@@ -4,8 +4,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, insertRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
-import { sendAdminNotificationSms } from "@/lib/admin-sms";
-import { sendAdminNotificationEmail } from "@/lib/admin-email";
 import { executeSmartDispatchRules } from "@/lib/smart-dispatch-rules";
 
 export async function GET(req: NextRequest) {
@@ -65,28 +63,13 @@ export async function POST(req: NextRequest) {
 
     await insertRows("sheetbot_inquiries", [newRow]);
 
-    // 관리자 SMS 알림 비동기 전송 (백그라운드 처리)
-    sendAdminNotificationSms("inquiry", {
-      userEmail,
-      userName,
-      title: body.title.trim(),
-    }).catch((smsErr) => console.warn("[Inquiry SMS Notification] Error:", smsErr));
-
-    // 이메일 알림 비동기 전송 (관리자 및 고객 확인 메일)
-    sendAdminNotificationEmail("inquiry", {
-      userEmail,
-      userName,
-      title: body.title.trim(),
-      content: body.content.trim(),
-    }).catch((emailErr) => console.warn("[Inquiry Email Notification] Error:", emailErr));
-
-    // AI 자연어 기반 스마트 발송 규칙 실행
+    // 알림 발송 통합 처리 (스마트 발송 규칙 우선 실행, 미매칭 시 기본 설정 자동 폴백)
     executeSmartDispatchRules("inquiry", {
       userEmail,
       userName,
       title: body.title.trim(),
       content: body.content.trim(),
-    }).catch((ruleErr) => console.warn("[Inquiry SmartRules Notification] Error:", ruleErr));
+    }).catch((ruleErr) => console.warn("[Inquiry Dispatch Notification] Error:", ruleErr));
 
     return NextResponse.json({
       success: true,

@@ -4,8 +4,6 @@ import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, insertRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
-import { sendAdminNotificationSms } from "@/lib/admin-sms";
-import { sendAdminNotificationEmail } from "@/lib/admin-email";
 import { executeSmartDispatchRules } from "@/lib/smart-dispatch-rules";
 
 // 세금계산서 / 현금영수증 신청 목록 조회
@@ -78,26 +76,12 @@ export async function POST(request: Request) {
       },
     ]);
 
-    // 관리자 SMS 알림 비동기 전송 (백그라운드 처리)
-    sendAdminNotificationSms("tax_invoice", {
-      userEmail,
-      companyName: companyName || "고객사",
-      amount: Number(amountKrw || 0),
-    }).catch((smsErr) => console.warn("[TaxInvoice SMS Notification] Error:", smsErr));
-
-    // 관리자 이메일 알림 비동기 전송 (백그라운드 처리)
-    sendAdminNotificationEmail("tax_invoice", {
-      userEmail,
-      companyName: companyName || "고객사",
-      amount: Number(amountKrw || 0),
-    }).catch((emailErr) => console.warn("[TaxInvoice Email Notification] Error:", emailErr));
-
-    // AI 자연어 기반 스마트 발송 규칙 실행
+    // 알림 발송 통합 처리 (스마트 발송 규칙 우선 실행, 미매칭 시 기본 설정 자동 폴백)
     executeSmartDispatchRules("tax_invoice", {
       userEmail,
       companyName: companyName || "고객사",
       amount: Number(amountKrw || 0),
-    }).catch((ruleErr) => console.warn("[TaxInvoice SmartRules Notification] Error:", ruleErr));
+    }).catch((ruleErr) => console.warn("[TaxInvoice Dispatch Notification] Error:", ruleErr));
 
     return NextResponse.json({
       success: true,
