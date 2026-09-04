@@ -175,6 +175,18 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const fetchPhoneDevices = async () => {
+    try {
+      const res = await fetch("/api/admin/sms");
+      const data = await res.json();
+      if (data.success && data.devices) {
+        setPhoneDevices(data.devices);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch phone devices", e);
+    }
+  };
+
   const fetchSmsSettings = async () => {
     try {
       const res = await fetch("/api/admin/sms");
