@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
-import { Bot, LogOut, User, Sparkles, ArrowRight, ShieldCheck, Activity } from "lucide-react";
+import { Bot, LogOut, User, Sparkles, ArrowRight, ShieldCheck, Activity, Settings } from "lucide-react";
 
 export default function Navbar() {
   const { data: session, status } = useSession();
@@ -109,6 +109,15 @@ export default function Navbar() {
               >
                 <Activity className="w-3.5 h-3.5 text-indigo-600" />
                 <span>AI 사용료 관제</span>
+              </Link>
+
+              <Link
+                href="/dashboard/settings"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-indigo-600 hover:bg-slate-100 border border-slate-200/80 rounded-xl transition-all"
+                data-easybot-hint="AI 모델 설정: Apps Script 생성기 및 이지봇에 적용될 구글 제미나이(Gemini 3.5 Flash 등) 모델과 파라미터를 설정합니다."
+              >
+                <Settings className="w-3.5 h-3.5 text-slate-500" />
+                <span className="hidden md:inline">AI 모델 설정</span>
               </Link>
 
               {/* 유저 프로필 카드 */}

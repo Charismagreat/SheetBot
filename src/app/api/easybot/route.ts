@@ -4,12 +4,16 @@ import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { callAiCaller } from "@/lib/egdesk-helpers";
 import { recordAiUsageLog } from "@/lib/ai-usage";
+import { getAiModelSettings } from "@/lib/ai-settings";
 
 export async function POST(request: Request) {
   try {
     const userEmail = await getCurrentUserEmail();
     const body = await request.json();
     const { message, history } = body;
+
+    const aiSettings = await getAiModelSettings();
+    const targetModel = aiSettings.easybotModel || aiSettings.defaultModel || "gemini-3.5-flash";
 
     if (!message || !message.trim()) {
       return NextResponse.json({ success: false, error: "메시지를 입력해 주세요." }, { status: 400 });
@@ -41,7 +45,8 @@ export async function POST(request: Request) {
     try {
       const callerRes = await callAiCaller(fullPrompt, {
         caller: "sheetbot-easybot",
-        temperature: 0.4,
+        model: targetModel,
+        temperature: aiSettings.temperature || 0.4,
       });
       if (callerRes && callerRes.text) {
         replyContent = callerRes.text.trim();
@@ -86,7 +91,7 @@ export async function POST(request: Request) {
       userEmail: userEmail || "guest",
       caller: "sheetbot-easybot",
       purpose: "이지봇 실시간 대화",
-      model: "gemini-2.0-flash",
+      model: targetModel,
       promptText: fullPrompt,
       responseText: replyContent,
     });
