@@ -120,6 +120,46 @@ export default function PricingWalletPage() {
     fetchWallet();
   }, []);
 
+  // 한국 표준시(KST) 포맷팅 헬퍼
+  const formatKstDate = (dateStr?: string) => {
+    if (!dateStr) return "-";
+    try {
+      // 이미 'YYYY-MM-DD HH:mm:ss' 형식이거나 ISO 문자열인 경우 처리
+      const d = new Date(dateStr.endsWith("Z") ? dateStr : dateStr + "Z");
+      if (isNaN(d.getTime())) {
+        return dateStr.replace("T", " ").substring(0, 16);
+      }
+      return new Intl.DateTimeFormat("ko-KR", {
+        timeZone: "Asia/Seoul",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })
+        .format(d)
+        .replace(/\. /g, "-")
+        .replace(".", "");
+    } catch {
+      return dateStr.replace("T", " ").substring(0, 16);
+    }
+  };
+
+  // 결제 수단 명칭 간결화 헬퍼
+  const formatPaymentBadge = (method: string) => {
+    if (!method) return "일반결제";
+    // 예: "간편결제 (카카오/네이버/토스) (카카오페이)" -> "카카오페이"
+    const match = method.match(/\(([^)]+)\)$/);
+    if (match && match[1]) return match[1];
+    if (method.includes("토스")) return "토스페이";
+    if (method.includes("카카오")) return "카카오페이";
+    if (method.includes("네이버")) return "네이버페이";
+    if (method.includes("카드")) return "신용카드";
+    if (method.includes("이니시스")) return "KG이니시스";
+    return method.length > 12 ? method.substring(0, 12) + "…" : method;
+  };
+
   // PG 결제 시뮬레이터 모달 상태
   const [activeModalPackage, setActiveModalPackage] = useState<PaymentPackage | null>(null);
   const [modalStep, setModalStep] = useState<"select" | "processing" | "done">("select");
@@ -498,38 +538,46 @@ export default function PricingWalletPage() {
                 아직 결제 충전 내역이 없습니다. (웰컴 무료 토큰 사용 중)
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-[11px] text-slate-400">
-                      <th className="pb-2">일시</th>
-                      <th className="pb-2">패키지</th>
-                      <th className="pb-2">결제 금액</th>
-                      <th className="pb-2">충전 토큰</th>
-                      <th className="pb-2">수단</th>
-                      <th className="pb-2 text-right">적격증빙 / 영수증</th>
+              <div className="overflow-x-auto max-h-[380px] overflow-y-auto pr-1">
+                <table className="w-full text-left text-xs whitespace-nowrap">
+                  <thead className="sticky top-0 bg-white shadow-xs z-10">
+                    <tr className="border-b border-slate-100 text-[11px] text-slate-400 font-bold">
+                      <th className="pb-2.5 pr-3">결제 일시</th>
+                      <th className="pb-2.5 px-3">패키지</th>
+                      <th className="pb-2.5 px-3 text-right">결제 금액</th>
+                      <th className="pb-2.5 px-3 text-right">충전 토큰</th>
+                      <th className="pb-2.5 px-3">수단</th>
+                      <th className="pb-2.5 pl-3 text-right">적격증빙 / 영수증</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {orders.map((o) => (
-                      <tr key={o.id} className="text-slate-700">
-                        <td className="py-2.5 text-slate-400 text-[11px]">
-                          {o.created_at ? o.created_at.replace("T", " ").substring(0, 16) : "-"}
+                      <tr key={o.id} className="text-slate-700 hover:bg-slate-50/70 transition-colors">
+                        <td className="py-3 pr-3 text-slate-500 text-[11.5px] font-mono whitespace-nowrap">
+                          {formatKstDate(o.created_at)}
                         </td>
-                        <td className="py-2.5 font-bold text-slate-900">{o.package_name}</td>
-                        <td className="py-2.5 font-extrabold">{o.amount_krw.toLocaleString()}원</td>
-                        <td className="py-2.5 font-bold text-amber-600">
+                        <td className="py-3 px-3 font-bold text-slate-900 whitespace-nowrap">
+                          {o.package_name.replace(/ \(인기 추천\)| \(체험형\)| Automation/g, "")}
+                        </td>
+                        <td className="py-3 px-3 font-black text-slate-900 text-right whitespace-nowrap">
+                          {o.amount_krw.toLocaleString()}원
+                        </td>
+                        <td className="py-3 px-3 font-extrabold text-amber-600 text-right whitespace-nowrap">
                           +{o.tokens_credited.toLocaleString()}
                         </td>
-                        <td className="py-2.5 text-slate-500">{o.payment_method}</td>
-                        <td className="py-2.5 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[10.5px] font-semibold border border-slate-200">
+                            {formatPaymentBadge(o.payment_method)}
+                          </span>
+                        </td>
+                        <td className="py-3 pl-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                             <button
                               onClick={() => setReceiptOrder(o)}
-                              className="px-2 py-1 text-[11px] font-bold text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                              className="px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 rounded-lg transition-all inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0 shadow-2xs"
                               title="신용카드/결제 영수증(매출전표) 출력"
                             >
-                              <Receipt className="w-3 h-3 text-slate-500" />
+                              <Receipt className="w-3.5 h-3.5 text-indigo-500" />
                               <span>영수증</span>
                             </button>
                             <button
@@ -543,11 +591,11 @@ export default function PricingWalletPage() {
                                   managerEmail: "",
                                 });
                               }}
-                              className="px-2 py-1 text-[11px] font-bold text-amber-800 hover:text-amber-900 hover:bg-amber-100/80 bg-amber-50 border border-amber-200 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                              className="px-2.5 py-1 text-[11px] font-bold text-amber-800 hover:text-amber-900 hover:bg-amber-100 bg-amber-50 border border-amber-200 rounded-lg transition-all inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0 shadow-2xs"
                               title="전자세금계산서 또는 지출증빙 현금영수증 신청"
                             >
-                              <FileText className="w-3 h-3 text-amber-600" />
-                              <span>계산서/현금영수증</span>
+                              <FileText className="w-3.5 h-3.5 text-amber-600" />
+                              <span>계산서 / 현금영수증</span>
                             </button>
                           </div>
                         </td>
