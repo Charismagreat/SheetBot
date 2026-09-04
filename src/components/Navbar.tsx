@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
-import { Bot, LogOut, User, Sparkles, ArrowRight, ShieldCheck, Activity, Settings } from "lucide-react";
+import { Bot, LogOut, User, Sparkles, ArrowRight, ShieldCheck, Activity, Settings, Coins } from "lucide-react";
 
 export default function Navbar() {
   const { data: session, status } = useSession();
@@ -100,6 +100,15 @@ export default function Navbar() {
                 data-easybot-hint="대시보드 이동: 내 스프레드시트 자동화 프로젝트 및 스케줄 관리 화면으로 이동합니다."
               >
                 <span>내 프로젝트 대시보드</span>
+              </Link>
+
+              <Link
+                href="/dashboard/pricing"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-extrabold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300/80 rounded-xl transition-all shadow-2xs"
+                data-easybot-hint="토큰 충전: 잔여 크레딧을 확인하고 안전한 선불형 결제를 통해 AI 토큰을 충전합니다."
+              >
+                <Coins className="w-3.5 h-3.5 text-amber-600" />
+                <span>토큰 충전</span>
               </Link>
 
               <Link

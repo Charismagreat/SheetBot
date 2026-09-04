@@ -5,12 +5,27 @@ import { getCurrentUserEmail } from "@/lib/auth";
 import { callAiCaller } from "@/lib/egdesk-helpers";
 import { recordAiUsageLog } from "@/lib/ai-usage";
 import { getAiModelSettings } from "@/lib/ai-settings";
+import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 
 export async function POST(request: Request) {
   try {
     const userEmail = await getCurrentUserEmail();
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
+    }
+
+    // 1. 토큰 지갑 잔여량 사전 검증 (스크립트 생성 기본 1,500 토큰 필요)
+    const tokenCheck = await checkTokenBalance(userEmail, 1500);
+    if (!tokenCheck.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: tokenCheck.reason,
+          requirePayment: true,
+          balance: tokenCheck.balance,
+        },
+        { status: 402 } // Payment Required
+      );
     }
 
     const aiSettings = await getAiModelSettings();
@@ -185,12 +200,21 @@ function checkSheetBotStatus() {
       };
     }
 
+    // 2. 토큰 사용량 계산 및 차감 (기본 예상치 1500~2000)
+    const promptLength = fullPrompt.length;
+    const responseLength = (generatedData?.scriptCode || JSON.stringify(generatedData)).length;
+    const estimatedUsedTokens = Math.max(800, Math.ceil((promptLength + responseLength) / 2.5));
+
+    const deductRes = await deductTokens(userEmail, estimatedUsedTokens);
+
     // AI 사용량 및 추정 비용 실시간 적재
     void recordAiUsageLog({
       userEmail,
       caller: "sheetbot-script-generator",
       purpose: "Apps Script 자동 생성",
       model: targetModel,
+      promptTokens: Math.ceil(promptLength / 2.5),
+      completionTokens: Math.ceil(responseLength / 2.5),
       promptText: fullPrompt,
       responseText: generatedData?.scriptCode || JSON.stringify(generatedData),
     });
@@ -198,6 +222,8 @@ function checkSheetBotStatus() {
     return NextResponse.json({
       success: true,
       data: generatedData,
+      tokensDeducted: estimatedUsedTokens,
+      newBalance: deductRes.newBalance,
     });
   } catch (error: any) {
     console.error("Generate script error:", error);
