@@ -62,6 +62,9 @@ export default function AdminDashboardPage() {
   const [editNote, setEditNote] = useState<string>("");
   const [savingUserMeta, setSavingUserMeta] = useState<boolean>(false);
 
+  // 후기 첨부 사진 크게 보기 상태
+  const [selectedReviewImage, setSelectedReviewImage] = useState<string | null>(null);
+
   // 문의 답변 모달
   const [selectedInquiry, setSelectedInquiry] = useState<any | null>(null);
   const [answerInput, setAnswerInput] = useState<string>("");
@@ -843,8 +846,30 @@ export default function AdminDashboardPage() {
                           </span>
                         </td>
                         <td className="py-3 px-4 max-w-md">
-                          <div className="font-bold text-slate-900">{rev.title}</div>
+                          <div className="font-bold text-slate-900 flex items-center gap-2">
+                            <span>{rev.title}</span>
+                            {rev.image_url && (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedReviewImage(rev.image_url)}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[10px] cursor-pointer border border-indigo-200"
+                                title="첨부 사진 크게 보기"
+                              >
+                                📷 사진 첨부
+                              </button>
+                            )}
+                          </div>
                           <div className="text-slate-500 mt-1 line-clamp-2">{rev.content}</div>
+                          {rev.image_url && (
+                            <div className="mt-2">
+                              <img
+                                src={rev.image_url}
+                                alt="후기 사진"
+                                onClick={() => setSelectedReviewImage(rev.image_url)}
+                                className="w-16 h-12 object-cover rounded-lg border border-slate-200 cursor-pointer hover:opacity-80 transition-opacity"
+                              />
+                            </div>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-slate-400 whitespace-nowrap">
                           {rev.created_at ? rev.created_at.slice(0, 16).replace("T", " ") : "-"}
@@ -1475,6 +1500,28 @@ export default function AdminDashboardPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* 관리자 후기 사진 크게 보기 라이트박스 */}
+      {selectedReviewImage && (
+        <div
+          onClick={() => setSelectedReviewImage(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in cursor-pointer"
+        >
+          <div className="relative max-w-3xl max-h-[90vh] p-2">
+            <img
+              src={selectedReviewImage}
+              alt="첨부 사진 원본"
+              className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl"
+            />
+            <button
+              onClick={() => setSelectedReviewImage(null)}
+              className="absolute top-4 right-4 p-2 bg-black/70 hover:bg-black/90 text-white rounded-full transition-colors cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
     </div>

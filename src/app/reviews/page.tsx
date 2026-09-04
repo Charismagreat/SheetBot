@@ -1,6 +1,6 @@
-﻿"use client";
+"use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
@@ -17,6 +17,9 @@ import {
   Calendar,
   User,
   Quote,
+  Image as ImageIcon,
+  UploadCloud,
+  Maximize2
 } from "lucide-react";
 
 interface Review {
@@ -26,6 +29,7 @@ interface Review {
   title: string;
   content: string;
   use_case?: string;
+  image_url?: string;
   created_at: string;
 }
 
@@ -42,10 +46,17 @@ export default function ReviewsPage() {
     title: "",
     content: "",
     use_case: "",
+    image_url: "",
   });
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
+
+  // 이미지 크게 보기 모달
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchReviews = async () => {
     try {
@@ -65,6 +76,60 @@ export default function ReviewsPage() {
   useEffect(() => {
     fetchReviews();
   }, []);
+
+  // 이미지 파일 선택 및 압축(리사이즈) 처리
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      alert("이미지 파일(PNG, JPG, WebP 등)만 첨부할 수 있습니다.");
+      return;
+    }
+
+    // 파일 크기 5MB 초과 제한
+    if (file.size > 5 * 1024 * 1024) {
+      alert("이미지 파일 크기는 최대 5MB까지 가능합니다.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (readerEvent) => {
+      const img = new Image();
+      img.onload = () => {
+        // 브라우저 캔버스를 통해 최대 너비 1000px로 압축 리사이징
+        const canvas = document.createElement("canvas");
+        const MAX_WIDTH = 1000;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > MAX_WIDTH) {
+          height = Math.round((height * MAX_WIDTH) / width);
+          width = MAX_WIDTH;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+          setPreviewImage(compressedDataUrl);
+          setForm((prev) => ({ ...prev, image_url: compressedDataUrl }));
+        }
+      };
+      img.src = readerEvent.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveImage = () => {
+    setPreviewImage(null);
+    setForm((prev) => ({ ...prev, image_url: "" }));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,7 +156,9 @@ export default function ReviewsPage() {
           title: "",
           content: "",
           use_case: "",
+          image_url: "",
         });
+        setPreviewImage(null);
         await fetchReviews();
         setTimeout(() => {
           setIsModalOpen(false);
@@ -128,7 +195,7 @@ export default function ReviewsPage() {
               SheetBot과 함께 업무를 자동화한 회원들의 이야기
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
-              수기 반복 업무에서 해방된 실무자, 스타트업 대표, 개발자 분들의 진솔한 활용 후기를 확인해 보세요.
+              수기 반복 업무에서 해방된 실무자, 스타트업 대표, 개발자 분들의 진솔한 활용 후기 및 시트 캡처 사진을 확인해 보세요.
             </p>
           </div>
 
@@ -146,7 +213,10 @@ export default function ReviewsPage() {
             <div className="pl-4 border-l border-slate-200">
               {session?.user ? (
                 <button
-                  onClick={() => setIsModalOpen(true)}
+                  onClick={() => {
+                    setIsModalOpen(true);
+                    setPreviewImage(null);
+                  }}
                   className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-extrabold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                 >
                   <PlusCircle className="w-4 h-4" />
@@ -198,9 +268,28 @@ export default function ReviewsPage() {
 
                   {/* 제목 & 본문 */}
                   <h3 className="font-extrabold text-sm text-slate-900 leading-snug">{r.title}</h3>
-                  <p className="text-xs text-slate-600 leading-relaxed line-clamp-4">
+                  <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">
                     "{r.content}"
                   </p>
+
+                  {/* 첨부 사진 썸네일 */}
+                  {r.image_url && (
+                    <div className="mt-2 relative rounded-2xl overflow-hidden border border-slate-200/80 bg-slate-50 group cursor-pointer">
+                      <img
+                        src={r.image_url}
+                        alt={r.title}
+                        className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
+                        onClick={() => setSelectedImage(r.image_url || null)}
+                      />
+                      <div
+                        onClick={() => setSelectedImage(r.image_url || null)}
+                        className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1"
+                      >
+                        <Maximize2 className="w-4 h-4" />
+                        <span>사진 크게 보기</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* 하단 작성자 정보 */}
@@ -219,8 +308,8 @@ export default function ReviewsPage() {
         {/* 후기 작성 모달 */}
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
-            <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 overflow-hidden relative animate-scale-up">
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+            <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 overflow-hidden relative animate-scale-up max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
                 <div className="flex items-center gap-2">
                   <Quote className="w-5 h-5 text-emerald-600" />
                   <h3 className="font-black text-base text-slate-900">SheetBot 사용 후기 작성</h3>
@@ -305,6 +394,54 @@ export default function ReviewsPage() {
                   />
                 </div>
 
+                {/* 사진 첨부 영역 */}
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-700 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
+                      인증 사진 / 시트 캡처 첨부 (선택)
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-normal">PNG, JPG 최대 5MB</span>
+                  </label>
+
+                  {previewImage ? (
+                    <div className="relative rounded-2xl border border-slate-200 overflow-hidden bg-slate-50 p-2">
+                      <img
+                        src={previewImage}
+                        alt="첨부 사진 미리보기"
+                        className="w-full h-48 object-cover rounded-xl"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRemoveImage}
+                        className="absolute top-4 right-4 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full transition-colors cursor-pointer"
+                        title="사진 삭제"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="border-2 border-dashed border-slate-200 hover:border-emerald-400 rounded-2xl p-5 text-center cursor-pointer transition-colors bg-slate-50/50 hover:bg-emerald-50/20 group"
+                    >
+                      <UploadCloud className="w-7 h-7 mx-auto text-slate-400 group-hover:text-emerald-600 transition-colors mb-1.5" />
+                      <p className="font-bold text-slate-700 text-xs">사진을 클릭하여 업로드하세요</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        자동화된 구글 시트 화면이나 메뉴 캡처를 첨부하면 더욱 생생한 후기가 됩니다.
+                      </p>
+                    </div>
+                  )}
+
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleImageChange}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                </div>
+
                 <div className="pt-2 flex items-center justify-end gap-2">
                   <button
                     type="button"
@@ -323,6 +460,28 @@ export default function ReviewsPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* 사진 크게 보기 모달 */}
+        {selectedImage && (
+          <div
+            onClick={() => setSelectedImage(null)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in cursor-pointer"
+          >
+            <div className="relative max-w-3xl max-h-[90vh] p-2">
+              <img
+                src={selectedImage}
+                alt="확대 이미지"
+                className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl"
+              />
+              <button
+                onClick={() => setSelectedImage(null)}
+                className="absolute top-4 right-4 p-2 bg-black/70 hover:bg-black/90 text-white rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
           </div>
         )}

@@ -1,4 +1,4 @@
-﻿export const dynamic = "force-dynamic";
+export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
@@ -89,6 +89,7 @@ export async function POST(req: NextRequest) {
       title: body.title.trim(),
       content: body.content.trim(),
       use_case: body.use_case?.trim() || "구글 시트 업무 자동화",
+      image_url: body.image_url || null,
       created_at: now,
     };
 
