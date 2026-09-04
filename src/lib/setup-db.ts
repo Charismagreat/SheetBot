@@ -290,7 +290,26 @@ export async function setupDatabase(): Promise<void> {
       { tableName: 'sheetbot_payment_orders' }
     );
 
-    // 7. 레거시 데이터 마이그레이션 실행
+    // 7. sheetbot_tax_invoices 테이블 생성 (세금계산서 및 현금영수증 발행 요청 대장)
+    await safeCreateTable(
+      'SheetBot 세금계산서 및 현금영수증 신청 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'order_id', type: 'TEXT', notNull: true },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'type', type: 'TEXT', notNull: true }, // 'TAX_INVOICE'(세금계산서), 'CASH_RECEIPT'(현금영수증)
+        { name: 'company_name', type: 'TEXT' },
+        { name: 'biz_number', type: 'TEXT', notNull: true },
+        { name: 'ceo_name', type: 'TEXT' },
+        { name: 'manager_email', type: 'TEXT', notNull: true },
+        { name: 'amount_krw', type: 'INTEGER', notNull: true },
+        { name: 'status', type: 'TEXT' }, // 'REQUESTED', 'ISSUED', 'REJECTED'
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_tax_invoices' }
+    );
+
+    // 8. 레거시 데이터 마이그레이션 실행
     await migrateLegacySettingsData();
 
     isDbInitialized = true;
