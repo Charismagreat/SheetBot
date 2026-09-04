@@ -5,7 +5,7 @@ import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, insertRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 
-const DEFAULT_SEED_REVIEWS = [
+export const DEFAULT_SEED_REVIEWS = [
   {
     id: "rev_seed_1",
     user_email: "ceo_mark@startup.io",
@@ -48,14 +48,17 @@ export async function GET(req: NextRequest) {
       limit: 100,
     }).catch(() => ({ rows: [] }));
 
-    const validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
+    let validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
 
-    let reviews = validRows;
-    if (reviews.length === 0) {
-      reviews = DEFAULT_SEED_REVIEWS;
+    // 테이블이 비어있는 경우 기본 시드 후기를 DB에 실제 등록
+    if (validRows.length === 0) {
+      await insertRows("sheetbot_reviews", DEFAULT_SEED_REVIEWS).catch((e) =>
+        console.warn("Failed to seed reviews:", e.message)
+      );
+      validRows = DEFAULT_SEED_REVIEWS;
     }
 
-    return NextResponse.json({ success: true, reviews });
+    return NextResponse.json({ success: true, reviews: validRows });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
@@ -81,7 +84,7 @@ export async function POST(req: NextRequest) {
     const newRow = {
       id: newId,
       user_email: userEmail.toLowerCase().trim(),
-      user_name: body.userName || "시트봇 회원",
+      user_name: body.userName || userEmail.split("@")[0] || "시트봇 회원",
       rating: Math.min(5, Math.max(1, Number(body.rating) || 5)),
       title: body.title.trim(),
       content: body.content.trim(),
