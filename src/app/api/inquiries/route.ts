@@ -6,6 +6,7 @@ import { queryTable, insertRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { sendAdminNotificationSms } from "@/lib/admin-sms";
 import { sendAdminNotificationEmail } from "@/lib/admin-email";
+import { executeSmartDispatchRules } from "@/lib/smart-dispatch-rules";
 
 export async function GET(req: NextRequest) {
   try {
@@ -78,6 +79,14 @@ export async function POST(req: NextRequest) {
       title: body.title.trim(),
       content: body.content.trim(),
     }).catch((emailErr) => console.warn("[Inquiry Email Notification] Error:", emailErr));
+
+    // AI 자연어 기반 스마트 발송 규칙 실행
+    executeSmartDispatchRules("inquiry", {
+      userEmail,
+      userName,
+      title: body.title.trim(),
+      content: body.content.trim(),
+    }).catch((ruleErr) => console.warn("[Inquiry SmartRules Notification] Error:", ruleErr));
 
     return NextResponse.json({
       success: true,

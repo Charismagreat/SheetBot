@@ -10,6 +10,7 @@ import {
 import { queryTable } from "@/lib/egdesk-helpers";
 import { sendAdminNotificationSms } from "@/lib/admin-sms";
 import { sendAdminNotificationEmail } from "@/lib/admin-email";
+import { executeSmartDispatchRules } from "@/lib/smart-dispatch-rules";
 
 export async function GET() {
   try {
@@ -90,6 +91,13 @@ export async function POST(request: Request) {
       title: pkg.name,
       amount: pkg.priceKrw,
     }).catch((emailErr) => console.warn("[Payment Email Notification] Error:", emailErr));
+
+    // AI 자연어 기반 스마트 발송 규칙 실행
+    executeSmartDispatchRules("payment", {
+      userEmail,
+      title: pkg.name,
+      amount: pkg.priceKrw,
+    }).catch((ruleErr) => console.warn("[Payment SmartRules Notification] Error:", ruleErr));
 
     return NextResponse.json({
       success: true,
