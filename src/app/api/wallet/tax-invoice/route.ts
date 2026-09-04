@@ -6,6 +6,7 @@ import { queryTable, insertRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { sendAdminNotificationSms } from "@/lib/admin-sms";
 import { sendAdminNotificationEmail } from "@/lib/admin-email";
+import { executeSmartDispatchRules } from "@/lib/smart-dispatch-rules";
 
 // 세금계산서 / 현금영수증 신청 목록 조회
 export async function GET() {
@@ -90,6 +91,13 @@ export async function POST(request: Request) {
       companyName: companyName || "고객사",
       amount: Number(amountKrw || 0),
     }).catch((emailErr) => console.warn("[TaxInvoice Email Notification] Error:", emailErr));
+
+    // AI 자연어 기반 스마트 발송 규칙 실행
+    executeSmartDispatchRules("tax_invoice", {
+      userEmail,
+      companyName: companyName || "고객사",
+      amount: Number(amountKrw || 0),
+    }).catch((ruleErr) => console.warn("[TaxInvoice SmartRules Notification] Error:", ruleErr));
 
     return NextResponse.json({
       success: true,
