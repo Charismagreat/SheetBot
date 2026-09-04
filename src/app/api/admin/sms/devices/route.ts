@@ -47,6 +47,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const label = body.label?.trim();
     const id = body.id?.trim();
+    const pairingMode = body.pairingMode || "qr"; // 'qr' or 'google_account'
+    const googleProfileName = pairingMode === "google_account" ? (body.googleProfileName?.trim() || "default") : undefined;
 
     if (!label) {
       return NextResponse.json(
@@ -59,6 +61,7 @@ export async function POST(req: NextRequest) {
     const createRes = await createPhoneDevice({
       label,
       ...(id ? { id } : {}),
+      ...(googleProfileName ? { googleProfileName } : {}),
     });
 
     let newDevice = createRes;

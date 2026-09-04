@@ -20,6 +20,9 @@ import {
   Check,
   X,
   SmartphoneNfc,
+  Globe,
+  ShieldCheck,
+  Info,
 } from "lucide-react";
 import { AdminSmsSettings } from "@/lib/admin-sms-types";
 
@@ -40,7 +43,7 @@ interface AdminSmsTabProps {
     checkedAt?: string;
   } | null;
   onCheckDevice?: () => void;
-  onAddDevice?: (label: string) => Promise<boolean>;
+  onAddDevice?: (label: string, pairingMode?: "qr" | "google_account", googleProfileName?: string) => Promise<boolean>;
   onDeleteDevice?: (deviceId: string) => Promise<boolean>;
   onConnectDevice?: (deviceId: string) => Promise<boolean>;
 }
@@ -64,11 +67,15 @@ export default function AdminSmsTab({
   // 새 기기 추가 모달 상태
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newDeviceLabel, setNewDeviceLabel] = useState("");
+  const [pairingMode, setPairingMode] = useState<"google_account" | "qr">("google_account");
+  const [googleProfileName, setGoogleProfileName] = useState("default");
   const [addingDevice, setAddingDevice] = useState(false);
   const [pairingDevice, setPairingDevice] = useState<string | null>(null);
 
   const handleOpenAddModal = () => {
     setNewDeviceLabel("");
+    setPairingMode("google_account");
+    setGoogleProfileName("default");
     setIsAddModalOpen(true);
   };
 
@@ -77,7 +84,11 @@ export default function AdminSmsTab({
     if (!newDeviceLabel.trim() || !onAddDevice) return;
     setAddingDevice(true);
     try {
-      const success = await onAddDevice(newDeviceLabel.trim());
+      const success = await onAddDevice(
+        newDeviceLabel.trim(),
+        pairingMode,
+        pairingMode === "google_account" ? googleProfileName.trim() : undefined
+      );
       if (success) {
         setIsAddModalOpen(false);
         setNewDeviceLabel("");
@@ -118,7 +129,7 @@ export default function AdminSmsTab({
         <div>
           <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-sky-50 text-sky-700 text-[11px] font-bold border border-sky-200/60 mb-1">
             <Smartphone className="w-3.5 h-3.5 text-sky-600" />
-            <span>EGDesk 구글메시지(Google Messages) MCP 실시간 연동</span>
+            <span>EGDesk 구글메시지(Google Messages) 실시간 연동 (구글 계정 &amp; QR 페어링 지원)</span>
           </div>
           <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <span>관리자 SMS 문자 알림 자동 발송 관제</span>
@@ -284,6 +295,7 @@ export default function AdminSmsTab({
                 {phoneDevices.map((dev: any) => {
                   const isSelected = smsSettings.deviceId === dev.id;
                   const isPaired = dev.status === "paired";
+                  const usesGoogleProfile = !!dev.google_profile_name;
 
                   return (
                     <div
@@ -295,7 +307,7 @@ export default function AdminSmsTab({
                       }`}
                     >
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-bold text-xs text-slate-800 truncate">
                             {dev.label || "휴대폰 기기"}
                           </span>
@@ -308,6 +320,17 @@ export default function AdminSmsTab({
                           >
                             {isPaired ? "● 페어링됨" : "○ 미연결"}
                           </span>
+                          {usesGoogleProfile ? (
+                            <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200/70 text-[10px] font-bold flex items-center gap-0.5">
+                              <Globe className="w-2.5 h-2.5" />
+                              <span>구글계정 ({dev.google_profile_name})</span>
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium flex items-center gap-0.5">
+                              <QrCode className="w-2.5 h-2.5" />
+                              <span>단독 세션</span>
+                            </span>
+                          )}
                           {isSelected && (
                             <span className="px-1.5 py-0.2 rounded bg-sky-600 text-white text-[10px] font-bold">
                               기본 발송기기
@@ -335,10 +358,10 @@ export default function AdminSmsTab({
                           onClick={() => handleTriggerConnect(dev.id)}
                           disabled={pairingDevice === dev.id}
                           className="px-2 py-1 rounded-lg text-[11px] font-bold bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1 cursor-pointer transition-all shadow-2xs disabled:opacity-50"
-                          title="QR 페어링 브라우저 열기"
+                          title="기기 페어링 연결 브라우저 열기"
                         >
-                          <QrCode className="w-3 h-3" />
-                          <span>{pairingDevice === dev.id ? "연결 중..." : "QR 페어링"}</span>
+                          <SmartphoneNfc className="w-3 h-3" />
+                          <span>{pairingDevice === dev.id ? "연결 중..." : "페어링 열기"}</span>
                         </button>
 
                         <button
@@ -369,7 +392,7 @@ export default function AdminSmsTab({
             <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 space-y-2">
               <div className="font-bold">등록된 디바이스가 없습니다</div>
               <p className="text-[11px] text-amber-700">
-                [+ 기기 추가] 버튼을 눌러 새로운 스마트폰을 등록하고 QR코드를 스캔해 주세요.
+                [+ 기기 추가] 버튼을 눌러 새로운 스마트폰을 등록해 주세요.
               </p>
               <button
                 type="button"
@@ -384,7 +407,7 @@ export default function AdminSmsTab({
         </div>
       </div>
 
-      {/* 새 기기 추가 모달 팝업 */}
+      {/* 새 기기 추가 모달 팝업 (2가지 페어링 방식 선택 지원) */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fade-in">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
@@ -402,28 +425,90 @@ export default function AdminSmsTab({
               </button>
             </div>
 
-            <div className="space-y-3 text-xs text-slate-600">
-              <div className="p-3 bg-sky-50 border border-sky-100 rounded-xl space-y-1 text-[11px] text-sky-800">
-                <div className="font-bold flex items-center gap-1">
-                  <QrCode className="w-3.5 h-3.5 text-sky-600" />
-                  <span>Google Messages Web 연동 안내</span>
-                </div>
-                <p>
-                  기기를 생성한 후, [QR 페어링] 버튼을 누르면 브라우저에 QR코드가 나타납니다. 스마트폰의 Google 메시지 앱에서 QR코드를 스캔하시면 페어링이 완료됩니다.
-                </p>
-              </div>
-
+            <div className="space-y-4 text-xs text-slate-600">
+              {/* 기기 라벨 입력 */}
               <div className="space-y-1.5">
                 <label className="font-bold text-slate-700">기기 별칭 (라벨) *</label>
                 <input
                   type="text"
                   required
-                  placeholder="예: 고객지원 전용폰, 대표님 세컨드폰"
+                  placeholder="예: 고객지원 전용폰, 대표님 업무폰"
                   value={newDeviceLabel}
                   onChange={(e) => setNewDeviceLabel(e.target.value)}
-                  className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-bold"
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-bold text-slate-800"
                 />
               </div>
+
+              {/* 페어링 방식 2가지 선택 (라디오 탭 형태) */}
+              <div className="space-y-2">
+                <label className="font-bold text-slate-700 flex items-center justify-between">
+                  <span>연결 및 페어링 방식 선택 *</span>
+                  <span className="text-[11px] text-slate-400 font-normal">원하시는 방식을 선택하세요</span>
+                </label>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  {/* 옵션 1: 구글 계정 간편 연동 */}
+                  <button
+                    type="button"
+                    onClick={() => setPairingMode("google_account")}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      pairingMode === "google_account"
+                        ? "bg-purple-50/80 border-purple-300 ring-2 ring-purple-500/20 text-purple-950"
+                        : "bg-slate-50 border-slate-200 hover:bg-slate-100/60 text-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold mb-1">
+                      <Globe className="w-3.5 h-3.5 text-purple-600" />
+                      <span>구글 계정 연동</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-snug">
+                      스마트폰과 PC의 구글 계정을 일치시켜 화면 터치 인증으로 연결
+                    </p>
+                  </button>
+
+                  {/* 옵션 2: QR코드 스캔 페어링 */}
+                  <button
+                    type="button"
+                    onClick={() => setPairingMode("qr")}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      pairingMode === "qr"
+                        ? "bg-sky-50/80 border-sky-300 ring-2 ring-sky-500/20 text-sky-950"
+                        : "bg-slate-50 border-slate-200 hover:bg-slate-100/60 text-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold mb-1">
+                      <QrCode className="w-3.5 h-3.5 text-sky-600" />
+                      <span>QR코드 스캔</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-snug">
+                      계정 로그인 없이 스마트폰 카메라로 QR코드를 직접 스캔하여 연결
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              {/* 방식별 상세 가이드 안내 */}
+              {pairingMode === "google_account" ? (
+                <div className="p-3 bg-purple-50/70 border border-purple-200/80 rounded-xl space-y-1.5 text-[11px] text-purple-900">
+                  <div className="font-bold flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+                    <span>구글 계정 자동 연동 안내</span>
+                  </div>
+                  <p className="text-slate-600 leading-relaxed">
+                    PC에 로그인된 구글 프로필(<code>{googleProfileName}</code>)의 세션을 공유합니다. 기기 생성 후 [페어링 열기]를 누르면 스마트폰에 뜨는 확인 버튼만 누르면 즉시 연결됩니다.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-sky-50/70 border border-sky-200/80 rounded-xl space-y-1.5 text-[11px] text-sky-900">
+                  <div className="font-bold flex items-center gap-1">
+                    <QrCode className="w-3.5 h-3.5 text-sky-600" />
+                    <span>QR코드 페어링 안내</span>
+                  </div>
+                  <p className="text-slate-600 leading-relaxed">
+                    구글 계정과 무관하게 독립된 전용 프로필로 생성됩니다. 기기 생성 후 [페어링 열기]를 눌러 스마트폰의 <strong>Google 메시지 &gt; 기기 페어링 &gt; QR 코드 스캐너</strong>로 스캔해 주세요.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
@@ -438,7 +523,7 @@ export default function AdminSmsTab({
                 type="button"
                 onClick={handleCreateDeviceSubmit}
                 disabled={addingDevice || !newDeviceLabel.trim()}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-xs"
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-xs"
               >
                 {addingDevice ? "생성 중..." : "기기 프로필 생성"}
               </button>
