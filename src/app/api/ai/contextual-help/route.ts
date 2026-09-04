@@ -1,7 +1,8 @@
 export const dynamic = "force-dynamic";
 
-import { NextResponse } from "next/server";
 import { callAiCaller } from "@/lib/egdesk-helpers";
+import { getCurrentUserEmail } from "@/lib/auth";
+import { recordAiUsageLog } from "@/lib/ai-usage";
 
 export async function POST(request: Request) {
   try {
@@ -39,6 +40,18 @@ export async function POST(request: Request) {
         ? `💡 ${hintText} 기능입니다. 시트 자동화 및 스케줄 연동에 필요한 설정을 안전하게 관리할 수 있습니다.`
         : `💡 해당 항목은 Google 스프레드시트 및 Apps Script 자동화 제어를 위한 인터페이스입니다.`;
     }
+
+    const userEmail = await getCurrentUserEmail().catch(() => null);
+
+    // AI 사용량 적재
+    void recordAiUsageLog({
+      userEmail: userEmail || "guest",
+      caller: "sheetbot-contextual-help",
+      purpose: "AI Contextual 도움말",
+      model: "gemini-2.0-flash",
+      promptText: prompt,
+      responseText: explanation,
+    });
 
     return NextResponse.json({
       success: true,

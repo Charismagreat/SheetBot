@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { callAiCaller } from "@/lib/egdesk-helpers";
+import { recordAiUsageLog } from "@/lib/ai-usage";
 
 export async function POST(request: Request) {
   try {
@@ -79,6 +80,16 @@ export async function POST(request: Request) {
     if (!replyContent) {
       replyContent = `안녕하세요! Google Apps Script 및 스프레드시트 자동화 도우미 이지봇입니다. 🤖\n\n문의하신 "${message}"에 대한 안내입니다.\n\n구글 시트 상단 메뉴 자동화나 정기 실행 트리거가 필요하시면, 상단의 **[+ 새 프로젝트 생성]** 버튼을 눌러 스프레드시트 URL과 요구사항을 입력해 보세요. AI가 완벽한 \`Code.gs\` 코드를 자동 생성하여 구글 클라우드에 직접 배포해 드립니다.`;
     }
+
+    // 실시간 AI 사용량 적재
+    void recordAiUsageLog({
+      userEmail: userEmail || "guest",
+      caller: "sheetbot-easybot",
+      purpose: "이지봇 실시간 대화",
+      model: "gemini-2.0-flash",
+      promptText: fullPrompt,
+      responseText: replyContent,
+    });
 
     return NextResponse.json({
       success: true,
