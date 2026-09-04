@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React from "react";
 import Link from "next/link";
@@ -38,7 +38,7 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* 2열: 빠른 메뉴 바로가기 */}
+          {/* 2열: 서비스 바로가기 */}
           <div className="space-y-2.5">
             <h4 className="font-bold text-slate-800 text-xs">서비스 바로가기</h4>
             <ul className="space-y-1.5 text-slate-500">
@@ -65,9 +65,36 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* 3열: 고객센터 및 지원 */}
+          {/* 3열: 가이드 & 고객 지원 */}
           <div className="space-y-2.5">
-            <h4 className="font-bold text-slate-800 text-xs">고객 지원 &amp; 문의</h4>
+            <h4 className="font-bold text-slate-800 text-xs">가이드 &amp; 지원</h4>
+            <ul className="space-y-1.5 text-slate-500">
+              <li>
+                <Link href="/guide" className="hover:text-slate-900 font-semibold text-emerald-700 transition-colors">
+                  📖 사용법 &amp; 활용 가이드
+                </Link>
+              </li>
+              <li>
+                <Link href="/faq" className="hover:text-slate-900 transition-colors">
+                  ❓ 자주 묻는 질문 (FAQ)
+                </Link>
+              </li>
+              <li>
+                <Link href="/reviews" className="hover:text-slate-900 transition-colors">
+                  ⭐ 회원 사용 후기 게시판
+                </Link>
+              </li>
+              <li>
+                <Link href="/contact" className="hover:text-slate-900 transition-colors">
+                  💬 1:1 고객 문의 접수
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* 4열: 고객센터 안내 */}
+          <div className="space-y-2.5">
+            <h4 className="font-bold text-slate-800 text-xs">고객 지원 센터</h4>
             <div className="space-y-1.5 text-slate-500">
               <div className="flex items-center gap-1.5">
                 <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -75,11 +102,11 @@ export default function Footer() {
               </div>
               <div className="flex items-center gap-1.5">
                 <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>평일 09:00 - 18:00 (주말/공휴일 휴무)</span>
+                <span>평일 09:00 - 18:00 (점심 12-13)</span>
               </div>
-              <div className="flex items-center gap-1.5 text-amber-700 font-medium">
+              <div className="flex items-center gap-1.5 text-amber-700 font-medium pt-1">
                 <HelpCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <span>우측 하단 이지봇(EasyBot) 실시간 AI 상담</span>
+                <span>이지봇(EasyBot) 24시간 상담</span>
               </div>
             </div>
           </div>

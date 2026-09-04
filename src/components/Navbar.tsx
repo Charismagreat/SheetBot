@@ -42,27 +42,57 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        {/* 로고 & 브랜드 */}
-        <Link
-          href="/"
-          className="flex items-center gap-2.5 group"
-          data-easybot-hint="홈 로고: SheetBot의 서비스 소개 및 랜딩 페이지로 이동합니다."
-        >
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
-            <Bot className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-black text-lg text-slate-800 tracking-tight">SheetBot</span>
-              <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-md">
-                SaaS
+        {/* 로고 & 브랜드 + 주요 안내 메뉴 */}
+        <div className="flex items-center gap-6">
+          <Link
+            href="/"
+            className="flex items-center gap-2.5 group"
+            data-easybot-hint="홈 로고: SheetBot의 서비스 소개 및 랜딩 페이지로 이동합니다."
+          >
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+              <Bot className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-black text-lg text-slate-800 tracking-tight">SheetBot</span>
+                <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-md">
+                  SaaS
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-medium block -mt-0.5">
+                Google Apps Script AI 자동화
               </span>
             </div>
-            <span className="text-[10px] text-slate-400 font-medium block -mt-0.5">
-              Google Apps Script AI 자동화
-            </span>
-          </div>
-        </Link>
+          </Link>
+
+          {/* 중앙 네비게이션 메뉴 (가이드, FAQ, 후기, 문의) */}
+          <nav className="hidden lg:flex items-center gap-1 text-xs font-bold text-slate-600">
+            <Link
+              href="/guide"
+              className="px-3 py-1.5 rounded-xl hover:text-emerald-700 hover:bg-emerald-50/70 transition-all"
+            >
+              사용 가이드
+            </Link>
+            <Link
+              href="/faq"
+              className="px-3 py-1.5 rounded-xl hover:text-indigo-700 hover:bg-indigo-50/70 transition-all"
+            >
+              FAQ
+            </Link>
+            <Link
+              href="/reviews"
+              className="px-3 py-1.5 rounded-xl hover:text-amber-700 hover:bg-amber-50/70 transition-all"
+            >
+              사용 후기
+            </Link>
+            <Link
+              href="/contact"
+              className="px-3 py-1.5 rounded-xl hover:text-slate-900 hover:bg-slate-100 transition-all"
+            >
+              문의하기
+            </Link>
+          </nav>
+        </div>
 
         {/* 네비게이션 링크 & 계정 영역 */}
         <div className="flex items-center gap-3">
