@@ -8,6 +8,7 @@ import {
   TOKEN_PACKAGES,
 } from "@/lib/token-wallet";
 import { queryTable } from "@/lib/egdesk-helpers";
+import { sendAdminNotificationSms } from "@/lib/admin-sms";
 
 export async function GET() {
   try {
@@ -74,6 +75,13 @@ export async function POST(request: Request) {
       pkg.priceKrw,
       paymentMethod || "카드 간편결제"
     );
+
+    // 관리자 SMS 알림 비동기 전송 (백그라운드 처리)
+    sendAdminNotificationSms("payment", {
+      userEmail,
+      title: pkg.name,
+      amount: pkg.priceKrw,
+    }).catch((smsErr) => console.warn("[Payment SMS Notification] Error:", smsErr));
 
     return NextResponse.json({
       success: true,

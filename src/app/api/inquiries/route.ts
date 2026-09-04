@@ -1,9 +1,10 @@
-﻿export const dynamic = "force-dynamic";
+export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, insertRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { sendAdminNotificationSms } from "@/lib/admin-sms";
 
 export async function GET(req: NextRequest) {
   try {
@@ -61,6 +62,13 @@ export async function POST(req: NextRequest) {
     };
 
     await insertRows("sheetbot_inquiries", [newRow]);
+
+    // 관리자 SMS 알림 비동기 전송 (백그라운드 처리)
+    sendAdminNotificationSms("inquiry", {
+      userEmail,
+      userName,
+      title: body.title.trim(),
+    }).catch((smsErr) => console.warn("[Inquiry SMS Notification] Error:", smsErr));
 
     return NextResponse.json({
       success: true,

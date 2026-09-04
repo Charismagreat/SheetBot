@@ -35,12 +35,16 @@ import {
   Phone,
   MapPin,
   Save,
-  Share2
+  Share2,
+  Smartphone,
+  Bell,
+  Radio
 } from "lucide-react";
 import { DEFAULT_FOOTER, FooterInfo, SnsChannel } from "@/lib/default-footer";
 import { SnsIcon } from "@/components/SnsIcons";
+import { DEFAULT_SMS_SETTINGS, AdminSmsSettings } from "@/lib/admin-sms";
 
-type TabType = "users" | "inquiries" | "reviews" | "faqs" | "tax_invoices" | "footer";
+type TabType = "users" | "inquiries" | "reviews" | "faqs" | "tax_invoices" | "footer" | "sms";
 
 export default function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<TabType>("users");
@@ -56,6 +60,12 @@ export default function AdminDashboardPage() {
   // 푸터 설정 상태
   const [footerForm, setFooterForm] = useState<FooterInfo>(DEFAULT_FOOTER);
   const [savingFooter, setSavingFooter] = useState<boolean>(false);
+
+  // 구글메시지 SMS 설정 상태
+  const [smsSettings, setSmsSettings] = useState<AdminSmsSettings>(DEFAULT_SMS_SETTINGS);
+  const [phoneDevices, setPhoneDevices] = useState<any[]>([]);
+  const [savingSms, setSavingSms] = useState<boolean>(false);
+  const [sendingTestSms, setSendingTestSms] = useState<boolean>(false);
 
   // 회원 검색 & 필터
   const [userSearch, setUserSearch] = useState<string>("");
@@ -108,6 +118,7 @@ export default function AdminDashboardPage() {
         fetchFaqs(),
         fetchTaxInvoices(),
         fetchFooterSettings(),
+        fetchSmsSettings(),
       ]);
     } finally {
       setLoading(false);
@@ -173,6 +184,70 @@ export default function AdminDashboardPage() {
       }
     } catch (e) {
       console.warn("Failed to fetch footer settings", e);
+    }
+  };
+
+  const fetchSmsSettings = async () => {
+    try {
+      const res = await fetch("/api/admin/sms");
+      const data = await res.json();
+      if (data.success) {
+        if (data.settings) setSmsSettings(data.settings);
+        if (data.devices) setPhoneDevices(data.devices);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch sms settings", e);
+    }
+  };
+
+  const handleSaveSmsSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingSms(true);
+    try {
+      const res = await fetch("/api/admin/sms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(smsSettings),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message || "구글메시지 SMS 발송 설정이 저장되었습니다.");
+      } else {
+        alert(data.error || "저장 실패");
+      }
+    } catch (e: any) {
+      alert("오류: " + e.message);
+    } finally {
+      setSavingSms(false);
+    }
+  };
+
+  const handleSendTestSms = async () => {
+    if (!smsSettings.adminPhone || !smsSettings.deviceId) {
+      alert("발송 디바이스와 관리자 전화번호를 입력해 주세요.");
+      return;
+    }
+    if (!confirm(`[${smsSettings.adminPhone}] 번호로 테스트 문자를 발송하시겠습니까?`)) return;
+    setSendingTestSms(true);
+    try {
+      const res = await fetch("/api/admin/sms/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceId: smsSettings.deviceId,
+          phoneNumber: smsSettings.adminPhone,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("✅ " + data.message);
+      } else {
+        alert("❌ 발송 실패: " + (data.error || "발송 실패"));
+      }
+    } catch (e: any) {
+      alert("오류: " + e.message);
+    } finally {
+      setSendingTestSms(false);
     }
   };
 
@@ -628,6 +703,18 @@ export default function AdminDashboardPage() {
           >
             <Building2 className="w-4 h-4 text-emerald-400" />
             <span>🏢 푸터 / 회사정보 &amp; SNS 설정</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("sms")}
+            className={`px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all ${
+              activeTab === "sms"
+                ? "bg-slate-900 text-white shadow-sm ring-2 ring-sky-400/50"
+                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+            }`}
+          >
+            <Smartphone className="w-4 h-4 text-sky-400" />
+            <span>📱 구글메시지 SMS 알림</span>
           </button>
         </div>
 
@@ -1526,6 +1613,236 @@ export default function AdminDashboardPage() {
                 </div>
                 <div className="text-[10px] text-slate-400 pt-1">
                   {footerForm.copyright_text}
+                </div>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {/* 6. 구글메시지 SMS 알림 설정 탭 */}
+        {activeTab === "sms" && (
+          <form onSubmit={handleSaveSmsSettings} className="space-y-6">
+            {/* 헤더 카드 */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-sky-50 text-sky-700 text-[11px] font-bold border border-sky-200/60 mb-1">
+                  <Smartphone className="w-3.5 h-3.5 text-sky-600" />
+                  <span>EGDesk 구글메시지(Google Messages) MCP 실시간 연동</span>
+                </div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <span>관리자 SMS 문자 알림 자동 발송 관제</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  1:1 고객 문의, 세금계산서 신청, 토큰 결제 등 주요 비즈니스 이벤트 발생 시 등록된 관리자 휴대폰으로 구글메시지 SMS를 자동 발송합니다.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSendTestSms}
+                  disabled={sendingTestSms}
+                  className="px-4 py-2.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-bold border border-sky-200 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0 shadow-2xs"
+                >
+                  <Bell className="w-4 h-4 text-sky-600" />
+                  <span>{sendingTestSms ? "테스트 전송 중..." : "테스트 문자 발송"}</span>
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={savingSms}
+                  className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
+                >
+                  <Save className="w-4 h-4 text-emerald-400" />
+                  <span>{savingSms ? "저장 중..." : "설정 저장 완료"}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 마스터 스위치 및 발송 전화번호 설정 카드 */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* 좌측: 발송용 관리자 번호 & 마스터 활성화 */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                <h4 className="text-xs font-bold text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-1.5">
+                  <Smartphone className="w-4 h-4 text-slate-500" />
+                  <span>수신용 관리자 전화번호 &amp; 마스터 제어</span>
+                </h4>
+
+                {/* 마스터 전체 알림 ON/OFF */}
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">전체 SMS 알림 기능 활성화</div>
+                    <div className="text-[11px] text-slate-500">
+                      {smsSettings.enabled ? "현재 알림 기능이 작동 중입니다." : "모든 SMS 자동 발송이 중단됩니다."}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSmsSettings({ ...smsSettings, enabled: !smsSettings.enabled })}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all ${
+                      smsSettings.enabled
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-slate-200 text-slate-600"
+                    }`}
+                  >
+                    {smsSettings.enabled ? "사용 중 (ON)" : "꺼짐 (OFF)"}
+                  </button>
+                </div>
+
+                {/* 관리자 전화번호 입력 */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                    <span>수신용 관리자 휴대폰 번호 *</span>
+                    <span className="text-[11px] font-normal text-slate-400">알림 문자를 받을 번호</span>
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={smsSettings.adminPhone}
+                    onChange={(e) => setSmsSettings({ ...smsSettings, adminPhone: e.target.value })}
+                    placeholder="예: 010-7216-5884"
+                    className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 font-bold text-slate-800 font-mono"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    * 이벤트 발생 시 위 번호로 자동 생성된 알림 문자가 즉시 전송됩니다.
+                  </p>
+                </div>
+              </div>
+
+              {/* 우측: 페어링된 구글메시지 디바이스 상태 및 선택 */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Radio className="w-4 h-4 text-sky-600" />
+                    <span>발송용 Google Messages 디바이스</span>
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={fetchSmsSettings}
+                    className="text-[11px] text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>기기 새로고침</span>
+                  </button>
+                </div>
+
+                {phoneDevices.length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="p-3.5 rounded-xl bg-sky-50/70 border border-sky-200/80 space-y-2 text-xs">
+                      {phoneDevices.map((dev: any) => (
+                        <div key={dev.id} className="flex items-center justify-between">
+                          <div>
+                            <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                              <span>{dev.label || "휴대폰 기기"}</span>
+                              <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] rounded font-bold">
+                                {dev.status === "paired" ? "● 페어링 연결됨" : dev.status}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              연결 번호: {dev.linked_phone || "010-7216-5884"} (ID: {dev.id})
+                            </div>
+                          </div>
+
+                          <span className="text-[11px] font-bold text-sky-700 bg-white px-2.5 py-1 rounded-lg border border-sky-200">
+                            기본 발송기기
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-600">발송 디바이스 ID</label>
+                      <input
+                        type="text"
+                        value={smsSettings.deviceId}
+                        onChange={(e) => setSmsSettings({ ...smsSettings, deviceId: e.target.value })}
+                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 font-mono text-slate-700"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 space-y-1">
+                    <div className="font-bold">기본 디바이스 연동: {smsSettings.deviceId}</div>
+                    <p className="text-[11px] text-amber-700">
+                      EGDesk Phone MCP에 등록된 기기 ID({smsSettings.deviceId})를 사용하여 문자를 발송합니다.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 이벤트별 알림 발송 조건 설정 카드 */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+              <h4 className="text-xs font-bold text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-1.5">
+                <Bell className="w-4 h-4 text-indigo-600" />
+                <span>이벤트별 자동 SMS 알림 활성화 설정</span>
+              </h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* 1. 1:1 고객 문의 */}
+                <div className={`p-4 rounded-xl border transition-all ${smsSettings.notifyOnInquiry ? "bg-slate-50 border-indigo-200" : "bg-white border-slate-200 opacity-60"}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                      <MessageSquare className="w-4 h-4 text-indigo-600" />
+                      <span>1:1 고객 문의 접수</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSmsSettings({ ...smsSettings, notifyOnInquiry: !smsSettings.notifyOnInquiry })}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-all ${
+                        smsSettings.notifyOnInquiry ? "bg-indigo-600 text-white" : "bg-slate-200 text-slate-600"
+                      }`}
+                    >
+                      {smsSettings.notifyOnInquiry ? "ON" : "OFF"}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    새로운 1:1 문의가 등록되면 작성자 이메일, 제목, 접수 시간을 관리자 휴대폰으로 즉시 전송합니다.
+                  </p>
+                </div>
+
+                {/* 2. 세금계산서 발행 신청 */}
+                <div className={`p-4 rounded-xl border transition-all ${smsSettings.notifyOnTaxInvoice ? "bg-slate-50 border-emerald-200" : "bg-white border-slate-200 opacity-60"}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-emerald-600" />
+                      <span>세금계산서 신청 접수</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSmsSettings({ ...smsSettings, notifyOnTaxInvoice: !smsSettings.notifyOnTaxInvoice })}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-all ${
+                        smsSettings.notifyOnTaxInvoice ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-600"
+                      }`}
+                    >
+                      {smsSettings.notifyOnTaxInvoice ? "ON" : "OFF"}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    기업 회원이 전자세금계산서 또는 현금영수증을 신청하면 신청 회사명과 신청 금액을 즉시 알립니다.
+                  </p>
+                </div>
+
+                {/* 3. 유료 토큰 결제 */}
+                <div className={`p-4 rounded-xl border transition-all ${smsSettings.notifyOnPayment ? "bg-slate-50 border-amber-200" : "bg-white border-slate-200 opacity-60"}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                      <Coins className="w-4 h-4 text-amber-500" />
+                      <span>유료 토큰 충전 결제</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSmsSettings({ ...smsSettings, notifyOnPayment: !smsSettings.notifyOnPayment })}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-all ${
+                        smsSettings.notifyOnPayment ? "bg-amber-600 text-white" : "bg-slate-200 text-slate-600"
+                      }`}
+                    >
+                      {smsSettings.notifyOnPayment ? "ON" : "OFF"}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    회원이 Pro 요금제 또는 토큰 패키지 충전을 완료하면 결제 회원 및 충전 금액을 실시간 통보합니다.
+                  </p>
                 </div>
               </div>
             </div>
