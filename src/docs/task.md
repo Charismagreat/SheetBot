@@ -27,3 +27,12 @@
 ## 📌 Phase 5. 검증 및 최종 보고
 - [x] TypeScript 및 Next.js 빌드 검증 (`npm run build` 성공 통과)
 - [x] `src/docs/walkthrough.md` 작업 결과 보고서 작성
+
+## 📌 Phase 6. AI API 호출 사용료 관제 센터 구축 (전체 및 회원별)
+- [x] `sheetbot_ai_usage_logs` My DB 감사 테이블 및 7종 감사 컬럼 구축
+- [x] `src/lib/ai-usage.ts` 토큰 및 추정 비용(USD/KRW) 산출 유틸리티 및 로깅 모듈
+- [x] AI 호출 지점 전체 연동 (Apps Script 생성기, 이지봇 대화, AI 도움말 호버)
+- [x] `src/app/api/admin/ai-usage/route.ts` 전체/회원별 집계 및 감사 로그 페이징 API
+- [x] `src/app/dashboard/ai-usage/page.tsx` 실시간 관제 대시보드 UI (핵심 지표, 회원별 랭킹 대장, 원클릭 필터, 상세 로그)
+- [x] `src/components/Navbar.tsx` 관제 링크 등록 및 빌드 검증
+

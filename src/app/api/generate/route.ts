@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { callAiCaller } from "@/lib/egdesk-helpers";
+import { recordAiUsageLog } from "@/lib/ai-usage";
 
 export async function POST(request: Request) {
   try {
@@ -178,6 +179,16 @@ function checkSheetBotStatus() {
         ],
       };
     }
+
+    // AI 사용량 및 추정 비용 실시간 적재
+    void recordAiUsageLog({
+      userEmail,
+      caller: "sheetbot-script-generator",
+      purpose: "Apps Script 자동 생성",
+      model: "gemini-2.0-flash",
+      promptText: fullPrompt,
+      responseText: generatedData?.scriptCode || JSON.stringify(generatedData),
+    });
 
     return NextResponse.json({
       success: true,

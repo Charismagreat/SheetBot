@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
-import { Bot, LogOut, User, Sparkles, ArrowRight, ShieldCheck } from "lucide-react";
+import { Bot, LogOut, User, Sparkles, ArrowRight, ShieldCheck, Activity } from "lucide-react";
 
 export default function Navbar() {
   const { data: session, status } = useSession();
@@ -100,6 +100,15 @@ export default function Navbar() {
                 data-easybot-hint="대시보드 이동: 내 스프레드시트 자동화 프로젝트 및 스케줄 관리 화면으로 이동합니다."
               >
                 <span>내 프로젝트 대시보드</span>
+              </Link>
+
+              <Link
+                href="/dashboard/ai-usage"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100/80 border border-indigo-200/60 rounded-xl transition-all shadow-2xs"
+                data-easybot-hint="AI 사용료 관제: Gemini API 사용 토큰 및 추정 비용(USD/KRW)을 전체 및 회원별로 실시간 모니터링합니다."
+              >
+                <Activity className="w-3.5 h-3.5 text-indigo-600" />
+                <span>AI 사용료 관제</span>
               </Link>
 
               {/* 유저 프로필 카드 */}
