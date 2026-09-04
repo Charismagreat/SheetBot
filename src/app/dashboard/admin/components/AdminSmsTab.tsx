@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
   Smartphone,
   Save,
@@ -10,8 +10,12 @@ import {
   MessageSquare,
   FileText,
   Coins,
+  Activity,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
 } from "lucide-react";
-import { AdminSmsSettings } from "@/lib/admin-sms";
+import { AdminSmsSettings } from "@/lib/admin-sms-types";
 
 interface AdminSmsTabProps {
   smsSettings: AdminSmsSettings;
@@ -22,6 +26,14 @@ interface AdminSmsTabProps {
   onSave: (e: React.FormEvent) => void;
   onSendTest: () => void;
   onRefreshDevices: () => void;
+  checkingDevice?: boolean;
+  deviceCheckResult?: {
+    online: boolean;
+    status: string;
+    message: string;
+    checkedAt?: string;
+  } | null;
+  onCheckDevice?: () => void;
 }
 
 export default function AdminSmsTab({
@@ -33,6 +45,9 @@ export default function AdminSmsTab({
   onSave,
   onSendTest,
   onRefreshDevices,
+  checkingDevice = false,
+  deviceCheckResult,
+  onCheckDevice,
 }: AdminSmsTabProps) {
   return (
     <form onSubmit={onSave} className="space-y-6 animate-fade-in">
@@ -130,15 +145,67 @@ export default function AdminSmsTab({
               <Radio className="w-4 h-4 text-sky-600" />
               <span>발송용 Google Messages 디바이스</span>
             </h4>
-            <button
-              type="button"
-              onClick={onRefreshDevices}
-              className="text-[11px] text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer"
-            >
-              <RefreshCw className="w-3 h-3" />
-              <span>기기 새로고침</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {onCheckDevice && (
+                <button
+                  type="button"
+                  onClick={onCheckDevice}
+                  disabled={checkingDevice}
+                  className="text-[11px] font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200/80 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer disabled:opacity-50 transition-all shadow-2xs"
+                >
+                  <Activity className={`w-3 h-3 text-sky-600 ${checkingDevice ? "animate-spin" : ""}`} />
+                  <span>{checkingDevice ? "상태 점검 중..." : "발송 가능 상태 점검"}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onRefreshDevices}
+                className="text-[11px] text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>기기 새로고침</span>
+              </button>
+            </div>
           </div>
+
+          {/* 기기 실시간 정밀 헬스체크 결과 알림 배너 */}
+          {deviceCheckResult && (
+            <div
+              className={`p-3.5 rounded-xl border text-xs flex items-start gap-2.5 transition-all ${
+                deviceCheckResult.online
+                  ? "bg-emerald-50/80 border-emerald-200 text-emerald-900"
+                  : "bg-rose-50/80 border-rose-200 text-rose-900"
+              }`}
+            >
+              {deviceCheckResult.online ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="font-bold flex items-center justify-between gap-2">
+                  <span>
+                    {deviceCheckResult.online
+                      ? "🟢 문자 발송 정상 (스마트폰 온라인 연결됨)"
+                      : "🔴 발송 불가 (오프라인 / 이메일 자동 전환 발송 대기)"}
+                  </span>
+                  {deviceCheckResult.checkedAt && (
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      확인: {deviceCheckResult.checkedAt}
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] mt-0.5 opacity-90">
+                  {deviceCheckResult.message}
+                </div>
+                {!deviceCheckResult.online && (
+                  <div className="text-[10px] text-rose-600 font-medium mt-1 bg-rose-100/60 px-2 py-0.5 rounded">
+                    * SMS 발송 실패 시 등록된 관리자 이메일(SMTP)로 즉시 긴급 알림이 자동 폴백 발송됩니다.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {phoneDevices.length > 0 ? (
             <div className="space-y-3">
