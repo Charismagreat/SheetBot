@@ -1,9 +1,10 @@
-﻿export const dynamic = "force-dynamic";
+export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, insertRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { sendAdminNotificationSms } from "@/lib/admin-sms";
 
 // 세금계산서 / 현금영수증 신청 목록 조회
 export async function GET() {
@@ -74,6 +75,13 @@ export async function POST(request: Request) {
         restored_by: null,
       },
     ]);
+
+    // 관리자 SMS 알림 비동기 전송 (백그라운드 처리)
+    sendAdminNotificationSms("tax_invoice", {
+      userEmail,
+      companyName: companyName || "고객사",
+      amount: Number(amountKrw || 0),
+    }).catch((smsErr) => console.warn("[TaxInvoice SMS Notification] Error:", smsErr));
 
     return NextResponse.json({
       success: true,
