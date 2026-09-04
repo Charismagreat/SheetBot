@@ -69,3 +69,51 @@ export async function getCurrentUserEmail(): Promise<string | null> {
   }
   return null;
 }
+
+/**
+ * 서버 사이드에서 현재 사용자가 관리자(ADMIN)인지 여부를 판별합니다.
+ */
+export async function isCurrentUserAdmin(emailToCheck?: string | null): Promise<boolean> {
+  try {
+    const email = emailToCheck !== undefined ? emailToCheck : await getCurrentUserEmail();
+    if (!email) return false;
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // 1. sheetbot_users 테이블에서 role === 'ADMIN' 여부 확인
+    const { queryTable } = await import("@/lib/egdesk-helpers");
+    const userRes = await queryTable("sheetbot_users", {
+      filters: { email: normalizedEmail },
+      limit: 1,
+    }).catch(() => ({ rows: [] }));
+
+    if (userRes.rows && userRes.rows.length > 0) {
+      const user = userRes.rows[0];
+      if (user.role === "ADMIN") return true;
+    }
+
+    // 2. 관리자 설정(sheetbot_sms_settings, sheetbot_smtp_settings)의 adminPhone / adminEmail 대조
+    const settingsRes = await queryTable("sheetbot_settings", {
+      limit: 10,
+    }).catch(() => ({ rows: [] }));
+
+    for (const r of settingsRes.rows || []) {
+      if (r.key === "sheetbot_smtp_settings" && r.value) {
+        try {
+          const parsed = JSON.parse(r.value);
+          if (parsed.adminEmail && parsed.adminEmail.toLowerCase().trim() === normalizedEmail) return true;
+          if (parsed.user && parsed.user.toLowerCase().trim() === normalizedEmail) return true;
+        } catch {}
+      }
+    }
+
+    // 3. 환경변수 ADMIN_EMAIL 대조 (설정된 경우)
+    const envAdminEmail = process.env.ADMIN_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+    if (envAdminEmail && envAdminEmail.toLowerCase().trim() === normalizedEmail) {
+      return true;
+    }
+  } catch (err) {
+    console.warn("isCurrentUserAdmin check warning:", err);
+  }
+  return false;
+}

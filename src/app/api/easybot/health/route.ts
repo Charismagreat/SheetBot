@@ -87,11 +87,13 @@ export async function GET() {
     }
   }
 
-  // 사용자 토큰 잔액 체크 (로그인된 경우)
+  // 사용자 토큰 잔액 체크 (로그인된 경우, 관리자는 항상 무제한 활성)
   let userBalance = 0;
   let userTokenDepleted = false;
+  const { isCurrentUserAdmin } = await import("@/lib/auth");
+  const isAdmin = await isCurrentUserAdmin(userEmail);
 
-  if (userEmail) {
+  if (userEmail && !isAdmin) {
     try {
       const tokenInfo = await checkTokenBalance(userEmail, 1);
       userBalance = tokenInfo.balance;
@@ -101,13 +103,20 @@ export async function GET() {
     } catch {
       // ignore
     }
+  } else if (isAdmin) {
+    userBalance = 9999999;
+    userTokenDepleted = false;
   }
 
-  // 최종 상태 조합: API가 정상이더라도 사용자의 보유 토큰이 0이면 주의(warning)로 표기
+  // 최종 상태 조합: API가 정상이더라도 일반 사용자의 보유 토큰이 0이면 주의(warning)로 표기
   let finalStatus = baseHealth.status;
   let finalMessage = baseHealth.message;
 
-  if (baseHealth.status === "healthy" && userTokenDepleted) {
+  if (isAdmin) {
+    if (baseHealth.status === "healthy") {
+      finalMessage = `관리자 모드 (무제한) · ${baseHealth.model}`;
+    }
+  } else if (baseHealth.status === "healthy" && userTokenDepleted) {
     finalStatus = "warning";
     finalMessage = "보유 토큰 소진 (충전 필요)";
   }
