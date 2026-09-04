@@ -2,13 +2,15 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getCurrentUserEmail, isCurrentUserAdmin } from "@/lib/auth";
-import { callAiCaller } from "@/lib/egdesk-helpers";
+import { callAiCaller, insertRows } from "@/lib/egdesk-helpers";
+import { setupDatabase } from "@/lib/setup-db";
 import { recordAiUsageLog } from "@/lib/ai-usage";
 import { getAiModelSettings } from "@/lib/ai-settings";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 
 export async function POST(request: Request) {
   try {
+    await setupDatabase();
     const userEmail = await getCurrentUserEmail();
     const isAdmin = await isCurrentUserAdmin(userEmail);
     const body = await request.json();
@@ -136,6 +138,32 @@ ${userRoleContext}
       promptText: fullPrompt,
       responseText: replyContent,
     });
+
+    // 로그인 회원의 경우 대화 내역 영구 보관 (시트봇 AI 대화 이력 대장)
+    if (userEmail) {
+      const nowTime = new Date().toISOString().replace("T", " ").slice(0, 19);
+      const userMsgId = `chat_${Date.now()}_u_${Math.random().toString(36).substring(2, 7)}`;
+      const botMsgId = `chat_${Date.now() + 1}_b_${Math.random().toString(36).substring(2, 7)}`;
+
+      await insertRows("sheetbot_easybot_chats", [
+        {
+          id: userMsgId,
+          user_email: userEmail.toLowerCase().trim(),
+          role: "user",
+          message: message.trim(),
+          created_at: nowTime,
+        },
+        {
+          id: botMsgId,
+          user_email: userEmail.toLowerCase().trim(),
+          role: "bot",
+          message: replyContent,
+          created_at: nowTime,
+        },
+      ]).catch((err: any) => {
+        console.warn("[EasyBot] Chat history persist warning:", err.message);
+      });
+    }
 
     return NextResponse.json({
       success: true,

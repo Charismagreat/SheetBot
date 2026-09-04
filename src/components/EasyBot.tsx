@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import {
   Bot,
   Sparkles,
@@ -50,11 +51,14 @@ const MIN_WIDTH = 340;
 const MIN_HEIGHT = 440;
 
 export default function EasyBot() {
+  const { data: session, status: sessionStatus } = useSession();
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
 
   // 창 위치 및 크기 상태
@@ -375,19 +379,61 @@ export default function EasyBot() {
     }
   };
 
-  // 초기 웰컴 메시지
+  // 사용자별/게스트 대화 내역 불러오기 및 복원
   useEffect(() => {
-    if (messages.length === 0) {
-      setMessages([
-        {
-          id: "welcome",
-          role: "bot",
-          text: "안녕하세요! Google 스프레드시트 & Apps Script 전문 비서 **시트봇 AI (SheetBot AI)**입니다. 🤖\n\n상단 바를 마우스로 잡고 창을 자유롭게 이동하거나, 테두리를 당겨 원하는 크기로 조절하실 수 있습니다.\n자동화 스크립트 작성, 트리거 설정, 구글 시트 고급 수식 등 무엇이든 편하게 질문해 주세요!",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        },
-      ]);
-    }
-  }, [messages.length]);
+    if (sessionStatus === "loading") return;
+
+    let isSubscribed = true;
+
+    const loadChatHistory = async () => {
+      // 1. 로그인 회원의 경우 클라우드 DB에서 대화 내역 조회
+      if (session?.user?.email) {
+        try {
+          const res = await fetch("/api/easybot/messages");
+          const data = await res.json();
+          if (isSubscribed && data?.success && Array.isArray(data.messages) && data.messages.length > 0) {
+            setMessages(data.messages);
+            setHistoryLoaded(true);
+            return;
+          }
+        } catch (err) {
+          console.warn("[EasyBot] Failed to load user chat history:", err);
+        }
+      } else {
+        // 2. 비로그인 게스트인 경우 로컬스토리지에서 복원
+        try {
+          const guestHistory = localStorage.getItem("sheetbot_guest_messages");
+          if (guestHistory) {
+            const parsed = JSON.parse(guestHistory);
+            if (isSubscribed && Array.isArray(parsed) && parsed.length > 0) {
+              setMessages(parsed);
+              setHistoryLoaded(true);
+              return;
+            }
+          }
+        } catch {}
+      }
+
+      // 3. 저장된 대화가 없으면 기본 환영 메시지 표시
+      if (isSubscribed) {
+        setMessages([
+          {
+            id: "welcome",
+            role: "bot",
+            text: "안녕하세요! Google 스프레드시트 & Apps Script 전문 비서 **시트봇 AI (SheetBot AI)**입니다. 🤖\n\n상단 바를 마우스로 잡고 창을 자유롭게 이동하거나, 테두리를 당겨 원하는 크기로 조절하실 수 있습니다.\n자동화 스크립트 작성, 트리거 설정, 구글 시트 고급 수식 등 무엇이든 편하게 질문해 주세요!",
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          },
+        ]);
+        setHistoryLoaded(true);
+      }
+    };
+
+    loadChatHistory();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [session?.user?.email, sessionStatus]);
 
   useEffect(() => {
     if (isOpen) {
@@ -431,7 +477,16 @@ export default function EasyBot() {
         text: data?.reply || "죄송합니다. 일시적인 오류로 답변을 불러오지 못했습니다.",
         time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
-      setMessages([...nextMessages, botMsg]);
+
+      const finalMessages = [...nextMessages, botMsg];
+      setMessages(finalMessages);
+
+      // 비로그인 게스트의 경우 로컬스토리지에 최근 대화 동기화
+      if (!session?.user?.email) {
+        try {
+          localStorage.setItem("sheetbot_guest_messages", JSON.stringify(finalMessages.slice(-50)));
+        } catch {}
+      }
     } catch {
       const errorMsg: ChatMessage = {
         id: `bot_err_${Date.now()}`,
@@ -452,16 +507,29 @@ export default function EasyBot() {
     setTimeout(() => setCopiedCodeId(null), 2000);
   };
 
-  const handleReset = () => {
-    if (confirm("대화 내역을 초기화하시겠습니까?")) {
+  const handleReset = async () => {
+    if (!confirm("대화 내역을 초기화하시겠습니까?")) return;
+
+    setIsResetting(true);
+    try {
+      if (session?.user?.email) {
+        await fetch("/api/easybot/messages", { method: "DELETE" }).catch(() => {});
+      } else {
+        localStorage.removeItem("sheetbot_guest_messages");
+      }
+
       setMessages([
         {
-          id: "welcome_reset",
+          id: `welcome_reset_${Date.now()}`,
           role: "bot",
           text: "대화가 초기화되었습니다. 새로운 질문을 입력해 주세요!",
           time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
+    } catch (err) {
+      console.error("[EasyBot] Reset failed:", err);
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -740,6 +808,28 @@ export default function EasyBot() {
               </a>
             </div>
           )}
+
+          {/* 대화 기억 및 세션 동기화 안내 배너 */}
+          <div className="bg-slate-100/90 border-b border-slate-200/80 px-3 py-1.5 text-[11px] text-slate-600 flex items-center justify-between shrink-0">
+            {session?.user?.email ? (
+              <span className="flex items-center gap-1.5 font-medium text-slate-700 truncate">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 shadow-sm" />
+                <span className="truncate">
+                  대화 영구 보관 중: <strong className="text-indigo-600">{session.user.email}</strong>
+                </span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 font-medium text-slate-500 truncate">
+                <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0 shadow-sm" />
+                <span className="truncate">게스트 모드 (로그인 시 클라우드 영구 보관)</span>
+              </span>
+            )}
+            {isResetting && (
+              <span className="text-[10px] text-indigo-600 font-bold shrink-0 animate-pulse">
+                초기화 중...
+              </span>
+            )}
+          </div>
 
           {/* 메시지 리스트 */}
           <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-50/50">

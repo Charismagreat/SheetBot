@@ -394,7 +394,20 @@ export async function setupDatabase(): Promise<void> {
       { tableName: 'sheetbot_dispatch_logs' }
     );
 
-    // 13. 레거시 데이터 마이그레이션 실행
+    // 13. sheetbot_easybot_chats 테이블 생성 (시트봇 AI 대화 영구 보관 대장)
+    await safeCreateTable(
+      'SheetBot AI 대화 이력 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'role', type: 'TEXT', notNull: true }, // 'user', 'bot'
+        { name: 'message', type: 'TEXT', notNull: true },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_easybot_chats' }
+    );
+
+    // 14. 레거시 데이터 마이그레이션 실행
     await migrateLegacySettingsData();
 
     isDbInitialized = true;
