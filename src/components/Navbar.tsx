@@ -7,12 +7,24 @@ import { Bot, LogOut, User, Sparkles, ArrowRight, ShieldCheck } from "lucide-rea
 
 export default function Navbar() {
   const { data: session, status } = useSession();
-  const [aiHelpEnabled, setAiHelpEnabled] = useState(true);
+  // 기본값: 꺼짐(false)
+  const [aiHelpEnabled, setAiHelpEnabled] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("sheetbot_ai_help_enabled");
-      setAiHelpEnabled(saved !== "false");
+      setAiHelpEnabled(saved === "true");
+
+      const handleToggle = (e: any) => {
+        if (typeof e.detail?.enabled === "boolean") {
+          setAiHelpEnabled(e.detail.enabled);
+        }
+      };
+
+      window.addEventListener("sheetbot-ai-help-toggle", handleToggle);
+      return () => {
+        window.removeEventListener("sheetbot-ai-help-toggle", handleToggle);
+      };
     }
   }, []);
 

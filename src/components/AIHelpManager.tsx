@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Sparkles, HelpCircle, X, Loader2 } from "lucide-react";
+import { Sparkles, HelpCircle, X, Loader2, PowerOff } from "lucide-react";
 
 export default function AIHelpManager() {
   const [mounted, setMounted] = useState(false);
-  const [isHelpEnabled, setIsHelpEnabled] = useState(true);
+  // 기본 상태: 꺼짐(false)
+  const [isHelpEnabled, setIsHelpEnabled] = useState(false);
   const isHelpEnabledRef = useRef(isHelpEnabled);
 
   // 커서 인디케이터 상태
@@ -43,8 +44,9 @@ export default function AIHelpManager() {
   useEffect(() => {
     setMounted(true);
     if (typeof window !== "undefined") {
+      // 기본값은 꺼진 상태(false), 오직 'true'로 명시 저장된 경우에만 켬
       const saved = localStorage.getItem("sheetbot_ai_help_enabled");
-      const enabled = saved !== "false";
+      const enabled = saved === "true";
       setIsHelpEnabled(enabled);
       isHelpEnabledRef.current = enabled;
 
@@ -72,6 +74,19 @@ export default function AIHelpManager() {
   useEffect(() => {
     isHelpEnabledRef.current = isHelpEnabled;
   }, [isHelpEnabled]);
+
+  const disableHelpPermanently = () => {
+    setIsHelpEnabled(false);
+    isHelpEnabledRef.current = false;
+    setHelpInfo((prev) => ({ ...prev, isOpen: false }));
+    setCursorIndicator((prev) => ({ ...prev, visible: false }));
+    if (typeof window !== "undefined") {
+      localStorage.setItem("sheetbot_ai_help_enabled", "false");
+      window.dispatchEvent(
+        new CustomEvent("sheetbot-ai-help-toggle", { detail: { enabled: false } })
+      );
+    }
+  };
 
   // 마우스 이벤트 리스너
   useEffect(() => {
@@ -275,14 +290,15 @@ export default function AIHelpManager() {
             </div>
             <button
               onClick={() => setHelpInfo((prev) => ({ ...prev, isOpen: false }))}
-              className="p-1 rounded-lg hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+              className="p-1 rounded-lg hover:bg-white/20 text-white/80 hover:text-white transition-colors cursor-pointer"
+              title="닫기"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
 
           {/* 본문 */}
-          <div className="p-4 space-y-2.5">
+          <div className="p-4 space-y-3">
             {helpInfo.isLoading ? (
               <div className="py-4 flex flex-col items-center justify-center gap-2 text-indigo-600">
                 <Loader2 className="w-5 h-5 animate-spin" />
@@ -293,9 +309,21 @@ export default function AIHelpManager() {
                 <p className="text-xs text-slate-700 leading-relaxed font-medium whitespace-pre-line">
                   {helpInfo.explanation}
                 </p>
-                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400 font-semibold">
-                  <span>Powered by 이지데스크 AI Caller</span>
-                  <span>SheetBot Context</span>
+
+                {/* 하단 제어 툴바 */}
+                <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                  <button
+                    onClick={disableHelpPermanently}
+                    className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                    title="상단 네비바에서 언제든 다시 켤 수 있습니다"
+                  >
+                    <PowerOff className="w-3 h-3" />
+                    <span>도움말 끄기</span>
+                  </button>
+
+                  <span className="text-[10px] text-slate-400 font-semibold">
+                    이지데스크 AI Caller
+                  </span>
                 </div>
               </>
             )}
