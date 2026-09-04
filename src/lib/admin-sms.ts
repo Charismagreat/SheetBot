@@ -51,6 +51,7 @@ export async function sendAdminNotificationSms(
     amount?: number;
     companyName?: string;
     extra?: string;
+    ruleName?: string;
   }
 ): Promise<{ success: boolean; message?: string }> {
   try {
@@ -95,14 +96,45 @@ export async function sendAdminNotificationSms(
     const cleanPhone = settings.adminPhone.replace(/[^0-9]/g, "");
 
     // EGDesk 구글메시지 MCP 전송 호출
-    await sendPhoneSms({
-      deviceId: settings.deviceId,
-      phoneNumber: cleanPhone,
-      message: smsText,
-      isMarketing: false, // 시스템 관리자 알림이므로 광고성 문구 제외
-    });
+    try {
+      await sendPhoneSms({
+        deviceId: settings.deviceId,
+        phoneNumber: cleanPhone,
+        message: smsText,
+        isMarketing: false, // 시스템 관리자 알림이므로 광고성 문구 제외
+      });
 
-    return { success: true, message: "관리자 SMS 발송 완료" };
+      // 발송 성공 이력 기록
+      const { recordDispatchLog } = await import("@/lib/dispatch-logger");
+      recordDispatchLog({
+        channel: "SMS",
+        eventType,
+        ruleName: payload.ruleName || "관리자 기본 SMS 알림",
+        recipient: settings.adminPhone,
+        recipientType: "ADMIN",
+        title: `[SMS] ${payload.title || eventType}`,
+        content: smsText,
+        status: "SUCCESS",
+      }).catch((logErr) => console.warn("[AdminSMS Log Error]", logErr));
+
+      return { success: true, message: "관리자 SMS 발송 완료" };
+    } catch (sendErr: any) {
+      // 발송 실패 이력 기록
+      const { recordDispatchLog } = await import("@/lib/dispatch-logger");
+      recordDispatchLog({
+        channel: "SMS",
+        eventType,
+        ruleName: payload.ruleName || "관리자 기본 SMS 알림",
+        recipient: settings.adminPhone,
+        recipientType: "ADMIN",
+        title: `[SMS] ${payload.title || eventType}`,
+        content: smsText,
+        status: "FAILED",
+        errorMessage: sendErr.message,
+      }).catch((logErr) => console.warn("[AdminSMS Log Error]", logErr));
+
+      throw sendErr;
+    }
   } catch (err: any) {
     console.error("[AdminSMS] Send SMS error:", err);
     return { success: false, message: err.message };

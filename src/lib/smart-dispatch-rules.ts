@@ -189,6 +189,7 @@ export async function executeSmartDispatchRules(
               title: payload.title,
               amount: payload.amount,
               companyName: payload.companyName,
+              ruleName: rule.name,
             }).catch((e) => console.warn("[SmartRules SMS Error]", e));
           }
         }
@@ -205,6 +206,9 @@ export async function executeSmartDispatchRules(
               sendSystemEmail({
                 to: adminTo,
                 subject: `[SheetBot 자동알림] ${rule.name} - ${payload.title || payload.companyName || eventType}`,
+                eventType,
+                ruleName: rule.name,
+                recipientType: "ADMIN",
                 html: `
                   <div style="font-family: sans-serif; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
                     <div style="font-size: 11px; color: #4f46e5; font-weight: bold; margin-bottom: 6px;">
@@ -229,6 +233,9 @@ export async function executeSmartDispatchRules(
               sendSystemEmail({
                 to: payload.userEmail,
                 subject: `[SheetBot] 안내 말씀드립니다: ${payload.title || "서비스 알림"}`,
+                eventType,
+                ruleName: rule.name,
+                recipientType: "CUSTOMER",
                 html: `
                   <div style="font-family: sans-serif; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
                     <h3 style="color: #059669; margin-top: 0;">SheetBot 알림 안내</h3>

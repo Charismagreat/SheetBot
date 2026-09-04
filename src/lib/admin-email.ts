@@ -33,6 +33,9 @@ export async function sendSystemEmail(options: {
   text?: string;
   html?: string;
   smtpConfig?: Partial<AdminSmtpSettings>;
+  eventType?: "inquiry" | "tax_invoice" | "payment" | "test" | "other";
+  ruleName?: string;
+  recipientType?: "ADMIN" | "CUSTOMER";
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
     const settings = options.smtpConfig 
@@ -40,7 +43,21 @@ export async function sendSystemEmail(options: {
       : await getAdminSmtpSettings();
 
     if (!settings.user || !settings.pass) {
-      return { success: false, error: "SMTP 발송 계정(아이디 또는 앱 비밀번호)이 설정되지 않았습니다." };
+      const errReason = "SMTP 발송 계정(아이디 또는 앱 비밀번호)이 설정되지 않았습니다.";
+      const { recordDispatchLog } = await import("@/lib/dispatch-logger");
+      recordDispatchLog({
+        channel: "EMAIL",
+        eventType: options.eventType || "other",
+        ruleName: options.ruleName || "관리자 기본 이메일 알림",
+        recipient: options.to,
+        recipientType: options.recipientType || "ADMIN",
+        title: options.subject,
+        content: options.text || options.html || "",
+        status: "FAILED",
+        errorMessage: errReason,
+      }).catch((logErr) => console.warn("[AdminEmail Log Error]", logErr));
+
+      return { success: false, error: errReason };
     }
 
     const transporter = nodemailer.createTransport({
@@ -63,9 +80,37 @@ export async function sendSystemEmail(options: {
       html: options.html,
     });
 
+    // 발송 성공 로그 기록
+    const { recordDispatchLog } = await import("@/lib/dispatch-logger");
+    recordDispatchLog({
+      channel: "EMAIL",
+      eventType: options.eventType || "other",
+      ruleName: options.ruleName || "관리자 기본 이메일 알림",
+      recipient: options.to,
+      recipientType: options.recipientType || "ADMIN",
+      title: options.subject,
+      content: options.text || options.html || "",
+      status: "SUCCESS",
+    }).catch((logErr) => console.warn("[AdminEmail Log Error]", logErr));
+
     return { success: true, messageId: info.messageId };
   } catch (err: any) {
     console.error("[AdminEmail] sendSystemEmail error:", err);
+
+    // 발송 실패 로그 기록
+    const { recordDispatchLog } = await import("@/lib/dispatch-logger");
+    recordDispatchLog({
+      channel: "EMAIL",
+      eventType: options.eventType || "other",
+      ruleName: options.ruleName || "관리자 기본 이메일 알림",
+      recipient: options.to,
+      recipientType: options.recipientType || "ADMIN",
+      title: options.subject,
+      content: options.text || options.html || "",
+      status: "FAILED",
+      errorMessage: err.message,
+    }).catch((logErr) => console.warn("[AdminEmail Log Error]", logErr));
+
     return { success: false, error: err.message };
   }
 }
