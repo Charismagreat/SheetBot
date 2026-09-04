@@ -15,6 +15,11 @@ import {
   History,
   AlertCircle,
   ChevronRight,
+  X,
+  Lock,
+  Loader2,
+  Check,
+  Smartphone,
 } from "lucide-react";
 
 interface UserWallet {
@@ -110,36 +115,55 @@ export default function PricingWalletPage() {
     fetchWallet();
   }, []);
 
-  const handleCharge = async (pkg: PaymentPackage) => {
-    if (!confirm(`[${pkg.name}] (${pkg.priceKrw.toLocaleString()}원)을 결제하고 ${pkg.totalTokens.toLocaleString()} 토큰을 충전하시겠습니까?`)) {
-      return;
-    }
+  // PG 결제 시뮬레이터 모달 상태
+  const [activeModalPackage, setActiveModalPackage] = useState<PaymentPackage | null>(null);
+  const [modalStep, setModalStep] = useState<"select" | "processing" | "done">("select");
+  const [pgAgency, setPgAgency] = useState("토스페이"); // 카카오페이, 네이버페이, 신용카드 등
 
+  const openPaymentModal = (pkg: PaymentPackage) => {
+    setActiveModalPackage(pkg);
+    setModalStep("select");
+    setPgAgency(selectedMethod.includes("간편") ? "토스페이" : "신용/체크카드");
+  };
+
+  const closePaymentModal = () => {
+    if (modalStep === "processing") return;
+    setActiveModalPackage(null);
+    setModalStep("select");
+  };
+
+  const executeSimulatedPayment = async () => {
+    if (!activeModalPackage) return;
     try {
-      setPurchasingId(pkg.id);
-      setPurchaseSuccess(null);
+      setModalStep("processing");
+      // 1.5초간 실제 PG사 암호화 통신 및 카드사 승인 대기 시뮬레이션
+      await new Promise((resolve) => setTimeout(resolve, 1600));
 
       const res = await fetch("/api/wallet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          packageId: pkg.id,
-          paymentMethod: selectedMethod,
+          packageId: activeModalPackage.id,
+          paymentMethod: `${selectedMethod} (${pgAgency})`,
         }),
       });
 
       const data = await res.json();
       if (data.success) {
-        setPurchaseSuccess(data.message);
+        setModalStep("done");
         await fetchWallet();
-        setTimeout(() => setPurchaseSuccess(null), 5000);
+        setTimeout(() => {
+          closePaymentModal();
+          setPurchaseSuccess(data.message);
+          setTimeout(() => setPurchaseSuccess(null), 5000);
+        }, 1200);
       } else {
-        alert(data.error || "결제 충전에 실패했습니다.");
+        alert(data.error || "결제 승인에 실패했습니다.");
+        setModalStep("select");
       }
     } catch (err: any) {
-      alert("결제 통신 오류: " + err.message);
-    } finally {
-      setPurchasingId(null);
+      alert("결제 처리 중 오류 발생: " + err.message);
+      setModalStep("select");
     }
   };
 
@@ -308,20 +332,15 @@ export default function PricingWalletPage() {
               {/* 충전 결제 버튼 */}
               <div className="pt-6">
                 <button
-                  onClick={() => handleCharge(pkg)}
-                  disabled={purchasingId === pkg.id}
+                  onClick={() => openPaymentModal(pkg)}
                   className={`w-full py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer ${
                     pkg.isPopular
                       ? "bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white shadow-md shadow-amber-500/20"
                       : "bg-slate-900 hover:bg-slate-800 text-white"
-                  } disabled:opacity-50`}
+                  }`}
                 >
-                  {purchasingId === pkg.id ? (
-                    <Sparkles className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <CreditCard className="w-4 h-4" />
-                  )}
-                  <span>{purchasingId === pkg.id ? "승인 처리 중..." : "원클릭 토큰 충전하기"}</span>
+                  <CreditCard className="w-4 h-4" />
+                  <span>토큰 충전 결제하기</span>
                 </button>
               </div>
             </div>
@@ -395,6 +414,134 @@ export default function PricingWalletPage() {
           </div>
         </div>
       </div>
+
+      {/* 💳 실제 PG 결제창 시뮬레이터 모달 */}
+      {activeModalPackage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 overflow-hidden relative animate-scale-up">
+            {/* PG사 헤더 */}
+            <div className="bg-slate-900 text-white p-5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 bg-amber-500 rounded-lg text-slate-900">
+                  <Coins className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-extrabold text-sm tracking-tight">안전 결제 PG 시뮬레이터</span>
+                    <span className="text-[10px] px-2 py-0.2 bg-emerald-500/20 text-emerald-300 rounded-full font-bold border border-emerald-500/30">
+                      TEST MODE
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">256-bit SSL 암호화 안전 결제</p>
+                </div>
+              </div>
+
+              <button
+                onClick={closePaymentModal}
+                disabled={modalStep === "processing"}
+                className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-all cursor-pointer disabled:opacity-30"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 주문 요약 정보 */}
+            <div className="p-6 space-y-6">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-2.5">
+                <div className="flex justify-between items-center text-xs text-slate-500">
+                  <span>결제 상품</span>
+                  <span className="font-bold text-slate-800">{activeModalPackage.name}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs text-slate-500">
+                  <span>충전 토큰 수량</span>
+                  <span className="font-bold text-amber-600">
+                    +{activeModalPackage.totalTokens.toLocaleString()} Tokens
+                  </span>
+                </div>
+                <div className="pt-2 border-t border-slate-200 flex justify-between items-center">
+                  <span className="text-xs font-extrabold text-slate-800">최종 결제 금액</span>
+                  <span className="text-xl font-black text-slate-900">
+                    {activeModalPackage.priceKrw.toLocaleString()}원
+                  </span>
+                </div>
+              </div>
+
+              {/* 시뮬레이터 상태에 따른 본문 */}
+              {modalStep === "select" && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                      <span>결제 대행사 / 간편결제사 선택</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {["토스페이", "카카오페이", "네이버페이", "KB국민카드", "신한카드", "삼성카드"].map((agency) => (
+                        <button
+                          key={agency}
+                          type="button"
+                          onClick={() => setPgAgency(agency)}
+                          className={`p-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
+                            pgAgency === agency
+                              ? "border-amber-500 bg-amber-50/60 text-amber-900 shadow-xs"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 bg-white"
+                          }`}
+                        >
+                          <span>{agency}</span>
+                          {pgAgency === agency && <Check className="w-4 h-4 text-amber-600" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 결제 약관 동의 */}
+                  <div className="p-3 bg-amber-50/50 rounded-xl border border-amber-200/60 text-[11px] text-amber-800 flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>실제 결제 승인 통신 흐름을 안전하게 검증하는 테스트 환경입니다.</span>
+                  </div>
+
+                  <button
+                    onClick={executeSimulatedPayment}
+                    className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-extrabold rounded-xl shadow-lg shadow-amber-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                  >
+                    <span>{pgAgency}로 {activeModalPackage.priceKrw.toLocaleString()}원 결제 승인하기</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {modalStep === "processing" && (
+                <div className="py-10 text-center space-y-4">
+                  <div className="relative w-16 h-16 mx-auto">
+                    <Loader2 className="w-16 h-16 animate-spin text-amber-500" />
+                    <CreditCard className="w-7 h-7 text-slate-700 absolute inset-0 m-auto" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-extrabold text-slate-900">
+                      {pgAgency} 결제 승인 진행 중...
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      금융 결제원 및 카드사 통신망과 안전하게 연동 중입니다. 잠시만 기다려 주세요.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {modalStep === "done" && (
+                <div className="py-10 text-center space-y-4 animate-fade-in">
+                  <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-xs">
+                    <CheckCircle2 className="w-10 h-10" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-black text-slate-900">결제 및 토큰 충전 완료!</h4>
+                    <p className="text-xs text-emerald-600 font-bold">
+                      +{activeModalPackage.totalTokens.toLocaleString()} 토큰이 지갑에 즉시 반영되었습니다.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
