@@ -1,4 +1,4 @@
-﻿export const dynamic = "force-dynamic";
+export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
       easybot_info: body.easybot_info?.trim() || DEFAULT_FOOTER.easybot_info,
       brand_description: body.brand_description?.trim() || DEFAULT_FOOTER.brand_description,
       copyright_text: body.copyright_text?.trim() || DEFAULT_FOOTER.copyright_text,
+      sns_channels: Array.isArray(body.sns_channels) ? body.sns_channels : DEFAULT_FOOTER.sns_channels,
     };
 
     const now = new Date().toISOString();
