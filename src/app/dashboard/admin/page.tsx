@@ -18,7 +18,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { DEFAULT_FOOTER, FooterInfo } from "@/lib/default-footer";
-import { DEFAULT_SMS_SETTINGS, AdminSmsSettings } from "@/lib/admin-sms";
+import { DEFAULT_SMS_SETTINGS, AdminSmsSettings } from "@/lib/admin-sms-types";
 import { DEFAULT_SMTP_SETTINGS, AdminSmtpSettings } from "@/lib/admin-email-types";
 import { DEFAULT_SMART_RULES, SmartDispatchRule } from "@/lib/smart-dispatch-types";
 import AdminDispatchLogsTab from "./components/AdminDispatchLogsTab";
@@ -54,6 +54,13 @@ export default function AdminDashboardPage() {
   const [phoneDevices, setPhoneDevices] = useState<any[]>([]);
   const [savingSms, setSavingSms] = useState<boolean>(false);
   const [sendingTestSms, setSendingTestSms] = useState<boolean>(false);
+  const [checkingDevice, setCheckingDevice] = useState<boolean>(false);
+  const [deviceCheckResult, setDeviceCheckResult] = useState<{
+    online: boolean;
+    status: string;
+    message: string;
+    checkedAt?: string;
+  } | null>(null);
 
   // 발송 메일 SMTP 설정 상태
   const [smtpSettings, setSmtpSettings] = useState<AdminSmtpSettings>(DEFAULT_SMTP_SETTINGS);
@@ -248,6 +255,47 @@ export default function AdminDashboardPage() {
       alert("오류: " + e.message);
     } finally {
       setSendingTestSms(false);
+    }
+  };
+
+  const handleCheckDevice = async () => {
+    if (!smsSettings.deviceId) {
+      alert("점검할 발송 디바이스 ID가 없습니다.");
+      return;
+    }
+    setCheckingDevice(true);
+    try {
+      const res = await fetch("/api/admin/sms/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId: smsSettings.deviceId }),
+      });
+      const data = await res.json();
+      const nowStr = new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      if (data.success) {
+        setDeviceCheckResult({
+          online: data.online,
+          status: data.status,
+          message: data.message,
+          checkedAt: nowStr,
+        });
+      } else {
+        setDeviceCheckResult({
+          online: false,
+          status: data.status || "offline",
+          message: data.message || data.error || "연결 상태 점검 실패",
+          checkedAt: nowStr,
+        });
+      }
+    } catch (e: any) {
+      setDeviceCheckResult({
+        online: false,
+        status: "error",
+        message: "점검 중 오류 발생: " + e.message,
+        checkedAt: new Date().toLocaleTimeString("ko-KR"),
+      });
+    } finally {
+      setCheckingDevice(false);
     }
   };
 
@@ -745,6 +793,9 @@ export default function AdminDashboardPage() {
             onSave={handleSaveSmsSettings}
             onSendTest={handleSendTestSms}
             onRefreshDevices={fetchPhoneDevices}
+            checkingDevice={checkingDevice}
+            deviceCheckResult={deviceCheckResult}
+            onCheckDevice={handleCheckDevice}
           />
         )}
 
