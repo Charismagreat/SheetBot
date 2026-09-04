@@ -375,7 +375,26 @@ export async function setupDatabase(): Promise<void> {
       { tableName: 'sheetbot_users' }
     );
 
-    // 12. 레거시 데이터 마이그레이션 실행
+    // 12. sheetbot_dispatch_logs 테이블 생성 (알림 발송 이력 대장)
+    await safeCreateTable(
+      'SheetBot 알림 발송 이력 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'channel', type: 'TEXT', notNull: true }, // 'SMS', 'EMAIL'
+        { name: 'event_type', type: 'TEXT', notNull: true }, // 'inquiry', 'tax_invoice', 'payment', 'test', 'other'
+        { name: 'rule_name', type: 'TEXT' }, // 적용된 스마트 규칙명 또는 기본 알림
+        { name: 'recipient', type: 'TEXT', notNull: true }, // 전화번호 또는 이메일
+        { name: 'recipient_type', type: 'TEXT' }, // 'ADMIN', 'CUSTOMER'
+        { name: 'title', type: 'TEXT' },
+        { name: 'content', type: 'TEXT' },
+        { name: 'status', type: 'TEXT', notNull: true }, // 'SUCCESS', 'FAILED'
+        { name: 'error_message', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_dispatch_logs' }
+    );
+
+    // 13. 레거시 데이터 마이그레이션 실행
     await migrateLegacySettingsData();
 
     isDbInitialized = true;

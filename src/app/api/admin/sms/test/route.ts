@@ -25,18 +25,47 @@ export async function POST(req: NextRequest) {
     const nowStr = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
     const testMessage = `[SheetBot 관리자 테스트]\nEGDesk 구글메시지 MCP 연동 테스트 발송 성공!\n발송시각: ${nowStr}\n수신번호: ${phoneNumber}`;
 
-    const res = await sendPhoneSms({
-      deviceId,
-      phoneNumber,
-      message: testMessage,
-      isMarketing: false,
-    });
+    try {
+      const res = await sendPhoneSms({
+        deviceId,
+        phoneNumber,
+        message: testMessage,
+        isMarketing: false,
+      });
 
-    return NextResponse.json({
-      success: true,
-      message: `[${phoneNumber}] 번호로 테스트 문자가 성공적으로 발송되었습니다.`,
-      result: res,
-    });
+      const { recordDispatchLog } = await import("@/lib/dispatch-logger");
+      recordDispatchLog({
+        channel: "SMS",
+        eventType: "test",
+        ruleName: "관리자 SMS 테스트 발송",
+        recipient: phoneNumber,
+        recipientType: "ADMIN",
+        title: "[SheetBot 관리자 테스트]",
+        content: testMessage,
+        status: "SUCCESS",
+      }).catch((e) => console.warn("[SMS Test Log Error]", e));
+
+      return NextResponse.json({
+        success: true,
+        message: `[${phoneNumber}] 번호로 테스트 문자가 성공적으로 발송되었습니다.`,
+        result: res,
+      });
+    } catch (smsErr: any) {
+      const { recordDispatchLog } = await import("@/lib/dispatch-logger");
+      recordDispatchLog({
+        channel: "SMS",
+        eventType: "test",
+        ruleName: "관리자 SMS 테스트 발송",
+        recipient: phoneNumber,
+        recipientType: "ADMIN",
+        title: "[SheetBot 관리자 테스트]",
+        content: testMessage,
+        status: "FAILED",
+        errorMessage: smsErr.message,
+      }).catch((e) => console.warn("[SMS Test Log Error]", e));
+
+      throw smsErr;
+    }
   } catch (err: any) {
     console.error("[AdminSMS Test] Error:", err);
     return NextResponse.json({ success: false, error: err.message || "문자 발송 실패" }, { status: 500 });

@@ -64,6 +64,9 @@ export async function POST(req: NextRequest) {
         pass: pass.trim(),
         fromName: fromName || "SheetBot",
       },
+      eventType: "test",
+      ruleName: "관리자 SMTP 테스트 발송",
+      recipientType: "ADMIN",
     });
 
     if (!res.success) {

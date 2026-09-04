@@ -50,7 +50,7 @@ import { DEFAULT_SMS_SETTINGS, AdminSmsSettings } from "@/lib/admin-sms";
 import { DEFAULT_SMTP_SETTINGS, AdminSmtpSettings } from "@/lib/admin-email-types";
 import { DEFAULT_SMART_RULES, SmartDispatchRule } from "@/lib/smart-dispatch-types";
 
-type TabType = "users" | "inquiries" | "reviews" | "faqs" | "tax_invoices" | "footer" | "sms" | "email" | "smart_rules";
+type TabType = "users" | "inquiries" | "reviews" | "faqs" | "tax_invoices" | "footer" | "sms" | "email" | "smart_rules" | "dispatch_logs";
 
 export default function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<TabType>("users");
@@ -84,6 +84,23 @@ export default function AdminDashboardPage() {
   const [smartRules, setSmartRules] = useState<SmartDispatchRule[]>(DEFAULT_SMART_RULES);
   const [rulePromptInput, setRulePromptInput] = useState<string>("");
   const [parsingRule, setParsingRule] = useState<boolean>(false);
+
+  // 알림 발송 이력 상태
+  const [dispatchLogs, setDispatchLogs] = useState<any[]>([]);
+  const [dispatchStats, setDispatchStats] = useState({
+    total: 0,
+    smsTotal: 0,
+    smsSuccess: 0,
+    smsFailed: 0,
+    emailTotal: 0,
+    emailSuccess: 0,
+    emailFailed: 0,
+  });
+  const [logChannelFilter, setLogChannelFilter] = useState<string>("ALL");
+  const [logStatusFilter, setLogStatusFilter] = useState<string>("ALL");
+  const [logSearchInput, setLogSearchInput] = useState<string>("");
+  const [loadingLogs, setLoadingLogs] = useState<boolean>(false);
+  const [selectedLogDetail, setSelectedLogDetail] = useState<any | null>(null);
 
   // 회원 검색 & 필터
   const [userSearch, setUserSearch] = useState<string>("");
@@ -126,6 +143,12 @@ export default function AdminDashboardPage() {
     fetchAllData();
   }, []);
 
+  useEffect(() => {
+    if (activeTab === "dispatch_logs") {
+      fetchDispatchLogs();
+    }
+  }, [activeTab, logChannelFilter, logStatusFilter]);
+
   const fetchAllData = async () => {
     setLoading(true);
     try {
@@ -139,6 +162,7 @@ export default function AdminDashboardPage() {
         fetchSmsSettings(),
         fetchSmtpSettings(),
         fetchSmartRules(),
+        fetchDispatchLogs(),
       ]);
     } finally {
       setLoading(false);
@@ -419,6 +443,45 @@ export default function AdminDashboardPage() {
         setSmartRules(data.rules);
       } else {
         fetchSmartRules();
+      }
+    } catch (e) {
+      alert("삭제 실패");
+    }
+  };
+
+  // 발송 이력 조회 함수
+  const fetchDispatchLogs = async () => {
+    setLoadingLogs(true);
+    try {
+      const q = new URLSearchParams();
+      if (logChannelFilter !== "ALL") q.set("channel", logChannelFilter);
+      if (logStatusFilter !== "ALL") q.set("status", logStatusFilter);
+      if (logSearchInput) q.set("search", logSearchInput);
+
+      const res = await fetch(`/api/admin/dispatch-logs?${q.toString()}`);
+      const data = await res.json();
+      if (data.success) {
+        setDispatchLogs(data.logs || []);
+        if (data.stats) setDispatchStats(data.stats);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch dispatch logs", e);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  const handleDeleteLog = async (id: string) => {
+    if (!confirm("이 발송 이력 항목을 삭제하시겠습니까?")) return;
+    try {
+      const res = await fetch(`/api/admin/dispatch-logs?id=${id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchDispatchLogs();
+      } else {
+        alert(data.error || "삭제 실패");
       }
     } catch (e) {
       alert("삭제 실패");
@@ -913,6 +976,18 @@ export default function AdminDashboardPage() {
           >
             <Wand2 className="w-4 h-4 text-purple-400" />
             <span>✨ AI 자연어 발송 규칙 ({smartRules.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("dispatch_logs")}
+            className={`px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all ${
+              activeTab === "dispatch_logs"
+                ? "bg-slate-900 text-white shadow-sm ring-2 ring-emerald-400/50"
+                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+            }`}
+          >
+            <Radio className="w-4 h-4 text-emerald-400" />
+            <span>📋 알림 발송 이력 대장 ({dispatchStats.total})</span>
           </button>
         </div>
 
@@ -2425,6 +2500,267 @@ export default function AdminDashboardPage() {
             </div>
           </div>
         )}
+
+        {/* 8. 알림 발송 이력 대장 탭 내용 */}
+        {activeTab === "dispatch_logs" && (
+          <div className="space-y-6 animate-fade-in">
+            {/* 발송 이력 지표 카드 4종 */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-1">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span className="text-xs font-bold text-slate-500">총 발송 시도</span>
+                  <Radio className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div className="text-2xl font-black text-slate-900">
+                  {dispatchStats.total}
+                  <span className="text-xs font-normal text-slate-400 ml-1">건</span>
+                </div>
+              </div>
+
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-1">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span className="text-xs font-bold text-slate-500">📱 문자 (SMS)</span>
+                  <Smartphone className="w-4 h-4 text-sky-500" />
+                </div>
+                <div className="text-2xl font-black text-sky-700">
+                  {dispatchStats.smsTotal}
+                  <span className="text-xs font-normal text-slate-400 ml-1">
+                    (성공 {dispatchStats.smsSuccess} / 실패 {dispatchStats.smsFailed})
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-1">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span className="text-xs font-bold text-slate-500">✉️ 이메일 (Email)</span>
+                  <Mail className="w-4 h-4 text-indigo-500" />
+                </div>
+                <div className="text-2xl font-black text-indigo-700">
+                  {dispatchStats.emailTotal}
+                  <span className="text-xs font-normal text-slate-400 ml-1">
+                    (성공 {dispatchStats.emailSuccess} / 실패 {dispatchStats.emailFailed})
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-1">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span className="text-xs font-bold text-slate-500">발송 성공률</span>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                </div>
+                <div className="text-2xl font-black text-emerald-700">
+                  {dispatchStats.total > 0
+                    ? Math.round(((dispatchStats.smsSuccess + dispatchStats.emailSuccess) / dispatchStats.total) * 100)
+                    : 100}
+                  <span className="text-xs font-normal text-slate-400 ml-1">%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 검색 및 필터 컨트롤 바 */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={logSearchInput}
+                  onChange={(e) => setLogSearchInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && fetchDispatchLogs()}
+                  placeholder="수신번호/이메일, 제목, 규칙명 검색..."
+                  className="w-full text-xs pl-9 pr-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-slate-800"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                {/* 채널 필터 */}
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-[11px] font-bold">
+                  {(["ALL", "SMS", "EMAIL"] as const).map((ch) => (
+                    <button
+                      key={ch}
+                      type="button"
+                      onClick={() => setLogChannelFilter(ch)}
+                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                        logChannelFilter === ch
+                          ? "bg-white text-slate-900 shadow-xs"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      {ch === "ALL" ? "전체 채널" : ch === "SMS" ? "📱 문자" : "✉️ 메일"}
+                    </button>
+                  ))}
+                </div>
+
+                {/* 상태 필터 */}
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-[11px] font-bold">
+                  {(["ALL", "SUCCESS", "FAILED"] as const).map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setLogStatusFilter(st)}
+                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                        logStatusFilter === st
+                          ? "bg-white text-slate-900 shadow-xs"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      {st === "ALL" ? "전체 상태" : st === "SUCCESS" ? "✅ 성공" : "❌ 실패"}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={fetchDispatchLogs}
+                  disabled={loadingLogs}
+                  className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl cursor-pointer border border-slate-200"
+                  title="새로고침"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingLogs ? "animate-spin text-emerald-600" : ""}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* 발송 이력 목록 테이블 */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">실시간 발송 완료 및 실패 이력 대장</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    고객 문의, 세금계산서, 결제 및 테스트 알림 발송 내역이 실시간으로 기록됩니다.
+                  </p>
+                </div>
+                <span className="text-xs font-bold text-slate-500">
+                  총 {dispatchLogs.length}건 표시 중
+                </span>
+              </div>
+
+              {dispatchLogs.length === 0 ? (
+                <div className="text-center py-16 text-slate-400 space-y-3">
+                  <Radio className="w-10 h-10 mx-auto text-slate-300" />
+                  <p className="text-sm">기록된 발송 이력이 없습니다.</p>
+                  <p className="text-xs text-slate-400">
+                    문의 접수, 결제, 세금계산서 신청 또는 SMS/이메일 테스트 발송 시 자동으로 기록됩니다.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50/70 text-slate-500 font-bold">
+                        <th className="py-3 px-4">발송 일시</th>
+                        <th className="py-3 px-3">채널</th>
+                        <th className="py-3 px-3">이벤트</th>
+                        <th className="py-3 px-4">수신자</th>
+                        <th className="py-3 px-4">적용 규칙 / 제목</th>
+                        <th className="py-3 px-3 text-center">발송 결과</th>
+                        <th className="py-3 px-4 text-right">관리</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {dispatchLogs.map((log) => {
+                        const isSms = log.channel === "SMS";
+                        const isSuccess = log.status === "SUCCESS";
+                        const formattedDate = log.created_at
+                          ? new Date(log.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+                          : "-";
+
+                        let eventBadge = { label: "기타", bg: "bg-slate-100", text: "text-slate-700" };
+                        if (log.event_type === "inquiry") eventBadge = { label: "1:1 문의", bg: "bg-indigo-50", text: "text-indigo-700" };
+                        else if (log.event_type === "tax_invoice") eventBadge = { label: "세금계산서", bg: "bg-sky-50", text: "text-sky-700" };
+                        else if (log.event_type === "payment") eventBadge = { label: "유료 결제", bg: "bg-amber-50", text: "text-amber-700" };
+                        else if (log.event_type === "test") eventBadge = { label: "연동 테스트", bg: "bg-emerald-50", text: "text-emerald-700" };
+
+                        return (
+                          <tr key={log.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="py-3.5 px-4 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                              {formattedDate}
+                            </td>
+                            <td className="py-3.5 px-3 whitespace-nowrap">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] ${
+                                  isSms
+                                    ? "bg-sky-50 text-sky-700 border border-sky-200"
+                                    : "bg-purple-50 text-purple-700 border border-purple-200"
+                                }`}
+                              >
+                                {isSms ? <Smartphone className="w-3 h-3" /> : <Mail className="w-3 h-3" />}
+                                {log.channel}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-3 whitespace-nowrap">
+                              <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${eventBadge.bg} ${eventBadge.text}`}>
+                                {eventBadge.label}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className={`px-1.5 py-0.2 rounded text-[9px] font-black ${
+                                    log.recipient_type === "CUSTOMER"
+                                      ? "bg-emerald-100 text-emerald-800"
+                                      : "bg-slate-200 text-slate-700"
+                                  }`}
+                                >
+                                  {log.recipient_type === "CUSTOMER" ? "고객" : "관리자"}
+                                </span>
+                                <span className="font-bold text-slate-800 font-mono text-xs">
+                                  {log.recipient}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 max-w-[260px] truncate">
+                              <div className="font-bold text-slate-800 truncate" title={log.title || log.rule_name}>
+                                {log.title || log.rule_name || "(제목 없음)"}
+                              </div>
+                              <div className="text-[10px] text-slate-400 truncate" title={log.rule_name}>
+                                규칙: {log.rule_name || "시스템 기본"}
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                              {isSuccess ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px] border border-emerald-200">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  성공
+                                </span>
+                              ) : (
+                                <span
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 font-bold text-[10px] border border-rose-200 cursor-help"
+                                  title={log.error_message || "발송 실패"}
+                                >
+                                  <Ban className="w-3 h-3" />
+                                  실패
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                              <div className="inline-flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedLogDetail(log)}
+                                  className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] cursor-pointer transition-colors"
+                                >
+                                  상세보기
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteLog(log.id)}
+                                  className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                                  title="로그 삭제"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
 
       {/* 토큰 수동 지급/차감 모달 */}
@@ -2879,6 +3215,113 @@ export default function AdminDashboardPage() {
             >
               ✕
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 알림 발송 이력 상세 모달 */}
+      {selectedLogDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-start">
+              <div className="flex items-center gap-2">
+                <div className={`p-2 rounded-xl ${selectedLogDetail.channel === "SMS" ? "bg-sky-50 text-sky-600" : "bg-purple-50 text-purple-600"}`}>
+                  {selectedLogDetail.channel === "SMS" ? <Smartphone className="w-5 h-5" /> : <Mail className="w-5 h-5" />}
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {selectedLogDetail.channel === "SMS" ? "문자 (SMS) 발송 상세" : "이메일 (Email) 발송 상세"}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {selectedLogDetail.created_at
+                      ? new Date(selectedLogDetail.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+                      : "-"}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedLogDetail(null)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 발송 상태 뱃지 & 에러 사유 */}
+            <div className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
+              selectedLogDetail.status === "SUCCESS"
+                ? "bg-emerald-50/70 border-emerald-200 text-emerald-800"
+                : "bg-rose-50 border-rose-200 text-rose-800"
+            }`}>
+              <div className="flex items-center gap-2 font-bold">
+                {selectedLogDetail.status === "SUCCESS" ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                ) : (
+                  <Ban className="w-4 h-4 text-rose-600" />
+                )}
+                <span>발송 상태: {selectedLogDetail.status === "SUCCESS" ? "정상 발송 완료" : "발송 실패"}</span>
+              </div>
+              <span className="text-[11px] font-mono opacity-80">ID: {selectedLogDetail.id}</span>
+            </div>
+
+            {selectedLogDetail.error_message && (
+              <div className="p-3 rounded-xl bg-rose-50/80 border border-rose-200 text-xs text-rose-700 space-y-1">
+                <div className="font-bold flex items-center gap-1">
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  <span>실패 사유 / 오류 메시지:</span>
+                </div>
+                <p className="font-mono text-[11px] break-all">{selectedLogDetail.error_message}</p>
+              </div>
+            )}
+
+            {/* 메타 정보 테이블 */}
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400">수신 대상:</span>
+                <span className="font-bold text-slate-800">
+                  [{selectedLogDetail.recipient_type === "CUSTOMER" ? "고객" : "관리자"}] {selectedLogDetail.recipient}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">트리거 이벤트:</span>
+                <span className="font-bold text-indigo-600">{selectedLogDetail.event_type}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">적용된 규칙:</span>
+                <span className="font-bold text-slate-700">{selectedLogDetail.rule_name || "시스템 기본"}</span>
+              </div>
+              {selectedLogDetail.title && (
+                <div className="flex justify-between pt-1 border-t border-slate-200/60">
+                  <span className="text-slate-400">메시지 제목:</span>
+                  <span className="font-bold text-slate-900">{selectedLogDetail.title}</span>
+                </div>
+              )}
+            </div>
+
+            {/* 본문 내용 */}
+            <div className="space-y-1 flex-1 overflow-hidden flex flex-col">
+              <label className="text-xs font-bold text-slate-700">발송된 본문 내용</label>
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-700 whitespace-pre-line overflow-y-auto flex-1 max-h-56">
+                {selectedLogDetail.channel === "EMAIL" && selectedLogDetail.content?.includes("<") ? (
+                  <div
+                    className="prose prose-xs max-w-none"
+                    dangerouslySetInnerHTML={{ __html: selectedLogDetail.content }}
+                  />
+                ) : (
+                  selectedLogDetail.content || "(본문 내용 없음)"
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedLogDetail(null)}
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-slate-800 text-white hover:bg-slate-900 cursor-pointer shadow-xs"
+              >
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}
