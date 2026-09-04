@@ -15,8 +15,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko">
-      <body className="bg-slate-50 text-slate-900 min-h-screen">
+    <html lang="ko" suppressHydrationWarning>
+      <body className="bg-slate-50 text-slate-900 min-h-screen" suppressHydrationWarning>
         <SessionWrapper>
           {children}
           <AIHelpManager />

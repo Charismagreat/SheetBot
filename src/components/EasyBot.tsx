@@ -31,6 +31,7 @@ const SAMPLE_QUESTIONS = [
 ];
 
 export default function EasyBot() {
+  const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -39,6 +40,10 @@ export default function EasyBot() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // 초기 웰컴 메시지
   useEffect(() => {
@@ -186,6 +191,8 @@ export default function EasyBot() {
       </div>
     );
   };
+
+  if (!mounted) return null;
 
   return (
     <>
