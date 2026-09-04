@@ -28,12 +28,12 @@ cd C:\dev\SheetBot
 npm install
 ```
 
-### 2. 개발 서버 구동 (포트 4100)
+### 2. 개발 서버 구동 (포트 4002)
 ```bash
 npm run dev
 ```
 
-브라우저에서 `http://localhost:4100`으로 접속합니다. (기존 프로젝트 포트 4000/4005와 충돌하지 않도록 포트 4100으로 사전 구성되어 있습니다.)
+브라우저에서 `http://localhost:4002`으로 접속합니다. (이지데스크 호스팅 포트 4002 사전 구성 완료)
 
 ---
 
@@ -41,7 +41,7 @@ npm run dev
 
 ```
 C:\dev\SheetBot\
-├── package.json                   # 의존성 및 스크립트 (포트 4100)
+├── package.json                   # 의존성 및 스크립트 (포트 4002)
 ├── tsconfig.json                  # TypeScript 설정
 ├── next.config.ts                 # Next.js 프록시 rewrite 설정
 ├── egdesk-helpers.ts              # 이지데스크 백엔드 통신 라이브러리
