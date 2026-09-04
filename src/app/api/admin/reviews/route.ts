@@ -2,8 +2,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
-import { queryTable, updateRows } from "@/lib/egdesk-helpers";
+import { queryTable, updateRows, insertRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { DEFAULT_SEED_REVIEWS } from "@/app/api/reviews/route";
 
 export async function GET(req: NextRequest) {
   try {
@@ -19,7 +20,16 @@ export async function GET(req: NextRequest) {
       limit: 100,
     }).catch(() => ({ rows: [] }));
 
-    const validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
+    let validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
+
+    // DB에 데이터가 없으면 고객 페이지와 동일한 초기 시드 후기를 DB에 실제 등록
+    if (validRows.length === 0) {
+      await insertRows("sheetbot_reviews", DEFAULT_SEED_REVIEWS).catch((e) =>
+        console.warn("Failed to seed reviews for admin:", e.message)
+      );
+      validRows = DEFAULT_SEED_REVIEWS;
+    }
+
     return NextResponse.json({ success: true, reviews: validRows });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
