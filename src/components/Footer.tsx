@@ -1,10 +1,40 @@
-"use client";
+﻿"use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Bot, ShieldCheck, Mail, Phone, MapPin, HelpCircle } from "lucide-react";
+import { DEFAULT_FOOTER, FooterInfo } from "@/lib/default-footer";
 
 export default function Footer() {
+  const [footerInfo, setFooterInfo] = useState<FooterInfo>(DEFAULT_FOOTER);
+
+  const fetchFooter = async () => {
+    try {
+      const res = await fetch("/api/footer");
+      const data = await res.json();
+      if (data.success && data.footer) {
+        setFooterInfo(data.footer);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch dynamic footer, using default", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchFooter();
+
+    const handleUpdate = () => {
+      fetchFooter();
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("sheetbot-footer-updated", handleUpdate);
+      return () => {
+        window.removeEventListener("sheetbot-footer-updated", handleUpdate);
+      };
+    }
+  }, []);
+
   return (
     <footer className="mt-auto border-t border-slate-200/80 bg-white text-slate-500 text-xs font-normal">
       {/* 상단 안내 & 링크 영역 */}
@@ -24,7 +54,7 @@ export default function Footer() {
               </div>
             </div>
             <p className="text-slate-500 text-xs leading-relaxed max-w-md">
-              SheetBot은 복잡한 구글 스프레드시트 수식과 Google Apps Script(GAS)를 자연어로 간편하게 자동화하는 B2B 업무 생산성 플랫폼입니다.
+              {footerInfo.brand_description}
             </p>
             <div className="flex items-center gap-4 text-[11px] text-slate-400 pt-1">
               <span className="flex items-center gap-1">
@@ -98,15 +128,15 @@ export default function Footer() {
             <div className="space-y-1.5 text-slate-500">
               <div className="flex items-center gap-1.5">
                 <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>support@sheetbot.io</span>
+                <span>{footerInfo.cs_email}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>평일 09:00 - 18:00 (점심 12-13)</span>
+                <span>{footerInfo.cs_phone}</span>
               </div>
               <div className="flex items-center gap-1.5 text-amber-700 font-medium pt-1">
                 <HelpCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <span>이지봇(EasyBot) 24시간 상담</span>
+                <span>{footerInfo.easybot_info}</span>
               </div>
             </div>
           </div>
@@ -115,28 +145,28 @@ export default function Footer() {
         {/* 하단: 사업자등록정보 및 법적 고지 */}
         <div className="pt-6 space-y-3 text-[11px] text-slate-400 leading-relaxed">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <span><strong>상호명:</strong> 시트봇 (SheetBot Co., Ltd.)</span>
+            <span><strong>상호명:</strong> {footerInfo.company_name}</span>
             <span>|</span>
-            <span><strong>대표자:</strong> 대표이사</span>
+            <span><strong>대표자:</strong> {footerInfo.ceo_name}</span>
             <span>|</span>
-            <span><strong>사업자등록번호:</strong> 123-45-67890</span>
+            <span><strong>사업자등록번호:</strong> {footerInfo.biz_number}</span>
             <span>|</span>
-            <span><strong>통신판매업신고:</strong> 제2026-서울강남-0000호</span>
+            <span><strong>통신판매업신고:</strong> {footerInfo.mail_order_biz_number}</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <span className="flex items-center gap-1">
               <MapPin className="w-3 h-3 text-slate-400" />
-              <span><strong>주소:</strong> 서울특별시 강남구 테헤란로 123 시트봇 빌딩 8층</span>
+              <span><strong>주소:</strong> {footerInfo.address}</span>
             </span>
             <span>|</span>
-            <span><strong>개인정보보호책임자:</strong> 관리자 (privacy@sheetbot.io)</span>
+            <span><strong>개인정보보호책임자:</strong> {footerInfo.privacy_manager}</span>
             <span>|</span>
-            <span><strong>호스팅 및 백엔드:</strong> EGDesk Cloud Infrastructure</span>
+            <span><strong>호스팅 및 백엔드:</strong> {footerInfo.hosting_provider}</span>
           </div>
 
           <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-slate-100 text-slate-400">
-            <p>© 2026 SheetBot Corp. All rights reserved.</p>
+            <p>{footerInfo.copyright_text}</p>
             <div className="flex items-center gap-4 text-[11px]">
               <span className="hover:text-slate-600 cursor-pointer">이용약관</span>
               <span>•</span>

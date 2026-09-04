@@ -28,10 +28,17 @@ import {
   Eye,
   CreditCard,
   Layers,
-  Sparkles
+  Sparkles,
+  Building2,
+  Globe,
+  Mail,
+  Phone,
+  MapPin,
+  Save
 } from "lucide-react";
+import { DEFAULT_FOOTER, FooterInfo } from "@/lib/default-footer";
 
-type TabType = "users" | "inquiries" | "reviews" | "faqs" | "tax_invoices";
+type TabType = "users" | "inquiries" | "reviews" | "faqs" | "tax_invoices" | "footer";
 
 export default function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<TabType>("users");
@@ -43,6 +50,10 @@ export default function AdminDashboardPage() {
   const [reviews, setReviews] = useState<any[]>([]);
   const [faqs, setFaqs] = useState<any[]>([]);
   const [taxInvoices, setTaxInvoices] = useState<any[]>([]);
+
+  // 푸터 설정 상태
+  const [footerForm, setFooterForm] = useState<FooterInfo>(DEFAULT_FOOTER);
+  const [savingFooter, setSavingFooter] = useState<boolean>(false);
 
   // 회원 검색 & 필터
   const [userSearch, setUserSearch] = useState<string>("");
@@ -94,6 +105,7 @@ export default function AdminDashboardPage() {
         fetchReviews(),
         fetchFaqs(),
         fetchTaxInvoices(),
+        fetchFooterSettings(),
       ]);
     } finally {
       setLoading(false);
@@ -147,6 +159,18 @@ export default function AdminDashboardPage() {
       if (data.success) setTaxInvoices(data.invoices || []);
     } catch (e) {
       console.warn("Failed to fetch admin tax invoices", e);
+    }
+  };
+
+  const fetchFooterSettings = async () => {
+    try {
+      const res = await fetch("/api/admin/footer");
+      const data = await res.json();
+      if (data.success && data.footer) {
+        setFooterForm(data.footer);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch footer settings", e);
     }
   };
 
@@ -237,7 +261,33 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // 4. 문의 답변 저장
+  // 4. 푸터 설정 저장
+  const handleSaveFooter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingFooter(true);
+    try {
+      const res = await fetch("/api/admin/footer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(footerForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message || "푸터 정보가 성공적으로 저장되었습니다.");
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("sheetbot-footer-updated"));
+        }
+      } else {
+        alert(data.error || "푸터 저장 실패");
+      }
+    } catch (e: any) {
+      alert("저장 오류: " + e.message);
+    } finally {
+      setSavingFooter(false);
+    }
+  };
+
+  // 5. 문의 답변 저장
   const handleSaveAnswer = async () => {
     if (!selectedInquiry || !answerInput.trim()) return;
     setSubmittingAnswer(true);
@@ -278,7 +328,7 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // 5. 후기 삭제/블라인드
+  // 6. 후기 삭제/블라인드
   const handleDeleteReview = async (id: string) => {
     if (!confirm("이 사용 후기를 블라인드(삭제) 처리하시겠습니까?")) return;
     try {
@@ -290,7 +340,7 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // 6. FAQ 저장
+  // 7. FAQ 저장
   const handleSaveFaq = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!faqForm.question.trim() || !faqForm.answer.trim()) {
@@ -334,7 +384,7 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // 7. 세금계산서 상태 변경
+  // 8. 세금계산서 상태 변경
   const handleUpdateInvoiceStatus = async (id: string, status: "ISSUED" | "REJECTED") => {
     const actionName = status === "ISSUED" ? "발행 완료" : "반려";
     if (!confirm(`해당 신청을 [${actionName}] 처리하시겠습니까?`)) return;
@@ -385,10 +435,10 @@ export default function AdminDashboardPage() {
               <span>통합 운영 관리 센터 (Admin Console)</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              SheetBot 전체 데이터 및 회원 관리 대시보드
+              SheetBot 전체 데이터 및 운영 관리 대시보드
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              가입 회원 관리, 토큰 수동 지급, 1:1 고객 문의, 사용 후기 검수, FAQ 편집, 세금계산서 발행을 한곳에서 통제합니다.
+              회원 관리, 토큰 지급, 1:1 문의, 사용 후기, FAQ, 세금계산서 및 푸터 회사 정보 설정을 한곳에서 통제합니다.
             </p>
           </div>
 
@@ -529,6 +579,18 @@ export default function AdminDashboardPage() {
                 {requestedTaxCount}
               </span>
             )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab("footer")}
+            className={`px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all ${
+              activeTab === "footer"
+                ? "bg-slate-800 text-white shadow-sm"
+                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+            }`}
+          >
+            <Building2 className="w-4 h-4 text-emerald-400" />
+            <span>🏢 푸터 / 회사정보 설정</span>
           </button>
         </div>
 
@@ -822,7 +884,7 @@ export default function AdminDashboardPage() {
                       <th className="py-3 px-4">평점</th>
                       <th className="py-3 px-4">작성자</th>
                       <th className="py-3 px-4">활용 용도</th>
-                      <th className="py-3 px-4">후기 제목 및 내용</th>
+                      <th className="py-3 px-4">후기 제목 및 내용 (사진 첨부)</th>
                       <th className="py-3 px-4">작성일시</th>
                       <th className="py-3 px-4 text-right">관리</th>
                     </tr>
@@ -1066,6 +1128,229 @@ export default function AdminDashboardPage() {
               </div>
             )}
           </div>
+        )}
+
+        {/* 5. 푸터 / 회사정보 설정 탭 */}
+        {activeTab === "footer" && (
+          <form onSubmit={handleSaveFooter} className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-indigo-600" />
+                  <span>푸터 영역 회사 정보 및 고객센터 설정</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  서비스 하단 푸터에 표시되는 사업자등록정보, 통신판매번호, 고객센터 연락처, 소개 문구를 실시간 관리합니다.
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingFooter}
+                className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
+              >
+                <Save className="w-4 h-4 text-emerald-400" />
+                <span>{savingFooter ? "저장 중..." : "설정 저장 완료"}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* 좌측: 사업자 기본 정보 입력 카드 */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                <h4 className="text-xs font-bold text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-1.5">
+                  <FileText className="w-4 h-4 text-slate-500" />
+                  <span>사업자등록 및 법적 표기 정보</span>
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-600">상호명 (법인명) *</label>
+                    <input
+                      type="text"
+                      required
+                      value={footerForm.company_name}
+                      onChange={(e) => setFooterForm({ ...footerForm, company_name: e.target.value })}
+                      placeholder="예: 시트봇 (SheetBot Co., Ltd.)"
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-600"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-600">대표자명 *</label>
+                    <input
+                      type="text"
+                      required
+                      value={footerForm.ceo_name}
+                      onChange={(e) => setFooterForm({ ...footerForm, ceo_name: e.target.value })}
+                      placeholder="예: 홍길동 대표이사"
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-600"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-600">사업자등록번호 *</label>
+                    <input
+                      type="text"
+                      required
+                      value={footerForm.biz_number}
+                      onChange={(e) => setFooterForm({ ...footerForm, biz_number: e.target.value })}
+                      placeholder="예: 123-45-67890"
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200 font-mono focus:outline-none focus:border-indigo-600"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-600">통신판매업 신고번호 *</label>
+                    <input
+                      type="text"
+                      required
+                      value={footerForm.mail_order_biz_number}
+                      onChange={(e) => setFooterForm({ ...footerForm, mail_order_biz_number: e.target.value })}
+                      placeholder="예: 제2026-서울강남-0000호"
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-600"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-600">사업장 주소 *</label>
+                  <input
+                    type="text"
+                    required
+                    value={footerForm.address}
+                    onChange={(e) => setFooterForm({ ...footerForm, address: e.target.value })}
+                    placeholder="예: 서울특별시 강남구 테헤란로 123 시트봇 빌딩 8층"
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-600"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-600">개인정보보호책임자</label>
+                    <input
+                      type="text"
+                      value={footerForm.privacy_manager}
+                      onChange={(e) => setFooterForm({ ...footerForm, privacy_manager: e.target.value })}
+                      placeholder="예: 관리자 (privacy@sheetbot.io)"
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-600"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-600">호스팅 제공자</label>
+                    <input
+                      type="text"
+                      value={footerForm.hosting_provider}
+                      onChange={(e) => setFooterForm({ ...footerForm, hosting_provider: e.target.value })}
+                      placeholder="예: EGDesk Cloud Infrastructure"
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-600"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 우측: 고객센터 및 브랜드 소개 카드 */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                <h4 className="text-xs font-bold text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-1.5">
+                  <Phone className="w-4 h-4 text-slate-500" />
+                  <span>고객 지원 센터 및 안내 정보</span>
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-600">고객센터 대표 이메일 *</label>
+                    <input
+                      type="email"
+                      required
+                      value={footerForm.cs_email}
+                      onChange={(e) => setFooterForm({ ...footerForm, cs_email: e.target.value })}
+                      placeholder="예: support@sheetbot.io"
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-600"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-600">고객센터 운영시간 / 연락처</label>
+                    <input
+                      type="text"
+                      value={footerForm.cs_phone}
+                      onChange={(e) => setFooterForm({ ...footerForm, cs_phone: e.target.value })}
+                      placeholder="예: 평일 09:00 - 18:00 (점심 12-13)"
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-600"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-600">실시간 봇 안내 문구</label>
+                  <input
+                    type="text"
+                    value={footerForm.easybot_info}
+                    onChange={(e) => setFooterForm({ ...footerForm, easybot_info: e.target.value })}
+                    placeholder="예: 이지봇(EasyBot) 24시간 상담"
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-600"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-600">서비스 브랜드 한 줄 소개</label>
+                  <textarea
+                    rows={2}
+                    value={footerForm.brand_description}
+                    onChange={(e) => setFooterForm({ ...footerForm, brand_description: e.target.value })}
+                    placeholder="서비스 요약 소개글"
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-600 resize-none leading-relaxed"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-600">하단 저작권(Copyright) 문구</label>
+                  <input
+                    type="text"
+                    value={footerForm.copyright_text}
+                    onChange={(e) => setFooterForm({ ...footerForm, copyright_text: e.target.value })}
+                    placeholder="예: © 2026 SheetBot Corp. All rights reserved."
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-600"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 하단 푸터 실시간 미리보기 프리뷰 박스 */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                <span className="flex items-center gap-1.5">
+                  <Globe className="w-4 h-4 text-emerald-600" />
+                  실시간 푸터 노출 미리보기 (Preview)
+                </span>
+                <span className="text-[11px] text-slate-400 font-normal">
+                  저장 시 모든 페이지 하단에 즉시 적용됩니다.
+                </span>
+              </div>
+
+              <div className="p-5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-600 space-y-3">
+                <div className="font-bold text-slate-900">{footerForm.company_name}</div>
+                <p className="text-[11px] text-slate-500">{footerForm.brand_description}</p>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500 pt-2 border-t border-slate-200">
+                  <span>대표: {footerForm.ceo_name}</span>
+                  <span>|</span>
+                  <span>사업자번호: {footerForm.biz_number}</span>
+                  <span>|</span>
+                  <span>통신판매: {footerForm.mail_order_biz_number}</span>
+                  <span>|</span>
+                  <span>고객센터: {footerForm.cs_email} ({footerForm.cs_phone})</span>
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  주소: {footerForm.address} | 개인정보책임자: {footerForm.privacy_manager}
+                </div>
+                <div className="text-[10px] text-slate-400 pt-1">
+                  {footerForm.copyright_text}
+                </div>
+              </div>
+            </div>
+          </form>
         )}
       </main>
 
