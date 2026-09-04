@@ -503,31 +503,13 @@ export default function PricingWalletPage() {
           ))}
         </div>
 
-        {/* 하단 안내 및 결제 이력 */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
-          {/* 안심 결제 보장 안내 */}
-          <div className="md:col-span-1 p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-4">
-            <div className="flex items-center gap-2 text-indigo-700 font-bold text-xs">
-              <ShieldCheck className="w-4 h-4" />
-              <span>안심 충전 보장 안내</span>
-            </div>
-            <h4 className="text-sm font-bold text-slate-900">
-              미사용 토큰은 언제든 안전하게 보관됩니다
-            </h4>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              SheetBot의 토큰은 사용자가 수식을 생성하거나 Apps Script를 배포할 때만 소모되며, 정기 구독과 달리 만료일 없이 평생 유지됩니다.
-            </p>
-            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-[11px] text-slate-500 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
-              <span>신규 회원에게는 가입 축하 20,000 토큰이 기본 제공됩니다.</span>
-            </div>
-          </div>
-
-          {/* 최근 충전 이력 테이블 */}
-          <div className="md:col-span-2 p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-4">
+        {/* 하단 안내 및 결제 이력 (1열 전체 너비 배치) */}
+        <div className="space-y-6 pt-4">
+          {/* 최근 충전 이력 테이블 (전체 너비 1열) */}
+          <div className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-slate-700 font-bold text-xs">
-                <History className="w-4 h-4" />
+                <History className="w-4 h-4 text-indigo-600" />
                 <span>내 최근 충전/결제 대장</span>
               </div>
               <span className="text-[11px] text-slate-400">최근 10건</span>
@@ -605,6 +587,23 @@ export default function PricingWalletPage() {
                 </table>
               </div>
             )}
+          </div>
+
+          {/* 안심 충전 보장 안내 (1열 가로 배너) */}
+          <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-indigo-700 font-bold text-xs">
+                <ShieldCheck className="w-4 h-4" />
+                <span>안심 충전 및 평생 보장 안내</span>
+              </div>
+              <p className="text-xs text-slate-600">
+                SheetBot의 토큰은 사용자가 수식을 생성하거나 Apps Script를 배포할 때만 소모되며, 정기 구독과 달리 만료일 없이 평생 보관됩니다.
+              </p>
+            </div>
+            <div className="shrink-0 px-3.5 py-2 bg-amber-50 rounded-xl border border-amber-200/60 text-[11px] text-amber-800 font-bold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>신규 가입 시 20,000 웰컴 토큰 평생 무료 제공</span>
+            </div>
           </div>
         </div>
       </div>
