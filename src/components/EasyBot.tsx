@@ -52,7 +52,7 @@ export default function EasyBot() {
         {
           id: "welcome",
           role: "bot",
-          text: "안녕하세요! Google 스프레드시트 & Apps Script 전문 비서 **이지봇(EasyBot)**입니다. 🤖\n\n자동화 스크립트 작성, 트리거 설정, 구글 시트 고급 수식 등 무엇이든 편하게 질문해 주세요!",
+          text: "안녕하세요! Google 스프레드시트 & Apps Script 전문 비서 **시트봇 AI (SheetBot AI)**입니다. 🤖\n\n자동화 스크립트 작성, 트리거 설정, 구글 시트 고급 수식 등 무엇이든 편하게 질문해 주세요!",
           time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
@@ -201,13 +201,13 @@ export default function EasyBot() {
         <button
           onClick={() => setIsOpen(true)}
           className="fixed bottom-6 right-6 z-[9990] group flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 text-white rounded-full shadow-2xl hover:shadow-indigo-500/40 hover:scale-105 active:scale-95 transition-all duration-200"
-          data-easybot-hint="이지봇: 클릭하여 스프레드시트 및 Apps Script 전문 AI 도우미와 실시간 대화를 나눕니다."
+          data-easybot-hint="시트봇 AI: 클릭하여 스프레드시트 및 Apps Script 전문 AI 도우미와 실시간 대화를 나눕니다."
         >
           <div className="relative">
             <Bot className="w-5 h-5 text-white animate-bounce" />
             <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-white animate-pulse" />
           </div>
-          <span className="text-xs font-extrabold tracking-wide">이지봇 AI</span>
+          <span className="text-xs font-extrabold tracking-wide">시트봇 AI</span>
         </button>
       )}
 
@@ -222,7 +222,7 @@ export default function EasyBot() {
               </div>
               <div>
                 <h3 className="text-sm font-extrabold flex items-center gap-1.5">
-                  <span>이지봇 (EasyBot)</span>
+                  <span>시트봇 AI (SheetBot AI)</span>
                   <span className="px-1.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 text-[10px] font-bold border border-emerald-400/30">
                     Live
                   </span>

@@ -1,4 +1,4 @@
-﻿export interface SnsChannel {
+export interface SnsChannel {
   id: string;
   type: "youtube" | "instagram" | "blog" | "github" | "kakao" | "twitter" | "custom";
   name: string;
@@ -70,7 +70,7 @@ export const DEFAULT_FOOTER: FooterInfo = {
   hosting_provider: "EGDesk Cloud Infrastructure",
   cs_email: "support@sheetbot.io",
   cs_phone: "평일 09:00 - 18:00 (점심 12-13)",
-  easybot_info: "이지봇(EasyBot) 24시간 상담",
+  easybot_info: "시트봇 AI(SheetBot AI) 24시간 상담",
   brand_description: "SheetBot은 복잡한 구글 스프레드시트 수식과 Google Apps Script(GAS)를 자연어로 간편하게 자동화하는 B2B 업무 생산성 플랫폼입니다.",
   copyright_text: "© 2026 SheetBot Corp. All rights reserved.",
   sns_channels: DEFAULT_SNS_CHANNELS,
