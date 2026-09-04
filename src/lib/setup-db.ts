@@ -244,7 +244,20 @@ export async function setupDatabase(): Promise<void> {
       { tableName: 'sheetbot_ai_usage_logs' }
     );
 
-    // 4. 레거시 데이터 마이그레이션 실행
+    // 4. sheetbot_settings 테이블 생성 (시스템 및 AI 모델 설정 저장용)
+    await safeCreateTable(
+      'SheetBot 시스템 및 AI 모델 설정 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'key', type: 'TEXT', notNull: true },
+        { name: 'value', type: 'TEXT', notNull: true },
+        { name: 'description', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_settings' }
+    );
+
+    // 5. 레거시 데이터 마이그레이션 실행
     await migrateLegacySettingsData();
 
     isDbInitialized = true;

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { callAiCaller } from "@/lib/egdesk-helpers";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { recordAiUsageLog } from "@/lib/ai-usage";
+import { getAiModelSettings } from "@/lib/ai-settings";
 
 export async function POST(request: Request) {
   try {
@@ -21,12 +22,16 @@ export async function POST(request: Request) {
 사용자가 이 기능을 200% 활용할 수 있도록 친절하고 명확하게 한국어로 1~3문장 이내로 핵심 설명과 실무 팁을 안내해 주세요.
 불필요한 인사말이나 서론은 생략하고, 바로 본론 설명과 활용 팁만 작성하세요.`;
 
+    const aiSettings = await getAiModelSettings();
+    const targetModel = aiSettings.helpModel || aiSettings.defaultModel || "gemini-3.5-flash";
+
     let explanation = "";
 
     try {
       const callerRes = await callAiCaller(prompt, {
         caller: "sheetbot-contextual-help",
-        temperature: 0.3,
+        model: targetModel,
+        temperature: aiSettings.temperature || 0.3,
       });
       if (callerRes && callerRes.text) {
         explanation = callerRes.text.trim();
@@ -48,7 +53,7 @@ export async function POST(request: Request) {
       userEmail: userEmail || "guest",
       caller: "sheetbot-contextual-help",
       purpose: "AI Contextual 도움말",
-      model: "gemini-2.0-flash",
+      model: targetModel,
       promptText: prompt,
       responseText: explanation,
     });

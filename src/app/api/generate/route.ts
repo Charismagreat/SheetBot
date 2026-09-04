@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { callAiCaller } from "@/lib/egdesk-helpers";
 import { recordAiUsageLog } from "@/lib/ai-usage";
+import { getAiModelSettings } from "@/lib/ai-settings";
 
 export async function POST(request: Request) {
   try {
@@ -11,6 +12,9 @@ export async function POST(request: Request) {
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }
+
+    const aiSettings = await getAiModelSettings();
+    const targetModel = aiSettings.scriptGeneratorModel || aiSettings.defaultModel || "gemini-3.5-flash";
 
     const body = await request.json();
     const { prompt, sheetUrl, customTitle } = body;
@@ -56,7 +60,8 @@ ${prompt}`;
     try {
       const callerRes = await callAiCaller(fullPrompt, {
         caller: "sheetbot-script-generator",
-        temperature: 0.2,
+        model: targetModel,
+        temperature: aiSettings.temperature || 0.2,
       });
 
       if (callerRes && callerRes.text) {
@@ -185,7 +190,7 @@ function checkSheetBotStatus() {
       userEmail,
       caller: "sheetbot-script-generator",
       purpose: "Apps Script 자동 생성",
-      model: "gemini-2.0-flash",
+      model: targetModel,
       promptText: fullPrompt,
       responseText: generatedData?.scriptCode || JSON.stringify(generatedData),
     });
