@@ -159,6 +159,10 @@ export default function PricingWalletPage() {
     setModalStep("select");
   };
 
+  // 포트원 가맹점 식별코드 (사용자가 콘솔에서 발급받은 imp 코드 입력 가능, 기본값: imp00000000)
+  const [portoneCode, setPortoneCode] = useState("imp00000000");
+  const [showPortoneConfig, setShowPortoneConfig] = useState(false);
+
   // 실제 포트원(PortOne) 결제창 호출 함수
   const executePortOnePayment = () => {
     if (!activeModalPackage) return;
@@ -168,53 +172,66 @@ export default function PricingWalletPage() {
       return;
     }
 
-    // 포트원 공식 테스트 가맹점 식별코드
-    IMP.init("imp00000000");
+    try {
+      // 입력된 가맹점 식별코드로 초기화
+      IMP.init(portoneCode.trim() || "imp00000000");
 
-    const merchantUid = `mid_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const merchantUid = `mid_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-    IMP.request_pay(
-      {
-        pg: "kakaopay.TC0ONETIME", // 카카오페이 테스트 PG사
-        pay_method: "card",
-        merchant_uid: merchantUid,
-        name: `SheetBot ${activeModalPackage.name}`,
-        amount: activeModalPackage.priceKrw,
-        buyer_email: "test_customer@gmail.com",
-        buyer_name: "시트봇 테스트 회원",
-        buyer_tel: "010-1234-5678",
-      },
-      async (rsp: any) => {
-        if (rsp.success) {
-          // 결제 성공 시 서버 지갑 충전 반영
-          setModalStep("processing");
-          try {
-            const res = await fetch("/api/wallet", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                packageId: activeModalPackage.id,
-                paymentMethod: `포트원 카카오페이 (승인번호: ${rsp.imp_uid || "IMP_TEST"})`,
-              }),
-            });
-            const data = await res.json();
-            if (data.success) {
-              setModalStep("done");
-              await fetchWallet();
-              setTimeout(() => {
-                closePaymentModal();
-                setPurchaseSuccess(data.message);
-                setTimeout(() => setPurchaseSuccess(null), 5000);
-              }, 1200);
+      IMP.request_pay(
+        {
+          pg: "html5_inicis", // 기본 표준 이니시스 테스트 PG (카카오페이보다 호환성 우수)
+          pay_method: "card",
+          merchant_uid: merchantUid,
+          name: `SheetBot ${activeModalPackage.name}`,
+          amount: activeModalPackage.priceKrw,
+          buyer_email: "test_customer@gmail.com",
+          buyer_name: "시트봇 테스트 회원",
+          buyer_tel: "010-1234-5678",
+        },
+        async (rsp: any) => {
+          if (rsp.success) {
+            // 결제 성공 시 서버 지갑 충전 반영
+            setModalStep("processing");
+            try {
+              const res = await fetch("/api/wallet", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  packageId: activeModalPackage.id,
+                  paymentMethod: `포트원 이니시스 (승인번호: ${rsp.imp_uid || "IMP_TEST"})`,
+                }),
+              });
+              const data = await res.json();
+              if (data.success) {
+                setModalStep("done");
+                await fetchWallet();
+                setTimeout(() => {
+                  closePaymentModal();
+                  setPurchaseSuccess(data.message);
+                  setTimeout(() => setPurchaseSuccess(null), 5000);
+                }, 1200);
+              }
+            } catch (err: any) {
+              alert("지갑 충전 반영 오류: " + err.message);
             }
-          } catch (err: any) {
-            alert("지갑 충전 반영 오류: " + err.message);
+          } else {
+            if (rsp.error_msg && rsp.error_msg.includes("등록된 PG")) {
+              alert(
+                "⚠️ 포트원 콘솔에 PG 설정이 등록되지 않은 가맹점 코드입니다.\n" +
+                "본인의 포트원 가맹점 식별코드(imp_xxxx)를 결제창 모달의 [⚙️ 가맹점 코드 설정]에 입력하시거나,\n" +
+                "상단의 [일반 결제 승인 시뮬레이션] 버튼을 이용해 안전하게 테스트해 보세요!"
+              );
+              setShowPortoneConfig(true);
+            } else {
+              alert(`결제 결과: ${rsp.error_msg || "사용자가 결제를 취소했습니다."}`);
+            }
           }
-        } else {
-          alert(`결제 실패: ${rsp.error_msg || "사용자가 결제를 취소했습니다."}`);
         }
-      }
-    );
+      );
+    } catch (e: any) {
+      alert("포트원 호출 오류: " + e.message);
+    }
   };
 
   const executeSimulatedPayment = async () => {
@@ -622,7 +639,7 @@ export default function PricingWalletPage() {
                   </button>
 
                   {/* 실제 포트원(PortOne) 팝업 SDK 호출 옵션 */}
-                  <div className="pt-1">
+                  <div className="pt-1 space-y-2">
                     <button
                       type="button"
                       onClick={executePortOnePayment}
@@ -632,6 +649,32 @@ export default function PricingWalletPage() {
                       <Smartphone className="w-4 h-4 text-indigo-600" />
                       <span>포트원(PortOne) 실제 결제창 팝업 띄우기 (테스트)</span>
                     </button>
+
+                    <div className="text-center">
+                      <button
+                        type="button"
+                        onClick={() => setShowPortoneConfig(!showPortoneConfig)}
+                        className="text-[11px] text-slate-400 hover:text-slate-600 underline cursor-pointer"
+                      >
+                        {showPortoneConfig ? "▲ 포트원 설정 닫기" : "⚙️ 내 포트원 가맹점 식별코드(imp_xxxx) 직접 입력하기"}
+                      </button>
+                    </div>
+
+                    {showPortoneConfig && (
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5 text-left">
+                        <label className="text-[11px] font-bold text-slate-700">포트원 가맹점 식별코드 (User Code)</label>
+                        <input
+                          type="text"
+                          value={portoneCode}
+                          onChange={(e) => setPortoneCode(e.target.value)}
+                          placeholder="imp00000000"
+                          className="w-full p-2 text-xs font-mono bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                        <p className="text-[10px] text-slate-400">
+                          포트원 관리자 콘솔 &gt; 결제연동 &gt; 가맹점 식별코드(imp_xxxx)를 입력하면 해당 계정의 PG 설정으로 결제창이 호출됩니다.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
