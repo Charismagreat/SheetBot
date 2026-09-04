@@ -158,7 +158,7 @@ export async function deductTokens(
         updated_at: now,
         updated_by: userEmail,
       },
-      { id: wallet.id }
+      { filters: { id: wallet.id } }
     );
 
     return { success: true, newBalance };
@@ -194,7 +194,7 @@ export async function creditTokens(
         updated_at: now,
         updated_by: userEmail,
       },
-      { id: wallet.id }
+      { filters: { id: wallet.id } }
     );
 
     // 2. 결제 주문 대장 기록

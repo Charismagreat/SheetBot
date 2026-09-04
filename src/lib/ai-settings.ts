@@ -1,4 +1,4 @@
-﻿import { queryTable, insertRows, updateRows } from "./egdesk-helpers";
+import { queryTable, insertRows, updateRows } from "./egdesk-helpers";
 import { setupDatabase } from "./setup-db";
 
 export interface SheetBotAiSettings {
@@ -74,12 +74,12 @@ export async function saveAiModelSettings(
         updated_at: now,
         updated_by: updatedBy,
       },
-      { id: existing.id }
+      { filters: { id: existing.id } }
     );
   } else {
     await insertRows("sheetbot_settings", [
       {
-        id: setting_,
+        id: `setting_${Date.now()}`,
         uuid: crypto.randomUUID(),
         key: SETTINGS_KEY,
         value: JSON.stringify(merged),
