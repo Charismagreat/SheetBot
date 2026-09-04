@@ -5,6 +5,7 @@ import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, insertRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { sendAdminNotificationSms } from "@/lib/admin-sms";
+import { sendAdminNotificationEmail } from "@/lib/admin-email";
 
 export async function GET(req: NextRequest) {
   try {
@@ -69,6 +70,14 @@ export async function POST(req: NextRequest) {
       userName,
       title: body.title.trim(),
     }).catch((smsErr) => console.warn("[Inquiry SMS Notification] Error:", smsErr));
+
+    // 이메일 알림 비동기 전송 (관리자 및 고객 확인 메일)
+    sendAdminNotificationEmail("inquiry", {
+      userEmail,
+      userName,
+      title: body.title.trim(),
+      content: body.content.trim(),
+    }).catch((emailErr) => console.warn("[Inquiry Email Notification] Error:", emailErr));
 
     return NextResponse.json({
       success: true,
