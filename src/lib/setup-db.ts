@@ -1,0 +1,234 @@
+import {
+  createTable,
+  queryTable,
+  insertRows,
+  listTables,
+  getTableSchema,
+} from './egdesk-helpers';
+
+let isDbInitialized = false;
+
+// 공통 7종 감사 컬럼 명세
+const AUDIT_COLUMNS = [
+  { name: 'uuid', type: 'TEXT' },
+  { name: 'updated_at', type: 'TEXT' },
+  { name: 'updated_by', type: 'TEXT' },
+  { name: 'deleted_at', type: 'TEXT' },
+  { name: 'deleted_by', type: 'TEXT' },
+  { name: 'restored_at', type: 'TEXT' },
+  { name: 'restored_by', type: 'TEXT' },
+];
+
+/**
+ * 테이블 존재 여부를 검사하고 누락된 감사 컬럼을 주입하여 안전하게 생성하는 헬퍼
+ */
+async function safeCreateTable(displayName: string, columns: any[], options: { tableName: string }) {
+  const tableName = options.tableName;
+
+  // 1. 감사 컬럼 주입
+  for (const aCol of AUDIT_COLUMNS) {
+    const exists = columns.some((c) => c.name.toLowerCase() === aCol.name.toLowerCase());
+    if (!exists) {
+      columns.push({ ...aCol });
+    }
+  }
+
+  // 2. 테이블 존재 여부 확인
+  let tableExists = false;
+  try {
+    const listRes = await listTables();
+    const tables = listRes.tables || [];
+    tableExists = tables.some((t: any) => t.tableName === tableName);
+  } catch (err) {
+    tableExists = false;
+  }
+
+  if (!tableExists) {
+    try {
+      await createTable(displayName, columns, options);
+      console.log(`[Setup-DB] ✅ Successfully created table: "${tableName}"`);
+    } catch (createErr: any) {
+      console.warn(`[Setup-DB] Table create warning for "${tableName}":`, createErr.message);
+    }
+  }
+}
+
+/**
+ * 레거시 system_settings에 저장된 JSON 데이터를 정규 테이블로 무손실 마이그레이션
+ */
+async function migrateLegacySettingsData() {
+  try {
+    // 1. system_settings 테이블에서 sheetbot_projects_% 및 sheetbot_schedules_% 조회
+    const settingsRes = await queryTable('system_settings', { limit: 500 }).catch(() => ({ rows: [] }));
+    const rows = settingsRes.rows || [];
+
+    for (const row of rows) {
+      const key = String(row.key || '');
+      const valStr = String(row.value || '[]');
+
+      // 프로젝트 마이그레이션
+      if (key.startsWith('sheetbot_projects_')) {
+        const userEmail = key.replace('sheetbot_projects_', '');
+        try {
+          const legacyProjects: any[] = JSON.parse(valStr);
+          if (Array.isArray(legacyProjects) && legacyProjects.length > 0) {
+            for (const p of legacyProjects) {
+              // 이미 신규 테이블에 존재하는지 확인
+              const existCheck = await queryTable('sheetbot_projects', {
+                filters: { id: p.id },
+                limit: 1,
+              }).catch(() => ({ rows: [] }));
+
+              if (!existCheck.rows || existCheck.rows.length === 0) {
+                await insertRows('sheetbot_projects', [
+                  {
+                    id: p.id,
+                    user_email: p.userEmail || userEmail,
+                    name: p.name || '제목 없음',
+                    description: p.description || '',
+                    spreadsheet_id: p.spreadsheetId || '',
+                    spreadsheet_url: p.spreadsheetUrl || '',
+                    gas_project_id: p.gasProjectId || '',
+                    script_id: p.scriptId || '',
+                    script_url: p.scriptUrl || '',
+                    script_code: p.scriptCode || '',
+                    manifest: p.manifest || '',
+                    summary: p.summary || '',
+                    features: JSON.stringify(p.features || []),
+                    triggers: JSON.stringify(p.triggers || []),
+                    prompt: p.prompt || '',
+                    status: p.status || 'ACTIVE',
+                    created_at: p.created_at || new Date().toISOString(),
+                    updated_at: p.updated_at || new Date().toISOString(),
+                    deleted_at: p.deleted_at || null,
+                  },
+                ]).catch((err) => console.warn(`Migration insert project failed for ${p.id}:`, err.message));
+              }
+            }
+          }
+        } catch (parseErr: any) {
+          console.warn(`Failed to parse legacy projects for key: ${key}`, parseErr.message);
+        }
+      }
+
+      // 스케줄 마이그레이션
+      if (key.startsWith('sheetbot_schedules_')) {
+        const userEmail = key.replace('sheetbot_schedules_', '');
+        try {
+          const legacySchedules: any[] = JSON.parse(valStr);
+          if (Array.isArray(legacySchedules) && legacySchedules.length > 0) {
+            for (const s of legacySchedules) {
+              const existCheck = await queryTable('sheetbot_schedules', {
+                filters: { id: s.id },
+                limit: 1,
+              }).catch(() => ({ rows: [] }));
+
+              if (!existCheck.rows || existCheck.rows.length === 0) {
+                await insertRows('sheetbot_schedules', [
+                  {
+                    id: s.id,
+                    user_email: s.userEmail || userEmail,
+                    project_id: s.projectId || '',
+                    project_name: s.projectName || '',
+                    spreadsheet_id: s.spreadsheetId || '',
+                    spreadsheet_url: s.spreadsheetUrl || '',
+                    name: s.name || '',
+                    description: s.description || '',
+                    function_name: s.functionName || '',
+                    trigger_type: s.triggerType || 'TIME_DRIVEN',
+                    time_frequency: s.timeFrequency || 'DAILY',
+                    interval_value: s.intervalValue ?? 1,
+                    at_hour: s.atHour ?? 9,
+                    week_day: s.weekDay || 'MONDAY',
+                    event_type: s.eventType || 'ON_EDIT',
+                    status: s.status || 'ACTIVE',
+                    last_run_at: s.lastRunAt || '',
+                    last_status: s.lastStatus || 'PENDING',
+                    last_run_message: s.lastRunMessage || '',
+                    created_at: s.created_at || new Date().toISOString(),
+                    updated_at: s.updated_at || new Date().toISOString(),
+                    deleted_at: s.deleted_at || null,
+                  },
+                ]).catch((err) => console.warn(`Migration insert schedule failed for ${s.id}:`, err.message));
+              }
+            }
+          }
+        } catch (parseErr: any) {
+          console.warn(`Failed to parse legacy schedules for key: ${key}`, parseErr.message);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn('[Setup-DB] Legacy data migration note:', err.message);
+  }
+}
+
+/**
+ * 전역 데이터베이스 초기화 및 테이블 무결성 확인
+ */
+export async function setupDatabase(): Promise<void> {
+  if (isDbInitialized) return;
+
+  try {
+    // 1. sheetbot_projects 테이블 생성
+    await safeCreateTable(
+      'SheetBot 프로젝트 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'name', type: 'TEXT', notNull: true },
+        { name: 'description', type: 'TEXT' },
+        { name: 'spreadsheet_id', type: 'TEXT' },
+        { name: 'spreadsheet_url', type: 'TEXT' },
+        { name: 'gas_project_id', type: 'TEXT' },
+        { name: 'script_id', type: 'TEXT' },
+        { name: 'script_url', type: 'TEXT' },
+        { name: 'script_code', type: 'TEXT' },
+        { name: 'manifest', type: 'TEXT' },
+        { name: 'summary', type: 'TEXT' },
+        { name: 'features', type: 'TEXT' },
+        { name: 'triggers', type: 'TEXT' },
+        { name: 'prompt', type: 'TEXT' },
+        { name: 'status', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_projects' }
+    );
+
+    // 2. sheetbot_schedules 테이블 생성
+    await safeCreateTable(
+      'SheetBot 스케줄 및 트리거 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'project_id', type: 'TEXT', notNull: true },
+        { name: 'project_name', type: 'TEXT' },
+        { name: 'spreadsheet_id', type: 'TEXT' },
+        { name: 'spreadsheet_url', type: 'TEXT' },
+        { name: 'name', type: 'TEXT', notNull: true },
+        { name: 'description', type: 'TEXT' },
+        { name: 'function_name', type: 'TEXT', notNull: true },
+        { name: 'trigger_type', type: 'TEXT', notNull: true },
+        { name: 'time_frequency', type: 'TEXT' },
+        { name: 'interval_value', type: 'INTEGER' },
+        { name: 'at_hour', type: 'INTEGER' },
+        { name: 'week_day', type: 'TEXT' },
+        { name: 'event_type', type: 'TEXT' },
+        { name: 'status', type: 'TEXT' },
+        { name: 'last_run_at', type: 'TEXT' },
+        { name: 'last_status', type: 'TEXT' },
+        { name: 'last_run_message', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_schedules' }
+    );
+
+    // 3. 레거시 데이터 마이그레이션 실행
+    await migrateLegacySettingsData();
+
+    isDbInitialized = true;
+    console.log('[Setup-DB] ✅ SheetBot Database schema initialized and verified.');
+  } catch (err: any) {
+    console.warn('[Setup-DB] Setup warning:', err.message);
+  }
+}
