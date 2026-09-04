@@ -30,6 +30,16 @@ const SAMPLE_QUESTIONS = [
   "스프레드시트 빈 행 일괄 삭제 스크립트",
 ];
 
+type HealthStatus = "healthy" | "warning" | "error" | "loading";
+
+interface BotHealthInfo {
+  status: HealthStatus;
+  message: string;
+  latencyMs?: number;
+  model?: string;
+  isQuotaExceeded?: boolean;
+}
+
 export default function EasyBot() {
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -38,11 +48,43 @@ export default function EasyBot() {
   const [loading, setLoading] = useState(false);
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
 
+  // 실시간 AI API 헬스 및 할당량 상태
+  const [health, setHealth] = useState<BotHealthInfo>({
+    status: "healthy",
+    message: "정상 가동 중",
+  });
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const checkHealth = async () => {
+    try {
+      const res = await fetch("/api/easybot/health");
+      const data = await res.json();
+      if (data && data.success) {
+        setHealth({
+          status: data.status || "healthy",
+          message: data.message || "정상 가동 중",
+          latencyMs: data.latencyMs,
+          model: data.model,
+          isQuotaExceeded: data.isQuotaExceeded,
+        });
+      }
+    } catch {
+      setHealth((prev) => ({
+        ...prev,
+        status: "warning",
+        message: "연결 확인 중",
+      }));
+    }
+  };
+
   useEffect(() => {
     setMounted(true);
+    checkHealth();
+    // 60초 간격으로 백그라운드 자동 진단
+    const interval = setInterval(checkHealth, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   // 초기 웰컴 메시지
@@ -199,15 +241,41 @@ export default function EasyBot() {
       {/* 플로팅 단추 */}
       {!isOpen && (
         <button
-          onClick={() => setIsOpen(true)}
+          onClick={() => {
+            setIsOpen(true);
+            checkHealth();
+          }}
           className="fixed bottom-6 right-6 z-[9990] group flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 text-white rounded-full shadow-2xl hover:shadow-indigo-500/40 hover:scale-105 active:scale-95 transition-all duration-200"
-          data-easybot-hint="시트봇 AI: 클릭하여 스프레드시트 및 Apps Script 전문 AI 도우미와 실시간 대화를 나눕니다."
+          data-easybot-hint={`시트봇 AI (${health.message}): 클릭하여 스프레드시트 및 Apps Script 전문 AI 도우미와 실시간 대화를 나눕니다.`}
+          title={`시트봇 AI - ${health.message}${health.latencyMs ? ` (${health.latencyMs}ms)` : ""}`}
         >
           <div className="relative">
             <Bot className="w-5 h-5 text-white animate-bounce" />
-            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-white animate-pulse" />
+            {health.status === "healthy" && (
+              <span
+                className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-white animate-pulse"
+                title="AI 엔진 정상 가동 중"
+              />
+            )}
+            {health.status === "warning" && (
+              <span
+                className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 ring-2 ring-white animate-pulse"
+                title={`주의: ${health.message}`}
+              />
+            )}
+            {health.status === "error" && (
+              <span
+                className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white animate-ping"
+                title={`오류/한도초과: ${health.message}`}
+              />
+            )}
           </div>
           <span className="text-xs font-extrabold tracking-wide">시트봇 AI</span>
+          {health.isQuotaExceeded && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-rose-500 text-white font-black animate-pulse">
+              한도초과
+            </span>
+          )}
         </button>
       )}
 
@@ -223,12 +291,35 @@ export default function EasyBot() {
               <div>
                 <h3 className="text-sm font-extrabold flex items-center gap-1.5">
                   <span>시트봇 AI (SheetBot AI)</span>
-                  <span className="px-1.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 text-[10px] font-bold border border-emerald-400/30">
-                    Live
-                  </span>
+                  {health.status === "healthy" && (
+                    <span
+                      className="px-1.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 text-[10px] font-bold border border-emerald-400/30"
+                      title={health.message}
+                    >
+                      Live
+                    </span>
+                  )}
+                  {health.status === "warning" && (
+                    <span
+                      className="px-1.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 text-[10px] font-bold border border-amber-400/30"
+                      title={health.message}
+                    >
+                      토큰/지연 주의
+                    </span>
+                  )}
+                  {health.status === "error" && (
+                    <span
+                      className="px-1.5 py-0.5 rounded-full bg-rose-400/20 text-rose-300 text-[10px] font-bold border border-rose-400/30"
+                      title={health.message}
+                    >
+                      {health.isQuotaExceeded ? "한도 초과" : "점검 중"}
+                    </span>
+                  )}
                 </h3>
-                <p className="text-[10px] text-white/80 font-medium">
-                  Apps Script & 시트 자동화 전문 AI 어시스턴트
+                <p className="text-[10px] text-white/80 font-medium truncate max-w-[220px]">
+                  {health.status === "healthy"
+                    ? `Apps Script & 시트 전문 AI (${health.model || "Gemini"})`
+                    : health.message}
                 </p>
               </div>
             </div>
@@ -250,6 +341,26 @@ export default function EasyBot() {
               </button>
             </div>
           </div>
+
+          {/* AI 한도 초과 또는 상태 경고 배너 */}
+          {health.status === "error" && (
+            <div className="bg-rose-50 border-b border-rose-200/80 px-4 py-2 text-[11px] text-rose-800 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 font-bold">
+                ⚠️ {health.message}
+              </span>
+              <span className="text-[10px] text-rose-600 font-medium">기본 지식 모드로 응답</span>
+            </div>
+          )}
+          {health.status === "warning" && (
+            <div className="bg-amber-50 border-b border-amber-200/80 px-4 py-2 text-[11px] text-amber-800 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 font-bold">
+                💡 {health.message}
+              </span>
+              <a href="/dashboard/pricing" className="text-[10px] text-amber-900 underline font-extrabold hover:text-amber-700">
+                토큰 충전 ➔
+              </a>
+            </div>
+          )}
 
           {/* 메시지 리스트 */}
           <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-50/50">
