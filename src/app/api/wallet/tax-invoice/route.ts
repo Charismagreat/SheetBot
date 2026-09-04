@@ -5,6 +5,7 @@ import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, insertRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { sendAdminNotificationSms } from "@/lib/admin-sms";
+import { sendAdminNotificationEmail } from "@/lib/admin-email";
 
 // 세금계산서 / 현금영수증 신청 목록 조회
 export async function GET() {
@@ -82,6 +83,13 @@ export async function POST(request: Request) {
       companyName: companyName || "고객사",
       amount: Number(amountKrw || 0),
     }).catch((smsErr) => console.warn("[TaxInvoice SMS Notification] Error:", smsErr));
+
+    // 관리자 이메일 알림 비동기 전송 (백그라운드 처리)
+    sendAdminNotificationEmail("tax_invoice", {
+      userEmail,
+      companyName: companyName || "고객사",
+      amount: Number(amountKrw || 0),
+    }).catch((emailErr) => console.warn("[TaxInvoice Email Notification] Error:", emailErr));
 
     return NextResponse.json({
       success: true,
