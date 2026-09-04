@@ -3,6 +3,7 @@ import "./globals.css";
 import SessionWrapper from "@/components/SessionWrapper";
 import AIHelpManager from "@/components/AIHelpManager";
 import EasyBot from "@/components/EasyBot";
+import Footer from "@/components/Footer";
 
 export const metadata: Metadata = {
   title: "SheetBot - AI 기반 Google Apps Script 자동화 SaaS",
@@ -16,9 +17,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" suppressHydrationWarning>
-      <body className="bg-slate-50 text-slate-900 min-h-screen" suppressHydrationWarning>
+      <body className="bg-slate-50 text-slate-900 min-h-screen flex flex-col" suppressHydrationWarning>
         <SessionWrapper>
-          {children}
+          <div className="flex-1 flex flex-col">
+            {children}
+          </div>
+          <Footer />
           <AIHelpManager />
           <EasyBot />
         </SessionWrapper>

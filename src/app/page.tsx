@@ -96,11 +96,6 @@ export default function LandingPage() {
           </div>
         </div>
       </main>
-
-      {/* 푸터 */}
-      <footer className="border-t border-slate-200/80 py-8 text-center text-xs text-slate-400">
-        <p>© 2026 SheetBot. Powered by EGDesk Infrastructure & Google Apps Script API.</p>
-      </footer>
     </div>
   );
 }
