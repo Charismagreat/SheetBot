@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, insertRows, updateRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { DEFAULT_FAQS } from "@/lib/default-faqs";
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,12 +15,36 @@ export async function GET(req: NextRequest) {
     }
 
     const res = await queryTable("sheetbot_faqs", {
-      orderBy: "id",
-      orderDirection: "DESC",
+      orderBy: "sort_order",
+      orderDirection: "ASC",
       limit: 100,
     }).catch(() => ({ rows: [] }));
 
-    const validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
+    let validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
+
+    // 테이블이 비어있는 경우 기본 FAQ를 DB에 실제 등록
+    if (validRows.length === 0) {
+      const now = new Date().toISOString();
+      const seedRows = DEFAULT_FAQS.map((faq) => ({
+        id: faq.id,
+        category: faq.category,
+        question: faq.question,
+        answer: faq.answer,
+        sort_order: faq.sort_order,
+        created_at: now,
+        updated_at: now,
+        updated_by: "system_seed",
+        deleted_at: null,
+      }));
+
+      await insertRows("sheetbot_faqs", seedRows).catch((e) =>
+        console.warn("Failed to seed faqs for admin:", e.message)
+      );
+      validRows = seedRows;
+    } else {
+      validRows.sort((a: any, b: any) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0));
+    }
+
     return NextResponse.json({ success: true, faqs: validRows });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
@@ -58,7 +83,7 @@ export async function POST(req: NextRequest) {
       },
     ]);
 
-    return NextResponse.json({ success: true, message: "새 FAQ가 등록되었습니다.", faqId });
+    return NextResponse.json({ success: true, message: "새 FAQ가 성공적으로 등록되었습니다.", faqId });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
@@ -93,7 +118,7 @@ export async function PUT(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ success: true, message: "FAQ 항목이 수정되었습니다." });
+    return NextResponse.json({ success: true, message: "FAQ 항목이 성공적으로 수정되었습니다." });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
@@ -122,7 +147,7 @@ export async function DELETE(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ success: true, message: "FAQ가 소프트 삭제되었습니다." });
+    return NextResponse.json({ success: true, message: "FAQ 항목이 삭제되었습니다." });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
