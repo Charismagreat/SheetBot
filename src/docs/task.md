@@ -36,3 +36,12 @@
 - [x] `src/app/dashboard/ai-usage/page.tsx` 실시간 관제 대시보드 UI (핵심 지표, 회원별 랭킹 대장, 원클릭 필터, 상세 로그)
 - [x] `src/components/Navbar.tsx` 관제 링크 등록 및 빌드 검증
 
+## 📌 Phase 7. 회원별 토큰 지갑(Wallet) 및 선불 충전 과금 시스템 구축
+- [x] `sheetbot_user_wallets` (회원 지갑) & `sheetbot_payment_orders` (결제 대장) My DB 테이블 정의
+- [x] `src/lib/token-wallet.ts` 신규 가입 웰컴 무료 토큰(20,000) 지급 및 잔액 검증/차감 모듈
+- [x] AI 작업 실행 전 잔액 사전 검증(`checkTokenBalance`) 및 사후 정산 차감(`deductTokens`)
+- [x] `src/app/api/wallet/route.ts` 지갑 잔액 조회 및 결제 충전 API
+- [x] `src/app/dashboard/pricing/page.tsx` 토큰 충전 센터 UI (패키지 상품, 결제 수단 선택, 실시간 잔여 토큰 뱃지, 결제 이력)
+- [x] 상단 네비게이션([Navbar.tsx](file:///C:/dev/SheetBot/src/components/Navbar.tsx))에 `[🪙 토큰 충전]` 링크 메뉴 배치
+
+

@@ -5,12 +5,25 @@ import { getCurrentUserEmail } from "@/lib/auth";
 import { callAiCaller } from "@/lib/egdesk-helpers";
 import { recordAiUsageLog } from "@/lib/ai-usage";
 import { getAiModelSettings } from "@/lib/ai-settings";
+import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 
 export async function POST(request: Request) {
   try {
     const userEmail = await getCurrentUserEmail();
     const body = await request.json();
     const { message, history } = body;
+
+    if (userEmail) {
+      const tokenCheck = await checkTokenBalance(userEmail, 300);
+      if (!tokenCheck.allowed) {
+        return NextResponse.json({
+          success: false,
+          reply: `⚠️ 보유 중인 토큰이 모두 소진되었습니다. (현재 잔여: ${tokenCheck.balance.toLocaleString()} 토큰)\n이지봇과 대화를 계속하시려면 상단 [토큰 충전] 메뉴에서 크레딧을 충전해 주세요.`,
+          requirePayment: true,
+          balance: tokenCheck.balance,
+        });
+      }
+    }
 
     const aiSettings = await getAiModelSettings();
     const targetModel = aiSettings.easybotModel || aiSettings.defaultModel || "gemini-3.5-flash";
@@ -86,12 +99,25 @@ export async function POST(request: Request) {
       replyContent = `안녕하세요! Google Apps Script 및 스프레드시트 자동화 도우미 이지봇입니다. 🤖\n\n문의하신 "${message}"에 대한 안내입니다.\n\n구글 시트 상단 메뉴 자동화나 정기 실행 트리거가 필요하시면, 상단의 **[+ 새 프로젝트 생성]** 버튼을 눌러 스프레드시트 URL과 요구사항을 입력해 보세요. AI가 완벽한 \`Code.gs\` 코드를 자동 생성하여 구글 클라우드에 직접 배포해 드립니다.`;
     }
 
+    // 사용 토큰 계산 및 차감
+    let newBalance = 0;
+    const promptTokens = Math.ceil(fullPrompt.length / 2.5);
+    const completionTokens = Math.ceil(replyContent.length / 2.5);
+    const usedTokens = promptTokens + completionTokens;
+
+    if (userEmail) {
+      const deductRes = await deductTokens(userEmail, usedTokens);
+      newBalance = deductRes.newBalance;
+    }
+
     // 실시간 AI 사용량 적재
     void recordAiUsageLog({
       userEmail: userEmail || "guest",
       caller: "sheetbot-easybot",
       purpose: "이지봇 실시간 대화",
       model: targetModel,
+      promptTokens,
+      completionTokens,
       promptText: fullPrompt,
       responseText: replyContent,
     });
@@ -100,6 +126,8 @@ export async function POST(request: Request) {
       success: true,
       reply: replyContent,
       userEmail: userEmail || "guest",
+      tokensDeducted: usedTokens,
+      newBalance,
     });
   } catch (error: any) {
     console.error("EasyBot API error:", error);

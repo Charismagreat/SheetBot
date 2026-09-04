@@ -257,7 +257,40 @@ export async function setupDatabase(): Promise<void> {
       { tableName: 'sheetbot_settings' }
     );
 
-    // 5. 레거시 데이터 마이그레이션 실행
+    // 5. sheetbot_user_wallets 테이블 생성 (회원 토큰 지갑 및 잔액 관리)
+    await safeCreateTable(
+      'SheetBot 회원 토큰 지갑 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'balance_tokens', type: 'INTEGER', notNull: true },
+        { name: 'total_purchased_tokens', type: 'INTEGER' },
+        { name: 'total_used_tokens', type: 'INTEGER' },
+        { name: 'tier', type: 'TEXT' }, // 'FREE', 'PRO', 'ENTERPRISE'
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_user_wallets' }
+    );
+
+    // 6. sheetbot_payment_orders 테이블 생성 (토큰 결제 및 충전 대장)
+    await safeCreateTable(
+      'SheetBot 토큰 결제 및 충전 주문 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'order_id', type: 'TEXT', notNull: true },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'package_name', type: 'TEXT', notNull: true },
+        { name: 'amount_krw', type: 'INTEGER', notNull: true },
+        { name: 'tokens_credited', type: 'INTEGER', notNull: true },
+        { name: 'pg_provider', type: 'TEXT' },
+        { name: 'payment_method', type: 'TEXT' },
+        { name: 'status', type: 'TEXT' }, // 'PAID', 'PENDING', 'CANCELLED'
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_payment_orders' }
+    );
+
+    // 7. 레거시 데이터 마이그레이션 실행
     await migrateLegacySettingsData();
 
     isDbInitialized = true;
