@@ -151,7 +151,7 @@ export async function parseNaturalLanguageRule(prompt: string): Promise<SmartDis
 }
 
 /**
- * 비즈니스 이벤트 발생 시 등록된 자연어 기반 스마트 규칙들을 매칭하여 실행
+ * 비즈니스 이벤트 발생 시 스마트 규칙 또는 기본 설정을 통합 실행 (중복 발송 100% 방지)
  */
 export async function executeSmartDispatchRules(
   eventType: "inquiry" | "tax_invoice" | "payment",
@@ -163,87 +163,98 @@ export async function executeSmartDispatchRules(
     amount?: number;
     companyName?: string;
   }
-): Promise<void> {
+): Promise<{ dispatchedRulesCount: number }> {
   try {
     const rules = await getSmartDispatchRules();
     const activeRules = rules.filter((r) => r.enabled);
 
-    for (const rule of activeRules) {
-      // 1. 이벤트 타입 매칭
-      if (rule.triggerEvent !== "all" && rule.triggerEvent !== eventType) {
-        continue;
-      }
-
-      // 2. 금액 조건 확인
+    // 1. 해당 이벤트에 매칭되는 활성 스마트 규칙 탐색
+    const matchedRules = activeRules.filter((rule) => {
+      if (rule.triggerEvent !== "all" && rule.triggerEvent !== eventType) return false;
       if (rule.minAmount && rule.minAmount > 0) {
-        if ((payload.amount || 0) < rule.minAmount) {
-          continue;
-        }
+        if ((payload.amount || 0) < rule.minAmount) return false;
       }
+      return true;
+    });
 
-      // 3. 발송 채널별 실행
-      if (rule.channels.includes("sms")) {
-        if (rule.targetRecipient === "admin" || rule.targetRecipient === "both") {
-          sendAdminNotificationSms(eventType, {
-            userName: payload.userName,
-            userEmail: payload.userEmail,
-            title: payload.title,
-            amount: payload.amount,
-            companyName: payload.companyName,
-          }).catch((e) => console.warn("[SmartRules SMS Error]", e));
-        }
-      }
-
-      if (rule.channels.includes("email")) {
-        const smtp = await getAdminSmtpSettings();
-        if (smtp.enabled && smtp.user && smtp.pass) {
-          const nowStr = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
-          // 관리자 발송
+    // 2. 만약 매칭된 활성 스마트 규칙이 있다면 -> 스마트 규칙에 따라서만 발송 (중복 방지)
+    if (matchedRules.length > 0) {
+      for (const rule of matchedRules) {
+        // SMS 발송
+        if (rule.channels.includes("sms")) {
           if (rule.targetRecipient === "admin" || rule.targetRecipient === "both") {
-            const adminTo = smtp.adminEmail || smtp.user;
-            sendSystemEmail({
-              to: adminTo,
-              subject: `[SheetBot 자동알림] ${rule.name} - ${payload.title || payload.companyName || eventType}`,
-              html: `
-                <div style="font-family: sans-serif; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
-                  <div style="font-size: 11px; color: #4f46e5; font-weight: bold; margin-bottom: 6px;">
-                    ✨ AI 스마트 발송 규칙 적용: ${rule.prompt}
-                  </div>
-                  <h3 style="color: #0f172a; margin-top: 0;">${rule.name}</h3>
-                  <p style="font-size: 13px; color: #475569;">${rule.conditionSummary}</p>
-                  <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 12px 0;" />
-                  <div style="font-size: 12px; color: #334155; line-height: 1.6;">
-                    <strong>회원/고객:</strong> ${payload.userEmail}<br/>
-                    ${payload.title ? `<strong>제목:</strong> ${payload.title}<br/>` : ""}
-                    ${payload.amount ? `<strong>금액:</strong> ${payload.amount.toLocaleString()}원<br/>` : ""}
-                    <strong>발송일시:</strong> ${nowStr}
-                  </div>
-                </div>
-              `,
-            }).catch((e) => console.warn("[SmartRules Admin Email Error]", e));
+            sendAdminNotificationSms(eventType, {
+              userName: payload.userName,
+              userEmail: payload.userEmail,
+              title: payload.title,
+              amount: payload.amount,
+              companyName: payload.companyName,
+            }).catch((e) => console.warn("[SmartRules SMS Error]", e));
           }
+        }
 
-          // 고객 발송 (고객 이메일이 있는 경우)
-          if ((rule.targetRecipient === "customer" || rule.targetRecipient === "both") && payload.userEmail) {
-            sendSystemEmail({
-              to: payload.userEmail,
-              subject: `[SheetBot] 안내 말씀드립니다: ${payload.title || "서비스 알림"}`,
-              html: `
-                <div style="font-family: sans-serif; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
-                  <h3 style="color: #059669; margin-top: 0;">SheetBot 알림 안내</h3>
-                  <p style="font-size: 13px; color: #334155; line-height: 1.6;">
-                    고객님의 요청사항(${payload.title || "비즈니스 작업"})이 정상적으로 접수 및 처리되고 있습니다.<br/>
-                    궁금하신 사항은 언제든 고객센터로 문의해 주시기 바랍니다.
-                  </p>
-                  <p style="font-size: 11px; color: #94a3b8; margin-top: 16px;">감사합니다.<br/>SheetBot 팀</p>
-                </div>
-              `,
-            }).catch((e) => console.warn("[SmartRules Customer Email Error]", e));
+        // Email 발송
+        if (rule.channels.includes("email")) {
+          const smtp = await getAdminSmtpSettings();
+          if (smtp.enabled && smtp.user && smtp.pass) {
+            const nowStr = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
+            
+            // 관리자 발송
+            if (rule.targetRecipient === "admin" || rule.targetRecipient === "both") {
+              const adminTo = smtp.adminEmail || smtp.user;
+              sendSystemEmail({
+                to: adminTo,
+                subject: `[SheetBot 자동알림] ${rule.name} - ${payload.title || payload.companyName || eventType}`,
+                html: `
+                  <div style="font-family: sans-serif; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
+                    <div style="font-size: 11px; color: #4f46e5; font-weight: bold; margin-bottom: 6px;">
+                      ✨ AI 스마트 발송 규칙 적용: ${rule.prompt}
+                    </div>
+                    <h3 style="color: #0f172a; margin-top: 0;">${rule.name}</h3>
+                    <p style="font-size: 13px; color: #475569;">${rule.conditionSummary}</p>
+                    <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 12px 0;" />
+                    <div style="font-size: 12px; color: #334155; line-height: 1.6;">
+                      <strong>회원/고객:</strong> ${payload.userEmail}<br/>
+                      ${payload.title ? `<strong>제목:</strong> ${payload.title}<br/>` : ""}
+                      ${payload.amount ? `<strong>금액:</strong> ${payload.amount.toLocaleString()}원<br/>` : ""}
+                      <strong>발송일시:</strong> ${nowStr}
+                    </div>
+                  </div>
+                `,
+              }).catch((e) => console.warn("[SmartRules Admin Email Error]", e));
+            }
+
+            // 고객 발송
+            if ((rule.targetRecipient === "customer" || rule.targetRecipient === "both") && payload.userEmail) {
+              sendSystemEmail({
+                to: payload.userEmail,
+                subject: `[SheetBot] 안내 말씀드립니다: ${payload.title || "서비스 알림"}`,
+                html: `
+                  <div style="font-family: sans-serif; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
+                    <h3 style="color: #059669; margin-top: 0;">SheetBot 알림 안내</h3>
+                    <p style="font-size: 13px; color: #334155; line-height: 1.6;">
+                      고객님의 요청사항(${payload.title || "비즈니스 작업"})이 정상적으로 접수 및 처리되고 있습니다.<br/>
+                      궁금하신 사항은 언제든 고객센터로 문의해 주시기 바랍니다.
+                    </p>
+                    <p style="font-size: 11px; color: #94a3b8; margin-top: 16px;">감사합니다.<br/>SheetBot 팀</p>
+                  </div>
+                `,
+              }).catch((e) => console.warn("[SmartRules Customer Email Error]", e));
+            }
           }
         }
       }
+      return { dispatchedRulesCount: matchedRules.length };
     }
+
+    // 3. 만약 활성 스마트 규칙이 하나도 매칭되지 않은 경우 -> 기본 설정(SMS 및 이메일)으로 안전하게 폴백 발송
+    const { sendAdminNotificationEmail } = await import("@/lib/admin-email");
+    sendAdminNotificationSms(eventType, payload).catch((e) => console.warn("[Default SMS Fallback Error]", e));
+    sendAdminNotificationEmail(eventType, payload).catch((e) => console.warn("[Default Email Fallback Error]", e));
+
+    return { dispatchedRulesCount: 0 };
   } catch (err) {
-    console.warn("[SmartRules] executeSmartDispatchRules warning:", err);
+    console.warn("[SmartRules] executeSmartDispatchRules error:", err);
+    return { dispatchedRulesCount: 0 };
   }
 }

@@ -8,8 +8,6 @@ import {
   TOKEN_PACKAGES,
 } from "@/lib/token-wallet";
 import { queryTable } from "@/lib/egdesk-helpers";
-import { sendAdminNotificationSms } from "@/lib/admin-sms";
-import { sendAdminNotificationEmail } from "@/lib/admin-email";
 import { executeSmartDispatchRules } from "@/lib/smart-dispatch-rules";
 
 export async function GET() {
@@ -78,26 +76,12 @@ export async function POST(request: Request) {
       paymentMethod || "카드 간편결제"
     );
 
-    // 관리자 SMS 알림 비동기 전송 (백그라운드 처리)
-    sendAdminNotificationSms("payment", {
-      userEmail,
-      title: pkg.name,
-      amount: pkg.priceKrw,
-    }).catch((smsErr) => console.warn("[Payment SMS Notification] Error:", smsErr));
-
-    // 관리자 이메일 알림 비동기 전송 (백그라운드 처리)
-    sendAdminNotificationEmail("payment", {
-      userEmail,
-      title: pkg.name,
-      amount: pkg.priceKrw,
-    }).catch((emailErr) => console.warn("[Payment Email Notification] Error:", emailErr));
-
-    // AI 자연어 기반 스마트 발송 규칙 실행
+    // 알림 발송 통합 처리 (스마트 발송 규칙 우선 실행, 미매칭 시 기본 설정 자동 폴백)
     executeSmartDispatchRules("payment", {
       userEmail,
       title: pkg.name,
       amount: pkg.priceKrw,
-    }).catch((ruleErr) => console.warn("[Payment SmartRules Notification] Error:", ruleErr));
+    }).catch((ruleErr) => console.warn("[Payment Dispatch Notification] Error:", ruleErr));
 
     return NextResponse.json({
       success: true,
