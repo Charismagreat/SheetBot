@@ -161,6 +161,16 @@ export default function Navbar() {
                 <span className="hidden md:inline whitespace-nowrap">모델 설정</span>
               </Link>
 
+              <Link
+                href="/dashboard/admin"
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-rose-700 bg-rose-50/70 hover:bg-rose-100 border border-rose-200/60 rounded-xl transition-all whitespace-nowrap shrink-0"
+                data-easybot-hint="관리자 센터: 1:1 고객 문의 답변, 사용 후기 검수, FAQ 편집, 세금계산서 발행을 승인합니다."
+                title="통합 운영 관리자 센터"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                <span className="hidden sm:inline whitespace-nowrap">관리자</span>
+              </Link>
+
               {/* 유저 프로필 카드 */}
               <div
                 className="flex items-center gap-2 pl-2 border-l border-slate-200 shrink-0 whitespace-nowrap"

@@ -343,7 +343,21 @@ export async function setupDatabase(): Promise<void> {
       { tableName: 'sheetbot_reviews' }
     );
 
-    // 10. 레거시 데이터 마이그레이션 실행
+    // 10. sheetbot_faqs 테이블 생성 (FAQ 관리 대장)
+    await safeCreateTable(
+      'SheetBot FAQ 관리 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'category', type: 'TEXT', notNull: true }, // '시작하기', '토큰/결제', 'Apps Script/기능', '보안/계정'
+        { name: 'question', type: 'TEXT', notNull: true },
+        { name: 'answer', type: 'TEXT', notNull: true },
+        { name: 'sort_order', type: 'INTEGER' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_faqs' }
+    );
+
+    // 11. 레거시 데이터 마이그레이션 실행
     await migrateLegacySettingsData();
 
     isDbInitialized = true;
