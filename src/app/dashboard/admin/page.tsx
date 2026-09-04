@@ -299,6 +299,73 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const handleAddDevice = async (label: string): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/admin/sms/devices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message || "새 디바이스가 추가되었습니다.");
+        await fetchPhoneDevices();
+        // 새로 생성된 기기가 있으면 선택 여부 유도
+        if (data.deviceId && confirm("추가된 디바이스를 기본 발송 기기로 설정하시겠습니까?")) {
+          setSmsSettings((prev) => ({ ...prev, deviceId: data.deviceId }));
+        }
+        return true;
+      } else {
+        alert(data.error || "디바이스 추가 실패");
+        return false;
+      }
+    } catch (e: any) {
+      alert("오류: " + e.message);
+      return false;
+    }
+  };
+
+  const handleDeleteDevice = async (deviceId: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/admin/sms/devices?deviceId=${encodeURIComponent(deviceId)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message || "디바이스가 삭제되었습니다.");
+        await fetchPhoneDevices();
+        return true;
+      } else {
+        alert(data.error || "디바이스 삭제 실패");
+        return false;
+      }
+    } catch (e: any) {
+      alert("오류: " + e.message);
+      return false;
+    }
+  };
+
+  const handleConnectDevice = async (deviceId: string): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/admin/sms/devices", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, action: "connect" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message || "QR 페어링 브라우저 창을 열었습니다. 스마트폰으로 스캔해 주세요.");
+        return true;
+      } else {
+        alert(data.error || "QR 페어링 창 열기 실패");
+        return false;
+      }
+    } catch (e: any) {
+      alert("오류: " + e.message);
+      return false;
+    }
+  };
+
   const fetchSmtpSettings = async () => {
     try {
       const res = await fetch("/api/admin/email");
@@ -796,6 +863,9 @@ export default function AdminDashboardPage() {
             checkingDevice={checkingDevice}
             deviceCheckResult={deviceCheckResult}
             onCheckDevice={handleCheckDevice}
+            onAddDevice={handleAddDevice}
+            onDeleteDevice={handleDeleteDevice}
+            onConnectDevice={handleConnectDevice}
           />
         )}
 
