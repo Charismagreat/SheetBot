@@ -309,7 +309,41 @@ export async function setupDatabase(): Promise<void> {
       { tableName: 'sheetbot_tax_invoices' }
     );
 
-    // 8. 레거시 데이터 마이그레이션 실행
+    // 8. sheetbot_inquiries 테이블 생성 (1:1 고객 문의 접수 대장)
+    await safeCreateTable(
+      'SheetBot 고객 문의 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'user_name', type: 'TEXT' },
+        { name: 'category', type: 'TEXT', notNull: true }, // 'GAS_ERROR', 'PAYMENT', 'PROPOSAL', 'OTHER'
+        { name: 'title', type: 'TEXT', notNull: true },
+        { name: 'content', type: 'TEXT', notNull: true },
+        { name: 'status', type: 'TEXT' }, // 'PENDING', 'ANSWERED'
+        { name: 'answer', type: 'TEXT' },
+        { name: 'answered_at', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_inquiries' }
+    );
+
+    // 9. sheetbot_reviews 테이블 생성 (사용 후기 및 평점 대장)
+    await safeCreateTable(
+      'SheetBot 사용 후기 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'user_name', type: 'TEXT' },
+        { name: 'rating', type: 'INTEGER', notNull: true }, // 1 ~ 5
+        { name: 'title', type: 'TEXT', notNull: true },
+        { name: 'content', type: 'TEXT', notNull: true },
+        { name: 'use_case', type: 'TEXT' }, // 예: '일일 마감 자동화', '이메일 웹훅 알림'
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_reviews' }
+    );
+
+    // 10. 레거시 데이터 마이그레이션 실행
     await migrateLegacySettingsData();
 
     isDbInitialized = true;
