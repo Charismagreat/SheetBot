@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
@@ -91,13 +91,13 @@ export default function AiSettingsPage() {
     }
   };
 
-  const handleResetToGemini35 = () => {
+  const handleApplyModel = (modelId: string) => {
     setSettings((prev) => ({
       ...prev,
-      defaultModel: "gemini-3.5-flash",
-      scriptGeneratorModel: "gemini-3.5-flash",
-      easybotModel: "gemini-3.5-flash",
-      helpModel: "gemini-3.5-flash",
+      defaultModel: modelId,
+      scriptGeneratorModel: modelId,
+      easybotModel: modelId,
+      helpModel: modelId,
     }));
   };
 
@@ -134,13 +134,22 @@ export default function AiSettingsPage() {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={handleResetToGemini35}
+              onClick={() => handleApplyModel("gemini-3.8-flash")}
+              type="button"
+              className="px-3 py-2 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl transition-all flex items-center gap-1.5 shadow-2xs"
+              title="모든 영역을 최신 gemini-3.8-flash로 일괄 지정"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>Gemini 3.8 Flash 전체 적용</span>
+            </button>
+            <button
+              onClick={() => handleApplyModel("gemini-3.5-flash")}
               type="button"
               className="px-3 py-2 text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-200 rounded-xl transition-all flex items-center gap-1.5"
-              title="모든 영역을 최신 gemini-3.5-flash로 일괄 지정"
+              title="모든 영역을 gemini-3.5-flash로 일괄 지정"
             >
-              <Zap className="w-3.5 h-3.5 text-amber-500" />
-              <span>Gemini 3.5 Flash 전체 적용</span>
+              <Zap className="w-3.5 h-3.5 text-indigo-500" />
+              <span>3.5 Flash 적용</span>
             </button>
             <Link
               href="/dashboard/ai-usage"
