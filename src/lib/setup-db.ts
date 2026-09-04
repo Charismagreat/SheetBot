@@ -338,6 +338,7 @@ export async function setupDatabase(): Promise<void> {
         { name: 'title', type: 'TEXT', notNull: true },
         { name: 'content', type: 'TEXT', notNull: true },
         { name: 'use_case', type: 'TEXT' }, // 예: '일일 마감 자동화', '이메일 웹훅 알림'
+        { name: 'image_url', type: 'TEXT' }, // 후기 첨부 사진 (Data URL 또는 이미지 URL)
         { name: 'created_at', type: 'TEXT' },
       ],
       { tableName: 'sheetbot_reviews' }
