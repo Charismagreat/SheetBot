@@ -34,9 +34,11 @@ import {
   Mail,
   Phone,
   MapPin,
-  Save
+  Save,
+  Share2
 } from "lucide-react";
-import { DEFAULT_FOOTER, FooterInfo } from "@/lib/default-footer";
+import { DEFAULT_FOOTER, FooterInfo, SnsChannel } from "@/lib/default-footer";
+import { SnsIcon } from "@/components/SnsIcons";
 
 type TabType = "users" | "inquiries" | "reviews" | "faqs" | "tax_invoices" | "footer";
 
@@ -287,6 +289,37 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // SNS 채널 조작 함수들
+  const handleAddSnsChannel = () => {
+    const newChan: SnsChannel = {
+      id: `sns_${Date.now()}`,
+      type: "custom",
+      name: "새 채널",
+      url: "https://",
+      enabled: true,
+    };
+    setFooterForm((prev) => ({
+      ...prev,
+      sns_channels: [...(prev.sns_channels || []), newChan],
+    }));
+  };
+
+  const handleUpdateSnsChannel = (id: string, updates: Partial<SnsChannel>) => {
+    setFooterForm((prev) => ({
+      ...prev,
+      sns_channels: (prev.sns_channels || []).map((ch) =>
+        ch.id === id ? { ...ch, ...updates } : ch
+      ),
+    }));
+  };
+
+  const handleDeleteSnsChannel = (id: string) => {
+    setFooterForm((prev) => ({
+      ...prev,
+      sns_channels: (prev.sns_channels || []).filter((ch) => ch.id !== id),
+    }));
+  };
+
   // 5. 문의 답변 저장
   const handleSaveAnswer = async () => {
     if (!selectedInquiry || !answerInput.trim()) return;
@@ -422,6 +455,10 @@ export default function AdminDashboardPage() {
     return matchesSearch && matchesTier;
   });
 
+  const getSnsIconSmall = (type: SnsChannel["type"]) => {
+    return <SnsIcon type={type} className="w-3.5 h-3.5" />;
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 pb-24">
       <Navbar />
@@ -438,7 +475,7 @@ export default function AdminDashboardPage() {
               SheetBot 전체 데이터 및 운영 관리 대시보드
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              회원 관리, 토큰 지급, 1:1 문의, 사용 후기, FAQ, 세금계산서 및 푸터 회사 정보 설정을 한곳에서 통제합니다.
+              회원 관리, 토큰 지급, 1:1 문의, 사용 후기, FAQ, 세금계산서, 푸터 회사 정보 및 SNS 채널 설정을 한곳에서 통제합니다.
             </p>
           </div>
 
@@ -590,7 +627,7 @@ export default function AdminDashboardPage() {
             }`}
           >
             <Building2 className="w-4 h-4 text-emerald-400" />
-            <span>🏢 푸터 / 회사정보 설정</span>
+            <span>🏢 푸터 / 회사정보 &amp; SNS 설정</span>
           </button>
         </div>
 
@@ -1130,17 +1167,17 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* 5. 푸터 / 회사정보 설정 탭 */}
+        {/* 5. 푸터 / 회사정보 & SNS 설정 탭 */}
         {activeTab === "footer" && (
           <form onSubmit={handleSaveFooter} className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
               <div>
                 <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                   <Building2 className="w-5 h-5 text-indigo-600" />
-                  <span>푸터 영역 회사 정보 및 고객센터 설정</span>
+                  <span>푸터 영역 회사 정보 및 공식 SNS 채널 관리</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  서비스 하단 푸터에 표시되는 사업자등록정보, 통신판매번호, 고객센터 연락처, 소개 문구를 실시간 관리합니다.
+                  서비스 하단 푸터에 표시되는 사업자등록정보, 고객센터 연락처, 소개글 및 공식 SNS 채널(유튜브, 인스타 등)을 실시간 관리합니다.
                 </p>
               </div>
 
@@ -1152,6 +1189,118 @@ export default function AdminDashboardPage() {
                 <Save className="w-4 h-4 text-emerald-400" />
                 <span>{savingFooter ? "저장 중..." : "설정 저장 완료"}</span>
               </button>
+            </div>
+
+            {/* 공식 SNS 채널 관리 카드 */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="space-y-0.5">
+                  <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Share2 className="w-4 h-4 text-indigo-600" />
+                    <span>공식 SNS 채널 바로가기 설정</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    푸터 1열 브랜드 소개 하단에 노출될 소셜 미디어(SNS) 링크를 켜고 끄거나 새로 추가할 수 있습니다.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAddSnsChannel}
+                  className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl transition-all flex items-center gap-1 cursor-pointer border border-indigo-200/60"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ SNS 채널 추가</span>
+                </button>
+              </div>
+
+              {(!footerForm.sns_channels || footerForm.sns_channels.length === 0) ? (
+                <div className="p-8 text-center text-xs text-slate-400">
+                  등록된 SNS 채널이 없습니다. [+ SNS 채널 추가] 버튼을 눌러 채널을 등록해 보세요.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {footerForm.sns_channels.map((ch) => (
+                    <div
+                      key={ch.id}
+                      className={`p-3.5 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        ch.enabled
+                          ? "bg-slate-50/70 border-slate-200"
+                          : "bg-slate-100/50 border-slate-200 opacity-60"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 flex-1">
+                        <span className="p-2 rounded-lg bg-white border border-slate-200 shadow-2xs shrink-0">
+                          {getSnsIconSmall(ch.type)}
+                        </span>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1">
+                          {/* 채널 종류 */}
+                          <select
+                            value={ch.type}
+                            onChange={(e) =>
+                              handleUpdateSnsChannel(ch.id, {
+                                type: e.target.value as SnsChannel["type"],
+                              })
+                            }
+                            className="text-xs p-2 rounded-lg border border-slate-200 bg-white"
+                          >
+                            <option value="youtube">유튜브 (YouTube)</option>
+                            <option value="instagram">인스타그램 (Instagram)</option>
+                            <option value="blog">블로그 (Naver/Tistory)</option>
+                            <option value="github">깃허브 (GitHub)</option>
+                            <option value="kakao">카카오톡 채널</option>
+                            <option value="twitter">X (트위터)</option>
+                            <option value="custom">기타 웹사이트</option>
+                          </select>
+
+                          {/* 채널명 */}
+                          <input
+                            type="text"
+                            value={ch.name}
+                            onChange={(e) => handleUpdateSnsChannel(ch.id, { name: e.target.value })}
+                            placeholder="채널 표시 이름"
+                            className="text-xs p-2 rounded-lg border border-slate-200 bg-white font-bold text-slate-800"
+                          />
+
+                          {/* URL */}
+                          <input
+                            type="url"
+                            value={ch.url}
+                            onChange={(e) => handleUpdateSnsChannel(ch.id, { url: e.target.value })}
+                            placeholder="https://..."
+                            className="text-xs p-2 rounded-lg border border-slate-200 bg-white font-mono text-slate-600"
+                          />
+                        </div>
+                      </div>
+
+                      {/* 활성화 토글 & 삭제 */}
+                      <div className="flex items-center justify-end gap-2 shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateSnsChannel(ch.id, { enabled: !ch.enabled })}
+                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1 ${
+                            ch.enabled
+                              ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+                              : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                          }`}
+                        >
+                          {ch.enabled ? "노출 ON" : "숨김 OFF"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSnsChannel(ch.id)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                          title="채널 삭제"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1333,6 +1482,24 @@ export default function AdminDashboardPage() {
               <div className="p-5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-600 space-y-3">
                 <div className="font-bold text-slate-900">{footerForm.company_name}</div>
                 <p className="text-[11px] text-slate-500">{footerForm.brand_description}</p>
+
+                {/* 미리보기 내 SNS 버튼 */}
+                {footerForm.sns_channels?.filter((c) => c.enabled).length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {footerForm.sns_channels
+                      ?.filter((c) => c.enabled)
+                      .map((c) => (
+                        <span
+                          key={c.id}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[10px] font-bold text-slate-700 shadow-2xs"
+                        >
+                          {getSnsIconSmall(c.type)}
+                          <span>{c.name}</span>
+                        </span>
+                      ))}
+                  </div>
+                )}
+
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500 pt-2 border-t border-slate-200">
                   <span>대표: {footerForm.ceo_name}</span>
                   <span>|</span>
