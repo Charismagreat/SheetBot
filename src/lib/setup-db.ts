@@ -357,7 +357,24 @@ export async function setupDatabase(): Promise<void> {
       { tableName: 'sheetbot_faqs' }
     );
 
-    // 11. 레거시 데이터 마이그레이션 실행
+    // 11. sheetbot_users 테이블 생성 (회원 마스터 및 상태 관리 대장)
+    await safeCreateTable(
+      'SheetBot 회원 마스터 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'email', type: 'TEXT', notNull: true },
+        { name: 'name', type: 'TEXT' },
+        { name: 'role', type: 'TEXT' }, // 'USER', 'ADMIN'
+        { name: 'status', type: 'TEXT' }, // 'ACTIVE', 'SUSPENDED'
+        { name: 'tier', type: 'TEXT' }, // 'FREE', 'PRO', 'ENTERPRISE'
+        { name: 'note', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+        { name: 'last_login_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_users' }
+    );
+
+    // 12. 레거시 데이터 마이그레이션 실행
     await migrateLegacySettingsData();
 
     isDbInitialized = true;
