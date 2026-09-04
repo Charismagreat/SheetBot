@@ -1479,26 +1479,38 @@ export default function AdminDashboardPage() {
                 </span>
               </div>
 
-              <div className="p-5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-600 space-y-3">
-                <div className="font-bold text-slate-900">{footerForm.company_name}</div>
-                <p className="text-[11px] text-slate-500">{footerForm.brand_description}</p>
-
-                {/* 미리보기 내 SNS 버튼 */}
-                {footerForm.sns_channels?.filter((c) => c.enabled).length > 0 && (
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {footerForm.sns_channels
-                      ?.filter((c) => c.enabled)
-                      .map((c) => (
-                        <span
-                          key={c.id}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[10px] font-bold text-slate-700 shadow-2xs"
-                        >
-                          {getSnsIconSmall(c.type)}
-                          <span>{c.name}</span>
-                        </span>
-                      ))}
+              <div className="p-5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-600 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <div className="font-bold text-slate-900">{footerForm.company_name}</div>
+                    <p className="text-[11px] text-slate-500">{footerForm.brand_description}</p>
+                    <div className="text-[10px] text-slate-400 pt-1">
+                      고객센터: {footerForm.cs_email} | {footerForm.cs_phone}
+                    </div>
                   </div>
-                )}
+
+                  {/* 미리보기 내 SNS 버튼 (우측 배치) */}
+                  <div className="space-y-1.5 md:border-l md:border-slate-200 md:pl-4">
+                    <div className="text-[10px] font-bold text-slate-500">공식 SNS 채널 바로가기:</div>
+                    {footerForm.sns_channels?.filter((c) => c.enabled).length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {footerForm.sns_channels
+                          ?.filter((c) => c.enabled)
+                          .map((c) => (
+                            <span
+                              key={c.id}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[10px] font-bold text-slate-700 shadow-2xs"
+                            >
+                              {getSnsIconSmall(c.type)}
+                              <span>{c.name}</span>
+                            </span>
+                          ))}
+                      </div>
+                    ) : (
+                      <div className="text-[10px] text-slate-400 italic">노출 중인 SNS 채널이 없습니다.</div>
+                    )}
+                  </div>
+                </div>
 
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500 pt-2 border-t border-slate-200">
                   <span>대표: {footerForm.ceo_name}</span>
