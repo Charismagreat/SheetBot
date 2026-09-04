@@ -45,29 +45,64 @@ interface PaymentOrder {
   created_at: string;
 }
 
+const DEFAULT_PACKAGES: PaymentPackage[] = [
+  {
+    id: "pkg_starter",
+    name: "Starter (체험형)",
+    priceKrw: 5000,
+    tokens: 50000,
+    bonusTokens: 0,
+    totalTokens: 50000,
+    tag: "약 25회 생성 가능",
+  },
+  {
+    id: "pkg_standard",
+    name: "Standard (인기 추천)",
+    priceKrw: 12000,
+    tokens: 120000,
+    bonusTokens: 30000,
+    totalTokens: 150000,
+    tag: "+25% 보너스 토큰",
+    isPopular: true,
+  },
+  {
+    id: "pkg_pro",
+    name: "Pro Automation",
+    priceKrw: 30000,
+    tokens: 300000,
+    bonusTokens: 150000,
+    totalTokens: 450000,
+    tag: "+50% 대용량 보너스",
+  },
+];
+
 export default function PricingWalletPage() {
-  const [wallet, setWallet] = useState<UserWallet | null>(null);
-  const [packages, setPackages] = useState<PaymentPackage[]>([]);
+  const [wallet, setWallet] = useState<UserWallet>({
+    balanceTokens: 20000,
+    totalPurchasedTokens: 0,
+    totalUsedTokens: 0,
+    tier: "FREE",
+  });
+  const [packages, setPackages] = useState<PaymentPackage[]>(DEFAULT_PACKAGES);
   const [orders, setOrders] = useState<PaymentOrder[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
   const [purchaseSuccess, setPurchaseSuccess] = useState<string | null>(null);
   const [selectedMethod, setSelectedMethod] = useState("간편결제 (카카오/네이버/토스)");
 
   const fetchWallet = async () => {
     try {
-      setLoading(true);
       const res = await fetch("/api/wallet");
       const data = await res.json();
       if (data.success) {
-        setWallet(data.wallet);
-        setPackages(data.packages || []);
-        setOrders(data.orders || []);
+        if (data.wallet) setWallet(data.wallet);
+        if (data.packages && data.packages.length > 0) setPackages(data.packages);
+        if (data.orders) setOrders(data.orders);
+        setIsLoggedIn(!!data.isLoggedIn);
       }
     } catch (err) {
       console.error("지갑 정보 조회 실패:", err);
-    } finally {
-      setLoading(false);
     }
   };
 

@@ -12,24 +12,34 @@ import { queryTable } from "@/lib/egdesk-helpers";
 export async function GET() {
   try {
     const userEmail = await getCurrentUserEmail();
-    if (!userEmail) {
-      return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
+    
+    // 로그인된 회원이면 실제 DB 지갑 조회, 미로그인이면 기본 안내용 웰컴 지갑 제공
+    let wallet = {
+      balanceTokens: 20000,
+      totalPurchasedTokens: 0,
+      totalUsedTokens: 0,
+      tier: "FREE",
+    };
+    let validOrders: any[] = [];
+
+    if (userEmail) {
+      const userWallet = await getOrCreateUserWallet(userEmail);
+      wallet = userWallet;
+
+      // 최근 충전 결제 내역 조회 (최근 10건)
+      const ordersRes = await queryTable("sheetbot_payment_orders", {
+        filters: { user_email: userEmail.toLowerCase().trim() },
+        orderBy: "id",
+        orderDirection: "DESC",
+        limit: 10,
+      }).catch(() => ({ rows: [] }));
+
+      validOrders = (ordersRes.rows || []).filter((r: any) => !r.deleted_at);
     }
-
-    const wallet = await getOrCreateUserWallet(userEmail);
-
-    // 최근 충전 결제 내역 조회 (최근 10건)
-    const ordersRes = await queryTable("sheetbot_payment_orders", {
-      filters: { user_email: userEmail.toLowerCase().trim() },
-      orderBy: "id",
-      orderDirection: "DESC",
-      limit: 10,
-    }).catch(() => ({ rows: [] }));
-
-    const validOrders = (ordersRes.rows || []).filter((r: any) => !r.deleted_at);
 
     return NextResponse.json({
       success: true,
+      isLoggedIn: !!userEmail,
       wallet,
       packages: TOKEN_PACKAGES,
       orders: validOrders,
