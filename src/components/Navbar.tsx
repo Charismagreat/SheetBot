@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
-import { Bot, LogOut, User, Sparkles, ArrowRight, ShieldCheck, Activity, Settings, Coins } from "lucide-react";
+import { Bot, LogOut, User, Sparkles, ArrowRight, ShieldCheck, Activity, Settings, Coins, Smartphone } from "lucide-react";
 
 export default function Navbar() {
   const { data: session, status } = useSession();
@@ -149,6 +149,16 @@ export default function Navbar() {
               >
                 <Activity className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                 <span className="hidden sm:inline whitespace-nowrap">AI 사용료</span>
+              </Link>
+
+              <Link
+                href="/dashboard/notifications"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-emerald-800 bg-emerald-50/70 hover:bg-emerald-100/80 border border-emerald-200/60 rounded-xl transition-all shadow-2xs whitespace-nowrap shrink-0"
+                data-easybot-hint="스마트 알림: 내 안드로이드 스마트폰을 구글 메시지로 연동하고 자연어로 구글 시트 자동 문자 발송 규칙을 설정합니다."
+                title="구글 메시지 스마트 알림 센터"
+              >
+                <Smartphone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="hidden sm:inline whitespace-nowrap">스마트 알림</span>
               </Link>
 
               <Link

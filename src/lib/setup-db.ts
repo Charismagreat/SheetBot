@@ -407,7 +407,63 @@ export async function setupDatabase(): Promise<void> {
       { tableName: 'sheetbot_easybot_chats' }
     );
 
-    // 14. 레거시 데이터 마이그레이션 실행
+    // 14. sheetbot_user_devices 테이블 생성 (회원 전용 구글메시지 디바이스 대장)
+    await safeCreateTable(
+      'SheetBot 회원 SMS 디바이스 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'label', type: 'TEXT', notNull: true },
+        { name: 'phone_number', type: 'TEXT' },
+        { name: 'device_id', type: 'TEXT' },
+        { name: 'pairing_mode', type: 'TEXT' }, // 'qr' | 'google_account'
+        { name: 'google_profile_name', type: 'TEXT' },
+        { name: 'status', type: 'TEXT' }, // 'CONNECTED' | 'DISCONNECTED' | 'PAIRING'
+        { name: 'last_connected_at', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_user_devices' }
+    );
+
+    // 15. sheetbot_user_smart_rules 테이블 생성 (회원 자연어 스마트 발송 규칙 대장)
+    await safeCreateTable(
+      'SheetBot 회원 자연어 알림 규칙 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'project_id', type: 'TEXT' }, // 'all' 또는 특정 sheetbot_projects id
+        { name: 'name', type: 'TEXT', notNull: true },
+        { name: 'prompt', type: 'TEXT', notNull: true },
+        { name: 'trigger_event', type: 'TEXT' }, // 'sheet_edit', 'row_added', 'status_change', 'daily_summary', 'custom'
+        { name: 'target_recipient', type: 'TEXT' }, // 'self', 'column_phone', 'custom_number'
+        { name: 'recipient_column', type: 'TEXT' }, // 예: '연락처', '고객전화'
+        { name: 'custom_phone', type: 'TEXT' },
+        { name: 'message_template', type: 'TEXT' },
+        { name: 'is_active', type: 'INTEGER' }, // 1: 활성, 0: 비활성
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_user_smart_rules' }
+    );
+
+    // 16. sheetbot_user_dispatch_logs 테이블 생성 (회원 알림 발송 이력 대장)
+    await safeCreateTable(
+      'SheetBot 회원 알림 발송 이력 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'rule_id', type: 'TEXT' },
+        { name: 'rule_name', type: 'TEXT' },
+        { name: 'device_id', type: 'TEXT' },
+        { name: 'recipient', type: 'TEXT', notNull: true },
+        { name: 'content', type: 'TEXT' },
+        { name: 'status', type: 'TEXT', notNull: true }, // 'SUCCESS', 'FAILED'
+        { name: 'error_message', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_user_dispatch_logs' }
+    );
+
+    // 17. 레거시 데이터 마이그레이션 실행
     await migrateLegacySettingsData();
 
     isDbInitialized = true;
