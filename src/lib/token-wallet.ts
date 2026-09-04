@@ -84,7 +84,7 @@ export async function getOrCreateUserWallet(userEmail: string): Promise<UserWall
 
   // 신규 지갑 생성 (웰컴 무료 토큰 지급)
   const now = new Date().toISOString();
-  const walletId = wallet__;
+  const walletId = `wallet_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const newRow = {
     id: walletId,
     uuid: crypto.randomUUID(),
@@ -198,7 +198,7 @@ export async function creditTokens(
     );
 
     // 2. 결제 주문 대장 기록
-    const orderId = ord__;
+    const orderId = `ord_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     await insertRows("sheetbot_payment_orders", [
       {
         id: orderId,
