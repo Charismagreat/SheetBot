@@ -160,6 +160,7 @@ export default function PricingWalletPage() {
   };
 
   // 포트원 가맹점 식별코드 및 PG사 설정
+  const [paymentMode, setPaymentMode] = useState<"simulation" | "portone">("simulation");
   const [portoneCode, setPortoneCode] = useState("");
   const [portonePg, setPortonePg] = useState("html5_inicis");
   const [showPortoneConfig, setShowPortoneConfig] = useState(false);
@@ -173,7 +174,15 @@ export default function PricingWalletPage() {
       return;
     }
 
-    const targetCode = portoneCode.trim() || "imp00000000";
+    const targetCode = portoneCode.trim();
+    if (!targetCode) {
+      alert(
+        "⚠️ [포트원 가맹점 식별코드 필요]\n\n" +
+        "실제 결제창을 브라우저에 팝업하려면 포트원 관리자 콘솔(admin.portone.io)에서 발급받은 본인의 '가맹점 식별코드(imp_xxxx)'를 입력해야 합니다.\n\n" +
+        "별도의 포트원 가입 없이 결제 및 토큰 충전 프로세스를 확인하시려면 상단의 [⚡ 일반 결제 시뮬레이션] 탭을 이용해 주세요!"
+      );
+      return;
+    }
 
     try {
       // 입력된 가맹점 식별코드로 초기화
@@ -603,111 +612,137 @@ export default function PricingWalletPage() {
                 </div>
               </div>
 
+              {/* 모달 탭 선택 (내장 시뮬레이터 vs 실제 포트원 연동) */}
+              <div className="flex rounded-xl bg-slate-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMode("simulation")}
+                  className={`flex-1 py-2 text-xs font-extrabold rounded-lg transition-all cursor-pointer ${
+                    paymentMode === "simulation"
+                      ? "bg-white text-amber-600 shadow-xs"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  ⚡ 일반 결제 시뮬레이션 (추천)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMode("portone")}
+                  className={`flex-1 py-2 text-xs font-extrabold rounded-lg transition-all cursor-pointer ${
+                    paymentMode === "portone"
+                      ? "bg-white text-indigo-600 shadow-xs"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  🔌 포트원 실제 PG창 연동
+                </button>
+              </div>
+
               {/* 시뮬레이터 상태에 따른 본문 */}
               {modalStep === "select" && (
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                      <span>결제 대행사 / 간편결제사 선택</span>
-                    </label>
-                    <div className="grid grid-cols-2 gap-2.5">
-                      {["토스페이", "카카오페이", "네이버페이", "KB국민카드", "신한카드", "삼성카드"].map((agency) => (
-                        <button
-                          key={agency}
-                          type="button"
-                          onClick={() => setPgAgency(agency)}
-                          className={`p-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
-                            pgAgency === agency
-                              ? "border-amber-500 bg-amber-50/60 text-amber-900 shadow-xs"
-                              : "border-slate-200 text-slate-600 hover:border-slate-300 bg-white"
-                          }`}
-                        >
-                          <span>{agency}</span>
-                          {pgAgency === agency && <Check className="w-4 h-4 text-amber-600" />}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* 결제 약관 동의 */}
-                  <div className="p-3 bg-amber-50/50 rounded-xl border border-amber-200/60 text-[11px] text-amber-800 flex items-center gap-2">
-                    <Lock className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span>실제 결제 승인 통신 흐름을 안전하게 검증하는 테스트 환경입니다.</span>
-                  </div>
-
-                  <button
-                    onClick={executeSimulatedPayment}
-                    className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-extrabold rounded-xl shadow-lg shadow-amber-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                  >
-                    <span>{pgAgency}로 {activeModalPackage.priceKrw.toLocaleString()}원 결제 승인하기</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-
-                  {/* 실제 포트원(PortOne) 팝업 SDK 호출 옵션 */}
-                  <div className="pt-1 space-y-2">
-                    <button
-                      type="button"
-                      onClick={executePortOnePayment}
-                      className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                      title="브라우저에 실제 포트원(PortOne) PG사 결제창을 직접 띄워 테스트합니다."
-                    >
-                      <Smartphone className="w-4 h-4 text-indigo-600" />
-                      <span>포트원(PortOne) 실제 결제창 팝업 띄우기 (테스트)</span>
-                    </button>
-
-                    <div className="text-center">
-                      <button
-                        type="button"
-                        onClick={() => setShowPortoneConfig(!showPortoneConfig)}
-                        className="text-[11px] text-slate-400 hover:text-slate-600 underline cursor-pointer"
-                      >
-                        {showPortoneConfig ? "▲ 포트원 설정 닫기" : "⚙️ 내 포트원 가맹점 식별코드(imp_xxxx) 직접 입력하기"}
-                      </button>
-                    </div>
-
-                    {showPortoneConfig && (
-                      <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5 text-left animate-fade-in">
-                        <div>
-                          <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                            1. 내 포트원 가맹점 식별코드 (User Code)
-                          </label>
-                          <input
-                            type="text"
-                            value={portoneCode}
-                            onChange={(e) => setPortoneCode(e.target.value)}
-                            placeholder="예: imp12345678 (포트원 콘솔 연동정보)"
-                            className="w-full p-2 text-xs font-mono bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                            2. 테스트할 PG 모듈 선택
-                          </label>
-                          <select
-                            value={portonePg}
-                            onChange={(e) => setPortonePg(e.target.value)}
-                            className="w-full p-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
-                          >
-                            <option value="html5_inicis">KG이니시스 웹표준 (html5_inicis)</option>
-                            <option value="kakaopay.TC0ONETIME">카카오페이 테스트 (kakaopay.TC0ONETIME)</option>
-                            <option value="tosspay">토스페이 (tosspay)</option>
-                            <option value="nice_v2">나이스페이 v2 (nice_v2)</option>
-                          </select>
-                        </div>
-
-                        <div className="p-2 bg-amber-50 rounded-lg border border-amber-200/60 text-[10.5px] text-amber-900 space-y-1">
-                          <p className="font-bold">💡 "등록된 PG 설정 정보를 찾을 수 없습니다" 해결 안내:</p>
-                          <p>
-                            포트원은 <strong>가입 계정의 콘솔(admin.portone.io)</strong>에서 [결제 연동 &gt; 채널 관리]에 테스트 PG사를 추가해야 결제창이 팝업됩니다.
-                          </p>
-                          <p className="text-slate-500 pt-0.5">
-                            * 포트원 키 설정 없이 빠른 승인/영수증 테스트를 원하시면 상단의 주황색 <strong>[결제 승인하기]</strong> 버튼을 이용해 주세요.
-                          </p>
+                  {paymentMode === "simulation" ? (
+                    <>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                          <span>결제 대행사 / 간편결제사 선택</span>
+                          <span className="text-[10px] text-emerald-600 font-semibold">설정 없이 즉시 테스트 가능</span>
+                        </label>
+                        <div className="grid grid-cols-2 gap-2.5">
+                          {["토스페이", "카카오페이", "네이버페이", "KB국민카드", "신한카드", "삼성카드"].map((agency) => (
+                            <button
+                              key={agency}
+                              type="button"
+                              onClick={() => setPgAgency(agency)}
+                              className={`p-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
+                                pgAgency === agency
+                                  ? "border-amber-500 bg-amber-50/60 text-amber-900 shadow-xs"
+                                  : "border-slate-200 text-slate-600 hover:border-slate-300 bg-white"
+                              }`}
+                            >
+                              <span>{agency}</span>
+                              {pgAgency === agency && <Check className="w-4 h-4 text-amber-600" />}
+                            </button>
+                          ))}
                         </div>
                       </div>
-                    )}
-                  </div>
+
+                      {/* 결제 안내 */}
+                      <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200/60 text-[11px] text-emerald-800 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>별도 PG 가입 없이 카드사 승인/토큰 충전/영수증 출력을 즉시 검증할 수 있습니다.</span>
+                      </div>
+
+                      <button
+                        onClick={executeSimulatedPayment}
+                        className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-extrabold rounded-xl shadow-lg shadow-amber-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                      >
+                        <span>{pgAgency}로 {activeModalPackage.priceKrw.toLocaleString()}원 결제 승인하기</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </>
+                  ) : (
+                    /* 포트원 실제 연동 모드 */
+                    <div className="space-y-3.5">
+                      <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200/60 text-[11px] text-indigo-900 space-y-1">
+                        <p className="font-bold flex items-center gap-1.5">
+                          <Smartphone className="w-4 h-4 text-indigo-600" />
+                          포트원(PortOne) 실 브라우저 결제창 팝업
+                        </p>
+                        <p className="text-slate-600 text-[10.5px]">
+                          포트원 관리자 콘솔(<a href="https://admin.portone.io" target="_blank" rel="noreferrer" className="underline font-bold text-indigo-600">admin.portone.io</a>)에서 발급받은 본인의 가맹점 식별코드와 연동 PG를 지정해야 팝업창이 열립니다.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                          1. 포트원 가맹점 식별코드 (User Code) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={portoneCode}
+                          onChange={(e) => setPortoneCode(e.target.value)}
+                          placeholder="imp12345678 (내 콘솔의 식별코드)"
+                          className="w-full p-2.5 text-xs font-mono bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                          2. 테스트할 PG 채널 모듈 <span className="text-rose-500">*</span>
+                        </label>
+                        <select
+                          value={portonePg}
+                          onChange={(e) => setPortonePg(e.target.value)}
+                          className="w-full p-2.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        >
+                          <option value="html5_inicis">KG이니시스 웹표준 (html5_inicis)</option>
+                          <option value="kakaopay.TC0ONETIME">카카오페이 테스트 (kakaopay.TC0ONETIME)</option>
+                          <option value="tosspay">토스페이 (tosspay)</option>
+                          <option value="nice_v2">나이스페이 v2 (nice_v2)</option>
+                        </select>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={executePortOnePayment}
+                        className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white text-xs font-extrabold rounded-xl shadow-lg shadow-indigo-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                      >
+                        <Smartphone className="w-4 h-4" />
+                        <span>포트원 실제 결제창 띄우기</span>
+                      </button>
+
+                      <div className="text-center pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setPaymentMode("simulation")}
+                          className="text-[11px] text-slate-500 hover:text-amber-600 underline cursor-pointer"
+                        >
+                          👈 복잡한 설정 없이 즉시 승인 시뮬레이션으로 테스트하기
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
