@@ -299,12 +299,20 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const handleAddDevice = async (label: string): Promise<boolean> => {
+  const handleAddDevice = async (
+    label: string,
+    pairingMode: "qr" | "google_account" = "qr",
+    googleProfileName?: string
+  ): Promise<boolean> => {
     try {
       const res = await fetch("/api/admin/sms/devices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label }),
+        body: JSON.stringify({
+          label,
+          pairingMode,
+          googleProfileName,
+        }),
       });
       const data = await res.json();
       if (data.success) {
