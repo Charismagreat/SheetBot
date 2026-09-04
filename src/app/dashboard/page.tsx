@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
   Bot, Plus, FileCode, Clock, RefreshCw, CheckCircle2, AlertTriangle,
-  X, ArrowRight, ExternalLink, Sparkles, Layers, ShieldCheck, Trash2
+  X, ArrowRight, ExternalLink, Sparkles, Layers, ShieldCheck, Trash2, Smartphone
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import NewProjectModal from "@/components/NewProjectModal";
@@ -180,6 +181,36 @@ export default function DashboardPage() {
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* 구글 메시지 스마트 알림 센터 바로가기 배너 */}
+          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 rounded-2xl p-4 border border-emerald-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0">
+                <Smartphone className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-extrabold text-sm text-slate-800">
+                    내 안드로이드 폰 연동 & 자연어 구글 시트 스마트 알림
+                  </h4>
+                  <span className="px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-black">
+                    통신비 0원
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  내 스마트폰을 10초 만에 연동하고, "D열 입금완료 시 고객 감사 문자 발송" 같은 자연어 규칙을 설정해 보세요.
+                </p>
+              </div>
+            </div>
+
+            <Link
+              href="/dashboard/notifications"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all shrink-0 self-start sm:self-auto"
+            >
+              <span>스마트 알림 센터 열기</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
         </div>
 
