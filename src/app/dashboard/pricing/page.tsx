@@ -159,8 +159,9 @@ export default function PricingWalletPage() {
     setModalStep("select");
   };
 
-  // 포트원 가맹점 식별코드 (사용자가 콘솔에서 발급받은 imp 코드 입력 가능, 기본값: imp00000000)
-  const [portoneCode, setPortoneCode] = useState("imp00000000");
+  // 포트원 가맹점 식별코드 및 PG사 설정
+  const [portoneCode, setPortoneCode] = useState("");
+  const [portonePg, setPortonePg] = useState("html5_inicis");
   const [showPortoneConfig, setShowPortoneConfig] = useState(false);
 
   // 실제 포트원(PortOne) 결제창 호출 함수
@@ -172,15 +173,17 @@ export default function PricingWalletPage() {
       return;
     }
 
+    const targetCode = portoneCode.trim() || "imp00000000";
+
     try {
       // 입력된 가맹점 식별코드로 초기화
-      IMP.init(portoneCode.trim() || "imp00000000");
+      IMP.init(targetCode);
 
       const merchantUid = `mid_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
       IMP.request_pay(
         {
-          pg: "html5_inicis", // 기본 표준 이니시스 테스트 PG (카카오페이보다 호환성 우수)
+          pg: portonePg, // 사용자 선택 PG사 (기본값: html5_inicis)
           pay_method: "card",
           merchant_uid: merchantUid,
           name: `SheetBot ${activeModalPackage.name}`,
@@ -216,15 +219,17 @@ export default function PricingWalletPage() {
               alert("지갑 충전 반영 오류: " + err.message);
             }
           } else {
-            if (rsp.error_msg && rsp.error_msg.includes("등록된 PG")) {
+            const errMsg = rsp.error_msg || "";
+            if (errMsg.includes("PG") && (errMsg.includes("등록") || errMsg.includes("설정") || errMsg.includes("찾을 수 없습니다"))) {
               alert(
-                "⚠️ 포트원 콘솔에 PG 설정이 등록되지 않은 가맹점 코드입니다.\n" +
-                "본인의 포트원 가맹점 식별코드(imp_xxxx)를 결제창 모달의 [⚙️ 가맹점 코드 설정]에 입력하시거나,\n" +
-                "상단의 [일반 결제 승인 시뮬레이션] 버튼을 이용해 안전하게 테스트해 보세요!"
+                "⚠️ [포트원 안내]\n" +
+                "현재 가맹점 식별코드에 해당 PG 채널이 등록되어 있지 않습니다.\n\n" +
+                "👉 1. 실제 테스트를 원하시면 결제창 아래 [⚙️ 내 포트원 가맹점 식별코드 직접 입력하기]에서 본인의 imp_xxxx 코드를 입력해 주세요.\n" +
+                "👉 2. 또는 상단의 주황색 [결제 승인하기] 버튼을 누르시면 별도 설정 없이도 즉시 충전/승인/영수증 테스트가 가능합니다!"
               );
               setShowPortoneConfig(true);
             } else {
-              alert(`결제 결과: ${rsp.error_msg || "사용자가 결제를 취소했습니다."}`);
+              alert(`결제 결과: ${errMsg || "사용자가 결제를 취소했습니다."}`);
             }
           }
         }
@@ -661,18 +666,45 @@ export default function PricingWalletPage() {
                     </div>
 
                     {showPortoneConfig && (
-                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5 text-left">
-                        <label className="text-[11px] font-bold text-slate-700">포트원 가맹점 식별코드 (User Code)</label>
-                        <input
-                          type="text"
-                          value={portoneCode}
-                          onChange={(e) => setPortoneCode(e.target.value)}
-                          placeholder="imp00000000"
-                          className="w-full p-2 text-xs font-mono bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
-                        />
-                        <p className="text-[10px] text-slate-400">
-                          포트원 관리자 콘솔 &gt; 결제연동 &gt; 가맹점 식별코드(imp_xxxx)를 입력하면 해당 계정의 PG 설정으로 결제창이 호출됩니다.
-                        </p>
+                      <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5 text-left animate-fade-in">
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                            1. 내 포트원 가맹점 식별코드 (User Code)
+                          </label>
+                          <input
+                            type="text"
+                            value={portoneCode}
+                            onChange={(e) => setPortoneCode(e.target.value)}
+                            placeholder="예: imp12345678 (포트원 콘솔 연동정보)"
+                            className="w-full p-2 text-xs font-mono bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                            2. 테스트할 PG 모듈 선택
+                          </label>
+                          <select
+                            value={portonePg}
+                            onChange={(e) => setPortonePg(e.target.value)}
+                            className="w-full p-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          >
+                            <option value="html5_inicis">KG이니시스 웹표준 (html5_inicis)</option>
+                            <option value="kakaopay.TC0ONETIME">카카오페이 테스트 (kakaopay.TC0ONETIME)</option>
+                            <option value="tosspay">토스페이 (tosspay)</option>
+                            <option value="nice_v2">나이스페이 v2 (nice_v2)</option>
+                          </select>
+                        </div>
+
+                        <div className="p-2 bg-amber-50 rounded-lg border border-amber-200/60 text-[10.5px] text-amber-900 space-y-1">
+                          <p className="font-bold">💡 "등록된 PG 설정 정보를 찾을 수 없습니다" 해결 안내:</p>
+                          <p>
+                            포트원은 <strong>가입 계정의 콘솔(admin.portone.io)</strong>에서 [결제 연동 &gt; 채널 관리]에 테스트 PG사를 추가해야 결제창이 팝업됩니다.
+                          </p>
+                          <p className="text-slate-500 pt-0.5">
+                            * 포트원 키 설정 없이 빠른 승인/영수증 테스트를 원하시면 상단의 주황색 <strong>[결제 승인하기]</strong> 버튼을 이용해 주세요.
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>
