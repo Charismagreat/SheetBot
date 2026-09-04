@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState } from "react";
 import Link from "next/link";
@@ -205,7 +205,7 @@ export default function GuidePage() {
           <div className="space-y-2 text-center sm:text-left">
             <h3 className="text-base font-black text-slate-900">궁금한 점이 해결되지 않으셨나요?</h3>
             <p className="text-xs text-slate-600">
-              우측 하단 분홍/인디고 아이콘의 <strong>이지봇(EasyBot)</strong>을 클릭해 수식 및 코드 질문을 실시간으로 물어보세요!
+              우측 하단 분홍/인디고 아이콘의 <strong>시트봇 AI (SheetBot AI)</strong>를 클릭해 수식 및 코드 질문을 실시간으로 물어보세요!
             </p>
           </div>
           <div className="flex items-center gap-3">

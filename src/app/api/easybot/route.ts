@@ -18,7 +18,7 @@ export async function POST(request: Request) {
       if (!tokenCheck.allowed) {
         return NextResponse.json({
           success: false,
-          reply: `⚠️ 보유 중인 토큰이 모두 소진되었습니다. (현재 잔여: ${tokenCheck.balance.toLocaleString()} 토큰)\n이지봇과 대화를 계속하시려면 상단 [토큰 충전] 메뉴에서 크레딧을 충전해 주세요.`,
+          reply: `⚠️ 보유 중인 토큰이 모두 소진되었습니다. (현재 잔여: ${tokenCheck.balance.toLocaleString()} 토큰)\n시트봇 AI와 대화를 계속하시려면 상단 [토큰 충전] 메뉴에서 크레딧을 충전해 주세요.`,
           requirePayment: true,
           balance: tokenCheck.balance,
         });
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "메시지를 입력해 주세요." }, { status: 400 });
     }
 
-    const systemPrompt = `당신은 Google 스프레드시트와 Google Apps Script(GAS) 자동화 전문 AI 어시스턴트 "이지봇(EasyBot)"입니다.
+    const systemPrompt = `당신은 Google 스프레드시트와 Google Apps Script(GAS) 자동화 전문 AI 어시스턴트 "시트봇 AI (SheetBot AI)"입니다.
 사용자는 구글 시트 기반 자동화 SaaS인 SheetBot을 이용하고 있습니다.
 
 [당신의 역할 및 지침]:
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     if (Array.isArray(history) && history.length > 0) {
       conversationText = history
         .slice(-6)
-        .map((m: any) => `${m.role === "user" ? "사용자" : "이지봇"}: ${m.content}`)
+        .map((m: any) => `${m.role === "user" ? "사용자" : "시트봇 AI"}: ${m.content}`)
         .join("\n");
     }
 
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
 
     // 3. 기본 안전 응답 폴백
     if (!replyContent) {
-      replyContent = `안녕하세요! Google Apps Script 및 스프레드시트 자동화 도우미 이지봇입니다. 🤖\n\n문의하신 "${message}"에 대한 안내입니다.\n\n구글 시트 상단 메뉴 자동화나 정기 실행 트리거가 필요하시면, 상단의 **[+ 새 프로젝트 생성]** 버튼을 눌러 스프레드시트 URL과 요구사항을 입력해 보세요. AI가 완벽한 \`Code.gs\` 코드를 자동 생성하여 구글 클라우드에 직접 배포해 드립니다.`;
+      replyContent = `안녕하세요! Google Apps Script 및 스프레드시트 자동화 도우미 시트봇 AI입니다. 🤖\n\n문의하신 "${message}"에 대한 안내입니다.\n\n구글 시트 상단 메뉴 자동화나 정기 실행 트리거가 필요하시면, 상단의 **[+ 새 프로젝트 생성]** 버튼을 눌러 스프레드시트 URL과 요구사항을 입력해 보세요. AI가 완벽한 \`Code.gs\` 코드를 자동 생성하여 구글 클라우드에 직접 배포해 드립니다.`;
     }
 
     // 사용 토큰 계산 및 차감
@@ -114,7 +114,7 @@ export async function POST(request: Request) {
     void recordAiUsageLog({
       userEmail: userEmail || "guest",
       caller: "sheetbot-easybot",
-      purpose: "이지봇 실시간 대화",
+      purpose: "시트봇 AI 실시간 대화",
       model: targetModel,
       promptTokens,
       completionTokens,

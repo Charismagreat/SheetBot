@@ -154,7 +154,7 @@ export default function Navbar() {
               <Link
                 href="/dashboard/settings"
                 className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:text-indigo-600 hover:bg-slate-100 border border-slate-200/80 rounded-xl transition-all whitespace-nowrap shrink-0"
-                data-easybot-hint="AI 모델 설정: Apps Script 생성기 및 이지봇에 적용될 구글 제미나이(Gemini 3.5 Flash 등) 모델과 파라미터를 설정합니다."
+                data-easybot-hint="AI 모델 설정: Apps Script 생성기 및 시트봇 AI에 적용될 구글 제미나이(Gemini 3.5 Flash 등) 모델과 파라미터를 설정합니다."
                 title="AI 모델 환경 설정"
               >
                 <Settings className="w-3.5 h-3.5 text-slate-500 shrink-0" />

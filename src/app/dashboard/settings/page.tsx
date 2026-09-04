@@ -127,7 +127,7 @@ export default function AiSettingsPage() {
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Apps Script 생성, 이지봇(EasyBot) 대화, 컨텍스트 도움말에 사용할 구글 제미나이(Gemini) 모델을 실시간 구성합니다.
+                Apps Script 생성, 시트봇 AI(SheetBot AI) 대화, 컨텍스트 도움말에 사용할 구글 제미나이(Gemini) 모델을 실시간 구성합니다.
               </p>
             </div>
           </div>
@@ -184,7 +184,7 @@ export default function AiSettingsPage() {
                     더 빠르고 강력한 차세대 제미나이 3.5 엔진을 경험해 보세요
                   </h2>
                   <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-                    이지데스크(EGDesk) AI Caller와 직결되어 있으며, 아래 설정을 변경하면 즉시 모든 Apps Script 생성기 및 이지봇에 반영됩니다.
+                    이지데스크(EGDesk) AI Caller와 직결되어 있으며, 아래 설정을 변경하면 즉시 모든 Apps Script 생성기 및 시트봇 AI에 반영됩니다.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-xl backdrop-blur-sm border border-white/10 text-xs">
@@ -233,7 +233,7 @@ export default function AiSettingsPage() {
                 </div>
               </div>
 
-              {/* 2. 이지봇(EasyBot) 오케스트레이터 모델 */}
+              {/* 2. 시트봇 AI(SheetBot AI) 오케스트레이터 모델 */}
               <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-indigo-200 transition-all space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
@@ -241,12 +241,12 @@ export default function AiSettingsPage() {
                       <Bot className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-slate-800">이지봇(EasyBot) 대화 모델</h3>
+                      <h3 className="text-sm font-bold text-slate-800">시트봇 AI(SheetBot AI) 대화 모델</h3>
                       <p className="text-[11px] text-slate-400">시트 수식 자문, 코드 가이드 및 자연어 대화</p>
                     </div>
                   </div>
                   <span className="text-[10px] px-2 py-0.5 font-bold bg-slate-100 text-slate-600 rounded-md">
-                    EasyBot Chat
+                    SheetBot AI Chat
                   </span>
                 </div>
 
@@ -346,7 +346,7 @@ export default function AiSettingsPage() {
             {/* 저장 버튼 및 피드백 */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
               <div className="text-xs text-slate-500">
-                설정을 저장하면 모든 신규 생성 요청 및 이지봇 대화에 실시간으로 즉각 반영됩니다.
+                설정을 저장하면 모든 신규 생성 요청 및 시트봇 AI 대화에 실시간으로 즉각 반영됩니다.
               </div>
 
               <div className="flex items-center gap-3 w-full sm:w-auto">

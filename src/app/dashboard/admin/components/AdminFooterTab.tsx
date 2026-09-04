@@ -332,7 +332,7 @@ export default function AdminFooterTab({
               type="text"
               value={footerForm.easybot_info}
               onChange={(e) => onFooterFormChange((prev) => ({ ...prev, easybot_info: e.target.value }))}
-              placeholder="예: 이지봇(EasyBot) 24시간 상담"
+              placeholder="예: 시트봇 AI(SheetBot AI) 24시간 상담"
               className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-600"
             />
           </div>

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
@@ -182,7 +182,7 @@ export default function ContactPage() {
                   <span>실시간 빠른 답변이 필요할 땐?</span>
                 </div>
                 <p>
-                  화면 우측 하단의 <strong>이지봇(EasyBot)</strong> 위젯을 누르시면 시트 수식과 Apps Script 코드 문법 질문을 즉시 해결할 수 있습니다.
+                  화면 우측 하단의 <strong>시트봇 AI (SheetBot AI)</strong> 위젯을 누르시면 시트 수식과 Apps Script 코드 문법 질문을 즉시 해결할 수 있습니다.
                 </p>
               </div>
             </div>
