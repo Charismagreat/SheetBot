@@ -207,11 +207,17 @@ export default function Footer() {
           <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-slate-100 text-slate-400">
             <p>{footerInfo.copyright_text}</p>
             <div className="flex items-center gap-4 text-[11px]">
-              <span className="hover:text-slate-600 cursor-pointer">이용약관</span>
+              <Link href="/terms" className="hover:text-slate-700 transition-colors">
+                이용약관
+              </Link>
               <span>•</span>
-              <span className="hover:text-slate-600 font-bold cursor-pointer text-slate-600">개인정보처리방침</span>
+              <Link href="/privacy" className="hover:text-slate-900 font-bold transition-colors text-slate-700">
+                개인정보처리방침
+              </Link>
               <span>•</span>
-              <span className="hover:text-slate-600 cursor-pointer">전자금융거래 이용약관</span>
+              <Link href="/finance-terms" className="hover:text-slate-700 transition-colors">
+                전자금융거래 이용약관
+              </Link>
             </div>
           </div>
         </div>
