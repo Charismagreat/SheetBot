@@ -1,7 +1,7 @@
 "use client";
 
 import { apiFetch } from "@/lib/api";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   DollarSign,
   TrendingUp,
@@ -205,6 +205,80 @@ export default function AdminPricingCostTab() {
       text: `목표 운영 마진율(${config.targetMarginRate}%) 기준으로 모든 모델의 차감 가중치가 자동 계산되어 채워졌습니다. 검토 후 하단 [저장하기]를 눌러주세요.`,
     });
   };
+
+  // 클라이언트 상태(모델별 차감 배율, 환율, 부가세, PG수수료) 변경 시 실시간 즉시 재계산
+  const computedSimulations = useMemo<PackageSimulation[]>(() => {
+    if (!config) return [];
+
+    const basePackages = [
+      { id: "pkg_starter", name: "Starter (스타터)", priceKrw: 5000, totalTokens: 50000 },
+      { id: "pkg_standard", name: "Standard (스탠다드)", priceKrw: 12000, totalTokens: 150000 },
+      { id: "pkg_pro", name: "Pro Automation", priceKrw: 30000, totalTokens: 450000 },
+    ];
+
+    const vatRate = config.vatRate ?? 10;
+    const pgFeeRate = config.pgFeeRate ?? 3.3;
+    const rate = config.exchangeRate || 1400;
+
+    const primaryModel =
+      config.models.find((m) => m.id === (config.defaultModel || "gemini-3.8-flash")) ||
+      config.models[0];
+    const legacyModel =
+      config.models.find((m) => m.id === "gemini-3.5-flash") ||
+      config.models[1] ||
+      primaryModel;
+
+    const inputRatio = 2 / 3;
+    const outputRatio = 1 / 3;
+
+    return basePackages.map((pkg) => {
+      const netSalesKrw = Math.round(pkg.priceKrw / (1 + vatRate / 100));
+      const vatKrw = pkg.priceKrw - netSalesKrw;
+      const pgFeeKrw = Math.round(pkg.priceKrw * (pgFeeRate / 100));
+
+      // 기본 추천 모델 (현재 입력된 tokenMultiplier 실시간 반영)
+      const primaryCostPerTokenUsd =
+        ((primaryModel.inputCostUsdPerMillion * inputRatio) +
+          (primaryModel.outputCostUsdPerMillion * outputRatio)) /
+        1_000_000;
+      const primaryRawCostKrw = pkg.totalTokens * primaryCostPerTokenUsd * rate;
+      const primaryMult = Number(primaryModel.tokenMultiplier) || 1.0;
+      const primaryEstimatedCostKrw = Math.round(primaryRawCostKrw / primaryMult);
+      const primaryRealProfitKrw = netSalesKrw - pgFeeKrw - primaryEstimatedCostKrw;
+      const primaryRealMarginPercent =
+        Math.round((primaryRealProfitKrw / netSalesKrw) * 1000) / 10;
+
+      // 구형 3.5 모델
+      const legacyCostPerTokenUsd =
+        ((legacyModel.inputCostUsdPerMillion * inputRatio) +
+          (legacyModel.outputCostUsdPerMillion * outputRatio)) /
+        1_000_000;
+      const legacyRawCostKrw = pkg.totalTokens * legacyCostPerTokenUsd * rate;
+      const legacyMult = Number(legacyModel.tokenMultiplier) || 1.0;
+      const legacyEstimatedCostKrw = Math.round(legacyRawCostKrw / legacyMult);
+      const legacyRealProfitKrw = netSalesKrw - pgFeeKrw - legacyEstimatedCostKrw;
+      const legacyRealMarginPercent =
+        Math.round((legacyRealProfitKrw / netSalesKrw) * 1000) / 10;
+
+      return {
+        id: pkg.id,
+        name: pkg.name,
+        priceKrw: pkg.priceKrw,
+        netSalesKrw,
+        vatKrw,
+        pgFeeKrw,
+        totalTokens: pkg.totalTokens,
+        primaryModelName: primaryModel.name,
+        primaryEstimatedCostKrw,
+        primaryRealProfitKrw,
+        primaryRealMarginPercent,
+        legacyModelName: legacyModel.name,
+        legacyEstimatedCostKrw,
+        legacyRealProfitKrw,
+        legacyRealMarginPercent,
+      };
+    });
+  }, [config]);
 
   if (loading || !config) {
     return (
@@ -627,7 +701,7 @@ export default function AdminPricingCostTab() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2">
-            {simulations.map((sim) => {
+            {computedSimulations.map((sim) => {
               const meetsTarget = sim.primaryRealMarginPercent >= (config.targetMarginRate || 50);
 
               return (
