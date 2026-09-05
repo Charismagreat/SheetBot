@@ -7,7 +7,8 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
   Bot, Plus, FileCode, Clock, RefreshCw, CheckCircle2, AlertTriangle,
-  X, ArrowRight, ExternalLink, Sparkles, Layers, ShieldCheck, Trash2, Smartphone, Edit3
+  X, ArrowRight, ExternalLink, Sparkles, Layers, ShieldCheck, Trash2, Smartphone, Edit3,
+  Globe, Star
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import nextDynamic from "next/dynamic";
@@ -15,6 +16,8 @@ import nextDynamic from "next/dynamic";
 const NewProjectModal = nextDynamic(() => import("@/components/NewProjectModal"));
 const EditProjectPromptModal = nextDynamic(() => import("@/components/EditProjectPromptModal"));
 const ScheduleManager = nextDynamic(() => import("@/components/ScheduleManager"));
+const PromptGalleryModal = nextDynamic(() => import("@/components/PromptGalleryModal"));
+const FeedbackModal = nextDynamic(() => import("@/components/FeedbackModal"));
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
@@ -26,6 +29,10 @@ export default function DashboardPage() {
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<any | null>(null);
   const [alertMessage, setAlertMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // 추천 프롬프트 갤러리 및 피드백 모달 상태
+  const [isPromptGalleryOpen, setIsPromptGalleryOpen] = useState(false);
+  const [feedbackTargetProject, setFeedbackTargetProject] = useState<any | null>(null);
 
   // 데이터 로드
   const fetchData = useCallback(async () => {
@@ -280,14 +287,26 @@ export default function DashboardPage() {
               <span>연동된 Apps Script 프로젝트 목록</span>
             </h4>
 
-            <button
-              onClick={() => setIsNewProjectModalOpen(true)}
-              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
-              data-easybot-hint="새 프로젝트 추가: 새 구글 스프레드시트 URL을 바인딩하고 AI 프롬프트로 Apps Script를 자동 생성합니다."
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>새 프로젝트 추가</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsPromptGalleryOpen(true)}
+                className="px-3 py-1.5 bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all border border-emerald-200/80 cursor-pointer shadow-2xs active:scale-95"
+                data-easybot-hint="추천 프롬프트 갤러리: 실무에서 검증된 우수 프롬프트를 탐색하고 즉시 적용합니다."
+              >
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                <span>✨ 추천 프롬프트 갤러리</span>
+              </button>
+
+              <button
+                onClick={() => setIsNewProjectModalOpen(true)}
+                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                data-easybot-hint="새 프로젝트 추가: 새 구글 스프레드시트 URL을 바인딩하고 AI 프롬프트로 Apps Script를 자동 생성합니다."
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>새 프로젝트 추가</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -395,6 +414,22 @@ export default function DashboardPage() {
                       );
                     })()}
 
+                    {/* 🌐 공개 웹페이지 바로가기 (Web App인 경우) */}
+                    {(p.webapp_url || p.webappUrl) && (
+                      <a
+                        href={p.webapp_url || p.webappUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold rounded-lg flex items-center gap-1.5 transition-colors border border-sky-200/80 shadow-2xs"
+                        data-easybot-hint="공개 웹페이지 열기: 일반 대중에게 배포할 수 있는 실시간 독립 접수/설문 웹페이지를 새 창에서 엽니다."
+                        title="일반 대중 배포용 독립 웹페이지 바로가기"
+                      >
+                        <Globe className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                        <span>공개 웹페이지</span>
+                        <ExternalLink className="w-2.5 h-2.5 opacity-70 shrink-0" />
+                      </a>
+                    )}
+
                     {/* 자연어 요구사항 수정 및 AI 코드 재배포 버튼 */}
                     <button
                       type="button"
@@ -405,6 +440,18 @@ export default function DashboardPage() {
                     >
                       <Edit3 className="w-3 h-3 text-slate-500" />
                       <span>요구사항 수정</span>
+                    </button>
+
+                    {/* ⭐ 만족도 평가 및 AI 자가 학습 피드백 버튼 */}
+                    <button
+                      type="button"
+                      onClick={() => setFeedbackTargetProject(p)}
+                      className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-lg flex items-center gap-1 transition-colors border border-amber-200/80 cursor-pointer shadow-2xs text-[11px]"
+                      data-easybot-hint="만족도 평가: AI 생성 코드에 대한 별점과 피드백을 제출하여 AI가 자가 학습하도록 합니다."
+                      title="AI 코드 만족도 평가 및 자가 학습 피드백"
+                    >
+                      <Star className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0" />
+                      <span>만족도 평가</span>
                     </button>
                   </div>
 
@@ -457,6 +504,28 @@ export default function DashboardPage() {
           showAlert({ type: "success", text: "수정된 요구사항을 바탕으로 스크립트 코드가 성공적으로 갱신 및 재배포되었습니다!" });
         }}
       />
+
+      {/* 추천 프롬프트 갤러리 모달 */}
+      <PromptGalleryModal
+        isOpen={isPromptGalleryOpen}
+        onClose={() => setIsPromptGalleryOpen(false)}
+        onSelectPrompt={(tpl) => {
+          setIsPromptGalleryOpen(false);
+          setIsNewProjectModalOpen(true);
+        }}
+      />
+
+      {/* 프로젝트 만족도 평가 및 AI 자가 학습 모달 */}
+      {feedbackTargetProject && (
+        <FeedbackModal
+          isOpen={!!feedbackTargetProject}
+          project={feedbackTargetProject}
+          onClose={() => setFeedbackTargetProject(null)}
+          onSuccess={() => {
+            showAlert({ type: "success", text: "소중한 만족도 평가가 AI 자가 학습 시스템에 성공적으로 반영되었습니다!" });
+          }}
+        />
+      )}
     </div>
   );
 }

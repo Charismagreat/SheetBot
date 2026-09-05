@@ -21,6 +21,7 @@ export interface SheetBotProject {
   features?: string[];
   triggers?: any[];
   prompt?: string;
+  webappUrl?: string;
   status: "ACTIVE" | "TRASHED";
   created_at: string;
   updated_at: string;
@@ -68,6 +69,7 @@ function mapRowToProject(row: any): SheetBotProject {
     features: parsedFeatures,
     triggers: parsedTriggers,
     prompt: row.prompt || "",
+    webappUrl: row.webapp_url || row.webappUrl || "",
     status: row.status || "ACTIVE",
     created_at: row.created_at || "",
     updated_at: row.updated_at || "",
@@ -148,6 +150,7 @@ export async function POST(request: Request) {
     let gasProjectId = "";
     let scriptId = "";
     let scriptUrl = "";
+    let webAppUrl = "";
 
     try {
       if (spreadsheetId) {
@@ -189,6 +192,27 @@ export async function POST(request: Request) {
           await callAppsScriptTool("apps_script_push_to_google", {
             projectId: gasProjectId,
           }).catch((err: any) => console.warn("push to google warning:", err.message));
+
+          // 스크립트 코드에 doGet(e) 또는 Web App 폼이 포함된 경우 웹 앱 배포 자동 실행
+          if (scriptCode.includes("doGet") || scriptCode.includes("HtmlService")) {
+            try {
+              const deployRes = await callAppsScriptTool("apps_script_create_deployment", {
+                projectId: gasProjectId,
+                access: "ANYONE_ANONYMOUS",
+                executeAs: "USER_DEPLOYING",
+                description: `[SheetBot] 공개 웹 폼 배포 (${name.trim()})`,
+              });
+              if (deployRes) {
+                webAppUrl =
+                  deployRes.webAppUrl ||
+                  deployRes.url ||
+                  deployRes.entryPoints?.[0]?.webApp?.url ||
+                  (deployRes.deploymentId ? `https://script.google.com/macros/s/${deployRes.deploymentId}/exec` : "");
+              }
+            } catch (deployErr: any) {
+              console.warn("Apps Script web app deployment note:", deployErr.message);
+            }
+          }
         }
       }
     } catch (mcpErr: any) {
@@ -215,6 +239,7 @@ export async function POST(request: Request) {
       features: JSON.stringify(Array.isArray(features) ? features : []),
       triggers: JSON.stringify(Array.isArray(triggers) ? triggers : []),
       prompt: prompt || "",
+      webapp_url: webAppUrl || "",
       status: "ACTIVE",
       created_at: nowStr,
       updated_at: nowStr,
