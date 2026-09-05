@@ -200,7 +200,7 @@ export async function POST(request: Request) {
           ...m,
           inputCostUsdPerMillion: Number(m.inputCostUsdPerMillion),
           outputCostUsdPerMillion: Number(m.outputCostUsdPerMillion),
-          tokenMultiplier: Math.max(0.5, Number(m.tokenMultiplier) || 1.0),
+          tokenMultiplier: Math.max(0.01, Number(m.tokenMultiplier) || 1.0),
           estimatedKrwPerMillion: Math.round(blendedUsd * rate),
         };
       });

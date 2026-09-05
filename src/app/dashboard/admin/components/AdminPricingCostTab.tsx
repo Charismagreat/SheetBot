@@ -154,8 +154,16 @@ export default function AdminPricingCostTab() {
     const pgFee = starterPrice * (pgFeeRate / 100);
 
     // 목표 마진율을 지키기 위한 1토큰당 허용 최대 API 원가 (KRW)
+    // 순매출 - PG수수료 - API원가 = 순매출 * (targetMargin / 100)
+    // API원가 = 순매출 * (1 - targetMargin / 100) - PG수수료
     const allowedApiBudget = netSales * (1 - targetMargin / 100) - pgFee;
-    const allowedCostPerToken = Math.max(0.0001, allowedApiBudget / starterTokens);
+
+    // 만약 목표 마진율이 너무 높아 API 예산이 0 이하가 되는 경우 (방어 한계)
+    if (allowedApiBudget <= 0) {
+      return 10.0;
+    }
+
+    const allowedCostPerToken = allowedApiBudget / starterTokens;
 
     // 해당 모델의 실제 1토큰당 원가 (입력 2/3, 출력 1/3 블렌디드)
     const blendedUsdPerToken =
@@ -163,21 +171,22 @@ export default function AdminPricingCostTab() {
       1_000_000;
     const rawCostPerToken = blendedUsdPerToken * exchangeRate;
 
-    // 목표 마진 방어를 위한 최소 요구 배율
+    // 목표 마진 방어(수렴)를 위한 정확한 배율:
+    // rawCostPerToken / Multiplier = allowedCostPerToken
+    // 따라서 Multiplier = rawCostPerToken / allowedCostPerToken
     const calculated = rawCostPerToken / allowedCostPerToken;
 
-    // 기본 추천 표준 모델(gemini-3.8-flash) 기준
-    if (model.id === (config.defaultModel || "gemini-3.8-flash")) {
-      return Math.max(1.0, Math.round(calculated * 10) / 10);
+    // 소수점 정밀 반올림 (0.01 단위)
+    let finalMult: number;
+    if (calculated < 0.1) {
+      finalMult = Math.max(0.01, Math.round(calculated * 100) / 100);
+    } else if (calculated < 1.0) {
+      finalMult = Math.round(calculated * 100) / 100;
+    } else {
+      finalMult = Math.round(calculated * 10) / 10;
     }
 
-    // 초경량 Flash-Lite 모델은 0.8x 할인 허용
-    if (model.id.includes("lite")) {
-      return Math.max(0.8, Math.round(calculated * 10) / 10);
-    }
-
-    // 기타 모델: 최소 1.0x ~ 최대 10.0x
-    return Math.max(1.0, Math.min(10.0, Math.round(calculated * 10) / 10));
+    return Math.max(0.01, Math.min(20.0, finalMult));
   };
 
   // 모든 모델의 차감 가중치를 현재 목표 마진율 기준으로 일괄 자동 최적화
@@ -542,17 +551,21 @@ export default function AdminPricingCostTab() {
                         <div className="flex items-center gap-1.5">
                           <input
                             type="number"
-                            step="0.1"
-                            min="0.5"
-                            max="10"
+                            step="0.01"
+                            min="0.01"
+                            max="20"
                             value={model.tokenMultiplier}
                             onChange={(e) => handleModelChange(idx, "tokenMultiplier", parseFloat(e.target.value) || 1.0)}
-                            className="w-16 px-2 py-1 bg-white border border-indigo-200 rounded-lg text-xs font-black text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                            className="w-20 px-2 py-1 bg-white border border-indigo-200 rounded-lg text-xs font-black text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
                           />
                           <span className="text-xs font-extrabold text-indigo-600">x</span>
                         </div>
                         <span className="text-[10px] text-slate-400 block mt-0.5">
-                          {model.tokenMultiplier < 1 ? "할인 차감" : model.tokenMultiplier === 1 ? "표준 차감" : `${model.tokenMultiplier}배 차감`}
+                          {model.tokenMultiplier < 1
+                            ? `${Math.round((1 - model.tokenMultiplier) * 100)}% 할인 차감`
+                            : model.tokenMultiplier === 1
+                            ? "표준 1.0x 차감"
+                            : `${model.tokenMultiplier}배 가중 차감`}
                         </span>
                       </td>
 
