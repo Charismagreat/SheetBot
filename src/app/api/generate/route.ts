@@ -175,9 +175,9 @@ ${colDetails}
 ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
 
 ⚠️ [컬럼 매핑 절대 규칙 - 불일치 시 시스템 작동 불가]:
-1. 임의의 11개 가상 컬럼(접수일시, 발주처, 발주번호, 품명, 규격, 수량, 단가, 공급가액, 납기일자, 파일명, 비고)을 절대로 사용하지 마십시오!
-2. recordToSheet 함수의 rowData 배열은 반드시 위에서 확정된 정확히 ${activeSchema.columns.length}개의 원소를 가져야 하며, A열부터 순서대로 정확한 필드 값을 매핑해야 합니다.
-3. 발주서 1장에 품목이 여러 개(N개) 있을 경우, 1행으로 뭉뚱그리지 말고 품목별로 1행씩(총 N개 행) 분리하여 시트에 순차 삽입하세요.
+1. 임의의 가상 컬럼을 생성하지 말고, 반드시 위에서 감지된 실제 시트의 확정된 컬럼 순서 및 개수(${activeSchema.columns.length}개 열)를 1:1로 엄격히 준수하세요.
+2. recordToSheet 또는 데이터 삽입 시 각 행 배열(rowData)은 반드시 위에서 확정된 정확히 ${activeSchema.columns.length}개의 원소를 가져야 하며, A열부터 순서대로 정확한 필드 값을 매핑해야 합니다.
+3. 세부 품목(Line Items)이 복수 개 존재하는 문서(발주서, 견적서, 거래명세서, 영수증 등)의 경우, 1행으로 뭉뚱그리지 말고 품목별로 1행씩(총 N개 행) 분리하여 시트에 순차 삽입하세요. 단일 건 문서(신청서, 문의 등)는 1건당 1행으로 삽입하세요.
 `;
     }
 
@@ -196,7 +196,7 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
    - 사이드바에서 PDF 또는 이미지 파일 업로드 시:
      - 사이드바 UI에 파일 선택(<input type="file">)과 'AI 분석 및 시트 기록' 버튼을 제공하세요.
      - 사용자가 파일을 선택하고 버튼을 누르면, 브라우저 FileReader로 Base64로 인코딩한 뒤 google.script.run을 통해 GAS 서버 함수(예: processUploadedDocument)를 호출하세요.
-     - GAS 서버 함수에서는 EGDESK_TUNNEL_URL로 UrlFetchApp.fetch를 실행할 때, 헤더에 {'X-Api-Key': EGDESK_API_KEY}를 넣고 바디에 { tool: 'ai_caller_call', arguments: { model: 'gemini-3.8-flash', prompt: '첨부된 발주서/문서를 정밀 분석하여 JSON으로 추출하세요: { issueDate: "발행일자 (YYYY-MM-DD)", poNumber: "수주번호/발주번호", projectName: "적요/프로젝트명", manager: "발주처 담당자명", items: [{ itemCode: "품번", itemName: "실제 품목명(절대로 파일명을 넣지 말 것)", spec: "규격", drawingNo: "도면번호", qty: 1, unitPrice: 1000, amount: 1000, dueDate: "납기" }] }', files: [{ name: fileName, content: fileData, encoding: 'base64', mimeType: mimeType }] } } 형식으로 전송하여 OCR 결과를 받아오세요.
+     - GAS 서버 함수에서는 EGDESK_TUNNEL_URL로 UrlFetchApp.fetch를 실행할 때, 헤더에 {'X-Api-Key': EGDESK_API_KEY}를 넣고 바디에 { tool: 'ai_caller_call', arguments: { model: 'gemini-3.8-flash', prompt: '첨부된 문서를 정밀 분석하여 대상 시트의 각 컬럼에 맞는 JSON 규격으로 추출하세요. (복수 품목이 있는 문서는 items 배열 포함)', files: [{ name: fileName, content: fileData, encoding: 'base64', mimeType: mimeType }] } } 형식으로 전송하여 OCR 결과를 받아오세요.
    - ⚠️ [AI Caller 응답 언래핑 표준 코드 - 100% 필수 준수]:
      - 이지데스크 AI Caller는 결과를 { result: { content: [{ type: "text", text: "..." }] } } 형태로 반환합니다.
      - outerJson.result 객체 자체를 파싱하려 하면 내부 텍스트 추출에 실패하므로, 반드시 아래 코드로 aiText를 안전하게 언래핑하세요:
@@ -220,15 +220,15 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
        }
        const parsedResult = JSON.parse(jsonStr);
        \`\`\`
-   - ⚠️ [품목 및 데이터 유효성 검증]:
-     - parsedResult.items가 비어있거나 없으면 절대 파일명(fileName)을 품목명으로 대체하지 말고, throw new Error("발주서 품목 정보를 추출하지 못했습니다.")로 명확히 예외를 발생시키세요.
+   - ⚠️ [데이터 유효성 검증]:
+     - AI 분석 결과가 비어있거나 유효하지 않으면 절대 파일명(fileName)이나 임의의 더미값을 데이터 열에 대체 삽입하지 말고, throw new Error("문서에서 유효한 정보를 추출하지 못했습니다.")로 명확히 예외를 발생시키세요.
      - 사용자에게 API 키가 없다는 경고나 설정창을 절대 띄우지 마세요!
-3. 📋 시트 및 데이터 조작 (실제 컬럼 1:1 매핑 및 다중 행 삽입 절대 준수):
-   - 특정 시트명(예: '발주서 접수대장')이 언급된 경우, getSheetByName()으로 참조하고 시트가 없으면 insertSheet()로 헤더 행과 함께 자동 생성하세요.
-   - 단, 시트에 이미 존재하는 헤더(1행)가 있을 경우, 헤더를 임의로 변경하거나 덮어쓰지 말고 실제 시트 1행의 컬럼 순서에 1:1로 정확히 맞추어 rowsToInsert 2차원 배열을 구성하세요.
+3. 📋 시트 및 데이터 조작 (실제 컬럼 1:1 매핑 및 동적 행 삽입 절대 준수):
+   - 특정 시트명이 언급된 경우, getSheetByName()으로 참조하고 시트가 없으면 insertSheet()로 헤더 행과 함께 자동 생성하세요.
+   - 단, 시트에 이미 존재하는 헤더(1행)가 있을 경우, 헤더를 임의로 변경하거나 덮어쓰지 말고 실제 시트 1행의 컬럼 순서 및 개수에 1:1로 정확히 맞추어 rowsToInsert 2차원 배열을 구성하세요.
    - '최근 기록이 위에 오도록' 요청된 경우:
-     - 단일 발주서 내에 N개 품목이 있을 때, sheet.insertRowsBefore(2, N) 후 sheet.getRange(2, 1, N, 12).setValues(rowsToInsert)로 한 번에 삽입하여 품목 순서가 뒤집히지 않고 최신 발주서가 시트 맨 위(2행부터)에 안전하게 자리잡도록 작성하세요.
-   - 숫자 포맷: 수량, 단가, 금액 열에 .setNumberFormat("#,##0")을 적용하세요.
+     - 삽입할 행이 N개일 때, sheet.insertRowsBefore(2, N) 후 sheet.getRange(2, 1, N, rowsToInsert[0].length).setValues(rowsToInsert)로 한 번에 삽입하여 데이터 순서가 뒤집히지 않고 최신 데이터가 시트 맨 위(2행부터)에 안전하게 자리잡도록 작성하세요.
+   - 숫자 포맷: 금액, 수량, 단가 등 숫자 열이 감지되면 해당 열에 .setNumberFormat("#,##0")을 적용하세요.
 4. 🚀 상단 메뉴 및 사이드바:
    - 구글 시트 상단 메뉴에 '🚀 SheetBot 자동화' 메뉴를 추가하는 onOpen() 함수를 항상 포함하세요.
    - 메뉴 클릭 시 showSidebar()를 호출하여 파일 업로드 사이드바가 즉시 열리도록 하세요.
