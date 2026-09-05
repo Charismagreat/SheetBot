@@ -22,9 +22,9 @@ const GOOGLE_OFFICIAL_PRICING_CATALOG: Record<string, {
   isLatest: boolean;
 }> = {
   "gemini-3.8-flash": {
-    inputUsd: 0.75, // 얼리액세스 $0.75 / 표준 $1.50
-    outputUsd: 3.75, // 얼리액세스 $3.75 / 표준 $7.50
-    description: "공식 Google AI Studio 최신 3.8 Flash 얼리액세스 공시 요율",
+    inputUsd: 0.75, // 얼리액세스 할인가 $0.75 (27년 정상가 $1.50)
+    outputUsd: 3.75, // 얼리액세스 할인가 $3.75 (27년 정상가 $7.50)
+    description: "공식 Google AI Studio 최신 3.8 Flash 얼리액세스 공시 요율 (최저가 / 최고성능)",
     isLatest: true,
   },
   "gemini-3.7-flash": {
@@ -34,9 +34,9 @@ const GOOGLE_OFFICIAL_PRICING_CATALOG: Record<string, {
     isLatest: true,
   },
   "gemini-3.5-flash": {
-    inputUsd: 0.50,
-    outputUsd: 2.00,
-    description: "공식 3.5 표준 Flash 프로덕션 공시 요율 (100만 컨텍스트)",
+    inputUsd: 1.50, // 이전 세대 공식 요율 (입력 $1.50)
+    outputUsd: 9.00, // 이전 세대 공식 요율 (출력 $9.00)
+    description: "공식 3.5 Flash 이전 세대 공시 요율 (구형 연산 구조로 3.8 대비 2배 이상 고비용)",
     isLatest: false,
   },
   "gemini-3.5-flash-lite": {
@@ -189,9 +189,12 @@ export async function POST(request: Request) {
         };
       });
 
+      const targetDefaultModel = config.defaultModel || "gemini-3.8-flash";
+
       const updated = await savePricingCostConfig(
         {
           ...config,
+          defaultModel: targetDefaultModel,
           exchangeRate: rate,
           targetMarginRate: Number(config.targetMarginRate) || 50,
           allowUserModelSelection: config.allowUserModelSelection !== false,
@@ -200,9 +203,18 @@ export async function POST(request: Request) {
         userEmail || "admin"
       );
 
+      // 전역 AI 모델 기본값(global_ai_model_config)도 함께 동기화하여 서비스 전체에 즉시 적용
+      const { saveAiModelSettings } = await import("@/lib/ai-settings");
+      await saveAiModelSettings({
+        defaultModel: targetDefaultModel,
+        scriptGeneratorModel: targetDefaultModel,
+        easybotModel: targetDefaultModel,
+        helpModel: targetDefaultModel,
+      }, userEmail || "admin");
+
       return NextResponse.json({
         success: true,
-        message: "AI 실제 원가, 차감 배율 및 운영 마진율 설정이 성공적으로 저장되었습니다.",
+        message: `기본 제공 모델(${targetDefaultModel}) 및 AI 원가·마진율 설정이 성공적으로 저장되었습니다.`,
         config: updated,
       });
     }

@@ -10,10 +10,10 @@ export interface SheetBotAiSettings {
 }
 
 export const DEFAULT_AI_SETTINGS: SheetBotAiSettings = {
-  defaultModel: "gemini-3.5-flash",
-  scriptGeneratorModel: "gemini-3.5-flash",
-  easybotModel: "gemini-3.5-flash",
-  helpModel: "gemini-3.5-flash",
+  defaultModel: "gemini-3.8-flash",
+  scriptGeneratorModel: "gemini-3.8-flash",
+  easybotModel: "gemini-3.8-flash",
+  helpModel: "gemini-3.8-flash",
   temperature: 0.3,
 };
 
@@ -115,6 +115,7 @@ export interface ModelPricingDetail {
 }
 
 export interface PricingCostConfig {
+  defaultModel: string; // 서비스 전역 기본 제공 모델 (기본: gemini-3.8-flash)
   exchangeRate: number; // USD to KRW (기본: 1400)
   targetMarginRate: number; // 목표 운영 마진율 % (기본: 50%)
   allowUserModelSelection: boolean; // 일반 회원의 모델 선택 허용 여부 (기본: true)
@@ -125,13 +126,13 @@ export interface PricingCostConfig {
 export const DEFAULT_MODEL_PRICING: ModelPricingDetail[] = [
   {
     id: "gemini-3.8-flash",
-    name: "Gemini 3.8 Flash (최신 플래그십)",
+    name: "Gemini 3.8 Flash (최신 플래그십 추천)",
     category: "flash",
-    inputCostUsdPerMillion: 0.75,
-    outputCostUsdPerMillion: 3.75,
-    estimatedKrwPerMillion: 3150, // 평균 (입력 1000 + 출력 500 토큰 기준 추정치 반영)
-    tokenMultiplier: 1.8,
-    description: "차세대 고속 초지능 엔진, 복잡한 업무 자동화 및 고난도 Apps Script 작성",
+    inputCostUsdPerMillion: 0.75, // 프로모션 $0.75 (27년 정상가 $1.50)
+    outputCostUsdPerMillion: 3.75, // 프로모션 $3.75 (27년 정상가 $7.50)
+    estimatedKrwPerMillion: 2450, // 평균 추정 원가 약 2,450원 (3.5 대비 절반 이하)
+    tokenMultiplier: 1.0, // 기본 제공 표준 모델: 1.0x 기준
+    description: "최신 세대 고속 초지능 엔진, 연산 최적화로 3.5 대비 절반 이하의 저렴한 원가 및 압도적 코딩 성능",
     isOfficialLatest: true,
   },
   {
@@ -140,19 +141,19 @@ export const DEFAULT_MODEL_PRICING: ModelPricingDetail[] = [
     category: "flash",
     inputCostUsdPerMillion: 0.75,
     outputCostUsdPerMillion: 3.75,
-    estimatedKrwPerMillion: 3150,
-    tokenMultiplier: 1.6,
-    description: "다단계 비즈니스 로직 및 스프레드시트 수식 생성",
+    estimatedKrwPerMillion: 2450,
+    tokenMultiplier: 1.1,
+    description: "다단계 비즈니스 로직 및 고난도 Apps Script 작성 최적화",
   },
   {
     id: "gemini-3.5-flash",
-    name: "Gemini 3.5 Flash (표준 추천)",
+    name: "Gemini 3.5 Flash (이전 세대)",
     category: "flash",
-    inputCostUsdPerMillion: 0.50,
-    outputCostUsdPerMillion: 2.00,
-    estimatedKrwPerMillion: 2100,
-    tokenMultiplier: 1.0,
-    description: "가장 안정적인 기본 표준 모델, 1.0배 표준 토큰 차감",
+    inputCostUsdPerMillion: 1.50, // 이전 세대 공식 요율 (입력 $1.50)
+    outputCostUsdPerMillion: 9.00, // 이전 세대 공식 요율 (출력 $9.00)
+    estimatedKrwPerMillion: 5600, // 구형 연산 구조로 3.8보다 원가가 2배 이상 높음
+    tokenMultiplier: 2.2, // 높은 원가에 비례한 2.2배 차감
+    description: "이전 세대 모델, 연산 최적화 이전 버전으로 3.8 대비 원가가 2배 이상 비쌈 (2.2배 차감)",
   },
   {
     id: "gemini-3.5-flash-lite",
@@ -160,9 +161,9 @@ export const DEFAULT_MODEL_PRICING: ModelPricingDetail[] = [
     category: "flash_lite",
     inputCostUsdPerMillion: 0.25,
     outputCostUsdPerMillion: 1.50,
-    estimatedKrwPerMillion: 1225,
+    estimatedKrwPerMillion: 930,
     tokenMultiplier: 0.8,
-    description: "초경량 저비용 모델, 토큰 20% 할인(0.8배 차감)",
+    description: "단순 조회 및 경량 작업에 최적화된 저비용 모델, 토큰 20% 할인(0.8배 차감)",
   },
   {
     id: "gemini-2.5-flash",
@@ -170,7 +171,7 @@ export const DEFAULT_MODEL_PRICING: ModelPricingDetail[] = [
     category: "flash",
     inputCostUsdPerMillion: 0.30,
     outputCostUsdPerMillion: 2.50,
-    estimatedKrwPerMillion: 1960,
+    estimatedKrwPerMillion: 1445,
     tokenMultiplier: 1.0,
     description: "이전 2.5 세대 Flash 안정화 버전",
   },
@@ -180,13 +181,14 @@ export const DEFAULT_MODEL_PRICING: ModelPricingDetail[] = [
     category: "pro",
     inputCostUsdPerMillion: 1.25,
     outputCostUsdPerMillion: 5.00,
-    estimatedKrwPerMillion: 4375, // 복잡 작업 시 100만당 약 20,000원 상당 발생 가능
-    tokenMultiplier: 3.5,
+    estimatedKrwPerMillion: 3500,
+    tokenMultiplier: 3.0,
     description: "복잡한 대형 스프레드시트 구조 분석 및 초정밀 스크립트 생성",
   },
 ];
 
 export const DEFAULT_PRICING_CONFIG: PricingCostConfig = {
+  defaultModel: "gemini-3.8-flash",
   exchangeRate: 1400,
   targetMarginRate: 50, // 50% 운영 마진 목표
   allowUserModelSelection: true,

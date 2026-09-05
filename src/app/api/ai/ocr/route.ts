@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     }
 
     const aiSettings = await getAiModelSettings();
-    const targetModel = requestedModel || aiSettings.defaultModel || "gemini-3.5-flash";
+    const targetModel = requestedModel || aiSettings.defaultModel || "gemini-3.8-flash";
     const tokenMultiplier = await getModelTokenMultiplier(targetModel);
     const requiredTokens = Math.round(800 * tokenMultiplier);
 

@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     }
 
     const aiSettings = await getAiModelSettings();
-    const targetModel = aiSettings.easybotModel || aiSettings.defaultModel || "gemini-3.5-flash";
+    const targetModel = aiSettings.easybotModel || aiSettings.defaultModel || "gemini-3.8-flash";
 
     if (!message || !message.trim()) {
       return NextResponse.json({ success: false, error: "메시지를 입력해 주세요." }, { status: 400 });

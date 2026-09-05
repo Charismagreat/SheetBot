@@ -22,7 +22,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   const [generatedResult, setGeneratedResult] = useState<any>(null);
 
   // AI 엔진 모델 선택 관련 상태
-  const [selectedModel, setSelectedModel] = useState("gemini-3.5-flash");
+  const [selectedModel, setSelectedModel] = useState("gemini-3.8-flash");
   const [pricingModels, setPricingModels] = useState<any[]>([]);
   const [allowUserSelection, setAllowUserSelection] = useState(true);
 
@@ -35,8 +35,9 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
           if (data.success && data.config) {
             setPricingModels(data.config.models || []);
             setAllowUserSelection(data.config.allowUserModelSelection !== false);
-            // 기본 추천 모델 설정
-            const def = data.config.models?.find((m: any) => m.id === "gemini-3.5-flash") || data.config.models?.[0];
+            // 관리자가 지정한 기본 제공 모델 또는 3.8 Flash 설정
+            const targetDefault = data.config.defaultModel || "gemini-3.8-flash";
+            const def = data.config.models?.find((m: any) => m.id === targetDefault) || data.config.models?.[0];
             if (def) setSelectedModel(def.id);
           }
         })

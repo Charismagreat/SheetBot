@@ -208,34 +208,58 @@ export default function AdminPricingCostTab() {
       </div>
 
       <form onSubmit={handleSaveConfig} className="space-y-8">
-        {/* 2. 전역 재무 파라미터 (환율, 목표 마진율, 회원 모델 선택 허용) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {/* 2. 전역 재무 및 기본 모델 파라미터 (기본 제공 모델, 환율, 목표 마진율, 회원 선택 허용) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* 기본 제공 모델 지정 */}
+          <div className="bg-white p-5 rounded-3xl border-2 border-indigo-200/80 shadow-xs space-y-3 relative overflow-hidden">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
+              <span className="text-indigo-950 font-black">기본 제공 표준 모델</span>
+              <Sparkles className="w-4 h-4 text-amber-500" />
+            </div>
+            <div>
+              <select
+                value={config.defaultModel || "gemini-3.8-flash"}
+                onChange={(e) => setConfig({ ...config, defaultModel: e.target.value })}
+                className="w-full px-3 py-2 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs font-black text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {config.models.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} {m.id === "gemini-3.8-flash" ? "⭐[추천]" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-[10px] text-slate-500 leading-tight">
+              신규 프로젝트 및 시스템 전체에 기본 적용되는 표준 AI 엔진입니다.
+            </p>
+          </div>
+
           {/* 기준 환율 */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs space-y-3">
+          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-3">
             <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
               <span>기준 환율 (USD → KRW)</span>
               <DollarSign className="w-4 h-4 text-indigo-600" />
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xl font-black text-slate-800">₩</span>
+              <span className="text-lg font-black text-slate-800">₩</span>
               <input
                 type="number"
                 value={config.exchangeRate}
                 onChange={(e) => setConfig({ ...config, exchangeRate: Number(e.target.value) })}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-lg font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-base font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 min="1000"
                 max="2000"
                 step="10"
                 required
               />
             </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Google Cloud 인보이스 청구 환율 기준 (기본 1,400원 권장)
+            <p className="text-[10px] text-slate-400 leading-tight">
+              인보이스 청구 환율 (1,400원 권장)
             </p>
           </div>
 
           {/* 목표 운영 마진율 */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs space-y-3">
+          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-3">
             <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
               <span>목표 운영 마진율 (%)</span>
               <Percent className="w-4 h-4 text-emerald-600" />
@@ -245,28 +269,28 @@ export default function AdminPricingCostTab() {
                 type="number"
                 value={config.targetMarginRate}
                 onChange={(e) => setConfig({ ...config, targetMarginRate: Number(e.target.value) })}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-lg font-black text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-base font-black text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 min="10"
                 max="95"
                 step="5"
                 required
               />
-              <span className="text-xl font-black text-emerald-700">%</span>
+              <span className="text-lg font-black text-emerald-700">%</span>
             </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              서버 인프라 비용, 세금 및 영업이익을 고려한 최소 권장 마진 (50% 이상)
+            <p className="text-[10px] text-slate-400 leading-tight">
+              서버 인프라 및 순이익 고려 마진
             </p>
           </div>
 
           {/* 회원 모델 선택 허용 */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs space-y-3">
+          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-3">
             <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
-              <span>회원 AI 모델 자율 선택권</span>
+              <span>회원 AI 모델 선택권</span>
               <Cpu className="w-4 h-4 text-violet-600" />
             </div>
             <div className="flex items-center justify-between pt-1">
-              <span className="text-sm font-extrabold text-slate-800">
-                {config.allowUserModelSelection ? "자유 선택 허용 (ON)" : "관리자 표준 고정 (OFF)"}
+              <span className="text-xs font-extrabold text-slate-800">
+                {config.allowUserModelSelection ? "선택 허용" : "기본 고정"}
               </span>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
@@ -278,8 +302,8 @@ export default function AdminPricingCostTab() {
                 <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
               </label>
             </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              ON 설정 시 회원이 프로젝트 생성/수정 시 원하는 Gemini 모델을 직접 선택합니다.
+            <p className="text-[10px] text-slate-400 leading-tight">
+              프로젝트 생성/수정 시 모델 선택 허용
             </p>
           </div>
         </div>

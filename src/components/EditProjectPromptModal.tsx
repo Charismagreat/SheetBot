@@ -25,7 +25,7 @@ export default function EditProjectPromptModal({
   const [generatedResult, setGeneratedResult] = useState<any>(null);
 
   // AI 엔진 모델 선택 관련 상태
-  const [selectedModel, setSelectedModel] = useState("gemini-3.5-flash");
+  const [selectedModel, setSelectedModel] = useState("gemini-3.8-flash");
   const [pricingModels, setPricingModels] = useState<any[]>([]);
   const [allowUserSelection, setAllowUserSelection] = useState(true);
 
@@ -43,7 +43,8 @@ export default function EditProjectPromptModal({
           if (data.success && data.config) {
             setPricingModels(data.config.models || []);
             setAllowUserSelection(data.config.allowUserModelSelection !== false);
-            const def = data.config.models?.find((m: any) => m.id === "gemini-3.5-flash") || data.config.models?.[0];
+            const targetDefault = data.config.defaultModel || "gemini-3.8-flash";
+            const def = data.config.models?.find((m: any) => m.id === targetDefault) || data.config.models?.[0];
             if (def) setSelectedModel(def.id);
           }
         })
