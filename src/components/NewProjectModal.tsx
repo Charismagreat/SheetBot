@@ -46,6 +46,18 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
     }
   };
 
+  // 구글 시트 원본 이름으로 동기화 버튼 클릭 핸들러
+  const handleSyncTitle = () => {
+    if (!sheetUrl.trim()) return;
+    if (autoDetectedTitle && projectName !== autoDetectedTitle) {
+      // 이미 조회된 원본 제목이 있고 현재 입력값과 다르면 즉시 채우기
+      setProjectName(autoDetectedTitle);
+    } else {
+      // 원본 제목을 새로 조회하여 덮어쓰기
+      fetchSheetTitle(sheetUrl, true);
+    }
+  };
+
   const handleApplyTemplate = (text: string) => {
     setPrompt(text);
   };
@@ -195,20 +207,10 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
                     }
                   }}
                   placeholder="https://docs.google.com/spreadsheets/d/1vVmz56s0QrknZfhaOod_EX6-eoiYlXGW220inT5qXME/edit"
-                  className="w-full pl-9 pr-24 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                   required
                 />
                 <FileSpreadsheet className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <button
-                  type="button"
-                  onClick={() => fetchSheetTitle(sheetUrl, true)}
-                  disabled={isFetchingTitle || !sheetUrl.trim()}
-                  className="absolute right-1.5 top-1.5 px-2 py-1 bg-white hover:bg-slate-100 disabled:opacity-40 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 transition-all cursor-pointer flex items-center gap-1"
-                  title="구글 시트 원래 제목 다시 가져오기"
-                >
-                  <RefreshCw className={`w-2.5 h-2.5 ${isFetchingTitle ? "animate-spin text-emerald-600" : ""}`} />
-                  제목 확인
-                </button>
               </div>
             </div>
 
@@ -219,11 +221,37 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
             >
               <div className="flex items-center justify-between">
                 <label className="font-bold text-slate-700 block">프로젝트 이름 *</label>
-                {autoDetectedTitle && (
-                  <span className="flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded-md font-medium">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                    시트 원래 제목 자동 반영됨 (수정 가능)
-                  </span>
+                {sheetUrl.trim() && (
+                  <button
+                    type="button"
+                    onClick={handleSyncTitle}
+                    disabled={isFetchingTitle}
+                    className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full transition-all cursor-pointer border shadow-2xs ${
+                      isFetchingTitle
+                        ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                        : autoDetectedTitle && projectName === autoDetectedTitle
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
+                        : "bg-indigo-50 text-indigo-700 border-indigo-300 hover:bg-indigo-100"
+                    }`}
+                    title="클릭 시 구글 스프레드시트의 원본 이름으로 동기화합니다."
+                  >
+                    {isFetchingTitle ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 animate-spin text-slate-500" />
+                        <span>동기화 중...</span>
+                      </>
+                    ) : autoDetectedTitle && projectName === autoDetectedTitle ? (
+                      <>
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        <span>시트명 동기화됨</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-3 h-3 text-indigo-600" />
+                        <span>시트명 동기화</span>
+                      </>
+                    )}
+                  </button>
                 )}
               </div>
               <input
@@ -235,7 +263,11 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
                 required
               />
               <p className="text-[10px] text-slate-400">
-                구글 시트의 원래 제목이 기본값으로 자동 채워지며, 원하는 이름으로 언제든 자유롭게 수정할 수 있습니다.
+                {autoDetectedTitle && projectName === autoDetectedTitle
+                  ? "✓ 구글 시트 원본 이름과 동기화되어 있습니다. 원하는 이름으로 직접 수정할 수도 있습니다."
+                  : autoDetectedTitle && projectName !== autoDetectedTitle
+                  ? "✏️ 직접 수정한 이름입니다. 원본 이름으로 되돌리려면 상단 '시트명 동기화' 배지를 클릭하세요."
+                  : "구글 시트 URL 입력 시 원본 제목이 자동 반영되며, 자유롭게 수정할 수 있습니다."}
               </p>
             </div>
 
