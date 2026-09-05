@@ -2,7 +2,23 @@
 
 import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from "react";
-import { X, Sparkles, FileSpreadsheet, Code, CheckCircle2, AlertCircle, RefreshCw, ArrowRight, Layers, Cpu } from "lucide-react";
+import {
+  X,
+  Sparkles,
+  FileSpreadsheet,
+  Code,
+  CheckCircle2,
+  AlertCircle,
+  RefreshCw,
+  ArrowRight,
+  Layers,
+  Cpu,
+  MessageSquare,
+  Send,
+  Table,
+  ShieldCheck,
+  ChevronLeft,
+} from "lucide-react";
 
 interface NewProjectModalProps {
   isOpen: boolean;
@@ -11,15 +27,23 @@ interface NewProjectModalProps {
 }
 
 export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProjectModalProps) {
-  const [step, setStep] = useState<1 | 2>(1);
+  // 1: 기본 정보 입력, 2: AI 분석 브리핑 및 조율(HITL), 3: 생성 및 배포 완료
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [sheetUrl, setSheetUrl] = useState("");
   const [projectName, setProjectName] = useState("");
   const [isFetchingTitle, setIsFetchingTitle] = useState(false);
   const [autoDetectedTitle, setAutoDetectedTitle] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedResult, setGeneratedResult] = useState<any>(null);
+
+  // AI 분석 결과 및 조율(HITL) 관련 상태
+  const [analyzedSchema, setAnalyzedSchema] = useState<any>(null);
+  const [turnCount, setTurnCount] = useState(0); // 0부터 시작, 최대 5회
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackHistory, setFeedbackHistory] = useState<Array<{ role: "user" | "ai"; message: string }>>([]);
 
   // AI 엔진 모델 선택 관련 상태
   const [selectedModel, setSelectedModel] = useState("gemini-3.8-flash");
@@ -35,7 +59,6 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
           if (data.success && data.config) {
             setPricingModels(data.config.models || []);
             setAllowUserSelection(data.config.allowUserModelSelection !== false);
-            // 관리자가 지정한 기본 제공 모델 또는 3.8 Flash 설정
             const targetDefault = data.config.defaultModel || "gemini-3.8-flash";
             const def = data.config.models?.find((m: any) => m.id === targetDefault) || data.config.models?.[0];
             if (def) setSelectedModel(def.id);
@@ -57,7 +80,6 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
       const res = await apiFetch(`/api/sheets/title?url=${encodeURIComponent(trimmed)}`);
       const data = await res.json().catch(() => ({}));
       if (data?.success && data?.title) {
-        // 프로젝트 이름이 비어있거나, 이전 자동감지 제목과 같거나, 강제 덮어쓰기인 경우 채우기
         if (forceOverwrite || !projectName.trim() || projectName === autoDetectedTitle) {
           setProjectName(data.title);
         }
@@ -74,10 +96,8 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   const handleSyncTitle = () => {
     if (!sheetUrl.trim()) return;
     if (autoDetectedTitle && projectName !== autoDetectedTitle) {
-      // 이미 조회된 원본 제목이 있고 현재 입력값과 다르면 즉시 채우기
       setProjectName(autoDetectedTitle);
     } else {
-      // 원본 제목을 새로 조회하여 덮어쓰기
       fetchSheetTitle(sheetUrl, true);
     }
   };
@@ -86,7 +106,8 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
     setPrompt(text);
   };
 
-  const handleGenerateAndDeploy = async (e: React.FormEvent) => {
+  // 1단계: AI 시트 사전 정밀 분석 실행 (무료)
+  const handleStartAnalysis = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!sheetUrl.trim()) {
       setError("구글 스프레드시트 URL 또는 ID를 입력해 주세요.");
@@ -101,11 +122,93 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
       return;
     }
 
+    setAnalyzing(true);
+    setError(null);
+
+    try {
+      const res = await apiFetch("/api/sheets/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sheetUrl: sheetUrl.trim(),
+          prompt: prompt.trim(),
+          model: selectedModel,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success || !data.schema) {
+        throw new Error(data.error || "시트 구조 분석에 실패했습니다.");
+      }
+
+      setAnalyzedSchema(data.schema);
+      setTurnCount(1);
+      setFeedbackHistory([
+        {
+          role: "ai",
+          message: data.schema.planSummary || "스프레드시트 분석이 완료되었습니다. 아래 실행 계획을 검토해 주세요.",
+        },
+      ]);
+      setStep(2); // 2단계 브리핑 화면으로 전환
+    } catch (err: any) {
+      setError(err.message || "시트 분석 중 오류가 발생했습니다.");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  // 2단계: 사용자 피드백 조율 전송 (최대 5회)
+  const handleSendFeedback = async () => {
+    if (!feedbackText.trim() || turnCount >= 5 || analyzing) return;
+
+    setAnalyzing(true);
+    setError(null);
+    const userMsg = feedbackText.trim();
+    setFeedbackText("");
+
+    // 히스토리에 사용자 메시지 즉시 추가
+    setFeedbackHistory((prev) => [...prev, { role: "user", message: userMsg }]);
+
+    try {
+      const res = await apiFetch("/api/sheets/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sheetUrl: sheetUrl.trim(),
+          prompt: prompt.trim(),
+          model: selectedModel,
+          feedback: userMsg,
+          previousSchema: analyzedSchema,
+          turn: turnCount + 1,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success || !data.schema) {
+        throw new Error(data.error || "피드백 반영 중 오류가 발생했습니다.");
+      }
+
+      setAnalyzedSchema(data.schema);
+      setTurnCount((prev) => prev + 1);
+      setFeedbackHistory((prev) => [
+        ...prev,
+        {
+          role: "ai",
+          message: data.schema.planSummary || "피드백을 반영하여 계획을 업데이트했습니다.",
+        },
+      ]);
+    } catch (err: any) {
+      setError(err.message || "피드백 조율 중 오류가 발생했습니다.");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  // 2단계 -> 3단계: 최종 승인 및 코드 생성/배포 (정규 토큰 1회 일괄 차감)
+  const handleFinalDeploy = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      // 1. AI 코드 생성 (AI Caller 경유 및 선택 모델 반영)
+      // 1. AI 코드 생성 (사전 분석된 스키마 강제 주입)
       const genRes = await apiFetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -114,6 +217,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
           sheetUrl,
           customTitle: projectName,
           model: selectedModel,
+          analyzedSchema, // 검증 및 조율된 시트 구조 주입
         }),
       });
       const genJson = await genRes.json();
@@ -148,7 +252,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
         ...scriptData,
         project: projJson.project,
       });
-      setStep(2);
+      setStep(3);
     } catch (err: any) {
       setError(err.message || "처리 중 오류가 발생했습니다.");
     } finally {
@@ -164,6 +268,9 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
     setProjectName("");
     setAutoDetectedTitle(null);
     setPrompt("");
+    setAnalyzedSchema(null);
+    setTurnCount(0);
+    setFeedbackHistory([]);
     setGeneratedResult(null);
   };
 
@@ -177,19 +284,28 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-extrabold text-sm text-slate-800">
-                {step === 1 ? "새 Apps Script 자동화 프로젝트 추가" : "🎉 자동화 코드 배포 완료!"}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-extrabold text-sm text-slate-800">
+                  {step === 1 && "새 Apps Script 자동화 프로젝트 추가"}
+                  {step === 2 && "🔍 AI 시트 분석 브리핑 및 사전 동의 (HITL)"}
+                  {step === 3 && "🎉 자동화 코드 배포 완료!"}
+                </h3>
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                  {step === 1 && "1단계: 정보 입력"}
+                  {step === 2 && `2단계: 계획 검토 (${turnCount}/5회 조율)`}
+                  {step === 3 && "3단계: 배포 완료"}
+                </span>
+              </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                {step === 1
-                  ? "구글 시트 URL과 원하는 기능을 입력하면 AI가 전용 스크립트를 생성합니다."
-                  : "Google Apps Script가 구글 시트에 연결되었습니다."}
+                {step === 1 && "구글 시트 URL과 원하는 기능을 입력하면 AI가 시트 구조를 먼저 정밀 분석합니다."}
+                {step === 2 && "AI가 파악한 시트 양식과 실행 계획을 확인하고, 필요한 경우 자유롭게 수정 조율할 수 있습니다."}
+                {step === 3 && "Google Apps Script가 구글 시트에 안전하게 바인딩되었습니다."}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            disabled={loading}
+            disabled={loading || analyzing}
             className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -203,8 +319,9 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
           </div>
         )}
 
-        {step === 1 ? (
-          <form onSubmit={handleGenerateAndDeploy} className="space-y-4 text-xs">
+        {/* Step 1: 기본 정보 입력 */}
+        {step === 1 && (
+          <form onSubmit={handleStartAnalysis} className="space-y-4 text-xs">
             {/* 스프레드시트 URL */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
@@ -291,19 +408,12 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                 required
               />
-              <p className="text-[10px] text-slate-400">
-                {autoDetectedTitle && projectName === autoDetectedTitle
-                  ? "✓ 구글 시트 원본 이름과 동기화되어 있습니다. 원하는 이름으로 직접 수정할 수도 있습니다."
-                  : autoDetectedTitle && projectName !== autoDetectedTitle
-                  ? "✏️ 직접 수정한 이름입니다. 원본 이름으로 되돌리려면 상단 '시트명 동기화' 배지를 클릭하세요."
-                  : "구글 시트 URL 입력 시 원본 제목이 자동 반영되며, 자유롭게 수정할 수 있습니다."}
-              </p>
             </div>
 
             {/* 템플릿 추천 버튼 */}
             <div
               className="space-y-1.5 pt-1"
-              data-easybot-hint="추천 템플릿: 자주 사용되는 자동화 시나리오(일일 마감, 수정 이력 로깅, 메뉴 생성)를 원클릭으로 프롬프트에 채웁니다."
+              data-easybot-hint="추천 템플릿: 자주 사용되는 자동화 시나리오를 원클릭으로 프롬프트에 채웁니다."
             >
               <span className="text-[11px] font-bold text-slate-400 block">⚡ 추천 프롬프트 원클릭 채우기:</span>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -311,12 +421,24 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
                   type="button"
                   onClick={() =>
                     handleApplyTemplate(
-                      "매일 자정에 당일 입력된 대장 데이터를 '일일_마감' 시트로 자동 복사 백업하고 총 수량과 합계 금액을 자동 계산하는 시간 기반 일일 자동 마감 기능을 만들어줘."
+                      "구글 시트 사이드바에서 PDF 발주서 파일을 업로드하면 AI가 분석하여 발주서 접수대장에 품목별로 1행씩 분리하여 최신순으로 자동 등록하는 시스템을 만들어줘."
                     )
                   }
                   className="p-2 text-left bg-slate-50 hover:bg-emerald-50/70 border border-slate-200/80 hover:border-emerald-300 rounded-xl text-[11px] font-bold text-slate-700 transition-all cursor-pointer flex flex-col gap-0.5"
                 >
-                  <span className="text-emerald-700">🕒 일일 대장 자동 마감</span>
+                  <span className="text-emerald-700">📄 PDF 발주서 AI 자동 접수</span>
+                  <span className="text-[10px] text-slate-400 line-clamp-1">사이드바 업로드 및 품목별 분리</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleApplyTemplate(
+                      "매일 자정에 당일 입력된 대장 데이터를 '일일_마감' 시트로 자동 복사 백업하고 총 수량과 합계 금액을 자동 계산하는 시간 기반 일일 자동 마감 기능을 만들어줘."
+                    )
+                  }
+                  className="p-2 text-left bg-slate-50 hover:bg-indigo-50/70 border border-slate-200/80 hover:border-indigo-300 rounded-xl text-[11px] font-bold text-slate-700 transition-all cursor-pointer flex flex-col gap-0.5"
+                >
+                  <span className="text-indigo-700">🕒 일일 대장 자동 마감</span>
                   <span className="text-[10px] text-slate-400 line-clamp-1">매일 자정 백업 및 합계 산출</span>
                 </button>
                 <button
@@ -326,27 +448,15 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
                       "시트 데이터가 수정될 때마다 변경 이력을 '로그' 시트에 자동으로 남기고, 특정 셀 값이 '승인'으로 변경되면 실시간 알림을 띄우는 onEdit 트리거를 작성해줘."
                     )
                   }
-                  className="p-2 text-left bg-slate-50 hover:bg-indigo-50/70 border border-slate-200/80 hover:border-indigo-300 rounded-xl text-[11px] font-bold text-slate-700 transition-all cursor-pointer flex flex-col gap-0.5"
-                >
-                  <span className="text-indigo-700">⚡ 실시간 변경 이력 로깅</span>
-                  <span className="text-[10px] text-slate-400 line-clamp-1">셀 수정 시 자동 이력 적재</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleApplyTemplate(
-                      "스프레드시트 상단에 '🚀 데이터 검증' 메뉴를 추가하고, 빈 셀이나 중복 데이터를 하이라이트 표시하는 기능을 구성해줘."
-                    )
-                  }
                   className="p-2 text-left bg-slate-50 hover:bg-amber-50/70 border border-slate-200/80 hover:border-amber-300 rounded-xl text-[11px] font-bold text-slate-700 transition-all cursor-pointer flex flex-col gap-0.5"
                 >
-                  <span className="text-amber-700">🎯 상단 커스텀 메뉴 & 검증</span>
-                  <span className="text-[10px] text-slate-400 line-clamp-1">중복 셀 검사 및 메뉴 추가</span>
+                  <span className="text-amber-700">⚡ 실시간 변경 이력 로깅</span>
+                  <span className="text-[10px] text-slate-400 line-clamp-1">셀 수정 시 자동 이력 적재</span>
                 </button>
               </div>
             </div>
 
-            {/* AI 엔진 모델 선택 (관리자 허용 시 자율 선택 가능) */}
+            {/* AI 엔진 모델 선택 */}
             {allowUserSelection && pricingModels.length > 0 && (
               <div className="p-3 bg-indigo-50/60 border border-indigo-100 rounded-2xl space-y-2">
                 <div className="flex items-center justify-between">
@@ -383,56 +493,231 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
             {/* 자연어 프롬프트 입력 */}
             <div
               className="space-y-1"
-              data-easybot-hint="요구사항 기술: 구현하고자 하는 자동화 기능(메뉴, 데이터 계산, 시트 분기, 이메일 전송 등)을 자유롭게 작성합니다."
+              data-easybot-hint="요구사항 기술: 구현하고자 하는 자동화 기능을 자유롭게 작성합니다."
             >
               <label className="font-bold text-slate-700 block">자동화 기능 요구사항 (자연어로 자유롭게 기술) *</label>
               <textarea
-                rows={4}
+                rows={3}
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="예: 시트에 새 행이 추가될 때마다 작성 일시를 오늘 날짜로 자동 기록하고, 상단 메뉴에서 원클릭으로 합계 통계를 계산하는 Apps Script 코드를 작성해줘."
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none leading-relaxed"
+                placeholder="예: 구글 시트 사이드바에서 PDF 발주서를 업로드하면 AI가 분석하여 '발주서 접수대장'에 품목별로 최신순 등록해줘."
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none leading-relaxed"
                 required
               />
             </div>
 
-            {/* 제출 버튼 */}
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            {/* 1단계 액션 버튼 */}
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 font-bold">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span>사전 분석 & 5회 조율 무료 제공 (최종 승인 시에만 토큰 차감)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={analyzing}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={analyzing}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white transition-all shadow-md shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {analyzing ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>시트 2차원 구조 및 수식 정밀 분석 중...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>🔍 AI 시트 정밀 분석 및 계획 수립</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {/* Step 2: AI 분석 브리핑 및 대화형 조율(HITL) */}
+        {step === 2 && analyzedSchema && (
+          <div className="space-y-4 text-xs">
+            {/* 시트 분석 요약 카드 */}
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Table className="w-4 h-4 text-indigo-600" />
+                  <span className="font-extrabold text-slate-800 text-xs">
+                    분석된 시트: <span className="text-indigo-600 font-mono font-bold">'{analyzedSchema.targetTab || "기본 시트"}'</span>
+                  </span>
+                </div>
+                <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                  {analyzedSchema.archetypeName || analyzedSchema.archetype || "📊 누적 대장형"}
+                </span>
+              </div>
+
+              {/* 컬럼/셀 구조 배지 */}
+              {analyzedSchema.columns && analyzedSchema.columns.length > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold">
+                    <span>
+                      감지된 헤더 ({analyzedSchema.headerRow || 1}행, 총 {analyzedSchema.columns.length}개 열):
+                    </span>
+                    <span className="text-[10px] text-emerald-600 font-bold">
+                      삽입 기준행: {analyzedSchema.dataStartRow || 2}행
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1.5 bg-white border border-slate-200/80 rounded-xl">
+                    {analyzedSchema.columns.map((c: any, i: number) => (
+                      <span
+                        key={i}
+                        className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200"
+                        title={c.purpose || c.name}
+                      >
+                        <span className="font-mono text-indigo-600 font-black">{c.letter || String.fromCharCode(65 + i)}</span>
+                        <span>{c.name}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 고정 셀 또는 수식 보존 안내 (견적서/보고서 양식인 경우) */}
+              {analyzedSchema.formCoordinates?.preservedFormulas && analyzedSchema.formCoordinates.preservedFormulas.length > 0 && (
+                <div className="p-2 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 font-medium">
+                  🔒 <strong>보존 대상 수식 감지:</strong>{" "}
+                  {analyzedSchema.formCoordinates.preservedFormulas.map((f: any) => `${f.cell}(${f.formula})`).join(", ")} (덮어쓰지 않고 자동 보존됩니다)
+                </div>
+              )}
+
+              {/* 핵심 실행 전략 */}
+              {analyzedSchema.keyStrategies && analyzedSchema.keyStrategies.length > 0 && (
+                <div className="space-y-1 pt-1">
+                  <span className="font-bold text-slate-600 text-[11px] block">AI 실행 계획 요약:</span>
+                  <ul className="space-y-1">
+                    {analyzedSchema.keyStrategies.map((s: string, idx: number) => (
+                      <li key={idx} className="flex items-start gap-1.5 text-slate-700 font-medium text-[11px]">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                        <span>{s}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* 대화형 조율 피드백 루프 (최대 5회) */}
+            <div className="p-3 bg-indigo-50/50 border border-indigo-100 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 font-bold text-indigo-950 text-[11px]">
+                  <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>AI 계획 보완 및 사전 조율 대화</span>
+                </div>
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                  turnCount >= 5 ? "bg-rose-100 text-rose-700" : "bg-indigo-100 text-indigo-700"
+                }`}>
+                  잔여 조율 기회: {Math.max(0, 5 - turnCount)}/5회
+                </span>
+              </div>
+
+              {/* 대화 히스토리 */}
+              <div className="space-y-1.5 max-h-32 overflow-y-auto p-2 bg-white rounded-xl border border-indigo-100 text-[11px]">
+                {feedbackHistory.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    className={`p-2 rounded-lg leading-relaxed ${
+                      msg.role === "user"
+                        ? "bg-indigo-50 text-indigo-900 ml-6 font-bold"
+                        : "bg-slate-50 text-slate-800 mr-6"
+                    }`}
+                  >
+                    <span className="text-[10px] font-black text-slate-400 block mb-0.5">
+                      {msg.role === "user" ? "🙋 내 요청" : "🤖 AI 아키텍트 브리핑"}
+                    </span>
+                    <span>{msg.message}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* 피드백 입력창 */}
+              {turnCount < 5 ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={feedbackText}
+                    onChange={(e) => setFeedbackText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendFeedback();
+                      }
+                    }}
+                    placeholder="계획에 수정할 점이 있다면 입력하세요 (예: 5행 대신 6행부터 넣어줘, 품목별 단가 포함해줘)"
+                    className="flex-1 px-3 py-1.5 bg-white border border-indigo-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    disabled={analyzing}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSendFeedback}
+                    disabled={analyzing || !feedbackText.trim()}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                  >
+                    {analyzing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    <span>조율</span>
+                  </button>
+                </div>
+              ) : (
+                <p className="text-[10px] text-slate-400 text-center py-1">
+                  ✓ 최대 5회 조율이 완료되었습니다. 계획을 확인하시고 아래 승인 버튼을 눌러주세요.
+                </p>
+              )}
+            </div>
+
+            {/* 2단계 액션 버튼 */}
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
               <button
                 type="button"
-                onClick={onClose}
-                disabled={loading}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                onClick={() => setStep(1)}
+                disabled={loading || analyzing}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer flex items-center gap-1"
               >
-                취소
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>처음으로 (0원 취소)</span>
               </button>
+
               <button
-                type="submit"
-                disabled={loading}
-                className="px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white transition-all shadow-md shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                data-easybot-hint="생성 및 배포 버튼: AI가 Code.gs 코드를 작성하여 구글 클라우드 스프레드시트에 직접 배포합니다."
+                type="button"
+                onClick={handleFinalDeploy}
+                disabled={loading || analyzing}
+                className="px-6 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white transition-all shadow-md shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 {loading ? (
                   <>
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>AI 스크립트 생성 및 주입 중...</span>
+                    <span>정밀 코드 생성 및 구글 시트 배포 중...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>원스톱 AI 생성 및 배포하기</span>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>🚀 확인 및 자동화 코드 생성 승인</span>
                   </>
                 )}
               </button>
             </div>
-          </form>
-        ) : (
-          /* Step 2: 배포 완료 화면 */
+          </div>
+        )}
+
+        {/* Step 3: 배포 완료 화면 */}
+        {step === 3 && (
           <div className="space-y-4 text-xs">
             <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-2xl space-y-2">
               <div className="flex items-center gap-2 text-emerald-800 font-extrabold text-sm">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                <span>Google 스프레드시트 바인딩 및 스크립트 주입 완료!</span>
+                <span>Google 스프레드시트 바인딩 및 스크립트 배포 완료!</span>
               </div>
               <p className="text-emerald-950 font-medium leading-relaxed">
                 구글 클라우드에 <code className="font-mono bg-white px-1.5 py-0.5 rounded text-emerald-700">Code.gs</code>와 <code className="font-mono bg-white px-1.5 py-0.5 rounded text-emerald-700">appsscript.json</code> 매니페스트가 성공적으로 푸시되었습니다.
