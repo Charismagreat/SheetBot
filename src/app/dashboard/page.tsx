@@ -304,21 +304,43 @@ export default function DashboardPage() {
                   <p className="text-[11px] text-slate-500 line-clamp-1">{p.summary}</p>
                 )}
 
-                {p.spreadsheetUrl && (
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                    <span className="text-slate-400 text-[10px]">연결 시트:</span>
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px]">
+                  {/* 스크립트 편집기 직접 열기 버튼 */}
+                  {(() => {
+                    const editorUrl =
+                      p.scriptUrl ||
+                      (p.scriptId ? `https://script.google.com/d/${p.scriptId}/edit` : (p.gasProjectId ? `https://script.google.com/d/${p.gasProjectId}/edit` : ""));
+                    return editorUrl ? (
+                      <a
+                        href={editorUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg flex items-center gap-1.5 transition-colors border border-indigo-200/60 shadow-2xs"
+                        data-easybot-hint="스크립트 편집기 열기: 구글 시트의 프로젝트 선택창을 거치지 않고 이 Apps Script 코드 편집 화면으로 1초 만에 바로 진입합니다."
+                      >
+                        <FileCode className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <span>스크립트 편집기 열기</span>
+                        <ExternalLink className="w-2.5 h-2.5 opacity-70 shrink-0" />
+                      </a>
+                    ) : (
+                      <span className="text-slate-400 text-[10px]">연결 시트:</span>
+                    );
+                  })()}
+
+                  {/* 구글 시트 열기 버튼 */}
+                  {p.spreadsheetUrl && (
                     <a
                       href={p.spreadsheetUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-emerald-600 hover:underline flex items-center gap-1 font-medium"
+                      className="text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-1 font-semibold text-xs"
                       data-easybot-hint="구글 시트 열기: 연결된 실제 구글 스프레드시트 웹 페이지를 새 창에서 엽니다."
                     >
                       <span>구글 시트 열기</span>
-                      <ExternalLink className="w-3 h-3" />
+                      <ExternalLink className="w-3 h-3 shrink-0" />
                     </a>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             ))}
           </div>
