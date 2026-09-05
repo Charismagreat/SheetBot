@@ -1,4 +1,4 @@
-﻿export interface DefaultFaqItem {
+export interface DefaultFaqItem {
   id: string;
   category: "시작하기" | "토큰/결제" | "Apps Script/기능" | "보안/계정";
   question: string;
@@ -51,16 +51,44 @@ export const DEFAULT_FAQS: DefaultFaqItem[] = [
   },
   {
     id: "faq_seed_7",
-    category: "보안/계정",
-    question: "제 스프레드시트의 내부 데이터가 다른 사용자에게 노출되지는 않나요?",
-    answer: "절대 노출되지 않습니다. SheetBot은 엄격한 '회원별 데이터 완전 격리(Multi-User Isolation)' 정책을 준수합니다. 본인의 구글 로그인 세션 이메일과 일치하는 프로젝트만 조회·관리되며, 타 회원의 프로젝트나 시트 정보는 데이터베이스 수준에서 원천 차단됩니다.",
+    category: "Apps Script/기능",
+    question: "발주서나 영수증 PDF, 이미지를 구글 시트에 자동으로 넣을 수 있나요?",
+    answer: "네! 시트봇의 AI OCR 기능으로 가능합니다. 구글 시트 상단 메뉴 [🚀 SheetBot 자동화]를 누르면 열리는 사이드바에 PDF나 이미지(JPG/PNG) 발주서를 올리면, AI가 문서를 1초 만에 분석하여 시트 양식(품명, 수량, 단가 등)에 맞춰 12개 열 또는 해당 시트 규격대로 자동 기록해 줍니다. 1장에 여러 품목이 있어도 품목별로 1행씩 완벽히 분리되어 최상단에 기록됩니다.",
     sort_order: 7,
   },
   {
     id: "faq_seed_8",
+    category: "Apps Script/기능",
+    question: "이미 배포된 자동화 프로젝트의 기능을 바꾸고 싶을 때는 어떻게 하나요?",
+    answer: "프로젝트 목록의 [요구사항 수정] 버튼을 누르시면 됩니다. AI가 현재 구글 시트 문서 전체를 다시 스캔하여 시트 구조와 실행 계획을 먼저 브리핑해 드립니다. 최대 5회까지 AI와 대화하며 세부 조정을 마친 후 [AI 코드 재배포 실행]을 누르면 구글 시트에 새로운 코드가 즉시 반영됩니다.",
+    sort_order: 8,
+  },
+  {
+    id: "faq_seed_9",
+    category: "토큰/결제",
+    question: "시트에서 AI OCR을 돌리거나 기능을 수정할 때 토큰은 어떻게 기록되나요?",
+    answer: "모든 AI 호출은 실시간으로 투명하게 감사 기록됩니다. 웹에서 시트를 분석하거나 대화형 조율을 진행할 때, 그리고 구글 시트 사이드바에서 발주서를 업로드하여 OCR 분석을 돌릴 때 발생하는 모든 토큰 소비량과 비용이 상단 [AI 사용료] 관제 센터(/dashboard/ai-usage)에 실시간으로 1건도 빠짐없이 자동 기록됩니다.",
+    sort_order: 9,
+  },
+  {
+    id: "faq_seed_10",
+    category: "보안/계정",
+    question: "개인 Gemini API 키나 OpenAI API 키를 구글 시트에 등록해야 하나요?",
+    answer: "전혀 필요 없습니다! 시트봇은 모든 AI 및 OCR 호출을 이지데스크 중앙 AI 클라우드 터널을 통해 일괄 안전 처리하므로, 사용자가 개인 API 키를 발급받거나 시트에 노출할 위험 없이 원클릭으로 안전하게 자동화 서비스를 이용하실 수 있습니다.",
+    sort_order: 10,
+  },
+  {
+    id: "faq_seed_11",
+    category: "보안/계정",
+    question: "제 스프레드시트의 내부 데이터가 다른 사용자에게 노출되지는 않나요?",
+    answer: "절대 노출되지 않습니다. SheetBot은 엄격한 '회원별 데이터 완전 격리(Multi-User Isolation)' 정책을 준수합니다. 본인의 구글 로그인 세션 이메일과 일치하는 프로젝트만 조회·관리되며, 타 회원의 프로젝트나 시트 정보는 데이터베이스 수준에서 원천 차단됩니다.",
+    sort_order: 11,
+  },
+  {
+    id: "faq_seed_12",
     category: "보안/계정",
     question: "어떤 AI 모델을 사용하나요? 최신 모델로 변경할 수 있나요?",
     answer: "이지데스크의 고성능 AI Caller를 통해 Google Gemini 3.5 Flash 및 최신 Gemini 3.8 Flash 모델과 실시간 연동되어 있습니다. [AI 모델 환경 설정] 페이지에서 원하는 모델과 Temperature 파라미터를 언제든 자유롭게 변경할 수 있습니다.",
-    sort_order: 8,
+    sort_order: 12,
   },
 ];
