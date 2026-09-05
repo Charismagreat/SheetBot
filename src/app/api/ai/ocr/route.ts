@@ -3,6 +3,7 @@ import { callAiCaller } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { recordAiUsageLog } from "@/lib/ai-usage";
+import { getAiModelSettings, getModelTokenMultiplier } from "@/lib/ai-settings";
 
 /**
  * POST /api/ai/ocr
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
   try {
     await setupDatabase();
     const body = await req.json().catch(() => ({}));
-    const { fileData, fileName, mimeType, headers, prompt: userPrompt, userEmail } = body;
+    const { fileData, fileName, mimeType, headers, prompt: userPrompt, userEmail, model: requestedModel } = body;
 
     if (!fileData) {
       return NextResponse.json(
@@ -23,11 +24,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const aiSettings = await getAiModelSettings();
+    const targetModel = requestedModel || aiSettings.defaultModel || "gemini-3.5-flash";
+    const tokenMultiplier = await getModelTokenMultiplier(targetModel);
+    const requiredTokens = Math.round(800 * tokenMultiplier);
+
     const cleanEmail = userEmail ? String(userEmail).toLowerCase().trim() : "";
 
-    // 1. 사용자 토큰 잔액 사전 검증 (OCR 분석 1회당 약 800 토큰 필요)
+    // 1. 사용자 토큰 잔액 사전 검증
     if (cleanEmail) {
-      const tokenCheck = await checkTokenBalance(cleanEmail, 800);
+      const tokenCheck = await checkTokenBalance(cleanEmail, requiredTokens);
       if (!tokenCheck.allowed) {
         return NextResponse.json(
           {
@@ -84,7 +90,7 @@ ${userPrompt || "모든 품목 항목을 행별로 빠짐없이 추출하세요.
     // 이지데스크 중앙 AI Caller 호출 (사용자 개인 API 키 불필요)
     const callerRes = await callAiCaller(ocrPrompt, {
       caller: "sheetbot-ocr-service",
-      model: "gemini-2.5-flash",
+      model: targetModel,
       temperature: 0.1,
     });
 
@@ -111,10 +117,11 @@ ${userPrompt || "모든 품목 항목을 행별로 빠짐없이 추출하세요.
       throw new Error("AI Caller OCR 데이터 추출 응답을 파싱할 수 없습니다.");
     }
 
-    // 2. 사용 토큰 계산 및 차감 (기본 약 800 토큰)
+    // 2. 사용 토큰 계산 및 차감 (선택된 모델의 multiplier 가중치 반영)
     const promptLen = ocrPrompt.length;
     const respLen = JSON.stringify(resultJson).length;
-    const usedTokens = Math.max(500, Math.ceil((promptLen + respLen) / 2.5));
+    const rawTokens = Math.max(500, Math.ceil((promptLen + respLen) / 2.5));
+    const usedTokens = Math.round(rawTokens * tokenMultiplier);
     let newBalance = 0;
 
     if (cleanEmail) {
@@ -125,8 +132,8 @@ ${userPrompt || "모든 품목 항목을 행별로 빠짐없이 추출하세요.
       void recordAiUsageLog({
         userEmail: cleanEmail,
         caller: "sheetbot-ocr-service",
-        purpose: "문서 AI OCR 분석 및 시트 데이터 추출",
-        model: "gemini-2.5-flash",
+        purpose: `문서 AI OCR 분석 및 시트 데이터 추출 (${targetModel} / ${tokenMultiplier}x)`,
+        model: targetModel,
         promptTokens: Math.ceil(promptLen / 2.5),
         completionTokens: Math.ceil(respLen / 2.5),
         promptText: `OCR 분석: ${fileName || "문서"}`,
@@ -137,6 +144,8 @@ ${userPrompt || "모든 품목 항목을 행별로 빠짐없이 추출하세요.
     return NextResponse.json({
       success: true,
       data: resultJson,
+      modelUsed: targetModel,
+      multiplier: tokenMultiplier,
       tokensDeducted: usedTokens,
       newBalance,
     });

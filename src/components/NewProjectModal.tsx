@@ -1,8 +1,8 @@
 "use client";
 
 import { apiFetch } from '@/lib/api';
-import React, { useState } from "react";
-import { X, Sparkles, FileSpreadsheet, Code, CheckCircle2, AlertCircle, RefreshCw, ArrowRight, Layers } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { X, Sparkles, FileSpreadsheet, Code, CheckCircle2, AlertCircle, RefreshCw, ArrowRight, Layers, Cpu } from "lucide-react";
 
 interface NewProjectModalProps {
   isOpen: boolean;
@@ -20,6 +20,29 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedResult, setGeneratedResult] = useState<any>(null);
+
+  // AI 엔진 모델 선택 관련 상태
+  const [selectedModel, setSelectedModel] = useState("gemini-3.5-flash");
+  const [pricingModels, setPricingModels] = useState<any[]>([]);
+  const [allowUserSelection, setAllowUserSelection] = useState(true);
+
+  useEffect(() => {
+    if (isOpen) {
+      // 원가 및 사용 가능 모델 설정 로드
+      apiFetch("/api/admin/pricing-cost")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.config) {
+            setPricingModels(data.config.models || []);
+            setAllowUserSelection(data.config.allowUserModelSelection !== false);
+            // 기본 추천 모델 설정
+            const def = data.config.models?.find((m: any) => m.id === "gemini-3.5-flash") || data.config.models?.[0];
+            if (def) setSelectedModel(def.id);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -81,11 +104,16 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
     setError(null);
 
     try {
-      // 1. AI 코드 생성 (AI Caller 경유)
+      // 1. AI 코드 생성 (AI Caller 경유 및 선택 모델 반영)
       const genRes = await apiFetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, sheetUrl, customTitle: projectName }),
+        body: JSON.stringify({
+          prompt,
+          sheetUrl,
+          customTitle: projectName,
+          model: selectedModel,
+        }),
       });
       const genJson = await genRes.json();
       if (!genJson.success || !genJson.data) {
@@ -316,6 +344,40 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
                 </button>
               </div>
             </div>
+
+            {/* AI 엔진 모델 선택 (관리자 허용 시 자율 선택 가능) */}
+            {allowUserSelection && pricingModels.length > 0 && (
+              <div className="p-3 bg-indigo-50/60 border border-indigo-100 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-900">
+                    <Cpu className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>사용할 Gemini AI 엔진 선택</span>
+                  </div>
+                  {pricingModels.find((m) => m.id === selectedModel) && (
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                      토큰 차감 {pricingModels.find((m) => m.id === selectedModel)?.tokenMultiplier}배
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  >
+                    {pricingModels.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} ({m.tokenMultiplier}x 차감)
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-indigo-700/80 flex items-center leading-tight">
+                    {pricingModels.find((m) => m.id === selectedModel)?.description || "선택한 모델의 스펙으로 정밀 코드가 생성됩니다."}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* 자연어 프롬프트 입력 */}
             <div

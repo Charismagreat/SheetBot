@@ -32,8 +32,9 @@ import AdminTaxInvoicesTab from "./components/AdminTaxInvoicesTab";
 import AdminInquiriesTab from "./components/AdminInquiriesTab";
 import AdminReviewsTab from "./components/AdminReviewsTab";
 import AdminUsersTab from "./components/AdminUsersTab";
+import AdminPricingCostTab from "./components/AdminPricingCostTab";
 
-type TabType = "users" | "inquiries" | "reviews" | "faqs" | "tax_invoices" | "footer" | "sms" | "email" | "smart_rules" | "dispatch_logs";
+type TabType = "users" | "inquiries" | "reviews" | "faqs" | "tax_invoices" | "pricing_cost" | "footer" | "sms" | "email" | "smart_rules" | "dispatch_logs";
 
 export default function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<TabType>("users");
@@ -763,6 +764,18 @@ export default function AdminDashboardPage() {
           </button>
 
           <button
+            onClick={() => setActiveTab("pricing_cost")}
+            className={`px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all ${
+              activeTab === "pricing_cost"
+                ? "bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-sm ring-2 ring-emerald-400/50"
+                : "bg-white text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 border border-slate-200"
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-emerald-400" />
+            <span>💰 AI 실제 원가 및 마진율 설정</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab("footer")}
             className={`px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all ${
               activeTab === "footer"
@@ -848,7 +861,12 @@ export default function AdminDashboardPage() {
           <AdminTaxInvoicesTab taxInvoices={taxInvoices} onRefresh={fetchTaxInvoices} />
         )}
 
-        {/* 5. 푸터 / 회사정보 & SNS 설정 탭 */}
+        {/* 5. AI 실제 원가 및 마진율 관제 탭 */}
+        {activeTab === "pricing_cost" && (
+          <AdminPricingCostTab />
+        )}
+
+        {/* 6. 푸터 / 회사정보 & SNS 설정 탭 */}
         {activeTab === "footer" && (
           <AdminFooterTab
             footerForm={footerForm}
