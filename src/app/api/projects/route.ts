@@ -151,9 +151,11 @@ export async function POST(request: Request) {
 
     try {
       if (spreadsheetId) {
+        // 생성 시점부터 AI 생성 코드를 직접 전달
         const boundRes = await callAppsScriptTool("apps_script_create_bound", {
           fileId: spreadsheetId,
           title: name.trim(),
+          scriptCode: scriptCode || undefined,
         });
         if (boundRes && (boundRes.id || boundRes.projectId)) {
           gasProjectId = boundRes.id || boundRes.projectId;
@@ -161,25 +163,26 @@ export async function POST(request: Request) {
           scriptUrl = boundRes.scriptUrl || `https://script.google.com/d/${scriptId}/edit`;
         }
 
-        // 스크립트 코드가 제공된 경우 구글 클라우드에 직접 푸시
+        // 스크립트 코드가 제공된 경우 Code.gs 파일 덮어쓰기 및 구글 클라우드에 직접 푸시
         if (gasProjectId && scriptCode) {
           await callAppsScriptTool("apps_script_write_file", {
             projectId: gasProjectId,
-            file: "Code.gs",
+            fileName: "Code.gs",
             content: scriptCode,
-          }).catch(() => null);
+          }).catch((err: any) => console.warn("write Code.gs warning:", err.message));
 
           if (manifest) {
             await callAppsScriptTool("apps_script_write_file", {
               projectId: gasProjectId,
-              file: "appsscript.json",
+              fileName: "appsscript.json",
               content: manifest,
-            }).catch(() => null);
+            }).catch((err: any) => console.warn("write appsscript.json warning:", err.message));
           }
 
+          // 클라우드 반영
           await callAppsScriptTool("apps_script_push_to_google", {
             projectId: gasProjectId,
-          }).catch(() => null);
+          }).catch((err: any) => console.warn("push to google warning:", err.message));
         }
       }
     } catch (mcpErr: any) {
@@ -289,7 +292,7 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
-    const { id, name, description } = body;
+    const { id, name, description, redeploy } = body;
 
     if (!id) {
       return NextResponse.json({ success: false, error: "수정할 프로젝트 ID가 필요합니다." }, { status: 400 });
@@ -308,6 +311,41 @@ export async function PATCH(request: Request) {
       updateData.description = description.trim();
     }
 
+    // 프로젝트 레코드 조회 (redeploy 처리용)
+    const existing = await queryTable("sheetbot_projects", {
+      filters: { id, user_email: userEmail.toLowerCase().trim() },
+      limit: 1,
+    }).catch(() => ({ rows: [] }));
+
+    const projRow = existing.rows?.[0];
+
+    // 기존 프로젝트의 AI 생성 코드를 구글 클라우드에 재주입
+    if (redeploy && projRow) {
+      const gasProjId = projRow.gas_project_id || projRow.script_id;
+      const scriptCode = projRow.script_code;
+      const manifest = projRow.manifest;
+
+      if (gasProjId && scriptCode) {
+        await callAppsScriptTool("apps_script_write_file", {
+          projectId: gasProjId,
+          fileName: "Code.gs",
+          content: scriptCode,
+        }).catch((err: any) => console.warn("Redeploy Code.gs warning:", err.message));
+
+        if (manifest) {
+          await callAppsScriptTool("apps_script_write_file", {
+            projectId: gasProjId,
+            fileName: "appsscript.json",
+            content: manifest,
+          }).catch(() => null);
+        }
+
+        await callAppsScriptTool("apps_script_push_to_google", {
+          projectId: gasProjId,
+        }).catch((err: any) => console.warn("Redeploy push warning:", err.message));
+      }
+    }
+
     await updateRows("sheetbot_projects", updateData, {
       filters: {
         id,
@@ -317,7 +355,7 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "프로젝트 정보가 성공적으로 갱신되었습니다.",
+      message: redeploy ? "스크립트 코드가 구글 시트에 성공적으로 재배포되었습니다." : "프로젝트 정보가 성공적으로 갱신되었습니다.",
       updated: updateData,
     });
   } catch (error: any) {

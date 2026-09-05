@@ -81,11 +81,11 @@ export default function DashboardPage() {
 
       const newTitle = titleData.title.trim();
 
-      // 2. DB 프로젝트 이름 업데이트 (PATCH)
+      // 2. DB 프로젝트 이름 업데이트 및 Apps Script 코드 구글 클라우드 재배포 (PATCH)
       const updateRes = await apiFetch("/api/projects", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: p.id, name: newTitle }),
+        body: JSON.stringify({ id: p.id, name: newTitle, redeploy: true }),
       });
       const updateData = await updateRes.json().catch(() => ({}));
 
@@ -98,7 +98,10 @@ export default function DashboardPage() {
         prev.map((proj) => (proj.id === p.id ? { ...proj, name: newTitle } : proj))
       );
 
-      showAlert({ type: "success", text: `'${newTitle}'(으)로 프로젝트 이름이 동기화되었습니다.` });
+      showAlert({
+        type: "success",
+        text: `'${newTitle}' 시트명 동기화 및 자동화 코드 클라우드 배포가 완료되었습니다.`,
+      });
     } catch (err: any) {
       showAlert({ type: "error", text: err.message || "시트 이름 동기화에 실패했습니다." });
     } finally {
