@@ -44,7 +44,11 @@ export async function POST(request: Request) {
 
     const host = request.headers.get("host") || "localhost:4002";
     const protocol = request.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
-    const currentServerUrl = `${protocol}://${host}`;
+    const rawServerUrl = `${protocol}://${host}`;
+    // Google 클라우드 환경에서 localhost 호출 시 발생하는 DNS 오류 방지: EGDesk 공용 터널 URL 기본 제공
+    const egdeskTunnelUrl = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/ai-caller/tools/call";
+    const egdeskApiKey = "a67ddc0f-7e2b-4997-9a0b-9667a74c89d0";
+    const currentServerUrl = process.env.SHEETBOT_PUBLIC_URL || (host.includes("localhost") ? egdeskTunnelUrl : `${rawServerUrl}/api/ai/ocr`);
 
     const systemPrompt = `당신은 Google Apps Script(GAS) 최고의 전문 수석 엔지니어입니다.
 사용자의 자연어 요구사항을 분석하여 Google 스프레드시트에서 즉시 완벽히 동작하는 완성형 Apps Script 코드와 매니페스트를 작성하세요.
@@ -52,12 +56,16 @@ export async function POST(request: Request) {
 [시트봇 핵심 보안 및 API 원칙 - 절대 준수]
 1. ⚠️ 사용자 개인 API 키 요구 절대 금지:
    - 사용자에게 Gemini API 키나 OpenAI API 키 등 개인 API 키 입력을 요구하는 UI, 안내문, 팝업, 메뉴(예: 'Gemini API 키 설정')를 "절대로 작성하지 마십시오".
-   - 시트봇(SheetBot) 서비스는 모든 AI 및 OCR 호출을 백엔드 중앙 서버(이지데스크 AI Caller)에서 일괄 처리하므로, 사용자가 개인 API 키를 소지하거나 시트에 등록할 필요가 없습니다.
-2. 🤖 AI 및 OCR 분석 구현 방법:
+   - 시트봇(SheetBot) 서비스는 모든 AI 및 OCR 호출을 이지데스크 중앙 AI Caller에서 일괄 처리하므로, 사용자가 개인 API 키를 소지하거나 시트에 등록할 필요가 없습니다.
+2. 🤖 AI 및 OCR 분석 구현 방법 (Google 클라우드 DNS 오류 방지):
+   - 중요: Google Apps Script(UrlFetchApp)는 Google 클라우드에서 실행되므로 'localhost' 주소를 호출하면 DNS 오류가 발생합니다.
+   - 따라서 이지데스크 정식 공용 터널 엔드포인트를 호출해야 합니다:
+     const EGDESK_TUNNEL_URL = "${egdeskTunnelUrl}";
+     const EGDESK_API_KEY = "${egdeskApiKey}";
    - 사이드바에서 PDF 또는 이미지 파일 업로드 시:
      - 사이드바 UI에 파일 선택(<input type="file">)과 'AI 분석 및 시트 기록' 버튼을 제공하세요.
      - 사용자가 파일을 선택하고 버튼을 누르면, 브라우저 FileReader로 Base64로 인코딩한 뒤 google.script.run을 통해 GAS 서버 함수(예: processUploadedDocument)를 호출하세요.
-     - GAS 서버 함수에서는 시트봇 중앙 엔드포인트(SHEETBOT_API_URL + '/api/ai/ocr')로 UrlFetchApp.fetch를 실행하여 이지데스크 AI Caller의 OCR 분석 결과를 받아오세요.
+     - GAS 서버 함수에서는 EGDESK_TUNNEL_URL로 UrlFetchApp.fetch를 실행할 때, 헤더에 {'X-Api-Key': EGDESK_API_KEY}를 넣고 바디에 { tool: 'ai_caller_call', arguments: { model: 'gemini-3.8-flash', prompt: '...', files: [{ name: fileName, content: fileData, encoding: 'base64', mimeType: mimeType }] } } 형식으로 전송하여 OCR 결과를 받아오세요.
      - 사용자에게 API 키가 없다는 경고나 설정창을 절대 띄우지 마세요! 바로 파일 업로드 및 자동 분석이 실행되어야 합니다.
 3. 📋 시트 및 데이터 조작:
    - 특정 시트명(예: '발주서 접수대장')이 언급된 경우, getSheetByName()으로 참조하고 시트가 없으면 insertSheet()로 헤더 행과 함께 자동 생성하세요.
@@ -84,19 +92,20 @@ export async function POST(request: Request) {
   ]
 }`;
 
-    const userMessage = `[시트봇 중앙 서버 주소]: ${currentServerUrl}
-[회원 계정]: ${userEmail}
+    const userMessage = `[회원 계정]: ${userEmail}
 [대상 구글 시트]: ${sheetUrl || "연결된 스프레드시트"}
 [프로젝트 명칭]: ${customTitle || "스마트 시트 자동화"}
+[이지데스크 공용 터널]: ${egdeskTunnelUrl}
 [사용자 요구사항]:
 ${prompt}
 
 * 중요 지침: 
-1. 코드 상단에 다음 상수를 반드시 선언하세요:
-   const SHEETBOT_SERVER_URL = "${currentServerUrl}";
+1. 코드 상단에 다음 상수를 선언하세요:
+   const EGDESK_TUNNEL_URL = "${egdeskTunnelUrl}";
+   const EGDESK_API_KEY = "${egdeskApiKey}";
    const SHEETBOT_USER_EMAIL = "${userEmail}";
-2. AI OCR 분석 시, 파일 Base64 데이터와 함께 { fileData: base64, fileName: name, userEmail: SHEETBOT_USER_EMAIL } 객체를 SHEETBOT_SERVER_URL + "/api/ai/ocr" 엔드포인트로 전송(UrlFetchApp.fetch)하여 분석 결과를 받아오세요.
-3. 사용자에게 Gemini API 키나 개인 키 입력을 요구하는 코드(경고창, 입력 메뉴 등)는 절대로 작성하지 마십시오. 모든 AI 처리는 시트봇 중앙 서버에서 회원의 토큰 지갑으로 정상 차감 처리됩니다.`;
+2. AI OCR 분석 시, Google 클라우드 DNS 오류 방지를 위해 반드시 EGDESK_TUNNEL_URL(X-Api-Key 헤더 포함)을 통해 이지데스크 AI Caller(gemini-3.8-flash)를 호출하여 완벽히 처리하세요.
+3. 사용자에게 Gemini API 키나 개인 키 입력을 요구하는 코드(경고창, 입력 메뉴 등)는 절대로 작성하지 마십시오.`;
 
     const fullPrompt = `${systemPrompt}\n\n${userMessage}`;
 
