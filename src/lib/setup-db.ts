@@ -4,6 +4,8 @@ import {
   insertRows,
   listTables,
   getTableSchema,
+  executeSQL,
+  callUserDataTool,
 } from './egdesk-helpers';
 
 let isDbInitialized = false;
@@ -20,7 +22,7 @@ const AUDIT_COLUMNS = [
 ];
 
 /**
- * 테이블 존재 여부를 검사하고 누락된 감사 컬럼을 주입하여 안전하게 생성하는 헬퍼
+ * 실제 물리 SQLite 테이블 존재 여부를 검사하고 누락된 감사 컬럼을 주입하여 안전하게 생성하는 헬퍼
  */
 async function safeCreateTable(displayName: string, columns: any[], options: { tableName: string }) {
   const tableName = options.tableName;
@@ -33,20 +35,30 @@ async function safeCreateTable(displayName: string, columns: any[], options: { t
     }
   }
 
-  // 2. 테이블 존재 여부 확인
-  let tableExists = false;
+  // 2. primaryKey 필드 제거 (EGDesk user_data_create_table 도구 파라미터 규격 준수)
+  const sanitizedColumns = columns.map((c) => {
+    const { primaryKey, ...rest } = c;
+    return rest;
+  });
+
+  // 3. 실제 SQLite 물리 테이블 존재 여부 2중 검증 (sqlite_master 검사)
+  let physicalExists = false;
   try {
-    const listRes = await listTables();
-    const tables = listRes.tables || [];
-    tableExists = tables.some((t: any) => t.tableName === tableName);
+    const masterRes = await executeSQL(`SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}';`);
+    physicalExists = (masterRes.rows || []).length > 0;
   } catch (err) {
-    tableExists = false;
+    physicalExists = false;
   }
 
-  if (!tableExists) {
+  // 4. 물리 테이블이 없는 경우: 혹시 남아있을 수 있는 유령 메타데이터 삭제 후 정상 생성
+  if (!physicalExists) {
     try {
-      await createTable(displayName, columns, options);
-      console.log(`[Setup-DB] ✅ Successfully created table: "${tableName}"`);
+      await callUserDataTool('user_data_delete_table', { tableName });
+    } catch {}
+
+    try {
+      await createTable(displayName, sanitizedColumns, options);
+      console.log(`[Setup-DB] ✅ Successfully created physical table: "${tableName}"`);
     } catch (createErr: any) {
       console.warn(`[Setup-DB] Table create warning for "${tableName}":`, createErr.message);
     }
