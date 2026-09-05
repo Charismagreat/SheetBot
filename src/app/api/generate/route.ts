@@ -235,6 +235,8 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
        }
        const parsedResult = JSON.parse(jsonStr);
        \`\`\`
+   - ⚠️ [실시간 AI 사용량 감사 로그 적재 규칙]:
+     - 사이드바에서 AI OCR 분석이 완료되면, 사용자 관제 센터에 누락 없이 기록되도록 이지데스크 user-data 터널(EGDESK_TUNNEL_URL.replace('/ai-caller/', '/user-data/'))을 통해 sheetbot_ai_usage_logs 테이블에 { user_email: SHEETBOT_USER_EMAIL, caller: 'sheetbot-gas-ocr', purpose: '구글 시트 문서 AI OCR 분석', model: 'gemini-3.8-flash', prompt_tokens, completion_tokens, prompt_preview: fileName } 행을 user_data_insert_rows 도구로 실시간 전송 적재하는 recordOcrUsageLog 헬퍼 함수를 반드시 포함하세요.
    - ⚠️ [데이터 유효성 검증]:
      - AI 분석 결과가 비어있거나 유효하지 않으면 절대 파일명(fileName)이나 임의의 더미값을 데이터 열에 대체 삽입하지 말고, throw new Error("문서에서 유효한 정보를 추출하지 못했습니다.")로 명확히 예외를 발생시키세요.
      - 사용자에게 API 키가 없다는 경고나 설정창을 절대 띄우지 마세요!

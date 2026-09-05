@@ -3,7 +3,9 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { callAiCaller, getSpreadsheetFullContext } from "@/lib/egdesk-helpers";
-import { getAiModelSettings } from "@/lib/ai-settings";
+import { getAiModelSettings, getModelTokenMultiplier } from "@/lib/ai-settings";
+import { recordAiUsageLog } from "@/lib/ai-usage";
+import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 
 // 구글 스프레드시트 URL에서 ID 추출
 function extractSpreadsheetId(urlOrId: string): string | null {
@@ -138,6 +140,25 @@ ${prompt || "스마트 발주/업무 자동화 시스템 구축"}
 * 지침: 위의 스프레드시트 실제 탭과 컬럼, 데이터 샘플을 정밀 분석하여 양식 유형과 완벽한 자동화 실행 계획(JSON)을 작성하세요.`;
     }
 
+    const tokenMultiplier = await getModelTokenMultiplier(targetModel);
+    const requiredTokens = Math.round(500 * tokenMultiplier);
+
+    // 1. 사용자 토큰 잔액 사전 검증
+    if (userEmail) {
+      const tokenCheck = await checkTokenBalance(userEmail, requiredTokens);
+      if (!tokenCheck.allowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: tokenCheck.reason || "시트 분석을 위한 잔여 토큰이 부족합니다.",
+            requirePayment: true,
+            balance: tokenCheck.balance,
+          },
+          { status: 402 }
+        );
+      }
+    }
+
     const aiRes = await callAiCaller(userMessage, {
       model: targetModel,
       systemPrompt,
@@ -146,6 +167,37 @@ ${prompt || "스마트 발주/업무 자동화 시스템 구축"}
     });
 
     let rawText = aiRes.content || aiRes.text || "";
+
+    // 2. 사용 토큰 계산, 차감 및 감사 로그 실시간 적재
+    const promptLen = userMessage.length;
+    const respLen = rawText.length;
+    const pTokens = aiRes.usage?.promptTokens || Math.ceil(promptLen / 2.5);
+    const cTokens = aiRes.usage?.completionTokens || Math.ceil(respLen / 2.5);
+    const totalRaw = pTokens + cTokens;
+    const usedTokens = Math.round(totalRaw * tokenMultiplier);
+
+    let newBalance = 0;
+    if (userEmail) {
+      const deductRes = await deductTokens(userEmail, usedTokens);
+      newBalance = deductRes.newBalance;
+
+      const purpose = isFeedbackMode
+        ? `구글 시트 대화형 조율 피드백 (${turn}회차) (${targetModel} / ${tokenMultiplier}x)`
+        : `구글 시트 2차원 구조 정밀 분석 (${targetModel} / ${tokenMultiplier}x)`;
+
+      void recordAiUsageLog({
+        userEmail,
+        userName: "사용자",
+        caller: "sheetbot-sheet-architect",
+        purpose,
+        model: targetModel,
+        promptTokens: pTokens,
+        completionTokens: cTokens,
+        promptText: userMessage,
+        responseText: rawText,
+      });
+    }
+
     // JSON 파싱
     let parsedSchema: any = null;
     try {
@@ -184,6 +236,8 @@ ${prompt || "스마트 발주/업무 자동화 시스템 구축"}
       turn: Math.min(turn, 5),
       maxTurns: 5,
       schema: parsedSchema,
+      tokensDeducted: usedTokens,
+      newBalance,
     });
   } catch (err: any) {
     console.error("[Sheets-Analyze-API] Error:", err);
