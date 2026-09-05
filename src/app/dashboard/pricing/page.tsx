@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
@@ -103,7 +104,7 @@ export default function PricingWalletPage() {
 
   const fetchWallet = async () => {
     try {
-      const res = await fetch("/api/wallet");
+      const res = await apiFetch("/api/wallet");
       const data = await res.json();
       if (data.success) {
         if (data.wallet) setWallet(data.wallet);
@@ -246,7 +247,7 @@ export default function PricingWalletPage() {
             // 결제 성공 시 서버 지갑 충전 반영
             setModalStep("processing");
             try {
-              const res = await fetch("/api/wallet", {
+              const res = await apiFetch("/api/wallet", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -295,7 +296,7 @@ export default function PricingWalletPage() {
       // 1.5초간 실제 PG사 암호화 통신 및 카드사 승인 대기 시뮬레이션
       await new Promise((resolve) => setTimeout(resolve, 1600));
 
-      const res = await fetch("/api/wallet", {
+      const res = await apiFetch("/api/wallet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -930,7 +931,7 @@ export default function PricingWalletPage() {
                 e.preventDefault();
                 try {
                   setTaxSubmitting(true);
-                  const res = await fetch("/api/wallet/tax-invoice", {
+                  const res = await apiFetch("/api/wallet/tax-invoice", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({

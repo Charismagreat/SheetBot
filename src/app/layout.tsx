@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import SessionWrapper from "@/components/SessionWrapper";
-import AIHelpManager from "@/components/AIHelpManager";
-import EasyBot from "@/components/EasyBot";
+import nextDynamic from "next/dynamic";
+
+const LazyAIHelpManager = nextDynamic(() => import("@/components/AIHelpManager"));
+const LazyEasyBot = nextDynamic(() => import("@/components/EasyBot"));
 import Footer from "@/components/Footer";
 
 export const metadata: Metadata = {
@@ -23,8 +25,8 @@ export default function RootLayout({
             {children}
           </div>
           <Footer />
-          <AIHelpManager />
-          <EasyBot />
+          <LazyAIHelpManager />
+          <LazyEasyBot />
         </SessionWrapper>
       </body>
     </html>

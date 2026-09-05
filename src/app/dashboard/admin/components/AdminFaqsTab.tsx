@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState } from "react";
 import { Plus, Edit2, Trash2 } from "lucide-react";
 
@@ -29,7 +30,7 @@ export default function AdminFaqsTab({ faqs, onRefresh }: AdminFaqsTabProps) {
     try {
       const method = editingFaq ? "PUT" : "POST";
       const body = editingFaq ? { id: editingFaq.id, ...faqForm } : faqForm;
-      const res = await fetch("/api/admin/faqs", {
+      const res = await apiFetch("/api/admin/faqs", {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -54,7 +55,7 @@ export default function AdminFaqsTab({ faqs, onRefresh }: AdminFaqsTabProps) {
   const handleDeleteFaq = async (id: string) => {
     if (!confirm("정말 이 FAQ 항목을 삭제하시겠습니까?")) return;
     try {
-      const res = await fetch(`/api/admin/faqs?id=${id}`, { method: "DELETE" });
+      const res = await apiFetch(`/api/admin/faqs?id=${id}`, { method: "DELETE" });
       const data = await res.json();
       if (data.success) {
         alert("FAQ가 삭제되었습니다.");

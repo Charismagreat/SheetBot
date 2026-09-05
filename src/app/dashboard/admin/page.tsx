@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import {
@@ -122,7 +123,7 @@ export default function AdminDashboardPage() {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch("/api/admin/users");
+      const res = await apiFetch("/api/admin/users");
       const data = await res.json();
       if (data.success) setUsers(data.users || []);
     } catch (e) {
@@ -132,7 +133,7 @@ export default function AdminDashboardPage() {
 
   const fetchInquiries = async () => {
     try {
-      const res = await fetch("/api/admin/inquiries");
+      const res = await apiFetch("/api/admin/inquiries");
       const data = await res.json();
       if (data.success) setInquiries(data.inquiries || []);
     } catch (e) {
@@ -142,7 +143,7 @@ export default function AdminDashboardPage() {
 
   const fetchReviews = async () => {
     try {
-      const res = await fetch("/api/admin/reviews");
+      const res = await apiFetch("/api/admin/reviews");
       const data = await res.json();
       if (data.success) setReviews(data.reviews || []);
     } catch (e) {
@@ -152,7 +153,7 @@ export default function AdminDashboardPage() {
 
   const fetchFaqs = async () => {
     try {
-      const res = await fetch("/api/admin/faqs");
+      const res = await apiFetch("/api/admin/faqs");
       const data = await res.json();
       if (data.success) setFaqs(data.faqs || []);
     } catch (e) {
@@ -162,7 +163,7 @@ export default function AdminDashboardPage() {
 
   const fetchTaxInvoices = async () => {
     try {
-      const res = await fetch("/api/admin/tax-invoices");
+      const res = await apiFetch("/api/admin/tax-invoices");
       const data = await res.json();
       if (data.success) setTaxInvoices(data.invoices || []);
     } catch (e) {
@@ -172,7 +173,7 @@ export default function AdminDashboardPage() {
 
   const fetchFooterSettings = async () => {
     try {
-      const res = await fetch("/api/admin/footer");
+      const res = await apiFetch("/api/admin/footer");
       const data = await res.json();
       if (data.success && data.footer) {
         setFooterForm(data.footer);
@@ -184,7 +185,7 @@ export default function AdminDashboardPage() {
 
   const fetchPhoneDevices = async () => {
     try {
-      const res = await fetch("/api/admin/sms");
+      const res = await apiFetch("/api/admin/sms");
       const data = await res.json();
       if (data.success && data.devices) {
         setPhoneDevices(data.devices);
@@ -196,7 +197,7 @@ export default function AdminDashboardPage() {
 
   const fetchSmsSettings = async () => {
     try {
-      const res = await fetch("/api/admin/sms");
+      const res = await apiFetch("/api/admin/sms");
       const data = await res.json();
       if (data.success) {
         if (data.settings) setSmsSettings(data.settings);
@@ -211,7 +212,7 @@ export default function AdminDashboardPage() {
     e.preventDefault();
     setSavingSms(true);
     try {
-      const res = await fetch("/api/admin/sms", {
+      const res = await apiFetch("/api/admin/sms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(smsSettings),
@@ -237,7 +238,7 @@ export default function AdminDashboardPage() {
     if (!confirm(`[${smsSettings.adminPhone}] 번호로 테스트 문자를 발송하시겠습니까?`)) return;
     setSendingTestSms(true);
     try {
-      const res = await fetch("/api/admin/sms/test", {
+      const res = await apiFetch("/api/admin/sms/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -265,7 +266,7 @@ export default function AdminDashboardPage() {
     }
     setCheckingDevice(true);
     try {
-      const res = await fetch("/api/admin/sms/check", {
+      const res = await apiFetch("/api/admin/sms/check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deviceId: smsSettings.deviceId }),
@@ -305,7 +306,7 @@ export default function AdminDashboardPage() {
     googleProfileName?: string
   ): Promise<boolean> => {
     try {
-      const res = await fetch("/api/admin/sms/devices", {
+      const res = await apiFetch("/api/admin/sms/devices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -335,7 +336,7 @@ export default function AdminDashboardPage() {
 
   const handleDeleteDevice = async (deviceId: string): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/admin/sms/devices?deviceId=${encodeURIComponent(deviceId)}`, {
+      const res = await apiFetch(`/api/admin/sms/devices?deviceId=${encodeURIComponent(deviceId)}`, {
         method: "DELETE",
       });
       const data = await res.json();
@@ -355,7 +356,7 @@ export default function AdminDashboardPage() {
 
   const handleConnectDevice = async (deviceId: string): Promise<boolean> => {
     try {
-      const res = await fetch("/api/admin/sms/devices", {
+      const res = await apiFetch("/api/admin/sms/devices", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deviceId, action: "connect" }),
@@ -376,7 +377,7 @@ export default function AdminDashboardPage() {
 
   const fetchSmtpSettings = async () => {
     try {
-      const res = await fetch("/api/admin/email");
+      const res = await apiFetch("/api/admin/email");
       const data = await res.json();
       if (data.success && data.settings) {
         setSmtpSettings(data.settings);
@@ -395,7 +396,7 @@ export default function AdminDashboardPage() {
     e.preventDefault();
     setSavingSmtp(true);
     try {
-      const res = await fetch("/api/admin/email", {
+      const res = await apiFetch("/api/admin/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(smtpSettings),
@@ -424,7 +425,7 @@ export default function AdminDashboardPage() {
     }
     setSendingTestEmail(true);
     try {
-      const res = await fetch("/api/admin/email/test", {
+      const res = await apiFetch("/api/admin/email/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -451,7 +452,7 @@ export default function AdminDashboardPage() {
 
   const fetchSmartRules = async () => {
     try {
-      const res = await fetch("/api/admin/smart-rules");
+      const res = await apiFetch("/api/admin/smart-rules");
       const data = await res.json();
       if (data.success && Array.isArray(data.rules)) {
         setSmartRules(data.rules);
@@ -469,7 +470,7 @@ export default function AdminDashboardPage() {
     }
     setParsingRule(true);
     try {
-      const res = await fetch("/api/admin/smart-rules", {
+      const res = await apiFetch("/api/admin/smart-rules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: rulePromptInput.trim() }),
@@ -495,7 +496,7 @@ export default function AdminDashboardPage() {
 
   const handleToggleRule = async (rule: SmartDispatchRule) => {
     try {
-      const res = await fetch("/api/admin/smart-rules", {
+      const res = await apiFetch("/api/admin/smart-rules", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: rule.id, enabled: !rule.enabled }),
@@ -514,7 +515,7 @@ export default function AdminDashboardPage() {
   const handleDeleteRule = async (id: string) => {
     if (!confirm("이 발송 규칙을 삭제하시겠습니까?")) return;
     try {
-      const res = await fetch(`/api/admin/smart-rules?id=${id}`, {
+      const res = await apiFetch(`/api/admin/smart-rules?id=${id}`, {
         method: "DELETE",
       });
       const data = await res.json();
@@ -537,7 +538,7 @@ export default function AdminDashboardPage() {
       if (logStatusFilter !== "ALL") q.set("status", logStatusFilter);
       if (logSearchInput) q.set("search", logSearchInput);
 
-      const res = await fetch(`/api/admin/dispatch-logs?${q.toString()}`);
+      const res = await apiFetch(`/api/admin/dispatch-logs?${q.toString()}`);
       const data = await res.json();
       if (data.success) {
         setDispatchLogs(data.logs || []);
@@ -553,7 +554,7 @@ export default function AdminDashboardPage() {
   const handleDeleteLog = async (id: string) => {
     if (!confirm("이 발송 이력 항목을 삭제하시겠습니까?")) return;
     try {
-      const res = await fetch(`/api/admin/dispatch-logs?id=${id}`, {
+      const res = await apiFetch(`/api/admin/dispatch-logs?id=${id}`, {
         method: "DELETE",
       });
       const data = await res.json();
@@ -572,7 +573,7 @@ export default function AdminDashboardPage() {
     e.preventDefault();
     setSavingFooter(true);
     try {
-      const res = await fetch("/api/admin/footer", {
+      const res = await apiFetch("/api/admin/footer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(footerForm),

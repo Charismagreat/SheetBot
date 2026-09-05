@@ -36,6 +36,25 @@ export const authOptions: AuthOptions = {
     strategy: "jwt",
   },
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      // 상대 경로일 경우 원본 경로 유지 (NextAuth 기본 fallback으로 localhost:3000이 붙는 것을 방지)
+      if (url.startsWith("/")) {
+        return url;
+      }
+      // 터널링 서비스 및 신뢰할 수 있는 도메인 허용
+      try {
+        const parsed = new URL(url);
+        if (
+          parsed.origin === baseUrl ||
+          parsed.hostname.includes("tunneling-service.onrender.com") ||
+          parsed.hostname.includes("localhost") ||
+          parsed.hostname.includes("127.0.0.1")
+        ) {
+          return url;
+        }
+      } catch {}
+      return baseUrl;
+    },
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;

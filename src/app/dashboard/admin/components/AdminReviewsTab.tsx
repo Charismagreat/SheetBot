@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState } from "react";
 import { Star, Trash2 } from "lucide-react";
 
@@ -17,7 +18,7 @@ export default function AdminReviewsTab({
   const handleDeleteReview = async (id: string) => {
     if (!confirm("이 사용 후기를 블라인드(삭제) 처리하시겠습니까?")) return;
     try {
-      const res = await fetch(`/api/admin/reviews?id=${id}`, { method: "DELETE" });
+      const res = await apiFetch(`/api/admin/reviews?id=${id}`, { method: "DELETE" });
       const data = await res.json();
       if (data.success) onRefresh();
     } catch {

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -61,7 +62,7 @@ export default function ReviewsPage() {
   const fetchReviews = async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/reviews");
+      const res = await apiFetch("/api/reviews");
       const data = await res.json();
       if (data.success) {
         setReviews(data.reviews || []);
@@ -143,7 +144,7 @@ export default function ReviewsPage() {
 
     try {
       setSubmitting(true);
-      const res = await fetch("/api/reviews", {
+      const res = await apiFetch("/api/reviews", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),

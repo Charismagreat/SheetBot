@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -44,7 +45,7 @@ export default function AiUsageMonitorPage() {
         limit: "15",
       });
 
-      const res = await fetch(`/api/admin/ai-usage?${query.toString()}`);
+      const res = await apiFetch(`/api/admin/ai-usage?${query.toString()}`);
       const json = await res.json();
       if (json.success) {
         setData(json);

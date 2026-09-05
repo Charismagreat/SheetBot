@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import Navbar from "@/components/Navbar";
@@ -59,7 +60,7 @@ export default function ContactPage() {
   const fetchMyInquiries = async () => {
     try {
       setLoadingHistory(true);
-      const res = await fetch("/api/inquiries");
+      const res = await apiFetch("/api/inquiries");
       const data = await res.json();
       if (data.success) {
         setInquiries(data.inquiries || []);
@@ -83,7 +84,7 @@ export default function ContactPage() {
 
     try {
       setSubmitting(true);
-      const res = await fetch("/api/inquiries", {
+      const res = await apiFetch("/api/inquiries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),

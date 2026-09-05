@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState } from "react";
 import { X, Sparkles, FileSpreadsheet, Code, CheckCircle2, AlertCircle, RefreshCw, ArrowRight, Layers } from "lucide-react";
 
@@ -44,7 +45,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
 
     try {
       // 1. AI 코드 생성 (AI Caller 경유)
-      const genRes = await fetch("/api/generate", {
+      const genRes = await apiFetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, sheetUrl, customTitle: projectName }),
@@ -57,7 +58,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
       const scriptData = genJson.data;
 
       // 2. 프로젝트 등록 및 배포 (My DB 정규 테이블 저장)
-      const projRes = await fetch("/api/projects", {
+      const projRes = await apiFetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

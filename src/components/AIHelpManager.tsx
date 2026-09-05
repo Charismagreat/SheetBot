@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect, useRef } from "react";
 import { Sparkles, HelpCircle, X, Loader2, PowerOff } from "lucide-react";
 
@@ -155,7 +156,7 @@ export default function AIHelpManager() {
         });
 
         try {
-          const res = await fetch("/api/ai/contextual-help", {
+          const res = await apiFetch("/api/ai/contextual-help", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
