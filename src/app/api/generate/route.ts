@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { callAiCaller } from "@/lib/egdesk-helpers";
 import { recordAiUsageLog } from "@/lib/ai-usage";
-import { getAiModelSettings } from "@/lib/ai-settings";
+import { getAiModelSettings, getModelTokenMultiplier } from "@/lib/ai-settings";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 
 export async function POST(request: Request) {
@@ -14,26 +14,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }
 
-    // 1. 토큰 지갑 잔여량 사전 검증 (스크립트 생성 기본 1,500 토큰 필요)
-    const tokenCheck = await checkTokenBalance(userEmail, 1500);
+    const body = await request.json();
+    const { prompt, sheetUrl, customTitle, model: userRequestedModel } = body;
+
+    const aiSettings = await getAiModelSettings();
+    // 사용자가 선택한 모델이 있으면 최우선 적용, 없으면 관리자 기본 설정 모델 적용
+    const targetModel = userRequestedModel || aiSettings.scriptGeneratorModel || aiSettings.defaultModel || "gemini-3.5-flash";
+
+    // 1. 토큰 지갑 잔여량 사전 검증 (선택된 모델의 가중치 고려: 기본 1500 * multiplier)
+    const tokenMultiplier = await getModelTokenMultiplier(targetModel);
+    const requiredTokens = Math.round(1500 * tokenMultiplier);
+
+    const tokenCheck = await checkTokenBalance(userEmail, requiredTokens);
     if (!tokenCheck.allowed) {
       return NextResponse.json(
         {
           success: false,
-          error: tokenCheck.reason,
+          error: tokenCheck.reason || `잔여 토큰이 부족합니다. (선택 모델: ${targetModel}, 필요 토큰: ${requiredTokens.toLocaleString()})`,
           requirePayment: true,
           balance: tokenCheck.balance,
         },
-        { status: 402 } // Payment Required
+        { status: 402 } // 402 Payment Required
       );
     }
-
-    const aiSettings = await getAiModelSettings();
-    // EGDesk AI Caller가 공식 지원하는 최적 모델 기본값 적용
-    const targetModel = aiSettings.scriptGeneratorModel || aiSettings.defaultModel || "gemini-2.5-flash";
-
-    const body = await request.json();
-    const { prompt, sheetUrl, customTitle } = body;
 
     if (!prompt || !prompt.trim()) {
       return NextResponse.json({ success: false, error: "요구사항 프롬프트를 입력해 주세요." }, { status: 400 });
@@ -277,10 +280,11 @@ function checkSheetBotStatus() {
       };
     }
 
-    // 2. 토큰 사용량 계산 및 차감 (기본 예상치 1500~2000)
+    // 2. 토큰 사용량 계산 및 차감 (선택된 모델의 multiplier 가중치 반영)
     const promptLength = fullPrompt.length;
     const responseLength = (generatedData?.scriptCode || JSON.stringify(generatedData)).length;
-    const estimatedUsedTokens = Math.max(800, Math.ceil((promptLength + responseLength) / 2.5));
+    const rawTokens = Math.max(800, Math.ceil((promptLength + responseLength) / 2.5));
+    const estimatedUsedTokens = Math.round(rawTokens * tokenMultiplier);
 
     const deductRes = await deductTokens(userEmail, estimatedUsedTokens);
 
@@ -288,7 +292,7 @@ function checkSheetBotStatus() {
     void recordAiUsageLog({
       userEmail,
       caller: "sheetbot-script-generator",
-      purpose: "Apps Script 자동 생성",
+      purpose: `Apps Script 자동 생성 (${targetModel} / ${tokenMultiplier}x)`,
       model: targetModel,
       promptTokens: Math.ceil(promptLength / 2.5),
       completionTokens: Math.ceil(responseLength / 2.5),
@@ -299,6 +303,8 @@ function checkSheetBotStatus() {
     return NextResponse.json({
       success: true,
       data: generatedData,
+      modelUsed: targetModel,
+      multiplier: tokenMultiplier,
       tokensDeducted: estimatedUsedTokens,
       newBalance: deductRes.newBalance,
     });

@@ -27,21 +27,41 @@ function estimateTokens(text: string): number {
   return hasKorean ? Math.ceil(len / 1.5) : Math.ceil(len / 3.5);
 }
 
-/**
- * 모델별 단가(USD) 기준 비용 계산 (Gemini 2.0 Flash / 1.5 Flash 기준: 입력 $0.10/1M, 출력 $0.40/1M)
- */
-export function calculateEstimatedCost(promptTokens: number, completionTokens: number, model: string = 'gemini-2.0-flash') {
-  // 1M 토큰당 가격 (기본: Flash)
-  let inputRatePerMillion = 0.10;
-  let outputRatePerMillion = 0.40;
+import { getPricingCostConfig, DEFAULT_PRICING_CONFIG } from './ai-settings';
 
-  if (model.includes('pro')) {
-    inputRatePerMillion = 1.25;
-    outputRatePerMillion = 5.00;
+/**
+ * 모델별 단가(USD) 기준 비용 계산
+ * 동적 설정이 제공되면 해당 모델의 공식 원가를 적용하고, 없으면 표준 기본값을 적용합니다.
+ */
+export function calculateEstimatedCost(
+  promptTokens: number,
+  completionTokens: number,
+  model: string = 'gemini-3.5-flash',
+  customConfig?: { exchangeRate?: number; models?: any[] }
+) {
+  const config = customConfig || DEFAULT_PRICING_CONFIG;
+  const exchangeRate = config.exchangeRate || 1400;
+
+  const foundModel = config.models?.find((m: any) => m.id === model || model.includes(m.id));
+  
+  let inputRatePerMillion = foundModel ? foundModel.inputCostUsdPerMillion : 0.50;
+  let outputRatePerMillion = foundModel ? foundModel.outputCostUsdPerMillion : 2.00;
+
+  if (!foundModel) {
+    if (model.includes('pro')) {
+      inputRatePerMillion = 1.25;
+      outputRatePerMillion = 5.00;
+    } else if (model.includes('flash-lite')) {
+      inputRatePerMillion = 0.25;
+      outputRatePerMillion = 1.50;
+    } else if (model.includes('3.8')) {
+      inputRatePerMillion = 0.75;
+      outputRatePerMillion = 3.75;
+    }
   }
 
   const costUsd = (promptTokens / 1_000_000) * inputRatePerMillion + (completionTokens / 1_000_000) * outputRatePerMillion;
-  const costKrw = costUsd * KRW_EXCHANGE_RATE;
+  const costKrw = costUsd * exchangeRate;
 
   return {
     costUsd: Math.round(costUsd * 1_000_000) / 1_000_000, // 소수점 6자리

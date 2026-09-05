@@ -2,7 +2,7 @@
 
 import { apiFetch } from "@/lib/api";
 import React, { useState, useEffect } from "react";
-import { X, Sparkles, Code, CheckCircle2, AlertCircle, RefreshCw, ExternalLink, Edit3, ArrowRight } from "lucide-react";
+import { X, Sparkles, Code, CheckCircle2, AlertCircle, RefreshCw, ExternalLink, Edit3, ArrowRight, Cpu } from "lucide-react";
 
 interface EditProjectPromptModalProps {
   isOpen: boolean;
@@ -24,6 +24,11 @@ export default function EditProjectPromptModal({
   const [error, setError] = useState<string | null>(null);
   const [generatedResult, setGeneratedResult] = useState<any>(null);
 
+  // AI 엔진 모델 선택 관련 상태
+  const [selectedModel, setSelectedModel] = useState("gemini-3.5-flash");
+  const [pricingModels, setPricingModels] = useState<any[]>([]);
+  const [allowUserSelection, setAllowUserSelection] = useState(true);
+
   useEffect(() => {
     if (project && isOpen) {
       setProjectName(project.name || "");
@@ -31,6 +36,18 @@ export default function EditProjectPromptModal({
       setStep(1);
       setError(null);
       setGeneratedResult(null);
+
+      apiFetch("/api/admin/pricing-cost")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.config) {
+            setPricingModels(data.config.models || []);
+            setAllowUserSelection(data.config.allowUserModelSelection !== false);
+            const def = data.config.models?.find((m: any) => m.id === "gemini-3.5-flash") || data.config.models?.[0];
+            if (def) setSelectedModel(def.id);
+          }
+        })
+        .catch(() => {});
     }
   }, [project, isOpen]);
 
@@ -55,6 +72,7 @@ export default function EditProjectPromptModal({
           prompt: prompt.trim(),
           sheetUrl: project.spreadsheetUrl || project.spreadsheet_url || "",
           customTitle: projectName.trim() || project.name,
+          model: selectedModel,
         }),
       });
 
@@ -158,6 +176,40 @@ export default function EditProjectPromptModal({
                 required
               />
             </div>
+
+            {/* AI 엔진 모델 선택 */}
+            {allowUserSelection && pricingModels.length > 0 && (
+              <div className="p-3 bg-indigo-50/60 border border-indigo-100 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-900">
+                    <Cpu className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>사용할 Gemini AI 엔진 선택</span>
+                  </div>
+                  {pricingModels.find((m) => m.id === selectedModel) && (
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                      토큰 차감 {pricingModels.find((m) => m.id === selectedModel)?.tokenMultiplier}배
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  >
+                    {pricingModels.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} ({m.tokenMultiplier}x 차감)
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-indigo-700/80 flex items-center leading-tight">
+                    {pricingModels.find((m) => m.id === selectedModel)?.description || "선택한 모델로 코드가 재생성됩니다."}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* 자연어 프롬프트 수정 */}
             <div className="space-y-1">
