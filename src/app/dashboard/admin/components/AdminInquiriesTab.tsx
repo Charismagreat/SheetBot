@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState } from "react";
 import { CheckCircle2, Clock, Trash2, Send } from "lucide-react";
 
@@ -20,7 +21,7 @@ export default function AdminInquiriesTab({
     if (!selectedInquiry || !answerInput.trim()) return;
     setSubmittingAnswer(true);
     try {
-      const res = await fetch("/api/admin/inquiries", {
+      const res = await apiFetch("/api/admin/inquiries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -47,7 +48,7 @@ export default function AdminInquiriesTab({
   const handleDeleteInquiry = async (id: string) => {
     if (!confirm("이 문의 내역을 삭제하시겠습니까?")) return;
     try {
-      const res = await fetch(`/api/admin/inquiries?id=${id}`, { method: "DELETE" });
+      const res = await apiFetch(`/api/admin/inquiries?id=${id}`, { method: "DELETE" });
       const data = await res.json();
       if (data.success) onRefresh();
     } catch {

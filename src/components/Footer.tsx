@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
@@ -18,7 +19,7 @@ export default function Footer() {
 
   const fetchFooter = async () => {
     try {
-      const res = await fetch("/api/footer");
+      const res = await apiFetch("/api/footer");
       const data = await res.json();
       if (data.success && data.footer) {
         setFooterInfo(data.footer);

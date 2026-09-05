@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState } from "react";
 import {
   Search,
@@ -43,7 +44,7 @@ export default function AdminUsersTab({ users, onRefresh }: AdminUsersTabProps) 
     if (!confirm(`${user.email} 회원을 [${actionLabel}] 처리하시겠습니까?`)) return;
 
     try {
-      const res = await fetch("/api/admin/users", {
+      const res = await apiFetch("/api/admin/users", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: user.email, status: nextStatus }),
@@ -65,7 +66,7 @@ export default function AdminUsersTab({ users, onRefresh }: AdminUsersTabProps) 
     if (!detailUser) return;
     setSavingUserMeta(true);
     try {
-      const res = await fetch("/api/admin/users", {
+      const res = await apiFetch("/api/admin/users", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -99,7 +100,7 @@ export default function AdminUsersTab({ users, onRefresh }: AdminUsersTabProps) 
     const delta = tokenActionType === "GRANT" ? tokenAmount : -tokenAmount;
     setSubmittingToken(true);
     try {
-      const res = await fetch("/api/admin/users/tokens", {
+      const res = await apiFetch("/api/admin/users/tokens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

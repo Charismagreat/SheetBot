@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
@@ -11,7 +12,7 @@ export default function FinanceTermsPage() {
   const [footerInfo, setFooterInfo] = useState<FooterInfo>(DEFAULT_FOOTER);
 
   useEffect(() => {
-    fetch("/api/footer")
+    apiFetch("/api/footer")
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.footer) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import {
@@ -359,7 +360,7 @@ export default function EasyBot() {
 
   const checkHealth = async () => {
     try {
-      const res = await fetch("/api/easybot/health");
+      const res = await apiFetch("/api/easybot/health");
       const data = await res.json();
       if (data && data.success) {
         setHealth({
@@ -389,7 +390,7 @@ export default function EasyBot() {
       // 1. 로그인 회원의 경우 클라우드 DB에서 대화 내역 조회
       if (session?.user?.email) {
         try {
-          const res = await fetch("/api/easybot/messages");
+          const res = await apiFetch("/api/easybot/messages");
           const data = await res.json();
           if (isSubscribed && data?.success && Array.isArray(data.messages) && data.messages.length > 0) {
             setMessages(data.messages);
@@ -461,7 +462,7 @@ export default function EasyBot() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/easybot", {
+      const res = await apiFetch("/api/easybot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -513,7 +514,7 @@ export default function EasyBot() {
     setIsResetting(true);
     try {
       if (session?.user?.email) {
-        await fetch("/api/easybot/messages", { method: "DELETE" }).catch(() => {});
+        await apiFetch("/api/easybot/messages", { method: "DELETE" }).catch(() => {});
       } else {
         localStorage.removeItem("sheetbot_guest_messages");
       }

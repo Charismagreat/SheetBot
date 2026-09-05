@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from "react";
 import { X, Clock, Zap, Check, RefreshCw, AlertCircle } from "lucide-react";
 
@@ -122,7 +123,7 @@ export default function ScheduleModal({
         status: scheduleToEdit?.status || "ACTIVE",
       };
 
-      const res = await fetch("/api/schedules", {
+      const res = await apiFetch("/api/schedules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

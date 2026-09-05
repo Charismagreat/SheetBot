@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -76,7 +77,7 @@ export default function NotificationsPage() {
   const fetchDevices = useCallback(async () => {
     setLoadingDevices(true);
     try {
-      const res = await fetch("/api/user/devices");
+      const res = await apiFetch("/api/user/devices");
       const data = await res.json();
       if (data.success) {
         setDevices(data.devices || []);
@@ -92,7 +93,7 @@ export default function NotificationsPage() {
   const fetchRules = useCallback(async () => {
     setLoadingRules(true);
     try {
-      const res = await fetch("/api/user/smart-rules");
+      const res = await apiFetch("/api/user/smart-rules");
       const data = await res.json();
       if (data.success) {
         setRules(data.rules || []);
@@ -108,7 +109,7 @@ export default function NotificationsPage() {
   const fetchLogs = useCallback(async () => {
     setLoadingLogs(true);
     try {
-      const res = await fetch("/api/user/dispatch-logs");
+      const res = await apiFetch("/api/user/dispatch-logs");
       const data = await res.json();
       if (data.success) {
         setLogs(data.logs || []);
@@ -140,7 +141,7 @@ export default function NotificationsPage() {
 
     setSubmittingDevice(true);
     try {
-      const res = await fetch("/api/user/devices", {
+      const res = await apiFetch("/api/user/devices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -169,7 +170,7 @@ export default function NotificationsPage() {
     if (!window.confirm(`'${dev.label}' 디바이스 연동을 해제하시겠습니까?`)) return;
 
     try {
-      const res = await fetch(`/api/user/devices?id=${dev.id}&deviceId=${dev.deviceId}`, {
+      const res = await apiFetch(`/api/user/devices?id=${dev.id}&deviceId=${dev.deviceId}`, {
         method: "DELETE",
       });
       const data = await res.json();
@@ -194,7 +195,7 @@ export default function NotificationsPage() {
 
     setSendingTest(true);
     try {
-      const res = await fetch("/api/user/devices/test", {
+      const res = await apiFetch("/api/user/devices/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -228,7 +229,7 @@ export default function NotificationsPage() {
 
     setCreatingRule(true);
     try {
-      const res = await fetch("/api/user/smart-rules", {
+      const res = await apiFetch("/api/user/smart-rules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: promptInput.trim() }),
@@ -252,7 +253,7 @@ export default function NotificationsPage() {
   const handleToggleRule = async (rule: any) => {
     const nextActive = rule.is_active === 1 ? false : true;
     try {
-      const res = await fetch("/api/user/smart-rules", {
+      const res = await apiFetch("/api/user/smart-rules", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: rule.id, isActive: nextActive }),
@@ -274,7 +275,7 @@ export default function NotificationsPage() {
     if (!window.confirm(`'${rule.name}' 규칙을 삭제하시겠습니까?`)) return;
 
     try {
-      const res = await fetch(`/api/user/smart-rules?id=${rule.id}`, { method: "DELETE" });
+      const res = await apiFetch(`/api/user/smart-rules?id=${rule.id}`, { method: "DELETE" });
       const data = await res.json();
       if (data.success) {
         showAlert("success", "규칙이 삭제되었습니다.");

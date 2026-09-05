@@ -209,7 +209,36 @@ export default function Navbar() {
                 </div>
 
                 <button
-                  onClick={() => signOut({ callbackUrl: "/" })}
+                  onClick={async () => {
+                    const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+                    const match = currentPath.match(/^(\/t\/[^\/]+\/p\/[^\/]+)/);
+                    const prefix = match ? match[1] : "";
+
+                    try {
+                      // 1. 서버 사이드 HttpOnly 세션 쿠키 파기
+                      await fetch(`${prefix}/api/auth/force-logout`, { method: "POST" }).catch(() => {});
+                    } catch {}
+
+                    try {
+                      // 2. NextAuth 클라이언트 signOut 시도
+                      await signOut({ redirect: false }).catch(() => {});
+                    } catch {}
+
+                    // 3. 클라이언트 세션 토큰 정리 (CSRF 토큰은 보존하여 재로그인 방해 방지)
+                    try {
+                      const sessionCookies = ["next-auth.session-token", "__Secure-next-auth.session-token"];
+                      sessionCookies.forEach((name) => {
+                        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;`;
+                        if (prefix) {
+                          document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${prefix};`;
+                          document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${prefix}/;`;
+                        }
+                      });
+                    } catch {}
+
+                    // 4. 터널링 홈 화면으로 새로고침 이동
+                    window.location.href = `${prefix}/`;
+                  }}
                   className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer shrink-0"
                   title="로그아웃"
                   data-easybot-hint="로그아웃: 현재 구글 계정 세션을 종료합니다."

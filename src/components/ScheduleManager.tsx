@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState } from "react";
 import { Clock, Zap, Play, RefreshCw, ToggleLeft, ToggleRight, Wrench, Trash2, Plus, ExternalLink, Activity } from "lucide-react";
 import ScheduleModal from "./ScheduleModal";
@@ -25,7 +26,7 @@ export default function ScheduleManager({
   const handleToggle = async (schedule: any) => {
     const next = schedule.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
     try {
-      const res = await fetch("/api/schedules", {
+      const res = await apiFetch("/api/schedules", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scheduleId: schedule.id, status: next }),
@@ -45,7 +46,7 @@ export default function ScheduleManager({
   const handleRunNow = async (schedule: any) => {
     setRunningId(schedule.id);
     try {
-      const res = await fetch("/api/schedules", {
+      const res = await apiFetch("/api/schedules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "run_now", scheduleId: schedule.id }),
@@ -68,7 +69,7 @@ export default function ScheduleManager({
     if (!window.confirm(`'${schedule.name}' 스케줄을 삭제하시겠습니까?`)) return;
 
     try {
-      const res = await fetch(`/api/schedules?id=${schedule.id}`, { method: "DELETE" });
+      const res = await apiFetch(`/api/schedules?id=${schedule.id}`, { method: "DELETE" });
       const data = await res.json();
       if (data.success) {
         onShowAlert({ type: "success", text: "스케줄이 성공적으로 삭제되었습니다." });

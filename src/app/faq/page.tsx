@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
@@ -29,7 +30,7 @@ export default function FaqPage() {
   const fetchFaqs = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/faqs");
+      const res = await apiFetch("/api/faqs");
       const data = await res.json();
       if (data.success && Array.isArray(data.faqs) && data.faqs.length > 0) {
         setFaqs(data.faqs);

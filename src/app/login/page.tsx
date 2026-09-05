@@ -14,7 +14,11 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     setIsLoadingGoogle(true);
-    await signIn("google", { callbackUrl: "/dashboard" });
+    // 현재 URL의 터널링 경로 prefix 감지
+    const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+    const match = currentPath.match(/^(\/t\/[^\/]+\/p\/[^\/]+)/);
+    const prefix = match ? match[1] : "";
+    await signIn("google", { callbackUrl: `${prefix}/dashboard` });
   };
 
   const handleTestUserLogin = async (email?: string, name?: string) => {
@@ -22,11 +26,51 @@ export default function LoginPage() {
     const targetEmail = email || customEmail || "test.user@sheetbot.dev";
     const targetName = name || customName || "테스트 유저";
 
-    await signIn("demo-login", {
-      email: targetEmail,
-      name: targetName,
-      callbackUrl: "/dashboard",
-    });
+    // 현재 터널링 경로 prefix 감지
+    const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+    const match = currentPath.match(/^(\/t\/[^\/]+\/p\/[^\/]+)/);
+    const prefix = match ? match[1] : "";
+
+    try {
+      // 1. 직접 안정적인 demo-login 엔드포인트 호출 (터널링 환경 CSRF 토큰 충돌 완벽 방지)
+      const directRes = await fetch(`${prefix}/api/auth/demo-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: targetEmail, name: targetName }),
+      });
+
+      const data = await directRes.json().catch(() => ({}));
+
+      if (data.success) {
+        // NextAuth 클라이언트 세션 캐시 동기화를 위해 백그라운드로 signIn 가볍게 트리거
+        signIn("demo-login", {
+          email: targetEmail,
+          name: targetName,
+          redirect: false,
+        }).catch(() => {});
+
+        // 대시보드로 이동
+        window.location.href = `${prefix}/dashboard`;
+        return;
+      }
+
+      // 2. 만약 직접 발급 실패 시 기존 signIn fallback
+      const res = await signIn("demo-login", {
+        email: targetEmail,
+        name: targetName,
+        redirect: false,
+      });
+
+      if (res?.ok && !res?.url?.includes("csrf=true")) {
+        window.location.href = `${prefix}/dashboard`;
+      } else {
+        setIsLoadingTest(false);
+        alert("로그인 처리 중 문제가 발생했습니다: " + (res?.error || "세션 생성 실패"));
+      }
+    } catch (err: any) {
+      setIsLoadingTest(false);
+      alert("로그인 중 오류가 발생했습니다: " + (err?.message || "네트워크 오류"));
+    }
   };
 
   return (

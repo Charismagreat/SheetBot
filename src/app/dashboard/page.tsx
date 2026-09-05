@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
@@ -9,8 +10,10 @@ import {
   X, ArrowRight, ExternalLink, Sparkles, Layers, ShieldCheck, Trash2, Smartphone
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
-import NewProjectModal from "@/components/NewProjectModal";
-import ScheduleManager from "@/components/ScheduleManager";
+import nextDynamic from "next/dynamic";
+
+const NewProjectModal = nextDynamic(() => import("@/components/NewProjectModal"));
+const ScheduleManager = nextDynamic(() => import("@/components/ScheduleManager"));
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
@@ -27,8 +30,8 @@ export default function DashboardPage() {
     setLoading(true);
     try {
       const [projRes, schedRes] = await Promise.all([
-        fetch("/api/projects").then((r) => r.json()).catch(() => ({})),
-        fetch("/api/schedules").then((r) => r.json()).catch(() => ({})),
+        apiFetch("/api/projects").then((r) => r.json()).catch(() => ({})),
+        apiFetch("/api/schedules").then((r) => r.json()).catch(() => ({})),
       ]);
 
       if (projRes?.success) setProjects(projRes.projects || []);
@@ -42,11 +45,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (status === "unauthenticated") {
-      router.push("/login");
+      const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+      const match = currentPath.match(/^(\/t\/[^\/]+\/p\/[^\/]+)/);
+      const prefix = match ? match[1] : "";
+      window.location.href = `${prefix}/login`;
     } else if (status === "authenticated") {
       fetchData();
     }
-  }, [status, router, fetchData]);
+  }, [status, fetchData]);
 
   const showAlert = (msg: { type: "success" | "error"; text: string }) => {
     setAlertMessage(msg);
@@ -57,7 +63,7 @@ export default function DashboardPage() {
     if (!window.confirm(`'${p.name}' 프로젝트를 삭제하시겠습니까?`)) return;
 
     try {
-      const res = await fetch(`/api/projects?id=${p.id}`, { method: "DELETE" });
+      const res = await apiFetch(`/api/projects?id=${p.id}`, { method: "DELETE" });
       const data = await res.json();
       if (data.success) {
         showAlert({ type: "success", text: "프로젝트가 성공적으로 삭제되었습니다." });

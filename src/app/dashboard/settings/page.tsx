@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
@@ -50,7 +51,7 @@ export default function AiSettingsPage() {
   const fetchSettings = async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/admin/settings");
+      const res = await apiFetch("/api/admin/settings");
       const data = await res.json();
       if (data.success) {
         setSettings(data.settings);
@@ -72,7 +73,7 @@ export default function AiSettingsPage() {
     try {
       setSaving(true);
       setSaveSuccess(false);
-      const res = await fetch("/api/admin/settings", {
+      const res = await apiFetch("/api/admin/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings),

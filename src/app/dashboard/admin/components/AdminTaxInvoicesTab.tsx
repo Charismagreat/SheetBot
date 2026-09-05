@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React from "react";
 import { CheckCircle2, X, Clock, Check } from "lucide-react";
 
@@ -16,7 +17,7 @@ export default function AdminTaxInvoicesTab({
     const actionName = status === "ISSUED" ? "발행 완료" : "반려";
     if (!confirm(`해당 신청을 [${actionName}] 처리하시겠습니까?`)) return;
     try {
-      const res = await fetch("/api/admin/tax-invoices", {
+      const res = await apiFetch("/api/admin/tax-invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, status }),
