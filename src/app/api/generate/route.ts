@@ -29,7 +29,8 @@ export async function POST(request: Request) {
     }
 
     const aiSettings = await getAiModelSettings();
-    const targetModel = aiSettings.scriptGeneratorModel || aiSettings.defaultModel || "gemini-3.5-flash";
+    // EGDesk AI Caller가 공식 지원하는 최적 모델 기본값 적용
+    const targetModel = aiSettings.scriptGeneratorModel || aiSettings.defaultModel || "gemini-2.5-flash";
 
     const body = await request.json();
     const { prompt, sheetUrl, customTitle } = body;
@@ -38,36 +39,94 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "요구사항 프롬프트를 입력해 주세요." }, { status: 400 });
     }
 
-    const systemPrompt = `당신은 Google Apps Script(GAS) 최고의 전문 엔지니어입니다.
-사용자의 자연어 요구사항을 분석하여 Google 스프레드시트에 완벽히 동작하는 Apps Script 코드와 매니페스트를 작성하세요.
+    const systemPrompt = `당신은 Google Apps Script(GAS) 최고의 전문 수석 엔지니어입니다.
+사용자의 자연어 요구사항을 분석하여 Google 스프레드시트에서 즉시 완벽히 동작하는 완성형 Apps Script 코드와 매니페스트를 작성하세요.
 
-반드시 다음 JSON 규격으로만 응답해야 합니다. 마크다운 코드블록(\`\`\`json) 없이 순수 JSON만 출력하세요.
+[필수 구현 지침]
+1. 사용자의 요구사항(기능, 시트 이름, 사이드바, 트리거, 삽입 위치 등)을 빠짐없이 100% 코드로 구체화하세요. 생략이나 TODO, 빈 함수를 남기지 마세요.
+2. 사이드바가 요구되는 경우: SpreadsheetApp.getUi().showSidebar()와 HtmlService를 활용하여 직관적인 HTML/JS 인터페이스를 생성하고, 사용자가 파일 업로드나 입력을 수행할 수 있는 핸들러를 온전히 포함하세요.
+3. 시트 조작: 특정 시트명이 언급된 경우(예: '발주서 접수대장'), getSheetByName()으로 참조하되 없으면 insertSheet()로 자동 생성하도록 하세요.
+4. 데이터 삽입: '최근 기록이 위에 오도록' 요청된 경우, 1행(헤더) 바로 아래인 2행에 새 행을 삽입(insertRowAfter(1) 또는 insertRows(2))하여 기존 데이터를 보존하며 맨 위에 추가되도록 작성하세요.
+5. 상단 메뉴: 구글 시트 상단 메뉴에 '🚀 SheetBot 자동화' 메뉴를 추가하는 onOpen() 함수를 항상 포함하세요.
+6. 예외 처리: 모든 주요 함수에는 try-catch를 꼼꼼히 감싸고, SpreadsheetApp.getUi().alert() 및 toast 안내를 적극 활용하세요.
+
+[출력 형식]
+반드시 다음 JSON 규격으로만 응답해야 합니다. 마크다운 코드블록(\`\`\`json) 없이 순수 JSON 문자열만 출력하세요:
 {
-  "summary": "구현된 자동화 기능의 1~2줄 핵심 요약",
+  "summary": "구현된 자동화 기능의 핵심 요약 (1~2문장)",
   "features": [
-    "기능 1 세부 설명",
-    "기능 2 세부 설명",
-    "기능 3 세부 설명"
+    "구현된 세부 기능 1",
+    "구현된 세부 기능 2",
+    "구현된 세부 기능 3"
   ],
-  "scriptCode": "/* Code.gs 소스코드 전체 (onOpen, 메뉴 생성, 비즈니스 로직, 헬퍼 함수 포함) */",
+  "scriptCode": "/* Code.gs 전체 소스코드 (onOpen, 사이드바 표출, 데이터 처리 등 완벽 동작 코드) */",
   "manifest": "{\\n  \\"timeZone\\": \\"Asia/Seoul\\",\\n  \\"dependencies\\": {},\\n  \\"exceptionLogging\\": \\"STACKDRIVER\\",\\n  \\"runtimeVersion\\": \\"V8\\"\\n}",
   "triggers": [
-    { "type": "ON_OPEN", "description": "시트 열기 시 커스텀 메뉴 자동 생성" },
-    { "type": "TIME_DRIVEN", "description": "정기 자동 실행 스케줄" }
+    { "type": "ON_OPEN", "description": "시트 열기 시 커스텀 메뉴 및 환경 자동 초기화" }
   ]
-}
+}`;
 
-주의사항:
-1. 구글 시트 상단 메뉴에 '🚀 SheetBot 자동화' 메뉴를 추가하는 onOpen() 함수를 항상 포함하세요.
-2. 에러가 발생하지 않도록 SpreadsheetApp API 사용 시 try-catch를 꼼꼼히 구성하세요.
-3. 알림 UI(SpreadsheetApp.getUi().alert) 및 토스트 안내(SpreadsheetApp.getActiveSpreadsheet().toast)를 적극 활용하세요.`;
-
-    const userMessage = `대상 구글 시트: ${sheetUrl || "연결된 스프레드시트"}
-프로젝트명: ${customTitle || "스마트 시트 자동화"}
-사용자 요구사항:
+    const userMessage = `[대상 구글 시트]: ${sheetUrl || "연결된 스프레드시트"}
+[프로젝트 명칭]: ${customTitle || "스마트 시트 자동화"}
+[사용자 요구사항]:
 ${prompt}`;
 
-    const fullPrompt = `${systemPrompt}\n\n[요청 세부사항]\n${userMessage}`;
+    const fullPrompt = `${systemPrompt}\n\n${userMessage}`;
+
+    // JSON 안전 추출 헬퍼
+    const safeParseJson = (text: string) => {
+      if (!text) return null;
+      try {
+        return JSON.parse(text);
+      } catch {
+        // 코드블록 제거 후 시도
+        const stripped = text.replace(/```json/gi, "").replace(/```/g, "").trim();
+        try {
+          return JSON.parse(stripped);
+        } catch {
+          // 첫 번째 '{'와 마지막 '}' 사이 추출 시도
+          const start = text.indexOf("{");
+          const end = text.lastIndexOf("}");
+          if (start !== -1 && end !== -1 && end > start) {
+            try {
+              return JSON.parse(text.substring(start, end + 1));
+            } catch {
+              return null;
+            }
+          }
+          return null;
+        }
+      }
+    };
+
+    // 데이터 구조 안전 정규화 헬퍼
+    const normalizeGeneratedData = (data: any) => {
+      if (!data) return null;
+      let scriptCode = "";
+      if (typeof data.scriptCode === "string") {
+        scriptCode = data.scriptCode;
+      } else if (typeof data.scriptCode === "object" && data.scriptCode !== null) {
+        // {"Code.gs": "..."} 형태 처리
+        scriptCode = data.scriptCode["Code.gs"] || Object.values(data.scriptCode).join("\n\n");
+      }
+
+      if (!scriptCode || !scriptCode.trim()) return null;
+
+      return {
+        summary: typeof data.summary === "string" ? data.summary : "AI 자동 생성 Apps Script",
+        features: Array.isArray(data.features) ? data.features : [],
+        scriptCode: scriptCode.trim(),
+        manifest: typeof data.manifest === "string" ? data.manifest : JSON.stringify({
+          timeZone: "Asia/Seoul",
+          dependencies: {},
+          exceptionLogging: "STACKDRIVER",
+          runtimeVersion: "V8",
+        }, null, 2),
+        triggers: Array.isArray(data.triggers) ? data.triggers : [
+          { type: "ON_OPEN", description: "시트 열기 시 상단 메뉴 및 환경 자동 초기화" }
+        ],
+      };
+    };
 
     let generatedData: any = null;
 
@@ -80,12 +139,10 @@ ${prompt}`;
       });
 
       if (callerRes && callerRes.text) {
-        const raw = callerRes.text.trim();
-        try {
-          generatedData = JSON.parse(raw);
-        } catch {
-          const clean = raw.replace(/```json/g, "").replace(/```/g, "").trim();
-          generatedData = JSON.parse(clean);
+        const rawParsed = safeParseJson(callerRes.text);
+        generatedData = normalizeGeneratedData(rawParsed);
+        if (generatedData?.scriptCode) {
+          console.log("[AI-Caller] Successfully generated script via AI Caller:", targetModel);
         }
       }
     } catch (aiCallerErr: any) {
@@ -120,12 +177,8 @@ ${prompt}`;
           if (geminiRes.ok) {
             const geminiJson = await geminiRes.json();
             const rawText = geminiJson?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            try {
-              generatedData = JSON.parse(rawText);
-            } catch {
-              const clean = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
-              generatedData = JSON.parse(clean);
-            }
+            const rawParsed = safeParseJson(rawText);
+            generatedData = normalizeGeneratedData(rawParsed);
           }
         } catch (apiErr: any) {
           console.warn("[Gemini-Fallback] Direct call warning:", apiErr.message);
