@@ -118,6 +118,8 @@ export interface PricingCostConfig {
   defaultModel: string; // 서비스 전역 기본 제공 모델 (기본: gemini-3.8-flash)
   exchangeRate: number; // USD to KRW (기본: 1400)
   targetMarginRate: number; // 목표 운영 마진율 % (기본: 50%)
+  pgFeeRate: number; // PG사 결제 대행 수수료율 % (기본: 3.3%)
+  vatRate: number; // 부가가치세율 % (기본: 10%)
   allowUserModelSelection: boolean; // 일반 회원의 모델 선택 허용 여부 (기본: true)
   lastSyncedAt: string; // 제미나이 공식 사이트 요율 동기화 일시
   models: ModelPricingDetail[];
@@ -191,6 +193,8 @@ export const DEFAULT_PRICING_CONFIG: PricingCostConfig = {
   defaultModel: "gemini-3.8-flash",
   exchangeRate: 1400,
   targetMarginRate: 50, // 50% 운영 마진 목표
+  pgFeeRate: 3.3, // 3.3% PG 수수료 기본값
+  vatRate: 10, // 10% 부가가치세 기본값
   allowUserModelSelection: true,
   lastSyncedAt: new Date().toISOString(),
   models: DEFAULT_MODEL_PRICING,

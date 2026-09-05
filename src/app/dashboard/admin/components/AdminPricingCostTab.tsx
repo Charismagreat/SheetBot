@@ -26,13 +26,18 @@ interface PackageSimulation {
   id: string;
   name: string;
   priceKrw: number;
+  netSalesKrw: number;
+  vatKrw: number;
+  pgFeeKrw: number;
   totalTokens: number;
-  stdEstimatedCostKrw: number;
-  stdProfitKrw: number;
-  stdMarginPercent: number;
-  latestEstimatedCostKrw: number;
-  latestProfitKrw: number;
-  latestMarginPercent: number;
+  primaryModelName: string;
+  primaryEstimatedCostKrw: number;
+  primaryRealProfitKrw: number;
+  primaryRealMarginPercent: number;
+  legacyModelName: string;
+  legacyEstimatedCostKrw: number;
+  legacyRealProfitKrw: number;
+  legacyRealMarginPercent: number;
 }
 
 export default function AdminPricingCostTab() {
@@ -208,8 +213,8 @@ export default function AdminPricingCostTab() {
       </div>
 
       <form onSubmit={handleSaveConfig} className="space-y-8">
-        {/* 2. 전역 재무 및 기본 모델 파라미터 (기본 제공 모델, 환율, 목표 마진율, 회원 선택 허용) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* 2. 전역 재무 및 기본 모델 파라미터 (기본 모델, 환율, 부가세, PG수수료, 목표 마진율, 회원 선택) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {/* 기본 제공 모델 지정 */}
           <div className="bg-white p-5 rounded-3xl border-2 border-indigo-200/80 shadow-xs space-y-3 relative overflow-hidden">
             <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
@@ -220,33 +225,33 @@ export default function AdminPricingCostTab() {
               <select
                 value={config.defaultModel || "gemini-3.8-flash"}
                 onChange={(e) => setConfig({ ...config, defaultModel: e.target.value })}
-                className="w-full px-3 py-2 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs font-black text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-2.5 py-2 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs font-black text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-500 truncate"
               >
                 {config.models.map((m) => (
                   <option key={m.id} value={m.id}>
-                    {m.name} {m.id === "gemini-3.8-flash" ? "⭐[추천]" : ""}
+                    {m.name} {m.id === "gemini-3.8-flash" ? "⭐" : ""}
                   </option>
                 ))}
               </select>
             </div>
             <p className="text-[10px] text-slate-500 leading-tight">
-              신규 프로젝트 및 시스템 전체에 기본 적용되는 표준 AI 엔진입니다.
+              신규 프로젝트 및 기본 적용 표준 AI 엔진
             </p>
           </div>
 
           {/* 기준 환율 */}
           <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-3">
             <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
-              <span>기준 환율 (USD → KRW)</span>
+              <span>기준 환율 (USD/KRW)</span>
               <DollarSign className="w-4 h-4 text-indigo-600" />
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-black text-slate-800">₩</span>
+            <div className="flex items-center gap-1">
+              <span className="text-base font-black text-slate-800">₩</span>
               <input
                 type="number"
                 value={config.exchangeRate}
                 onChange={(e) => setConfig({ ...config, exchangeRate: Number(e.target.value) })}
-                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-base font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 min="1000"
                 max="2000"
                 step="10"
@@ -258,27 +263,75 @@ export default function AdminPricingCostTab() {
             </p>
           </div>
 
+          {/* 부가가치세율 (VAT) */}
+          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-3">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
+              <span>부가가치세율 (VAT)</span>
+              <Percent className="w-4 h-4 text-sky-600" />
+            </div>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={config.vatRate ?? 10}
+                onChange={(e) => setConfig({ ...config, vatRate: Number(e.target.value) })}
+                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                min="0"
+                max="30"
+                step="1"
+                required
+              />
+              <span className="text-base font-black text-sky-700">%</span>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-tight">
+              국세청 납부 세액 (기본 10%, 예수금)
+            </p>
+          </div>
+
+          {/* PG 결제 대행 수수료율 */}
+          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-3">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
+              <span>PG 결제 수수료율</span>
+              <Percent className="w-4 h-4 text-amber-600" />
+            </div>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={config.pgFeeRate ?? 3.3}
+                onChange={(e) => setConfig({ ...config, pgFeeRate: Number(e.target.value) })}
+                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                min="0"
+                max="10"
+                step="0.1"
+                required
+              />
+              <span className="text-base font-black text-amber-700">%</span>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-tight">
+              카드/간편결제 대행 수수료 (통상 3.3%)
+            </p>
+          </div>
+
           {/* 목표 운영 마진율 */}
           <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-3">
             <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
-              <span>목표 운영 마진율 (%)</span>
-              <Percent className="w-4 h-4 text-emerald-600" />
+              <span>목표 운영 마진율</span>
+              <TrendingUp className="w-4 h-4 text-emerald-600" />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <input
                 type="number"
                 value={config.targetMarginRate}
                 onChange={(e) => setConfig({ ...config, targetMarginRate: Number(e.target.value) })}
-                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-base font-black text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 min="10"
                 max="95"
                 step="5"
                 required
               />
-              <span className="text-lg font-black text-emerald-700">%</span>
+              <span className="text-base font-black text-emerald-700">%</span>
             </div>
             <p className="text-[10px] text-slate-400 leading-tight">
-              서버 인프라 및 순이익 고려 마진
+              실질 순매출(공급가) 대비 목표 마진
             </p>
           </div>
 
@@ -303,7 +356,7 @@ export default function AdminPricingCostTab() {
               </label>
             </div>
             <p className="text-[10px] text-slate-400 leading-tight">
-              프로젝트 생성/수정 시 모델 선택 허용
+              프로젝트별 모델 변경 권한 부여
             </p>
           </div>
         </div>
@@ -440,11 +493,11 @@ export default function AdminPricingCostTab() {
             <div className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-emerald-600" />
               <h3 className="font-extrabold text-slate-900 text-sm">
-                토큰 판매 패키지별 예상 손익 &amp; 운영 마진율 시뮬레이션
+                토큰 판매 패키지별 실질 손익 &amp; 운영 마진율(영업이익률) 시뮬레이션
               </h3>
             </div>
-            <span className="text-xs text-slate-500">
-              * 기준: 회원이 1회 생성 시 평균 1,500토큰(입력 1,000 + 출력 500) 소모 가정
+            <span className="text-xs text-slate-500 font-medium">
+              * 회계 산정: 결제액에서 <strong>VAT(10%) 제외한 순매출(공급가)</strong> 및 <strong>PG 수수료(3.3%)</strong> 차감 반영
             </span>
           </div>
 
@@ -452,64 +505,100 @@ export default function AdminPricingCostTab() {
             {simulations.map((sim) => (
               <div
                 key={sim.id}
-                className="p-5 rounded-2xl bg-gradient-to-b from-slate-50/80 to-white border border-slate-200/80 shadow-xs space-y-4"
+                className="p-5 rounded-2xl bg-gradient-to-b from-slate-50/80 to-white border border-slate-200/80 shadow-xs space-y-4 flex flex-col justify-between"
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-slate-800">{sim.name}</span>
-                  <span className="text-[11px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
-                    {sim.totalTokens.toLocaleString()} 토큰
-                  </span>
-                </div>
-
-                <div className="space-y-1 border-b border-slate-100 pb-3">
-                  <div className="text-2xl font-black text-slate-900">
-                    ₩ {sim.priceKrw.toLocaleString()}
-                  </div>
-                  <div className="text-[11px] text-slate-400">사용자 결제 금액 (VAT 포함)</div>
-                </div>
-
-                {/* 표준 Flash 모델 사용 시 손익 */}
-                <div className="space-y-2 text-xs">
-                  <div className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
-                    <Zap className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>Gemini 3.5 Flash (표준 1.0x) 소모 시</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">예상 API 원가:</span>
-                    <span className="font-mono font-bold text-slate-700">₩ {sim.stdEstimatedCostKrw.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">예상 영업 순이익:</span>
-                    <span className="font-mono font-black text-emerald-600">₩ {sim.stdProfitKrw.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center pt-1 border-t border-slate-100">
-                    <span className="text-slate-500 font-bold">운영 마진율:</span>
-                    <span className="text-xs font-black px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
-                      {sim.stdMarginPercent}%
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-800">{sim.name}</span>
+                    <span className="text-[11px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
+                      {sim.totalTokens.toLocaleString()} 토큰
                     </span>
                   </div>
+
+                  {/* 결제 금액 및 회계 순매출 분해 */}
+                  <div className="mt-3 space-y-1.5 border-b border-slate-100 pb-3">
+                    <div className="flex items-baseline justify-between">
+                      <div className="text-2xl font-black text-slate-900">
+                        ₩ {sim.priceKrw.toLocaleString()}
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-semibold">결제액 (VAT 포함)</span>
+                    </div>
+                    
+                    {/* 공급가액 및 정산 내역 */}
+                    <div className="bg-slate-100/70 rounded-xl p-2.5 space-y-1 text-[11px]">
+                      <div className="flex justify-between text-slate-600">
+                        <span>순매출 (공급가액):</span>
+                        <span className="font-mono font-bold text-slate-800">₩ {sim.netSalesKrw.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-400 text-[10px]">
+                        <span>- 부가가치세 (예수금 10%):</span>
+                        <span className="font-mono">₩ {sim.vatKrw.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-amber-700 text-[10px]">
+                        <span>- PG 결제 수수료 ({config.pgFeeRate ?? 3.3}%):</span>
+                        <span className="font-mono font-bold">- ₩ {sim.pgFeeKrw.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-indigo-700 font-bold border-t border-slate-200/80 pt-1 text-[11px]">
+                        <span>정산 수입 (순매출-PG):</span>
+                        <span className="font-mono">₩ {(sim.netSalesKrw - sim.pgFeeKrw).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 추천 최신 표준 모델 사용 시 실질 영업 손익 */}
+                  <div className="space-y-2 text-xs pt-3">
+                    <div className="text-[11px] font-bold text-emerald-700 flex items-center justify-between">
+                      <div className="flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>{sim.primaryModelName} (기본 추천)</span>
+                      </div>
+                      <span className="text-[10px] px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded font-black">표준 1.0x</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>실효 API 원가:</span>
+                      <span className="font-mono font-bold text-slate-700">- ₩ {sim.primaryEstimatedCostKrw.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-800 font-bold">
+                      <span>실질 영업이익:</span>
+                      <span className="font-mono font-black text-emerald-600">₩ {sim.primaryRealProfitKrw.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-1 border-t border-slate-100">
+                      <span className="text-slate-500 font-bold text-[11px]">실질 운영 마진율:</span>
+                      <span className="text-xs font-black px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        {sim.primaryRealMarginPercent}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 구형 고비용 모델 사용 시 실질 손익 (차감 배율 방어) */}
+                  <div className="space-y-2 text-xs pt-3 border-t border-slate-100 mt-3">
+                    <div className="text-[11px] font-bold text-indigo-700 flex items-center justify-between">
+                      <div className="flex items-center gap-1">
+                        <Zap className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>{sim.legacyModelName}</span>
+                      </div>
+                      <span className="text-[10px] px-1.5 py-0.2 bg-indigo-100 text-indigo-800 rounded font-black">2.2x 차감 방어</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>실효 API 원가:</span>
+                      <span className="font-mono font-bold text-slate-700">- ₩ {sim.legacyEstimatedCostKrw.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-800 font-bold">
+                      <span>실질 영업이익:</span>
+                      <span className="font-mono font-black text-indigo-600">₩ {sim.legacyRealProfitKrw.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-1 border-t border-slate-100">
+                      <span className="text-slate-500 font-bold text-[11px]">실질 운영 마진율:</span>
+                      <span className="text-xs font-black px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 border border-indigo-200">
+                        {sim.legacyRealMarginPercent}%
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                {/* 최신 3.8 Flash 사용 시 손익 (차감 배율 방어) */}
-                <div className="space-y-2 text-xs pt-3 border-t border-slate-100">
-                  <div className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    <span>Gemini 3.8 Flash (배율 1.8x 방어 시)</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">실효 API 원가:</span>
-                    <span className="font-mono font-bold text-slate-700">₩ {sim.latestEstimatedCostKrw.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">예상 영업 순이익:</span>
-                    <span className="font-mono font-black text-emerald-600">₩ {sim.latestProfitKrw.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center pt-1 border-t border-slate-100">
-                    <span className="text-slate-500 font-bold">방어 마진율:</span>
-                    <span className="text-xs font-black px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800">
-                      {sim.latestMarginPercent}%
-                    </span>
-                  </div>
+                <div className="pt-3 text-[10px] text-slate-400 border-t border-slate-100 flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                  <span>부가세 10% 분리 및 PG 수수료 3.3% 차감 완료</span>
                 </div>
               </div>
             ))}
