@@ -298,7 +298,7 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
-    const { id, name, description, redeploy } = body;
+    const { id, name, description, prompt, scriptCode, manifest, summary, features, triggers, redeploy } = body;
 
     if (!id) {
       return NextResponse.json({ success: false, error: "수정할 프로젝트 ID가 필요합니다." }, { status: 400 });
@@ -316,6 +316,25 @@ export async function PATCH(request: Request) {
     if (typeof description === "string") {
       updateData.description = description.trim();
     }
+    if (typeof prompt === "string") {
+      updateData.prompt = prompt.trim();
+    }
+    if (typeof scriptCode === "string" && scriptCode.trim()) {
+      updateData.script_code = scriptCode.trim();
+    }
+    if (typeof manifest === "string") {
+      updateData.manifest = manifest.trim();
+    }
+    if (typeof summary === "string") {
+      updateData.summary = summary.trim();
+      if (!updateData.description) updateData.description = summary.trim();
+    }
+    if (features) {
+      updateData.features = JSON.stringify(Array.isArray(features) ? features : []);
+    }
+    if (triggers) {
+      updateData.triggers = JSON.stringify(Array.isArray(triggers) ? triggers : []);
+    }
 
     // 프로젝트 레코드 조회 (redeploy 처리용)
     const existing = await queryTable("sheetbot_projects", {
@@ -328,10 +347,10 @@ export async function PATCH(request: Request) {
     // 기존 프로젝트의 AI 생성 코드를 구글 클라우드에 재주입
     if (redeploy && projRow) {
       const gasProjId = projRow.gas_project_id || projRow.script_id;
-      const scriptCode = projRow.script_code;
-      const manifest = projRow.manifest;
+      const targetScriptCode = updateData.script_code || projRow.script_code;
+      const targetManifest = updateData.manifest || projRow.manifest;
 
-      if (gasProjId && scriptCode) {
+      if (gasProjId && targetScriptCode) {
         // 비정상 파일이 남아있을 경우 푸시 충돌 방지를 위해 정리
         await callAppsScriptTool("apps_script_delete_file", {
           projectId: gasProjId,
@@ -341,14 +360,14 @@ export async function PATCH(request: Request) {
         await callAppsScriptTool("apps_script_write_file", {
           projectId: gasProjId,
           fileName: "Code.gs",
-          content: scriptCode,
+          content: targetScriptCode,
         }).catch((err: any) => console.warn("Redeploy Code.gs warning:", err.message));
 
-        if (manifest) {
+        if (targetManifest) {
           await callAppsScriptTool("apps_script_write_file", {
             projectId: gasProjId,
             fileName: "appsscript.json",
-            content: manifest,
+            content: targetManifest,
           }).catch(() => null);
         }
 
