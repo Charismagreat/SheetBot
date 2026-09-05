@@ -276,3 +276,52 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
+/**
+ * PATCH: 프로젝트 정보 부분 수정 (이름 동기화 및 갱신 지원)
+ */
+export async function PATCH(request: Request) {
+  try {
+    await setupDatabase();
+    const userEmail = await getCurrentUserEmail();
+    if (!userEmail) {
+      return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { id, name, description } = body;
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: "수정할 프로젝트 ID가 필요합니다." }, { status: 400 });
+    }
+
+    const nowStr = new Date().toISOString();
+    const updateData: any = {
+      updated_at: nowStr,
+      updated_by: userEmail,
+    };
+
+    if (typeof name === "string" && name.trim()) {
+      updateData.name = name.trim();
+    }
+    if (typeof description === "string") {
+      updateData.description = description.trim();
+    }
+
+    await updateRows("sheetbot_projects", updateData, {
+      filters: {
+        id,
+        user_email: userEmail.toLowerCase().trim(),
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "프로젝트 정보가 성공적으로 갱신되었습니다.",
+      updated: updateData,
+    });
+  } catch (error: any) {
+    console.error("PATCH SheetBot project error:", error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
