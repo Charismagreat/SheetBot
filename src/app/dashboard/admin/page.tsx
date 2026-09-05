@@ -33,8 +33,9 @@ import AdminInquiriesTab from "./components/AdminInquiriesTab";
 import AdminReviewsTab from "./components/AdminReviewsTab";
 import AdminUsersTab from "./components/AdminUsersTab";
 import AdminPricingCostTab from "./components/AdminPricingCostTab";
+import AdminPromptsTab from "./components/AdminPromptsTab";
 
-type TabType = "users" | "inquiries" | "reviews" | "faqs" | "tax_invoices" | "pricing_cost" | "footer" | "sms" | "email" | "smart_rules" | "dispatch_logs";
+type TabType = "users" | "inquiries" | "reviews" | "faqs" | "tax_invoices" | "pricing_cost" | "footer" | "sms" | "email" | "smart_rules" | "dispatch_logs" | "prompts";
 
 export default function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<TabType>("users");
@@ -834,6 +835,18 @@ export default function AdminDashboardPage() {
             <Radio className="w-4 h-4 text-emerald-400" />
             <span>📋 알림 발송 이력 대장 ({dispatchStats.total})</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab("prompts")}
+            className={`px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all ${
+              activeTab === "prompts"
+                ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-sm ring-2 ring-indigo-400/50"
+                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <span>💡 추천 프롬프트 관리</span>
+          </button>
         </div>
 
         {/* 0. 회원 관리 탭 내용 */}
@@ -940,6 +953,11 @@ export default function AdminDashboardPage() {
             onRefresh={fetchDispatchLogs}
             onDeleteLog={handleDeleteLog}
           />
+        )}
+
+        {/* 9. 추천 프롬프트 갤러리 관리 탭 */}
+        {activeTab === "prompts" && (
+          <AdminPromptsTab />
         )}
       </main>
 
