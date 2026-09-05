@@ -1,26 +1,44 @@
-export const dynamic = "force-dynamic";
-
 import { NextRequest, NextResponse } from "next/server";
 import { callAiCaller } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
+import { recordAiUsageLog } from "@/lib/ai-usage";
 
 /**
  * POST /api/ai/ocr
  * 구글 시트 Apps Script(사이드바)에서 전달된 PDF/이미지 파일을
  * 이지데스크 AI Caller를 경유하여 OCR 및 문서 데이터 자동 추출
- * (사용자의 개인 API 키 불필요, 이지데스크 중앙 AI Caller 사용)
+ * (사용자의 개인 API 키 불필요, 이지데스크 중앙 AI Caller 사용 & 사용자 토큰 지갑에서 차감)
  */
 export async function POST(req: NextRequest) {
   try {
     await setupDatabase();
     const body = await req.json().catch(() => ({}));
-    const { fileData, fileName, mimeType, headers, prompt: userPrompt } = body;
+    const { fileData, fileName, mimeType, headers, prompt: userPrompt, userEmail } = body;
 
     if (!fileData) {
       return NextResponse.json(
         { success: false, error: "분석할 파일 데이터(Base64)가 누락되었습니다." },
         { status: 400 }
       );
+    }
+
+    const cleanEmail = userEmail ? String(userEmail).toLowerCase().trim() : "";
+
+    // 1. 사용자 토큰 잔액 사전 검증 (OCR 분석 1회당 약 800 토큰 필요)
+    if (cleanEmail) {
+      const tokenCheck = await checkTokenBalance(cleanEmail, 800);
+      if (!tokenCheck.allowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: tokenCheck.reason || "잔여 토큰이 부족합니다. 시트봇 대시보드(http://localhost:4002/dashboard/pricing)에서 토큰을 충전해주세요.",
+            requirePayment: true,
+            balance: tokenCheck.balance,
+          },
+          { status: 402 } // 402 Payment Required
+        );
+      }
     }
 
     // 대상 시트 헤더 컬럼 안내 (기본: 발주서 접수대장 규격)
@@ -93,9 +111,34 @@ ${userPrompt || "모든 품목 항목을 행별로 빠짐없이 추출하세요.
       throw new Error("AI Caller OCR 데이터 추출 응답을 파싱할 수 없습니다.");
     }
 
+    // 2. 사용 토큰 계산 및 차감 (기본 약 800 토큰)
+    const promptLen = ocrPrompt.length;
+    const respLen = JSON.stringify(resultJson).length;
+    const usedTokens = Math.max(500, Math.ceil((promptLen + respLen) / 2.5));
+    let newBalance = 0;
+
+    if (cleanEmail) {
+      const deductRes = await deductTokens(cleanEmail, usedTokens);
+      newBalance = deductRes.newBalance;
+
+      // AI 사용량 감사 로그 실시간 적재
+      void recordAiUsageLog({
+        userEmail: cleanEmail,
+        caller: "sheetbot-ocr-service",
+        purpose: "문서 AI OCR 분석 및 시트 데이터 추출",
+        model: "gemini-2.5-flash",
+        promptTokens: Math.ceil(promptLen / 2.5),
+        completionTokens: Math.ceil(respLen / 2.5),
+        promptText: `OCR 분석: ${fileName || "문서"}`,
+        responseText: JSON.stringify(resultJson),
+      });
+    }
+
     return NextResponse.json({
       success: true,
       data: resultJson,
+      tokensDeducted: usedTokens,
+      newBalance,
     });
   } catch (error: any) {
     console.error("OCR API error:", error);
