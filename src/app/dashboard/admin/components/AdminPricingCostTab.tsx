@@ -139,6 +139,64 @@ export default function AdminPricingCostTab() {
     });
   };
 
+  // 목표 마진율 및 환율 기반 모델별 권장 차감 가중치(Multiplier) 산출
+  const getRecommendedMultiplier = (model: ModelPricingDetail) => {
+    if (!config) return 1.0;
+    const starterPrice = 5000;
+    const starterTokens = 50000;
+    const vatRate = config.vatRate ?? 10;
+    const pgFeeRate = config.pgFeeRate ?? 3.3;
+    const targetMargin = config.targetMarginRate || 50;
+    const exchangeRate = config.exchangeRate || 1400;
+
+    // 순매출(공급가액) 및 PG 수수료
+    const netSales = starterPrice / (1 + vatRate / 100);
+    const pgFee = starterPrice * (pgFeeRate / 100);
+
+    // 목표 마진율을 지키기 위한 1토큰당 허용 최대 API 원가 (KRW)
+    const allowedApiBudget = netSales * (1 - targetMargin / 100) - pgFee;
+    const allowedCostPerToken = Math.max(0.0001, allowedApiBudget / starterTokens);
+
+    // 해당 모델의 실제 1토큰당 원가 (입력 2/3, 출력 1/3 블렌디드)
+    const blendedUsdPerToken =
+      ((model.inputCostUsdPerMillion * (2 / 3)) + (model.outputCostUsdPerMillion * (1 / 3))) /
+      1_000_000;
+    const rawCostPerToken = blendedUsdPerToken * exchangeRate;
+
+    // 목표 마진 방어를 위한 최소 요구 배율
+    const calculated = rawCostPerToken / allowedCostPerToken;
+
+    // 기본 추천 표준 모델(gemini-3.8-flash) 기준
+    if (model.id === (config.defaultModel || "gemini-3.8-flash")) {
+      return Math.max(1.0, Math.round(calculated * 10) / 10);
+    }
+
+    // 초경량 Flash-Lite 모델은 0.8x 할인 허용
+    if (model.id.includes("lite")) {
+      return Math.max(0.8, Math.round(calculated * 10) / 10);
+    }
+
+    // 기타 모델: 최소 1.0x ~ 최대 10.0x
+    return Math.max(1.0, Math.min(10.0, Math.round(calculated * 10) / 10));
+  };
+
+  // 모든 모델의 차감 가중치를 현재 목표 마진율 기준으로 일괄 자동 최적화
+  const handleApplyAllRecommendedMultipliers = () => {
+    if (!config) return;
+    const updatedModels = config.models.map((m) => ({
+      ...m,
+      tokenMultiplier: getRecommendedMultiplier(m),
+    }));
+    setConfig({
+      ...config,
+      models: updatedModels,
+    });
+    setMessage({
+      type: "success",
+      text: `목표 운영 마진율(${config.targetMarginRate}%) 기준으로 모든 모델의 차감 가중치가 자동 계산되어 채워졌습니다. 검토 후 하단 [저장하기]를 눌러주세요.`,
+    });
+  };
+
   if (loading || !config) {
     return (
       <div className="py-20 flex flex-col items-center justify-center gap-3 text-slate-400">
@@ -363,7 +421,7 @@ export default function AdminPricingCostTab() {
 
         {/* 3. 모델별 실제 원가 및 토큰 차감 가중치(Multiplier) 매트릭스 */}
         <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
             <div className="flex items-center gap-2.5">
               <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
                 <Sliders className="w-5 h-5" />
@@ -377,7 +435,20 @@ export default function AdminPricingCostTab() {
                 </p>
               </div>
             </div>
-            <span className="text-xs font-bold text-slate-400">총 {config.models.length}개 모델 등록됨</span>
+            
+            {/* 목표 운영 마진율 기준 가중치 일괄 자동 최적화 버튼 */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleApplyAllRecommendedMultipliers}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-black text-xs flex items-center gap-2 shadow-md shadow-indigo-500/10 active:scale-95 transition-all cursor-pointer"
+                title={`현재 목표 운영 마진율(${config.targetMarginRate}%)을 달성할 수 있도록 모든 모델의 차감 배율을 일괄 역산하여 입력합니다.`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>⚡ 목표 마진({config.targetMarginRate}%) 기준 가중치 일괄 자동 최적화</span>
+              </button>
+              <span className="text-xs font-bold text-slate-400">총 {config.models.length}개</span>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -389,99 +460,135 @@ export default function AdminPricingCostTab() {
                   <th className="py-3 px-3">입력 원가 ($/1M)</th>
                   <th className="py-3 px-3">출력 원가 ($/1M)</th>
                   <th className="py-3 px-3">100만 토큰 원화 원가</th>
-                  <th className="py-3 px-4 text-indigo-700 bg-indigo-50/50">차감 가중치 (Multiplier)</th>
+                  <th className="py-3 px-4 text-indigo-700 bg-indigo-50/60 font-black">
+                    현재 차감 배율 (Multiplier)
+                  </th>
+                  <th className="py-3 px-3 text-emerald-700 bg-emerald-50/60 font-black">
+                    목표 마진({config.targetMarginRate}%) 권장치
+                  </th>
                   <th className="py-3 px-4">설명</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {config.models.map((model, idx) => (
-                  <tr key={model.id} className="hover:bg-slate-50/50 transition-colors">
-                    {/* 모델명 */}
-                    <td className="py-3 px-4 font-bold text-slate-900">
-                      <div className="flex items-center gap-2">
-                        {model.isOfficialLatest && (
-                          <span className="px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700 text-[10px] font-black">
-                            LATEST
+                {config.models.map((model, idx) => {
+                  const recMult = getRecommendedMultiplier(model);
+                  const isSufficient = model.tokenMultiplier >= recMult;
+
+                  return (
+                    <tr key={model.id} className="hover:bg-slate-50/50 transition-colors">
+                      {/* 모델명 */}
+                      <td className="py-3 px-4 font-bold text-slate-900">
+                        <div className="flex items-center gap-2">
+                          {model.isOfficialLatest && (
+                            <span className="px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700 text-[10px] font-black">
+                              LATEST
+                            </span>
+                          )}
+                          <span>{model.name}</span>
+                        </div>
+                        <span className="font-mono text-[10px] text-slate-400 block mt-0.5">{model.id}</span>
+                      </td>
+
+                      {/* 카테고리 */}
+                      <td className="py-3 px-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          model.category === "pro"
+                            ? "bg-purple-100 text-purple-700"
+                            : model.category === "flash_lite"
+                            ? "bg-sky-100 text-sky-700"
+                            : "bg-indigo-100 text-indigo-700"
+                        }`}>
+                          {model.category.toUpperCase()}
+                        </span>
+                      </td>
+
+                      {/* 입력 원가 ($/1M) */}
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-1">
+                          <span className="text-slate-400 font-mono">$</span>
+                          <input
+                            type="number"
+                            step="0.05"
+                            min="0"
+                            value={model.inputCostUsdPerMillion}
+                            onChange={(e) => handleModelChange(idx, "inputCostUsdPerMillion", parseFloat(e.target.value) || 0)}
+                            className="w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </td>
+
+                      {/* 출력 원가 ($/1M) */}
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-1">
+                          <span className="text-slate-400 font-mono">$</span>
+                          <input
+                            type="number"
+                            step="0.05"
+                            min="0"
+                            value={model.outputCostUsdPerMillion}
+                            onChange={(e) => handleModelChange(idx, "outputCostUsdPerMillion", parseFloat(e.target.value) || 0)}
+                            className="w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </td>
+
+                      {/* 100만 토큰 원화 원가 (자동 산출) */}
+                      <td className="py-3 px-3 font-bold text-slate-700 font-mono">
+                        ₩ {model.estimatedKrwPerMillion?.toLocaleString()}
+                      </td>
+
+                      {/* 현재 차감 가중치 Multiplier */}
+                      <td className="py-3 px-4 bg-indigo-50/30">
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0.5"
+                            max="10"
+                            value={model.tokenMultiplier}
+                            onChange={(e) => handleModelChange(idx, "tokenMultiplier", parseFloat(e.target.value) || 1.0)}
+                            className="w-16 px-2 py-1 bg-white border border-indigo-200 rounded-lg text-xs font-black text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                          />
+                          <span className="text-xs font-extrabold text-indigo-600">x</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          {model.tokenMultiplier < 1 ? "할인 차감" : model.tokenMultiplier === 1 ? "표준 차감" : `${model.tokenMultiplier}배 차감`}
+                        </span>
+                      </td>
+
+                      {/* 목표 마진율 기준 권장치 열 */}
+                      <td className="py-3 px-3 bg-emerald-50/30">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`px-2 py-0.5 rounded-md text-[11px] font-black font-mono ${
+                            isSufficient
+                              ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                              : "bg-amber-100 text-amber-800 border border-amber-300 animate-pulse"
+                          }`}>
+                            {recMult}x
                           </span>
-                        )}
-                        <span>{model.name}</span>
-                      </div>
-                      <span className="font-mono text-[10px] text-slate-400 block mt-0.5">{model.id}</span>
-                    </td>
+                          {model.tokenMultiplier !== recMult && (
+                            <button
+                              type="button"
+                              onClick={() => handleModelChange(idx, "tokenMultiplier", recMult)}
+                              className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold transition-all cursor-pointer shrink-0"
+                              title="이 모델에 권장 배율을 즉시 입력합니다."
+                            >
+                              적용
+                            </button>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-500 block mt-0.5">
+                          {isSufficient ? "마진 방어 충족" : "⚠️ 마진 방어 부족"}
+                        </span>
+                      </td>
 
-                    {/* 카테고리 */}
-                    <td className="py-3 px-3">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        model.category === "pro"
-                          ? "bg-purple-100 text-purple-700"
-                          : model.category === "flash_lite"
-                          ? "bg-sky-100 text-sky-700"
-                          : "bg-indigo-100 text-indigo-700"
-                      }`}>
-                        {model.category.toUpperCase()}
-                      </span>
-                    </td>
-
-                    {/* 입력 원가 ($/1M) */}
-                    <td className="py-3 px-3">
-                      <div className="flex items-center gap-1">
-                        <span className="text-slate-400 font-mono">$</span>
-                        <input
-                          type="number"
-                          step="0.05"
-                          min="0"
-                          value={model.inputCostUsdPerMillion}
-                          onChange={(e) => handleModelChange(idx, "inputCostUsdPerMillion", parseFloat(e.target.value) || 0)}
-                          className="w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        />
-                      </div>
-                    </td>
-
-                    {/* 출력 원가 ($/1M) */}
-                    <td className="py-3 px-3">
-                      <div className="flex items-center gap-1">
-                        <span className="text-slate-400 font-mono">$</span>
-                        <input
-                          type="number"
-                          step="0.05"
-                          min="0"
-                          value={model.outputCostUsdPerMillion}
-                          onChange={(e) => handleModelChange(idx, "outputCostUsdPerMillion", parseFloat(e.target.value) || 0)}
-                          className="w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        />
-                      </div>
-                    </td>
-
-                    {/* 100만 토큰 원화 원가 (자동 산출) */}
-                    <td className="py-3 px-3 font-bold text-slate-700 font-mono">
-                      ₩ {model.estimatedKrwPerMillion?.toLocaleString()}
-                    </td>
-
-                    {/* 차감 가중치 Multiplier */}
-                    <td className="py-3 px-4 bg-indigo-50/30">
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="number"
-                          step="0.1"
-                          min="0.5"
-                          max="10"
-                          value={model.tokenMultiplier}
-                          onChange={(e) => handleModelChange(idx, "tokenMultiplier", parseFloat(e.target.value) || 1.0)}
-                          className="w-16 px-2 py-1 bg-white border border-indigo-200 rounded-lg text-xs font-black text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                        />
-                        <span className="text-xs font-extrabold text-indigo-600">x</span>
-                      </div>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">
-                        {model.tokenMultiplier < 1 ? "할인 차감" : model.tokenMultiplier === 1 ? "표준 차감" : `${model.tokenMultiplier}배 차감`}
-                      </span>
-                    </td>
-
-                    {/* 설명 */}
-                    <td className="py-3 px-4 text-[11px] text-slate-500 max-w-xs">
-                      {model.description}
-                    </td>
-                  </tr>
-                ))}
+                      {/* 설명 */}
+                      <td className="py-3 px-4 text-[11px] text-slate-500 max-w-xs">
+                        {model.description}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -496,54 +603,71 @@ export default function AdminPricingCostTab() {
                 토큰 판매 패키지별 실질 손익 &amp; 운영 마진율(영업이익률) 시뮬레이션
               </h3>
             </div>
-            <span className="text-xs text-slate-500 font-medium">
-              * 회계 산정: 결제액에서 <strong>VAT(10%) 제외한 순매출(공급가)</strong> 및 <strong>PG 수수료(3.3%)</strong> 차감 반영
-            </span>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-bold">
+                목표 마진 기준: {config.targetMarginRate}%
+              </span>
+              <span className="text-slate-500 font-medium hidden md:inline">
+                * VAT(10%) 제외 순매출 및 PG 수수료(3.3%) 차감 반영
+              </span>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2">
-            {simulations.map((sim) => (
-              <div
-                key={sim.id}
-                className="p-5 rounded-2xl bg-gradient-to-b from-slate-50/80 to-white border border-slate-200/80 shadow-xs space-y-4 flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-800">{sim.name}</span>
-                    <span className="text-[11px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
-                      {sim.totalTokens.toLocaleString()} 토큰
-                    </span>
-                  </div>
+            {simulations.map((sim) => {
+              const meetsTarget = sim.primaryRealMarginPercent >= (config.targetMarginRate || 50);
 
-                  {/* 결제 금액 및 회계 순매출 분해 */}
-                  <div className="mt-3 space-y-1.5 border-b border-slate-100 pb-3">
-                    <div className="flex items-baseline justify-between">
-                      <div className="text-2xl font-black text-slate-900">
-                        ₩ {sim.priceKrw.toLocaleString()}
+              return (
+                <div
+                  key={sim.id}
+                  className="p-5 rounded-2xl bg-gradient-to-b from-slate-50/80 to-white border border-slate-200/80 shadow-xs space-y-4 flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-slate-800">{sim.name}</span>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                          meetsTarget
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-amber-100 text-amber-800"
+                        }`}>
+                          {meetsTarget ? "✅ 목표 달성" : "⚠️ 목표 미달"}
+                        </span>
                       </div>
-                      <span className="text-[10px] text-slate-400 font-semibold">결제액 (VAT 포함)</span>
+                      <span className="text-[11px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
+                        {sim.totalTokens.toLocaleString()} 토큰
+                      </span>
                     </div>
-                    
-                    {/* 공급가액 및 정산 내역 */}
-                    <div className="bg-slate-100/70 rounded-xl p-2.5 space-y-1 text-[11px]">
-                      <div className="flex justify-between text-slate-600">
-                        <span>순매출 (공급가액):</span>
-                        <span className="font-mono font-bold text-slate-800">₩ {sim.netSalesKrw.toLocaleString()}</span>
+
+                    {/* 결제 금액 및 회계 순매출 분해 */}
+                    <div className="mt-3 space-y-1.5 border-b border-slate-100 pb-3">
+                      <div className="flex items-baseline justify-between">
+                        <div className="text-2xl font-black text-slate-900">
+                          ₩ {sim.priceKrw.toLocaleString()}
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-semibold">결제액 (VAT 포함)</span>
                       </div>
-                      <div className="flex justify-between text-slate-400 text-[10px]">
-                        <span>- 부가가치세 (예수금 10%):</span>
-                        <span className="font-mono">₩ {sim.vatKrw.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between text-amber-700 text-[10px]">
-                        <span>- PG 결제 수수료 ({config.pgFeeRate ?? 3.3}%):</span>
-                        <span className="font-mono font-bold">- ₩ {sim.pgFeeKrw.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between text-indigo-700 font-bold border-t border-slate-200/80 pt-1 text-[11px]">
-                        <span>정산 수입 (순매출-PG):</span>
-                        <span className="font-mono">₩ {(sim.netSalesKrw - sim.pgFeeKrw).toLocaleString()}</span>
+                      
+                      {/* 공급가액 및 정산 내역 */}
+                      <div className="bg-slate-100/70 rounded-xl p-2.5 space-y-1 text-[11px]">
+                        <div className="flex justify-between text-slate-600">
+                          <span>순매출 (공급가액):</span>
+                          <span className="font-mono font-bold text-slate-800">₩ {sim.netSalesKrw.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-slate-400 text-[10px]">
+                          <span>- 부가가치세 (예수금 10%):</span>
+                          <span className="font-mono">₩ {sim.vatKrw.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-amber-700 text-[10px]">
+                          <span>- PG 결제 수수료 ({config.pgFeeRate ?? 3.3}%):</span>
+                          <span className="font-mono font-bold">- ₩ {sim.pgFeeKrw.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-indigo-700 font-bold border-t border-slate-200/80 pt-1 text-[11px]">
+                          <span>정산 수입 (순매출-PG):</span>
+                          <span className="font-mono">₩ {(sim.netSalesKrw - sim.pgFeeKrw).toLocaleString()}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
                   {/* 추천 최신 표준 모델 사용 시 실질 영업 손익 */}
                   <div className="space-y-2 text-xs pt-3">
@@ -601,7 +725,8 @@ export default function AdminPricingCostTab() {
                   <span>부가세 10% 분리 및 PG 수수료 3.3% 차감 완료</span>
                 </div>
               </div>
-            ))}
+            );
+          })}
           </div>
         </div>
 
