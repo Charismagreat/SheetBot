@@ -82,14 +82,18 @@ export async function POST(request: Request) {
 }`;
 
     const userMessage = `[시트봇 중앙 서버 주소]: ${currentServerUrl}
+[회원 계정]: ${userEmail}
 [대상 구글 시트]: ${sheetUrl || "연결된 스프레드시트"}
 [프로젝트 명칭]: ${customTitle || "스마트 시트 자동화"}
 [사용자 요구사항]:
 ${prompt}
 
 * 중요 지침: 
-1. 코드 상단에 const SHEETBOT_SERVER_URL = "${currentServerUrl}"; 상수를 선언하고, AI OCR 분석 시 SHEETBOT_SERVER_URL + "/api/ai/ocr" 엔드포인트를 호출하세요.
-2. 사용자에게 Gemini API 키나 개인 키 설정을 절대로 요구하지 마십시오.`;
+1. 코드 상단에 다음 상수를 반드시 선언하세요:
+   const SHEETBOT_SERVER_URL = "${currentServerUrl}";
+   const SHEETBOT_USER_EMAIL = "${userEmail}";
+2. AI OCR 분석 시, 파일 Base64 데이터와 함께 { fileData: base64, fileName: name, userEmail: SHEETBOT_USER_EMAIL } 객체를 SHEETBOT_SERVER_URL + "/api/ai/ocr" 엔드포인트로 전송(UrlFetchApp.fetch)하여 분석 결과를 받아오세요.
+3. 사용자에게 Gemini API 키나 개인 키 입력을 요구하는 코드(경고창, 입력 메뉴 등)는 절대로 작성하지 마십시오. 모든 AI 처리는 시트봇 중앙 서버에서 회원의 토큰 지갑으로 정상 차감 처리됩니다.`;
 
     const fullPrompt = `${systemPrompt}\n\n${userMessage}`;
 
