@@ -197,9 +197,9 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
      - 사이드바 UI에 파일 선택(<input type="file">)과 'AI 분석 및 시트 기록' 버튼을 제공하세요.
      - 사용자가 파일을 선택하고 버튼을 누르면, 브라우저 FileReader로 Base64로 인코딩한 뒤 google.script.run을 통해 GAS 서버 함수(예: processUploadedDocument)를 호출하세요.
      - GAS 서버 함수에서는 EGDESK_TUNNEL_URL로 UrlFetchApp.fetch를 실행할 때, 헤더에 {'X-Api-Key': EGDESK_API_KEY}를 넣고 바디에 { tool: 'ai_caller_call', arguments: { model: 'gemini-3.8-flash', prompt: '첨부된 문서를 정밀 분석하여 대상 시트의 각 컬럼에 맞는 JSON 규격으로 추출하세요. (복수 품목이 있는 문서는 items 배열 포함)', files: [{ name: fileName, content: fileData, encoding: 'base64', mimeType: mimeType }] } } 형식으로 전송하여 OCR 결과를 받아오세요.
-   - ⚠️ [AI Caller 응답 언래핑 표준 코드 - 100% 필수 준수]:
-     - 이지데스크 AI Caller는 결과를 { result: { content: [{ type: "text", text: "..." }] } } 형태로 반환합니다.
-     - outerJson.result 객체 자체를 파싱하려 하면 내부 텍스트 추출에 실패하므로, 반드시 아래 코드로 aiText를 안전하게 언래핑하세요:
+   - ⚠️ [AI Caller 응답 2단계 언래핑 표준 코드 - 100% 필수 준수]:
+     - 이지데스크 AI Caller는 결과를 { result: { content: [{ type: "text", text: "..." }] } } 형태로 반환하며, text 문자열 내부에 다시 { "content": "실제AI추출JSON", "usage": ... } 객체가 중첩되어 있습니다.
+     - 따라서 반드시 아래 2단계 언래핑 코드를 사용하여 내부의 실제 JSON 텍스트를 안전하게 추출하세요:
        \`\`\`javascript
        const outerJson = JSON.parse(responseText);
        let aiText = "";
@@ -212,6 +212,21 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
        } else {
          aiText = JSON.stringify(outerJson);
        }
+
+       // 2차 언래핑: aiText 자체가 {"content": "...", "usage": ...} 형태의 메타 객체인 경우 내부 실제 content 추출
+       try {
+         const nested = JSON.parse(aiText);
+         if (nested && typeof nested === "object") {
+           if (typeof nested.content === "string") {
+             aiText = nested.content;
+           } else if (typeof nested.text === "string") {
+             aiText = nested.text;
+           } else if (nested.json && typeof nested.json === "object") {
+             aiText = JSON.stringify(nested.json);
+           }
+         }
+       } catch (e) {}
+
        let jsonStr = aiText.replace(/\`\`\`json/gi, "").replace(/\`\`\`/g, "").trim();
        const firstBrace = jsonStr.indexOf("{");
        const lastBrace = jsonStr.lastIndexOf("}");
