@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { prompt, sheetUrl, customTitle, model: userRequestedModel } = body;
+    const { prompt, sheetUrl, customTitle, model: userRequestedModel, analyzedSchema } = body;
 
     const aiSettings = await getAiModelSettings();
     // 사용자가 선택한 모델이 있으면 최우선 적용, 없으면 관리자 기본 설정 모델 적용
@@ -50,6 +50,30 @@ export async function POST(request: Request) {
     const egdeskApiKey = "a67ddc0f-7e2b-4997-9a0b-9667a74c89d0";
     const currentServerUrl = process.env.SHEETBOT_PUBLIC_URL || (host.includes("localhost") ? egdeskTunnelUrl : `${rawServerUrl}/api/ai/ocr`);
 
+    let schemaPromptSection = "";
+    if (analyzedSchema) {
+      const colDetails = (analyzedSchema.columns || [])
+        .map((c: any) => `  * ${c.letter || `Col${c.index}`}열: "${c.name}" (${c.purpose || "데이터"})`)
+        .join("\n");
+
+      schemaPromptSection = `
+[사전 검증된 실제 구글 시트 양식 및 스키마 (100% 필수 준수)]:
+- 양식 유형: ${analyzedSchema.archetypeName || analyzedSchema.archetype || "누적 대장형"}
+- 대상 탭 이름: "${analyzedSchema.targetTab || "기본 탭"}"
+- 헤더 위치: ${analyzedSchema.headerRow || 1}행 (신규 데이터 삽입 위치: ${analyzedSchema.dataStartRow || 2}행)
+- 확정된 컬럼 매핑 (총 ${(analyzedSchema.columns || []).length}개 열):
+${colDetails || "  (컬럼 정보 없음)"}
+- 핵심 실행 전략:
+${(analyzedSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n") || "  - 기존 컬럼 순서 1:1 매핑"}
+${analyzedSchema.formCoordinates?.fixedCells ? `- 고정 셀 좌표: ${JSON.stringify(analyzedSchema.formCoordinates.fixedCells)}` : ""}
+${analyzedSchema.formCoordinates?.preservedFormulas ? `- 보존 필수 수식: ${JSON.stringify(analyzedSchema.formCoordinates.preservedFormulas)}` : ""}
+
+⚠️ [컬럼 매핑 절대 규칙]:
+1. 임의로 열 순서를 바꾸거나 상상해서 컬럼을 추가/삭제하지 마십시오. 반드시 위에서 확정된 ${analyzedSchema.columns?.length || 0}개 열의 순서(A열부터 순서대로)와 정확히 일치하도록 recordToSheet 행 배열을 구성하세요.
+2. 발주서 1장에 품목이 여러 개(N개) 있을 경우, 1행으로 뭉뚱그리지 말고 품목별로 1행씩(총 N개 행) 분리하여 시트에 순차 삽입하세요.
+`;
+    }
+
     const systemPrompt = `당신은 Google Apps Script(GAS) 최고의 전문 수석 엔지니어입니다.
 사용자의 자연어 요구사항을 분석하여 Google 스프레드시트에서 즉시 완벽히 동작하는 완성형 Apps Script 코드와 매니페스트를 작성하세요.
 
@@ -69,7 +93,8 @@ export async function POST(request: Request) {
      - 사용자에게 API 키가 없다는 경고나 설정창을 절대 띄우지 마세요! 바로 파일 업로드 및 자동 분석이 실행되어야 합니다.
 3. 📋 시트 및 데이터 조작:
    - 특정 시트명(예: '발주서 접수대장')이 언급된 경우, getSheetByName()으로 참조하고 시트가 없으면 insertSheet()로 헤더 행과 함께 자동 생성하세요.
-   - '최근 기록이 위에 오도록' 요청된 경우, 헤더(1행) 바로 아래인 2행에 insertRowAfter(1) 또는 insertRows(2)로 삽입하여 최신 데이터가 항상 맨 위에 오도록 작성하세요. 기존 행을 덮어쓰거나 지우지 마세요.
+   - '최근 기록이 위에 오도록' 요청된 경우, 헤더 바로 아래에 insertRowAfter 또는 insertRows로 삽입하여 최신 데이터가 항상 맨 위에 오도록 작성하세요. 기존 행을 덮어쓰거나 지우지 마세요.
+   - 단일 문서에 여러 품목이 있을 때는 품목별로 1행씩 분리하여 행을 추가하세요.
 4. 🚀 상단 메뉴 및 사이드바:
    - 구글 시트 상단 메뉴에 '🚀 SheetBot 자동화' 메뉴를 추가하는 onOpen() 함수를 항상 포함하세요.
    - 메뉴 클릭 시 showSidebar()를 호출하여 파일 업로드 사이드바가 즉시 열리도록 하세요.
@@ -96,6 +121,7 @@ export async function POST(request: Request) {
 [대상 구글 시트]: ${sheetUrl || "연결된 스프레드시트"}
 [프로젝트 명칭]: ${customTitle || "스마트 시트 자동화"}
 [이지데스크 공용 터널]: ${egdeskTunnelUrl}
+${schemaPromptSection}
 [사용자 요구사항]:
 ${prompt}
 
