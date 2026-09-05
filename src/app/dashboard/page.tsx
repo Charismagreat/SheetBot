@@ -7,12 +7,13 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
   Bot, Plus, FileCode, Clock, RefreshCw, CheckCircle2, AlertTriangle,
-  X, ArrowRight, ExternalLink, Sparkles, Layers, ShieldCheck, Trash2, Smartphone
+  X, ArrowRight, ExternalLink, Sparkles, Layers, ShieldCheck, Trash2, Smartphone, Edit3
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import nextDynamic from "next/dynamic";
 
 const NewProjectModal = nextDynamic(() => import("@/components/NewProjectModal"));
+const EditProjectPromptModal = nextDynamic(() => import("@/components/EditProjectPromptModal"));
 const ScheduleManager = nextDynamic(() => import("@/components/ScheduleManager"));
 
 export default function DashboardPage() {
@@ -23,6 +24,7 @@ export default function DashboardPage() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<any | null>(null);
   const [alertMessage, setAlertMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // 데이터 로드
@@ -370,27 +372,41 @@ export default function DashboardPage() {
                 )}
 
                 <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px]">
-                  {/* 스크립트 편집기 직접 열기 버튼 */}
-                  {(() => {
-                    const editorUrl =
-                      p.scriptUrl ||
-                      (p.scriptId ? `https://script.google.com/d/${p.scriptId}/edit` : (p.gasProjectId ? `https://script.google.com/d/${p.gasProjectId}/edit` : ""));
-                    return editorUrl ? (
-                      <a
-                        href={editorUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg flex items-center gap-1.5 transition-colors border border-indigo-200/60 shadow-2xs"
-                        data-easybot-hint="스크립트 편집기 열기: 구글 시트의 프로젝트 선택창을 거치지 않고 이 Apps Script 코드 편집 화면으로 1초 만에 바로 진입합니다."
-                      >
-                        <FileCode className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        <span>스크립트 편집기 열기</span>
-                        <ExternalLink className="w-2.5 h-2.5 opacity-70 shrink-0" />
-                      </a>
-                    ) : (
-                      <span className="text-slate-400 text-[10px]">연결 시트:</span>
-                    );
-                  })()}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {/* 스크립트 편집기 직접 열기 버튼 */}
+                    {(() => {
+                      const editorUrl =
+                        p.scriptUrl ||
+                        (p.scriptId ? `https://script.google.com/d/${p.scriptId}/edit` : (p.gasProjectId ? `https://script.google.com/d/${p.gasProjectId}/edit` : ""));
+                      return editorUrl ? (
+                        <a
+                          href={editorUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg flex items-center gap-1.5 transition-colors border border-indigo-200/60 shadow-2xs"
+                          data-easybot-hint="스크립트 편집기 열기: 구글 시트의 프로젝트 선택창을 거치지 않고 이 Apps Script 코드 편집 화면으로 1초 만에 바로 진입합니다."
+                        >
+                          <FileCode className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          <span>스크립트 편집기 열기</span>
+                          <ExternalLink className="w-2.5 h-2.5 opacity-70 shrink-0" />
+                        </a>
+                      ) : (
+                        <span className="text-slate-400 text-[10px]">연결 시트:</span>
+                      );
+                    })()}
+
+                    {/* 자연어 요구사항 수정 및 AI 코드 재배포 버튼 */}
+                    <button
+                      type="button"
+                      onClick={() => setEditingProject(p)}
+                      className="px-2.5 py-1 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 font-bold rounded-lg flex items-center gap-1.5 transition-colors border border-slate-200/80 hover:border-indigo-200 cursor-pointer shadow-2xs active:scale-95"
+                      data-easybot-hint="요구사항 수정: 기존 프롬프트를 확인하고 수정/추가하여 새 코드를 AI로 재작성 및 구글 시트에 재배포합니다."
+                      title="자연어 요구사항을 수정하거나 추가하여 새 코드로 재배포합니다."
+                    >
+                      <Edit3 className="w-3 h-3 text-slate-500" />
+                      <span>요구사항 수정</span>
+                    </button>
+                  </div>
 
                   {/* 구글 시트 열기 버튼 */}
                   {p.spreadsheetUrl && (
@@ -428,6 +444,17 @@ export default function DashboardPage() {
         onSuccess={() => {
           fetchData();
           showAlert({ type: "success", text: "새 Apps Script 프로젝트가 성공적으로 생성되었습니다!" });
+        }}
+      />
+
+      {/* 기존 프로젝트 자연어 요구사항 수정 및 재배포 모달 */}
+      <EditProjectPromptModal
+        isOpen={!!editingProject}
+        project={editingProject}
+        onClose={() => setEditingProject(null)}
+        onSuccess={() => {
+          fetchData();
+          showAlert({ type: "success", text: "수정된 요구사항을 바탕으로 스크립트 코드가 성공적으로 갱신 및 재배포되었습니다!" });
         }}
       />
     </div>
