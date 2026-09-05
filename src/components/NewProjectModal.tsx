@@ -18,6 +18,8 @@ import {
   Table,
   ShieldCheck,
   ChevronLeft,
+  HelpCircle,
+  Wrench,
 } from "lucide-react";
 
 interface NewProjectModalProps {
@@ -44,6 +46,12 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   const [turnCount, setTurnCount] = useState(0); // 0부터 시작, 최대 5회
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackHistory, setFeedbackHistory] = useState<Array<{ role: "user" | "ai"; message: string }>>([]);
+
+  // 관리자 1:1 맞춤 제작 문의 관련 상태
+  const [isInquiryOpen, setIsInquiryOpen] = useState(false);
+  const [inquiryMemo, setInquiryMemo] = useState("");
+  const [submittingInquiry, setSubmittingInquiry] = useState(false);
+  const [inquirySuccess, setInquirySuccess] = useState(false);
 
   // AI 엔진 모델 선택 관련 상태
   const [selectedModel, setSelectedModel] = useState("gemini-3.8-flash");
@@ -202,6 +210,60 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
     }
   };
 
+  // 관리자 1:1 맞춤 제작 문의 접수 핸들러
+  const handleSubmitInquiry = async () => {
+    setSubmittingInquiry(true);
+    setError(null);
+
+    try {
+      const historyStr = feedbackHistory
+        .map((h) => `${h.role === "user" ? "사용자" : "AI"}: ${h.message}`)
+        .join("\n");
+
+      const inquiryContent = `[대상 구글 스프레드시트]
+${sheetUrl}
+
+[프로젝트 명칭]
+${projectName || "스마트 시트 자동화"}
+
+[사용자 원본 요구사항]
+${prompt}
+
+[AI가 분석한 시트 스키마]
+- 양식 유형: ${analyzedSchema?.archetypeName || analyzedSchema?.archetype || "누적 대장형"}
+- 대상 탭: ${analyzedSchema?.targetTab || "기본 시트"}
+- 감지된 헤더 및 컬럼 수: ${analyzedSchema?.columns?.length || 0}개 열
+${(analyzedSchema?.columns || []).map((c: any) => `  * ${c.letter || c.index}열: ${c.name}`).join("\n")}
+
+[조율 대화 내역 (${turnCount}/5회 진행)]
+${historyStr || "(조율 내역 없음)"}
+
+[고객 추가 전달 메모]
+${inquiryMemo.trim() || "(추가 메모 없음)"}`;
+
+      const res = await apiFetch("/api/inquiries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: "AUTOMATION_REQUEST",
+          title: `[맞춤 제작 문의] ${projectName || "스마트 시트 자동화"}`,
+          content: inquiryContent,
+        }),
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || "문의 접수에 실패했습니다.");
+      }
+
+      setInquirySuccess(true);
+    } catch (err: any) {
+      setError(err.message || "문의 접수 중 오류가 발생했습니다.");
+    } finally {
+      setSubmittingInquiry(false);
+    }
+  };
+
   // 2단계 -> 3단계: 최종 승인 및 코드 생성/배포 (정규 토큰 1회 일괄 차감)
   const handleFinalDeploy = async () => {
     setLoading(true);
@@ -271,6 +333,9 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
     setAnalyzedSchema(null);
     setTurnCount(0);
     setFeedbackHistory([]);
+    setIsInquiryOpen(false);
+    setInquiryMemo("");
+    setInquirySuccess(false);
     setGeneratedResult(null);
   };
 
@@ -676,6 +741,105 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
                 </p>
               )}
             </div>
+
+            {/* 관리자 1:1 맞춤 제작 문의 영역 */}
+            {inquirySuccess ? (
+              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-2.5">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="space-y-1 text-xs">
+                  <span className="font-extrabold text-emerald-900 block">
+                    관리자 1:1 맞춤 제작 문의가 성공적으로 접수되었습니다!
+                  </span>
+                  <p className="text-emerald-800 text-[11px] leading-relaxed">
+                    연결된 구글 시트 정보와 분석 내역이 엔지니어에게 안전하게 전달되었습니다. 스마트 알림(SMS/Email)을 통해 영업일 기준 24시간 내에 신속히 답변해 드립니다.
+                  </p>
+                </div>
+              </div>
+            ) : isInquiryOpen ? (
+              <div className="p-4 bg-amber-50/80 border border-amber-200 rounded-2xl space-y-3 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-extrabold text-amber-950 text-xs">
+                    <Wrench className="w-4 h-4 text-amber-600" />
+                    <span>🛠️ 전문 엔지니어에게 1:1 맞춤 제작 의뢰</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsInquiryOpen(false)}
+                    className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer font-bold"
+                  >
+                    ✕ 닫기
+                  </button>
+                </div>
+
+                <div className="p-2.5 bg-white/90 border border-amber-200/80 rounded-xl space-y-1 text-[11px]">
+                  <div className="text-slate-600 leading-snug">
+                    <span className="font-bold text-slate-800">📌 자동 첨부 컨텍스트:</span> 스프레드시트 링크, 초기 요구사항, AI 시트 분석 스키마({analyzedSchema.columns?.length || 0}개 열), 최근 조율 내역이 문의서에 100% 자동 포함됩니다.
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700 text-[11px] block">
+                    엔지니어에게 전달할 추가 메모 또는 특수 요구사항 (선택)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={inquiryMemo}
+                    onChange={(e) => setInquiryMemo(e.target.value)}
+                    placeholder="예: AI가 인식하지 못한 특수한 사내 채번 규칙이 있거나, 특정 열에 수식을 넣어야 하는 경우 자유롭게 작성해 주세요."
+                    className="w-full px-3 py-2 bg-white border border-amber-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 resize-none leading-relaxed"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsInquiryOpen(false)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-amber-100/50 cursor-pointer"
+                    disabled={submittingInquiry}
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSubmitInquiry}
+                    disabled={submittingInquiry}
+                    className="px-4 py-1.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {submittingInquiry ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>문의 접수 중...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5" />
+                        <span>관리자에게 원클릭 문의 접수</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-2xl flex items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-900 text-xs">
+                    <HelpCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>AI로 원하는 기능이 잘 풀리지 않나요?</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-snug">
+                    현재 시트 구조와 대화 내역을 그대로 첨부하여 전문 엔지니어에게 1:1 맞춤 제작을 문의할 수 있습니다.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsInquiryOpen(true)}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shrink-0 transition-all shadow-xs cursor-pointer flex items-center gap-1"
+                >
+                  <Wrench className="w-3 h-3" />
+                  <span>관리자 1:1 문의</span>
+                </button>
+              </div>
+            )}
 
             {/* 2단계 액션 버튼 */}
             <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
