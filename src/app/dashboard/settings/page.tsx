@@ -41,10 +41,10 @@ export default function AiSettingsPage() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [models, setModels] = useState<AiModelOption[]>([]);
   const [settings, setSettings] = useState<AiSettingsState>({
-    defaultModel: "gemini-3.5-flash",
-    scriptGeneratorModel: "gemini-3.5-flash",
-    easybotModel: "gemini-3.5-flash",
-    helpModel: "gemini-3.5-flash",
+    defaultModel: "gemini-3.8-flash",
+    scriptGeneratorModel: "gemini-3.8-flash",
+    easybotModel: "gemini-3.8-flash",
+    helpModel: "gemini-3.8-flash",
     temperature: 0.3,
   });
 

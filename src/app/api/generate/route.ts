@@ -19,7 +19,7 @@ export async function POST(request: Request) {
 
     const aiSettings = await getAiModelSettings();
     // 사용자가 선택한 모델이 있으면 최우선 적용, 없으면 관리자 기본 설정 모델 적용
-    const targetModel = userRequestedModel || aiSettings.scriptGeneratorModel || aiSettings.defaultModel || "gemini-3.5-flash";
+    const targetModel = userRequestedModel || aiSettings.scriptGeneratorModel || aiSettings.defaultModel || "gemini-3.8-flash";
 
     // 1. 토큰 지갑 잔여량 사전 검증 (선택된 모델의 가중치 고려: 기본 1500 * multiplier)
     const tokenMultiplier = await getModelTokenMultiplier(targetModel);

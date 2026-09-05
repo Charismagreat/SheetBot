@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 불필요한 인사말이나 서론은 생략하고, 바로 본론 설명과 활용 팁만 작성하세요.`;
 
     const aiSettings = await getAiModelSettings();
-    const targetModel = aiSettings.helpModel || aiSettings.defaultModel || "gemini-3.5-flash";
+    const targetModel = aiSettings.helpModel || aiSettings.defaultModel || "gemini-3.8-flash";
 
     let explanation = "";
 
