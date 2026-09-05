@@ -6,6 +6,64 @@ import { callAiCaller } from "@/lib/egdesk-helpers";
 import { recordAiUsageLog } from "@/lib/ai-usage";
 import { getAiModelSettings, getModelTokenMultiplier } from "@/lib/ai-settings";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
+import { queryTable } from "@/lib/setup-db";
+
+/**
+ * AI 자가 학습(Self-Improving) 피드백 컨텍스트 생성
+ * - 고평가(4~5점) 피드백: 모범 사례(Exemplars)로 강화
+ * - 저평가(1~2점) 피드백: 실수/오류 방지 가이드(Pitfalls to Avoid)로 보강
+ */
+async function buildSelfImprovingFeedbackContext(): Promise<string> {
+  try {
+    const feedbackRes = await queryTable("sheetbot_project_feedback", {
+      orderBy: "created_at",
+      orderDirection: "DESC",
+      limit: 30,
+    }).catch(() => ({ rows: [] }));
+
+    const rawRows = feedbackRes.rows || [];
+    const rows = rawRows.filter((r: any) => !r.deleted_at && (r.ai_learned === 1 || r.ai_learned === "1" || r.ai_learned === true));
+    if (rows.length === 0) return "";
+
+    const positiveCases = rows.filter((r: any) => r.rating >= 4).slice(0, 3);
+    const negativeCases = rows.filter((r: any) => r.rating <= 2).slice(0, 3);
+
+    let context = "\n[🧠 AI 자가 학습 시스템 - 사용자 실제 만족도 피드백 반영 지침]:\n";
+
+    if (positiveCases.length > 0) {
+      context += "🌟 [사용자 극찬 모범 패턴 (적극 준수)]:\n";
+      positiveCases.forEach((c: any) => {
+        let tags: string[] = [];
+        try {
+          tags = typeof c.tags === "string" ? JSON.parse(c.tags) : c.tags || [];
+        } catch {
+          tags = [];
+        }
+        const tagStr = tags.length > 0 ? ` [칭찬 요소: ${tags.join(", ")}]` : "";
+        context += `  - 만족도 ${c.rating}점${tagStr}: ${c.comment || "완벽한 열 매핑과 안정적인 실행"}\n`;
+      });
+    }
+
+    if (negativeCases.length > 0) {
+      context += "⚠️ [이전 사용자 불만/오류 발생 요인 (절대 반복 금지)]:\n";
+      negativeCases.forEach((c: any) => {
+        let tags: string[] = [];
+        try {
+          tags = typeof c.tags === "string" ? JSON.parse(c.tags) : c.tags || [];
+        } catch {
+          tags = [];
+        }
+        const tagStr = tags.length > 0 ? ` [문제 유형: ${tags.join(", ")}]` : "";
+        context += `  - 불만족 ${c.rating}점${tagStr}: ${c.comment || "컬럼 순서 불일치 또는 런타임 오류 방지 필수"}\n`;
+      });
+    }
+
+    return context;
+  } catch (err: any) {
+    console.warn("[Self-Improving AI] Failed to load feedback context:", err.message);
+    return "";
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -100,6 +158,13 @@ ${analyzedSchema.formCoordinates?.preservedFormulas ? `- 보존 필수 수식: $
    - 메뉴 클릭 시 showSidebar()를 호출하여 파일 업로드 사이드바가 즉시 열리도록 하세요.
 5. 🛡️ 예외 처리:
    - try-catch를 꼼꼼히 감싸고, SpreadsheetApp.getUi().alert() 및 toast 안내를 적극 활용하세요.
+6. 🌐 독립 웹페이지(Web App) 설문/신청서/접수폼 구현 규칙:
+   - 사용자가 '설문지', '신청서', '접수 폼', '웹페이지', '공개 링크/URL'을 요구한 경우:
+     - 반드시 function doGet(e) 함수를 구현하여 HtmlService.createHtmlOutput(getFormHtml()).setTitle("...").setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)을 반환하세요.
+     - getFormHtml() 함수 내부에 Tailwind CSS(CDN)를 활용한 모바일 반응형 독립 웹페이지 입력 폼을 작성하세요.
+     - 시트 컬럼에 맞는 입력 필드(성함, 연락처, 주관식 내용 등)를 구성하고, 브라우저에서 google.script.run을 통해 서버 함수(예: submitFormToSheet)를 호출하여 시트에 실시간 기록(appendRow)하세요.
+     - 제출 완료 후 "정상 접수되었습니다" 안내 화면을 표출하세요.
+     - appsscript.json 매니페스트에 "webapp": { "access": "ANYONE_ANONYMOUS", "executeAs": "USER_DEPLOYING" }를 포함하세요.
 
 [출력 형식]
 반드시 다음 JSON 규격으로만 응답해야 합니다. 마크다운 코드블록(\`\`\`json) 없이 순수 JSON 문자열만 출력하세요:
@@ -131,9 +196,11 @@ ${prompt}
    const EGDESK_API_KEY = "${egdeskApiKey}";
    const SHEETBOT_USER_EMAIL = "${userEmail}";
 2. AI OCR 분석 시, Google 클라우드 DNS 오류 방지를 위해 반드시 EGDESK_TUNNEL_URL(X-Api-Key 헤더 포함)을 통해 이지데스크 AI Caller(gemini-3.8-flash)를 호출하여 완벽히 처리하세요.
-3. 사용자에게 Gemini API 키나 개인 키 입력을 요구하는 코드(경고창, 입력 메뉴 등)는 절대로 작성하지 마십시오.`;
+3. 사용자에게 개인 Gemini API 키 입력을 요구하는 코드는 절대로 작성하지 마십시오.`;
 
-    const fullPrompt = `${systemPrompt}\n\n${userMessage}`;
+    const learningFeedbackSection = await buildSelfImprovingFeedbackContext();
+
+    const fullPrompt = `${systemPrompt}\n${learningFeedbackSection}\n\n${userMessage}`;
 
     // JSON 안전 추출 헬퍼
     const safeParseJson = (text: string) => {

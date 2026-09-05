@@ -20,7 +20,13 @@ import {
   ChevronLeft,
   HelpCircle,
   Wrench,
+  Globe,
+  ExternalLink,
+  Copy,
+  Star,
+  ThumbsUp,
 } from "lucide-react";
+import PromptGalleryModal from "./PromptGalleryModal";
 
 interface NewProjectModalProps {
   isOpen: boolean;
@@ -40,6 +46,16 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedResult, setGeneratedResult] = useState<any>(null);
+
+  // 추천 프롬프트 갤러리 모달 상태
+  const [showPromptGallery, setShowPromptGallery] = useState(false);
+
+  // Step 3 완료 화면 관련 상태 (URL 복사 및 즉시 별점 피드백)
+  const [copiedWebappUrl, setCopiedWebappUrl] = useState(false);
+  const [inlineRating, setInlineRating] = useState(5);
+  const [inlineFeedbackSent, setInlineFeedbackSent] = useState(false);
+  const [inlineComment, setInlineComment] = useState("");
+  const [inlineSubmitting, setInlineSubmitting] = useState(false);
 
   // AI 분석 결과 및 조율(HITL) 관련 상태
   const [analyzedSchema, setAnalyzedSchema] = useState<any>(null);
@@ -480,8 +496,18 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
               className="space-y-1.5 pt-1"
               data-easybot-hint="추천 템플릿: 자주 사용되는 자동화 시나리오를 원클릭으로 프롬프트에 채웁니다."
             >
-              <span className="text-[11px] font-bold text-slate-400 block">⚡ 추천 프롬프트 원클릭 채우기:</span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-400 block">⚡ 추천 프롬프트 빠른 채우기:</span>
+                <button
+                  type="button"
+                  onClick={() => setShowPromptGallery(true)}
+                  className="text-[11px] font-extrabold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/80 px-2.5 py-0.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <Sparkles className="w-3 h-3 text-emerald-600" />
+                  <span>✨ 실무 추천 프롬프트 갤러리 둘러보기 ↗</span>
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                 <button
                   type="button"
                   onClick={() =>
@@ -492,7 +518,19 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                   className="p-2 text-left bg-slate-50 hover:bg-emerald-50/70 border border-slate-200/80 hover:border-emerald-300 rounded-xl text-[11px] font-bold text-slate-700 transition-all cursor-pointer flex flex-col gap-0.5"
                 >
                   <span className="text-emerald-700">📄 PDF 발주서 AI 자동 접수</span>
-                  <span className="text-[10px] text-slate-400 line-clamp-1">사이드바 업로드 및 품목별 분리</span>
+                  <span className="text-[10px] text-slate-400 line-clamp-1">사이드바 업로드 & 품목 분리</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleApplyTemplate(
+                      "일반 대중 및 고객에게 배포할 수 있는 모바일 반응형 설문 및 신청 접수 웹페이지(doGet Web App)를 만들어줘. 성함, 연락처, 신청내용을 깔끔한 폼으로 입력받아 이 구글 시트에 실시간으로 기록하고, 제출 완료 화면을 띄워줘."
+                    )
+                  }
+                  className="p-2 text-left bg-slate-50 hover:bg-sky-50/70 border border-slate-200/80 hover:border-sky-300 rounded-xl text-[11px] font-bold text-slate-700 transition-all cursor-pointer flex flex-col gap-0.5"
+                >
+                  <span className="text-sky-700">🌐 설문/접수 공개 웹페이지</span>
+                  <span className="text-[10px] text-slate-400 line-clamp-1">독립 웹 폼 & 실시간 시트 기록</span>
                 </button>
                 <button
                   type="button"
@@ -932,6 +970,141 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
               </pre>
             </div>
 
+            {/* 🌐 일반 대중 배포용 독립 웹페이지 URL 카드 */}
+            {generatedResult?.project?.webappUrl && (
+              <div className="p-3.5 bg-sky-50/90 border border-sky-200 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-sky-600 text-white flex items-center justify-center shadow-sm">
+                      <Globe className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-extrabold text-sky-900 text-xs">🌐 일반 대중 배포용 독립 웹페이지 발급 완료!</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-sky-700 bg-sky-100/80 px-2 py-0.5 rounded-full border border-sky-200/60">
+                    Web App 실시간 연결됨
+                  </span>
+                </div>
+                <p className="text-[11px] text-sky-800 font-medium leading-relaxed">
+                  일반 대중이나 고객이 별도 구글 로그인 없이 스마트폰 및 PC에서 바로 접속해 폼을 제출할 수 있는 고유 배포 주소입니다. 제출된 데이터는 스프레드시트에 실시간 적재됩니다.
+                </p>
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="text"
+                    readOnly
+                    value={generatedResult.project.webappUrl}
+                    className="flex-1 px-2.5 py-1.5 bg-white border border-sky-200 rounded-xl text-xs font-mono text-slate-800 select-all focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(generatedResult.project.webappUrl);
+                      setCopiedWebappUrl(true);
+                      setTimeout(() => setCopiedWebappUrl(false), 2000);
+                    }}
+                    className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shrink-0 shadow-sm"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>{copiedWebappUrl ? "복사됨!" : "URL 복사"}</span>
+                  </button>
+                  <a
+                    href={generatedResult.project.webappUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1.5 bg-white border border-sky-300 hover:bg-sky-100 text-sky-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shrink-0"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>새 탭 열기</span>
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* ⭐ AI 생성 결과 만족도 평가 카드 (AI 자가 학습 연동) */}
+            <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                  <span className="font-extrabold text-slate-800 text-xs">AI 생성 결과 만족도 평가 (자가 학습 반영)</span>
+                </div>
+                <span className="text-[10px] font-bold text-amber-700 bg-amber-100/70 px-2 py-0.5 rounded-full border border-amber-200/60">
+                  Self-improving AI
+                </span>
+              </div>
+
+              {inlineFeedbackSent ? (
+                <div className="p-2.5 bg-white rounded-xl border border-emerald-200 text-center text-xs font-bold text-emerald-700 flex items-center justify-center gap-1.5 shadow-sm">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>소중한 평가가 AI 자가 학습 시스템에 성공적으로 반영되었습니다!</span>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-amber-100">
+                    <span className="text-[11px] font-bold text-slate-600">완성된 코드와 기능에 만족하시나요?</span>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setInlineRating(star)}
+                          className="p-0.5 hover:scale-110 transition-transform cursor-pointer"
+                        >
+                          <Star
+                            className={`w-4 h-4 ${
+                              inlineRating >= star
+                                ? "text-amber-400 fill-amber-400 drop-shadow-sm"
+                            : "text-slate-200"
+                            }`}
+                          />
+                        </button>
+                      ))}
+                      <span className="text-xs font-black text-amber-700 ml-1.5">{inlineRating}점</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={inlineComment}
+                      onChange={(e) => setInlineComment(e.target.value)}
+                      placeholder={
+                        inlineRating >= 4
+                          ? "칭찬이나 좋았던 점을 남겨주시면 AI가 모범 사례로 학습합니다."
+                          : "아쉬웠던 부분이나 개선사항을 남겨주시면 AI가 보완 지침으로 학습합니다."
+                      }
+                      className="flex-1 px-2.5 py-1.5 bg-white border border-amber-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                    <button
+                      type="button"
+                      disabled={inlineSubmitting}
+                      onClick={async () => {
+                        const targetProjId = generatedResult?.project?.id || "temp_proj";
+                        setInlineSubmitting(true);
+                        try {
+                          await fetch("/api/feedback", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              projectId: targetProjId,
+                              projectName: projectName || "신규 프로젝트",
+                              rating: inlineRating,
+                              comment: inlineComment,
+                              scriptCodeSnapshot: generatedResult?.scriptCode,
+                            }),
+                          });
+                          setInlineFeedbackSent(true);
+                        } catch {
+                        } finally {
+                          setInlineSubmitting(false);
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer disabled:opacity-50 shadow-sm"
+                    >
+                      {inlineSubmitting ? "반영 중..." : "AI 학습 반영"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="pt-3 border-t border-slate-100 flex items-center justify-end">
               <button
                 onClick={handleComplete}
@@ -943,6 +1116,19 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
           </div>
         )}
       </div>
+
+      {/* 추천 프롬프트 갤러리 모달 */}
+      <PromptGalleryModal
+        isOpen={showPromptGallery}
+        onClose={() => setShowPromptGallery(false)}
+        onSelectPrompt={(tpl) => {
+          setPrompt(tpl.prompt_text);
+          if (!projectName) {
+            setProjectName(tpl.title);
+          }
+          setShowPromptGallery(false);
+        }}
+      />
     </div>
   );
 }
