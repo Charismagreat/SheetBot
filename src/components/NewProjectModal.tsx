@@ -13,13 +13,38 @@ interface NewProjectModalProps {
 export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProjectModalProps) {
   const [step, setStep] = useState<1 | 2>(1);
   const [sheetUrl, setSheetUrl] = useState("");
-  const [projectName, setProjectName] = useState("스마트 업무 자동화 시트");
+  const [projectName, setProjectName] = useState("");
+  const [isFetchingTitle, setIsFetchingTitle] = useState(false);
+  const [autoDetectedTitle, setAutoDetectedTitle] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedResult, setGeneratedResult] = useState<any>(null);
 
   if (!isOpen) return null;
+
+  // 구글 시트 URL 입력 시 시트 원본 제목 자동 조회 및 채우기
+  const fetchSheetTitle = async (url: string, forceOverwrite = false) => {
+    const trimmed = url.trim();
+    if (!trimmed || trimmed.length < 20) return;
+
+    setIsFetchingTitle(true);
+    try {
+      const res = await apiFetch(`/api/sheets/title?url=${encodeURIComponent(trimmed)}`);
+      const data = await res.json().catch(() => ({}));
+      if (data?.success && data?.title) {
+        // 프로젝트 이름이 비어있거나, 이전 자동감지 제목과 같거나, 강제 덮어쓰기인 경우 채우기
+        if (forceOverwrite || !projectName.trim() || projectName === autoDetectedTitle) {
+          setProjectName(data.title);
+        }
+        setAutoDetectedTitle(data.title);
+      }
+    } catch (e) {
+      // 오류 시 침묵하여 수동 입력에 방해되지 않도록 처리
+    } finally {
+      setIsFetchingTitle(false);
+    }
+  };
 
   const handleApplyTemplate = (text: string) => {
     setPrompt(text);
@@ -95,6 +120,8 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
     onClose();
     setStep(1);
     setSheetUrl("");
+    setProjectName("");
+    setAutoDetectedTitle(null);
     setPrompt("");
     setGeneratedResult(null);
   };
@@ -139,7 +166,15 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
           <form onSubmit={handleGenerateAndDeploy} className="space-y-4 text-xs">
             {/* 스프레드시트 URL */}
             <div className="space-y-1">
-              <label className="font-bold text-slate-700 block">연결할 구글 스프레드시트 URL 또는 ID *</label>
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-700 block">연결할 구글 스프레드시트 URL 또는 ID *</label>
+                {isFetchingTitle && (
+                  <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-semibold animate-pulse">
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    시트 제목 조회 중...
+                  </span>
+                )}
+              </div>
               <div
                 className="relative"
                 data-easybot-hint="스프레드시트 URL: Apps Script 코드가 바인딩될 대상 구글 시트의 전체 URL 또는 스프레드시트 ID를 입력합니다."
@@ -147,12 +182,33 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
                 <input
                   type="text"
                   value={sheetUrl}
-                  onChange={(e) => setSheetUrl(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSheetUrl(val);
+                    if (val.includes("/spreadsheets/d/") || val.length >= 25) {
+                      fetchSheetTitle(val);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (sheetUrl) {
+                      fetchSheetTitle(sheetUrl);
+                    }
+                  }}
                   placeholder="https://docs.google.com/spreadsheets/d/1vVmz56s0QrknZfhaOod_EX6-eoiYlXGW220inT5qXME/edit"
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  className="w-full pl-9 pr-24 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                   required
                 />
                 <FileSpreadsheet className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <button
+                  type="button"
+                  onClick={() => fetchSheetTitle(sheetUrl, true)}
+                  disabled={isFetchingTitle || !sheetUrl.trim()}
+                  className="absolute right-1.5 top-1.5 px-2 py-1 bg-white hover:bg-slate-100 disabled:opacity-40 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 transition-all cursor-pointer flex items-center gap-1"
+                  title="구글 시트 원래 제목 다시 가져오기"
+                >
+                  <RefreshCw className={`w-2.5 h-2.5 ${isFetchingTitle ? "animate-spin text-emerald-600" : ""}`} />
+                  제목 확인
+                </button>
               </div>
             </div>
 
@@ -161,7 +217,15 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
               className="space-y-1"
               data-easybot-hint="프로젝트 명칭: 대시보드에서 식별할 수 있는 직관적인 자동화 프로젝트 이름을 입력합니다."
             >
-              <label className="font-bold text-slate-700 block">프로젝트 이름 *</label>
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-700 block">프로젝트 이름 *</label>
+                {autoDetectedTitle && (
+                  <span className="flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded-md font-medium">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    시트 원래 제목 자동 반영됨 (수정 가능)
+                  </span>
+                )}
+              </div>
               <input
                 type="text"
                 value={projectName}
@@ -170,6 +234,9 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                 required
               />
+              <p className="text-[10px] text-slate-400">
+                구글 시트의 원래 제목이 기본값으로 자동 채워지며, 원하는 이름으로 언제든 자유롭게 수정할 수 있습니다.
+              </p>
             </div>
 
             {/* 템플릿 추천 버튼 */}
