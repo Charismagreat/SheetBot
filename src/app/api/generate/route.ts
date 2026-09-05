@@ -39,16 +39,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "요구사항 프롬프트를 입력해 주세요." }, { status: 400 });
     }
 
+    const host = request.headers.get("host") || "localhost:4002";
+    const protocol = request.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
+    const currentServerUrl = `${protocol}://${host}`;
+
     const systemPrompt = `당신은 Google Apps Script(GAS) 최고의 전문 수석 엔지니어입니다.
 사용자의 자연어 요구사항을 분석하여 Google 스프레드시트에서 즉시 완벽히 동작하는 완성형 Apps Script 코드와 매니페스트를 작성하세요.
 
-[필수 구현 지침]
-1. 사용자의 요구사항(기능, 시트 이름, 사이드바, 트리거, 삽입 위치 등)을 빠짐없이 100% 코드로 구체화하세요. 생략이나 TODO, 빈 함수를 남기지 마세요.
-2. 사이드바가 요구되는 경우: SpreadsheetApp.getUi().showSidebar()와 HtmlService를 활용하여 직관적인 HTML/JS 인터페이스를 생성하고, 사용자가 파일 업로드나 입력을 수행할 수 있는 핸들러를 온전히 포함하세요.
-3. 시트 조작: 특정 시트명이 언급된 경우(예: '발주서 접수대장'), getSheetByName()으로 참조하되 없으면 insertSheet()로 자동 생성하도록 하세요.
-4. 데이터 삽입: '최근 기록이 위에 오도록' 요청된 경우, 1행(헤더) 바로 아래인 2행에 새 행을 삽입(insertRowAfter(1) 또는 insertRows(2))하여 기존 데이터를 보존하며 맨 위에 추가되도록 작성하세요.
-5. 상단 메뉴: 구글 시트 상단 메뉴에 '🚀 SheetBot 자동화' 메뉴를 추가하는 onOpen() 함수를 항상 포함하세요.
-6. 예외 처리: 모든 주요 함수에는 try-catch를 꼼꼼히 감싸고, SpreadsheetApp.getUi().alert() 및 toast 안내를 적극 활용하세요.
+[시트봇 핵심 보안 및 API 원칙 - 절대 준수]
+1. ⚠️ 사용자 개인 API 키 요구 절대 금지:
+   - 사용자에게 Gemini API 키나 OpenAI API 키 등 개인 API 키 입력을 요구하는 UI, 안내문, 팝업, 메뉴(예: 'Gemini API 키 설정')를 "절대로 작성하지 마십시오".
+   - 시트봇(SheetBot) 서비스는 모든 AI 및 OCR 호출을 백엔드 중앙 서버(이지데스크 AI Caller)에서 일괄 처리하므로, 사용자가 개인 API 키를 소지하거나 시트에 등록할 필요가 없습니다.
+2. 🤖 AI 및 OCR 분석 구현 방법:
+   - 사이드바에서 PDF 또는 이미지 파일 업로드 시:
+     - 사이드바 UI에 파일 선택(<input type="file">)과 'AI 분석 및 시트 기록' 버튼을 제공하세요.
+     - 사용자가 파일을 선택하고 버튼을 누르면, 브라우저 FileReader로 Base64로 인코딩한 뒤 google.script.run을 통해 GAS 서버 함수(예: processUploadedDocument)를 호출하세요.
+     - GAS 서버 함수에서는 시트봇 중앙 엔드포인트(SHEETBOT_API_URL + '/api/ai/ocr')로 UrlFetchApp.fetch를 실행하여 이지데스크 AI Caller의 OCR 분석 결과를 받아오세요.
+     - 사용자에게 API 키가 없다는 경고나 설정창을 절대 띄우지 마세요! 바로 파일 업로드 및 자동 분석이 실행되어야 합니다.
+3. 📋 시트 및 데이터 조작:
+   - 특정 시트명(예: '발주서 접수대장')이 언급된 경우, getSheetByName()으로 참조하고 시트가 없으면 insertSheet()로 헤더 행과 함께 자동 생성하세요.
+   - '최근 기록이 위에 오도록' 요청된 경우, 헤더(1행) 바로 아래인 2행에 insertRowAfter(1) 또는 insertRows(2)로 삽입하여 최신 데이터가 항상 맨 위에 오도록 작성하세요. 기존 행을 덮어쓰거나 지우지 마세요.
+4. 🚀 상단 메뉴 및 사이드바:
+   - 구글 시트 상단 메뉴에 '🚀 SheetBot 자동화' 메뉴를 추가하는 onOpen() 함수를 항상 포함하세요.
+   - 메뉴 클릭 시 showSidebar()를 호출하여 파일 업로드 사이드바가 즉시 열리도록 하세요.
+5. 🛡️ 예외 처리:
+   - try-catch를 꼼꼼히 감싸고, SpreadsheetApp.getUi().alert() 및 toast 안내를 적극 활용하세요.
 
 [출력 형식]
 반드시 다음 JSON 규격으로만 응답해야 합니다. 마크다운 코드블록(\`\`\`json) 없이 순수 JSON 문자열만 출력하세요:
@@ -66,10 +81,15 @@ export async function POST(request: Request) {
   ]
 }`;
 
-    const userMessage = `[대상 구글 시트]: ${sheetUrl || "연결된 스프레드시트"}
+    const userMessage = `[시트봇 중앙 서버 주소]: ${currentServerUrl}
+[대상 구글 시트]: ${sheetUrl || "연결된 스프레드시트"}
 [프로젝트 명칭]: ${customTitle || "스마트 시트 자동화"}
 [사용자 요구사항]:
-${prompt}`;
+${prompt}
+
+* 중요 지침: 
+1. 코드 상단에 const SHEETBOT_SERVER_URL = "${currentServerUrl}"; 상수를 선언하고, AI OCR 분석 시 SHEETBOT_SERVER_URL + "/api/ai/ocr" 엔드포인트를 호출하세요.
+2. 사용자에게 Gemini API 키나 개인 키 설정을 절대로 요구하지 마십시오.`;
 
     const fullPrompt = `${systemPrompt}\n\n${userMessage}`;
 
