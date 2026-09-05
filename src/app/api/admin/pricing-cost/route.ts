@@ -66,49 +66,65 @@ export async function GET() {
   try {
     const config = await getPricingCostConfig();
 
-    // 패키지별 손익 시뮬레이션 계산
-    // 기준: 표준 모델(gemini-3.5-flash) 및 최신 모델(gemini-3.8-flash) 기준 원가 비교
-    const standardModel = config.models.find((m) => m.id === "gemini-3.5-flash") || config.models[0];
-    const latestModel = config.models.find((m) => m.id === "gemini-3.8-flash") || config.models[0];
+    // 패키지별 정밀 재무 손익 시뮬레이션 계산 (VAT 및 PG 수수료 반영)
+    const vatRate = Number(config.vatRate ?? 10) / 100; // 10%
+    const pgFeeRate = Number(config.pgFeeRate ?? 3.3) / 100; // 3.3%
+
+    // 기본 제공 모델(3.8 Flash 등) 및 비교 모델(3.5 Flash 등)
+    const defModelId = config.defaultModel || "gemini-3.8-flash";
+    const primaryModel = config.models.find((m) => m.id === defModelId) || config.models[0];
+    const legacyModel = config.models.find((m) => m.id === "gemini-3.5-flash") || config.models[1] || primaryModel;
 
     const packageSimulations = TOKEN_PACKAGES.map((pkg) => {
-      // 1회 평균 생성 토큰: 1,500토큰 가정 (입력 1,000 + 출력 500)
+      // 1. 회계상 순매출(공급가액) 및 부가세 예수금 분리
+      // 결제금액 = 공급가액 * (1 + vatRate) -> 공급가액 = 결제금액 / (1 + vatRate)
+      const netSalesKrw = Math.round(pkg.priceKrw / (1 + vatRate));
+      const vatKrw = pkg.priceKrw - netSalesKrw;
+
+      // 2. PG사 결제 수수료 (결제 총액 기준 통상 차감)
+      const pgFeeKrw = Math.round(pkg.priceKrw * pgFeeRate);
+
+      // 3. LLM API 실제 원가 계산 (1회 평균 1,500토큰 가정: 입력 1,000 + 출력 500)
       const inputRatio = 1000 / 1500;
       const outputRatio = 500 / 1500;
 
-      // 표준 모델 1토큰당 원가 (KRW)
-      const stdCostPerTokenUsd =
-        ((standardModel.inputCostUsdPerMillion * inputRatio) +
-         (standardModel.outputCostUsdPerMillion * outputRatio)) / 1_000_000;
-      const stdEstimatedCostKrw = Math.round(pkg.totalTokens * stdCostPerTokenUsd * config.exchangeRate);
+      // A. 기본 제공 모델 (예: 3.8 Flash)
+      const primaryCostPerTokenUsd =
+        ((primaryModel.inputCostUsdPerMillion * inputRatio) +
+         (primaryModel.outputCostUsdPerMillion * outputRatio)) / 1_000_000;
+      const primaryRawCostKrw = pkg.totalTokens * primaryCostPerTokenUsd * config.exchangeRate;
+      const primaryEstimatedCostKrw = Math.round(primaryRawCostKrw / (primaryModel.tokenMultiplier || 1.0));
 
-      // 최신 모델(3.8) 1토큰당 원가 (KRW)
-      const latestCostPerTokenUsd =
-        ((latestModel.inputCostUsdPerMillion * inputRatio) +
-         (latestModel.outputCostUsdPerMillion * outputRatio)) / 1_000_000;
-      const latestEstimatedCostKrw = Math.round(pkg.totalTokens * latestCostPerTokenUsd * config.exchangeRate);
+      // B. 구형 모델 (예: 3.5 Flash)
+      const legacyCostPerTokenUsd =
+        ((legacyModel.inputCostUsdPerMillion * inputRatio) +
+         (legacyModel.outputCostUsdPerMillion * outputRatio)) / 1_000_000;
+      const legacyRawCostKrw = pkg.totalTokens * legacyCostPerTokenUsd * config.exchangeRate;
+      const legacyEstimatedCostKrw = Math.round(legacyRawCostKrw / (legacyModel.tokenMultiplier || 1.0));
 
-      // 표준 모델 기준 순이익 & 마진율
-      const stdProfitKrw = pkg.priceKrw - stdCostPerTokenUsd * pkg.totalTokens * config.exchangeRate;
-      const stdMarginPercent = Math.round((stdProfitKrw / pkg.priceKrw) * 100);
+      // 4. 실질 영업 순이익 (순매출 - PG수수료 - API원가)
+      const primaryRealProfitKrw = netSalesKrw - pgFeeKrw - primaryEstimatedCostKrw;
+      const primaryRealMarginPercent = Math.round((primaryRealProfitKrw / netSalesKrw) * 1000) / 10; // 소수점 1자리
 
-      // 최신 모델 기준 (가중치 1.8배 차감 적용 시 실질 소모 토큰 = totalTokens / 1.8)
-      // 사용자는 1.8배 더 빨리 토큰을 소모하므로 운영사는 같은 금액에 더 적은 호출을 제공하여 마진 방어
-      const effectiveLatestCostKrw = Math.round(latestEstimatedCostKrw / (latestModel.tokenMultiplier || 1.8));
-      const latestProfitKrw = pkg.priceKrw - effectiveLatestCostKrw;
-      const latestMarginPercent = Math.round((latestProfitKrw / pkg.priceKrw) * 100);
+      const legacyRealProfitKrw = netSalesKrw - pgFeeKrw - legacyEstimatedCostKrw;
+      const legacyRealMarginPercent = Math.round((legacyRealProfitKrw / netSalesKrw) * 1000) / 10;
 
       return {
         id: pkg.id,
         name: pkg.name,
         priceKrw: pkg.priceKrw,
+        netSalesKrw,
+        vatKrw,
+        pgFeeKrw,
         totalTokens: pkg.totalTokens,
-        stdEstimatedCostKrw,
-        stdProfitKrw: Math.round(stdProfitKrw),
-        stdMarginPercent,
-        latestEstimatedCostKrw: effectiveLatestCostKrw,
-        latestProfitKrw: Math.round(latestProfitKrw),
-        latestMarginPercent,
+        primaryModelName: primaryModel.name,
+        primaryEstimatedCostKrw,
+        primaryRealProfitKrw,
+        primaryRealMarginPercent,
+        legacyModelName: legacyModel.name,
+        legacyEstimatedCostKrw,
+        legacyRealProfitKrw,
+        legacyRealMarginPercent,
       };
     });
 
@@ -197,6 +213,8 @@ export async function POST(request: Request) {
           defaultModel: targetDefaultModel,
           exchangeRate: rate,
           targetMarginRate: Number(config.targetMarginRate) || 50,
+          pgFeeRate: typeof config.pgFeeRate === "number" ? config.pgFeeRate : Number(config.pgFeeRate) || 3.3,
+          vatRate: typeof config.vatRate === "number" ? config.vatRate : Number(config.vatRate) || 10,
           allowUserModelSelection: config.allowUserModelSelection !== false,
           models: normalizedModels,
         },
