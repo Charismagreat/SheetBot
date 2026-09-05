@@ -165,6 +165,12 @@ export async function POST(request: Request) {
 
         // 스크립트 코드가 제공된 경우 Code.gs 파일 덮어쓰기 및 구글 클라우드에 직접 푸시
         if (gasProjectId && scriptCode) {
+          // 비정상 파일이 남아있을 경우 푸시 충돌 방지를 위해 정리
+          await callAppsScriptTool("apps_script_delete_file", {
+            projectId: gasProjectId,
+            fileName: "undefined.gs",
+          }).catch(() => null);
+
           await callAppsScriptTool("apps_script_write_file", {
             projectId: gasProjectId,
             fileName: "Code.gs",
@@ -326,6 +332,12 @@ export async function PATCH(request: Request) {
       const manifest = projRow.manifest;
 
       if (gasProjId && scriptCode) {
+        // 비정상 파일이 남아있을 경우 푸시 충돌 방지를 위해 정리
+        await callAppsScriptTool("apps_script_delete_file", {
+          projectId: gasProjId,
+          fileName: "undefined.gs",
+        }).catch(() => null);
+
         await callAppsScriptTool("apps_script_write_file", {
           projectId: gasProjId,
           fileName: "Code.gs",
