@@ -54,9 +54,56 @@ export default function DashboardPage() {
     }
   }, [status, fetchData]);
 
+  const [syncingProjectId, setSyncingProjectId] = useState<string | null>(null);
+
   const showAlert = (msg: { type: "success" | "error"; text: string }) => {
     setAlertMessage(msg);
     setTimeout(() => setAlertMessage(null), 5000);
+  };
+
+  // 구글 시트 원본 제목으로 프로젝트 이름 동기화 핸들러
+  const handleSyncProjectTitle = async (p: any) => {
+    const urlOrId = p.spreadsheetUrl || p.spreadsheet_url || p.spreadsheetId || p.spreadsheet_id;
+    if (!urlOrId) {
+      showAlert({ type: "error", text: "연결된 구글 시트 URL 또는 ID 정보가 없습니다." });
+      return;
+    }
+
+    setSyncingProjectId(p.id);
+    try {
+      // 1. 최신 시트 원본 제목 조회
+      const titleRes = await apiFetch(`/api/sheets/title?url=${encodeURIComponent(urlOrId)}`);
+      const titleData = await titleRes.json().catch(() => ({}));
+
+      if (!titleData?.success || !titleData?.title) {
+        throw new Error(titleData?.error || "구글 시트 제목을 가져오지 못했습니다.");
+      }
+
+      const newTitle = titleData.title.trim();
+
+      // 2. DB 프로젝트 이름 업데이트 (PATCH)
+      const updateRes = await apiFetch("/api/projects", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: p.id, name: newTitle }),
+      });
+      const updateData = await updateRes.json().catch(() => ({}));
+
+      if (!updateData?.success) {
+        throw new Error(updateData?.error || "프로젝트 이름 업데이트에 실패했습니다.");
+      }
+
+      // 3. 로컬 프로젝트 목록 즉시 갱신
+      setProjects((prev) =>
+        prev.map((proj) => (proj.id === p.id ? { ...proj, name: newTitle } : proj))
+      );
+
+      showAlert({ type: "success", text: `'${newTitle}'(으)로 프로젝트 이름이 동기화되었습니다.` });
+    } catch (err: any) {
+      showAlert({ type: "error", text: err.message || "시트 이름 동기화에 실패했습니다." });
+    } finally {
+      setSyncingProjectId(null);
+    }
   };
 
   const handleDeleteProject = async (p: any) => {
@@ -267,38 +314,53 @@ export default function DashboardPage() {
             </div>
 
             {/* 기존 프로젝트 목록 */}
-            {projects.map((p) => (
-              <div
-                key={p.id}
-                className="p-4 rounded-2xl border border-emerald-100 shadow-xs hover:border-emerald-300 bg-white transition-all flex flex-col justify-between gap-3"
-                data-easybot-hint={`프로젝트 카드: '${p.name}' 자동화 프로젝트입니다. 구글 시트 바인딩 및 코드 배포 상태를 확인합니다.`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1 flex-1 min-w-0">
-                    <h5 className="font-bold text-xs text-slate-800 truncate" title={p.name}>
-                      {p.name}
-                    </h5>
-                    <div className="text-[10px] text-slate-400 font-mono truncate">
-                      ID: {p.scriptId || p.gasProjectId || p.id}
+            {projects.map((p) => {
+              const isSyncing = syncingProjectId === p.id;
+              return (
+                <div
+                  key={p.id}
+                  className="p-4 rounded-2xl border border-emerald-100 shadow-xs hover:border-emerald-300 bg-white transition-all flex flex-col justify-between gap-3"
+                  data-easybot-hint={`프로젝트 카드: '${p.name}' 자동화 프로젝트입니다. 구글 시트 바인딩 및 코드 배포 상태를 확인합니다.`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1 flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h5 className="font-bold text-xs text-slate-800 truncate max-w-[180px] sm:max-w-[240px]" title={p.name}>
+                          {p.name}
+                        </h5>
+                        <button
+                          type="button"
+                          onClick={() => handleSyncProjectTitle(p)}
+                          disabled={isSyncing}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 text-slate-600 rounded-md text-[10px] font-bold transition-all border border-slate-200 cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50"
+                          title="구글 시트의 원래 최신 제목으로 프로젝트 이름을 동기화합니다."
+                          data-easybot-hint="시트명 동기화: 구글 스프레드시트의 원본 제목을 조회하여 이 카드의 프로젝트 이름을 즉시 일치시킵니다."
+                        >
+                          <RefreshCw className={`w-2.5 h-2.5 ${isSyncing ? "animate-spin text-emerald-600" : "text-slate-500"}`} />
+                          <span>{isSyncing ? "동기화 중..." : "동기화"}</span>
+                        </button>
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono truncate">
+                        ID: {p.scriptId || p.gasProjectId || p.id}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-md flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>연결 완료</span>
+                      </span>
+
+                      <button
+                        onClick={() => handleDeleteProject(p)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
+                        title="프로젝트 삭제"
+                        data-easybot-hint="프로젝트 삭제: 프로젝트를 안전하게 소프트 삭제(휴지통 처리)합니다."
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-md flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      <span>연결 완료</span>
-                    </span>
-
-                    <button
-                      onClick={() => handleDeleteProject(p)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
-                      title="프로젝트 삭제"
-                      data-easybot-hint="프로젝트 삭제: 프로젝트를 안전하게 소프트 삭제(휴지통 처리)합니다."
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
 
                 {p.summary && (
                   <p className="text-[11px] text-slate-500 line-clamp-1">{p.summary}</p>
@@ -342,8 +404,9 @@ export default function DashboardPage() {
                   )}
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
+        </div>
         </div>
 
         {/* 3. 자동화 스케줄 & 트리거 관리 섹션 */}
