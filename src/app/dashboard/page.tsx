@@ -29,6 +29,7 @@ export default function DashboardPage() {
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<any | null>(null);
   const [alertMessage, setAlertMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [copyingBridgeProjectId, setCopyingBridgeProjectId] = useState<string | null>(null);
 
   // 요약 카드용 실시간 계정 자원 상태
   const [wallet, setWallet] = useState<{
@@ -199,6 +200,32 @@ export default function DashboardPage() {
       showAlert({ type: "error", text: err.message || "시트 이름 동기화에 실패했습니다." });
     } finally {
       setSyncingProjectId(null);
+    }
+  };
+
+  // AI 에이전트 연동 주소 및 프롬프트 복사 핸들러
+  const handleCopyAgentBridgeUrl = async (p: any) => {
+    setCopyingBridgeProjectId(p.id);
+    try {
+      const res = await apiFetch("/api/projects/bridge-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: p.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!data?.success) {
+        throw new Error(data?.error || "AI 연동 주소 발급에 실패했습니다.");
+      }
+
+      await navigator.clipboard.writeText(data.promptTemplate);
+      showAlert({
+        type: "success",
+        text: `🤖 AI 연동 프롬프트가 복사되었습니다! 안티그라비티나 AI 채팅창에 붙여넣어 코드를 자동 주입하세요.`,
+      });
+    } catch (err: any) {
+      showAlert({ type: "error", text: err.message || "주소 복사 중 오류가 발생했습니다." });
+    } finally {
+      setCopyingBridgeProjectId(null);
     }
   };
 
@@ -671,6 +698,20 @@ export default function DashboardPage() {
                           <ExternalLink className="w-3 h-3 text-sky-600/70 shrink-0" />
                         </a>
                       )}
+
+                      {/* 🤖 AI 에이전트 연동 주소 복사 버튼 */}
+                      <button
+                        type="button"
+                        onClick={() => handleCopyAgentBridgeUrl(p)}
+                        disabled={copyingBridgeProjectId === p.id}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-lg transition-colors border border-purple-200/80 shadow-2xs whitespace-nowrap text-xs cursor-pointer active:scale-95 disabled:opacity-50"
+                        data-easybot-hint="AI 에이전트 연동: 안티그라비티나 외부 AI에 전달할 원격 코드 주입용 웹 주소와 프롬프트를 원클릭 복사합니다."
+                        title="안티그라비티/외부 AI에 전달하여 코드를 자동 주입할 웹 주소를 복사합니다."
+                      >
+                        <Bot className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                        <span>{copyingBridgeProjectId === p.id ? "주소 생성 중..." : "AI 연동 주소 복사"}</span>
+                        <Copy className="w-3 h-3 text-purple-600/70 shrink-0" />
+                      </button>
                     </div>
                   </div>
 

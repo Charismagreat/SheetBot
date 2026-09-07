@@ -13,6 +13,7 @@ import {
   ArrowRight,
   ShieldCheck,
   Code,
+  FileCode,
   CheckCircle2,
   HelpCircle,
   Copy,
@@ -144,6 +145,30 @@ export default function GuidePage() {
       icon: FileSpreadsheet,
       color: "border-teal-200 bg-teal-50/60 text-teal-700",
       prompt: "A시트의 주문번호를 기준으로 B시트의 결제금액을 VLOOKUP으로 가져와 C열에 넣고, 미납금이 있는 행만 골라내는 ARRAYFORMULA 수식 구조를 작성해줘.",
+    },
+    {
+      id: "ex_agent_bridge",
+      title: "안티그라비티(Antigravity) 브릿지 연동 및 대화형 코드 주입",
+      tag: "AI 에이전트 브릿지",
+      icon: Bot,
+      color: "border-purple-200 bg-purple-50/60 text-purple-800",
+      prompt: "아래 웹 주소를 통해 내 구글 시트의 헤더 구조와 기존 코드를 확인하고, 필요한 기능 코드를 주입해줘:\n웹 주소: https://.../api/agent/gas-bridge?token=sec_xxxx\n요구사항: 사이드바에서 발주서 PDF를 올리면 10행 헤더 양식에 맞게 품목별로 1행씩 분리해서 자동으로 채워 넣어줘.",
+    },
+    {
+      id: "ex_estimate_form",
+      title: "고정 셀·품목란·합계 수식이 결합된 견적서/발주서 양식 자동 완성",
+      tag: "견적서/보고서 양식 완성",
+      icon: FileCode,
+      color: "border-emerald-200 bg-emerald-50/60 text-emerald-800",
+      prompt: "이 견적서 시트의 C4(견적일자), B6(고객사명) 고정 좌표와 14행부터 시작하는 품목란에 입력값을 채워 넣어줘. 하단 G24의 =SUM(G14:G23) 합계 수식은 절대 덮어쓰지 말고 그대로 보존해서 자동 계산되게 해줘.",
+    },
+    {
+      id: "ex_sqlite_sync",
+      title: "내 컴퓨터 로컬 SQLite DB 파일 데이터 추출 및 구글 시트 대장 완성",
+      tag: "로컬 SQLite DB 연동",
+      icon: Code,
+      color: "border-blue-200 bg-blue-50/60 text-blue-800",
+      prompt: "내 컴퓨터 C:\\data\\erp.sqlite 파일의 orders 테이블에서 '삼전상사'의 이번 달 발주 품목만 SQL로 추출해서, 구글 시트 견적서 양식의 14행부터 차례대로 기입해줘.",
     },
   ];
 
@@ -280,6 +305,75 @@ export default function GuidePage() {
               <h4 className="font-extrabold text-xs text-slate-900">스프레드시트 실시간 발송</h4>
               <p className="text-[11px] text-slate-500 leading-relaxed">
                 시트에서 행 데이터가 수정되거나 추가되면 AI가 조건을 판별하여 내 스마트폰을 통해 고객 또는 나에게 문자를 실시간 발송합니다.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* 신규 기능: AI 에이전트 원격 브릿지 & 견적서·보고서 양식 완성 가이드 */}
+        <section className="bg-gradient-to-r from-purple-50 via-slate-50 to-indigo-50 rounded-3xl p-6 sm:p-10 border border-purple-200/80 space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-purple-700 text-white rounded-full text-xs font-black">
+                <Bot className="w-3.5 h-3.5" />
+                <span>신규 탑재: AI 에이전트 원격 브릿지 &amp; 복합 양식 완성</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900">
+                안티그라비티(Antigravity) 연동 &amp; 견적서·보고서 자동 완성
+              </h2>
+              <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+                복잡한 설치나 도구(MCP) 없이, 대시보드의 [AI 연동 주소 복사] 버튼으로 발급된 웹 주소 하나만 안티그라비티나 AI 채팅창에 전달하세요. 
+                10행 헤더 감지, 견적서 고정 좌표/합계 수식 보존, 로컬 SQLite 데이터 연동, 정기 스케줄까지 대화형으로 완성됩니다.
+              </p>
+            </div>
+
+            <Link
+              href="/dashboard"
+              className="px-5 py-3 bg-purple-900 hover:bg-purple-800 text-white text-xs font-extrabold rounded-xl shadow-md transition-all flex items-center gap-1.5 shrink-0 self-start md:self-auto"
+            >
+              <span>대시보드에서 연동 주소 복사하기</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
+            <div className="bg-white p-5 rounded-2xl border border-purple-100 shadow-2xs space-y-2">
+              <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs">
+                1
+              </div>
+              <h4 className="font-extrabold text-xs text-slate-900">원클릭 AI 연동 주소 발급</h4>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                시트봇 대시보드 프로젝트 카드에서 <strong>[🤖 AI 연동 주소 복사]</strong>를 누르면 안티그라비티 전용 프롬프트와 웹 주소가 즉시 복사됩니다.
+              </p>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-indigo-100 shadow-2xs space-y-2">
+              <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">
+                2
+              </div>
+              <h4 className="font-extrabold text-xs text-slate-900">10행 헤더 &amp; 견적서 양식 감지</h4>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                상단 제목/결재란과 10행 실제 헤더를 분리 인식하며, 견적서 고정 셀(C4, B6)과 품목란(14행~), 하단 =SUM 수식을 안전하게 보존합니다.
+              </p>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-2xs space-y-2">
+              <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
+                3
+              </div>
+              <h4 className="font-extrabold text-xs text-slate-900">내 컴퓨터 SQLite DB 연동</h4>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                "내 PC의 sales.db에서 이번 달 거래처 발주 내역 뽑아서 시트에 채워줘"라고 요청하면 AI가 SQL 쿼리 후 견적서에 자동 입력합니다.
+              </p>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-emerald-100 shadow-2xs space-y-2">
+              <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
+                4
+              </div>
+              <h4 className="font-extrabold text-xs text-slate-900">대화형 코드 수정 &amp; 스케줄</h4>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                매일 정해진 시간 자동 실행(트리거) 설정은 물론, "이 함수는 지워줘", "계산식 바꿔줘" 등 특정 기능 수정/제거도 자유롭게 가능합니다.
               </p>
             </div>
           </div>
