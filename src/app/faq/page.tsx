@@ -63,17 +63,14 @@ export default function FaqPage() {
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-10">
         {/* 상단 헤더 */}
-        <div className="text-center max-w-2xl mx-auto space-y-3">
+        <div className="text-center max-w-2xl mx-auto space-y-2">
           <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold border border-indigo-200/60 shadow-xs">
             <HelpCircle className="w-3.5 h-3.5 text-indigo-600" />
-            <span>자주 묻는 질문 (FAQ)</span>
+            <span>자주 묻는 질문</span>
           </div>
-          <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
-            궁금한 점을 빠르고 명쾌하게 확인하세요
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+            자주 묻는 질문 (FAQ)
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
-            SheetBot 이용 방법, 토큰 충전 및 환불 규정, 구글 시트 보안과 스케줄 자동화에 관한 주요 질문들을 실시간으로 제공합니다.
-          </p>
         </div>
 
         {/* 실시간 키워드 검색창 */}
