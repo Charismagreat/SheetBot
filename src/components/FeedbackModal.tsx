@@ -37,6 +37,40 @@ export default function FeedbackModal({
   const [comment, setComment] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [submitted, setSubmitted] = useState<boolean>(false);
+  const [canRate, setCanRate] = useState<boolean>(true);
+  const [checkingEligibility, setCheckingEligibility] = useState<boolean>(true);
+  const [alreadyRatedMsg, setAlreadyRatedMsg] = useState<string>('');
+
+  React.useEffect(() => {
+    if (!isOpen || !project?.id) return;
+    let isMounted = true;
+    setCheckingEligibility(true);
+
+    apiFetch(`/api/feedback?projectId=${encodeURIComponent(project.id)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!isMounted) return;
+        if (data.success && data.canRate === false) {
+          setCanRate(false);
+          setAlreadyRatedMsg(
+            '이 프로젝트에 대한 AI 코드 만족도 평가가 이미 완료되었습니다. 추가 요구사항을 통해 AI 코드를 수정한 후에 다시 평가하실 수 있습니다.'
+          );
+        } else {
+          setCanRate(true);
+          setAlreadyRatedMsg('');
+        }
+      })
+      .catch(() => {
+        if (isMounted) setCanRate(true);
+      })
+      .finally(() => {
+        if (isMounted) setCheckingEligibility(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, project?.id]);
 
   if (!isOpen) return null;
 
@@ -137,6 +171,30 @@ export default function FeedbackModal({
                   ? '🌟 우수 모범 사례로 분류되어 향후 코드 생성 품질이 한층 더 높아집니다.'
                   : '⚠️ 지적해주신 개선점과 주의사항을 시스템이 즉시 학습하여 반복 실수를 방지합니다.'}
               </p>
+            </div>
+          </div>
+        ) : !canRate ? (
+          <div className="py-8 px-2 text-center space-y-4">
+            <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto shadow-sm">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div className="space-y-1.5 max-w-sm mx-auto">
+              <h4 className="text-sm font-extrabold text-slate-900">만족도 평가가 이미 완료되었습니다</h4>
+              <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                현재 생성된 AI 코드에 대해 이미 평가를 제출하셨습니다.
+              </p>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600 font-medium text-left">
+                💡 <span className="font-bold text-indigo-700">다시 평가하시려면:</span> 대장에서 <span className="font-bold text-slate-800">[요구사항 수정]</span>을 통해 추가 요구사항을 입력하고 새 AI 코드를 생성/재배포한 후 다시 평가하실 수 있습니다.
+              </div>
+            </div>
+            <div className="pt-2 flex justify-center">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
+              >
+                확인
+              </button>
             </div>
           </div>
         ) : (

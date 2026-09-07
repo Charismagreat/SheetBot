@@ -47,9 +47,36 @@ export async function GET(req: NextRequest) {
       ? Number((formatted.reduce((acc: number, curr: any) => acc + (curr.rating || 0), 0) / totalCount).toFixed(1))
       : 5.0;
 
+    // 특정 프로젝트에 대한 평가 가능 여부(canRate) 판별
+    let canRate = true;
+    let lastRatedAt: string | null = null;
+
+    if (projectId) {
+      const projFeedbacks = formatted.filter((f: any) => f.project_id === projectId);
+      if (projFeedbacks.length > 0) {
+        const latestFeedback = projFeedbacks[0]; // orderBy created_at DESC
+        lastRatedAt = latestFeedback.created_at;
+
+        // 프로젝트의 최신 갱신 일시 조회
+        const projRes = await queryTable('sheetbot_projects', {
+          filters: { id: projectId },
+          limit: 1,
+        }).catch(() => ({ rows: [] }));
+        const projectRow = projRes.rows?.[0];
+
+        const feedbackTime = new Date(latestFeedback.created_at).getTime();
+        const projectUpdatedTime = projectRow?.updated_at ? new Date(projectRow.updated_at).getTime() : 0;
+
+        // 마지막 평가 이후 프로젝트 요구사항 수정 및 신규 배포가 이루어졌는지 확인
+        canRate = projectUpdatedTime > (feedbackTime + 1000);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       feedbacks: formatted,
+      canRate,
+      lastRatedAt,
       stats: {
         totalCount,
         avgRating,
@@ -86,6 +113,40 @@ export async function POST(req: NextRequest) {
       else if (numericRating === 3) determinedType = 'AVERAGE';
       else if (numericRating === 2) determinedType = 'NEEDS_IMPROVEMENT';
       else determinedType = 'CRITICAL_ISSUE';
+    }
+
+    // 1. 이미 평가한 프로젝트인지 확인 (마지막 평가 이후 신규 코드 생성이 없었다면 재평가 차단)
+    const existingFeedbackRes = await queryTable('sheetbot_project_feedback', {
+      filters: { project_id: projectId },
+      orderBy: 'created_at',
+      orderDirection: 'DESC',
+      limit: 1,
+    }).catch(() => ({ rows: [] }));
+
+    const lastFeedback = (existingFeedbackRes.rows || []).find((r: any) => !r.deleted_at);
+
+    if (lastFeedback) {
+      // 프로젝트의 최종 갱신/배포 일시 확인
+      const projRes = await queryTable('sheetbot_projects', {
+        filters: { id: projectId },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+      const projectRow = projRes.rows?.[0];
+
+      const feedbackTime = new Date(lastFeedback.created_at).getTime();
+      const projectUpdatedTime = projectRow?.updated_at ? new Date(projectRow.updated_at).getTime() : 0;
+
+      // 요구사항 수정이나 신규 코드 생성이 피드백 이후에 이루어지지 않은 경우
+      const hasNewGeneration = projectUpdatedTime > (feedbackTime + 1000);
+      const isSnapshotDifferent = scriptCodeSnapshot && lastFeedback.script_code_snapshot && scriptCodeSnapshot.trim() !== lastFeedback.script_code_snapshot.trim();
+
+      if (!hasNewGeneration && !isSnapshotDifferent) {
+        return NextResponse.json({
+          success: false,
+          alreadyRated: true,
+          message: '이미 만족도 평가를 완료하셨습니다. 추가 요구사항을 통해 AI 코드를 수정한 후 다시 평가하실 수 있습니다.',
+        }, { status: 409 });
+      }
     }
 
     const feedbackEntry = {

@@ -7,7 +7,7 @@ import {
   creditTokens,
   TOKEN_PACKAGES,
 } from "@/lib/token-wallet";
-import { queryTable } from "@/lib/egdesk-helpers";
+import { queryTable } from "../../../../egdesk-helpers";
 import { executeSmartDispatchRules } from "@/lib/smart-dispatch-rules";
 
 export async function GET() {

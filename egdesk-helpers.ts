@@ -111,7 +111,12 @@ async function parseEgdeskMcpToolResponse(response: Response): Promise<any> {
   }
 
   const content = result.result?.content?.[0]?.text;
-  return content ? JSON.parse(content) : null;
+  if (!content) return null;
+  try {
+    return JSON.parse(content);
+  } catch {
+    return content;
+  }
 }
 
 async function parseEgdeskHttpResponse(response: Response): Promise<any> {
