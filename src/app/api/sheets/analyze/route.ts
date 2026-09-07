@@ -25,44 +25,85 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { sheetUrl, prompt, model: userRequestedModel, feedback, previousSchema, turn = 1 } = body;
+    const {
+      sourceType = "URL", // "URL" | "NEW_SHEET" | "EXCEL_UPLOAD"
+      sheetUrl,
+      excelData, // { fileName, headers, sampleRows, sheets, activeSheet }
+      prompt,
+      model: userRequestedModel,
+      feedback,
+      previousSchema,
+      turn = 1,
+    } = body;
 
-    if (!sheetUrl || !sheetUrl.trim()) {
-      return NextResponse.json({ success: false, error: "구글 스프레드시트 URL을 입력해 주세요." }, { status: 400 });
-    }
+    // 1. 소스 유형별 유효성 검사 및 구조 요약 준비
+    let sheetStructureSummary = "";
+    let spreadsheetId = "";
 
-    const spreadsheetId = extractSpreadsheetId(sheetUrl);
-    if (!spreadsheetId) {
-      return NextResponse.json({ success: false, error: "유효한 구글 스프레드시트 URL 또는 ID가 아닙니다." }, { status: 400 });
+    if (sourceType === "NEW_SHEET") {
+      // 새 시트 자동 생성 모드: URL 불필요, 요구사항 기반으로 최적의 구조 설계
+      sheetStructureSummary = `[새 구글 시트 신규 설계 모드]
+- 사용자가 아직 구글 시트를 생성하지 않았으며, 요구사항에 맞춰 최적의 컬럼 구조, 탭 이름, 양식 유형을 신규 설계해야 합니다.
+- 업무 목적: ${prompt || "업무 자동화 대장"}
+- 지침: 현업에서 가장 편리하고 실용적인 시트 구조(A, B, C, D... 각 열의 컬럼명과 용도, 탭 명칭)를 설계하여 columns 배열에 제공하세요.`;
+    } else if (sourceType === "EXCEL_UPLOAD") {
+      // 엑셀 파일 업로드 모드: 파싱된 엑셀 메타데이터 주입
+      const fileName = excelData?.fileName || "업로드_엑셀.xlsx";
+      const sheets = excelData?.sheets || ["Sheet1"];
+      const activeSheet = excelData?.activeSheet || sheets[0];
+      const headers = excelData?.headers || [];
+      const sampleRows = excelData?.sampleRows || [];
+
+      const headersStr = headers.map((h: string, i: number) => `Col ${String.fromCharCode(65 + i)}: "${h}"`).join(", ");
+      const sampleRowsStr = sampleRows
+        .slice(0, 5)
+        .map((row: any[], rIdx: number) => `  Row ${rIdx + 2}: [${row.map((v: any) => JSON.stringify(v)).join(", ")}]`)
+        .join("\n");
+
+      sheetStructureSummary = `[업로드된 엑셀 파일: '${fileName}']
+- 시트 탭 목록: ${sheets.join(", ")}
+- 대상 분석 시트: '${activeSheet}'
+- 추출된 실제 헤더 열(${headers.length}개): ${headersStr || "(헤더 없음)"}
+- 엑셀 원본 데이터 샘플:
+${sampleRowsStr || "  (데이터 없음)"}
+- 지침: 이 엑셀 파일의 컬럼명(${headers.join(", ")})을 정확하게 유지하면서 구글 시트로 가져와 자동화하는 실행 계획을 수립하세요.`;
+    } else {
+      // 기존 URL 입력 모드
+      if (!sheetUrl || !sheetUrl.trim()) {
+        return NextResponse.json({ success: false, error: "구글 스프레드시트 URL을 입력해 주세요." }, { status: 400 });
+      }
+
+      spreadsheetId = extractSpreadsheetId(sheetUrl) || "";
+      if (!spreadsheetId) {
+        return NextResponse.json({ success: false, error: "유효한 구글 스프레드시트 URL 또는 ID가 아닙니다." }, { status: 400 });
+      }
+
+      // 스프레드시트 컨텍스트 조회 (MCP sheets_get_full_context 경유)
+      let fullContext: any = null;
+      try {
+        fullContext = await getSpreadsheetFullContext(spreadsheetId, 8);
+      } catch (err: any) {
+        console.warn("[Sheets-Analyze] Failed to get full context:", err.message);
+      }
+
+      if (fullContext && fullContext.sheetsData && fullContext.sheetsData.length > 0) {
+        sheetStructureSummary = fullContext.sheetsData
+          .map((s: any, idx: number) => {
+            const headersStr = (s.headers || []).map((h: string, i: number) => `Col ${String.fromCharCode(65 + i)}: "${h}"`).join(", ");
+            const sampleRowsStr = (s.sampleData || [])
+              .slice(0, 3)
+              .map((row: any[], rIdx: number) => `  Row ${rIdx + 2}: [${row.map((v: any) => JSON.stringify(v)).join(", ")}]`)
+              .join("\n");
+            return `[탭 ${idx + 1}: '${s.sheetTitle}' (전체 ${s.rowCount || 0}행, ${s.columnCount || 0}열)]\n- 감지된 헤더(1행): ${headersStr || "(비어있음)"}\n- 기존 데이터 샘플:\n${sampleRowsStr || "  (데이터 없음)"}`;
+          })
+          .join("\n\n");
+      } else {
+        sheetStructureSummary = `스프레드시트 ID: ${spreadsheetId} (시트 상세 격자 자동 조회 불가 - 기본 대장형 기반 추론 필요)`;
+      }
     }
 
     const aiSettings = await getAiModelSettings();
     const targetModel = userRequestedModel || aiSettings.scriptGeneratorModel || "gemini-3.8-flash";
-
-    // 1. 스프레드시트 컨텍스트 조회 (MCP sheets_get_full_context 경유)
-    let fullContext: any = null;
-    try {
-      fullContext = await getSpreadsheetFullContext(spreadsheetId, 8);
-    } catch (err: any) {
-      console.warn("[Sheets-Analyze] Failed to get full context:", err.message);
-    }
-
-    // 시트 구조를 AI가 이해하기 쉬운 텍스트 요약으로 변환
-    let sheetStructureSummary = "";
-    if (fullContext && fullContext.sheetsData && fullContext.sheetsData.length > 0) {
-      sheetStructureSummary = fullContext.sheetsData
-        .map((s: any, idx: number) => {
-          const headersStr = (s.headers || []).map((h: string, i: number) => `Col ${String.fromCharCode(65 + i)}: "${h}"`).join(", ");
-          const sampleRowsStr = (s.sampleData || [])
-            .slice(0, 3)
-            .map((row: any[], rIdx: number) => `  Row ${rIdx + 2}: [${row.map((v: any) => JSON.stringify(v)).join(", ")}]`)
-            .join("\n");
-          return `[탭 ${idx + 1}: '${s.sheetTitle}' (전체 ${s.rowCount || 0}행, ${s.columnCount || 0}열)]\n- 감지된 헤더(1행): ${headersStr || "(비어있음)"}\n- 기존 데이터 샘플:\n${sampleRowsStr || "  (데이터 없음)"}`;
-        })
-        .join("\n\n");
-    } else {
-      sheetStructureSummary = `스프레드시트 ID: ${spreadsheetId} (시트 상세 격자 자동 조회 불가 - 기본 대장형 기반 추론 필요)`;
-    }
 
     // 2. 피드백 조율 모드 여부 분기
     const isFeedbackMode = Boolean(feedback && feedback.trim() && previousSchema);

@@ -274,7 +274,14 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
    - 메뉴 구성:
      - '📄 문서 AI 업로드 및 분석' (showSidebar 호출)
      - '⚡ 터널 연결 상태 점검' (testEgdeskTunnel 호출)
+     - 신규 시트 설계 또는 엑셀 변환 프로젝트인 경우: '🛠️ 초기 시트 양식 및 데이터 자동 세팅' (setupInitialSheetLayout 호출)
      - 기타 요구사항에 맞는 커스텀 실행 항목
+   - 🛠️ [신규 시트 양식/엑셀 데이터 초기화 함수 - setupInitialSheetLayout]:
+     - 사용자가 빈 구글 시트에서 시작하거나 엑셀 데이터를 가져왔을 때를 대비하여, setupInitialSheetLayout() 함수를 구현하세요:
+       * 대상 시트 탭이 없으면 새로 생성,
+       * 1행에 확정된 컬럼 헤더들을 깔끔하게 채우고 배경색(에메랄드 또는 네이비 #1e293b)과 굵은 글씨 스타일 적용,
+       * 각 열의 너비를 내용에 맞게 자동 조절(autoResizeColumns),
+       * 완료 시 SpreadsheetApp.getUi().alert("✅ 시트 양식 및 초기 설정이 완료되었습니다.") 안내.
 6. 🛡️ 예외 처리:
    - try-catch를 꼼꼼히 감싸고, 실패 시 { success: false, error: error.message }를 반환하여 사이드바에 실패 원인이 빨간색 안내창으로 명확히 뜨도록 작성하세요.
 7. 🌐 독립 웹페이지(Web App) 설문/신청서/접수폼 구현 규칙:

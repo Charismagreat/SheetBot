@@ -25,6 +25,13 @@ import {
   Copy,
   Star,
   ThumbsUp,
+  UploadCloud,
+  FileUp,
+  Link2,
+  FileCheck,
+  ArrowUpRight,
+  FolderPlus,
+  FileText,
 } from "lucide-react";
 import PromptGalleryModal from "./PromptGalleryModal";
 
@@ -35,6 +42,9 @@ interface NewProjectModalProps {
 }
 
 export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProjectModalProps) {
+  // 생성 모드: NEW_SHEET (새 시트 자동 설계), EXCEL_UPLOAD (엑셀 업로드 변환), EXISTING_URL (기존 구글 시트 URL)
+  const [sourceMode, setSourceMode] = useState<"NEW_SHEET" | "EXCEL_UPLOAD" | "EXISTING_URL">("NEW_SHEET");
+
   // 1: 기본 정보 입력, 2: AI 분석 브리핑 및 조율(HITL), 3: 생성 및 배포 완료
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [sheetUrl, setSheetUrl] = useState("");
@@ -46,6 +56,26 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedResult, setGeneratedResult] = useState<any>(null);
+
+  // 엑셀 업로드 및 파싱 관련 상태
+  const [isUploadingExcel, setIsUploadingExcel] = useState(false);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [parsedExcel, setParsedExcel] = useState<{
+    fileName: string;
+    sheets: string[];
+    activeSheet: string;
+    headers: string[];
+    sampleRows: any[][];
+    totalRows: number;
+    dataRowCount: number;
+    previewGrid: any[][];
+    allRows?: any[][];
+  } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // 새 시트 자동 생성 상태
+  const [isCreatingSheet, setIsCreatingSheet] = useState(false);
+  const [autoCreatedSheet, setAutoCreatedSheet] = useState<{ id: string; url: string } | null>(null);
 
   // 추천 프롬프트 갤러리 모달 상태
   const [showPromptGallery, setShowPromptGallery] = useState(false);
@@ -178,11 +208,66 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
     setPrompt(text);
   };
 
+  // 엑셀 파일 업로드 및 구조 파싱 핸들러
+  const handleExcelFile = async (file: File, selectedSheet?: string) => {
+    if (!file) return;
+    setIsUploadingExcel(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      if (selectedSheet) {
+        formData.append("sheetName", selectedSheet);
+      }
+
+      const res = await apiFetch("/api/sheets/parse-excel", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || "엑셀 파일 파싱에 실패했습니다.");
+      }
+
+      setParsedExcel(data);
+      setExcelFile(file);
+
+      // 프로젝트 이름이 비어있으면 파일명(확장자 제거)으로 자동 추천
+      if (!projectName.trim()) {
+        const cleanName = file.name.replace(/\.[^/.]+$/, "");
+        setProjectName(cleanName);
+      }
+
+      // 프롬프트가 비어있으면 맞춤 추천 문구 자동 주입
+      if (!prompt.trim()) {
+        setPrompt(
+          `업로드된 [${file.name}]의 '${data.activeSheet}' 시트 구조(${data.headers.join(", ")})를 기반으로 데이터를 관리하고 자동화하는 시스템을 구축해 주세요.`
+        );
+      }
+    } catch (err: any) {
+      setError(err.message || "엑셀 파일 분석 중 오류가 발생했습니다.");
+    } finally {
+      setIsUploadingExcel(false);
+    }
+  };
+
+  // 구글 시트 원클릭 신규 생성 헬퍼
+  const handleQuickOpenNewSheet = () => {
+    window.open("https://docs.google.com/spreadsheets/create", "_blank");
+  };
+
   // 1단계: AI 시트 사전 정밀 분석 실행 (무료)
   const handleStartAnalysis = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sheetUrl.trim()) {
-      setError("구글 스프레드시트 URL 또는 ID를 입력해 주세요.");
+
+    if (sourceMode === "EXISTING_URL" && !sheetUrl.trim()) {
+      setError("연결할 구글 스프레드시트 URL 또는 ID를 입력해 주세요.");
+      return;
+    }
+    if (sourceMode === "EXCEL_UPLOAD" && !parsedExcel) {
+      setError("변환할 엑셀 파일(.xlsx, .xls, .csv)을 먼저 업로드해 주세요.");
       return;
     }
     if (!projectName.trim()) {
@@ -202,7 +287,17 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          sourceType: sourceMode === "EXCEL_UPLOAD" ? "EXCEL_UPLOAD" : sourceMode === "NEW_SHEET" ? "NEW_SHEET" : "URL",
           sheetUrl: sheetUrl.trim(),
+          excelData: parsedExcel
+            ? {
+                fileName: parsedExcel.fileName,
+                sheets: parsedExcel.sheets,
+                activeSheet: parsedExcel.activeSheet,
+                headers: parsedExcel.headers,
+                sampleRows: parsedExcel.sampleRows,
+              }
+            : undefined,
           prompt: prompt.trim(),
           model: selectedModel,
         }),
@@ -217,7 +312,13 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
       setFeedbackHistory([
         {
           role: "ai",
-          message: data.schema.planSummary || "스프레드시트 분석이 완료되었습니다. 아래 실행 계획을 검토해 주세요.",
+          message:
+            data.schema.planSummary ||
+            (sourceMode === "EXCEL_UPLOAD"
+              ? `엑셀 파일 '${parsedExcel?.fileName}'의 컬럼 분석이 완료되었습니다. 아래 양식 구조와 실행 계획을 확인해 주세요.`
+              : sourceMode === "NEW_SHEET"
+              ? "요구사항에 맞춘 최적의 스프레드시트 양식 설계가 완료되었습니다. 아래 컬럼 구조를 확인해 주세요."
+              : "스프레드시트 분석이 완료되었습니다. 아래 실행 계획을 검토해 주세요."),
         },
       ]);
       setStep(2); // 2단계 브리핑 화면으로 전환
@@ -334,13 +435,42 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
     setError(null);
 
     try {
+      let targetSheetUrl = sheetUrl.trim();
+
+      // 만약 구글 시트 URL이 비어있다면, 서버에서 sheets_create_spreadsheet로 자동 생성 시도
+      if (!targetSheetUrl) {
+        setIsCreatingSheet(true);
+        try {
+          const createRes = await apiFetch("/api/sheets/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: projectName.trim() || "새 스프레드시트",
+              data: parsedExcel?.previewGrid || (analyzedSchema?.columns ? [analyzedSchema.columns.map((c: any) => c.name)] : []),
+            }),
+          });
+          const createData = await createRes.json();
+          if (createData.success && createData.spreadsheetUrl) {
+            targetSheetUrl = createData.spreadsheetUrl;
+            setSheetUrl(targetSheetUrl);
+            setAutoCreatedSheet({ id: createData.spreadsheetId, url: createData.spreadsheetUrl });
+          } else {
+            throw new Error(
+              "바인딩할 구글 스프레드시트 URL이 필요합니다. 아래 입력란에 구글 시트 URL을 입력해 주시거나 'Google Sheets 새 시트 열기' 버튼을 눌러 새 시트를 생성해 주세요."
+            );
+          }
+        } finally {
+          setIsCreatingSheet(false);
+        }
+      }
+
       // 1. AI 코드 생성 (사전 분석된 스키마 및 기존 코드 병합 옵션 주입)
       const genRes = await apiFetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt,
-          sheetUrl,
+          sheetUrl: targetSheetUrl,
           customTitle: projectName,
           model: selectedModel,
           analyzedSchema, // 검증 및 조율된 시트 구조 주입
@@ -361,7 +491,7 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: projectName.trim(),
-          spreadsheetUrl: sheetUrl.trim(),
+          spreadsheetUrl: targetSheetUrl,
           scriptCode: scriptData.scriptCode,
           manifest: scriptData.manifest,
           summary: scriptData.summary,
@@ -392,10 +522,14 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
     onSuccess();
     onClose();
     setStep(1);
+    setSourceMode("NEW_SHEET");
     setSheetUrl("");
     setProjectName("");
     setAutoDetectedTitle(null);
     setPrompt("");
+    setParsedExcel(null);
+    setExcelFile(null);
+    setAutoCreatedSheet(null);
     setAnalyzedSchema(null);
     setTurnCount(0);
     setFeedbackHistory([]);
@@ -456,177 +590,476 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
         {/* Step 1: 기본 정보 입력 */}
         {step === 1 && (
           <form onSubmit={handleStartAnalysis} className="space-y-4 text-xs">
-            {/* 스프레드시트 URL */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="font-bold text-slate-700 block">연결할 구글 스프레드시트 URL 또는 ID *</label>
-                <div className="flex items-center gap-2 text-[11px] font-semibold">
-                  {isFetchingTitle && (
-                    <span className="flex items-center gap-1 text-emerald-600 animate-pulse">
-                      <RefreshCw className="w-3 h-3 animate-spin" />
-                      시트 제목 조회 중...
-                    </span>
-                  )}
-                  {isDetectingGas && (
-                    <span className="flex items-center gap-1 text-indigo-600 animate-pulse">
-                      <RefreshCw className="w-3 h-3 animate-spin" />
-                      기존 스크립트 검사 중...
-                    </span>
-                  )}
+            {/* 상단 3대 생성 방식 선택 세그먼트 */}
+            <div className="p-1 bg-slate-100 rounded-2xl grid grid-cols-3 gap-1 shadow-inner border border-slate-200/60">
+              <button
+                type="button"
+                onClick={() => setSourceMode("NEW_SHEET")}
+                className={`py-2 px-2.5 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  sourceMode === "NEW_SHEET"
+                    ? "bg-white text-emerald-700 shadow-sm ring-1 ring-slate-200/80"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="truncate">✨ 새 시트 자동 생성</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSourceMode("EXCEL_UPLOAD")}
+                className={`py-2 px-2.5 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  sourceMode === "EXCEL_UPLOAD"
+                    ? "bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200/80"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <UploadCloud className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span className="truncate">📁 엑셀 업로드 변환</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSourceMode("EXISTING_URL")}
+                className={`py-2 px-2.5 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  sourceMode === "EXISTING_URL"
+                    ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200/80"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Link2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span className="truncate">🔗 기존 시트 URL</span>
+              </button>
+            </div>
+
+            {/* 모드 1: 새 구글 시트 자동 생성 모드 */}
+            {sourceMode === "NEW_SHEET" && (
+              <div className="p-4 bg-gradient-to-br from-emerald-50/90 to-teal-50/60 border border-emerald-200 rounded-2xl space-y-3 animate-in fade-in duration-150">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-emerald-500 text-white rounded-xl shadow-xs shrink-0">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="font-extrabold text-slate-800 text-xs">
+                      기존 구글 시트가 없어도 바로 시작할 수 있습니다!
+                    </h4>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      원하시는 업무 요구사항을 자연어로 입력하시면, AI가 최적의 시트 구조(컬럼 A, B, C, D... 및 양식 유형)를 자동으로 설계하고 완성형 Apps Script를 바인딩해 드립니다.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-1 border-t border-emerald-200/60 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 text-[11px]">
+                  <span className="text-slate-500 font-medium">
+                    💡 빈 구글 시트가 필요하신가요? 1초 만에 새 시트를 열 수 있습니다.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleQuickOpenNewSheet}
+                    className="inline-flex items-center justify-center gap-1 font-bold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-300 px-3 py-1.5 rounded-xl shadow-2xs transition-all cursor-pointer shrink-0"
+                  >
+                    <span>Google Sheets 새 시트 열기</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* 선택적 시트 URL 사전 연결 입력란 */}
+                <div className="pt-2 space-y-1">
+                  <label className="font-bold text-slate-700 text-[11px] flex items-center justify-between">
+                    <span>바인딩할 새 구글 시트 URL (선택 사항)</span>
+                    <span className="text-[10px] text-emerald-600 font-semibold">지금 비워두셔도 됩니다</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={sheetUrl}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSheetUrl(val);
+                        if (val.includes("/spreadsheets/d/") || val.length >= 25) {
+                          fetchSheetTitle(val);
+                        }
+                      }}
+                      placeholder="https://docs.google.com/spreadsheets/d/... (열린 새 시트의 주소를 복사해 넣으시면 연결됩니다)"
+                      className="w-full pl-9 pr-3 py-2 bg-white/90 border border-emerald-200 rounded-xl text-xs font-mono font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-500 absolute left-3 top-2.5" />
+                  </div>
                 </div>
               </div>
-              <div
-                className="relative"
-                data-easybot-hint="스프레드시트 URL: Apps Script 코드가 바인딩될 대상 구글 시트의 전체 URL 또는 스프레드시트 ID를 입력합니다."
-              >
-                <input
-                  type="text"
-                  value={sheetUrl}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setSheetUrl(val);
-                    if (val.includes("/spreadsheets/d/") || val.length >= 25) {
-                      fetchSheetTitle(val);
-                      detectExistingGas(val);
-                    }
-                  }}
-                  onBlur={() => {
-                    if (sheetUrl) {
-                      fetchSheetTitle(sheetUrl);
-                      detectExistingGas(sheetUrl);
-                    }
-                  }}
-                  placeholder="https://docs.google.com/spreadsheets/d/1vVmz56s0QrknZfhaOod_EX6-eoiYlXGW220inT5qXME/edit"
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  required
-                />
-                <FileSpreadsheet className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              </div>
+            )}
 
-              {/* 🛡️ 기존 Apps Script 코드 안전 감지 배너 및 모드 선택 카드 */}
-              {existingGasInfo && existingGasInfo.hasExistingScript && (
-                <div className="mt-2 p-3 bg-amber-50/90 border border-amber-200 rounded-2xl space-y-2.5 animate-in fade-in duration-150">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-amber-100 text-amber-700 rounded-lg">
-                        <ShieldCheck className="w-4 h-4" />
+            {/* 모드 2: 엑셀 파일 업로드 변환 모드 */}
+            {sourceMode === "EXCEL_UPLOAD" && (
+              <div className="space-y-3 animate-in fade-in duration-150">
+                {/* 엑셀 파일 드롭존 */}
+                {!parsedExcel ? (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDragging(true);
+                    }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragging(false);
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) handleExcelFile(file);
+                    }}
+                    className={`p-6 border-2 border-dashed rounded-2xl text-center transition-all cursor-pointer ${
+                      isDragging
+                        ? "border-indigo-500 bg-indigo-50/80"
+                        : "border-slate-300 hover:border-indigo-400 bg-slate-50/60 hover:bg-slate-50"
+                    }`}
+                    onClick={() => {
+                      const input = document.getElementById("excel-file-input") as HTMLInputElement;
+                      if (input) input.click();
+                    }}
+                  >
+                    <input
+                      id="excel-file-input"
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleExcelFile(file);
+                      }}
+                    />
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl">
+                        {isUploadingExcel ? (
+                          <RefreshCw className="w-6 h-6 animate-spin" />
+                        ) : (
+                          <FileUp className="w-6 h-6" />
+                        )}
                       </div>
                       <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-extrabold text-xs text-amber-950">
-                            기존 Apps Script 코드가 감지되었습니다!
-                          </span>
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-800">
-                            안전 보호 작동 중
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-amber-800 mt-0.5 leading-snug">
-                          해당 구글 시트에 이미 작성된 스크립트 파일({existingGasInfo.filesCount || 0}개) 및 함수({existingGasInfo.functionNames?.length || 0}개)가 있습니다.
+                        <span className="font-extrabold text-xs text-slate-800 block">
+                          {isUploadingExcel
+                            ? "엑셀 파일의 시트 구조 및 데이터를 정밀 분석하고 있습니다..."
+                            : "PC의 엑셀 파일(.xlsx, .xls, .csv)을 끌어다 놓거나 클릭하여 선택하세요"}
+                        </span>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          시트 탭 목록, 헤더 열(컬럼명), 실제 데이터 행을 AI가 즉시 자동 추출합니다.
                         </p>
                       </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 border border-indigo-200">
+                        지원 형식: .xlsx, .xls, .csv (최대 50MB)
+                      </span>
                     </div>
+                  </div>
+                ) : (
+                  /* 엑셀 파일 분석 완료 카드 및 데이터 미리보기 */
+                  <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-2xl space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-xs shrink-0">
+                          <FileCheck className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-xs text-slate-900">{parsedExcel.fileName}</span>
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-200/80 text-indigo-800">
+                              분석 완료
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px] text-slate-600 mt-0.5">
+                            <span>전체 {parsedExcel.totalRows}행</span>
+                            <span>•</span>
+                            <span>컬럼 {parsedExcel.headers.length}개</span>
+                            {parsedExcel.sheets.length > 1 && (
+                              <>
+                                <span>•</span>
+                                <span className="font-semibold text-indigo-700">시트 {parsedExcel.sheets.length}개 감지</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
 
-                    {existingGasInfo.existingCode && (
                       <button
                         type="button"
-                        onClick={() => setShowCodePreview((prev) => !prev)}
-                        className="text-[11px] font-bold text-amber-800 hover:text-amber-900 bg-white/80 hover:bg-white border border-amber-300 px-2.5 py-1 rounded-lg transition-all cursor-pointer shrink-0 flex items-center gap-1"
+                        onClick={() => {
+                          setParsedExcel(null);
+                          setExcelFile(null);
+                        }}
+                        className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-white border border-indigo-200 hover:border-indigo-300 px-2.5 py-1 rounded-lg transition-all cursor-pointer shrink-0"
                       >
-                        <Code className="w-3 h-3" />
-                        <span>{showCodePreview ? "코드 접기" : "기존 코드 보기"}</span>
+                        파일 변경
                       </button>
+                    </div>
+
+                    {/* 복수 시트일 경우 시트 선택 셀렉트 */}
+                    {parsedExcel.sheets.length > 1 && excelFile && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <label className="text-[11px] font-bold text-slate-700 shrink-0">변환할 시트 탭 선택:</label>
+                        <select
+                          value={parsedExcel.activeSheet}
+                          onChange={(e) => handleExcelFile(excelFile, e.target.value)}
+                          className="bg-white border border-indigo-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        >
+                          {parsedExcel.sheets.map((s, idx) => (
+                            <option key={idx} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* 추출된 헤더 뱃지 리스트 */}
+                    {parsedExcel.headers.length > 0 && (
+                      <div className="space-y-1 pt-1">
+                        <span className="text-[11px] font-bold text-slate-700 block">감지된 컬럼 헤더 목록:</span>
+                        <div className="flex flex-wrap gap-1">
+                          {parsedExcel.headers.map((h, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-0.5 bg-white border border-indigo-200 rounded-md font-mono text-[10px] font-bold text-indigo-900 shadow-2xs"
+                            >
+                              {String.fromCharCode(65 + idx)}열: {h}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 엑셀 데이터 미리보기 테이블 */}
+                    {parsedExcel.previewGrid && parsedExcel.previewGrid.length > 0 && (
+                      <div className="space-y-1 pt-1">
+                        <span className="text-[11px] font-bold text-slate-700 block">데이터 미리보기 (상위 샘플):</span>
+                        <div className="border border-indigo-200 rounded-xl overflow-x-auto max-h-32 bg-white">
+                          <table className="w-full text-[10px] text-left border-collapse">
+                            <thead>
+                              <tr className="bg-indigo-100/70 border-b border-indigo-200 text-indigo-950 font-bold">
+                                {parsedExcel.headers.map((h, idx) => (
+                                  <th key={idx} className="px-2 py-1.5 whitespace-nowrap border-r border-indigo-200 last:border-r-0">
+                                    {h}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {parsedExcel.sampleRows.slice(0, 3).map((row, rIdx) => (
+                                <tr key={rIdx} className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50">
+                                  {parsedExcel.headers.map((_, cIdx) => (
+                                    <td key={cIdx} className="px-2 py-1 whitespace-nowrap text-slate-700 border-r border-slate-100 last:border-r-0">
+                                      {row[cIdx] !== undefined && row[cIdx] !== null ? String(row[cIdx]) : ""}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 연결할 대상 시트 URL 및 퀵 생성 안내 */}
+                    <div className="pt-2 border-t border-indigo-200/60 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-700 text-[11px] block">
+                          데이터를 복원할 구글 시트 URL (선택 사항)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleQuickOpenNewSheet}
+                          className="text-[10px] font-bold text-indigo-700 hover:text-indigo-900 inline-flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <span>새 시트 열기</span>
+                          <ArrowUpRight className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={sheetUrl}
+                          onChange={(e) => setSheetUrl(e.target.value)}
+                          placeholder="https://docs.google.com/spreadsheets/d/... (비워두셔도 분석 및 설계 가능)"
+                          className="w-full pl-9 pr-3 py-2 bg-white border border-indigo-200 rounded-xl text-xs font-mono font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        />
+                        <FileSpreadsheet className="w-4 h-4 text-indigo-500 absolute left-3 top-2.5" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 모드 3: 기존 구글 시트 URL 직접 연결 모드 */}
+            {sourceMode === "EXISTING_URL" && (
+              <div className="space-y-1 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-700 block">연결할 구글 스프레드시트 URL 또는 ID *</label>
+                  <div className="flex items-center gap-2 text-[11px] font-semibold">
+                    {isFetchingTitle && (
+                      <span className="flex items-center gap-1 text-emerald-600 animate-pulse">
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        시트 제목 조회 중...
+                      </span>
+                    )}
+                    {isDetectingGas && (
+                      <span className="flex items-center gap-1 text-indigo-600 animate-pulse">
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        기존 스크립트 검사 중...
+                      </span>
                     )}
                   </div>
+                </div>
+                <div
+                  className="relative"
+                  data-easybot-hint="스프레드시트 URL: Apps Script 코드가 바인딩될 대상 구글 시트의 전체 URL 또는 스프레드시트 ID를 입력합니다."
+                >
+                  <input
+                    type="text"
+                    value={sheetUrl}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSheetUrl(val);
+                      if (val.includes("/spreadsheets/d/") || val.length >= 25) {
+                        fetchSheetTitle(val);
+                        detectExistingGas(val);
+                      }
+                    }}
+                    onBlur={() => {
+                      if (sheetUrl) {
+                        fetchSheetTitle(sheetUrl);
+                        detectExistingGas(sheetUrl);
+                      }
+                    }}
+                    placeholder="https://docs.google.com/spreadsheets/d/1vVmz56s0QrknZfhaOod_EX6-eoiYlXGW220inT5qXME/edit"
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    required={sourceMode === "EXISTING_URL"}
+                  />
+                  <FileSpreadsheet className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                </div>
 
-                  {/* 감지된 함수 배지 리스트 */}
-                  {existingGasInfo.functionNames && existingGasInfo.functionNames.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1 text-[10px] pt-0.5">
-                      <span className="font-bold text-amber-900">감지된 함수:</span>
-                      {existingGasInfo.functionNames.slice(0, 6).map((fn, idx) => (
-                        <span
-                          key={idx}
-                          className="font-mono font-bold px-1.5 py-0.5 bg-white/90 border border-amber-200 text-amber-900 rounded"
+                {/* 🛡️ 기존 Apps Script 코드 안전 감지 배너 및 모드 선택 카드 */}
+                {existingGasInfo && existingGasInfo.hasExistingScript && (
+                  <div className="mt-2 p-3 bg-amber-50/90 border border-amber-200 rounded-2xl space-y-2.5 animate-in fade-in duration-150">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-amber-100 text-amber-700 rounded-lg">
+                          <ShieldCheck className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-extrabold text-xs text-amber-950">
+                              기존 Apps Script 코드가 감지되었습니다!
+                            </span>
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-800">
+                              안전 보호 작동 중
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-amber-800 mt-0.5 leading-snug">
+                            해당 구글 시트에 이미 작성된 스크립트 파일({existingGasInfo.filesCount || 0}개) 및 함수({existingGasInfo.functionNames?.length || 0}개)가 있습니다.
+                          </p>
+                        </div>
+                      </div>
+
+                      {existingGasInfo.existingCode && (
+                        <button
+                          type="button"
+                          onClick={() => setShowCodePreview((prev) => !prev)}
+                          className="text-[11px] font-bold text-amber-800 hover:text-amber-900 bg-white/80 hover:bg-white border border-amber-300 px-2.5 py-1 rounded-lg transition-all cursor-pointer shrink-0 flex items-center gap-1"
                         >
-                          {fn}()
-                        </span>
-                      ))}
-                      {existingGasInfo.functionNames.length > 6 && (
-                        <span className="text-amber-700 font-bold">
-                          외 {existingGasInfo.functionNames.length - 6}개
-                        </span>
+                          <Code className="w-3 h-3" />
+                          <span>{showCodePreview ? "코드 접기" : "기존 코드 보기"}</span>
+                        </button>
                       )}
                     </div>
-                  )}
 
-                  {/* 기존 소스코드 미리보기 토글 */}
-                  {showCodePreview && existingGasInfo.existingCode && (
-                    <div className="p-2.5 bg-slate-900 text-slate-100 rounded-xl font-mono text-[11px] max-h-40 overflow-y-auto border border-slate-700 leading-relaxed">
-                      <pre className="whitespace-pre-wrap">{existingGasInfo.existingCode}</pre>
+                    {/* 감지된 함수 배지 리스트 */}
+                    {existingGasInfo.functionNames && existingGasInfo.functionNames.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1 text-[10px] pt-0.5">
+                        <span className="font-bold text-amber-900">감지된 함수:</span>
+                        {existingGasInfo.functionNames.slice(0, 6).map((fn, idx) => (
+                          <span
+                            key={idx}
+                            className="font-mono font-bold px-1.5 py-0.5 bg-white/90 border border-amber-200 text-amber-900 rounded"
+                          >
+                            {fn}()
+                          </span>
+                        ))}
+                        {existingGasInfo.functionNames.length > 6 && (
+                          <span className="text-amber-700 font-bold">
+                            외 {existingGasInfo.functionNames.length - 6}개
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 기존 소스코드 미리보기 토글 */}
+                    {showCodePreview && existingGasInfo.existingCode && (
+                      <div className="p-2.5 bg-slate-900 text-slate-100 rounded-xl font-mono text-[11px] max-h-40 overflow-y-auto border border-slate-700 leading-relaxed">
+                        <pre className="whitespace-pre-wrap">{existingGasInfo.existingCode}</pre>
+                      </div>
+                    )}
+
+                    {/* 안전 병합(Merge) vs 덮어쓰기(Overwrite) 선택 */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      <label
+                        className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-start gap-2.5 ${
+                          mergeMode === "MERGE"
+                            ? "bg-white border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs"
+                            : "bg-white/60 border-amber-200 hover:bg-white text-slate-600"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="mergeMode"
+                          value="MERGE"
+                          checked={mergeMode === "MERGE"}
+                          onChange={() => setMergeMode("MERGE")}
+                          className="mt-0.5 accent-emerald-600"
+                        />
+                        <div>
+                          <div className="flex items-center gap-1">
+                            <span className="font-extrabold text-xs text-slate-800">
+                              🛡️ 기존 코드 보존 & 새 기능 추가
+                            </span>
+                            <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">
+                              권장
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                            기존 함수와 메뉴를 100% 보존하면서 새 자동화 기능을 덧붙여 안전하게 병합합니다.
+                          </p>
+                        </div>
+                      </label>
+
+                      <label
+                        className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-start gap-2.5 ${
+                          mergeMode === "OVERWRITE"
+                            ? "bg-white border-rose-500 ring-2 ring-rose-500/20 shadow-xs"
+                            : "bg-white/60 border-amber-200 hover:bg-white text-slate-600"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="mergeMode"
+                          value="OVERWRITE"
+                          checked={mergeMode === "OVERWRITE"}
+                          onChange={() => setMergeMode("OVERWRITE")}
+                          className="mt-0.5 accent-rose-600"
+                        />
+                        <div>
+                          <div className="flex items-center gap-1">
+                            <span className="font-extrabold text-xs text-slate-800">
+                              ⚠️ 기존 코드 덮어쓰기
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                            기존 코드를 지우고 새 요구사항에 맞춰 완전히 새롭게 작성합니다.
+                          </p>
+                        </div>
+                      </label>
                     </div>
-                  )}
-
-                  {/* 안전 병합(Merge) vs 덮어쓰기(Overwrite) 선택 */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                    <label
-                      className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-start gap-2.5 ${
-                        mergeMode === "MERGE"
-                          ? "bg-white border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs"
-                          : "bg-white/60 border-amber-200 hover:bg-white text-slate-600"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="mergeMode"
-                        value="MERGE"
-                        checked={mergeMode === "MERGE"}
-                        onChange={() => setMergeMode("MERGE")}
-                        className="mt-0.5 accent-emerald-600"
-                      />
-                      <div>
-                        <div className="flex items-center gap-1">
-                          <span className="font-extrabold text-xs text-slate-800">
-                            🛡️ 기존 코드 보존 & 새 기능 추가
-                          </span>
-                          <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">
-                            권장
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
-                          기존 함수와 메뉴를 100% 보존하면서 새 자동화 기능을 덧붙여 안전하게 병합합니다.
-                        </p>
-                      </div>
-                    </label>
-
-                    <label
-                      className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-start gap-2.5 ${
-                        mergeMode === "OVERWRITE"
-                          ? "bg-white border-rose-500 ring-2 ring-rose-500/20 shadow-xs"
-                          : "bg-white/60 border-amber-200 hover:bg-white text-slate-600"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="mergeMode"
-                        value="OVERWRITE"
-                        checked={mergeMode === "OVERWRITE"}
-                        onChange={() => setMergeMode("OVERWRITE")}
-                        className="mt-0.5 accent-rose-600"
-                      />
-                      <div>
-                        <div className="flex items-center gap-1">
-                          <span className="font-extrabold text-xs text-slate-800">
-                            ⚠️ 기존 코드 덮어쓰기
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
-                          기존 코드를 지우고 새 요구사항에 맞춰 완전히 새롭게 작성합니다.
-                        </p>
-                      </div>
-                    </label>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             {/* 프로젝트 이름 */}
             <div
@@ -836,6 +1269,48 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
         {/* Step 2: AI 분석 브리핑 및 대화형 조율(HITL) */}
         {step === 2 && analyzedSchema && (
           <div className="space-y-4 text-xs">
+            {/* 연결 대상 구글 시트 확인 및 입력 카드 */}
+            <div className={`p-3 rounded-2xl border transition-all ${
+              sheetUrl.trim()
+                ? "bg-slate-50 border-slate-200"
+                : "bg-emerald-50/80 border-emerald-300 ring-2 ring-emerald-500/10"
+            }`}>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="flex items-center gap-2">
+                  <FileSpreadsheet className={`w-4 h-4 ${sheetUrl.trim() ? "text-emerald-600" : "text-emerald-700 animate-bounce"}`} />
+                  <span className="font-extrabold text-slate-800 text-xs">
+                    {sheetUrl.trim() ? "연결된 구글 스프레드시트" : "📌 바인딩할 구글 스프레드시트 지정"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleQuickOpenNewSheet}
+                  className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-0.5 bg-white border border-emerald-300 px-2 py-0.5 rounded-lg shadow-2xs cursor-pointer"
+                >
+                  <span>새 구글 시트 열기</span>
+                  <ArrowUpRight className="w-3 h-3" />
+                </button>
+              </div>
+
+              <div className="relative">
+                <input
+                  type="text"
+                  value={sheetUrl}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSheetUrl(val);
+                    if (val.includes("/spreadsheets/d/") || val.length >= 25) {
+                      fetchSheetTitle(val);
+                      detectExistingGas(val);
+                    }
+                  }}
+                  placeholder="https://docs.google.com/spreadsheets/d/... (새 시트 주소를 여기에 붙여넣으세요)"
+                  className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                />
+                <Link2 className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+              </div>
+            </div>
+
             {/* 시트 분석 요약 카드 */}
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
               <div className="flex items-center justify-between">
