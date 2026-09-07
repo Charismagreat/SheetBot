@@ -184,74 +184,92 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
     const systemPrompt = `당신은 Google Apps Script(GAS) 최고의 전문 수석 엔지니어입니다.
 사용자의 자연어 요구사항을 분석하여 Google 스프레드시트에서 즉시 완벽히 동작하는 완성형 Apps Script 코드와 매니페스트를 작성하세요.
 
+[이지데스크 터널 클라이언트 인프라 환경 (사전 주입 완료)]:
+* 중요: 이 프로젝트는 이지데스크 터널 설정 도구(apps_script_setup_egdesk_tunnel)를 통해 다음 파일들이 이미 함께 주입되어 즉시 사용할 수 있습니다.
+1. EgdeskConfig.gs: getEgdeskConfig() 함수 제공 (활성 공용 터널 URL 및 인증 X-Api-Key 자동 보유)
+2. EgdeskClient.gs: 강력한 터널 통신 클라이언트 유틸리티 함수 사전 제공:
+   - egdeskToolsCall(service, tool, args): 이지데스크의 모든 백엔드 MCP 도구를 원격 호출 (예: service 'ai-caller', 'user-data' 등)
+   - egdeskUserDataCall(tool, args): My DB 도구(user_data_*) 원격 호출
+   - egdeskUserDataSql(query): My DB에 SQL 쿼리 직접 실행 및 결과 반환
+   - egdeskUserDataListTables(): DB 테이블 목록 조회
+   - testEgdeskTunnel(): 터널 연결 상태 점검 및 UI 알림 함수
+3. appsscript.json: UrlFetchApp 외부 요청 권한("https://www.googleapis.com/auth/script.external_request") 사전 등록 완료
+
 [시트봇 핵심 보안 및 API 원칙 - 절대 준수]
 1. ⚠️ 사용자 개인 API 키 요구 절대 금지:
    - 사용자에게 Gemini API 키나 OpenAI API 키 등 개인 API 키 입력을 요구하는 UI, 안내문, 팝업, 메뉴(예: 'Gemini API 키 설정')를 "절대로 작성하지 마십시오".
    - 시트봇(SheetBot) 서비스는 모든 AI 및 OCR 호출을 이지데스크 중앙 AI Caller에서 일괄 처리하므로, 사용자가 개인 API 키를 소지하거나 시트에 등록할 필요가 없습니다.
-2. 🤖 AI 및 OCR 분석 구현 방법 (Google 클라우드 DNS 오류 방지 및 응답 언래핑 필수):
-   - 중요: Google Apps Script(UrlFetchApp)는 Google 클라우드에서 실행되므로 'localhost' 주소를 호출하면 DNS 오류가 발생합니다.
-   - 따라서 이지데스크 정식 공용 터널 엔드포인트를 호출해야 합니다:
-     const EGDESK_TUNNEL_URL = "${egdeskTunnelUrl}";
-     const EGDESK_API_KEY = "${egdeskApiKey}";
+2. 🤖 AI 및 OCR 분석 구현 방법 (EgdeskClient 유틸리티 함수 적극 활용):
+   - 더 이상 Code.gs 내부에 길고 복잡한 UrlFetchApp 저수준 코드나 하드코딩된 API Key 상수를 넣을 필요가 없습니다!
+   - 이미 사전 제공되는 egdeskToolsCall('ai-caller', 'ai_caller_call', { ... }) 함수를 호출하여 AI/OCR 분석을 깔끔하게 구현하세요.
    - 사이드바에서 PDF 또는 이미지 파일 업로드 시:
      - 사이드바 UI에 파일 선택(<input type="file">)과 'AI 분석 및 시트 기록' 버튼을 제공하세요.
      - 사용자가 파일을 선택하고 버튼을 누르면, 브라우저 FileReader로 Base64로 인코딩한 뒤 google.script.run을 통해 GAS 서버 함수(예: processUploadedDocument)를 호출하세요.
-     - GAS 서버 함수에서는 EGDESK_TUNNEL_URL로 UrlFetchApp.fetch를 실행할 때, 헤더에 {'X-Api-Key': EGDESK_API_KEY}를 넣고 바디에 { tool: 'ai_caller_call', arguments: { model: 'gemini-3.8-flash', prompt: '첨부된 문서를 정밀 분석하여 대상 시트의 각 컬럼에 맞는 JSON 규격으로 추출하세요. (복수 품목이 있는 문서는 items 배열 포함)', files: [{ name: fileName, content: fileData, encoding: 'base64', mimeType: mimeType }] } } 형식으로 전송하여 OCR 결과를 받아오세요.
-   - ⚠️ [AI Caller 응답 2단계 언래핑 표준 코드 - 100% 필수 준수]:
-     - 이지데스크 AI Caller는 결과를 { result: { content: [{ type: "text", text: "..." }] } } 형태로 반환하며, text 문자열 내부에 다시 { "content": "실제AI추출JSON", "usage": ... } 객체가 중첩되어 있습니다.
-     - 따라서 반드시 아래 2단계 언래핑 코드를 사용하여 내부의 실제 JSON 텍스트를 안전하게 추출하세요:
+     - GAS 서버 함수에서는 egdeskToolsCall을 사용하여 AI Caller(gemini-3.8-flash)를 호출하세요:
        \`\`\`javascript
-       const outerJson = JSON.parse(responseText);
-       let aiText = "";
-       if (outerJson.result && outerJson.result.content && Array.isArray(outerJson.result.content) && outerJson.result.content[0] && outerJson.result.content[0].text) {
-         aiText = outerJson.result.content[0].text;
-       } else if (outerJson.content && Array.isArray(outerJson.content) && outerJson.content[0] && outerJson.content[0].text) {
-         aiText = outerJson.content[0].text;
-       } else if (typeof outerJson.result === "string") {
-         aiText = outerJson.result;
-       } else {
-         aiText = JSON.stringify(outerJson);
-       }
-
-       // 2차 언래핑: aiText 자체가 {"content": "...", "usage": ...} 형태의 메타 객체인 경우 내부 실제 content 추출
-       try {
-         const nested = JSON.parse(aiText);
-         if (nested && typeof nested === "object") {
-           if (typeof nested.content === "string") {
-             aiText = nested.content;
-           } else if (typeof nested.text === "string") {
-             aiText = nested.text;
-           } else if (nested.json && typeof nested.json === "object") {
-             aiText = JSON.stringify(nested.json);
-           }
-         }
-       } catch (e) {}
-
-       let jsonStr = aiText.replace(/\`\`\`json/gi, "").replace(/\`\`\`/g, "").trim();
-       const firstBrace = jsonStr.indexOf("{");
-       const lastBrace = jsonStr.lastIndexOf("}");
-       if (firstBrace !== -1 && lastBrace !== -1) {
-         jsonStr = jsonStr.substring(firstBrace, lastBrace + 1);
-       }
-       const parsedResult = JSON.parse(jsonStr);
+       const toolRes = egdeskToolsCall('ai-caller', 'ai_caller_call', {
+         model: 'gemini-3.8-flash',
+         temperature: 0.1,
+         prompt: '첨부된 문서를 정밀 분석하여 대상 시트의 각 컬럼에 맞는 JSON 규격으로 추출하세요. (복수 품목이 있는 문서는 items 배열 포함)',
+         files: [{ name: fileName, content: fileData, encoding: 'base64', mimeType: mimeType }]
+       });
        \`\`\`
-   - ⚠️ [실시간 AI 사용량 감사 로그 적재 규칙]:
-     - 사이드바에서 AI OCR 분석이 완료되면, 사용자 관제 센터에 누락 없이 기록되도록 이지데스크 user-data 터널(EGDESK_TUNNEL_URL.replace('/ai-caller/', '/user-data/'))을 통해 sheetbot_ai_usage_logs 테이블에 { user_email: SHEETBOT_USER_EMAIL, caller: 'sheetbot-gas-ocr', purpose: '구글 시트 문서 AI OCR 분석', model: 'gemini-3.8-flash', prompt_tokens, completion_tokens, prompt_preview: fileName } 행을 user_data_insert_rows 도구로 실시간 전송 적재하는 recordOcrUsageLog 헬퍼 함수를 반드시 포함하세요.
+   - ⚠️ [AI Caller 응답 언래핑 헬퍼 함수 - 필수 포함 및 준수]:
+     - egdeskToolsCall이 반환한 결과 객체에서 실제 AI JSON 텍스트를 안전하게 추출하는 parseAiCallerResponse 헬퍼 함수를 Code.gs에 포함하세요:
+       \`\`\`javascript
+       function parseAiCallerResponse(toolRes) {
+         let text = "";
+         if (toolRes && toolRes.result && toolRes.result.content && toolRes.result.content[0] && toolRes.result.content[0].text) {
+           text = toolRes.result.content[0].text;
+         } else if (toolRes && toolRes.content && toolRes.content[0] && toolRes.content[0].text) {
+           text = toolRes.content[0].text;
+         } else if (typeof toolRes.result === "string") {
+           text = toolRes.result;
+         } else {
+           text = JSON.stringify(toolRes);
+         }
+
+         // 중첩된 메타 JSON 래퍼({ content: "..." }) 언래핑
+         try {
+           const nested = JSON.parse(text);
+           if (nested && typeof nested === "object") {
+             if (typeof nested.content === "string") text = nested.content;
+             else if (typeof nested.text === "string") text = nested.text;
+             else if (nested.json && typeof nested.json === "object") text = JSON.stringify(nested.json);
+           }
+         } catch (e) {}
+
+         var jsonStr = text.replace(/\`\`\`json/gi, "").replace(/\`\`\`/g, "").trim();
+         var firstBrace = jsonStr.indexOf("{");
+         var lastBrace = jsonStr.lastIndexOf("}");
+         if (firstBrace !== -1 && lastBrace !== -1) {
+           jsonStr = jsonStr.substring(firstBrace, lastBrace + 1);
+         }
+         return JSON.parse(jsonStr);
+       }
+       \`\`\`
+   - ⚠️ [실시간 AI 사용량 감사 로그 적재]:
+     - AI OCR 분석이 완료되면, 사용자 관제 센터에 기록되도록 egdeskToolsCall('user-data', 'user_data_insert_rows', { tableName: 'sheetbot_ai_usage_logs', rows: [{ user_email: SHEETBOT_USER_EMAIL, caller: 'sheetbot-gas-ocr', purpose: '구글 시트 문서 AI OCR 분석', model: 'gemini-3.8-flash', prompt_preview: fileName }] })를 호출하는 recordOcrUsageLog 헬퍼 함수를 포함하세요 (try-catch로 감싸서 실패해도 본 작업에 영향 없도록 안전 처리).
    - ⚠️ [데이터 유효성 검증]:
      - AI 분석 결과가 비어있거나 유효하지 않으면 절대 파일명(fileName)이나 임의의 더미값을 데이터 열에 대체 삽입하지 말고, throw new Error("문서에서 유효한 정보를 추출하지 못했습니다.")로 명확히 예외를 발생시키세요.
      - 사용자에게 API 키가 없다는 경고나 설정창을 절대 띄우지 마세요!
-3. 📋 시트 및 데이터 조작 (실제 컬럼 1:1 매핑 및 동적 행 삽입 절대 준수):
+3. 💾 My DB 직접 연동 기능 (필요 시 자유롭게 활용):
+   - 스프레드시트 데이터를 My DB 대장에 백업하거나, My DB의 프로젝트/회원/이력 데이터를 조회해야 할 때는 egdeskUserDataSql("SELECT ...") 또는 egdeskToolsCall('user-data', 'user_data_insert_rows', ...)를 사용하여 원격 DB와 원활히 동기화할 수 있습니다.
+4. 📋 시트 및 데이터 조작 (실제 컬럼 1:1 매핑 및 동적 행 삽입 절대 준수):
    - 특정 시트명이 언급된 경우, getSheetByName()으로 참조하고 시트가 없으면 insertSheet()로 헤더 행과 함께 자동 생성하세요.
    - 단, 시트에 이미 존재하는 헤더(1행)가 있을 경우, 헤더를 임의로 변경하거나 덮어쓰지 말고 실제 시트 1행의 컬럼 순서 및 개수에 1:1로 정확히 맞추어 rowsToInsert 2차원 배열을 구성하세요.
    - '최근 기록이 위에 오도록' 요청된 경우:
      - 삽입할 행이 N개일 때, sheet.insertRowsBefore(2, N) 후 sheet.getRange(2, 1, N, rowsToInsert[0].length).setValues(rowsToInsert)로 한 번에 삽입하여 데이터 순서가 뒤집히지 않고 최신 데이터가 시트 맨 위(2행부터)에 안전하게 자리잡도록 작성하세요.
    - 숫자 포맷: 금액, 수량, 단가 등 숫자 열이 감지되면 해당 열에 .setNumberFormat("#,##0")을 적용하세요.
-4. 🚀 상단 메뉴 및 사이드바:
+5. 🚀 상단 메뉴 및 사이드바:
    - 구글 시트 상단 메뉴에 '🚀 SheetBot 자동화' 메뉴를 추가하는 onOpen() 함수를 항상 포함하세요.
-   - 메뉴 클릭 시 showSidebar()를 호출하여 파일 업로드 사이드바가 즉시 열리도록 하세요.
-5. 🛡️ 예외 처리:
+   - 메뉴 구성:
+     - '📄 문서 AI 업로드 및 분석' (showSidebar 호출)
+     - '⚡ 터널 연결 상태 점검' (testEgdeskTunnel 호출)
+     - 기타 요구사항에 맞는 커스텀 실행 항목
+6. 🛡️ 예외 처리:
    - try-catch를 꼼꼼히 감싸고, 실패 시 { success: false, error: error.message }를 반환하여 사이드바에 실패 원인이 빨간색 안내창으로 명확히 뜨도록 작성하세요.
-6. 🌐 독립 웹페이지(Web App) 설문/신청서/접수폼 구현 규칙:
+7. 🌐 독립 웹페이지(Web App) 설문/신청서/접수폼 구현 규칙:
    - 사용자가 '설문지', '신청서', '접수 폼', '웹페이지', '공개 링크/URL'을 요구한 경우:
      - 반드시 function doGet(e) 함수를 구현하여 HtmlService.createHtmlOutput(getFormHtml()).setTitle("...").setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)을 반환하세요.
      - getFormHtml() 함수 내부에 Tailwind CSS(CDN)를 활용한 모바일 반응형 독립 웹페이지 입력 폼을 작성하세요.
@@ -268,8 +286,8 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
     "구현된 세부 기능 2",
     "구현된 세부 기능 3"
   ],
-  "scriptCode": "/* Code.gs 전체 소스코드 (onOpen, 사이드바 표출, 데이터 처리 등 완벽 동작 코드) */",
-  "manifest": "{\\n  \\"timeZone\\": \\"Asia/Seoul\\",\\n  \\"dependencies\\": {},\\n  \\"exceptionLogging\\": \\"STACKDRIVER\\",\\n  \\"runtimeVersion\\": \\"V8\\"\\n}",
+  "scriptCode": "/* Code.gs 전체 소스코드 (onOpen, 사이드바 표출, egdeskToolsCall을 활용한 깔끔하고 강력한 자동화 코드) */",
+  "manifest": "{\\n  \\"timeZone\\": \\"Asia/Seoul\\",\\n  \\"dependencies\\": {},\\n  \\"exceptionLogging\\": \\"STACKDRIVER\\",\\n  \\"runtimeVersion\\": \\"V8\\",\\n  \\"oauthScopes\\": [\\"https://www.googleapis.com/auth/script.external_request\\", \\"https://www.googleapis.com/auth/spreadsheets\\"]\\n}",
   "triggers": [
     { "type": "ON_OPEN", "description": "시트 열기 시 커스텀 메뉴 및 환경 자동 초기화" }
   ]
@@ -278,18 +296,17 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
     const userMessage = `[회원 계정]: ${userEmail}
 [대상 구글 시트]: ${sheetUrl || "연결된 스프레드시트"}
 [프로젝트 명칭]: ${customTitle || "스마트 시트 자동화"}
-[이지데스크 공용 터널]: ${egdeskTunnelUrl}
+[이지데스크 공용 터널 인프라]: 사전 배포 완료 (EgdeskConfig.gs, EgdeskClient.gs 내장)
 ${schemaPromptSection}
 [사용자 요구사항]:
 ${prompt}
 
 * 중요 지침: 
-1. 코드 상단에 다음 상수를 선언하세요:
-   const EGDESK_TUNNEL_URL = "${egdeskTunnelUrl}";
-   const EGDESK_API_KEY = "${egdeskApiKey}";
+1. 코드 상단에 회원 식별을 위한 상수를 선언하세요:
    const SHEETBOT_USER_EMAIL = "${userEmail}";
-2. AI OCR 분석 시, Google 클라우드 DNS 오류 방지를 위해 반드시 EGDESK_TUNNEL_URL(X-Api-Key 헤더 포함)을 통해 이지데스크 AI Caller(gemini-3.8-flash)를 호출하여 완벽히 처리하세요.
-3. 사용자에게 개인 Gemini API 키 입력을 요구하는 코드는 절대로 작성하지 마십시오.`;
+2. AI/OCR 호출 시, 별도의 저수준 UrlFetchApp 대신 프로젝트에 사전 제공되는 egdeskToolsCall('ai-caller', 'ai_caller_call', { model: 'gemini-3.8-flash', prompt: '...', files: [...] })을 사용하여 간결하고 우아하게 구현하세요.
+3. My DB 연동이나 SQL 쿼리가 필요한 경우 egdeskUserDataSql(query)을 활용하세요.
+4. 사용자에게 개인 Gemini API 키 입력을 요구하는 코드는 절대로 작성하지 마십시오.`;
 
     const learningFeedbackSection = await buildSelfImprovingFeedbackContext();
 
@@ -429,8 +446,16 @@ function onOpen() {
     .addItem('▶️ 자동화 작업 실행', 'runSheetBotAutomatedTask')
     .addItem('📊 일일 통계 집계', 'calculateDailySummary')
     .addSeparator()
-    .addItem('⚙️ 자동화 상태 점검', 'checkSheetBotStatus')
+    .addItem('⚡ 터널 연결 상태 점검', 'checkEgdeskTunnelConnection')
     .addToUi();
+}
+
+function checkEgdeskTunnelConnection() {
+  if (typeof testEgdeskTunnel === 'function') {
+    testEgdeskTunnel();
+  } else {
+    SpreadsheetApp.getUi().alert('이지데스크 터널 클라이언트가 프로젝트에 설치되어 있습니다.');
+  }
 }
 
 function runSheetBotAutomatedTask() {

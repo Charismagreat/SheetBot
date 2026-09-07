@@ -1725,7 +1725,7 @@ export async function searchBrowserRecordingElements(sessionId: string, query: s
   return callBrowserRecordingTool('browser_recording_search_elements', { sessionId, query });
 }
 
-/** Visible form fields (dialog-scoped). lookup = type_into then double-click a row. */
+/** Visible form fields (dialog-scoped). lookup = type_into then pick a row. date = fill_form using date_format. */
 export async function getBrowserRecordingForms(
   sessionId: string,
   scroll?: 'none' | 'up' | 'down'
@@ -1749,7 +1749,7 @@ export async function clickBrowserRecordingElement(
   });
 }
 
-/** Fill free-text/select by field_id (locator + verify). Rejected: passwords, lookups, file inputs. */
+/** Fill free-text/select/date by field_id (locator + verify; dates coerced to date_format). Rejected: passwords, lookups, file inputs. */
 export async function fillBrowserRecordingForm(
   sessionId: string,
   fields: Array<{ field_id: string; value: string }>
