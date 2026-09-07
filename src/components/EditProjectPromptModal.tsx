@@ -15,6 +15,7 @@ import {
   MessageSquare,
   Send,
   ArrowLeft,
+  ShieldCheck,
 } from "lucide-react";
 
 interface EditProjectPromptModalProps {
@@ -55,6 +56,20 @@ export default function EditProjectPromptModal({
   const sheetUrl =
     project?.spreadsheetUrl || project?.spreadsheet_url || "";
 
+  // 기존 Apps Script 안전 감지 및 보존(Merge) / 덮어쓰기(Overwrite) 상태
+  const [isDetectingGas, setIsDetectingGas] = useState(false);
+  const [existingGasInfo, setExistingGasInfo] = useState<{
+    hasExistingScript: boolean;
+    projectId?: string;
+    filesCount?: number;
+    files?: Array<{ name: string; type: string }>;
+    functionNames?: string[];
+    existingCode?: string;
+    scriptUrl?: string;
+  } | null>(null);
+  const [mergeMode, setMergeMode] = useState<"MERGE" | "OVERWRITE">("MERGE");
+  const [showCodePreview, setShowCodePreview] = useState(false);
+
   useEffect(() => {
     if (project && isOpen) {
       setProjectName(project.name || "");
@@ -66,6 +81,54 @@ export default function EditProjectPromptModal({
       setTurnCount(0);
       setFeedbackHistory([]);
       setFeedbackText("");
+      setMergeMode("MERGE");
+      setShowCodePreview(false);
+
+      // 모달 오픈 시 현재 프로젝트의 기존 코드 또는 시트의 클라우드 Apps Script 코드 확인
+      const curSheetUrl = project.spreadsheetUrl || project.spreadsheet_url || "";
+      if (curSheetUrl) {
+        setIsDetectingGas(true);
+        apiFetch(`/api/projects/detect-gas?sheetUrl=${encodeURIComponent(curSheetUrl)}`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data?.success && data?.hasExistingScript) {
+              setExistingGasInfo({
+                hasExistingScript: true,
+                projectId: data.projectId,
+                filesCount: data.filesCount,
+                files: data.files,
+                functionNames: data.functionNames,
+                existingCode: data.existingCode || project.scriptCode || project.script_code || "",
+                scriptUrl: data.scriptUrl,
+              });
+            } else if (project.scriptCode || project.script_code) {
+              // DB에 저장된 기존 코드가 있는 경우 폴백
+              const code = project.scriptCode || project.script_code;
+              const matches = [...code.matchAll(/function\s+([a-zA-Z0-9_$]+)\s*\(/g)];
+              setExistingGasInfo({
+                hasExistingScript: true,
+                functionNames: matches.map((m: any) => m[1]),
+                existingCode: code,
+              });
+            } else {
+              setExistingGasInfo(null);
+            }
+          })
+          .catch(() => {
+            if (project.scriptCode || project.script_code) {
+              const code = project.scriptCode || project.script_code;
+              const matches = [...code.matchAll(/function\s+([a-zA-Z0-9_$]+)\s*\(/g)];
+              setExistingGasInfo({
+                hasExistingScript: true,
+                functionNames: matches.map((m: any) => m[1]),
+                existingCode: code,
+              });
+            }
+          })
+          .finally(() => {
+            setIsDetectingGas(false);
+          });
+      }
 
       apiFetch("/api/admin/pricing-cost")
         .then((res) => res.json())
@@ -184,7 +247,7 @@ export default function EditProjectPromptModal({
     setError(null);
 
     try {
-      // 1. AI 코드 생성 (조율된 스키마 강제 주입)
+      // 1. AI 코드 생성 (조율된 스키마 및 안전 보존 병합 옵션 주입)
       const genRes = await apiFetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -194,6 +257,8 @@ export default function EditProjectPromptModal({
           customTitle: projectName.trim() || project.name,
           model: selectedModel,
           analyzedSchema, // 조율된 최신 시트 스키마 전달
+          existingScriptCode: existingGasInfo?.existingCode || undefined,
+          mergeMode: existingGasInfo?.hasExistingScript ? mergeMode : "OVERWRITE",
         }),
       });
 
@@ -367,6 +432,135 @@ export default function EditProjectPromptModal({
               </p>
             </div>
 
+            {/* 🛡️ 기존 Apps Script 코드 안전 감지 배너 및 보존/덮어쓰기 선택 카드 */}
+            {isDetectingGas ? (
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center gap-2 text-slate-500 font-bold animate-pulse">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                <span>시트에 연결된 기존 Apps Script 코드 확인 중...</span>
+              </div>
+            ) : existingGasInfo && existingGasInfo.hasExistingScript ? (
+              <div className="p-3 bg-amber-50/90 border border-amber-200 rounded-2xl space-y-2.5 animate-in fade-in duration-150">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-amber-100 text-amber-700 rounded-lg">
+                      <ShieldCheck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-extrabold text-xs text-amber-950">
+                          기존 Apps Script 코드가 보존 대상입니다
+                        </span>
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-800">
+                          안전 보호 작동 중
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-amber-800 mt-0.5 leading-snug">
+                        기존 작성된 함수({existingGasInfo.functionNames?.length || 0}개)의 삭제를 방지하고 신규 요구사항을 안전하게 증분(Merge)합니다.
+                      </p>
+                    </div>
+                  </div>
+
+                  {existingGasInfo.existingCode && (
+                    <button
+                      type="button"
+                      onClick={() => setShowCodePreview((prev) => !prev)}
+                      className="text-[11px] font-bold text-amber-800 hover:text-amber-900 bg-white/80 hover:bg-white border border-amber-300 px-2.5 py-1 rounded-lg transition-all cursor-pointer shrink-0 flex items-center gap-1"
+                    >
+                      <Code className="w-3 h-3" />
+                      <span>{showCodePreview ? "코드 접기" : "기존 코드 보기"}</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* 감지된 함수 배지 리스트 */}
+                {existingGasInfo.functionNames && existingGasInfo.functionNames.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1 text-[10px] pt-0.5">
+                    <span className="font-bold text-amber-900">보존 대상 함수:</span>
+                    {existingGasInfo.functionNames.slice(0, 6).map((fn, idx) => (
+                      <span
+                        key={idx}
+                        className="font-mono font-bold px-1.5 py-0.5 bg-white/90 border border-amber-200 text-amber-900 rounded"
+                      >
+                        {fn}()
+                      </span>
+                    ))}
+                    {existingGasInfo.functionNames.length > 6 && (
+                      <span className="text-amber-700 font-bold">
+                        외 {existingGasInfo.functionNames.length - 6}개
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* 기존 소스코드 미리보기 토글 */}
+                {showCodePreview && existingGasInfo.existingCode && (
+                  <div className="p-2.5 bg-slate-900 text-slate-100 rounded-xl font-mono text-[11px] max-h-40 overflow-y-auto border border-slate-700 leading-relaxed">
+                    <pre className="whitespace-pre-wrap">{existingGasInfo.existingCode}</pre>
+                  </div>
+                )}
+
+                {/* 안전 병합(Merge) vs 덮어쓰기(Overwrite) 선택 */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  <label
+                    className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-start gap-2.5 ${
+                      mergeMode === "MERGE"
+                        ? "bg-white border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs"
+                        : "bg-white/60 border-amber-200 hover:bg-white text-slate-600"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="editMergeMode"
+                      value="MERGE"
+                      checked={mergeMode === "MERGE"}
+                      onChange={() => setMergeMode("MERGE")}
+                      className="mt-0.5 accent-emerald-600"
+                    />
+                    <div>
+                      <div className="flex items-center gap-1">
+                        <span className="font-extrabold text-xs text-slate-800">
+                          🛡️ 기존 코드 보존 & 새 기능 추가
+                        </span>
+                        <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">
+                          권장
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                        기존 함수와 메뉴를 100% 보존하면서 새 요구사항을 덧붙여 안전하게 병합합니다.
+                      </p>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-start gap-2.5 ${
+                      mergeMode === "OVERWRITE"
+                        ? "bg-white border-rose-500 ring-2 ring-rose-500/20 shadow-xs"
+                        : "bg-white/60 border-amber-200 hover:bg-white text-slate-600"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="editMergeMode"
+                      value="OVERWRITE"
+                      checked={mergeMode === "OVERWRITE"}
+                      onChange={() => setMergeMode("OVERWRITE")}
+                      className="mt-0.5 accent-rose-600"
+                    />
+                    <div>
+                      <div className="flex items-center gap-1">
+                        <span className="font-extrabold text-xs text-slate-800">
+                          ⚠️ 기존 코드 덮어쓰기
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                        기존 코드를 지우고 이번 요구사항에 맞춰 완전히 새롭게 작성합니다.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            ) : null}
+
             {/* 모달 버튼 */}
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
@@ -413,9 +607,22 @@ export default function EditProjectPromptModal({
                     </span>
                   </span>
                 </div>
-                <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
-                  {analyzedSchema.archetypeName || analyzedSchema.archetype || "📊 누적 대장형"}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  {existingGasInfo?.hasExistingScript && (
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                      mergeMode === "MERGE"
+                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                        : "bg-rose-100 text-rose-800 border border-rose-300"
+                    }`}>
+                      {mergeMode === "MERGE"
+                        ? `🛡️ 기존 코드 ${existingGasInfo.functionNames?.length || 0}개 함수 보존 병합`
+                        : "⚠️ 기존 코드 덮어쓰기 모드"}
+                    </span>
+                  )}
+                  <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                    {analyzedSchema.archetypeName || analyzedSchema.archetype || "📊 누적 대장형"}
+                  </span>
+                </div>
               </div>
 
               {/* 컬럼 구조 배지 */}

@@ -82,7 +82,15 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { prompt, sheetUrl, customTitle, model: userRequestedModel, analyzedSchema } = body;
+    const {
+      prompt,
+      sheetUrl,
+      customTitle,
+      model: userRequestedModel,
+      analyzedSchema,
+      existingScriptCode,
+      mergeMode = "OVERWRITE",
+    } = body;
 
     const aiSettings = await getAiModelSettings();
     // 사용자가 선택한 모델이 있으면 최우선 적용, 없으면 관리자 기본 설정 모델 적용
@@ -293,11 +301,31 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
   ]
 }`;
 
+    let existingScriptSection = "";
+    if (mergeMode === "MERGE" && existingScriptCode && existingScriptCode.trim()) {
+      existingScriptSection = `
+[🛡️ 안전 병합 모드: 기존 Apps Script 코드 보존 및 신규 기능 증분(Merge) 절대 준수 지침]:
+- 사용자의 구글 시트에는 이미 실무에서 사용 중인 중요한 Apps Script 코드가 존재합니다.
+- ⚠️ 절대 규칙:
+  1. 아래 제공되는 [기존 Apps Script 소스코드]에 정의된 모든 커스텀 함수(이름, 매개변수, 내부 로직)를 절대 임의로 삭제하거나 기능을 훼손하지 마십시오.
+  2. 기존 코드에 onOpen() 함수가 이미 있다면:
+     - 기존 onOpen()의 UI 메뉴 구조를 100% 보존하면서, 새로 추가되는 SheetBot 기능 메뉴를 기존 메뉴에 깔끔하게 합치거나 하위 메뉴/새 메뉴로 병합하십시오. (onOpen 함수가 2개 존재하면 문법 오류가 나므로 반드시 1개로 병합)
+  3. 신규 자동화 요구사항에 필요한 함수들은 기존 함수들과 충돌하지 않도록 명확한 네이밍으로 새롭게 추가하십시오.
+  4. 결과물 scriptCode는 기존 코드의 모든 함수와 이번 신규 요구사항 구현 코드가 조화롭게 결합된 '완전한 완성형 Code.gs'여야 합니다.
+
+[기존 Apps Script 소스코드 (반드시 보존 및 융합)]:
+\`\`\`javascript
+${existingScriptCode.trim()}
+\`\`\`
+`;
+    }
+
     const userMessage = `[회원 계정]: ${userEmail}
 [대상 구글 시트]: ${sheetUrl || "연결된 스프레드시트"}
 [프로젝트 명칭]: ${customTitle || "스마트 시트 자동화"}
 [이지데스크 공용 터널 인프라]: 사전 배포 완료 (EgdeskConfig.gs, EgdeskClient.gs 내장)
 ${schemaPromptSection}
+${existingScriptSection}
 [사용자 요구사항]:
 ${prompt}
 
