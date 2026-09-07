@@ -166,6 +166,20 @@ export async function POST(request: Request) {
           scriptUrl = boundRes.scriptUrl || `https://script.google.com/d/${scriptId}/edit`;
         }
 
+        // 1-1. 이지데스크 터널 인프라(EgdeskConfig.gs, EgdeskClient.gs) 자동 주입
+        // AI가 생성한 Code.gs가 egdeskToolsCall, egdeskUserDataSql을 즉시 안전하게 호출할 수 있도록 보장
+        if (gasProjectId) {
+          try {
+            await callAppsScriptTool("apps_script_setup_egdesk_tunnel", {
+              projectId: gasProjectId,
+              push: false,
+            });
+            console.log(`[Projects] Successfully embedded EGDesk tunnel files into ${gasProjectId}`);
+          } catch (tunnelErr: any) {
+            console.warn("[Projects] Embed EGDesk tunnel warning:", tunnelErr.message);
+          }
+        }
+
         // 스크립트 코드가 제공된 경우 Code.gs 파일 덮어쓰기 및 구글 클라우드에 직접 푸시
         if (gasProjectId && scriptCode) {
           // 비정상 파일이 남아있을 경우 푸시 충돌 방지를 위해 정리
@@ -188,7 +202,7 @@ export async function POST(request: Request) {
             }).catch((err: any) => console.warn("write appsscript.json warning:", err.message));
           }
 
-          // 클라우드 반영
+          // 클라우드 최종 반영 (EgdeskConfig.gs, EgdeskClient.gs, Code.gs, appsscript.json 모두 푸시)
           await callAppsScriptTool("apps_script_push_to_google", {
             projectId: gasProjectId,
           }).catch((err: any) => console.warn("push to google warning:", err.message));
@@ -381,6 +395,12 @@ export async function PATCH(request: Request) {
           projectId: gasProjId,
           fileName: "undefined.gs",
         }).catch(() => null);
+
+        // 터널 클라이언트 인프라(EgdeskConfig.gs, EgdeskClient.gs) 최신화 보장
+        await callAppsScriptTool("apps_script_setup_egdesk_tunnel", {
+          projectId: gasProjId,
+          push: false,
+        }).catch((err: any) => console.warn("Redeploy setup tunnel warning:", err.message));
 
         await callAppsScriptTool("apps_script_write_file", {
           projectId: gasProjId,

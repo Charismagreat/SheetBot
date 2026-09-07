@@ -19,7 +19,7 @@
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
-    "@egdesk/next-api-plugin": "^1.5.40",
+    "@egdesk/next-api-plugin": "^1.5.44",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.1",
