@@ -74,6 +74,12 @@ export default function Navbar() {
               사용 가이드
             </Link>
             <Link
+              href="/use-cases"
+              className="px-2.5 py-1.5 rounded-xl hover:text-teal-700 hover:bg-teal-50/70 transition-all whitespace-nowrap"
+            >
+              활용 사례
+            </Link>
+            <Link
               href="/faq"
               className="px-2.5 py-1.5 rounded-xl hover:text-indigo-700 hover:bg-indigo-50/70 transition-all whitespace-nowrap"
             >
