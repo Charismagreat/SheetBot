@@ -11,6 +11,7 @@ export interface AiUsageLogInput {
   responseText?: string;
   promptTokens?: number;
   completionTokens?: number;
+  totalTokens?: number;
 }
 
 // 1 USD = 1,350 KRW 기준
@@ -78,7 +79,7 @@ export async function recordAiUsageLog(input: AiUsageLogInput): Promise<void> {
 
     const pTokens = input.promptTokens ?? estimateTokens(input.promptText || '');
     const cTokens = input.completionTokens ?? estimateTokens(input.responseText || '');
-    const totalTokens = pTokens + cTokens;
+    const totalTokens = input.totalTokens ?? (pTokens + cTokens);
     const model = input.model || 'gemini-2.0-flash';
 
     const { costUsd, costKrw } = calculateEstimatedCost(pTokens, cTokens, model);

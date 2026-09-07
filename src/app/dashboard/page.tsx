@@ -31,7 +31,12 @@ export default function DashboardPage() {
   const [alertMessage, setAlertMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // 요약 카드용 실시간 계정 자원 상태
-  const [wallet, setWallet] = useState<{ balanceTokens: number; tier: string } | null>(null);
+  const [wallet, setWallet] = useState<{
+    balanceTokens: number;
+    totalPurchasedTokens?: number;
+    totalUsedTokens?: number;
+    tier: string;
+  } | null>(null);
   const [usageCostKrw, setUsageCostKrw] = useState<number>(0);
   const [usageTokens, setUsageTokens] = useState<number>(0);
   const [usageCalls, setUsageCalls] = useState<number>(0);
@@ -48,15 +53,16 @@ export default function DashboardPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      const now = Date.now();
       const userParam = session?.user?.email ? `&userEmail=${encodeURIComponent(session.user.email)}` : "";
       const [projRes, schedRes, walletRes, usageRes, devRes, ruleRes, settingsRes] = await Promise.all([
-        apiFetch("/api/projects").then((r) => r.json()).catch(() => ({})),
-        apiFetch("/api/schedules").then((r) => r.json()).catch(() => ({})),
-        apiFetch("/api/wallet").then((r) => r.json()).catch(() => ({})),
-        apiFetch(`/api/admin/ai-usage?range=month&limit=1${userParam}`).then((r) => r.json()).catch(() => ({})),
-        apiFetch("/api/user/devices").then((r) => r.json()).catch(() => ({})),
-        apiFetch("/api/user/smart-rules").then((r) => r.json()).catch(() => ({})),
-        apiFetch("/api/admin/settings").then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/projects?_t=${now}`).then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/schedules?_t=${now}`).then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/wallet?_t=${now}`).then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/admin/ai-usage?range=month&limit=1${userParam}&_t=${now}`).then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/user/devices?_t=${now}`).then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/user/smart-rules?_t=${now}`).then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/admin/settings?_t=${now}`).then((r) => r.json()).catch(() => ({})),
       ]);
 
       if (projRes?.success) setProjects(projRes.projects || []);
@@ -342,11 +348,16 @@ export default function DashboardPage() {
                   </span>
                   <span className="text-xs font-bold text-amber-700">Token</span>
                 </div>
-                <p className="text-[11px] text-amber-800/80 font-medium mt-1 flex items-center gap-1">
+                <p className="text-[11px] text-amber-800/80 font-medium mt-1 flex flex-wrap items-center gap-1.5">
                   <span className="px-1.5 py-0.2 bg-amber-200/60 text-amber-900 rounded font-bold text-[10px]">
                     {wallet?.tier || "FREE"} 플랜
                   </span>
                   <span>보유 중</span>
+                  {wallet?.totalPurchasedTokens ? (
+                    <span className="text-[10px] text-amber-800/70 font-semibold">
+                      (총 적립 {wallet.totalPurchasedTokens.toLocaleString()})
+                    </span>
+                  ) : null}
                 </p>
               </div>
 

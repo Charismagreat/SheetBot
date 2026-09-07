@@ -31,12 +31,16 @@ export async function GET() {
       const targetModel = aiSettings.easybotModel || aiSettings.defaultModel || "gemini-3.5-flash";
 
       // EGDesk AI Caller 또는 Gemini 모델 메타데이터 실시간 진단 (토큰 소모 없음)
-      const modelsResult = await listAiCallerModels().catch((err: any) => {
-        throw err;
-      });
+      const modelsResult = await listAiCallerModels().catch(() => null);
 
       const latencyMs = Date.now() - startTime;
-      const isAvailable = modelsResult && Array.isArray(modelsResult.models);
+      const isAvailable = Boolean(
+        modelsResult &&
+        (Array.isArray(modelsResult.models) ||
+         Array.isArray((modelsResult as any)?.result?.models) ||
+         Array.isArray((modelsResult as any)?.data) ||
+         (modelsResult as any)?.success !== false)
+      );
 
       baseHealth = {
         status: isAvailable ? "healthy" : "warning",
@@ -58,6 +62,15 @@ export async function GET() {
       let isQuotaExceeded = false;
 
       if (
+        errMsg.includes("depleted") ||
+        errMsg.includes("prepayment") ||
+        errMsg.includes("credits") ||
+        errMsg.includes("billing")
+      ) {
+        status = "error";
+        message = "⚠️ 구글 AI API 결제 크레딧 소진 (충전 필요)";
+        isQuotaExceeded = true;
+      } else if (
         errMsg.includes("429") ||
         errMsg.includes("quota") ||
         errMsg.includes("resource_exhausted") ||
@@ -67,12 +80,12 @@ export async function GET() {
         status = "error";
         message = "AI API 일일 할당량(한도) 초과";
         isQuotaExceeded = true;
-      } else if (errMsg.includes("key") || errMsg.includes("auth") || errMsg.includes("unauthorized")) {
+      } else if (errMsg.includes("key") || errMsg.includes("auth") || errMsg.includes("unauthorized") || errMsg.includes("invalid")) {
         status = "error";
         message = "AI API 인증 키 설정 점검 필요";
       } else {
         status = "warning";
-        message = "일시적 응답 지연 (가이드 모드)";
+        message = `일시적 응답 지연 (${err.message || "가이드 모드"})`;
       }
 
       baseHealth = {

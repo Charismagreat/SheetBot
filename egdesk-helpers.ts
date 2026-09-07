@@ -111,12 +111,7 @@ async function parseEgdeskMcpToolResponse(response: Response): Promise<any> {
   }
 
   const content = result.result?.content?.[0]?.text;
-  if (!content) return null;
-  try {
-    return JSON.parse(content);
-  } catch {
-    return content;
-  }
+  return content ? JSON.parse(content) : null;
 }
 
 async function parseEgdeskHttpResponse(response: Response): Promise<any> {
@@ -2460,7 +2455,7 @@ export async function callAiCallerTool(
 }
 
 /** Known API key names discovered at setup time from EGDesk AI Keys Manager */
-export const AI_KEY_NAMES = ['wonconduct', 'egdesk'] as const;
+export const AI_KEY_NAMES = ['wonconduct'] as const;
 
 export type AiCallerCallOptions = {
   systemPrompt?: string;
@@ -2489,7 +2484,7 @@ export type AiCallerCallOptions = {
     mimeType?: string;
   }>;
   /** Select a specific Google API key by name (as saved in EGDesk AI Keys Manager). Leave empty to use the default key. */
-  keyName?: 'wonconduct' | 'egdesk' | (string & {});
+  keyName?: 'wonconduct' | (string & {});
 };
 
 export type AiCallerModelDetails = {
@@ -2569,7 +2564,7 @@ export type AiCallerGenerateImageOptions = {
   fallbackModel?: string;
   caller?: string;
   /** Select a specific Google API key by name (as saved in EGDesk AI Keys Manager). Leave empty to use the default key. */
-  keyName?: 'wonconduct' | 'egdesk' | (string & {});
+  keyName?: 'wonconduct' | (string & {});
 };
 
 export type AiCallerGeneratedImage = {

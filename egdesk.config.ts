@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-07T02:11:42.246Z
+ * Generated at: 2026-09-07T09:53:04.679Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -25,7 +25,7 @@ export const TABLES = {
   table1: {
     name: 'sheetbot_project_feedback',
     displayName: 'SheetBot 프로젝트 만족도 및 AI 자가 학습 대장',
-    rowCount: 7,
+    rowCount: 8,
     columnCount: 19,
     columns: ['id', '_version', 'project_id', 'project_name', 'user_email', 'rating', 'satisfaction_type', 'tags', 'comment', 'script_code_snapshot', 'ai_learned', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
