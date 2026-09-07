@@ -347,17 +347,17 @@ export default function AiSettingsPage() {
 
               {/* 5. AI 에이전트 브릿지 1회 배포당 차감 토큰량 */}
               <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-purple-200 transition-all space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-purple-50 text-purple-600 rounded-xl border border-purple-100">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="p-2 bg-purple-50 text-purple-600 rounded-xl border border-purple-100 shrink-0">
                       <Bot className="w-4 h-4" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <h3 className="text-sm font-bold text-slate-800">AI 에이전트 브릿지 배포 차감 토큰량</h3>
                       <p className="text-[11px] text-slate-400">안티그라비티/외부 AI가 브릿지를 통해 코드를 배포할 때 프로젝트 소유자 지갑에서 차감할 토큰</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 shrink-0 whitespace-nowrap">
                     <input
                       type="number"
                       min="0"
@@ -365,9 +365,9 @@ export default function AiSettingsPage() {
                       step="50"
                       value={settings.agentBridgeDeploymentTokens ?? 500}
                       onChange={(e) => setSettings({ ...settings, agentBridgeDeploymentTokens: Math.max(0, parseInt(e.target.value) || 0) })}
-                      className="w-24 text-right px-2.5 py-1 text-xs font-mono font-bold bg-purple-50 text-purple-700 rounded-md border border-purple-200 focus:outline-hidden focus:ring-1 focus:ring-purple-500"
+                      className="w-24 text-right px-2.5 py-1 text-xs font-mono font-bold bg-purple-50 text-purple-700 rounded-md border border-purple-200 focus:outline-hidden focus:ring-1 focus:ring-purple-500 shrink-0"
                     />
-                    <span className="text-xs font-bold text-purple-700">토큰</span>
+                    <span className="text-xs font-bold text-purple-700 whitespace-nowrap shrink-0">토큰</span>
                   </div>
                 </div>
 
