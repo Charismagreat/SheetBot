@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useState } from 'react';
 import {
   X,
@@ -71,7 +72,7 @@ export default function FeedbackModal({
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await fetch('/api/feedback', {
+      const res = await apiFetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

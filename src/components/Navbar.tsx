@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
-import { Bot, LogOut, User, Sparkles, ArrowRight, ShieldCheck, Activity, Settings, Coins, Smartphone } from "lucide-react";
+import { Bot, LogOut, User, Sparkles, ArrowRight, ShieldCheck } from "lucide-react";
 
 export default function Navbar() {
   const { data: session, status } = useSession();
@@ -126,49 +126,11 @@ export default function Navbar() {
             <div className="flex items-center gap-2 xl:gap-2.5 shrink-0 whitespace-nowrap">
               <Link
                 href="/dashboard"
-                className="hidden xl:flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-slate-700 hover:text-emerald-600 hover:bg-slate-100 rounded-xl transition-all whitespace-nowrap shrink-0"
-                data-easybot-hint="대시보드 이동: 내 스프레드시트 자동화 프로젝트 및 스케줄 관리 화면으로 이동합니다."
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/80 rounded-xl transition-all shadow-2xs whitespace-nowrap shrink-0"
+                data-easybot-hint="워크스페이스 이동: 내 스프레드시트 자동화 프로젝트, 토큰 지갑, 스케줄 종합 관리 화면으로 이동합니다."
               >
-                <span>내 프로젝트</span>
-              </Link>
-
-              <Link
-                href="/dashboard/pricing"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300/80 rounded-xl transition-all shadow-2xs whitespace-nowrap shrink-0"
-                data-easybot-hint="토큰 충전: 잔여 크레딧을 확인하고 안전한 선불형 결제를 통해 AI 토큰을 충전합니다."
-              >
-                <Coins className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <span className="whitespace-nowrap">토큰 충전</span>
-              </Link>
-
-              <Link
-                href="/dashboard/ai-usage"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100/80 border border-indigo-200/60 rounded-xl transition-all shadow-2xs whitespace-nowrap shrink-0"
-                data-easybot-hint="AI 사용료 관제: Gemini API 사용 토큰 및 추정 비용(USD/KRW)을 전체 및 회원별로 실시간 모니터링합니다."
-                title="AI 사용료 관제 대시보드"
-              >
-                <Activity className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                <span className="hidden sm:inline whitespace-nowrap">AI 사용료</span>
-              </Link>
-
-              <Link
-                href="/dashboard/notifications"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-emerald-800 bg-emerald-50/70 hover:bg-emerald-100/80 border border-emerald-200/60 rounded-xl transition-all shadow-2xs whitespace-nowrap shrink-0"
-                data-easybot-hint="스마트 알림: 내 안드로이드 스마트폰을 구글 메시지로 연동하고 자연어로 구글 시트 자동 문자 발송 규칙을 설정합니다."
-                title="구글 메시지 스마트 알림 센터"
-              >
-                <Smartphone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span className="hidden sm:inline whitespace-nowrap">스마트 알림</span>
-              </Link>
-
-              <Link
-                href="/dashboard/settings"
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:text-indigo-600 hover:bg-slate-100 border border-slate-200/80 rounded-xl transition-all whitespace-nowrap shrink-0"
-                data-easybot-hint="AI 모델 설정: Apps Script 생성기 및 시트봇 AI에 적용될 구글 제미나이(Gemini 3.5 Flash 등) 모델과 파라미터를 설정합니다."
-                title="AI 모델 환경 설정"
-              >
-                <Settings className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                <span className="hidden md:inline whitespace-nowrap">모델 설정</span>
+                <Bot className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>내 워크스페이스</span>
               </Link>
 
               <Link

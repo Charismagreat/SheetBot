@@ -1,4 +1,4 @@
-﻿export const dynamic = "force-dynamic";
+export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { queryTable, insertRows } from "@/lib/egdesk-helpers";
@@ -17,11 +17,12 @@ export async function GET(req: NextRequest) {
 
     let validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
 
-    // 테이블이 비어있는 경우 기본 8개 FAQ를 DB에 실제 영구 등록
+    // 테이블이 비어있는 경우 기본 FAQ를 DB에 실제 영구 등록
     if (validRows.length === 0) {
       const now = new Date().toISOString();
       const seedRows = DEFAULT_FAQS.map((faq) => ({
         id: faq.id,
+        uuid: crypto.randomUUID(),
         category: faq.category,
         question: faq.question,
         answer: faq.answer,
@@ -37,6 +38,29 @@ export async function GET(req: NextRequest) {
       );
       validRows = seedRows;
     } else {
+      // 기존 DB에 아직 없는 신규 DEFAULT_FAQS가 있으면 자동 등록
+      const existingIds = new Set(validRows.map((r: any) => r.id));
+      const missingFaqs = DEFAULT_FAQS.filter((f) => !existingIds.has(f.id));
+      if (missingFaqs.length > 0) {
+        const now = new Date().toISOString();
+        const newSeedRows = missingFaqs.map((faq) => ({
+          id: faq.id,
+          uuid: crypto.randomUUID(),
+          category: faq.category,
+          question: faq.question,
+          answer: faq.answer,
+          sort_order: faq.sort_order,
+          created_at: now,
+          updated_at: now,
+          updated_by: "system_seed",
+          deleted_at: null,
+        }));
+        await insertRows("sheetbot_faqs", newSeedRows).catch((e) =>
+          console.warn("Failed to insert missing faqs:", e.message)
+        );
+        validRows = [...validRows, ...newSeedRows];
+      }
+
       // 정렬 순서대로 보정
       validRows.sort((a: any, b: any) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0));
     }

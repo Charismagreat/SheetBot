@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import {
   Bot, Plus, FileCode, Clock, RefreshCw, CheckCircle2, AlertTriangle,
   X, ArrowRight, ExternalLink, Sparkles, Layers, ShieldCheck, Trash2, Smartphone, Edit3,
-  Globe, Star
+  Globe, Star, Coins, Activity, Cpu, Settings
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import nextDynamic from "next/dynamic";
@@ -30,6 +30,16 @@ export default function DashboardPage() {
   const [editingProject, setEditingProject] = useState<any | null>(null);
   const [alertMessage, setAlertMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // 요약 카드용 실시간 계정 자원 상태
+  const [wallet, setWallet] = useState<{ balanceTokens: number; tier: string } | null>(null);
+  const [usageCostKrw, setUsageCostKrw] = useState<number>(0);
+  const [usageTokens, setUsageTokens] = useState<number>(0);
+  const [usageCalls, setUsageCalls] = useState<number>(0);
+  const [isAdminUser, setIsAdminUser] = useState<boolean>(false);
+  const [deviceCount, setDeviceCount] = useState<number>(0);
+  const [ruleCount, setRuleCount] = useState<number>(0);
+  const [currentModel, setCurrentModel] = useState<string>("Gemini 3.8 Flash");
+
   // 추천 프롬프트 갤러리 및 피드백 모달 상태
   const [isPromptGalleryOpen, setIsPromptGalleryOpen] = useState(false);
   const [feedbackTargetProject, setFeedbackTargetProject] = useState<any | null>(null);
@@ -38,19 +48,45 @@ export default function DashboardPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [projRes, schedRes] = await Promise.all([
+      const userParam = session?.user?.email ? `&userEmail=${encodeURIComponent(session.user.email)}` : "";
+      const [projRes, schedRes, walletRes, usageRes, devRes, ruleRes, settingsRes] = await Promise.all([
         apiFetch("/api/projects").then((r) => r.json()).catch(() => ({})),
         apiFetch("/api/schedules").then((r) => r.json()).catch(() => ({})),
+        apiFetch("/api/wallet").then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/admin/ai-usage?range=month&limit=1${userParam}`).then((r) => r.json()).catch(() => ({})),
+        apiFetch("/api/user/devices").then((r) => r.json()).catch(() => ({})),
+        apiFetch("/api/user/smart-rules").then((r) => r.json()).catch(() => ({})),
+        apiFetch("/api/admin/settings").then((r) => r.json()).catch(() => ({})),
       ]);
 
       if (projRes?.success) setProjects(projRes.projects || []);
       if (schedRes?.success) setSchedules(schedRes.schedules || []);
+      if (walletRes?.success && walletRes.wallet) setWallet(walletRes.wallet);
+      if (usageRes?.success) {
+        setIsAdminUser(!!usageRes.isAdmin);
+        if (usageRes.summary) {
+          setUsageCostKrw(usageRes.summary.totalCostKrw ?? usageRes.summary.costKrw ?? 0);
+          setUsageTokens(usageRes.summary.totalTokens ?? 0);
+          setUsageCalls(usageRes.summary.totalCalls ?? 0);
+        }
+      }
+      if (devRes?.success) setDeviceCount((devRes.devices || []).length);
+      if (ruleRes?.success) setRuleCount((ruleRes.rules || []).length);
+      if (settingsRes?.success && settingsRes.settings?.defaultModel) {
+        // 보기 좋은 모델 라벨 정리
+        const m = settingsRes.settings.defaultModel;
+        setCurrentModel(
+          m === "gemini-3.8-flash" ? "Gemini 3.8 Flash" :
+          m === "gemini-3.5-flash" ? "Gemini 3.5 Flash" :
+          m === "gemini-2.5-flash" ? "Gemini 2.5 Flash" : m
+        );
+      }
     } catch (err) {
       console.error("Dashboard fetch error:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [session?.user?.email]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -211,71 +247,195 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* 4대 핵심 자원 & 현황 요약 카드 그리드 */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 카드 1: 연동 프로젝트 & 스케줄 */}
             <div
-              className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60"
-              data-easybot-hint="연동 프로젝트 수: 현재 내 구글 계정에 등록되어 구글 시트에 바인딩된 Apps Script 프로젝트 총 건수입니다."
+              className="bg-slate-50/80 hover:bg-slate-50 p-4 rounded-2xl border border-slate-200/80 transition-all flex flex-col justify-between"
+              data-easybot-hint="내 연동 프로젝트: 현재 내 구글 계정에 등록되어 스프레드시트에 바인딩된 Apps Script 프로젝트와 가동 중인 스케줄 현황입니다."
             >
-              <span className="text-xs font-bold text-slate-400 block mb-1">내 연동 프로젝트</span>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-slate-800 tracking-tight">{projects.length}</span>
-                <span className="text-xs font-bold text-slate-500">개</span>
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs font-bold text-slate-500">내 연동 프로젝트</span>
+                  <div className="w-7 h-7 rounded-xl bg-emerald-100/80 text-emerald-700 flex items-center justify-center">
+                    <FileCode className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-black text-slate-800 tracking-tight">{projects.length}</span>
+                  <span className="text-xs font-bold text-slate-500">개 시트</span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium mt-1 flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-amber-500 shrink-0" />
+                  <span>활성 스케줄 <strong className="text-amber-700 font-bold">{activeSchedulesCount}개</strong> 가동</span>
+                </p>
+              </div>
+
+              <div className="pt-3 mt-3 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+                <span className="text-slate-400 font-medium">자동화 관리</span>
+                <button
+                  onClick={() => setIsNewProjectModalOpen(true)}
+                  className="text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-0.5 hover:underline cursor-pointer"
+                >
+                  <span>+ 새 프로젝트</span>
+                </button>
               </div>
             </div>
 
+            {/* 카드 2: AI 토큰 지갑 & 충전 */}
             <div
-              className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60"
-              data-easybot-hint="활성 스케줄 수: 현재 정기 실행(시간 기반) 또는 이벤트 트리거로 작동 중인 자동화 개수입니다."
+              className="bg-amber-50/40 hover:bg-amber-50/60 p-4 rounded-2xl border border-amber-200/70 transition-all flex flex-col justify-between"
+              data-easybot-hint="AI 토큰 잔여량: Apps Script 코드 생성 및 AI 대화에 사용되는 보유 크레딧 잔액입니다. 클릭하여 토큰을 충전할 수 있습니다."
             >
-              <span className="text-xs font-bold text-slate-400 block mb-1">활성 실행 스케줄</span>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-amber-600 tracking-tight">{activeSchedulesCount}</span>
-                <span className="text-xs font-bold text-slate-500">개 가동 중</span>
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs font-bold text-amber-900">AI 토큰 지갑</span>
+                  <div className="w-7 h-7 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                    <Coins className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-black text-amber-900 tracking-tight">
+                    {(wallet?.balanceTokens ?? 20000).toLocaleString()}
+                  </span>
+                  <span className="text-xs font-bold text-amber-700">Token</span>
+                </div>
+                <p className="text-[11px] text-amber-800/80 font-medium mt-1 flex items-center gap-1">
+                  <span className="px-1.5 py-0.2 bg-amber-200/60 text-amber-900 rounded font-bold text-[10px]">
+                    {wallet?.tier || "FREE"} 플랜
+                  </span>
+                  <span>보유 중</span>
+                </p>
+              </div>
+
+              <div className="pt-3 mt-3 border-t border-amber-200/60 flex items-center justify-between text-[11px]">
+                <span className="text-amber-700/80 font-medium">선불형 크레딧</span>
+                <Link
+                  href="/dashboard/pricing"
+                  className="text-amber-800 hover:text-amber-950 font-bold flex items-center gap-0.5 hover:underline"
+                >
+                  <span>토큰 충전 ➔</span>
+                </Link>
               </div>
             </div>
 
+            {/* 카드 3: AI 사용량 관제 */}
             <div
-              className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60"
-              data-easybot-hint="인프라 연결: 이지데스크 Apps Script MCP 도구 및 My DB, AI Caller와의 통신 상태를 나타냅니다."
+              className="bg-indigo-50/40 hover:bg-indigo-50/60 p-4 rounded-2xl border border-indigo-200/70 transition-all flex flex-col justify-between"
+              data-easybot-hint={
+                isAdminUser
+                  ? `AI 사용량 관제: 이번 달 호출된 총 AI 토큰과 구글 클라우드에 납부될 순수 API 원가(실비용 ₩${usageCostKrw.toLocaleString()}원)를 모니터링합니다.`
+                  : "AI 사용량 관제: 이번 달 스프레드시트 자동화 코드 생성 및 어시스턴트에 사용된 총 AI 토큰과 호출 횟수입니다."
+              }
             >
-              <span className="text-xs font-bold text-slate-400 block mb-1">인프라 연결 상태</span>
-              <div className="flex items-center gap-1.5 mt-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="font-bold text-emerald-600 text-xs">
-                  EGDesk Apps Script & My DB 연동 완료
-                </span>
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs font-bold text-indigo-900">당월 AI 사용량</span>
+                  <div className="w-7 h-7 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                    <Activity className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-black text-indigo-900 tracking-tight">
+                    {usageTokens.toLocaleString()}
+                  </span>
+                  <span className="text-xs font-bold text-indigo-700">Token</span>
+                </div>
+                <div className="text-[11px] text-indigo-800/80 font-medium mt-1 flex flex-wrap items-center gap-1.5">
+                  <span>총 <strong>{usageCalls}회</strong> 자동화 호출</span>
+                  {isAdminUser && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-200/60 text-indigo-950 font-bold border border-indigo-300/60">
+                      API 원가 ₩{usageCostKrw.toLocaleString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-3 mt-3 border-t border-indigo-200/60 flex items-center justify-between text-[11px]">
+                <span className="text-indigo-700/80 font-medium">사용량 분석</span>
+                <Link
+                  href="/dashboard/ai-usage"
+                  className="text-indigo-800 hover:text-indigo-950 font-bold flex items-center gap-0.5 hover:underline"
+                >
+                  <span>사용량 관제 ➔</span>
+                </Link>
+              </div>
+            </div>
+
+            {/* 카드 4: AI 모델 환경 설정 */}
+            <div
+              className="bg-slate-50/80 hover:bg-slate-50 p-4 rounded-2xl border border-slate-200/80 transition-all flex flex-col justify-between"
+              data-easybot-hint="AI 모델 환경 설정: 코드 생성 및 어시스턴트에 적용되는 Google Gemini 모델과 파라미터를 변경합니다."
+            >
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs font-bold text-slate-700">적용 AI 모델</span>
+                  <div className="w-7 h-7 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center">
+                    <Cpu className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-base sm:text-lg font-black text-slate-800 tracking-tight truncate max-w-full">
+                    {currentModel}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium mt-1 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                  <span className="truncate">Apps Script 코드 특화</span>
+                </p>
+              </div>
+
+              <div className="pt-3 mt-3 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+                <span className="text-slate-400 font-medium">파라미터 설정</span>
+                <Link
+                  href="/dashboard/settings"
+                  className="text-slate-700 hover:text-indigo-600 font-bold flex items-center gap-0.5 hover:underline"
+                >
+                  <span>모델 설정 ➔</span>
+                </Link>
               </div>
             </div>
           </div>
 
-          {/* 구글 메시지 스마트 알림 센터 바로가기 배너 */}
-          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 rounded-2xl p-4 border border-emerald-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0">
+          {/* 구글 메시지 스마트 알림 & 인프라 연결 통합 배너 */}
+          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 rounded-2xl p-4 sm:p-5 border border-emerald-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0">
                 <Smartphone className="w-5 h-5" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <h4 className="font-extrabold text-sm text-slate-800">
-                    내 안드로이드 폰 연동 & 자연어 구글 시트 스마트 알림
+                    스마트 알림 센터 (내 안드로이드 폰 연동)
                   </h4>
                   <span className="px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-black">
                     통신비 0원
                   </span>
+                  <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold">
+                    연동 폰 {deviceCount}대 · 발송 규칙 {ruleCount}개
+                  </span>
                 </div>
-                <p className="text-xs text-slate-600 mt-0.5">
-                  내 스마트폰을 10초 만에 연동하고, "D열 입금완료 시 고객 감사 문자 발송" 같은 자연어 규칙을 설정해 보세요.
+                <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                  스마트폰을 10초 만에 연동하고, "D열 입금완료 시 고객 감사 문자 발송" 같은 자연어 규칙을 설정해 보세요.
                 </p>
               </div>
             </div>
 
-            <Link
-              href="/dashboard/notifications"
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all shrink-0 self-start sm:self-auto"
-            >
-              <span>스마트 알림 센터 열기</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
+              <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-slate-500 bg-white/80 px-2.5 py-1.5 rounded-xl border border-emerald-200/60">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="font-bold text-emerald-700">인프라 연동 완료</span>
+              </div>
+
+              <Link
+                href="/dashboard/notifications"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all shrink-0 active:scale-95"
+                data-easybot-hint="스마트 알림 센터: 내 안드로이드 스마트폰을 연동하고 구글 시트 자동 문자 발송 규칙을 관리합니다."
+              >
+                <span>스마트 알림 센터 열기</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           </div>
         </div>
 

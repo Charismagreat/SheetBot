@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from 'react';
 import {
   X,
@@ -55,7 +56,7 @@ export default function PromptGalleryModal({
   const fetchPrompts = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/prompts');
+      const res = await apiFetch('/api/prompts');
       const data = await res.json();
       if (data.success && data.prompts) {
         setPrompts(data.prompts);

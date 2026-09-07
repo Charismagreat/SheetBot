@@ -111,7 +111,7 @@ export default function AiSettingsPage() {
             <Link
               href="/dashboard"
               className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all"
-              title="대시보드로 돌아가기"
+              title="워크스페이스로 돌아가기"
             >
               <ArrowLeft className="w-5 h-5" />
             </Link>

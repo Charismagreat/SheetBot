@@ -1079,7 +1079,7 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                         const targetProjId = generatedResult?.project?.id || "temp_proj";
                         setInlineSubmitting(true);
                         try {
-                          await fetch("/api/feedback", {
+                          await apiFetch("/api/feedback", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
@@ -1110,7 +1110,7 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                 onClick={handleComplete}
                 className="px-6 py-2.5 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-md shadow-emerald-500/20 cursor-pointer"
               >
-                대시보드로 돌아가기
+                워크스페이스로 돌아가기
               </button>
             </div>
           </div>

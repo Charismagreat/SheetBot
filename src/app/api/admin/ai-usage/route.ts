@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { queryTable } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { getCurrentUserEmail, isCurrentUserAdmin } from "@/lib/auth";
 
 export interface UserAiStat {
   userEmail: string;
@@ -206,8 +207,12 @@ export async function GET(request: Request) {
     const offset = (page - 1) * limit;
     const paginatedLogs = finalFilteredRows.slice(offset, offset + limit);
 
+    const currentUserEmail = await getCurrentUserEmail();
+    const isAdmin = await isCurrentUserAdmin(currentUserEmail);
+
     return NextResponse.json({
       success: true,
+      isAdmin,
       range,
       targetUser,
       summary: {
