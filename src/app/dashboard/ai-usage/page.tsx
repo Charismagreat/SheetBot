@@ -92,7 +92,7 @@ export default function AiUsageMonitorPage() {
               <Link
                 href="/dashboard"
                 className="p-1.5 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-slate-800 transition-colors shadow-2xs"
-                title="대시보드로 돌아가기"
+                title="워크스페이스로 돌아가기"
               >
                 <ArrowLeft className="w-4 h-4" />
               </Link>
@@ -100,11 +100,11 @@ export default function AiUsageMonitorPage() {
                 <Cpu className="w-5 h-5" />
               </div>
               <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                AI API 호출 및 사용료 관제 센터
+                AI API 호출 및 사용량 관제 센터
               </h2>
             </div>
             <p className="text-xs text-slate-500 pl-8">
-              SheetBot에서 호출된 이지데스크 AI Caller의 실시간 토큰 사용량과 과금액을 전체 및 회원별로 분석·모니터링합니다.
+              SheetBot에서 호출된 이지데스크 AI Caller의 실시간 토큰 사용량과 추정 비용을 전체 및 회원별로 분석·모니터링합니다.
             </p>
           </div>
 

@@ -373,7 +373,7 @@ export default function NotificationsPage() {
               }`}
             >
               <Smartphone className="w-4 h-4" />
-              <span>📱 내 기기 연동 ({devices.length})</span>
+              <span>내 기기 연동 ({devices.length})</span>
             </button>
 
             <button
@@ -385,7 +385,7 @@ export default function NotificationsPage() {
               }`}
             >
               <Zap className="w-4 h-4" />
-              <span>⚡ 자연어 스마트 규칙 ({rules.length})</span>
+              <span>자연어 스마트 규칙 ({rules.length})</span>
             </button>
 
             <button
@@ -397,7 +397,7 @@ export default function NotificationsPage() {
               }`}
             >
               <Clock className="w-4 h-4" />
-              <span>📜 알림 발송 이력 ({logs.length})</span>
+              <span>알림 발송 이력 ({logs.length})</span>
             </button>
 
             <button
@@ -409,7 +409,7 @@ export default function NotificationsPage() {
               }`}
             >
               <FileText className="w-4 h-4" />
-              <span>🔌 시트 연동 가이드</span>
+              <span>시트 연동 가이드</span>
             </button>
           </div>
         </div>
@@ -439,7 +439,7 @@ export default function NotificationsPage() {
                   className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>+ 새 안드로이드 폰 연동</span>
+                  <span>새 안드로이드 폰 연동</span>
                 </button>
               </div>
             </div>

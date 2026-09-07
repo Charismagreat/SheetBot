@@ -1,14 +1,5 @@
 # Project Agent Rules
 
-<!-- BEGIN:egdesk-dev-context -->
-## EGDesk Development Context
-
-EGDesk opened this project with the dev server on **port 4002** (http://localhost:4002, coding (dev)).
-Do not assume port 3000. Use port 4002 for local preview and dev commands.
-EGDesk MCP/API runs at http://localhost:8080.
-
-See `.agents/rules/egdesk-dev-context.md` for full details.
-<!-- END:egdesk-dev-context -->
 
 <!-- BEGIN:database-audit-rules -->
 ## 데이터베이스 테이블 설계 및 소프트 삭제(Soft Delete) 준수 원칙
@@ -107,3 +98,13 @@ See `.agents/rules/egdesk-dev-context.md` for full details.
 4. **신규 Apps Script 코드 생성 시 터널 자동 주입 강제**:
    - `src/app/api/generate/route.ts` 등 코드 생성기에서는 호스트가 `localhost`인 경우 항상 이지데스크 공용 터널 주소 및 `X-Api-Key`를 `Code.gs`에 주입하여 배포하도록 보장합니다.
 <!-- END:egdesk-tunnel-rules -->
+
+<!-- BEGIN:egdesk-dev-context -->
+## EGDesk Development Context
+
+EGDesk opened this project with the dev server on **port 3002** (http://localhost:3002, hosting (production)).
+Do not assume port 3000. Use port 3002 for local preview and dev commands.
+EGDesk MCP/API runs at http://localhost:8080.
+
+See `.agents/rules/egdesk-dev-context.md` for full details.
+<!-- END:egdesk-dev-context -->

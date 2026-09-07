@@ -28,6 +28,10 @@ const getLocalIPs = () => {
 };
 
 const nextConfig: NextConfig = {
+  eslint: {
+    // Always skip ESLint errors to prevent blocking on auto-generated files
+    ignoreDuringBuilds: true,
+  },
   images: {
     remotePatterns: [
       {
@@ -40,10 +44,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  eslint: {
-    // Always skip ESLint errors to prevent blocking on auto-generated files
-    ignoreDuringBuilds: true,
-  },
+
   // Only use basePath in production mode, not in dev mode
   basePath: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
   assetPrefix: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
