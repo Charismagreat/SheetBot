@@ -543,7 +543,7 @@ function checkSheetBotStatus() {
 
     const deductRes = await deductTokens(userEmail, estimatedUsedTokens);
 
-    // AI 사용량 및 추정 비용 실시간 적재
+    // AI 사용량 및 추정 비용 실시간 적재 (가중치 적용된 실차감 토큰 기록)
     void recordAiUsageLog({
       userEmail,
       caller: "sheetbot-script-generator",
@@ -551,6 +551,7 @@ function checkSheetBotStatus() {
       model: targetModel,
       promptTokens: Math.ceil(promptLength / 2.5),
       completionTokens: Math.ceil(responseLength / 2.5),
+      totalTokens: estimatedUsedTokens,
       promptText: fullPrompt,
       responseText: generatedData?.scriptCode || JSON.stringify(generatedData),
     });

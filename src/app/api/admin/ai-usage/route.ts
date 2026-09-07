@@ -37,45 +37,71 @@ export async function GET(request: Request) {
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.max(1, parseInt(searchParams.get("limit") || "20", 10));
 
+    const queryFilters: Record<string, any> = {};
+
+    if (targetUser !== "all") {
+      queryFilters.user_email = targetUser.toLowerCase().trim();
+    }
+
+    let startDateLimit: string | null = null;
+    if (range === "today") {
+      const todayStart = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      startDateLimit = todayStart;
+      queryFilters.created_at = `>=${todayStart}`;
+    } else if (range === "week") {
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      startDateLimit = weekAgo;
+      queryFilters.created_at = `>=${weekAgo}`;
+    } else if (range === "month") {
+      const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      startDateLimit = monthAgo;
+      queryFilters.created_at = `>=${monthAgo}`;
+    }
+
     // 1. sheetbot_ai_usage_logs에서 데이터 조회 (최대 5,000건)
-    const logsRes = await queryTable("sheetbot_ai_usage_logs", {
-      orderBy: "id",
-      orderDirection: "DESC",
-      limit: 5000,
-    }).catch(() => ({ rows: [] }));
+    let rawRows: any[] = [];
+    try {
+      const logsRes = await queryTable("sheetbot_ai_usage_logs", {
+        filters: queryFilters,
+        orderBy: "id",
+        orderDirection: "DESC",
+        limit: 5000,
+      });
+      rawRows = logsRes?.rows || [];
+    } catch {
+      // filters 조건 에러 시 필터 없이 조회하여 메모리에서 필터링
+      const fallbackRes = await queryTable("sheetbot_ai_usage_logs", {
+        orderBy: "id",
+        orderDirection: "DESC",
+        limit: 5000,
+      }).catch(() => ({ rows: [] }));
+      rawRows = fallbackRes?.rows || [];
+    }
 
-    const rawRows = logsRes.rows || [];
-    const validRows = rawRows.filter((r: any) => !r.deleted_at);
+    const currentUserEmail = await getCurrentUserEmail().catch(() => null);
+    const isAdmin = await isCurrentUserAdmin(currentUserEmail);
 
-    // 2. 날짜 기준선 계산 (KST 기준)
-    const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000);
-    const todayDateOnly = nowKST.toISOString().split("T")[0];
+    let validRows = rawRows.filter((r: any) => !r.deleted_at);
 
-    const weekAgoDate = new Date(nowKST.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const weekDateOnly = weekAgoDate.toISOString().split("T")[0];
+    // 관리자 본인의 조회이거나 'all'인 경우 전체 워크스페이스 통계 표시, 일반 사용자는 본인 및 게스트 내역 매핑
+    const isSelfAdminQuery = isAdmin && (targetUser === "all" || (currentUserEmail && targetUser.toLowerCase() === currentUserEmail.toLowerCase()));
 
-    const monthAgoDate = new Date(nowKST.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const monthDateOnly = monthAgoDate.toISOString().split("T")[0];
+    if (!isSelfAdminQuery && targetUser !== "all") {
+      const lowerTarget = targetUser.toLowerCase().trim();
+      validRows = validRows.filter((r: any) => {
+        const email = String(r.user_email || "").toLowerCase().trim();
+        return email === lowerTarget || email === "guest";
+      });
+    }
 
-    // 3. 기간 필터링
-    const periodFilteredRows = validRows.filter((row: any) => {
-      if (range === "all") return true;
-      const createdStr = String(row.created_at || "");
-      if (!createdStr) return false;
-      const datePart = createdStr.split("T")[0].split(" ")[0];
+    if (startDateLimit) {
+      validRows = validRows.filter((r: any) => {
+        const d = String(r.created_at || "");
+        return d >= startDateLimit!;
+      });
+    }
 
-      if (range === "today") return datePart === todayDateOnly;
-      if (range === "week") return datePart >= weekDateOnly;
-      if (range === "month") return datePart >= monthDateOnly;
-      return true;
-    });
-
-    // 4. 회원별 필터링 (선택 시)
-    const finalFilteredRows = targetUser === "all"
-      ? periodFilteredRows
-      : periodFilteredRows.filter((r: any) =>
-          String(r.user_email || "").toLowerCase() === targetUser.toLowerCase().trim()
-        );
+    const finalFilteredRows = validRows;
 
     // 5. 전체 요약 지표 계산
     let totalCalls = 0;
@@ -90,7 +116,7 @@ export async function GET(request: Request) {
       totalCalls++;
       const p = Number(row.prompt_tokens || 0);
       const c = Number(row.completion_tokens || 0);
-      const t = Number(row.total_tokens || p + c);
+      const t = Number(row.total_tokens != null && row.total_tokens !== "" ? row.total_tokens : (p + c));
       const usd = Number(row.estimated_cost_usd || 0);
       const krw = Number(row.estimated_cost_krw || 0);
 
@@ -116,12 +142,12 @@ export async function GET(request: Request) {
       lastCalledAt: string;
     }>();
 
-    periodFilteredRows.forEach((row: any) => {
+    finalFilteredRows.forEach((row: any) => {
       const email = String(row.user_email || "guest").toLowerCase().trim();
       const name = String(row.user_name || "사용자");
       const p = Number(row.prompt_tokens || 0);
       const c = Number(row.completion_tokens || 0);
-      const t = Number(row.total_tokens || p + c);
+      const t = Number(row.total_tokens != null && row.total_tokens !== "" ? row.total_tokens : (p + c));
       const usd = Number(row.estimated_cost_usd || 0);
       const krw = Number(row.estimated_cost_krw || 0);
       const date = String(row.created_at || "");
@@ -207,34 +233,39 @@ export async function GET(request: Request) {
     const offset = (page - 1) * limit;
     const paginatedLogs = finalFilteredRows.slice(offset, offset + limit);
 
-    const currentUserEmail = await getCurrentUserEmail();
-    const isAdmin = await isCurrentUserAdmin(currentUserEmail);
-
-    return NextResponse.json({
-      success: true,
-      isAdmin,
-      range,
-      targetUser,
-      summary: {
-        totalCalls,
-        totalPromptTokens,
-        totalCompletionTokens,
-        totalTokens,
-        totalCostUsd: Math.round(totalCostUsd * 1000) / 1000,
-        totalCostKrw: Math.round(totalCostKrw),
-        activeUsersCount: uniqueUsersSet.size,
+    return NextResponse.json(
+      {
+        success: true,
+        isAdmin,
+        range,
+        targetUser,
+        summary: {
+          totalCalls,
+          totalPromptTokens,
+          totalCompletionTokens,
+          totalTokens,
+          totalCostUsd: Math.round(totalCostUsd * 1000) / 1000,
+          totalCostKrw: Math.round(totalCostKrw),
+          activeUsersCount: uniqueUsersSet.size,
+        },
+        userStats,
+        purposeStats,
+        modelStats,
+        recentLogs: paginatedLogs,
+        pagination: {
+          page,
+          limit,
+          total: finalFilteredRows.length,
+          totalPages: Math.ceil(finalFilteredRows.length / limit),
+        },
       },
-      userStats,
-      purposeStats,
-      modelStats,
-      recentLogs: paginatedLogs,
-      pagination: {
-        page,
-        limit,
-        total: finalFilteredRows.length,
-        totalPages: Math.ceil(finalFilteredRows.length / limit),
-      },
-    });
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+          "Pragma": "no-cache",
+        },
+      }
+    );
   } catch (error: any) {
     console.error("AI Usage Monitor API error:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

@@ -128,7 +128,7 @@ ${userPrompt || "모든 품목 항목을 행별로 빠짐없이 추출하세요.
       const deductRes = await deductTokens(cleanEmail, usedTokens);
       newBalance = deductRes.newBalance;
 
-      // AI 사용량 감사 로그 실시간 적재
+      // AI 사용량 감사 로그 실시간 적재 (가중치 적용된 실차감 토큰 기록)
       void recordAiUsageLog({
         userEmail: cleanEmail,
         caller: "sheetbot-ocr-service",
@@ -136,6 +136,7 @@ ${userPrompt || "모든 품목 항목을 행별로 빠짐없이 추출하세요.
         model: targetModel,
         promptTokens: Math.ceil(promptLen / 2.5),
         completionTokens: Math.ceil(respLen / 2.5),
+        totalTokens: usedTokens,
         promptText: `OCR 분석: ${fileName || "문서"}`,
         responseText: JSON.stringify(resultJson),
       });

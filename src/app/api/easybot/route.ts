@@ -131,7 +131,7 @@ ${userRoleContext}
       newBalance = 9999999; // 관리자는 무제한 표시
     }
 
-    // 실시간 AI 사용량 적재
+    // 실시간 AI 사용량 적재 (실차감 토큰 기록)
     void recordAiUsageLog({
       userEmail: userEmail || "guest",
       caller: "sheetbot-easybot",
@@ -139,6 +139,7 @@ ${userRoleContext}
       model: targetModel,
       promptTokens,
       completionTokens,
+      totalTokens: usedTokens,
       promptText: fullPrompt,
       responseText: replyContent,
     });

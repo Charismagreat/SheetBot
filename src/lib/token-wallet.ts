@@ -65,12 +65,19 @@ export async function getOrCreateUserWallet(userEmail: string): Promise<UserWall
 
   const res = await queryTable("sheetbot_user_wallets", {
     filters: { user_email: email },
-    limit: 1,
+    limit: 10,
   }).catch(() => ({ rows: [] }));
 
   const validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
 
   if (validRows.length > 0) {
+    // PRO 티어 우선, 또는 잔액이 큰 지갑을 메인으로 선택
+    validRows.sort((a: any, b: any) => {
+      if (a.tier === "PRO" && b.tier !== "PRO") return -1;
+      if (b.tier === "PRO" && a.tier !== "PRO") return 1;
+      return (Number(b.balance_tokens) || 0) - (Number(a.balance_tokens) || 0);
+    });
+
     const row = validRows[0];
     return {
       id: row.id,

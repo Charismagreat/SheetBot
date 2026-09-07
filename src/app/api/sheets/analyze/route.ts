@@ -234,6 +234,7 @@ ${prompt || "스마트 발주/업무 자동화 시스템 구축"}
         model: targetModel,
         promptTokens: pTokens,
         completionTokens: cTokens,
+        totalTokens: usedTokens,
         promptText: userMessage,
         responseText: rawText,
       });

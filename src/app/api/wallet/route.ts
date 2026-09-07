@@ -38,13 +38,21 @@ export async function GET() {
       validOrders = (ordersRes.rows || []).filter((r: any) => !r.deleted_at);
     }
 
-    return NextResponse.json({
-      success: true,
-      isLoggedIn: !!userEmail,
-      wallet,
-      packages: TOKEN_PACKAGES,
-      orders: validOrders,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        isLoggedIn: !!userEmail,
+        wallet,
+        packages: TOKEN_PACKAGES,
+        orders: validOrders,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+          "Pragma": "no-cache",
+        },
+      }
+    );
   } catch (err: any) {
     console.error("[Wallet-API] GET error:", err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

@@ -44,6 +44,7 @@ interface BotHealthInfo {
   latencyMs?: number;
   model?: string;
   isQuotaExceeded?: boolean;
+  userTokenDepleted?: boolean;
 }
 
 const DEFAULT_WIDTH = 420;
@@ -158,7 +159,8 @@ export default function EasyBot() {
       setPosition(calculateDefaultPosition());
     }
 
-    const interval = setInterval(checkHealth, 60000);
+    // 💡 1분 주기를 10분으로 완화하여 브라우저 유휴 리소스 절약
+    const interval = setInterval(checkHealth, 600000);
     return () => clearInterval(interval);
   }, [calculateDefaultPosition]);
 
@@ -359,6 +361,9 @@ export default function EasyBot() {
   };
 
   const checkHealth = async () => {
+    // 🛡️ 백그라운드 비활성 탭이거나 창이 숨겨져 있을 때는 네트워크 요청 차단
+    if (typeof document !== "undefined" && document.hidden) return;
+
     try {
       const res = await apiFetch("/api/easybot/health");
       const data = await res.json();
@@ -369,6 +374,7 @@ export default function EasyBot() {
           latencyMs: data.latencyMs,
           model: data.model,
           isQuotaExceeded: data.isQuotaExceeded,
+          userTokenDepleted: !!data.userTokenDepleted,
         });
       }
     } catch {
@@ -804,9 +810,13 @@ export default function EasyBot() {
               <span className="flex items-center gap-1.5 font-bold">
                 💡 {health.message}
               </span>
-              <a href="/dashboard/pricing" className="text-[10px] text-amber-900 underline font-extrabold hover:text-amber-700">
-                토큰 충전 ➔
-              </a>
+              {health.userTokenDepleted ? (
+                <a href="/dashboard/pricing" className="text-[10px] text-amber-900 underline font-extrabold hover:text-amber-700">
+                  토큰 충전 ➔
+                </a>
+              ) : (
+                <span className="text-[10px] text-amber-700 font-medium">안내 모드 활성</span>
+              )}
             </div>
           )}
 
