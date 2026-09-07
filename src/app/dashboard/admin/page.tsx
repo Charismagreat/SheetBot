@@ -703,7 +703,7 @@ export default function AdminDashboardPage() {
             }`}
           >
             <Users className="w-4 h-4" />
-            <span>👥 회원 계정 관리 ({users.length})</span>
+            <span>회원 계정 관리 ({users.length})</span>
           </button>
 
           <button
@@ -773,7 +773,7 @@ export default function AdminDashboardPage() {
             }`}
           >
             <Sparkles className="w-4 h-4 text-emerald-400" />
-            <span>💰 AI 실제 원가 및 마진율 설정</span>
+            <span>AI 실제 원가 및 마진율 설정</span>
           </button>
 
           <button
@@ -785,7 +785,7 @@ export default function AdminDashboardPage() {
             }`}
           >
             <Building2 className="w-4 h-4 text-emerald-400" />
-            <span>🏢 푸터 / 회사정보 &amp; SNS 설정</span>
+            <span>푸터 / 회사정보 &amp; SNS 설정</span>
           </button>
 
           <button
@@ -797,7 +797,7 @@ export default function AdminDashboardPage() {
             }`}
           >
             <Smartphone className="w-4 h-4 text-sky-400" />
-            <span>📱 구글메시지 SMS 알림</span>
+            <span>구글메시지 SMS 알림</span>
           </button>
 
           <button
@@ -809,7 +809,7 @@ export default function AdminDashboardPage() {
             }`}
           >
             <Mail className="w-4 h-4 text-indigo-400" />
-            <span>✉️ 발송 메일 SMTP 설정</span>
+            <span>발송 메일 SMTP 설정</span>
           </button>
 
           <button
@@ -821,7 +821,7 @@ export default function AdminDashboardPage() {
             }`}
           >
             <Wand2 className="w-4 h-4 text-purple-400" />
-            <span>✨ AI 자연어 발송 규칙 ({smartRules.length})</span>
+            <span>AI 자연어 발송 규칙 ({smartRules.length})</span>
           </button>
 
           <button
@@ -833,7 +833,7 @@ export default function AdminDashboardPage() {
             }`}
           >
             <Radio className="w-4 h-4 text-emerald-400" />
-            <span>📋 알림 발송 이력 대장 ({dispatchStats.total})</span>
+            <span>알림 발송 이력 대장 ({dispatchStats.total})</span>
           </button>
 
           <button
@@ -845,7 +845,7 @@ export default function AdminDashboardPage() {
             }`}
           >
             <Sparkles className="w-4 h-4 text-amber-400" />
-            <span>💡 추천 프롬프트 관리</span>
+            <span>추천 프롬프트 관리</span>
           </button>
         </div>
 
