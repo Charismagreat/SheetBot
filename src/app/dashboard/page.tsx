@@ -100,10 +100,52 @@ export default function DashboardPage() {
   }, [status, fetchData]);
 
   const [syncingProjectId, setSyncingProjectId] = useState<string | null>(null);
+  const [syncingCodeProjectId, setSyncingCodeProjectId] = useState<string | null>(null);
 
   const showAlert = (msg: { type: "success" | "error"; text: string }) => {
     setAlertMessage(msg);
     setTimeout(() => setAlertMessage(null), 5000);
+  };
+
+  // 구글 시트에서 직접 수정한 최신 Apps Script 코드를 SheetBot DB로 동기화하는 핸들러
+  const handleSyncProjectCode = async (p: any) => {
+    setSyncingCodeProjectId(p.id);
+    try {
+      const res = await apiFetch("/api/projects/sync-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: p.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!data?.success) {
+        throw new Error(data?.error || "구글 시트 코드 동기화에 실패했습니다.");
+      }
+
+      // 로컬 프로젝트 목록의 scriptCode 즉시 갱신
+      setProjects((prev) =>
+        prev.map((proj) =>
+          proj.id === p.id
+            ? {
+                ...proj,
+                scriptCode: data.scriptCode,
+                script_code: data.scriptCode,
+                updatedAt: data.syncedAt,
+                updated_at: data.syncedAt,
+              }
+            : proj
+        )
+      );
+
+      showAlert({
+        type: "success",
+        text: `'${p.name}' 구글 시트의 최신 Apps Script 코드(${data.functionNames?.length || 0}개 함수)가 SheetBot DB에 동기화되었습니다.`,
+      });
+    } catch (err: any) {
+      showAlert({ type: "error", text: err.message || "코드 동기화 중 오류가 발생했습니다." });
+    } finally {
+      setSyncingCodeProjectId(null);
+    }
   };
 
   // 구글 시트 원본 제목으로 프로젝트 이름 동기화 핸들러
@@ -558,17 +600,32 @@ export default function DashboardPage() {
                         p.scriptUrl ||
                         (p.scriptId ? `https://script.google.com/d/${p.scriptId}/edit` : (p.gasProjectId ? `https://script.google.com/d/${p.gasProjectId}/edit` : ""));
                       return editorUrl ? (
-                        <a
-                          href={editorUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg flex items-center gap-1.5 transition-colors border border-indigo-200/60 shadow-2xs"
-                          data-easybot-hint="스크립트 편집기 열기: 구글 시트의 프로젝트 선택창을 거치지 않고 이 Apps Script 코드 편집 화면으로 1초 만에 바로 진입합니다."
-                        >
-                          <FileCode className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                          <span>스크립트 편집기 열기</span>
-                          <ExternalLink className="w-2.5 h-2.5 opacity-70 shrink-0" />
-                        </a>
+                        <div className="flex items-center gap-1">
+                          <a
+                            href={editorUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg flex items-center gap-1.5 transition-colors border border-indigo-200/60 shadow-2xs"
+                            data-easybot-hint="스크립트 편집기 열기: 구글 시트의 프로젝트 선택창을 거치지 않고 이 Apps Script 코드 편집 화면으로 1초 만에 바로 진입합니다."
+                          >
+                            <FileCode className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <span>스크립트 편집기 열기</span>
+                            <ExternalLink className="w-2.5 h-2.5 opacity-70 shrink-0" />
+                          </a>
+
+                          {/* 🔄 구글 시트에서 수정한 최신 코드 동기화 버튼 */}
+                          <button
+                            type="button"
+                            onClick={() => handleSyncProjectCode(p)}
+                            disabled={syncingCodeProjectId === p.id}
+                            className="px-2 py-1 bg-slate-50 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 font-bold rounded-lg flex items-center gap-1 transition-colors border border-slate-200/80 hover:border-emerald-300 cursor-pointer shadow-2xs text-[11px] disabled:opacity-50"
+                            title="구글 시트에서 직접 수정한 최신 Apps Script 코드를 SheetBot DB로 가져옵니다."
+                            data-easybot-hint="최신 코드 동기화: 사용자가 구글 시트에서 직접 수정한 Apps Script 최신 코드를 즉시 읽어와 SheetBot에 일치시킵니다."
+                          >
+                            <RefreshCw className={`w-3 h-3 ${syncingCodeProjectId === p.id ? "animate-spin text-emerald-600" : "text-slate-500"}`} />
+                            <span>{syncingCodeProjectId === p.id ? "가져오는 중..." : "코드 동기화"}</span>
+                          </button>
+                        </div>
                       ) : (
                         <span className="text-slate-400 text-[10px]">연결 시트:</span>
                       );
