@@ -8,7 +8,7 @@ import {
   callUserDataTool,
 } from './egdesk-helpers';
 
-export { queryTable, insertRows, safeCreateTable };
+export { queryTable, insertRows };
 
 let isDbInitialized = false;
 
@@ -204,11 +204,17 @@ export async function setupDatabase(force = false): Promise<void> {
         { name: 'triggers', type: 'TEXT' },
         { name: 'prompt', type: 'TEXT' },
         { name: 'webapp_url', type: 'TEXT' },
+        { name: 'bridge_token', type: 'TEXT' },
         { name: 'status', type: 'TEXT' },
         { name: 'created_at', type: 'TEXT' },
       ],
       { tableName: 'sheetbot_projects' }
     );
+
+    // sheetbot_projects 테이블에 bridge_token 컬럼 마이그레이션 보장
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_projects ADD COLUMN bridge_token TEXT;`);
+    } catch {}
 
     // 2. sheetbot_schedules 테이블 생성
     await safeCreateTable(
