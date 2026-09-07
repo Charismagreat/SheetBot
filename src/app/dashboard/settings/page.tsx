@@ -33,6 +33,7 @@ interface AiSettingsState {
   easybotModel: string;
   helpModel: string;
   temperature: number;
+  agentBridgeDeploymentTokens: number;
 }
 
 export default function AiSettingsPage() {
@@ -46,6 +47,7 @@ export default function AiSettingsPage() {
     easybotModel: "gemini-3.8-flash",
     helpModel: "gemini-3.8-flash",
     temperature: 0.3,
+    agentBridgeDeploymentTokens: 500,
   });
 
   const fetchSettings = async () => {
@@ -340,6 +342,54 @@ export default function AiSettingsPage() {
                     <span>0.5 (균형)</span>
                     <span>1.0 (창의적 응답)</span>
                   </div>
+                </div>
+              </div>
+
+              {/* 5. AI 에이전트 브릿지 1회 배포당 차감 토큰량 */}
+              <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-purple-200 transition-all space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-purple-50 text-purple-600 rounded-xl border border-purple-100">
+                      <Bot className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-800">AI 에이전트 브릿지 배포 차감 토큰량</h3>
+                      <p className="text-[11px] text-slate-400">안티그라비티/외부 AI가 브릿지를 통해 코드를 배포할 때 프로젝트 소유자 지갑에서 차감할 토큰</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min="0"
+                      max="10000"
+                      step="50"
+                      value={settings.agentBridgeDeploymentTokens ?? 500}
+                      onChange={(e) => setSettings({ ...settings, agentBridgeDeploymentTokens: Math.max(0, parseInt(e.target.value) || 0) })}
+                      className="w-24 text-right px-2.5 py-1 text-xs font-mono font-bold bg-purple-50 text-purple-700 rounded-md border border-purple-200 focus:outline-hidden focus:ring-1 focus:ring-purple-500"
+                    />
+                    <span className="text-xs font-bold text-purple-700">토큰</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-1">
+                  <input
+                    type="range"
+                    min="0"
+                    max="2000"
+                    step="50"
+                    value={settings.agentBridgeDeploymentTokens ?? 500}
+                    onChange={(e) => setSettings({ ...settings, agentBridgeDeploymentTokens: parseInt(e.target.value) || 0 })}
+                    className="w-full accent-purple-600 cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-400 font-bold">
+                    <span>0 (완전 무료 개방)</span>
+                    <span>500 토큰 (기본 추천)</span>
+                    <span>1,000 토큰</span>
+                    <span>2,000 토큰</span>
+                  </div>
+                </div>
+                <div className="text-[11px] text-slate-600 leading-relaxed bg-purple-50/50 p-3 rounded-xl border border-purple-100/80">
+                  💡 <strong>0으로 설정 시</strong> 안티그라비티/외부 AI를 통한 코드 배포가 완전 무료로 개방되며, <strong>500으로 설정 시</strong> 안티그라비티가 구글 시트에 코드를 성공적으로 배포할 때마다 프로젝트 소유자 지갑에서 500토큰이 자동 차감됩니다.
                 </div>
               </div>
             </div>

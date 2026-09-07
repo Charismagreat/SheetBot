@@ -7,6 +7,7 @@ export interface SheetBotAiSettings {
   easybotModel: string;
   helpModel: string;
   temperature: number;
+  agentBridgeDeploymentTokens: number;
 }
 
 export const DEFAULT_AI_SETTINGS: SheetBotAiSettings = {
@@ -15,6 +16,7 @@ export const DEFAULT_AI_SETTINGS: SheetBotAiSettings = {
   easybotModel: "gemini-3.8-flash",
   helpModel: "gemini-3.8-flash",
   temperature: 0.3,
+  agentBridgeDeploymentTokens: 500,
 };
 
 const SETTINGS_KEY = "global_ai_model_config";

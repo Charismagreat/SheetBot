@@ -8,6 +8,9 @@ import {
   getSpreadsheetFullContext,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { getAiModelSettings } from "@/lib/ai-settings";
+import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
+import { recordAiUsageLog } from "@/lib/ai-usage";
 
 /**
  * 1. GET: 외부 AI 에이전트가 스프레드시트의 탭, 헤더(10행 등), 기존 코드 및 코딩 지침 조회
@@ -132,6 +135,8 @@ export async function GET(request: Request) {
       },
       codingInstructions: {
         overview: "본 프로젝트는 이지데스크 터널 인프라(EgdeskConfig.gs, EgdeskClient.gs)가 자동 탑재되는 환경입니다.",
+        deploymentTokenCost: (await getAiModelSettings()).agentBridgeDeploymentTokens ?? 500,
+        tokenPolicy: `코드 배포(POST) 완료 시 프로젝트 소유자 토큰 지갑에서 ${(await getAiModelSettings()).agentBridgeDeploymentTokens ?? 500} 토큰이 차감됩니다. (0 설정 시 무료)`,
         absoluteRules: [
           "1. [개인 API 키 요구 금지]: 사용자에게 Gemini/OpenAI API 키를 요구하는 팝업/UI를 만들지 마세요. 이미 주입된 egdeskToolsCall('ai-caller', 'ai_caller_call', ...) 함수를 호출하세요.",
           "2. [실제 헤더 1:1 매핑]: 상단에 보고서 타이틀/결재란이 있어 헤더가 10행 등에 위치하는 경우, suggestedHeaderRow 및 dataStartRow를 엄격히 준수하여 신규 데이터를 기입하세요.",
@@ -191,6 +196,25 @@ export async function POST(request: Request) {
         { success: false, error: "유효하지 않거나 만료된 브릿지 토큰입니다." },
         { status: 404 }
       );
+    }
+
+    // 0. 관리자 설정 토큰 차감량 확인 및 사전 잔액 검증
+    const aiSettings = await getAiModelSettings();
+    const deploymentTokenCost = aiSettings.agentBridgeDeploymentTokens ?? 500;
+
+    if (deploymentTokenCost > 0 && project.user_email) {
+      const tokenCheck = await checkTokenBalance(project.user_email, deploymentTokenCost);
+      if (!tokenCheck.allowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: tokenCheck.reason || `프로젝트 소유자의 잔여 토큰이 부족합니다. (필요: ${deploymentTokenCost} 토큰, 잔여: ${tokenCheck.balance} 토큰)`,
+            requirePayment: true,
+            balance: tokenCheck.balance,
+          },
+          { status: 402 } // 402 Payment Required
+        );
+      }
     }
 
     let gasProjectId = project.gas_project_id;
@@ -305,6 +329,25 @@ export async function POST(request: Request) {
       }
     );
 
+    // 7. 관리자 설정 토큰 차감 및 감사 로그 적재
+    let remainingBalance = 0;
+    if (deploymentTokenCost > 0 && project.user_email) {
+      const deductRes = await deductTokens(project.user_email, deploymentTokenCost);
+      remainingBalance = deductRes.newBalance;
+
+      void recordAiUsageLog({
+        userEmail: project.user_email,
+        userName: "프로젝트 소유자",
+        caller: "sheetbot-agent-bridge",
+        purpose: `AI 에이전트 브릿지 코드 배포 (${comment})`,
+        model: "agent-bridge-deployment",
+        promptTokens: 0,
+        completionTokens: deploymentTokenCost,
+        totalTokens: deploymentTokenCost,
+        promptText: `브릿지 코드 주입: ${comment}`,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       message: "Google Apps Script 프로젝트에 코드가 성공적으로 주입 및 배포되었습니다.",
@@ -314,6 +357,10 @@ export async function POST(request: Request) {
         webAppUrl: webAppUrl || null,
         deployedAt: new Date().toISOString(),
         comment,
+      },
+      tokens: {
+        deducted: deploymentTokenCost,
+        remainingBalance: deploymentTokenCost > 0 ? remainingBalance : undefined,
       },
     });
   } catch (err: any) {
