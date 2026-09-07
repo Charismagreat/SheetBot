@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import {
   Bot, Plus, FileCode, Clock, RefreshCw, CheckCircle2, AlertTriangle,
   X, ArrowRight, ExternalLink, Sparkles, Layers, ShieldCheck, Trash2, Smartphone, Edit3,
-  Globe, Star, Coins, Activity, Cpu, Settings
+  Globe, Star, Coins, Activity, Cpu, Settings, FileSpreadsheet, Copy
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import nextDynamic from "next/dynamic";
@@ -566,8 +566,21 @@ export default function DashboardPage() {
                           <span>{isSyncing ? "동기화 중..." : "동기화"}</span>
                         </button>
                       </div>
-                      <div className="text-[10px] text-slate-400 font-mono truncate">
-                        ID: {p.scriptId || p.gasProjectId || p.id}
+                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+                        <span className="shrink-0 font-bold text-slate-500">ID:</span>
+                        <span
+                          className="truncate max-w-[200px] sm:max-w-[280px] select-all cursor-pointer hover:text-slate-600 transition-colors"
+                          title={`전체 ID: ${p.scriptId || p.gasProjectId || p.id} (클릭 시 복사)`}
+                          onClick={() => {
+                            const fullId = p.scriptId || p.gasProjectId || p.id;
+                            if (fullId) {
+                              navigator.clipboard.writeText(fullId);
+                              showAlert({ type: "success", text: "프로젝트 ID가 클립보드에 복사되었습니다." });
+                            }
+                          }}
+                        >
+                          {p.scriptId || p.gasProjectId || p.id}
+                        </span>
                       </div>
                     </div>
 
@@ -592,78 +605,98 @@ export default function DashboardPage() {
                   <p className="text-[11px] text-slate-500 line-clamp-1">{p.summary}</p>
                 )}
 
-                <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px]">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {/* 스크립트 편집기 직접 열기 버튼 */}
-                    {(() => {
-                      const editorUrl =
-                        p.scriptUrl ||
-                        (p.scriptId ? `https://script.google.com/d/${p.scriptId}/edit` : (p.gasProjectId ? `https://script.google.com/d/${p.gasProjectId}/edit` : ""));
-                      return editorUrl ? (
-                        <div className="flex items-center gap-1">
+                {/* 프로젝트 카드 하단 액션 영역 (2단 논리 분할 구조로 정돈) */}
+                <div className="pt-2.5 border-t border-slate-100 space-y-2 text-[11px]">
+                  {/* 1단: 구글 시트 / Apps Script 바로가기 링크 그룹 */}
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {/* 구글 시트 열기 링크 버튼 */}
+                      {p.spreadsheetUrl && (
+                        <a
+                          href={p.spreadsheetUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold rounded-lg transition-colors border border-emerald-200/80 shadow-2xs whitespace-nowrap text-xs"
+                          data-easybot-hint="구글 시트 열기: 연결된 실제 구글 스프레드시트 웹 페이지를 새 창에서 엽니다."
+                        >
+                          <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>구글 시트 열기</span>
+                          <ExternalLink className="w-3 h-3 text-emerald-600/70 shrink-0" />
+                        </a>
+                      )}
+
+                      {/* 스크립트 편집기 직접 열기 버튼 */}
+                      {(() => {
+                        const editorUrl =
+                          p.scriptUrl ||
+                          (p.scriptId ? `https://script.google.com/d/${p.scriptId}/edit` : (p.gasProjectId ? `https://script.google.com/d/${p.gasProjectId}/edit` : ""));
+                        return editorUrl ? (
                           <a
                             href={editorUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg flex items-center gap-1.5 transition-colors border border-indigo-200/60 shadow-2xs"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg transition-colors border border-indigo-200/60 shadow-2xs whitespace-nowrap text-xs"
                             data-easybot-hint="스크립트 편집기 열기: 구글 시트의 프로젝트 선택창을 거치지 않고 이 Apps Script 코드 편집 화면으로 1초 만에 바로 진입합니다."
                           >
                             <FileCode className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                            <span>스크립트 편집기 열기</span>
-                            <ExternalLink className="w-2.5 h-2.5 opacity-70 shrink-0" />
+                            <span>스크립트 편집기</span>
+                            <ExternalLink className="w-3 h-3 text-indigo-600/70 shrink-0" />
                           </a>
+                        ) : null;
+                      })()}
 
-                          {/* 🔄 구글 시트에서 수정한 최신 코드 동기화 버튼 */}
-                          <button
-                            type="button"
-                            onClick={() => handleSyncProjectCode(p)}
-                            disabled={syncingCodeProjectId === p.id}
-                            className="px-2 py-1 bg-slate-50 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 font-bold rounded-lg flex items-center gap-1 transition-colors border border-slate-200/80 hover:border-emerald-300 cursor-pointer shadow-2xs text-[11px] disabled:opacity-50"
-                            title="구글 시트에서 직접 수정한 최신 Apps Script 코드를 SheetBot DB로 가져옵니다."
-                            data-easybot-hint="최신 코드 동기화: 사용자가 구글 시트에서 직접 수정한 Apps Script 최신 코드를 즉시 읽어와 SheetBot에 일치시킵니다."
-                          >
-                            <RefreshCw className={`w-3 h-3 ${syncingCodeProjectId === p.id ? "animate-spin text-emerald-600" : "text-slate-500"}`} />
-                            <span>{syncingCodeProjectId === p.id ? "가져오는 중..." : "코드 동기화"}</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 text-[10px]">연결 시트:</span>
-                      );
-                    })()}
+                      {/* 🌐 공개 웹페이지 바로가기 (Web App인 경우) */}
+                      {(p.webapp_url || p.webappUrl) && (
+                        <a
+                          href={p.webapp_url || p.webappUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold rounded-lg transition-colors border border-sky-200/80 shadow-2xs whitespace-nowrap text-xs"
+                          data-easybot-hint="공개 웹페이지 열기: 일반 대중에게 배포할 수 있는 실시간 독립 접수/설문 웹페이지를 새 창에서 엽니다."
+                          title="일반 대중 배포용 독립 웹페이지 바로가기"
+                        >
+                          <Globe className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                          <span>공개 웹 폼</span>
+                          <ExternalLink className="w-3 h-3 text-sky-600/70 shrink-0" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
 
-                    {/* 🌐 공개 웹페이지 바로가기 (Web App인 경우) */}
-                    {(p.webapp_url || p.webappUrl) && (
-                      <a
-                        href={p.webapp_url || p.webappUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold rounded-lg flex items-center gap-1.5 transition-colors border border-sky-200/80 shadow-2xs"
-                        data-easybot-hint="공개 웹페이지 열기: 일반 대중에게 배포할 수 있는 실시간 독립 접수/설문 웹페이지를 새 창에서 엽니다."
-                        title="일반 대중 배포용 독립 웹페이지 바로가기"
+                  {/* 2단: 관리 도구 (코드 동기화 / 요구사항 수정 / 만족도 평가) */}
+                  <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-slate-100/80 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {/* 🔄 최신 코드 동기화 버튼 */}
+                      <button
+                        type="button"
+                        onClick={() => handleSyncProjectCode(p)}
+                        disabled={syncingCodeProjectId === p.id}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 text-slate-600 font-bold rounded-lg transition-all border border-slate-200 cursor-pointer shadow-2xs text-[11px] whitespace-nowrap disabled:opacity-50"
+                        title="구글 시트에서 직접 수정한 최신 Apps Script 코드를 SheetBot DB로 가져옵니다."
+                        data-easybot-hint="최신 코드 동기화: 사용자가 구글 시트에서 직접 수정한 Apps Script 최신 코드를 즉시 읽어와 SheetBot에 일치시킵니다."
                       >
-                        <Globe className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                        <span>공개 웹페이지</span>
-                        <ExternalLink className="w-2.5 h-2.5 opacity-70 shrink-0" />
-                      </a>
-                    )}
+                        <RefreshCw className={`w-3 h-3 ${syncingCodeProjectId === p.id ? "animate-spin text-emerald-600" : "text-slate-500"}`} />
+                        <span>{syncingCodeProjectId === p.id ? "동기화 중..." : "코드 동기화"}</span>
+                      </button>
 
-                    {/* 자연어 요구사항 수정 및 AI 코드 재배포 버튼 */}
-                    <button
-                      type="button"
-                      onClick={() => setEditingProject(p)}
-                      className="px-2.5 py-1 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 font-bold rounded-lg flex items-center gap-1.5 transition-colors border border-slate-200/80 hover:border-indigo-200 cursor-pointer shadow-2xs active:scale-95"
-                      data-easybot-hint="요구사항 수정: 기존 프롬프트를 확인하고 수정/추가하여 새 코드를 AI로 재작성 및 구글 시트에 재배포합니다."
-                      title="자연어 요구사항을 수정하거나 추가하여 새 코드로 재배포합니다."
-                    >
-                      <Edit3 className="w-3 h-3 text-slate-500" />
-                      <span>요구사항 수정</span>
-                    </button>
+                      {/* ✏️ 자연어 요구사항 수정 및 AI 코드 재배포 버튼 */}
+                      <button
+                        type="button"
+                        onClick={() => setEditingProject(p)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-300 text-slate-600 font-bold rounded-lg transition-all border border-slate-200 cursor-pointer shadow-2xs text-[11px] whitespace-nowrap active:scale-95"
+                        data-easybot-hint="요구사항 수정: 기존 프롬프트를 확인하고 수정/추가하여 새 코드를 AI로 재작성 및 구글 시트에 재배포합니다."
+                        title="자연어 요구사항을 수정하거나 추가하여 새 코드로 재배포합니다."
+                      >
+                        <Edit3 className="w-3 h-3 text-slate-500" />
+                        <span>요구사항 수정</span>
+                      </button>
+                    </div>
 
                     {/* ⭐ 만족도 평가 및 AI 자가 학습 피드백 버튼 */}
                     <button
                       type="button"
                       onClick={() => setFeedbackTargetProject(p)}
-                      className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-lg flex items-center gap-1 transition-colors border border-amber-200/80 cursor-pointer shadow-2xs text-[11px]"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-lg transition-all border border-amber-200/80 cursor-pointer shadow-2xs text-[11px] whitespace-nowrap ml-auto"
                       data-easybot-hint="만족도 평가: AI 생성 코드에 대한 별점과 피드백을 제출하여 AI가 자가 학습하도록 합니다."
                       title="AI 코드 만족도 평가 및 자가 학습 피드백"
                     >
@@ -671,20 +704,6 @@ export default function DashboardPage() {
                       <span>만족도 평가</span>
                     </button>
                   </div>
-
-                  {/* 구글 시트 열기 버튼 */}
-                  {p.spreadsheetUrl && (
-                    <a
-                      href={p.spreadsheetUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-1 font-semibold text-xs"
-                      data-easybot-hint="구글 시트 열기: 연결된 실제 구글 스프레드시트 웹 페이지를 새 창에서 엽니다."
-                    >
-                      <span>구글 시트 열기</span>
-                      <ExternalLink className="w-3 h-3 shrink-0" />
-                    </a>
-                  )}
                 </div>
               </div>
             );
