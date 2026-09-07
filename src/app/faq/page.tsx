@@ -1,10 +1,10 @@
-﻿"use client";
+"use client";
 
 import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
-import { HelpCircle, ChevronDown, Sparkles, MessageSquare, ArrowRight, RefreshCw } from "lucide-react";
+import { HelpCircle, ChevronDown, Sparkles, MessageSquare, ArrowRight, RefreshCw, Search, X } from "lucide-react";
 import { DEFAULT_FAQS } from "@/lib/default-faqs";
 
 interface FaqItem {
@@ -20,6 +20,7 @@ interface FaqItem {
 export default function FaqPage() {
   const [faqs, setFaqs] = useState<FaqItem[]>(DEFAULT_FAQS);
   const [selectedCat, setSelectedCat] = useState<string>("전체");
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const [openIdx, setOpenIdx] = useState<number | null>(0);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -44,9 +45,17 @@ export default function FaqPage() {
 
   const categories = ["전체", "시작하기", "토큰/결제", "Apps Script/기능", "보안/계정"];
 
-  const filteredFaqs = selectedCat === "전체" 
-    ? faqs 
-    : faqs.filter((f) => f.category === selectedCat);
+  // 카테고리 필터 및 검색어 필터 결합
+  const filteredFaqs = faqs.filter((f) => {
+    const matchCat = selectedCat === "전체" || f.category === selectedCat;
+    if (!matchCat) return false;
+
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    const question = (f.question || f.q || "").toLowerCase();
+    const answer = (f.answer || f.a || "").toLowerCase();
+    return question.includes(q) || answer.includes(q);
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-slate-100/60 to-white text-slate-800 pb-20">
@@ -65,6 +74,50 @@ export default function FaqPage() {
           <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
             SheetBot 이용 방법, 토큰 충전 및 환불 규정, 구글 시트 보안과 스케줄 자동화에 관한 주요 질문들을 실시간으로 제공합니다.
           </p>
+        </div>
+
+        {/* 실시간 키워드 검색창 */}
+        <div className="max-w-2xl mx-auto space-y-2">
+          <div className="relative flex items-center">
+            <Search className="w-5 h-5 text-slate-400 absolute left-4 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setOpenIdx(null);
+              }}
+              placeholder="궁금한 질문이나 키워드를 검색해 보세요 (예: 엑셀, 견적서, 안티그라비티, 토큰 등)"
+              className="w-full pl-12 pr-10 py-3.5 bg-white rounded-2xl border border-slate-200 shadow-xs text-sm placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-slate-800"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3.5 p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+                title="검색어 지우기"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          {searchQuery && (
+            <div className="flex items-center justify-between px-2 text-xs text-slate-500">
+              <span>
+                <strong>"{searchQuery}"</strong> 검색 결과: <strong className="text-indigo-600">{filteredFaqs.length}</strong>건
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  setSelectedCat("전체");
+                }}
+                className="text-xs text-indigo-600 hover:underline font-bold cursor-pointer"
+              >
+                검색 초기화
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 카테고리 필터 탭 */}
@@ -128,6 +181,28 @@ export default function FaqPage() {
               </div>
             );
           })}
+
+          {/* 검색 결과 0건일 때 안내 */}
+          {filteredFaqs.length === 0 && (
+            <div className="p-12 text-center bg-white rounded-3xl border border-slate-200/80 shadow-xs space-y-3">
+              <HelpCircle className="w-10 h-10 text-slate-300 mx-auto" />
+              <h4 className="text-base font-bold text-slate-800">일치하는 질문을 찾지 못했습니다</h4>
+              <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                {searchQuery ? `"${searchQuery}"에 해당하는 FAQ가 없습니다.` : "선택하신 카테고리에 등록된 질문이 없습니다."}
+                <br />다른 단어로 검색하시거나 하단의 1:1 고객센터로 문의해 주세요.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  setSelectedCat("전체");
+                }}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
+              >
+                전체 질문 보기
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 하단 문의 배너 */}
