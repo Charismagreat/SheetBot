@@ -30,6 +30,8 @@ import {
   FileUp,
   RefreshCw,
   FolderPlus,
+  KeyRound,
+  Terminal,
 } from "lucide-react";
 
 export default function GuidePage() {
@@ -145,6 +147,14 @@ export default function GuidePage() {
       icon: FileSpreadsheet,
       color: "border-teal-200 bg-teal-50/60 text-teal-700",
       prompt: "A시트의 주문번호를 기준으로 B시트의 결제금액을 VLOOKUP으로 가져와 C열에 넣고, 미납금이 있는 행만 골라내는 ARRAYFORMULA 수식 구조를 작성해줘.",
+    },
+    {
+      id: "ex_api_key_agent",
+      title: "안티그라비티 전용 API 키 기반 원스톱 프로젝트 자동 생성 & 배포",
+      tag: "개인 API 키 원스톱 (추천)",
+      icon: KeyRound,
+      color: "border-violet-200 bg-violet-50/60 text-violet-800",
+      prompt: "내 시트봇 API 키는 sk_sheetbot_xxxxxxxxxxxx야.\n이 구글 시트 주소(https://docs.google.com/spreadsheets/d/.../edit)로 프로젝트를 만들고, 10행 헤더 기준으로 매일 밤 11시 50분에 일일 매출을 연간누적 탭에 복사하는 자동화 스크립트를 배포해줘.",
     },
     {
       id: "ex_agent_bridge",
@@ -311,39 +321,71 @@ export default function GuidePage() {
         </section>
 
         {/* 신규 기능: AI 에이전트 원격 브릿지 & 견적서·보고서 양식 완성 가이드 */}
-        <section className="bg-gradient-to-r from-purple-50 via-slate-50 to-indigo-50 rounded-3xl p-6 sm:p-10 border border-purple-200/80 space-y-6">
+        <section className="bg-gradient-to-r from-violet-50 via-slate-50 to-indigo-50 rounded-3xl p-6 sm:p-10 border border-violet-200/80 space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-purple-700 text-white rounded-full text-xs font-black">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-violet-700 text-white rounded-full text-xs font-black">
                 <Bot className="w-3.5 h-3.5" />
-                <span>신규 탑재: AI 에이전트 원격 브릿지 &amp; 복합 양식 완성</span>
+                <span>핵심 업그레이드: 개인 API 키 기반 원스톱 자동화 &amp; 안티그라비티 연동</span>
               </div>
               <h2 className="text-xl sm:text-2xl font-black text-slate-900">
-                안티그라비티(Antigravity) 연동 &amp; 견적서·보고서 자동 완성
+                안티그라비티(Antigravity)와 시트봇의 100% 완전 자동화 연동
               </h2>
               <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
-                복잡한 설치나 도구(MCP) 없이, 대시보드의 [AI 연동 주소 복사] 버튼으로 발급된 웹 주소 하나만 안티그라비티나 AI 채팅창에 전달하세요. 
-                10행 헤더 감지, 견적서 고정 좌표/합계 수식 보존, 로컬 SQLite 데이터 연동, 정기 스케줄까지 대화형으로 완성됩니다.
+                시트봇 대시보드에 일일이 들어와 프로젝트를 만들지 않아도 됩니다. 
+                로그인 즉시 자동 발급된 <strong>내 개인 API 키(sk_sheetbot_...)</strong>와 구글 시트 주소만 안티그라비티에 던지면, 
+                프로젝트 생성부터 10행 헤더/데이터 분석, Apps Script 코드 작성, 구글 클라우드 원클릭 배포까지 단 한 번의 대화로 완성됩니다.
               </p>
             </div>
 
-            <Link
-              href="/dashboard"
-              className="px-5 py-3 bg-purple-900 hover:bg-purple-800 text-white text-xs font-extrabold rounded-xl shadow-md transition-all flex items-center gap-1.5 shrink-0 self-start md:self-auto"
-            >
-              <span>대시보드에서 연동 주소 복사하기</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0 self-start md:self-auto">
+              <Link
+                href="/dashboard"
+                className="px-5 py-3 bg-violet-900 hover:bg-violet-800 text-white text-xs font-extrabold rounded-xl shadow-md transition-all flex items-center gap-1.5"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-violet-300" />
+                <span>대시보드에서 내 API 키 확인</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           </div>
 
+          {/* 2가지 연동 방식 비교 배너 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+            <div className="p-4 rounded-2xl bg-white/90 border border-violet-200 shadow-2xs space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded-md bg-violet-100 text-violet-800 font-extrabold text-[10px]">
+                  방식 A (강력 추천!)
+                </span>
+                <h4 className="font-extrabold text-xs text-slate-900">개인 API 키 원스톱 자동 생성 &amp; 배포</h4>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                대시보드 상단 <strong>[🔑 에이전트 API 키]</strong>를 복사한 후, 안티그라비티에게 "내 API 키는 sk_...이고, 이 시트 주소로 프로젝트 만들어서 배포해줘"라고만 하세요. 프로젝트 생성부터 배포까지 알아서 끝냅니다.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white/90 border border-slate-200 shadow-2xs space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-extrabold text-[10px]">
+                  방식 B
+                </span>
+                <h4 className="font-extrabold text-xs text-slate-900">프로젝트별 브릿지 URL 복사 &amp; 주입</h4>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                이미 생성된 프로젝트가 있다면 카드 우측의 <strong>[🤖 AI 연동 주소 복사]</strong>를 눌러 고유 브릿지 웹 주소(gas-bridge?token=...)를 AI 채팅창에 전달하여 대화형으로 코드를 수정하고 주입할 수 있습니다.
+              </p>
+            </div>
+          </div>
+
+          {/* 4단계 프로세스 카드 */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
-            <div className="bg-white p-5 rounded-2xl border border-purple-100 shadow-2xs space-y-2">
-              <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs">
+            <div className="bg-white p-5 rounded-2xl border border-violet-100 shadow-2xs space-y-2">
+              <div className="w-8 h-8 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center font-bold text-xs">
                 1
               </div>
-              <h4 className="font-extrabold text-xs text-slate-900">원클릭 AI 연동 주소 발급</h4>
+              <h4 className="font-extrabold text-xs text-slate-900">개인 API 키 자동 확인</h4>
               <p className="text-[11px] text-slate-500 leading-relaxed">
-                시트봇 대시보드 프로젝트 카드에서 <strong>[🤖 AI 연동 주소 복사]</strong>를 누르면 안티그라비티 전용 프롬프트와 웹 주소가 즉시 복사됩니다.
+                시트봇 회원가입 즉시 20,000 웰컴 토큰과 함께 고유 개인 API 키(sk_sheetbot_...)가 자동 발급됩니다. 워크스페이스 상단에서 클릭 한 번으로 복사할 수 있습니다.
               </p>
             </div>
 
@@ -351,9 +393,9 @@ export default function GuidePage() {
               <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">
                 2
               </div>
-              <h4 className="font-extrabold text-xs text-slate-900">10행 헤더 &amp; 견적서 양식 감지</h4>
+              <h4 className="font-extrabold text-xs text-slate-900">안티그라비티 원격 프로젝트 생성</h4>
               <p className="text-[11px] text-slate-500 leading-relaxed">
-                상단 제목/결재란과 10행 실제 헤더를 분리 인식하며, 견적서 고정 셀(C4, B6)과 품목란(14행~), 하단 =SUM 수식을 안전하게 보존합니다.
+                안티그라비티에게 키와 시트 주소만 주면 AI가 시트봇 API를 호출하여 시트 구조(탭, 10행 헤더, 샘플 데이터)를 자동 분석하고 프로젝트를 원격 등록합니다.
               </p>
             </div>
 
@@ -361,9 +403,9 @@ export default function GuidePage() {
               <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
                 3
               </div>
-              <h4 className="font-extrabold text-xs text-slate-900">내 컴퓨터 SQLite DB 연동</h4>
+              <h4 className="font-extrabold text-xs text-slate-900">10행 헤더 &amp; SQLite DB 연동</h4>
               <p className="text-[11px] text-slate-500 leading-relaxed">
-                "내 PC의 sales.db에서 이번 달 거래처 발주 내역 뽑아서 시트에 채워줘"라고 요청하면 AI가 SQL 쿼리 후 견적서에 자동 입력합니다.
+                견적서 고정 셀/하단 =SUM 수식 보존은 물론, "내 PC의 SQLite DB에서 발주 내역 뽑아서 시트에 채워줘"와 같은 복합 자동화 로직도 Apps Script로 완성합니다.
               </p>
             </div>
 
@@ -371,9 +413,9 @@ export default function GuidePage() {
               <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
                 4
               </div>
-              <h4 className="font-extrabold text-xs text-slate-900">대화형 코드 수정 &amp; 스케줄</h4>
+              <h4 className="font-extrabold text-xs text-slate-900">구글 클라우드 원클릭 배포</h4>
               <p className="text-[11px] text-slate-500 leading-relaxed">
-                매일 정해진 시간 자동 실행(트리거) 설정은 물론, "이 함수는 지워줘", "계산식 바꿔줘" 등 특정 기능 수정/제거도 자유롭게 가능합니다.
+                안티그라비티가 완성된 코드를 브릿지 URL로 전송하면 구글 스프레드시트에 즉시 자동 배포되며, 상단 메뉴 등록 및 주기적 정기 스케줄까지 자율 가동됩니다.
               </p>
             </div>
           </div>

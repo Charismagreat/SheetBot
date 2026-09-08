@@ -1,5 +1,6 @@
 import { queryTable, insertRows, updateRows } from "./egdesk-helpers";
 import { setupDatabase } from "./setup-db";
+import { getOrCreateUserApiKey } from "./api-keys";
 
 export interface UserWallet {
   id: string;
@@ -110,6 +111,11 @@ export async function getOrCreateUserWallet(userEmail: string): Promise<UserWall
   };
 
   await insertRows("sheetbot_user_wallets", [newRow]);
+
+  // 회원가입 시 개인 API 키도 자동 발급 연계
+  await getOrCreateUserApiKey(email).catch((err) =>
+    console.warn("[Token-Wallet] Auto-provision API key warning:", err.message)
+  );
 
   return {
     id: walletId,

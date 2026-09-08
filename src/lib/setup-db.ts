@@ -521,10 +521,25 @@ export async function setupDatabase(force = false): Promise<void> {
       { tableName: 'sheetbot_project_feedback' }
     );
 
-    // 19. 기본 추천 프롬프트 시딩
+    // 19. sheetbot_user_api_keys 테이블 생성 (사용자 개인 API 키 및 에이전트 인증 대장)
+    await safeCreateTable(
+      'SheetBot 사용자 개인 API 키 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'api_key', type: 'TEXT', notNull: true },
+        { name: 'name', type: 'TEXT' }, // 키 식별 이름 (예: 'Default Agent Key')
+        { name: 'status', type: 'TEXT', notNull: true }, // 'ACTIVE', 'REVOKED'
+        { name: 'last_used_at', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_user_api_keys' }
+    );
+
+    // 20. 기본 추천 프롬프트 시딩
     await seedDefaultPromptTemplates();
 
-    // 20. 레거시 데이터 마이그레이션 실행
+    // 21. 레거시 데이터 마이그레이션 실행
     await migrateLegacySettingsData();
 
     isDbInitialized = true;
