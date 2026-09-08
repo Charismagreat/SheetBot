@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-07T13:52:22.703Z
+ * Generated at: 2026-09-08T10:12:23.414Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -116,7 +116,7 @@ export const TABLES = {
   table14: {
     name: 'sheetbot_faqs',
     displayName: 'SheetBot FAQ 관리 대장',
-    rowCount: 14,
+    rowCount: 22,
     columnCount: 14,
     columns: ['id', '_version', 'category', 'question', 'answer', 'sort_order', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,

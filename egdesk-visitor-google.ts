@@ -53,6 +53,27 @@ function visitorOriginHeaders(): Record<string, string> {
   return { 'X-Visitor-Origin': window.location.origin };
 }
 
+/** Tunnel production apps live under /t/{id}/p/{project}. Bare /auth/callback 404s. */
+export function getVisitorSiteBasePath(): string {
+  const fromEnv =
+    (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_BASE_PATH) || '';
+  if (fromEnv) return fromEnv.replace(/\/$/, '');
+  if (typeof window === 'undefined') return '';
+  const parts = window.location.pathname.split('/').filter(Boolean);
+  if (parts[0] === 't' && parts.length >= 4 && parts[2] === 'p') {
+    return '/' + parts.slice(0, 4).join('/');
+  }
+  return '';
+}
+
+export function resolveVisitorAppPath(path: string): string {
+  const base = getVisitorSiteBasePath();
+  const normalized = path.startsWith('/') ? path : '/' + path;
+  if (!base) return normalized;
+  if (normalized === base || normalized.startsWith(base + '/')) return normalized;
+  return base + normalized;
+}
+
 async function callVisitorAuth(tool: string, args: Record<string, unknown> = {}) {
   const response = await apiFetch('/__visitor_auth_proxy', {
     method: 'POST',
@@ -90,10 +111,13 @@ export async function startVisitorGoogleLogin(options: {
   if (typeof window === 'undefined') {
     throw new Error('startVisitorGoogleLogin() must run in the browser');
   }
-  const next =
-    options.next && options.next.startsWith('/') ? options.next : window.location.pathname;
-  const returnTo = new URL('/auth/callback', window.location.origin);
+  const next = resolveVisitorAppPath(
+    options.next && options.next.startsWith('/') ? options.next : window.location.pathname,
+  );
+  const returnTo = new URL(resolveVisitorAppPath('/auth/callback'), window.location.origin);
   returnTo.searchParams.set('next', next);
+  // EGDesk picks the OAuth bounce: localhost hosted coding uses
+  // http://localhost:54321/auth/callback so Supabase does not fall back to egdesk.cloud.
   const egdeskPublicUrl =
     process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
 

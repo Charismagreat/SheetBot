@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { exchangeVisitorAuthCode } from '@/egdesk-visitor-google';
+import { exchangeVisitorAuthCode, resolveVisitorAppPath } from '@/egdesk-visitor-google';
 
 export default function VisitorAuthCallbackPage() {
   const [message, setMessage] = useState('Finishing sign-in…');
@@ -25,7 +25,7 @@ export default function VisitorAuthCallbackPage() {
     }
     void exchangeVisitorAuthCode(code)
       .then(() => {
-        const dest = next.startsWith('/') ? next : '/';
+        const dest = resolveVisitorAppPath(next.startsWith('/') ? next : '/');
         window.location.replace(dest);
       })
       .catch((err: unknown) => {

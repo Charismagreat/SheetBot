@@ -8,7 +8,8 @@ import { useRouter } from "next/navigation";
 import {
   Bot, Plus, FileCode, Clock, RefreshCw, CheckCircle2, AlertTriangle,
   X, ArrowRight, ExternalLink, Sparkles, Layers, ShieldCheck, Trash2, Smartphone, Edit3,
-  Globe, Star, Coins, Activity, Cpu, Settings, FileSpreadsheet, Copy, Briefcase, Send
+  Globe, Star, Coins, Activity, Cpu, Settings, FileSpreadsheet, Copy, Briefcase, Send,
+  KeyRound
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import nextDynamic from "next/dynamic";
@@ -18,6 +19,7 @@ const EditProjectPromptModal = nextDynamic(() => import("@/components/EditProjec
 const ScheduleManager = nextDynamic(() => import("@/components/ScheduleManager"));
 const PromptGalleryModal = nextDynamic(() => import("@/components/PromptGalleryModal"));
 const FeedbackModal = nextDynamic(() => import("@/components/FeedbackModal"));
+const ApiKeyModal = nextDynamic(() => import("@/components/ApiKeyModal"));
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
@@ -27,6 +29,7 @@ export default function DashboardPage() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<any | null>(null);
   const [alertMessage, setAlertMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [copyingBridgeProjectId, setCopyingBridgeProjectId] = useState<string | null>(null);
@@ -477,15 +480,26 @@ ${recruitForm.introduction}
               </div>
             </div>
 
-            <button
-              onClick={fetchData}
-              disabled={loading}
-              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer w-max"
-              data-easybot-hint="새로고침: 최신 프로젝트 목록 및 스케줄 실행 상태를 My DB에서 다시 동기화합니다."
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-emerald-600" : ""}`} />
-              <span>새로고침</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsApiKeyModalOpen(true)}
+                className="px-3.5 py-1.5 bg-gradient-to-r from-violet-600 via-indigo-600 to-indigo-700 hover:opacity-95 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-all shadow-sm shadow-indigo-500/20 cursor-pointer"
+                data-easybot-hint="에이전트 API 키: 안티그라비티 등 외부 AI 에이전트가 내 시트에 자동 접근할 수 있는 개인 API 키를 조회하고 관리합니다."
+              >
+                <KeyRound className="w-3.5 h-3.5 text-violet-200" />
+                <span>에이전트 API 키</span>
+              </button>
+
+              <button
+                onClick={fetchData}
+                disabled={loading}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer w-max"
+                data-easybot-hint="새로고침: 최신 프로젝트 목록 및 스케줄 실행 상태를 My DB에서 다시 동기화합니다."
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-emerald-600" : ""}`} />
+                <span>새로고침</span>
+              </button>
+            </div>
           </div>
 
           {/* 4대 핵심 자원 & 현황 요약 카드 그리드 */}
@@ -1485,6 +1499,12 @@ ${recruitForm.introduction}
           </div>
         </div>
       )}
+
+      {/* 에이전트 개인 API 키 모달 */}
+      <ApiKeyModal
+        isOpen={isApiKeyModalOpen}
+        onClose={() => setIsApiKeyModalOpen(false)}
+      />
     </div>
   );
 }
