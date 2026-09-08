@@ -159,6 +159,7 @@ export default function Navbar() {
                     src={session.user.image}
                     alt={session.user.name || "User"}
                     className="w-8 h-8 rounded-full border border-slate-200 object-cover shadow-2xs shrink-0"
+                    referrerPolicy="no-referrer"
                   />
                 ) : (
                   <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs border border-emerald-200 shrink-0">
