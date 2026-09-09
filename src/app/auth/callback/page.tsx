@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { exchangeVisitorAuthCode, resolveVisitorAppPath } from '@/egdesk-visitor-google';
+import { exchangeVisitorAuthCode, getVisitorGoogleStatus, resolveVisitorAppPath } from '@/egdesk-visitor-google';
 
 export default function VisitorAuthCallbackPage() {
   const [message, setMessage] = useState('Finishing sign-in…');
@@ -24,7 +24,32 @@ export default function VisitorAuthCallbackPage() {
       return;
     }
     void exchangeVisitorAuthCode(code)
-      .then(() => {
+      .then(async (result) => {
+        setMessage('세션을 구성하는 중입니다…');
+
+        // 1. 방문자 이메일 및 프로필 정보 확인
+        let email = (result as any)?.email || (result as any)?.user?.email;
+        let name = (result as any)?.name || (result as any)?.user?.user_metadata?.full_name;
+        let image = (result as any)?.image || (result as any)?.user?.user_metadata?.avatar_url;
+
+        if (!email) {
+          const status = await getVisitorGoogleStatus().catch(() => null);
+          if (status?.connected && status?.email) {
+            email = status.email;
+          }
+        }
+
+        // 2. NextAuth 세션 쿠키 발급 및 회원 동기화 (/api/auth/google/session)
+        if (email) {
+          await fetch('/api/auth/google/session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, name, image }),
+          }).catch((err) => {
+            console.warn('NextAuth session sync warning:', err);
+          });
+        }
+
         const dest = resolveVisitorAppPath(next.startsWith('/') ? next : '/');
         window.location.replace(dest);
       })
