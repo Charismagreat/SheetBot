@@ -161,6 +161,7 @@ export default function Navbar() {
                     alt={session.user.name || "User"}
                     width={32}
                     height={32}
+                    unoptimized
                     className="rounded-full border border-slate-200 object-cover shadow-2xs shrink-0"
                     referrerPolicy="no-referrer"
                   />
