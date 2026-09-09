@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
+import Image from "next/image";
 import { Bot, LogOut, User, Sparkles, ArrowRight, ShieldCheck } from "lucide-react";
 
 export default function Navbar() {
@@ -155,10 +156,12 @@ export default function Navbar() {
                 data-easybot-hint="회원 세션: 로그인된 구글 계정 정보입니다. 모든 프로젝트와 스케줄이 이 이메일 단위로 안전하게 격리 보관됩니다."
               >
                 {session.user.image ? (
-                  <img
+                  <Image
                     src={session.user.image}
                     alt={session.user.name || "User"}
-                    className="w-8 h-8 rounded-full border border-slate-200 object-cover shadow-2xs shrink-0"
+                    width={32}
+                    height={32}
+                    className="rounded-full border border-slate-200 object-cover shadow-2xs shrink-0"
                     referrerPolicy="no-referrer"
                   />
                 ) : (
