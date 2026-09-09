@@ -15,7 +15,13 @@ import { apiFetch } from './egdesk-helpers';
 
 const VISITOR_SESSION_KEY = 'egdesk_visitor_session';
 
-export const VISITOR_GOOGLE_OAUTH_SCOPES = [
+export const VISITOR_BASIC_SCOPES = [
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile',
+  'openid',
+] as const;
+
+export const VISITOR_WORKSPACE_SCOPES = [
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',
   'https://www.googleapis.com/auth/drive.file',
@@ -24,6 +30,8 @@ export const VISITOR_GOOGLE_OAUTH_SCOPES = [
   'https://www.googleapis.com/auth/presentations',
   'openid',
 ] as const;
+
+export const VISITOR_GOOGLE_OAUTH_SCOPES = VISITOR_WORKSPACE_SCOPES;
 
 function getVisitorSessionId(): string | null {
   if (typeof window === 'undefined') return null;
@@ -123,6 +131,7 @@ async function callVisitorGoogle(tool: string, args: Record<string, unknown> = {
 export async function startVisitorGoogleLogin(options: {
   next?: string;
   forceConsent?: boolean;
+  scopes?: readonly string[] | string[];
 } = {}) {
   if (typeof window === 'undefined') {
     throw new Error('startVisitorGoogleLogin() must run in the browser');
@@ -139,11 +148,22 @@ export async function startVisitorGoogleLogin(options: {
     returnTo: returnTo.toString(),
     egdeskPublicUrl,
     forceConsent: options.forceConsent === true,
+    ...(options.scopes ? { scopes: options.scopes } : {}),
   });
   if (!result?.authUrl) {
     throw new Error(result?.error || 'Failed to start visitor Google login');
   }
-  window.location.href = result.authUrl;
+
+  let finalAuthUrl = result.authUrl;
+  if (options.scopes && options.scopes.length > 0) {
+    try {
+      const u = new URL(finalAuthUrl);
+      u.searchParams.set('scopes', options.scopes.join(' '));
+      finalAuthUrl = u.toString();
+    } catch {}
+  }
+
+  window.location.href = finalAuthUrl;
 }
 
 export async function exchangeVisitorAuthCode(code: string) {
