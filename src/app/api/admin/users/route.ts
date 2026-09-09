@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, isCurrentUserAdmin } from "@/lib/auth";
 import { queryTable, insertRows, updateRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 
@@ -9,8 +9,8 @@ export async function GET(req: NextRequest) {
   try {
     await setupDatabase();
     const adminEmail = await getCurrentUserEmail();
-    if (!adminEmail) {
-      return NextResponse.json({ success: false, error: "관리자 인증이 필요합니다." }, { status: 401 });
+    if (!adminEmail || !(await isCurrentUserAdmin(adminEmail))) {
+      return NextResponse.json({ success: false, error: "관리자 권한이 필요합니다." }, { status: 403 });
     }
 
     // 1. 필요한 테이블 병렬 조회
@@ -132,8 +132,8 @@ export async function PUT(req: NextRequest) {
   try {
     await setupDatabase();
     const adminEmail = await getCurrentUserEmail();
-    if (!adminEmail) {
-      return NextResponse.json({ success: false, error: "관리자 인증이 필요합니다." }, { status: 401 });
+    if (!adminEmail || !(await isCurrentUserAdmin(adminEmail))) {
+      return NextResponse.json({ success: false, error: "관리자 권한이 필요합니다." }, { status: 403 });
     }
 
     const body = await req.json();

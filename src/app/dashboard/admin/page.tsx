@@ -2,6 +2,7 @@
 
 import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import {
   Users,
@@ -38,6 +39,7 @@ import AdminPromptsTab from "./components/AdminPromptsTab";
 type TabType = "users" | "inquiries" | "reviews" | "faqs" | "tax_invoices" | "pricing_cost" | "footer" | "sms" | "email" | "smart_rules" | "dispatch_logs" | "prompts";
 
 export default function AdminDashboardPage() {
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("users");
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -94,14 +96,32 @@ export default function AdminDashboardPage() {
   const [loadingLogs, setLoadingLogs] = useState<boolean>(false);
 
   useEffect(() => {
-    fetchAllData();
+    checkAdmin();
   }, []);
 
+  const checkAdmin = async () => {
+    setLoading(true);
+    try {
+      const res = await apiFetch("/api/admin/check");
+      const data = await res.json();
+      if (data.success && data.isAdmin) {
+        setIsAdmin(true);
+        await fetchAllData();
+      } else {
+        setIsAdmin(false);
+        setLoading(false);
+      }
+    } catch {
+      setIsAdmin(false);
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    if (activeTab === "dispatch_logs") {
+    if (isAdmin && activeTab === "dispatch_logs") {
       fetchDispatchLogs();
     }
-  }, [activeTab, logChannelFilter, logStatusFilter]);
+  }, [isAdmin, activeTab, logChannelFilter, logStatusFilter]);
 
   const fetchAllData = async () => {
     setLoading(true);
@@ -604,6 +624,45 @@ export default function AdminDashboardPage() {
     ? (reviews.reduce((acc, r) => acc + (Number(r.rating) || 5), 0) / reviews.length).toFixed(1)
     : "5.0";
   const requestedTaxCount = taxInvoices.filter((t) => t.status === "REQUESTED").length;
+
+  // 관리자 권한 체크 중일 때
+  if (isAdmin === null) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 pb-24">
+        <Navbar />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 flex flex-col items-center justify-center text-center space-y-4">
+          <RefreshCw className="w-8 h-8 text-emerald-600 animate-spin" />
+          <p className="text-sm font-semibold text-slate-500">관리자 권한을 확인하는 중입니다...</p>
+        </main>
+      </div>
+    );
+  }
+
+  // 관리자가 아닐 때 접근 차단
+  if (isAdmin === false) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 pb-24">
+        <Navbar />
+        <main className="max-w-md mx-auto px-4 py-24 text-center space-y-4">
+          <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-black text-slate-900 tracking-tight">관리자 전용 페이지입니다</h2>
+          <p className="text-sm text-slate-500">
+            현재 계정은 SheetBot 통합 관리자 권한이 없습니다. 관리자 계정으로 로그인해 주세요.
+          </p>
+          <div className="pt-3">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-500/20"
+            >
+              내 워크스페이스로 이동
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 pb-24">

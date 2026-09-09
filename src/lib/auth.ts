@@ -143,3 +143,13 @@ export async function isCurrentUserAdmin(emailToCheck?: string | null): Promise<
   }
   return false;
 }
+
+/**
+ * 현재 요청 사용자가 관리자 권한을 가졌는지 일괄 검증하는 편의 헬퍼
+ */
+export async function verifyAdminSession(): Promise<{ authorized: boolean; email: string | null }> {
+  const email = await getCurrentUserEmail();
+  if (!email) return { authorized: false, email: null };
+  const isAdmin = await isCurrentUserAdmin(email);
+  return { authorized: isAdmin, email };
+}

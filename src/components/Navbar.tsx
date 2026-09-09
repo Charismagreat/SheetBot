@@ -5,11 +5,36 @@ import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 import Image from "next/image";
 import { Bot, LogOut, User, Sparkles, ArrowRight, ShieldCheck } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 
 export default function Navbar() {
   const { data: session, status } = useSession();
   // 기본값: 꺼짐(false)
   const [aiHelpEnabled, setAiHelpEnabled] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!session?.user?.email) {
+      setIsAdmin(false);
+      return;
+    }
+
+    apiFetch("/api/admin/check")
+      .then((res) => res.json())
+      .then((data) => {
+        if (isMounted && data.success) {
+          setIsAdmin(Boolean(data.isAdmin));
+        }
+      })
+      .catch(() => {
+        if (isMounted) setIsAdmin(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session?.user?.email]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -140,15 +165,17 @@ export default function Navbar() {
                 <span>내 워크스페이스</span>
               </Link>
 
-              <Link
-                href="/dashboard/admin"
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-rose-700 bg-rose-50/70 hover:bg-rose-100 border border-rose-200/60 rounded-xl transition-all whitespace-nowrap shrink-0"
-                data-easybot-hint="관리자 센터: 1:1 고객 문의 답변, 사용 후기 검수, FAQ 편집, 세금계산서 발행을 승인합니다."
-                title="통합 운영 관리자 센터"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                <span className="hidden sm:inline whitespace-nowrap">관리자</span>
-              </Link>
+              {isAdmin && (
+                <Link
+                  href="/dashboard/admin"
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-rose-700 bg-rose-50/70 hover:bg-rose-100 border border-rose-200/60 rounded-xl transition-all whitespace-nowrap shrink-0"
+                  data-easybot-hint="관리자 센터: 1:1 고객 문의 답변, 사용 후기 검수, FAQ 편집, 세금계산서 발행을 승인합니다."
+                  title="통합 운영 관리자 센터"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                  <span className="hidden sm:inline whitespace-nowrap">관리자</span>
+                </Link>
+              )}
 
               {/* 유저 프로필 카드 */}
               <div
