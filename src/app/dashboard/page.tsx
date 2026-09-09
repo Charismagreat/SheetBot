@@ -281,7 +281,7 @@ ${recruitForm.introduction}
 
           if (visitorStatus?.connected && visitorStatus?.email) {
             // Visitor 세션이 확인되면 NextAuth 세션을 동기화 발급받고 화면 새로고침
-            const syncRes = await fetch("/api/auth/google/session", {
+            const syncRes = await apiFetch("/api/auth/google/session", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({

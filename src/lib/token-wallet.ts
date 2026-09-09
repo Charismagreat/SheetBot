@@ -66,7 +66,7 @@ export async function getOrCreateUserWallet(userEmail: string): Promise<UserWall
 
   const res = await queryTable("sheetbot_user_wallets", {
     filters: { user_email: email },
-    limit: 10,
+    limit: 1,
   }).catch(() => ({ rows: [] }));
 
   const validRows = (res.rows || []).filter((r: any) => !r.deleted_at);

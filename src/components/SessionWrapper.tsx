@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from "react";
 import { SessionProvider } from "next-auth/react";
 
@@ -39,7 +40,7 @@ export default function SessionWrapper({ children }: { children: React.ReactNode
 
         if (status?.connected && status?.email) {
           // 백그라운드에서 NextAuth 세션 쿠키 발급 및 회원 동기화
-          await fetch("/api/auth/google/session", {
+          await apiFetch("/api/auth/google/session", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
