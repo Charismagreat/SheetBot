@@ -9,22 +9,25 @@ export const authOptions: AuthOptions = {
       clientId: process.env.GOOGLE_CLIENT_ID || "dummy-client-id",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "dummy-client-secret",
     }),
-    // 2. 개발 및 빠른 체험용 1초 데모 계정 로그인
+    // 2. EGDesk Google OAuth 통합 로그인
     CredentialsProvider({
-      id: "demo-login",
-      name: "Demo Account",
+      id: "google-login",
+      name: "Google Account",
       credentials: {
-        email: { label: "Email", type: "email", placeholder: "demo@example.com" },
-        name: { label: "Name", type: "text", placeholder: "데모 사용자" },
+        email: { label: "Email", type: "email" },
+        name: { label: "Name", type: "text" },
+        image: { label: "Image", type: "text" },
       },
       async authorize(credentials) {
-        const email = credentials?.email || "demo.user@gmail.com";
-        const name = credentials?.name || "데모 사용자";
+        if (!credentials?.email) return null;
+        const email = credentials.email.toLowerCase().trim();
+        const name = credentials.name || email.split("@")[0];
+        const image = credentials.image || "https://lh3.googleusercontent.com/a/default-user=s96-c";
         return {
-          id: `demo_${email.replace(/[^a-zA-Z0-9]/g, "_")}`,
+          id: `google_${email.replace(/[^a-zA-Z0-9]/g, "_")}`,
           name,
           email,
-          image: "https://lh3.googleusercontent.com/a/default-user=s96-c",
+          image,
         };
       },
     }),
@@ -59,6 +62,8 @@ export const authOptions: AuthOptions = {
       if (user) {
         token.id = user.id;
         token.email = user.email;
+        if (user.image) token.picture = user.image;
+        if (user.name) token.name = user.name;
       }
       return token;
     },
@@ -66,6 +71,8 @@ export const authOptions: AuthOptions = {
       if (session.user) {
         (session.user as any).id = token.id || token.sub;
         session.user.email = token.email || session.user.email;
+        if (token.name) session.user.name = token.name;
+        if (token.picture) session.user.image = token.picture;
       }
       return session;
     },

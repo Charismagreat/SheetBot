@@ -33,6 +33,11 @@ import {
   FolderPlus,
   FileText,
 } from "lucide-react";
+import {
+  startVisitorGoogleLogin,
+  getVisitorGoogleStatus,
+  VISITOR_GOOGLE_OAUTH_SCOPES,
+} from "@/egdesk-visitor-google";
 import PromptGalleryModal from "./PromptGalleryModal";
 
 interface NewProjectModalProps {
@@ -117,6 +122,24 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   const [selectedModel, setSelectedModel] = useState("gemini-3.8-flash");
   const [pricingModels, setPricingModels] = useState<any[]>([]);
   const [allowUserSelection, setAllowUserSelection] = useState(true);
+
+  // 구글 드라이브/시트 권한 안내 팝업 상태
+  const [showScopePrompt, setShowScopePrompt] = useState(false);
+  const [isGrantingScope, setIsGrantingScope] = useState(false);
+
+  const handleGrantWorkspaceScopes = async () => {
+    setIsGrantingScope(true);
+    try {
+      await startVisitorGoogleLogin({
+        next: "/dashboard",
+        forceConsent: true,
+        scopes: VISITOR_WORKSPACE_SCOPES,
+      });
+    } catch (err: any) {
+      setIsGrantingScope(false);
+      alert("권한 요청 중 오류가 발생했습니다: " + (err?.message || "네트워크 오류"));
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -512,7 +535,19 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
       });
       setStep(3);
     } catch (err: any) {
-      setError(err.message || "처리 중 오류가 발생했습니다.");
+      const msg = err.message || "처리 중 오류가 발생했습니다.";
+      setError(msg);
+      if (
+        msg.includes("권한") ||
+        msg.includes("permission") ||
+        msg.includes("403") ||
+        msg.includes("scope") ||
+        msg.includes("인증") ||
+        msg.includes("Drive") ||
+        msg.includes("Sheets")
+      ) {
+        setShowScopePrompt(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -584,6 +619,66 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
           <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-2 text-rose-700 text-xs font-bold">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
+          </div>
+        )}
+
+        {/* 🔐 권한 안내 및 추가 요청 배너 (점진적 권한 요청 UX) */}
+        {showScopePrompt && (
+          <div className="p-4 bg-gradient-to-r from-indigo-50 via-purple-50 to-emerald-50 border-2 border-indigo-200/80 rounded-2xl space-y-2.5 animate-in fade-in duration-200 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-xs shrink-0 mt-0.5">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="font-extrabold text-xs text-indigo-950 flex items-center gap-1.5">
+                    <span>Google 스프레드시트 및 드라이브 연동 권한 안내</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-200/80 text-indigo-800">
+                      최소 권한 보호
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-indigo-900/80 leading-relaxed">
+                    회원가입 시점에는 보안을 위해 최소 권한(이메일)만 수집되었습니다.<br />
+                    내 구글 시트와 직접 연동하거나 자동 생성된 시트에 Apps Script 코드를 배포하기 위해 <strong>스프레드시트/드라이브 파일 권한</strong>을 추가로 승인해 주세요.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowScopePrompt(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-1 border-t border-indigo-100/80">
+              <button
+                type="button"
+                onClick={() => setShowScopePrompt(false)}
+                className="px-3 py-1.5 text-[11px] font-bold text-slate-500 hover:text-slate-700 hover:bg-white/60 rounded-xl transition-all cursor-pointer"
+              >
+                나중에 하기
+              </button>
+              <button
+                type="button"
+                onClick={handleGrantWorkspaceScopes}
+                disabled={isGrantingScope}
+                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-extrabold rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isGrantingScope ? (
+                  <>
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    <span>Google 동의창 이동 중...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Google 드라이브·시트 권한 승인하기</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         )}
 
@@ -893,6 +988,14 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                 <div className="flex items-center justify-between">
                   <label className="font-bold text-slate-700 block">연결할 구글 스프레드시트 URL 또는 ID *</label>
                   <div className="flex items-center gap-2 text-[11px] font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setShowScopePrompt(true)}
+                      className="text-[10px] text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-all cursor-pointer"
+                    >
+                      <ShieldCheck className="w-3 h-3 text-indigo-500" />
+                      <span>드라이브·시트 권한 확인</span>
+                    </button>
                     {isFetchingTitle && (
                       <span className="flex items-center gap-1 text-emerald-600 animate-pulse">
                         <RefreshCw className="w-3 h-3 animate-spin" />

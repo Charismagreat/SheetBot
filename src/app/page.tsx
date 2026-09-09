@@ -15,17 +15,19 @@ export default function LandingPage() {
 
       <main className="flex-1 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 flex flex-col justify-center items-center text-center space-y-12">
         {/* 헤더 배너 */}
-        <div className="space-y-4 max-w-3xl">
+        <div className="space-y-4 max-w-4xl">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-xs font-bold shadow-xs">
             <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
             <span>Google Apps Script 자동화 전용 SaaS 플랫폼</span>
           </div>
 
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-slate-900 tracking-tight leading-[1.15]">
+          <h1 className="text-3xl sm:text-5xl md:text-6xl font-black text-slate-900 tracking-tight leading-[1.18] break-keep">
             복잡한 코딩 없이,<br />
-            <span className="bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 bg-clip-text text-transparent">
-              스프레드시트 자동화
-            </span>를 완성하세요.
+            <span className="inline-block whitespace-nowrap">
+              <span className="bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 bg-clip-text text-transparent">
+                구글시트 자동화
+              </span>를 완성하세요.
+            </span>
           </h1>
 
           <p className="text-sm sm:text-base text-slate-500 max-w-2xl mx-auto leading-relaxed">
@@ -50,7 +52,7 @@ export default function LandingPage() {
               className="w-full sm:w-auto px-7 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-sm rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 transition-all hover:scale-102 active:scale-98"
             >
               <Sparkles className="w-4 h-4 text-amber-300" />
-              <span>테스트 유저로 1초 시작하기</span>
+              <span>Google 계정으로 시작하기</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
           )}
