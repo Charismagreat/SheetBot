@@ -221,10 +221,10 @@ export default function Navbar() {
               <Link
                 href="/login"
                 className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 active:scale-95 whitespace-nowrap"
-                data-easybot-hint="로그인: 테스트 유저로 1초 만에 로그인하여 모든 자동화 기능을 체험합니다."
+                data-easybot-hint="로그인: 구글 계정으로 로그인하여 스프레드시트 자동화 기능을 이용합니다."
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                <span>테스트 유저 로그인</span>
+                <span>Google 로그인</span>
                 <ArrowRight className="w-3.5 h-3.5 shrink-0" />
               </Link>
             </div>

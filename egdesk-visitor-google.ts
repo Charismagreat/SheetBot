@@ -74,6 +74,22 @@ export function resolveVisitorAppPath(path: string): string {
   return base + normalized;
 }
 
+/** MCP root for the public tunnel, e.g. https://tunneling-service.onrender.com/t/{id} */
+export function resolveEgdeskPublicUrl(): string {
+  const configured =
+    (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+    'http://localhost:8080';
+  if (typeof window === 'undefined') return configured;
+  const parts = window.location.pathname.split('/').filter(Boolean);
+  const onTunnelGateway =
+    window.location.hostname === 'tunneling-service.onrender.com' ||
+    window.location.hostname.endsWith('.egdesk.cloud');
+  if (onTunnelGateway && parts[0] === 't' && parts[1]) {
+    return window.location.origin + '/t/' + parts[1];
+  }
+  return configured;
+}
+
 async function callVisitorAuth(tool: string, args: Record<string, unknown> = {}) {
   const response = await apiFetch('/__visitor_auth_proxy', {
     method: 'POST',
@@ -116,15 +132,13 @@ export async function startVisitorGoogleLogin(options: {
   );
   const returnTo = new URL(resolveVisitorAppPath('/auth/callback'), window.location.origin);
   returnTo.searchParams.set('next', next);
-  // EGDesk picks the OAuth bounce: localhost hosted coding uses
-  // http://localhost:54321/auth/callback so Supabase does not fall back to egdesk.cloud.
-  const egdeskPublicUrl =
-    process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+  // Localhost → EGDesk :54321. Tunnel site → {gateway}/t/{id}/visitor-auth/callback.
+  const egdeskPublicUrl = resolveEgdeskPublicUrl();
 
   const result = await callVisitorAuth('start', {
     returnTo: returnTo.toString(),
     egdeskPublicUrl,
-    forceConsent: options.forceConsent !== false,
+    forceConsent: options.forceConsent === true,
   });
   if (!result?.authUrl) {
     throw new Error(result?.error || 'Failed to start visitor Google login');
