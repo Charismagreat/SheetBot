@@ -265,14 +265,54 @@ ${recruitForm.introduction}
   }, [session?.user?.email]);
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
-      const match = currentPath.match(/^(\/t\/[^\/]+\/p\/[^\/]+)/);
-      const prefix = match ? match[1] : "";
-      window.location.href = `${prefix}/login`;
-    } else if (status === "authenticated") {
-      fetchData();
-    }
+    let isMounted = true;
+
+    const checkAuth = async () => {
+      if (status === "authenticated") {
+        fetchData();
+        return;
+      }
+
+      if (status === "unauthenticated") {
+        // NextAuth 세션이 없더라도, 이지데스크 플러그인이 발급한 Visitor 세션이 있는지 확인
+        try {
+          const { getVisitorGoogleStatus } = await import("@/egdesk-visitor-google");
+          const visitorStatus = await getVisitorGoogleStatus();
+
+          if (visitorStatus?.connected && visitorStatus?.email) {
+            // Visitor 세션이 확인되면 NextAuth 세션을 동기화 발급받고 화면 새로고침
+            const syncRes = await fetch("/api/auth/google/session", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                email: visitorStatus.email,
+                name: visitorStatus.email.split("@")[0],
+              }),
+            });
+            if (syncRes.ok) {
+              window.location.reload();
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn("Visitor session auto-recovery error:", err);
+        }
+
+        // Visitor 세션조차 없을 때만 /login으로 안전하게 이동
+        if (isMounted) {
+          const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+          const match = currentPath.match(/^(\/t\/[^\/]+\/p\/[^\/]+)/);
+          const prefix = match ? match[1] : "";
+          window.location.href = `${prefix}/login`;
+        }
+      }
+    };
+
+    void checkAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, [status, fetchData]);
 
   const [syncingProjectId, setSyncingProjectId] = useState<string | null>(null);
