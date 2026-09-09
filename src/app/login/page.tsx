@@ -15,6 +15,7 @@ import {
   getVisitorGoogleStatus,
   signOutVisitorGoogle,
   VISITOR_GOOGLE_OAUTH_SCOPES,
+  VISITOR_BASIC_SCOPES,
 } from "@/egdesk-visitor-google";
 
 export default function LoginPage() {
