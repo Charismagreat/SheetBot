@@ -268,19 +268,17 @@ ${recruitForm.introduction}
     let isMounted = true;
 
     const checkAuth = async () => {
-      if (status === "authenticated") {
-        fetchData();
-        return;
-      }
+      // 1. 현재 브라우저에 인증된 실제 Visitor Google 계정 상태 확인
+      try {
+        const { getVisitorGoogleStatus } = await import("@/egdesk-visitor-google");
+        const visitorStatus = await getVisitorGoogleStatus();
 
-      if (status === "unauthenticated") {
-        // NextAuth 세션이 없더라도, 이지데스크 플러그인이 발급한 Visitor 세션이 있는지 확인
-        try {
-          const { getVisitorGoogleStatus } = await import("@/egdesk-visitor-google");
-          const visitorStatus = await getVisitorGoogleStatus();
+        if (visitorStatus?.connected && visitorStatus?.email) {
+          const currentEmail = session?.user?.email ? session.user.email.toLowerCase().trim() : null;
+          const targetEmail = visitorStatus.email.toLowerCase().trim();
 
-          if (visitorStatus?.connected && visitorStatus?.email) {
-            // Visitor 세션이 확인되면 NextAuth 세션을 동기화 발급받고 화면 새로고침
+          // 세션이 없거나(unauthenticated), 기존 세션 이메일과 로그인된 구글 계정이 다른 경우 즉시 동기화
+          if (status === "unauthenticated" || (currentEmail && currentEmail !== targetEmail)) {
             const syncRes = await apiFetch("/api/auth/google/session", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -294,10 +292,17 @@ ${recruitForm.introduction}
               return;
             }
           }
-        } catch (err) {
-          console.warn("Visitor session auto-recovery error:", err);
         }
+      } catch (err) {
+        console.warn("Visitor session auto-recovery error:", err);
+      }
 
+      if (status === "authenticated") {
+        fetchData();
+        return;
+      }
+
+      if (status === "unauthenticated") {
         // Visitor 세션조차 없을 때만 /login으로 안전하게 이동
         if (isMounted) {
           const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
