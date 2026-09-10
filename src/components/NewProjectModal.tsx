@@ -132,8 +132,10 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   const [isGrantingScope, setIsGrantingScope] = useState(false);
   const [titleSyncFeedback, setTitleSyncFeedback] = useState<{
     type: "success" | "error" | "info";
+    source?: "file" | "tab" | "web";
     message: string;
   } | null>(null);
+  const [titleSource, setTitleSource] = useState<"file" | "tab" | "web" | null>(null);
 
   const checkGoogleScopes = async () => {
     try {
@@ -199,6 +201,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
     setIsFetchingTitle(true);
     setTitleSyncFeedback(null);
     let resolvedTitle = "";
+    let detectedSource: "file" | "tab" | "web" = "file";
 
     try {
       const match = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
@@ -214,6 +217,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
         const found = files.find((f: any) => f.id === targetId);
         if (found?.name) {
           resolvedTitle = found.name;
+          detectedSource = "file";
         }
       } catch (err) {
         console.warn("Drive mime list warning:", err);
@@ -227,23 +231,37 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
           const found = files.find((f: any) => f.id === targetId);
           if (found?.name) {
             resolvedTitle = found.name;
+            detectedSource = "file";
           }
         } catch (err) {
           console.warn("Drive all list warning:", err);
         }
       }
 
-      // 1-3. 구글 시트 API를 통한 시트 탭명 조회 폴백 (스프레드시트 API 권한 경유)
+      // 1-3. 서버 사이드 메타데이터 조회 시도 (공개 시트 또는 웹 접근 가능 시트)
+      if (!resolvedTitle) {
+        try {
+          const res = await apiFetch(`/api/sheets/title?url=${encodeURIComponent(trimmed)}`);
+          const data = await res.json().catch(() => ({}));
+          if (data?.success && data?.title) {
+            resolvedTitle = data.title;
+            detectedSource = "web";
+          }
+        } catch (err) {
+          console.warn("Server title API warning:", err);
+        }
+      }
+
+      // 1-4. 구글 시트 API를 통한 시트 내부 탭명 조회 폴백 (비공개 시트 안전망)
       if (!resolvedTitle) {
         try {
           const rangeRes = await getVisitorSheetRange(targetId, "A1:A1").catch(() => null);
           if (rangeRes?.range) {
             // '시트1'!A1:A1 또는 Sheet1!A1:A1 형식에서 시트 탭 이름 추출
             const rawTabName = rangeRes.range.split("!")[0].replace(/^['"]|['"]$/g, "").trim();
-            if (rawTabName && !rawTabName.startsWith("Sheet") && !rawTabName.startsWith("시트")) {
+            if (rawTabName) {
               resolvedTitle = rawTabName;
-            } else if (rawTabName) {
-              resolvedTitle = rawTabName;
+              detectedSource = "tab";
             }
           }
         } catch (err) {
@@ -251,26 +269,24 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
         }
       }
 
-      // 2. 서버 사이드 API 조회 폴백 (/api/sheets/title)
-      if (!resolvedTitle) {
-        try {
-          const res = await apiFetch(`/api/sheets/title?url=${encodeURIComponent(trimmed)}`);
-          const data = await res.json().catch(() => ({}));
-          if (data?.success && data?.title) {
-            resolvedTitle = data.title;
-          }
-        } catch (err) {
-          console.warn("Server title API warning:", err);
-        }
-      }
-
       if (resolvedTitle) {
         setProjectName(resolvedTitle);
         setAutoDetectedTitle(resolvedTitle);
-        setTitleSyncFeedback({
-          type: "success",
-          message: `'${resolvedTitle}' 시트명이 성공적으로 입력되었습니다!`,
-        });
+        setTitleSource(detectedSource);
+
+        if (detectedSource === "tab") {
+          setTitleSyncFeedback({
+            type: "info",
+            source: "tab",
+            message: `'${resolvedTitle}' 시트 탭명이 채워졌습니다. 전체 시트 문서명으로 쓰시려면 직접 수정해 주세요.`,
+          });
+        } else {
+          setTitleSyncFeedback({
+            type: "success",
+            source: detectedSource,
+            message: `'${resolvedTitle}' 구글 시트 원본 제목이 성공적으로 동기화되었습니다!`,
+          });
+        }
       } else if (forceOverwrite) {
         if (scopeStatus === "needed") {
           setShowScopePrompt(true);
@@ -281,7 +297,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
         } else {
           setTitleSyncFeedback({
             type: "error",
-            message: "비공개 시트이거나 제목을 자동으로 가져올 수 없습니다. 프로젝트 이름을 직접 입력해 주세요.",
+            message: "시트 정보를 자동으로 가져오지 못했습니다. 프로젝트 이름을 직접 입력해 주세요.",
           });
         }
       }
@@ -1195,10 +1211,10 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                       onClick={handleSyncTitle}
                       disabled={isFetchingTitle}
                       className="absolute right-2 top-1.5 px-2.5 py-1 text-[10px] font-extrabold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                      title="구글 시트의 원본 제목을 가져와 프로젝트 이름에 채웁니다."
+                      title="입력된 구글 시트의 이름 정보를 읽어와 프로젝트 이름에 채웁니다."
                     >
                       <RefreshCw className={`w-3 h-3 ${isFetchingTitle ? "animate-spin" : ""}`} />
-                      <span>{isFetchingTitle ? "조회중" : "시트명 동기화"}</span>
+                      <span>{isFetchingTitle ? "조회 중..." : "시트명 가져오기"}</span>
                     </button>
                   )}
                 </div>
@@ -1337,36 +1353,34 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
               <div className="flex items-center justify-between">
                 <label className="font-bold text-slate-700 block">프로젝트 이름 *</label>
                 {sheetUrl.trim() && (
-                  <button
-                    type="button"
-                    onClick={handleSyncTitle}
-                    disabled={isFetchingTitle}
-                    className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full transition-all cursor-pointer border shadow-2xs ${
-                      isFetchingTitle
-                        ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                        : autoDetectedTitle && projectName === autoDetectedTitle
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
-                        : "bg-indigo-50 text-indigo-700 border-indigo-300 hover:bg-indigo-100"
-                    }`}
-                    title="클릭 시 구글 스프레드시트의 원본 이름으로 동기화합니다."
-                  >
-                    {isFetchingTitle ? (
-                      <>
-                        <RefreshCw className="w-3 h-3 animate-spin text-slate-500" />
-                        <span>동기화 중...</span>
-                      </>
-                    ) : autoDetectedTitle && projectName === autoDetectedTitle ? (
-                      <>
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                        <span>시트명 동기화됨</span>
-                      </>
+                  isFetchingTitle ? (
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                      <RefreshCw className="w-3 h-3 animate-spin text-slate-500" />
+                      <span>동기화 중...</span>
+                    </span>
+                  ) : autoDetectedTitle && projectName === autoDetectedTitle ? (
+                    titleSource === "tab" ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-300">
+                        <CheckCircle2 className="w-3 h-3 text-amber-600" />
+                        <span>시트 탭명 반영됨 (직접 수정 가능)</span>
+                      </span>
                     ) : (
-                      <>
-                        <RefreshCw className="w-3 h-3 text-indigo-600" />
-                        <span>시트명 동기화</span>
-                      </>
-                    )}
-                  </button>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-300">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        <span>시트 파일명 동기화됨</span>
+                      </span>
+                    )
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleSyncTitle}
+                      className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-all cursor-pointer"
+                      title="클릭 시 구글 스프레드시트의 이름으로 다시 동기화합니다."
+                    >
+                      <RefreshCw className="w-3 h-3 text-indigo-600" />
+                      <span>시트명 동기화</span>
+                    </button>
+                  )
                 )}
               </div>
               <input
@@ -1381,33 +1395,38 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                 required
               />
               {titleSyncFeedback && (
-                <div
-                  className={`mt-1.5 px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between gap-2 animate-in fade-in slide-in-from-top-1 duration-200 ${
-                    titleSyncFeedback.type === "success"
-                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                      : titleSyncFeedback.type === "error"
-                      ? "bg-rose-50 text-rose-800 border border-rose-200"
-                      : "bg-indigo-50 text-indigo-800 border border-indigo-200"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    {titleSyncFeedback.type === "success" ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    ) : (
-                      <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
-                    )}
-                    <span className="truncate">{titleSyncFeedback.message}</span>
+                titleSyncFeedback.source === "tab" ? (
+                  <div className="mt-1.5 p-2.5 rounded-xl text-xs bg-amber-50/90 text-amber-900 border border-amber-200/90 space-y-1 animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2 font-bold">
+                      <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>{titleSyncFeedback.message}</span>
+                    </div>
+                    <p className="text-[11px] text-amber-700 pl-6 leading-relaxed">
+                      💡 비공개 시트는 Google 보안 정책상 내부 탭명이 먼저 반영됩니다. 전체 스프레드시트 이름으로 사용하시려면 위 입력창에서 자유롭게 직접 수정해 주세요.
+                    </p>
                   </div>
-                  {titleSyncFeedback.type === "error" && scopeStatus === "needed" && (
-                    <button
-                      type="button"
-                      onClick={() => setShowScopePrompt(true)}
-                      className="px-2 py-0.5 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg shrink-0 transition-colors cursor-pointer"
-                    >
-                      권한 승인
-                    </button>
-                  )}
-                </div>
+                ) : titleSyncFeedback.type === "success" ? (
+                  <div className="mt-1.5 px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 bg-emerald-50 text-emerald-800 border border-emerald-200 animate-in fade-in duration-200">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>{titleSyncFeedback.message}</span>
+                  </div>
+                ) : (
+                  <div className="mt-1.5 px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between gap-2 bg-rose-50 text-rose-800 border border-rose-200 animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                      <span className="truncate">{titleSyncFeedback.message}</span>
+                    </div>
+                    {scopeStatus === "needed" && (
+                      <button
+                        type="button"
+                        onClick={() => setShowScopePrompt(true)}
+                        className="px-2 py-0.5 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg shrink-0 transition-colors cursor-pointer"
+                      >
+                        권한 승인
+                      </button>
+                    )}
+                  </div>
+                )
               )}
             </div>
 
