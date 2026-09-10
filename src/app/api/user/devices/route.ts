@@ -62,20 +62,44 @@ export async function GET(req: NextRequest) {
     // 3. DB 정보와 실시간 상태 병합
     const mergedDevices = userDevices.map((d: any) => {
       const live = liveDeviceMap[d.device_id || d.id] || {};
+      const isConnected =
+        Boolean(live.connected) ||
+        live.status === "connected" ||
+        live.status === "paired" ||
+        Boolean(live.last_paired_at);
+
+      const computedStatus = isConnected
+        ? "CONNECTED"
+        : d.status === "CONNECTED"
+        ? "CONNECTED"
+        : (d.status || "DISCONNECTED");
+
       return {
         id: d.id,
         deviceId: d.device_id || d.id,
         label: d.label,
-        phoneNumber: d.phone_number || live.phoneNumber || "",
+        phoneNumber: d.phone_number || live.phoneNumber || live.linked_phone || "",
         pairingMode: d.pairing_mode || "qr",
-        status: live.connected || live.status === "connected" ? "CONNECTED" : (d.status || "DISCONNECTED"),
+        status: computedStatus,
         battery: live.batteryLevel || live.battery || null,
         isCharging: !!live.isCharging,
         networkType: live.networkType || "Wi-Fi",
-        lastConnectedAt: live.lastConnectedAt || d.last_connected_at || d.created_at,
+        lastConnectedAt: live.lastConnectedAt || live.last_paired_at || d.last_connected_at || d.created_at,
         createdAt: d.created_at,
       };
     });
+
+    // 페어링 성공한 기기는 DB 상태도 CONNECTED로 동기화
+    for (const d of userDevices) {
+      const live = liveDeviceMap[d.device_id || d.id];
+      if (live && (live.status === "paired" || live.status === "connected") && d.status !== "CONNECTED") {
+        void updateRows(
+          "sheetbot_user_devices",
+          { status: "CONNECTED", last_connected_at: new Date().toISOString() },
+          { filters: { id: d.id, user_email: cleanEmail } }
+        ).catch(() => {});
+      }
+    }
 
     return NextResponse.json({ success: true, devices: mergedDevices });
   } catch (err: any) {
