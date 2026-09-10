@@ -154,16 +154,41 @@ export async function POST(request: Request) {
 
     try {
       if (spreadsheetId) {
-        // 생성 시점부터 AI 생성 코드를 직접 전달
-        const boundRes = await callAppsScriptTool("apps_script_create_bound", {
-          fileId: spreadsheetId,
-          title: name.trim(),
-          scriptCode: scriptCode || undefined,
-        });
-        if (boundRes && (boundRes.id || boundRes.projectId)) {
-          gasProjectId = boundRes.id || boundRes.projectId;
-          scriptId = boundRes.scriptId || gasProjectId;
-          scriptUrl = boundRes.scriptUrl || `https://script.google.com/d/${scriptId}/edit`;
+        // 1-0. 이미 해당 스프레드시트에 연결된 바운드 프로젝트가 있는지 우선 검색 (중복 생성 방지)
+        let existingGasProject: any = null;
+        try {
+          const listRes = await callAppsScriptTool("apps_script_list_projects", {});
+          const allProjects = Array.isArray(listRes)
+            ? listRes
+            : (listRes?.projects || listRes?.result || []);
+          existingGasProject = allProjects.find(
+            (p: any) =>
+              p.containerId === spreadsheetId ||
+              p.spreadsheetId === spreadsheetId ||
+              (p.containerUrl && p.containerUrl.includes(spreadsheetId)) ||
+              (p.spreadsheetUrl && p.spreadsheetUrl.includes(spreadsheetId))
+          );
+        } catch (listErr: any) {
+          console.warn("[Projects] list_projects check note:", listErr.message);
+        }
+
+        if (existingGasProject && (existingGasProject.id || existingGasProject.projectId)) {
+          gasProjectId = existingGasProject.id || existingGasProject.projectId;
+          scriptId = existingGasProject.scriptId || gasProjectId;
+          scriptUrl = existingGasProject.scriptUrl || `https://script.google.com/d/${scriptId}/edit`;
+          console.log(`[Projects] Reusing existing bound Apps Script project: ${gasProjectId}`);
+        } else {
+          // 기존 프로젝트가 없을 때만 신규 바운드 프로젝트 생성
+          const boundRes = await callAppsScriptTool("apps_script_create_bound", {
+            fileId: spreadsheetId,
+            title: name.trim(),
+            scriptCode: scriptCode || undefined,
+          });
+          if (boundRes && (boundRes.id || boundRes.projectId)) {
+            gasProjectId = boundRes.id || boundRes.projectId;
+            scriptId = boundRes.scriptId || gasProjectId;
+            scriptUrl = boundRes.scriptUrl || `https://script.google.com/d/${scriptId}/edit`;
+          }
         }
 
         // 1-1. 이지데스크 터널 인프라(EgdeskConfig.gs, EgdeskClient.gs) 자동 주입

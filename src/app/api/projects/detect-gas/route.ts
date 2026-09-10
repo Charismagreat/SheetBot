@@ -61,22 +61,7 @@ export async function GET(request: Request) {
       console.warn("[Detect-GAS] list_projects warning:", listErr.message);
     }
 
-    // 2. 만약 목록에 아직 등록되어 있지 않다면, apps_script_create_bound(force: false)로 기존 바인딩 감지 시도
     let gasProjectId = matchedProject?.id || matchedProject?.projectId || "";
-    if (!gasProjectId) {
-      try {
-        const boundRes = await callAppsScriptTool("apps_script_create_bound", {
-          fileId: spreadsheetId,
-          force: false,
-        });
-        if (boundRes && (boundRes.id || boundRes.projectId)) {
-          gasProjectId = boundRes.id || boundRes.projectId;
-          matchedProject = boundRes;
-        }
-      } catch (bindErr: any) {
-        console.warn("[Detect-GAS] create_bound check warning:", bindErr.message);
-      }
-    }
 
     if (!gasProjectId) {
       return NextResponse.json({
