@@ -36,6 +36,7 @@ import {
 import {
   startVisitorGoogleLogin,
   getVisitorGoogleStatus,
+  VISITOR_WORKSPACE_SCOPES,
   VISITOR_GOOGLE_OAUTH_SCOPES,
 } from "@/egdesk-visitor-google";
 import PromptGalleryModal from "./PromptGalleryModal";
