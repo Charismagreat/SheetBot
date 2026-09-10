@@ -218,23 +218,25 @@ export async function DELETE(req: NextRequest) {
 
     // 2. DB 소프트 삭제 (반드시 user_email 일치 검증)
     if (id) {
-      await updateRows("sheetbot_user_devices", {
-        filters: { id, user_email: cleanEmail },
-        updates: {
+      await updateRows(
+        "sheetbot_user_devices",
+        {
           status: "DISCONNECTED",
           deleted_at: now,
           deleted_by: cleanEmail,
         },
-      });
+        { filters: { id, user_email: cleanEmail } }
+      );
     } else if (deviceId) {
-      await updateRows("sheetbot_user_devices", {
-        filters: { device_id: deviceId, user_email: cleanEmail },
-        updates: {
+      await updateRows(
+        "sheetbot_user_devices",
+        {
           status: "DISCONNECTED",
           deleted_at: now,
           deleted_by: cleanEmail,
         },
-      });
+        { filters: { device_id: deviceId, user_email: cleanEmail } }
+      );
     }
 
     return NextResponse.json({
