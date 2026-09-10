@@ -169,21 +169,46 @@ export async function POST(request: Request) {
     let scriptUrl = "";
 
     try {
-      const boundRes = await callAppsScriptTool("apps_script_create_bound", {
-        fileId: spreadsheetId,
-        title: projectName,
-      });
-
-      if (boundRes && (boundRes.id || boundRes.projectId)) {
-        gasProjectId = boundRes.id || boundRes.projectId;
-        scriptId = boundRes.scriptId || gasProjectId;
-        scriptUrl = boundRes.scriptUrl || `https://script.google.com/d/${scriptId}/edit`;
-
-        // 이지데스크 터널 인프라 자동 주입
-        await callAppsScriptTool("apps_script_setup_egdesk_tunnel", {
-          projectId: gasProjectId,
-        }).catch((tErr: any) => console.warn("[Agent-Projects] Tunnel setup warning:", tErr.message));
+      // 이미 해당 스프레드시트에 연결된 바운드 프로젝트가 있는지 우선 검색
+      let existingGasProject: any = null;
+      try {
+        const listRes = await callAppsScriptTool("apps_script_list_projects", {});
+        const allProjects = Array.isArray(listRes)
+          ? listRes
+          : (listRes?.projects || listRes?.result || []);
+        existingGasProject = allProjects.find(
+          (p: any) =>
+            p.containerId === spreadsheetId ||
+            p.spreadsheetId === spreadsheetId ||
+            (p.containerUrl && p.containerUrl.includes(spreadsheetId)) ||
+            (p.spreadsheetUrl && p.spreadsheetUrl.includes(spreadsheetId))
+        );
+      } catch (listErr: any) {
+        console.warn("[Agent-Projects] list_projects check note:", listErr.message);
       }
+
+      if (existingGasProject && (existingGasProject.id || existingGasProject.projectId)) {
+        gasProjectId = existingGasProject.id || existingGasProject.projectId;
+        scriptId = existingGasProject.scriptId || gasProjectId;
+        scriptUrl = existingGasProject.scriptUrl || `https://script.google.com/d/${scriptId}/edit`;
+        console.log(`[Agent-Projects] Reusing existing bound Apps Script project: ${gasProjectId}`);
+      } else {
+        const boundRes = await callAppsScriptTool("apps_script_create_bound", {
+          fileId: spreadsheetId,
+          title: projectName,
+        });
+
+        if (boundRes && (boundRes.id || boundRes.projectId)) {
+          gasProjectId = boundRes.id || boundRes.projectId;
+          scriptId = boundRes.scriptId || gasProjectId;
+          scriptUrl = boundRes.scriptUrl || `https://script.google.com/d/${scriptId}/edit`;
+        }
+      }
+
+      // 이지데스크 터널 인프라 자동 주입
+      await callAppsScriptTool("apps_script_setup_egdesk_tunnel", {
+        projectId: gasProjectId,
+      }).catch((tErr: any) => console.warn("[Agent-Projects] Tunnel setup warning:", tErr.message));
     } catch (gasErr: any) {
       console.warn("[Agent-Projects] Apps Script create bound warning:", gasErr.message);
     }
