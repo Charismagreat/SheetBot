@@ -42,10 +42,11 @@ export async function POST(req: NextRequest) {
         deviceId: deviceId || undefined,
         isMarketing: false,
       });
-      if (res && (res.success || res.status === "sent" || res.messageId)) {
+      if (res && (res.success === true || res.status === "sent" || res.messageId)) {
         sendSuccess = true;
       } else {
-        sendSuccess = true; // 통신 예외 없으면 기본 성공 간주
+        sendSuccess = false;
+        errorDetail = res?.error || "문자 발송 장치 연결 거부 (기기 페어링 상태를 확인해 주세요)";
       }
     } catch (sendErr: any) {
       console.warn("[UserDevicesTest] send error:", sendErr.message);
