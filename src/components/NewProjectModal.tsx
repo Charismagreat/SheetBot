@@ -37,6 +37,7 @@ import {
   startVisitorGoogleLogin,
   getVisitorGoogleStatus,
   listVisitorDriveFiles,
+  getVisitorSheetRange,
   VISITOR_WORKSPACE_SCOPES,
   VISITOR_GOOGLE_OAUTH_SCOPES,
 } from "@/egdesk-visitor-google";
@@ -129,6 +130,10 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   const [scopeStatus, setScopeStatus] = useState<"loading" | "granted" | "needed">("loading");
   const [showScopePrompt, setShowScopePrompt] = useState(false);
   const [isGrantingScope, setIsGrantingScope] = useState(false);
+  const [titleSyncFeedback, setTitleSyncFeedback] = useState<{
+    type: "success" | "error" | "info";
+    message: string;
+  } | null>(null);
 
   const checkGoogleScopes = async () => {
     try {
@@ -192,17 +197,101 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
     if (!trimmed || trimmed.length < 20) return;
 
     setIsFetchingTitle(true);
+    setTitleSyncFeedback(null);
+    let resolvedTitle = "";
+
     try {
-      const res = await apiFetch(`/api/sheets/title?url=${encodeURIComponent(trimmed)}`);
-      const data = await res.json().catch(() => ({}));
-      if (data?.success && data?.title) {
-        if (forceOverwrite || !projectName.trim() || projectName === autoDetectedTitle) {
-          setProjectName(data.title);
+      const match = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+      const targetId = match ? match[1] : trimmed;
+
+      // 1-1. 사용자 방문자 드라이브: 스프레드시트 쿼리 검색 (최대 100건)
+      try {
+        const driveRes = await listVisitorDriveFiles({
+          pageSize: 100,
+          query: "mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false",
+        }).catch(() => null);
+        const files = driveRes?.files || (Array.isArray(driveRes) ? driveRes : []);
+        const found = files.find((f: any) => f.id === targetId);
+        if (found?.name) {
+          resolvedTitle = found.name;
         }
-        setAutoDetectedTitle(data.title);
+      } catch (err) {
+        console.warn("Drive mime list warning:", err);
       }
-    } catch (e) {
-      // 오류 시 침묵하여 수동 입력에 방해되지 않도록 처리
+
+      // 1-2. 사용자 방문자 드라이브: 전체 파일 목록 검색 폴백 (최대 100건)
+      if (!resolvedTitle) {
+        try {
+          const driveRes = await listVisitorDriveFiles({ pageSize: 100 }).catch(() => null);
+          const files = driveRes?.files || (Array.isArray(driveRes) ? driveRes : []);
+          const found = files.find((f: any) => f.id === targetId);
+          if (found?.name) {
+            resolvedTitle = found.name;
+          }
+        } catch (err) {
+          console.warn("Drive all list warning:", err);
+        }
+      }
+
+      // 1-3. 구글 시트 API를 통한 시트 탭명 조회 폴백 (스프레드시트 API 권한 경유)
+      if (!resolvedTitle) {
+        try {
+          const rangeRes = await getVisitorSheetRange(targetId, "A1:A1").catch(() => null);
+          if (rangeRes?.range) {
+            // '시트1'!A1:A1 또는 Sheet1!A1:A1 형식에서 시트 탭 이름 추출
+            const rawTabName = rangeRes.range.split("!")[0].replace(/^['"]|['"]$/g, "").trim();
+            if (rawTabName && !rawTabName.startsWith("Sheet") && !rawTabName.startsWith("시트")) {
+              resolvedTitle = rawTabName;
+            } else if (rawTabName) {
+              resolvedTitle = rawTabName;
+            }
+          }
+        } catch (err) {
+          console.warn("Sheet range fetch warning:", err);
+        }
+      }
+
+      // 2. 서버 사이드 API 조회 폴백 (/api/sheets/title)
+      if (!resolvedTitle) {
+        try {
+          const res = await apiFetch(`/api/sheets/title?url=${encodeURIComponent(trimmed)}`);
+          const data = await res.json().catch(() => ({}));
+          if (data?.success && data?.title) {
+            resolvedTitle = data.title;
+          }
+        } catch (err) {
+          console.warn("Server title API warning:", err);
+        }
+      }
+
+      if (resolvedTitle) {
+        setProjectName(resolvedTitle);
+        setAutoDetectedTitle(resolvedTitle);
+        setTitleSyncFeedback({
+          type: "success",
+          message: `'${resolvedTitle}' 시트명이 성공적으로 입력되었습니다!`,
+        });
+      } else if (forceOverwrite) {
+        if (scopeStatus === "needed") {
+          setShowScopePrompt(true);
+          setTitleSyncFeedback({
+            type: "error",
+            message: "구글 시트 접근 권한이 필요합니다. 상단의 '권한 승인' 버튼을 먼저 눌러주세요.",
+          });
+        } else {
+          setTitleSyncFeedback({
+            type: "error",
+            message: "비공개 시트이거나 제목을 자동으로 가져올 수 없습니다. 프로젝트 이름을 직접 입력해 주세요.",
+          });
+        }
+      }
+    } catch (e: any) {
+      if (forceOverwrite) {
+        setTitleSyncFeedback({
+          type: "error",
+          message: e?.message || "시트 제목 동기화 중 오류가 발생했습니다. 프로젝트 이름을 직접 입력해 주세요.",
+        });
+      }
     } finally {
       setIsFetchingTitle(false);
     }
@@ -244,12 +333,14 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
 
   // 구글 시트 원본 이름으로 동기화 버튼 클릭 핸들러
   const handleSyncTitle = () => {
-    if (!sheetUrl.trim()) return;
-    if (autoDetectedTitle && projectName !== autoDetectedTitle) {
-      setProjectName(autoDetectedTitle);
-    } else {
-      fetchSheetTitle(sheetUrl, true);
+    if (!sheetUrl.trim()) {
+      setTitleSyncFeedback({
+        type: "error",
+        message: "연결할 구글 스프레드시트 URL을 먼저 입력해 주세요.",
+      });
+      return;
     }
+    fetchSheetTitle(sheetUrl, true);
   };
 
   const handleApplyTemplate = (text: string) => {
@@ -1079,6 +1170,14 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                         detectExistingGas(val);
                       }
                     }}
+                    onPaste={(e) => {
+                      const pasted = e.clipboardData.getData("text");
+                      if (pasted && (pasted.includes("/spreadsheets/d/") || pasted.length >= 25)) {
+                        setSheetUrl(pasted);
+                        fetchSheetTitle(pasted, true);
+                        detectExistingGas(pasted);
+                      }
+                    }}
                     onBlur={() => {
                       if (sheetUrl) {
                         fetchSheetTitle(sheetUrl);
@@ -1086,10 +1185,22 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                       }
                     }}
                     placeholder="https://docs.google.com/spreadsheets/d/1vVmz56s0QrknZfhaOod_EX6-eoiYlXGW220inT5qXME/edit"
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    className="w-full pl-9 pr-24 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                     required={sourceMode === "EXISTING_URL"}
                   />
                   <FileSpreadsheet className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  {sheetUrl.trim() && (
+                    <button
+                      type="button"
+                      onClick={handleSyncTitle}
+                      disabled={isFetchingTitle}
+                      className="absolute right-2 top-1.5 px-2.5 py-1 text-[10px] font-extrabold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                      title="구글 시트의 원본 제목을 가져와 프로젝트 이름에 채웁니다."
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isFetchingTitle ? "animate-spin" : ""}`} />
+                      <span>{isFetchingTitle ? "조회중" : "시트명 동기화"}</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* 🛡️ 기존 Apps Script 코드 안전 감지 배너 및 모드 선택 카드 */}
@@ -1261,11 +1372,43 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
               <input
                 type="text"
                 value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
+                onChange={(e) => {
+                  setProjectName(e.target.value);
+                  if (titleSyncFeedback) setTitleSyncFeedback(null);
+                }}
                 placeholder="예: 일일 마감 및 매출 자동 집계"
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                 required
               />
+              {titleSyncFeedback && (
+                <div
+                  className={`mt-1.5 px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between gap-2 animate-in fade-in slide-in-from-top-1 duration-200 ${
+                    titleSyncFeedback.type === "success"
+                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                      : titleSyncFeedback.type === "error"
+                      ? "bg-rose-50 text-rose-800 border border-rose-200"
+                      : "bg-indigo-50 text-indigo-800 border border-indigo-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {titleSyncFeedback.type === "success" ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                    )}
+                    <span className="truncate">{titleSyncFeedback.message}</span>
+                  </div>
+                  {titleSyncFeedback.type === "error" && scopeStatus === "needed" && (
+                    <button
+                      type="button"
+                      onClick={() => setShowScopePrompt(true)}
+                      className="px-2 py-0.5 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg shrink-0 transition-colors cursor-pointer"
+                    >
+                      권한 승인
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* 템플릿 추천 버튼 */}
