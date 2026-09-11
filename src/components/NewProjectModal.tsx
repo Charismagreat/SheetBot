@@ -101,6 +101,9 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   } | null>(null);
   const [mergeMode, setMergeMode] = useState<"MERGE" | "OVERWRITE">("MERGE");
   const [includeCopilotSidebar, setIncludeCopilotSidebar] = useState(true);
+  const [enableSqliteSync, setEnableSqliteSync] = useState(true);
+  const [sqliteFolderName, setSqliteFolderName] = useState("SheetBot_Databases");
+  const [sqliteFileName, setSqliteFileName] = useState("");
   const [showCodePreview, setShowCodePreview] = useState(false);
 
   // Step 3 완료 화면 관련 상태 (URL 복사 및 즉시 별점 피드백)
@@ -633,6 +636,9 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
           existingScriptCode: existingGasInfo?.existingCode || undefined,
           mergeMode: existingGasInfo?.hasExistingScript ? mergeMode : "OVERWRITE",
           includeCopilotSidebar,
+          enableSqliteSync,
+          sqliteFolderName: sqliteFolderName.trim() || "SheetBot_Databases",
+          sqliteFileName: (sqliteFileName.trim() || `${projectName || 'sheetbot'}_데이터`).replace(/\.sqlite$/i, '') + '.sqlite',
         }),
       });
       const genJson = await genRes.json();
@@ -1568,6 +1574,56 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                 </p>
               </div>
             </label>
+
+            {/* Google Drive SQLite 양방향 연동 옵션 */}
+            <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2.5">
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={enableSqliteSync}
+                  onChange={(e) => setEnableSqliteSync(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 text-blue-600 rounded focus:ring-blue-500 border-gray-300"
+                />
+                <div className="flex-1 text-xs">
+                  <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                    <span>🗄️ Google Drive SQLite 양방향 연동 (데이터 전송 & 2가지 조회)</span>
+                    <span className="text-[10px] font-black px-1.5 py-0.2 bg-blue-100 text-blue-800 rounded-full">신규</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5 leading-normal">
+                    시트의 데이터를 구글 드라이브 SQLite DB로 아카이빙하고, 시트 안에서 간편 필터 및 AI 자연어(Text-to-SQL)로 즉시 조회합니다.
+                  </p>
+                </div>
+              </label>
+
+              {enableSqliteSync && (
+                <div className="pt-2 border-t border-slate-200/60 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      📁 드라이브 저장 폴더
+                    </label>
+                    <input
+                      type="text"
+                      value={sqliteFolderName}
+                      onChange={(e) => setSqliteFolderName(e.target.value)}
+                      placeholder="SheetBot_Databases"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      🗃️ SQLite 파일명 (.sqlite)
+                    </label>
+                    <input
+                      type="text"
+                      value={sqliteFileName}
+                      onChange={(e) => setSqliteFileName(e.target.value)}
+                      placeholder={projectName ? `${projectName}_데이터.sqlite` : 'sheetbot_데이터.sqlite'}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* 1단계 액션 버튼 */}
             <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
