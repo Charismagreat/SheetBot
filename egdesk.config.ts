@@ -1,13 +1,13 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-11T01:53:45.135Z
+ * Generated at: 2026-09-11T06:27:40.442Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
 
 export const EGDESK_CONFIG = {
   apiUrl: 'http://localhost:8080',
-  tunnelUrl: 'http://localhost:8080',
+  tunnelUrl: 'https://tunneling-service.onrender.com/t/mcp-server-fxkud1',
   apiKey: 'a67ddc0f-7e2b-4997-9a0b-9667a74c89d0',
 } as const;
 
@@ -46,7 +46,7 @@ export const TABLES = {
   table4: {
     name: 'sheetbot_dispatch_logs',
     displayName: 'SheetBot 알림 발송 이력 대장',
-    rowCount: 2,
+    rowCount: 3,
     columnCount: 19,
     columns: ['id', '_version', 'channel', 'event_type', 'rule_name', 'recipient', 'recipient_type', 'title', 'content', 'status', 'error_message', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -74,7 +74,7 @@ export const TABLES = {
   table8: {
     name: 'sheetbot_ai_usage_logs',
     displayName: 'SheetBot AI 토큰 및 사용료 감사 대장',
-    rowCount: 10,
+    rowCount: 13,
     columnCount: 21,
     columns: ['id', '_version', 'user_email', 'user_name', 'caller', 'purpose', 'model', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'estimated_cost_usd', 'estimated_cost_krw', 'prompt_preview', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -137,7 +137,7 @@ export const TABLES = {
   table17: {
     name: 'sheetbot_payment_orders',
     displayName: 'SheetBot 토큰 결제 및 충전 주문 대장',
-    rowCount: 9,
+    rowCount: 10,
     columnCount: 18,
     columns: ['id', '_version', 'order_id', 'user_email', 'package_name', 'amount_krw', 'tokens_credited', 'pg_provider', 'payment_method', 'status', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,

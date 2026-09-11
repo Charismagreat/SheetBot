@@ -27,11 +27,7 @@ const getLocalIPs = () => {
   }
 };
 
-const nextConfig: any = {
-  eslint: {
-    // Always skip ESLint errors to prevent blocking on auto-generated files
-    ignoreDuringBuilds: true,
-  },
+const nextConfig: NextConfig = {
   // Only use basePath in production mode, not in dev mode
   basePath: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
   assetPrefix: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
@@ -40,6 +36,10 @@ const nextConfig: any = {
   typescript: {
     // Always skip TypeScript errors to prevent blocking on auto-generated files
     ignoreBuildErrors: true,
+  },
+  eslint: {
+    // Always skip ESLint errors to prevent blocking on auto-generated files
+    ignoreDuringBuilds: true,
   },
   experimental: {
     serverActions: {
@@ -78,14 +78,6 @@ const nextConfig: any = {
       {
         source: "/__sheets_proxy/:path*",
         destination: `${egdeskApiUrl}/sheets/tools/call`,
-      },
-      {
-        source: "/__visitor_google_proxy/:path*",
-        destination: `${egdeskApiUrl}/visitor-google/tools/call`,
-      },
-      {
-        source: "/__visitor_auth_proxy/:path*",
-        destination: `${egdeskApiUrl}/visitor-auth/tools/call`,
       },
     ];
   },
