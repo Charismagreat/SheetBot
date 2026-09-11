@@ -391,19 +391,40 @@ ${existingScriptCode.trim()}
     if (enableSqliteSync) {
       const targetSqliteFileName = (sqliteFileName.trim() || `${customTitle || 'sheetbot'}_데이터`).replace(/\.sqlite$/i, '') + '.sqlite';
       sqliteSyncPromptSection = `
-[🗄️ Google Drive SQLite 양방향 연동 (데이터 전송 & 2가지 조회 모드) 필수 탑재 지침]:
-- 사용자가 구글 시트의 데이터를 구글 드라이브의 SQLite DB 파일('${targetSqliteFileName}')로 안전하게 전송(아카이빙)하고, 시트 안에서 간편 필터 및 AI 자연어(Text-to-SQL)로 즉시 조회하여 시트에 채우는 기능을 필수 구현하세요.
-1. 상단 onOpen() 메뉴에 항목 추가 (기존 메뉴와 조화롭게 연결):
-   .addItem('📤 [1] 미전송 데이터 SQLite로 전송', 'exportOrdersToSqlite')
+[🗄️ Google Drive SQLite 양방향 연동 및 전송·조회·수정·삭제(CRUD) 완성형 탑재 지침]:
+- 사용자가 구글 시트의 데이터를 구글 드라이브의 SQLite DB 파일('${targetSqliteFileName}')로 안전하게 전송하고, 시트 안에서 조건 검색 및 AI 자연어(Text-to-SQL)로 즉시 조회하며, 시트 셀 직접 편집 및 사이드바 폼을 통한 수정/삭제(CRUD)를 완벽 지원하도록 구현하세요.
+
+1. 상단 onOpen() 메뉴 3종 세트 필수 등록:
+   .addItem('📤 [1] 미전송 데이터 SQLite로 전송 (구글 드라이브 동기화)', 'exportOrdersToSqlite')
    .addItem('📥 [2] SQLite 데이터 조회 및 시트 추출', 'showSqliteQuerySidebar')
+   .addItem('💾 [3] 조회결과 시트 수정/삭제 내역 SQLite에 반영', 'syncEditedResultsToSqlite')
+
 2. 데이터 전송 함수 exportOrdersToSqlite():
    - 시트에서 '전송완료'가 아닌 미전송 데이터 행들을 추출.
-   - egdeskToolsCall 또는 백엔드 API를 통해 폴더('${sqliteFolderName}'), 파일명('${targetSqliteFileName}')으로 전송.
-   - 전송 성공 후 해당 행들의 마지막 열에 '전송완료 (YYYY-MM-DD HH:mm)' 타임스탬프 기록.
-3. 조회 사이드바 showSqliteQuerySidebar() 및 getSqliteQuerySidebarHtml():
-   - HtmlService로 사이드바 표출 (너비 360).
-   - [모드 1: 간편 조건 검색 탭]: 기간(시작일/종료일), 검색어 입력 ➔ 조회 실행 시 백엔드 조회 API 호출 ➔ 'SQLite_조회결과' 탭에 2차원 배열 데이터 기입 및 헤더 서식 자동 적용.
-   - [모드 2: 🤖 AI 자연어 검색 탭 (Text-to-SQL)]: 일상어 질문(예: "지난달 50만원 이상 거래처") 입력 ➔ 백엔드 AI 쿼리 API 호출 ➔ AI가 생성한 SQL 및 실행 결과를 'SQLite_조회결과' 탭에 자동 렌더링.
+   - egdeskToolsCall('user-data', 'user_data_insert_rows', { tableName: '${sqliteFileName.replace(/[^a-zA-Z0-9_]/g, '_') || 'sheetbot_table'}', rows: rowsToExport }) 호출.
+   - Google Drive 폴더('${sqliteFolderName}') 내 '${targetSqliteFileName}' 파일 내용도 최신 JSON 덤프로 자동 생성/동기화.
+   - 전송 성공 후 해당 행들의 마지막 열에 '전송완료 (YYYY-MM-DD HH:mm)' 타임스탬프 및 녹색 배경 서식 기록.
+
+3. 2가지 조회 모드 및 'SQLite_조회결과' 시트 렌더링 (서식 및 ID 보존 원칙):
+   - executeSqliteQuery(mode, filterParams, aiPrompt):
+     * [조건 검색]: 날짜 범위, 상호/키워드, 색상/유형, 최소금액/수량 등 동적 WHERE 조건 SQL 생성 및 실행.
+     * [🤖 AI 검색 (Text-to-SQL)]: egdeskToolsCall('ai-caller', 'ai_caller_call', ...) 호출로 자연어를 단일 SELECT 문으로 변환 후 안전 검증 및 실행.
+   - renderQueryResultsToSheet(rows, queryTitle):
+     * 'SQLite_조회결과' 탭이 없으면 생성, 있으면 sheet.clear() 및 sheet.clearFormats()로 이전 날짜 서식 오염 완전 리셋.
+     * A열은 반드시 'SQLite ID'로 배치하고, sheet.getRange(3, 1, tableData.length, 1).setNumberFormat("0") 정수 서식을 강제 적용하여 날짜로 오인식되지 않도록 방지.
+     * B열부터 기존 데이터 컬럼 출력, 타이틀 행 및 합계 행 추가.
+
+4. 📊 [방안 1] 시트 직접 편집 후 일괄 동기화 (syncEditedResultsToSqlite):
+   - 사용자가 'SQLite_조회결과' 시트에서 수량, 금액, 상태 등을 직접 수정한 뒤 메뉴 [3]을 실행하면 작동.
+   - A열 ID를 안전하게 파싱하는 extractSqliteId 헬퍼 함수를 필수 탑재 (셀이 날짜 객체로 들어올 경우 1899-12-30 기준일 역산 2중 방어).
+   - 상태가 '삭제'인 행은 user_data_delete_rows로 삭제하고, 나머지 행은 user_data_update_rows로 일괄 수정 반영.
+   - 구글 드라이브 동기화 파일('${targetSqliteFileName}')도 최신 상태로 백업 갱신.
+
+5. ✏️ [방안 2] 사이드바 3단 탭 및 단건 폼 제어 (Sidebar.html 독립 파일 분리):
+   - 인라인 스크립트 파싱 충돌 방지를 위해 showSqliteQuerySidebar()는 HtmlService.createHtmlOutputFromFile("Sidebar")를 호출.
+   - 사이드바 상단 탭: [조건 검색] | [AI 검색] | [행 수정/삭제] (360px 너비 최적화).
+   - AI 검색 탭에는 ⭐ 최근 성공한 질문 목록 및 즐겨찾기 보관함(localStorage) 제공.
+   - 행 수정/삭제 탭: 시트에서 원하는 행을 클릭 후 '선택 행 불러오기'(getSelectedRowDataForSidebar) ➔ 폼에 값 자동 입력 ➔ '수정 저장'(updateSingleRowFromSidebar) 또는 '삭제'(deleteSingleRowFromSidebar)로 시트와 DB에 즉시 동시 반영.
 `;
     }
 
