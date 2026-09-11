@@ -287,13 +287,6 @@ export async function POST(request: Request) {
           dependencies: {},
           exceptionLogging: "STACKDRIVER",
           runtimeVersion: "V8",
-          oauthScopes: [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/script.container.ui",
-            "https://www.googleapis.com/auth/script.external_request",
-            "https://www.googleapis.com/auth/script.scriptapp",
-            "https://www.googleapis.com/auth/drive",
-          ],
         },
         null,
         2

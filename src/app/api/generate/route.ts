@@ -323,7 +323,7 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
     "구현된 세부 기능 3"
   ],
   "scriptCode": "/* Code.gs 전체 소스코드 (onOpen, 사이드바 표출, egdeskToolsCall을 활용한 깔끔하고 강력한 자동화 코드) */",
-  "manifest": "{\\n  \\"timeZone\\": \\"Asia/Seoul\\",\\n  \\"dependencies\\": {},\\n  \\"exceptionLogging\\": \\"STACKDRIVER\\",\\n  \\"runtimeVersion\\": \\"V8\\",\\n  \\"oauthScopes\\": [\\"https://www.googleapis.com/auth/spreadsheets\\", \\"https://www.googleapis.com/auth/script.container.ui\\", \\"https://www.googleapis.com/auth/script.external_request\\", \\"https://www.googleapis.com/auth/script.scriptapp\\", \\"https://www.googleapis.com/auth/drive\\"]\\n}",
+  "manifest": "{\\n  \\"timeZone\\": \\"Asia/Seoul\\",\\n  \\"dependencies\\": {},\\n  \\"exceptionLogging\\": \\"STACKDRIVER\\",\\n  \\"runtimeVersion\\": \\"V8\\"\\n}",
   "triggers": [
     { "type": "ON_OPEN", "description": "시트 열기 시 커스텀 메뉴 및 환경 자동 초기화" }
   ]
