@@ -32,6 +32,8 @@ import {
   FolderPlus,
   KeyRound,
   Terminal,
+  Database,
+  Search,
 } from "lucide-react";
 
 export default function GuidePage() {
@@ -187,6 +189,22 @@ export default function GuidePage() {
       icon: Code,
       color: "border-blue-200 bg-blue-50/60 text-blue-800",
       prompt: "내 컴퓨터 C:\\data\\erp.sqlite 파일의 orders 테이블에서 '삼전상사'의 이번 달 발주 품목만 SQL로 추출해서, 구글 시트 견적서 양식의 14행부터 차례대로 기입해줘.",
+    },
+    {
+      id: "ex_sqlite_crud_all",
+      title: "구글 드라이브 SQLite 양방향 동기화 및 시트/사이드바 수정·삭제(CRUD) 올인원",
+      tag: "Google Drive SQLite CRUD (NEW)",
+      icon: Database,
+      color: "border-emerald-200 bg-emerald-50/60 text-emerald-800",
+      prompt: "구글 시트의 주문 데이터를 구글 드라이브 'SheetBot_Databases' 폴더의 SQLite DB 파일로 전송하고, 사이드바에서 조건 및 AI 자연어로 조회하며, 시트 셀에서 직접 편집한 내용이나 사이드바 단건 폼에서 수정·삭제한 내역이 SQLite DB 및 드라이브 파일에 양방향으로 동기화(CRUD)되도록 구현해줘.",
+    },
+    {
+      id: "ex_sqlite_ai_text2sql",
+      title: "Gemini AI Text-to-SQL 자연어 주문 조회 및 즐겨찾기 보관함",
+      tag: "AI 자연어 Text-to-SQL",
+      icon: Search,
+      color: "border-indigo-200 bg-indigo-50/60 text-indigo-800",
+      prompt: "사이드바의 AI 검색 탭에서 '주문금액 상위 5건', '수량 100개 이상'처럼 자연어로 질문하면 Gemini AI가 SELECT SQL로 즉시 변환하여 시트에 자동 서식과 함께 추출하고, 최근 성공한 질문을 보관함과 즐겨찾기(⭐)로 관리할 수 있도록 해줘.",
     },
   ];
 
@@ -425,6 +443,73 @@ export default function GuidePage() {
               <p className="text-[11px] text-slate-500 leading-relaxed">
                 안티그라비티가 완성된 코드를 브릿지 URL로 전송하면 구글 스프레드시트에 즉시 자동 배포되며, 상단 메뉴 등록 및 주기적 정기 스케줄까지 자율 가동됩니다.
               </p>
+            </div>
+          </div>
+        </section>
+
+        {/* 신규 기능: Google Drive SQLite 양방향 연동 & 시트/사이드바 수정·삭제(CRUD) & AI 자연어 검색 가이드 */}
+        <section className="bg-gradient-to-r from-emerald-50 via-teal-50 to-slate-50 rounded-3xl p-6 sm:p-10 border border-emerald-200/80 space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-700 text-white rounded-full text-xs font-black">
+                <Database className="w-3.5 h-3.5" />
+                <span>엔터프라이즈 신기능: Google Drive SQLite 양방향 동기화 &amp; 풀 CRUD</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900">
+                구글 드라이브 SQLite 연동: 데이터 전송·조회·수정·삭제(CRUD)
+              </h2>
+              <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+                스프레드시트의 방대한 데이터를 구글 드라이브의 SQLite DB 파일(<strong>SheetBot_Databases/파일명.sqlite</strong>)로 안전하게 아카이빙하고,
+                정밀 조건 검색과 <strong>Gemini AI 자연어(Text-to-SQL)</strong>를 통해 원하는 데이터만 시트에 즉시 추출합니다.
+                추출된 데이터는 시트에서 직접 수정하거나 사이드바 폼을 통해 SQLite DB와 양방향으로 실시간 동기화할 수 있습니다.
+              </p>
+            </div>
+          </div>
+
+          {/* 3대 핵심 메뉴 및 CRUD 아키텍처 안내 */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+            <div className="p-5 rounded-2xl bg-white border border-emerald-100 shadow-2xs space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-extrabold text-[10px]">
+                  메뉴 [1] 데이터 전송
+                </span>
+              </div>
+              <h4 className="font-extrabold text-xs text-slate-900">구글 드라이브 SQLite 자동 동기화</h4>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                시트에서 미전송 상태인 주문/거래 내역을 원클릭으로 구글 드라이브 지정 폴더의 SQLite DB 파일로 안전하게 전송합니다. 전송된 행은 초록색 완료 라벨이 마킹되어 중복 전송이 방지됩니다.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-white border border-indigo-100 shadow-2xs space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-extrabold text-[10px]">
+                  메뉴 [2] 데이터 조회
+                </span>
+              </div>
+              <h4 className="font-extrabold text-xs text-slate-900">조건 필터 &amp; AI 자연어 (Text-to-SQL)</h4>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                기간, 상호, 금액 등 상세 조건 검색뿐만 아니라, "지난달 주문금액 상위 5건"처럼 일상어로 질문하면 AI가 SQL로 즉시 변환하여 시트에 자동 서식과 합계 행을 구성해 추출합니다.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-white border border-teal-100 shadow-2xs space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded-md bg-teal-100 text-teal-800 font-extrabold text-[10px]">
+                  메뉴 [3] 수정·삭제 (CRUD)
+                </span>
+              </div>
+              <h4 className="font-extrabold text-xs text-slate-900">시트 직접 편집 &amp; 사이드바 폼 제어</h4>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                'SQLite_조회결과' 탭에서 수량/금액을 바꾸거나 상태를 '삭제'로 변경한 뒤 메뉴 [3]을 누르면 DB에 일괄 반영됩니다. 사이드바 [행 수정/삭제] 탭에서 개별 건을 불러와 정밀 수정·삭제도 가능합니다.
+              </p>
+            </div>
+          </div>
+
+          {/* 2중 안전장치 배너 */}
+          <div className="bg-white/80 border border-emerald-200/80 rounded-2xl p-4 flex items-center justify-between text-xs text-slate-700">
+            <div className="flex items-center space-x-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span><strong>A열 SQLite ID 완벽 보호:</strong> 시트 날짜 서식 오염을 방지하는 정수 서식 강제 및 날짜 오인식 역산 2중 방어 코드가 적용되어 대량 데이터도 안전하게 동기화됩니다.</span>
             </div>
           </div>
         </section>
