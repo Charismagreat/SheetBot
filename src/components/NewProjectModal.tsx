@@ -100,6 +100,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
     scriptUrl?: string;
   } | null>(null);
   const [mergeMode, setMergeMode] = useState<"MERGE" | "OVERWRITE">("MERGE");
+  const [includeCopilotSidebar, setIncludeCopilotSidebar] = useState(true);
   const [showCodePreview, setShowCodePreview] = useState(false);
 
   // Step 3 완료 화면 관련 상태 (URL 복사 및 즉시 별점 피드백)
@@ -631,6 +632,7 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
           analyzedSchema, // 검증 및 조율된 시트 구조 주입
           existingScriptCode: existingGasInfo?.existingCode || undefined,
           mergeMode: existingGasInfo?.hasExistingScript ? mergeMode : "OVERWRITE",
+          includeCopilotSidebar,
         }),
       });
       const genJson = await genRes.json();
@@ -1548,6 +1550,25 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
               />
             </div>
 
+            {/* 시트 내장 AI 코파일럿 사이드바 옵션 */}
+            <label className="flex items-start gap-2.5 p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-2xl cursor-pointer hover:bg-indigo-100/60 transition-colors">
+              <input
+                type="checkbox"
+                checked={includeCopilotSidebar}
+                onChange={(e) => setIncludeCopilotSidebar(e.target.checked)}
+                className="w-4 h-4 mt-0.5 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300"
+              />
+              <div className="flex-1 text-xs">
+                <div className="flex items-center gap-1.5 font-bold text-indigo-950">
+                  <span>🤖 구글 시트 내장형 AI 코파일럿 사이드바 자동 포함</span>
+                  <span className="text-[10px] font-black px-1.5 py-0.2 bg-indigo-200 text-indigo-800 rounded-full">추천</span>
+                </div>
+                <p className="text-[11px] text-indigo-700/90 mt-0.5 leading-normal">
+                  배포 후 구글 시트 상단 메뉴에서 사이드바를 열어 새 요구사항을 말하면, AI가 코드를 다시 생성하여 시트에 즉시 자가 주입(Self-Update)합니다.
+                </p>
+              </div>
+            </label>
+
             {/* 1단계 액션 버튼 */}
             <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 font-bold">
@@ -1654,6 +1675,18 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                   <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
                     {analyzedSchema.archetypeName || analyzedSchema.archetype || "📊 누적 대장형"}
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => setIncludeCopilotSidebar(!includeCopilotSidebar)}
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors cursor-pointer ${
+                      includeCopilotSidebar
+                        ? "bg-purple-100 text-purple-800 border-purple-300 hover:bg-purple-200"
+                        : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
+                    }`}
+                    title="클릭하여 구글 시트 내장 AI 코파일럿 포함 여부를 변경합니다."
+                  >
+                    {includeCopilotSidebar ? "🤖 AI 코파일럿 포함" : "🤖 AI 코파일럿 제외"}
+                  </button>
                 </div>
               </div>
 

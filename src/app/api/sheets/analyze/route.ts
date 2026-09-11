@@ -39,6 +39,7 @@ export async function POST(request: Request) {
     // 1. 소스 유형별 유효성 검사 및 구조 요약 준비
     let sheetStructureSummary = "";
     let spreadsheetId = "";
+    let fullContext: any = null;
 
     if (sourceType === "NEW_SHEET") {
       // 새 시트 자동 생성 모드: URL 불필요, 요구사항 기반으로 최적의 구조 설계
@@ -79,7 +80,6 @@ ${sampleRowsStr || "  (데이터 없음)"}
       }
 
       // 스프레드시트 컨텍스트 조회 (MCP sheets_get_full_context 경유)
-      let fullContext: any = null;
       try {
         fullContext = await getSpreadsheetFullContext(spreadsheetId, 8);
       } catch (err: any) {

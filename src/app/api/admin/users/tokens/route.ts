@@ -30,14 +30,17 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
 
     // 1. 지갑 잔액 업데이트
-    await updateRows("sheetbot_user_wallets", {
-      filters: { id: wallet.id },
-      updates: {
-        balance_tokens: newBalance,
-        updated_at: now,
-        updated_by: `admin:${adminEmail}`,
-      },
-    });
+    await updateRows(
+       "sheetbot_user_wallets",
+       {
+         balance_tokens: newBalance,
+         updated_at: now,
+         updated_by: `admin:${adminEmail}`,
+       },
+       {
+         filters: { id: String(wallet.id) },
+       }
+     );
 
     // 2. 관리자 토큰 조정 이력을 결제/주문 대장에 투명하게 기록
     const orderId = `admin_adj_${Date.now()}`;
