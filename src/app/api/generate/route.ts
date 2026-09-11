@@ -91,6 +91,9 @@ export async function POST(request: Request) {
       existingScriptCode,
       mergeMode = "OVERWRITE",
       includeCopilotSidebar = true,
+      enableSqliteSync = false,
+      sqliteFolderName = "SheetBot_Databases",
+      sqliteFileName = "",
     } = body;
 
     const aiSettings = await getAiModelSettings();
@@ -384,6 +387,26 @@ ${existingScriptCode.trim()}
 `;
     }
 
+    let sqliteSyncPromptSection = "";
+    if (enableSqliteSync) {
+      const targetSqliteFileName = (sqliteFileName.trim() || `${customTitle || 'sheetbot'}_데이터`).replace(/\.sqlite$/i, '') + '.sqlite';
+      sqliteSyncPromptSection = `
+[🗄️ Google Drive SQLite 양방향 연동 (데이터 전송 & 2가지 조회 모드) 필수 탑재 지침]:
+- 사용자가 구글 시트의 데이터를 구글 드라이브의 SQLite DB 파일('${targetSqliteFileName}')로 안전하게 전송(아카이빙)하고, 시트 안에서 간편 필터 및 AI 자연어(Text-to-SQL)로 즉시 조회하여 시트에 채우는 기능을 필수 구현하세요.
+1. 상단 onOpen() 메뉴에 항목 추가 (기존 메뉴와 조화롭게 연결):
+   .addItem('📤 [1] 미전송 데이터 SQLite로 전송', 'exportOrdersToSqlite')
+   .addItem('📥 [2] SQLite 데이터 조회 및 시트 추출', 'showSqliteQuerySidebar')
+2. 데이터 전송 함수 exportOrdersToSqlite():
+   - 시트에서 '전송완료'가 아닌 미전송 데이터 행들을 추출.
+   - egdeskToolsCall 또는 백엔드 API를 통해 폴더('${sqliteFolderName}'), 파일명('${targetSqliteFileName}')으로 전송.
+   - 전송 성공 후 해당 행들의 마지막 열에 '전송완료 (YYYY-MM-DD HH:mm)' 타임스탬프 기록.
+3. 조회 사이드바 showSqliteQuerySidebar() 및 getSqliteQuerySidebarHtml():
+   - HtmlService로 사이드바 표출 (너비 360).
+   - [모드 1: 간편 조건 검색 탭]: 기간(시작일/종료일), 검색어 입력 ➔ 조회 실행 시 백엔드 조회 API 호출 ➔ 'SQLite_조회결과' 탭에 2차원 배열 데이터 기입 및 헤더 서식 자동 적용.
+   - [모드 2: 🤖 AI 자연어 검색 탭 (Text-to-SQL)]: 일상어 질문(예: "지난달 50만원 이상 거래처") 입력 ➔ 백엔드 AI 쿼리 API 호출 ➔ AI가 생성한 SQL 및 실행 결과를 'SQLite_조회결과' 탭에 자동 렌더링.
+`;
+    }
+
     const userMessage = `[회원 계정]: ${userEmail}
 [대상 구글 시트]: ${sheetUrl || "연결된 스프레드시트"}
 [프로젝트 명칭]: ${customTitle || "스마트 시트 자동화"}
@@ -391,6 +414,7 @@ ${existingScriptCode.trim()}
 ${schemaPromptSection}
 ${existingScriptSection}
 ${copilotSidebarPromptSection}
+${sqliteSyncPromptSection}
 [사용자 요구사항]:
 ${prompt}
 
