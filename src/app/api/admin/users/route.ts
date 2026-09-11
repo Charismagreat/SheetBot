@@ -162,9 +162,8 @@ export async function PUT(req: NextRequest) {
       if (role) updateData.role = role;
       if (typeof note === "string") updateData.note = note;
 
-      await updateRows("sheetbot_users", {
+      await updateRows("sheetbot_users", updateData, {
         filters: { email: targetEmail },
-        updates: updateData,
       });
     } else {
       await insertRows("sheetbot_users", [
@@ -192,14 +191,17 @@ export async function PUT(req: NextRequest) {
       }).catch(() => ({ rows: [] }));
 
       if (walletRes.rows && walletRes.rows.length > 0) {
-        await updateRows("sheetbot_user_wallets", {
-          filters: { user_email: targetEmail },
-          updates: {
+        await updateRows(
+          "sheetbot_user_wallets",
+          {
             tier,
             updated_at: now,
             updated_by: adminEmail,
           },
-        });
+          {
+            filters: { user_email: targetEmail },
+          }
+        );
       }
     }
 

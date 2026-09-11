@@ -37,3 +37,4 @@ next-env.d.ts
 # backups
 .backup/
 *.backup.*
+scratch*.gs

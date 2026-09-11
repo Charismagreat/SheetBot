@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
     // 1. 회원의 활성화된 스마트 알림 규칙 목록 조회
     const rulesRes = await queryTable("sheetbot_user_smart_rules", {
-      filters: { user_email: cleanEmail, is_active: 1 },
+      filters: { user_email: cleanEmail, is_active: "1" },
       limit: 50,
     }).catch(() => ({ rows: [] }));
 

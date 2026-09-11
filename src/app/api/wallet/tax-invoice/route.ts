@@ -51,13 +51,13 @@ export async function POST(request: Request) {
     }
 
     const now = new Date().toISOString();
-    const reqId = 	ax__;
+    const reqId = `tax_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
     await insertRows("sheetbot_tax_invoices", [
       {
         id: reqId,
         uuid: crypto.randomUUID(),
-        order_id: orderId || ord_,
+        order_id: orderId || `ord_${Date.now()}`,
         user_email: userEmail.toLowerCase().trim(),
         type: type || "TAX_INVOICE",
         company_name: companyName || "",

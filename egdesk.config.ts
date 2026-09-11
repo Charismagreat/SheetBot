@@ -1,13 +1,13 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-10T06:50:46.701Z
+ * Generated at: 2026-09-11T01:53:45.135Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
 
 export const EGDESK_CONFIG = {
   apiUrl: 'http://localhost:8080',
-  tunnelUrl: 'https://tunneling-service.onrender.com/t/mcp-server-fxkud1',
+  tunnelUrl: 'http://localhost:8080',
   apiKey: 'a67ddc0f-7e2b-4997-9a0b-9667a74c89d0',
 } as const;
 
@@ -46,7 +46,7 @@ export const TABLES = {
   table4: {
     name: 'sheetbot_dispatch_logs',
     displayName: 'SheetBot 알림 발송 이력 대장',
-    rowCount: 1,
+    rowCount: 2,
     columnCount: 19,
     columns: ['id', '_version', 'channel', 'event_type', 'rule_name', 'recipient', 'recipient_type', 'title', 'content', 'status', 'error_message', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -74,7 +74,7 @@ export const TABLES = {
   table8: {
     name: 'sheetbot_ai_usage_logs',
     displayName: 'SheetBot AI 토큰 및 사용료 감사 대장',
-    rowCount: 7,
+    rowCount: 10,
     columnCount: 21,
     columns: ['id', '_version', 'user_email', 'user_name', 'caller', 'purpose', 'model', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'estimated_cost_usd', 'estimated_cost_krw', 'prompt_preview', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -88,14 +88,14 @@ export const TABLES = {
   table10: {
     name: 'sheetbot_projects',
     displayName: 'SheetBot 프로젝트 대장',
-    rowCount: 2,
+    rowCount: 3,
     columnCount: 25,
     columns: ['id', '_version', 'user_email', 'name', 'description', 'spreadsheet_id', 'spreadsheet_url', 'gas_project_id', 'script_id', 'script_url', 'script_code', 'manifest', 'summary', 'features', 'triggers', 'prompt', 'status', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
   table11: {
     name: 'sheetbot_user_dispatch_logs',
     displayName: 'SheetBot 회원 알림 발송 이력 대장',
-    rowCount: 0,
+    rowCount: 4,
     columnCount: 18,
     columns: ['id', '_version', 'user_email', 'rule_id', 'rule_name', 'device_id', 'recipient', 'content', 'status', 'error_message', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -109,7 +109,7 @@ export const TABLES = {
   table13: {
     name: 'sheetbot_user_devices',
     displayName: 'SheetBot 회원 SMS 디바이스 대장',
-    rowCount: 0,
+    rowCount: 2,
     columnCount: 18,
     columns: ['id', '_version', 'user_email', 'label', 'phone_number', 'device_id', 'pairing_mode', 'google_profile_name', 'status', 'last_connected_at', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -137,7 +137,7 @@ export const TABLES = {
   table17: {
     name: 'sheetbot_payment_orders',
     displayName: 'SheetBot 토큰 결제 및 충전 주문 대장',
-    rowCount: 6,
+    rowCount: 9,
     columnCount: 18,
     columns: ['id', '_version', 'order_id', 'user_email', 'package_name', 'amount_krw', 'tokens_credited', 'pg_provider', 'payment_method', 'status', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,

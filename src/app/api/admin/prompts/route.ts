@@ -223,9 +223,11 @@ export async function DELETE(req: NextRequest) {
     }
 
     const now = new Date().toISOString();
-    await updateRows("sheetbot_prompt_templates", { id }, {
+    await updateRows("sheetbot_prompt_templates", {
       deleted_at: now,
       deleted_by: userEmail,
+    }, {
+      filters: { id },
     });
 
     return NextResponse.json({ success: true, message: "추천 프롬프트가 성공적으로 삭제되었습니다." });

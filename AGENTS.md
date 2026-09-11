@@ -57,8 +57,9 @@
 <!-- BEGIN:apps-script-safety-rules -->
 ## Google Apps Script 안전 배포 및 트리거 제어 표준 원칙
 
-1. **자동 생성 코드 품질 보장**:
-   - 생성되는 `Code.gs`는 반드시 `onOpen()`을 포함하여 구글 시트 상단에 전용 메뉴를 등록해야 합니다.
+1. **자동 생성 코드 품질 및 표준 메뉴 보장**:
+   - 생성되는 `Code.gs`는 반드시 `onOpen()`을 포함하여 구글 시트 상단에 **`🚀 SheetBot 메뉴`** 전용 메뉴를 등록해야 합니다.
+   - 메뉴 최하단에는 항상 **`📖 SheetBot 사용법 및 활용사례`**(`https://sheetbot.cloud` 새 탭 열기 모달 함수 `openSheetBotGuide`)를 필수로 포함해야 합니다.
    - 예외 처리를 위한 `try-catch` 및 구글 시트 알림 UI(`SpreadsheetApp.getUi().alert`, `toast`)를 필수로 포함해야 합니다.
 2. **트리거 등록 및 중복 방지**:
    - Apps Script 원격 함수 실행(`apps_script_run_function`) 시 실행 결과 및 로그를 `last_run_at`, `last_status`, `last_run_message`에 투명하게 기록해야 합니다.

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { NextResponse } from "next/server";
 import { callAiCaller } from "@/lib/egdesk-helpers";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { recordAiUsageLog } from "@/lib/ai-usage";

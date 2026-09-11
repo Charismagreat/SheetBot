@@ -28,14 +28,22 @@ export async function GET(request: Request) {
       );
     }
 
-    // 프로젝트 조회 (소유자 및 토큰 일치)
-    const projectRes = await queryTable("sheetbot_projects", {
-      filters: { bridge_token: token },
-      limit: 1,
-    });
+    // 프로젝트 조회 (id 또는 bridge_token 엄격 매칭)
+    let project = null;
+    if (token.startsWith("proj_")) {
+      const idRes = await queryTable("sheetbot_projects", {
+        filters: { id: token },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+      project = (idRes.rows || []).find((r: any) => r.id === token && !r.deleted_at);
+    } else {
+      const allRes = await queryTable("sheetbot_projects", {
+        limit: 100,
+      }).catch(() => ({ rows: [] }));
+      project = (allRes.rows || []).find((r: any) => (r.bridge_token === token || r.id === token) && !r.deleted_at);
+    }
 
-    const project = (projectRes.rows || [])[0];
-    if (!project || project.deleted_at) {
+    if (!project) {
       return NextResponse.json(
         { success: false, error: "유효하지 않거나 만료된 브릿지 토큰입니다." },
         { status: 404 }
@@ -141,7 +149,7 @@ export async function GET(request: Request) {
           "1. [개인 API 키 요구 금지]: 사용자에게 Gemini/OpenAI API 키를 요구하는 팝업/UI를 만들지 마세요. 이미 주입된 egdeskToolsCall('ai-caller', 'ai_caller_call', ...) 함수를 호출하세요.",
           "2. [실제 헤더 1:1 매핑]: 상단에 보고서 타이틀/결재란이 있어 헤더가 10행 등에 위치하는 경우, suggestedHeaderRow 및 dataStartRow를 엄격히 준수하여 신규 데이터를 기입하세요.",
           "3. [다중 품목 분리 삽입]: 발주서나 견적서 등 다중 품목 문서는 1건당 1행이 아니라 품목별로 1행씩(N개 행) 분리하여 시트에 순차 기록하세요.",
-          "4. [onOpen 메뉴 등록]: 구글 시트 상단에 '🚀 SheetBot 자동화' 메뉴를 등록하는 onOpen() 함수를 반드시 포함하세요.",
+          "4. [onOpen 메뉴 등록]: 구글 시트 상단에 '🚀 SheetBot 메뉴' 메뉴를 등록하는 onOpen() 함수를 반드시 포함하고, 최하단에는 '📖 SheetBot 사용법 및 활용사례'(sheetbot.cloud 새 탭 열기) 메뉴를 필수로 포함하세요.",
           "5. [AI 응답 언래핑 함수]: parseAiCallerResponse(toolRes) 유틸리티 함수를 Code.gs에 포함하여 안전하게 JSON을 추출하세요.",
         ],
         postEndpoint,
@@ -184,14 +192,22 @@ export async function POST(request: Request) {
       );
     }
 
-    // 프로젝트 조회
-    const projectRes = await queryTable("sheetbot_projects", {
-      filters: { bridge_token: token },
-      limit: 1,
-    });
+    // 프로젝트 조회 (id 또는 bridge_token 엄격 매칭)
+    let project = null;
+    if (token.startsWith("proj_")) {
+      const idRes = await queryTable("sheetbot_projects", {
+        filters: { id: token },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+      project = (idRes.rows || []).find((r: any) => r.id === token && !r.deleted_at);
+    } else {
+      const allRes = await queryTable("sheetbot_projects", {
+        limit: 100,
+      }).catch(() => ({ rows: [] }));
+      project = (allRes.rows || []).find((r: any) => (r.bridge_token === token || r.id === token) && !r.deleted_at);
+    }
 
-    const project = (projectRes.rows || [])[0];
-    if (!project || project.deleted_at) {
+    if (!project) {
       return NextResponse.json(
         { success: false, error: "유효하지 않거나 만료된 브릿지 토큰입니다." },
         { status: 404 }

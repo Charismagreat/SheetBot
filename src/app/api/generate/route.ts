@@ -90,6 +90,7 @@ export async function POST(request: Request) {
       analyzedSchema,
       existingScriptCode,
       mergeMode = "OVERWRITE",
+      includeCopilotSidebar = true,
     } = body;
 
     const aiSettings = await getAiModelSettings();
@@ -261,21 +262,38 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
    - ⚠️ [데이터 유효성 검증]:
      - AI 분석 결과가 비어있거나 유효하지 않으면 절대 파일명(fileName)이나 임의의 더미값을 데이터 열에 대체 삽입하지 말고, throw new Error("문서에서 유효한 정보를 추출하지 못했습니다.")로 명확히 예외를 발생시키세요.
      - 사용자에게 API 키가 없다는 경고나 설정창을 절대 띄우지 마세요!
-3. 💾 My DB 직접 연동 기능 (필요 시 자유롭게 활용):
+3. 💾 My DB 연동 및 🏛️ B2B 공공/기업 인텔리전스 도구 활용:
    - 스프레드시트 데이터를 My DB 대장에 백업하거나, My DB의 프로젝트/회원/이력 데이터를 조회해야 할 때는 egdeskUserDataSql("SELECT ...") 또는 egdeskToolsCall('user-data', 'user_data_insert_rows', ...)를 사용하여 원격 DB와 원활히 동기화할 수 있습니다.
+   - 🏢 [국민연금(NPS) 사업장·직원 수·고용 추이 자동 조회]:
+     - 거래처나 고객사의 직원 수, 월별 가입자 변동을 시트에 채울 때: egdeskToolsCall('nps', 'nps_lookup', { workplaceName: '회사명', businessNumber: '사업자번호' })
+   - 🏛️ [나라장터(KONEPS) 공공 계약 실적 & 입찰공고(BidNotice) 실시간 수집]:
+     - 기업의 공공기관 납품/낙찰 계약 실적 조회: egdeskToolsCall('koneps', 'koneps_lookup', { companyName: '회사명' })
+     - 나라장터 신규 입찰공고 실시간 모니터링: egdeskToolsCall('bidnotice', 'bidnotice_lookup', { title: '키워드', openOnly: true })
+   - 🔍 [기업 심층 웹 리서치]:
+     - 기업 홈페이지 분석 및 사업 영역 요약: egdeskToolsCall('company-research', 'companyresearch_run', { domain: '회사도메인', companyName: '회사명' })
 4. 📋 시트 및 데이터 조작 (실제 컬럼 1:1 매핑 및 동적 행 삽입 절대 준수):
    - 특정 시트명이 언급된 경우, getSheetByName()으로 참조하고 시트가 없으면 insertSheet()로 헤더 행과 함께 자동 생성하세요.
    - 단, 시트에 이미 존재하는 헤더(1행)가 있을 경우, 헤더를 임의로 변경하거나 덮어쓰지 말고 실제 시트 1행의 컬럼 순서 및 개수에 1:1로 정확히 맞추어 rowsToInsert 2차원 배열을 구성하세요.
    - '최근 기록이 위에 오도록' 요청된 경우:
      - 삽입할 행이 N개일 때, sheet.insertRowsBefore(2, N) 후 sheet.getRange(2, 1, N, rowsToInsert[0].length).setValues(rowsToInsert)로 한 번에 삽입하여 데이터 순서가 뒤집히지 않고 최신 데이터가 시트 맨 위(2행부터)에 안전하게 자리잡도록 작성하세요.
    - 숫자 포맷: 금액, 수량, 단가 등 숫자 열이 감지되면 해당 열에 .setNumberFormat("#,##0")을 적용하세요.
-5. 🚀 상단 메뉴 및 사이드바:
-   - 구글 시트 상단 메뉴에 '🚀 SheetBot 자동화' 메뉴를 추가하는 onOpen() 함수를 항상 포함하세요.
-   - 메뉴 구성:
-     - '📄 문서 AI 업로드 및 분석' (showSidebar 호출)
-     - '⚡ 터널 연결 상태 점검' (testEgdeskTunnel 호출)
-     - 신규 시트 설계 또는 엑셀 변환 프로젝트인 경우: '🛠️ 초기 시트 양식 및 데이터 자동 세팅' (setupInitialSheetLayout 호출)
-     - 기타 요구사항에 맞는 커스텀 실행 항목
+5. 🚀 상단 메뉴 및 사이드바 (표준 메뉴 규칙 필수 준수):
+   - 구글 시트 상단 메뉴에 '🚀 SheetBot 메뉴' 메뉴를 추가하는 onOpen() 함수를 항상 포함하세요.
+   - 메뉴 구성 순서:
+     - 1. 업무 자동화 기능 항목들 (예: '📄 문서 AI 업로드 및 분석', '⚡ 터널 연결 상태 점검', '🛠️ 초기 시트 양식 및 데이터 자동 세팅' 등)
+     - 2. 구분선 (.addSeparator())
+     - 3. '🤖 SheetBot AI 코파일럿' (showAiCopilotSidebar 호출)
+     - 4. 최하단 고정: '📖 SheetBot 사용법 및 활용사례' (openSheetBotGuide 호출 - sheetbot.cloud 사이트를 새 탭으로 여는 모달 함수)
+   - 🌐 [SheetBot 사용법 안내 함수 - openSheetBotGuide 필수 포함]:
+     - Code.gs 하단에 다음 openSheetBotGuide() 함수를 반드시 포함하세요:
+       \`\`\`javascript
+       function openSheetBotGuide() {
+         var html = HtmlService.createHtmlOutput(
+           '<!DOCTYPE html><html><head><base target="_blank"><script>window.onload=function(){window.open("https://sheetbot.cloud","_blank");google.script.host.close();};</script><style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f8fafc;color:#334155;}.btn{display:inline-block;margin-top:10px;padding:8px 16px;background:#4f46e5;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:12px;}</style></head><body><div style="font-weight:bold;font-size:13px;margin-bottom:6px;">🌐 SheetBot 가이드로 이동합니다</div><div style="font-size:11px;color:#64748b;margin-bottom:10px;">새 탭이 열리지 않으면 아래를 클릭하세요.</div><a href="https://sheetbot.cloud" target="_blank" class="btn">sheetbot.cloud 바로가기</a></body></html>'
+         ).setWidth(320).setHeight(130);
+         SpreadsheetApp.getUi().showModalDialog(html, "SheetBot 사용법 및 활용사례");
+       }
+       \`\`\`
    - 🛠️ [신규 시트 양식/엑셀 데이터 초기화 함수 - setupInitialSheetLayout]:
      - 사용자가 빈 구글 시트에서 시작하거나 엑셀 데이터를 가져왔을 때를 대비하여, setupInitialSheetLayout() 함수를 구현하세요:
        * 대상 시트 탭이 없으면 새로 생성,
@@ -327,12 +345,52 @@ ${existingScriptCode.trim()}
 `;
     }
 
+    let copilotSidebarPromptSection = "";
+    if (includeCopilotSidebar) {
+      copilotSidebarPromptSection = `
+[🤖 시트 내장 AI 코파일럿 사이드바 (자가 코드 생성 및 원격 자동 주입) 필수 탑재 지침]:
+- 사용자가 구글 시트 안에서 편리하게 요구사항을 말하면 AI가 스스로 코드를 다시 작성하여 시트에 즉시 주입(Self-Update)하는 대화형 코파일럿 사이드바 기능을 필수 구현하세요.
+1. 상단 onOpen() 메뉴 구성:
+   - 메뉴의 다른 업무 기능들이 모두 등록된 후 맨 마지막에 구분선(.addSeparator())과 함께 다음 순서대로 배치하세요:
+     .addSeparator()
+     .addItem('🤖 SheetBot AI 코파일럿', 'showAiCopilotSidebar')
+     .addItem('📖 SheetBot 사용법 및 활용사례', 'openSheetBotGuide')
+     .addToUi();
+2. 사이드바 표출 함수 showAiCopilotSidebar():
+   - HtmlService.createHtmlOutput(getAiCopilotSidebarHtml()).setTitle("🤖 SheetBot AI 코파일럿").setWidth(360);
+   - SpreadsheetApp.getUi().showSidebar(html);
+3. 사이드바 UI 템플릿 getAiCopilotSidebarHtml():
+   - 중복 헤더나 안내 카드를 일절 배제한 극도로 심플하고 실용적인 레이아웃:
+   - 텍스트 입력란(라벨: '자연어 요청 또는 직접 짠 코드 붙여넣기', 드래그로 높이 확장 가능한 <textarea id="userPrompt" class="... resize-y min-h-[220px] ...">)
+   - 실행 버튼 1종 제공:
+     * '⚡ AI 코드 생성 및 시트에 즉시 주입' 버튼 (google.script.run.executeSelfCodeInjection(prompt) 호출)
+     * (자연어 요구사항뿐만 아니라 사용자가 직접 작성한 JavaScript 함수 코드가 입력된 경우에도 AI가 스스로 감지하여 기존 코드에 무손실 100% 원형 병합 배포)
+   - 실행 중 로딩 스피너 및 진행 상태(완료 시 F5 새로고침 안내)
+4. 백엔드 주입 함수 구현:
+   - executeSelfCodeInjection(userPrompt): 자연어 요청 및 직접 작성 코드를 분석하여 기존 로직과 충돌 없이 안전 병합(Merge)한 후 클라우드 Apps Script(Code.gs)에 주입 및 push
+   - 스프레드시트 탭, 컬럼 구조(A열~헤더), 기존 Code.gs 소스코드를 수집.
+   - 프로젝트 메타(gasProjectId, projectId)를 조회:
+     상수 SHEETBOT_GAS_PROJECT_ID 가 있으면 우선 사용하고, 없으면 egdeskUserDataSql("SELECT id, gas_project_id FROM sheetbot_projects WHERE spreadsheet_id = '" + currentSpreadsheetId + "' AND deleted_at IS NULL LIMIT 1") 로 동적 획득.
+   - egdeskToolsCall('ai-caller', 'ai_caller_call', {
+       model: 'gemini-3.8-flash',
+       temperature: 0.1,
+       prompt: '현재 구글 스프레드시트의 기존 기능과 스키마를 100% 무손실 보존(Merge)하면서, 다음 요구사항을 반영한 완전한 완성형 Code.gs 전체 코드를 생성하세요. [중요]: 사용자가 직접 작성한 JavaScript/Apps Script 코드나 함수 정의(function ...)가 요구사항에 포함되어 있는 경우, 해당 로직을 왜곡하거나 생략하지 말고 원형 그대로 안전하게 융합 반영하세요. 요구사항: ' + userPrompt + ' ...',
+     }) 호출.
+   - parseAiCallerResponse()로 AI가 생성한 완성형 소스코드를 추출.
+   - egdeskToolsCall('apps-script', 'apps_script_write_file', { projectId: gasProjectId, fileName: 'Code.gs', content: cleanCode }) 호출.
+   - egdeskToolsCall('apps-script', 'apps_script_push_to_google', { projectId: gasProjectId }) 호출하여 구글 클라우드에 즉시 배포.
+   - egdeskToolsCall('user-data', 'user_data_update_rows', { tableName: 'sheetbot_projects', filters: { id: projectId }, updates: { script_code: cleanCode, updated_at: new Date().toISOString() } }) 로 My DB에도 최신 코드 동기화.
+   - 성공 시 { success: true, message: "새로운 코드가 구글 시트에 성공적으로 자동 주입되었습니다! 브라우저를 새로고침하세요." } 반환.
+`;
+    }
+
     const userMessage = `[회원 계정]: ${userEmail}
 [대상 구글 시트]: ${sheetUrl || "연결된 스프레드시트"}
 [프로젝트 명칭]: ${customTitle || "스마트 시트 자동화"}
 [이지데스크 공용 터널 인프라]: 사전 배포 완료 (EgdeskConfig.gs, EgdeskClient.gs 내장)
 ${schemaPromptSection}
 ${existingScriptSection}
+${copilotSidebarPromptSection}
 [사용자 요구사항]:
 ${prompt}
 
@@ -465,7 +523,7 @@ ${prompt}
       generatedData = {
         summary: prompt.substring(0, 50) + " 자동화 스크립트",
         features: [
-          "스프레드시트 상단 '🚀 SheetBot 자동화' 전용 메뉴 자동 생성",
+          "스프레드시트 상단 '🚀 SheetBot 메뉴' 전용 메뉴 자동 생성",
           "데이터 실시간 검증 및 안전한 일괄 처리 핸들러 탑재",
           "작업 완료 알림 토스트 및 실행 결과 로그 시트 자동 기록",
         ],
@@ -477,12 +535,20 @@ ${prompt}
 
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
-  ui.createMenu('🚀 SheetBot 자동화')
+  ui.createMenu('🚀 SheetBot 메뉴')
     .addItem('▶️ 자동화 작업 실행', 'runSheetBotAutomatedTask')
     .addItem('📊 일일 통계 집계', 'calculateDailySummary')
     .addSeparator()
     .addItem('⚡ 터널 연결 상태 점검', 'checkEgdeskTunnelConnection')
+    .addItem('📖 SheetBot 사용법 및 활용사례', 'openSheetBotGuide')
     .addToUi();
+}
+
+function openSheetBotGuide() {
+  var html = HtmlService.createHtmlOutput(
+    '<!DOCTYPE html><html><head><base target="_blank"><script>window.onload=function(){window.open("https://sheetbot.cloud","_blank");google.script.host.close();};</script><style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f8fafc;color:#334155;}.btn{display:inline-block;margin-top:10px;padding:8px 16px;background:#4f46e5;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:12px;}</style></head><body><div style="font-weight:bold;font-size:13px;margin-bottom:6px;">🌐 SheetBot 가이드로 이동합니다</div><div style="font-size:11px;color:#64748b;margin-bottom:10px;">새 탭이 열리지 않으면 아래를 클릭하세요.</div><a href="https://sheetbot.cloud" target="_blank" class="btn">sheetbot.cloud 바로가기</a></body></html>'
+  ).setWidth(320).setHeight(130);
+  SpreadsheetApp.getUi().showModalDialog(html, "SheetBot 사용법 및 활용사례");
 }
 
 function checkEgdeskTunnelConnection() {

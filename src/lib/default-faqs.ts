@@ -53,7 +53,7 @@ export const DEFAULT_FAQS: DefaultFaqItem[] = [
     id: "faq_seed_7",
     category: "Apps Script/기능",
     question: "발주서나 영수증 PDF, 이미지를 구글 시트에 자동으로 넣을 수 있나요?",
-    answer: "네! 시트봇의 AI OCR 기능으로 가능합니다. 구글 시트 상단 메뉴 [🚀 SheetBot 자동화]를 누르면 열리는 사이드바에 PDF나 이미지(JPG/PNG) 발주서를 올리면, AI가 문서를 1초 만에 분석하여 시트 양식(품명, 수량, 단가 등)에 맞춰 12개 열 또는 해당 시트 규격대로 자동 기록해 줍니다. 1장에 여러 품목이 있어도 품목별로 1행씩 완벽히 분리되어 최상단에 기록됩니다.",
+    answer: "네! 시트봇의 AI OCR 기능으로 가능합니다. 구글 시트 상단 메뉴 [🚀 SheetBot 메뉴]를 누르면 열리는 사이드바에 PDF나 이미지(JPG/PNG) 발주서를 올리면, AI가 문서를 1초 만에 분석하여 시트 양식(품명, 수량, 단가 등)에 맞춰 12개 열 또는 해당 시트 규격대로 자동 기록해 줍니다. 1장에 여러 품목이 있어도 품목별로 1행씩 완벽히 분리되어 최상단에 기록됩니다.",
     sort_order: 7,
   },
   {
@@ -188,5 +188,19 @@ export const DEFAULT_FAQS: DefaultFaqItem[] = [
     question: "구글 드라이브 및 스프레드시트 권한은 언제, 어떻게 부여하나요?",
     answer: "실제 자동화 프로젝트를 생성하거나 내 구글 시트를 연동하는 시점에만 점진적(Just-in-Time)으로 권한을 요청합니다. [새 프로젝트 추가] 모달 내의 'Google 드라이브·시트 권한 승인하기' 안내 배너나 권한 확인 버튼을 통해 원클릭으로 필요한 권한만 안전하게 추가 부여하실 수 있습니다.",
     sort_order: 26,
+  },
+  {
+    id: "faq_seed_27",
+    category: "Apps Script/기능",
+    question: "구글 시트 상단의 [🚀 SheetBot 메뉴]와 [📖 SheetBot 사용법 및 활용사례]는 어떻게 동작하나요?",
+    answer: "시트봇으로 연동된 모든 구글 시트 상단에는 '🚀 SheetBot 메뉴'가 자동 등록됩니다. 업무 기능 메뉴 외에도 최하단에 '🤖 SheetBot AI 코파일럿'과 '📖 SheetBot 사용법 및 활용사례' 서브메뉴가 항상 기본 탑재됩니다. 사용법 메뉴를 클릭하시면 브라우저의 새 탭으로 sheetbot.cloud 사이트가 즉시 열려 언제든 실전 활용 레시피와 매뉴얼을 편리하게 확인하실 수 있습니다.",
+    sort_order: 27,
+  },
+  {
+    id: "faq_seed_28",
+    category: "Apps Script/기능",
+    question: "시트 안의 'SheetBot AI 코파일럿' 사이드바에서 직접 짠 스크립트 코드도 주입할 수 있나요?",
+    answer: "네, 100% 지원합니다! 구글 시트 상단 메뉴 [🚀 SheetBot 메뉴] ➔ [🤖 SheetBot AI 코파일럿]을 열면 시트 내장형 입력창이 나타납니다. '특정 조건 행 색상 변경해줘' 같은 한국어 자연어 요청은 물론, 직접 작성하신 JavaScript/Apps Script 함수(function ...)를 그대로 붙여넣고 [⚡ AI 코드 생성 및 시트에 즉시 주입] 버튼을 누르시면, AI 자가 엔진이 기존 비즈니스 로직을 완벽히 보존(Merge)하면서 새 코드를 시트 프로젝트(Code.gs)에 즉각 안전하게 병합 배포해 줍니다.",
+    sort_order: 28,
   },
 ];

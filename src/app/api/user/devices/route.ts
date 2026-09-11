@@ -157,7 +157,7 @@ export async function POST(req: NextRequest) {
     // 2. 연결 세션 요청 (QR코드 생성 또는 구글 계정 브라우저 연결)
     let pairingData: any = {};
     try {
-      const connRes = await connectPhoneDevice(targetDeviceId, pairingMode);
+      const connRes = await connectPhoneDevice(targetDeviceId);
       if (typeof connRes === "string") {
         try { pairingData = JSON.parse(connRes); } catch { pairingData = { message: connRes }; }
       } else {

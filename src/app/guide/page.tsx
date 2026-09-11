@@ -68,10 +68,10 @@ export default function GuidePage() {
     },
     {
       step: "04",
-      title: "구글 시트 상단 메뉴 자동 등록 & 엑셀 초기 데이터 세팅",
-      desc: "구글 시트를 열면 상단 메뉴에 '🚀 SheetBot 자동화'가 자동 등록됩니다. [🛠️ 초기 시트 양식 및 엑셀 데이터 자동 세팅]을 누르면 헤더 스타일 서식과 엑셀 데이터가 시트에 즉시 채워지며, [📄 문서 AI 업로드] 메뉴로 PDF/이미지 실시간 분석도 가능합니다.",
-      tip: "개인 API 키 등록 없이 원클릭 작동하며, 소비된 토큰은 내 워크스페이스 'AI 사용량' 관제 센터에서 투명하게 실시간 조회됩니다.",
-      badge: "시트 메뉴 연동",
+      title: "구글 시트 '🚀 SheetBot 메뉴' & 시트 내장 AI 코파일럿 활용",
+      desc: "구글 시트를 열면 상단에 '🚀 SheetBot 메뉴'가 자동 생성됩니다. 업무 자동화 실행 외에도, [🤖 SheetBot AI 코파일럿] 사이드바를 열어 자연어 요청이나 직접 짠 자바스크립트 코드를 시트 안에서 즉시 주입·배포할 수 있으며, 최하단 [📖 SheetBot 사용법 및 활용사례]를 누르면 언제든 새 탭으로 공식 가이드가 열립니다.",
+      tip: "시트 안에서 직접 작성한 함수(function)도 AI가 기존 코드를 100% 보존하면서 스마트하게 병합해 줍니다.",
+      badge: "시트 메뉴 & AI 코파일럿",
     },
     {
       step: "05",
@@ -82,8 +82,16 @@ export default function GuidePage() {
     },
   ];
 
-  // 실전 프롬프트 레시피 8종
+  // 실전 프롬프트 레시피 9종
   const examples = [
+    {
+      id: "ex_copilot_self_update",
+      title: "시트 내장 'SheetBot AI 코파일럿' 사이드바를 통한 자가 기능 확장 및 코드 직접 주입",
+      tag: "시트 내장 AI 코파일럿 (NEW)",
+      icon: Bot,
+      color: "border-purple-200 bg-purple-50/60 text-purple-800",
+      prompt: "구글 시트 상단 [🚀 SheetBot 메뉴] ➔ [🤖 SheetBot AI 코파일럿] 사이드바를 열고 아래처럼 자연어 요청이나 직접 짠 함수 코드를 입력창에 넣은 후 [⚡ AI 코드 생성 및 시트에 즉시 주입]을 누르세요:\n\n// 자연어 요청 예시:\n'주문금액 50만원 이상인 행은 배경을 연한 노란색으로 강조하는 함수 추가해줘'\n\n// 직접 작성한 함수 코드 예시:\nfunction highlightVipRows() {\n  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();\n  // 직접 짠 로직을 그대로 붙여넣어도 AI가 기존 코드 손실 없이 안전하게 융합 배포합니다.\n}",
+    },
     {
       id: "ex_excel",
       title: "엑셀 파일(.xlsx) 업로드 기반 자재 재고관리 시스템 자동 변환",

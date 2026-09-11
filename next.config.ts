@@ -27,7 +27,7 @@ const getLocalIPs = () => {
   }
 };
 
-const nextConfig: NextConfig = {
+const nextConfig: any = {
   eslint: {
     // Always skip ESLint errors to prevent blocking on auto-generated files
     ignoreDuringBuilds: true,
