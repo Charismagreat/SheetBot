@@ -132,6 +132,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
 
   // 구글 드라이브/시트 권한 상태 및 안내 팝업 상태
   const [scopeStatus, setScopeStatus] = useState<"loading" | "granted" | "needed">("loading");
+  const [serverCanCreateSheet, setServerCanCreateSheet] = useState<boolean | null>(null);
   const [showScopePrompt, setShowScopePrompt] = useState(false);
   const [isGrantingScope, setIsGrantingScope] = useState(false);
   const [titleSyncFeedback, setTitleSyncFeedback] = useState<{
@@ -143,6 +144,15 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
 
   const checkGoogleScopes = async () => {
     try {
+      // 1. 서버의 구글 시트 자동 생성 엔진 상태 확인
+      apiFetch("/api/sheets/create")
+        .then((res) => res.json())
+        .then((data) => {
+          setServerCanCreateSheet(Boolean(data?.canAutoCreate));
+        })
+        .catch(() => setServerCanCreateSheet(false));
+
+      // 2. 브라우저의 구글 로그인 및 파일 접근 상태 확인
       const status = await getVisitorGoogleStatus();
       if (status?.connected && status?.email) {
         // 실제 드라이브 파일 목록을 1건 조회하여 Workspace(시트/드라이브) 권한 보유 여부 실시간 확인
@@ -468,6 +478,33 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
 
       setAnalyzedSchema(data.schema);
       setTurnCount(1);
+
+      // '새 시트 자동 생성' 또는 시트 URL이 없는 경우, 분석된 헤더 기반으로 새 스프레드시트 사전 자동 생성
+      let finalSheetUrl = sheetUrl.trim();
+      if ((sourceMode === "NEW_SHEET" || sourceMode === "EXCEL_UPLOAD") && !finalSheetUrl) {
+        try {
+          const createRes = await apiFetch("/api/sheets/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: projectName.trim() || "새 스프레드시트",
+              data: parsedExcel?.previewGrid || (data.schema?.columns ? [data.schema.columns.map((c: any) => c.name)] : []),
+            }),
+          });
+          const createData = await createRes.json();
+          if (createData.success && createData.spreadsheetUrl) {
+            finalSheetUrl = createData.spreadsheetUrl;
+            setSheetUrl(finalSheetUrl);
+            setAutoCreatedSheet({
+              id: createData.spreadsheetId,
+              url: createData.spreadsheetUrl,
+            });
+          }
+        } catch (createErr) {
+          console.warn("[Analysis] Auto sheet creation warning:", createErr);
+        }
+      }
+
       setFeedbackHistory([
         {
           role: "ai",
@@ -476,7 +513,9 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
             (sourceMode === "EXCEL_UPLOAD"
               ? `엑셀 파일 '${parsedExcel?.fileName}'의 컬럼 분석이 완료되었습니다. 아래 양식 구조와 실행 계획을 확인해 주세요.`
               : sourceMode === "NEW_SHEET"
-              ? "요구사항에 맞춘 최적의 스프레드시트 양식 설계가 완료되었습니다. 아래 컬럼 구조를 확인해 주세요."
+              ? (finalSheetUrl
+                  ? "요구사항에 맞춘 최적의 스프레드시트가 자동 생성되어 연결되었습니다. 아래 컬럼 구조와 실행 계획을 확인해 주세요."
+                  : "요구사항에 맞춘 최적의 스프레드시트 양식 설계가 완료되었습니다. 아래 컬럼 구조를 확인해 주세요.")
               : "스프레드시트 분석이 완료되었습니다. 아래 실행 계획을 검토해 주세요."),
         },
       ]);
@@ -614,8 +653,12 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
             setSheetUrl(targetSheetUrl);
             setAutoCreatedSheet({ id: createData.spreadsheetId, url: createData.spreadsheetUrl });
           } else {
+            // 서버 백그라운드 생성이 불가능한 경우: 브라우저 새 탭으로 즉시 새 시트를 띄워줌
+            try {
+              window.open("https://docs.google.com/spreadsheets/create", "_blank");
+            } catch {}
             throw new Error(
-              "바인딩할 구글 스프레드시트 URL이 필요합니다. 아래 입력란에 구글 시트 URL을 입력해 주시거나 'Google Sheets 새 시트 열기' 버튼을 눌러 새 시트를 생성해 주세요."
+              "새 구글 스프레드시트가 브라우저 새 탭에 열렸습니다! 상단 주소창 URL을 복사하여 아래 입력란에 붙여넣어 주세요."
             );
           }
         } finally {
@@ -677,14 +720,14 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
     } catch (err: any) {
       const msg = err.message || "처리 중 오류가 발생했습니다.";
       setError(msg);
+      // 실제 OAuth 권한 부족 에러인 경우에만 권한 안내 배너 노출 (단순 단어 포함 오인 발동 방지)
       if (
-        msg.includes("권한") ||
-        msg.includes("permission") ||
+        msg.includes("권한이 필요합니다") ||
+        msg.includes("permission_denied") ||
         msg.includes("403") ||
-        msg.includes("scope") ||
-        msg.includes("인증") ||
-        msg.includes("Drive") ||
-        msg.includes("Sheets")
+        msg.includes("scope_missing") ||
+        msg.includes("GOOGLE_OAUTH_TOKEN_MISSING") ||
+        msg.includes("Workspace 인증이 필요합니다")
       ) {
         setShowScopePrompt(true);
       }
@@ -760,10 +803,14 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
           <div className="px-3.5 py-2 bg-emerald-50 border border-emerald-200/80 rounded-2xl flex items-center justify-between gap-2 text-emerald-800 text-xs font-bold shadow-2xs">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>Google 드라이브·스프레드시트 연동 권한: 정상 승인됨 (생성 및 배포 준비 완료)</span>
+              <span>
+                {sourceMode === "NEW_SHEET"
+                  ? "Google 계정 로그인 완료 • AI 새 시트 자동 설계 모드"
+                  : "Google 드라이브·스프레드시트 연동 권한: 정상 승인됨"}
+              </span>
             </div>
             <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-200/70 text-emerald-800">
-              Workspace 연동 완료
+              {sourceMode === "NEW_SHEET" ? "자동 설계 활성" : "연동 완료"}
             </span>
           </div>
         ) : scopeStatus === "needed" ? (
@@ -898,56 +945,24 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
 
             {/* 모드 1: 새 구글 시트 자동 생성 모드 */}
             {sourceMode === "NEW_SHEET" && (
-              <div className="p-4 bg-gradient-to-br from-emerald-50/90 to-teal-50/60 border border-emerald-200 rounded-2xl space-y-3 animate-in fade-in duration-150">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-emerald-500 text-white rounded-xl shadow-xs shrink-0">
+              <div className="p-4 bg-gradient-to-br from-emerald-50/90 via-teal-50/50 to-white border border-emerald-200/90 rounded-2xl shadow-2xs animate-in fade-in duration-150">
+                <div className="flex items-start gap-3.5">
+                  <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-xs shrink-0 mt-0.5">
                     <Sparkles className="w-4 h-4" />
                   </div>
-                  <div className="space-y-1">
-                    <h4 className="font-extrabold text-slate-800 text-xs">
-                      기존 구글 시트가 없어도 바로 시작할 수 있습니다!
-                    </h4>
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-extrabold text-slate-800 text-xs flex items-center gap-1.5">
+                        <span>🪄 기존 구글 시트가 없어도 바로 시작할 수 있습니다!</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200/60">
+                          URL 입력 불필요
+                        </span>
+                      </h4>
+                    </div>
                     <p className="text-[11px] text-slate-600 leading-relaxed">
-                      원하시는 업무 요구사항을 자연어로 입력하시면, AI가 최적의 시트 구조(컬럼 A, B, C, D... 및 양식 유형)를 자동으로 설계하고 완성형 Apps Script를 바인딩해 드립니다.
+                      아래 <strong>프로젝트 이름</strong>과 원하시는 <strong>자동화 요구사항</strong>만 자유롭게 적어주세요.<br />
+                      AI가 비즈니스 목적에 맞는 최적의 시트 구조(컬럼, 서식, 수식)와 Apps Script 코드를 원스톱으로 자동 설계해 드립니다.
                     </p>
-                  </div>
-                </div>
-
-                <div className="pt-1 border-t border-emerald-200/60 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 text-[11px]">
-                  <span className="text-slate-500 font-medium">
-                    💡 빈 구글 시트가 필요하신가요? 1초 만에 새 시트를 열 수 있습니다.
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleQuickOpenNewSheet}
-                    className="inline-flex items-center justify-center gap-1 font-bold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-300 px-3 py-1.5 rounded-xl shadow-2xs transition-all cursor-pointer shrink-0"
-                  >
-                    <span>Google Sheets 새 시트 열기</span>
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                {/* 선택적 시트 URL 사전 연결 입력란 */}
-                <div className="pt-2 space-y-1">
-                  <label className="font-bold text-slate-700 text-[11px] flex items-center justify-between">
-                    <span>바인딩할 새 구글 시트 URL (선택 사항)</span>
-                    <span className="text-[10px] text-emerald-600 font-semibold">지금 비워두셔도 됩니다</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={sheetUrl}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSheetUrl(val);
-                        if (val.includes("/spreadsheets/d/") || val.length >= 25) {
-                          fetchSheetTitle(val);
-                        }
-                      }}
-                      placeholder="https://docs.google.com/spreadsheets/d/... (열린 새 시트의 주소를 복사해 넣으시면 연결됩니다)"
-                      className="w-full pl-9 pr-3 py-2 bg-white/90 border border-emerald-200 rounded-xl text-xs font-mono font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                    />
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-500 absolute left-3 top-2.5" />
                   </div>
                 </div>
               </div>
@@ -1309,14 +1324,14 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                         <div>
                           <div className="flex items-center gap-1">
                             <span className="font-extrabold text-xs text-slate-800">
-                              🛡️ 기존 코드 보존 & 새 기능 추가
+                              🛡️ 기존 기능/커스텀 코드 보존 & 스마트 개선
                             </span>
                             <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">
                               권장
                             </span>
                           </div>
                           <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
-                            기존 함수와 메뉴를 100% 보존하면서 새 자동화 기능을 덧붙여 안전하게 병합합니다.
+                            기존 기능과 사용자 코드를 안전하게 보존하면서, 새 요구사항 및 오류 방지 로직을 똑똑하게 리팩토링합니다.
                           </p>
                         </div>
                       </label>
@@ -1339,11 +1354,11 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                         <div>
                           <div className="flex items-center gap-1">
                             <span className="font-extrabold text-xs text-slate-800">
-                              ⚠️ 기존 코드 덮어쓰기
+                              ⚠️ 전체 코드 새로 작성 (클린 오버라이트)
                             </span>
                           </div>
                           <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
-                            기존 코드를 지우고 새 요구사항에 맞춰 완전히 새롭게 작성합니다.
+                            기존 코드를 지우고 이번 요구사항을 바탕으로 완전히 새로운 스크립트를 작성합니다.
                           </p>
                         </div>
                       </label>
@@ -1665,46 +1680,102 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
         {/* Step 2: AI 분석 브리핑 및 대화형 조율(HITL) */}
         {step === 2 && analyzedSchema && (
           <div className="space-y-4 text-xs">
-            {/* 연결 대상 구글 시트 확인 및 입력 카드 */}
-            <div className={`p-3 rounded-2xl border transition-all ${
+            {/* 연결 대상 구글 시트 확인 및 바인딩 카드 */}
+            <div className={`p-3.5 rounded-2xl border transition-all ${
               sheetUrl.trim()
-                ? "bg-slate-50 border-slate-200"
-                : "bg-emerald-50/80 border-emerald-300 ring-2 ring-emerald-500/10"
+                ? "bg-emerald-50/50 border-emerald-200"
+                : "bg-amber-50/80 border-amber-300 ring-2 ring-amber-500/10"
             }`}>
-              <div className="flex items-center justify-between gap-2 mb-1.5">
+              <div className="flex items-center justify-between gap-2 mb-2">
                 <div className="flex items-center gap-2">
-                  <FileSpreadsheet className={`w-4 h-4 ${sheetUrl.trim() ? "text-emerald-600" : "text-emerald-700 animate-bounce"}`} />
+                  <FileSpreadsheet className={`w-4 h-4 ${sheetUrl.trim() ? "text-emerald-600" : "text-amber-600 animate-bounce"}`} />
                   <span className="font-extrabold text-slate-800 text-xs">
-                    {sheetUrl.trim() ? "연결된 구글 스프레드시트" : "📌 바인딩할 구글 스프레드시트 지정"}
+                    {autoCreatedSheet || sourceMode === "NEW_SHEET"
+                      ? "✅ 자동 생성 및 연결된 구글 스프레드시트"
+                      : sheetUrl.trim()
+                      ? "연결된 대상 구글 스프레드시트"
+                      : "📌 바인딩할 구글 스프레드시트 지정"}
                   </span>
+                  {autoCreatedSheet && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      실시간 동기화 준비 완료
+                    </span>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={handleQuickOpenNewSheet}
-                  className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-0.5 bg-white border border-emerald-300 px-2 py-0.5 rounded-lg shadow-2xs cursor-pointer"
-                >
-                  <span>새 구글 시트 열기</span>
-                  <ArrowUpRight className="w-3 h-3" />
-                </button>
+
+                <div className="flex items-center gap-1.5">
+                  {sheetUrl.trim() && (
+                    <a
+                      href={sheetUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 inline-flex items-center gap-1 bg-white border border-emerald-300 px-2.5 py-1 rounded-lg shadow-2xs cursor-pointer hover:bg-emerald-50 transition-colors"
+                    >
+                      <span>새 시트 확인하기</span>
+                      <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600" />
+                    </a>
+                  )}
+                  {!sheetUrl.trim() && (
+                    <button
+                      type="button"
+                      onClick={handleQuickOpenNewSheet}
+                      className="text-[10px] font-bold text-amber-800 hover:text-amber-950 inline-flex items-center gap-0.5 bg-white border border-amber-300 px-2 py-0.5 rounded-lg shadow-2xs cursor-pointer"
+                    >
+                      <span>새 구글 시트 열기</span>
+                      <ArrowUpRight className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="relative">
-                <input
-                  type="text"
-                  value={sheetUrl}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setSheetUrl(val);
-                    if (val.includes("/spreadsheets/d/") || val.length >= 25) {
-                      fetchSheetTitle(val);
-                      detectExistingGas(val);
-                    }
-                  }}
-                  placeholder="https://docs.google.com/spreadsheets/d/... (새 시트 주소를 여기에 붙여넣으세요)"
-                  className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                />
-                <Link2 className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
-              </div>
+              {sheetUrl.trim() ? (
+                <div className="flex items-center gap-2 bg-white/90 border border-emerald-200/80 rounded-xl px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] font-bold text-slate-800 truncate">
+                      {projectName.trim() || "새 스프레드시트"}
+                    </div>
+                    <div className="text-[10px] font-mono text-slate-500 truncate flex items-center gap-1">
+                      <Link2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                      <span className="truncate">{sheetUrl}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newUrl = window.prompt("변경할 구글 스프레드시트 URL을 입력하세요:", sheetUrl);
+                      if (newUrl !== null) {
+                        const trimmed = newUrl.trim();
+                        setSheetUrl(trimmed);
+                        if (trimmed.includes("/spreadsheets/d/") || trimmed.length >= 25) {
+                          fetchSheetTitle(trimmed);
+                          detectExistingGas(trimmed);
+                        }
+                      }
+                    }}
+                    className="text-[10px] font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg border border-slate-200 shrink-0 transition-colors cursor-pointer"
+                  >
+                    주소 변경
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={sheetUrl}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSheetUrl(val);
+                      if (val.includes("/spreadsheets/d/") || val.length >= 25) {
+                        fetchSheetTitle(val);
+                        detectExistingGas(val);
+                      }
+                    }}
+                    placeholder="https://docs.google.com/spreadsheets/d/... (새 시트 주소를 여기에 붙여넣으세요)"
+                    className="w-full pl-8 pr-3 py-1.5 bg-white border border-amber-200 rounded-xl text-xs font-mono font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  />
+                  <Link2 className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+                </div>
+              )}
             </div>
 
             {/* 시트 분석 요약 카드 */}

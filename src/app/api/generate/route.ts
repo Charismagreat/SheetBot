@@ -274,16 +274,28 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
      - 나라장터 신규 입찰공고 실시간 모니터링: egdeskToolsCall('bidnotice', 'bidnotice_lookup', { title: '키워드', openOnly: true })
    - 🔍 [기업 심층 웹 리서치]:
      - 기업 홈페이지 분석 및 사업 영역 요약: egdeskToolsCall('company-research', 'companyresearch_run', { domain: '회사도메인', companyName: '회사명' })
+   - 📱 [SMS 문자 발송 구현 표준 원칙 - 가짜 성공 Mock 코드 절대 금지]:
+     - ⚠️ 절대 금지: 실제 통신 없이 단순히 '발송성공'이나 'HTTP 200' 문자열을 대입하는 모의(Mock) 코드를 작성하지 마십시오!
+     - [1번 기본 엔진 - SheetBot 구글 메시지 스마트폰 연동]:
+         * 발송 전 checkActiveSmsDevice()를 호출하여 회원의 등록된 활성 기기(status === 'CONNECTED' 또는 'paired')가 있는지 실시간 점검하세요. (My DB sheetbot_user_devices 조회 시 result.content[0].text JSON을 안전하게 파싱하여 user_email 일치 기기를 1순위 매칭)
+         * 점검 결과(연결된 기기명, 무료 연동 여부, 발송 대상 건수)를 명시한 [점검 완료 및 발송 확인] 알림창을 띄워 사용자 승인을 받은 후 실제 문자를 발송하세요.
+         * 활성 기기가 있으면 egdeskToolsCall('phone', 'phone_send', { deviceId: device.device_id, phoneNumber: phone, message: content })를 호출하여 실제 문자를 발송하세요.
+     - [기기 미등록 시 세련된 안내 모달 표출 - showSmsDeviceNoticeModal()]:
+       * 등록된 기기가 없으면 발송을 중단하고 다음 2가지 대안을 담은 HTML 모달 다이얼로그(380px)를 띄우세요:
+         1. 📱 기본: 스마트폰(구글 메시지) 연동 (무제한 무료 발송) -> [스마트폰 기기 연동 바로가기 ↗] (https://sheetbot.cloud/dashboard/settings)
+         2. 💳 대안: 상용 유료 문자 API (알리고, 쿨SMS 등) Key 등록 안내
+     - [2번 대안 - 상용 문자 API (알리고/쿨SMS) 지원]:
+       * PropertiesService.getScriptProperties()에 'SMS_API_KEY'가 설정되어 있는 경우, 해당 상용 통신사 API 규격으로 전송하는 폴백을 함께 지원하세요.
 4. 📋 시트 및 데이터 조작 (실제 컬럼 1:1 매핑 및 동적 행 삽입 절대 준수):
    - 특정 시트명이 언급된 경우, getSheetByName()으로 참조하고 시트가 없으면 insertSheet()로 헤더 행과 함께 자동 생성하세요.
    - 단, 시트에 이미 존재하는 헤더(1행)가 있을 경우, 헤더를 임의로 변경하거나 덮어쓰지 말고 실제 시트 1행의 컬럼 순서 및 개수에 1:1로 정확히 맞추어 rowsToInsert 2차원 배열을 구성하세요.
    - '최근 기록이 위에 오도록' 요청된 경우:
      - 삽입할 행이 N개일 때, sheet.insertRowsBefore(2, N) 후 sheet.getRange(2, 1, N, rowsToInsert[0].length).setValues(rowsToInsert)로 한 번에 삽입하여 데이터 순서가 뒤집히지 않고 최신 데이터가 시트 맨 위(2행부터)에 안전하게 자리잡도록 작성하세요.
    - 숫자 포맷: 금액, 수량, 단가 등 숫자 열이 감지되면 해당 열에 .setNumberFormat("#,##0")을 적용하세요.
-5. 🚀 상단 메뉴 및 사이드바 (표준 메뉴 규칙 필수 준수):
-   - 구글 시트 상단 메뉴에 '🚀 SheetBot 메뉴' 메뉴를 추가하는 onOpen() 함수를 항상 포함하세요.
+5. 🚀 상단 메뉴 및 사이드바 (표준 메뉴 규칙 필수 준수 - 위반 절대 금지):
+   - ⚠️ [메뉴명 고정 절대 원칙]: 구글 시트 상단 메뉴명은 사용자의 요청 주제나 업무 내용과 무관하게 **반드시 100% '🚀 SheetBot 메뉴'로 통일**해야 합니다. (예: ui.createMenu('🚀 SheetBot 메뉴')) 임의의 다른 메뉴명(예: '문자발송 시스템', '주문 관리' 등)을 절대로 사용하지 마십시오!
    - 메뉴 구성 순서:
-     - 1. 업무 자동화 기능 항목들 (예: '📄 문서 AI 업로드 및 분석', '⚡ 터널 연결 상태 점검', '🛠️ 초기 시트 양식 및 데이터 자동 세팅' 등)
+     - 1. 업무 자동화 기능 항목들 (예: '▶️ 자동화 작업 실행', '📤 [1] SQLite 전송', '📥 [2] SQLite 조회', '⚡ 터널 연결 상태 점검', '🛠️ 초기 시트 양식 및 데이터 자동 세팅' 등)
      - 2. 구분선 (.addSeparator())
      - 3. '🤖 SheetBot AI 코파일럿' (showAiCopilotSidebar 호출)
      - 4. 최하단 고정: '📖 SheetBot 사용법 및 활용사례' (openSheetBotGuide 호출 - sheetbot.cloud 사이트를 새 탭으로 여는 모달 함수)
@@ -323,7 +335,7 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
     "구현된 세부 기능 3"
   ],
   "scriptCode": "/* Code.gs 전체 소스코드 (onOpen, 사이드바 표출, egdeskToolsCall을 활용한 깔끔하고 강력한 자동화 코드) */",
-  "manifest": "{\\n  \\"timeZone\\": \\"Asia/Seoul\\",\\n  \\"dependencies\\": {},\\n  \\"exceptionLogging\\": \\"STACKDRIVER\\",\\n  \\"runtimeVersion\\": \\"V8\\"\\n}",
+  "manifest": "{\\n  \\"timeZone\\": \\"Asia/Seoul\\",\\n  \\"dependencies\\": {},\\n  \\"exceptionLogging\\": \\"STACKDRIVER\\",\\n  \\"runtimeVersion\\": \\"V8\\",\\n  \\"oauthScopes\\": [\\n    \\"https://www.googleapis.com/auth/spreadsheets\\",\\n    \\"https://www.googleapis.com/auth/script.container.ui\\",\\n    \\"https://www.googleapis.com/auth/script.external_request\\",\\n    \\"https://www.googleapis.com/auth/script.scriptapp\\",\\n    \\"https://www.googleapis.com/auth/drive\\"\\n  ]\\n}",
   "triggers": [
     { "type": "ON_OPEN", "description": "시트 열기 시 커스텀 메뉴 및 환경 자동 초기화" }
   ]
@@ -332,16 +344,35 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
     let existingScriptSection = "";
     if (mergeMode === "MERGE" && existingScriptCode && existingScriptCode.trim()) {
       existingScriptSection = `
-[🛡️ 안전 병합 모드: 기존 Apps Script 코드 보존 및 신규 기능 증분(Merge) 절대 준수 지침]:
-- 사용자의 구글 시트에는 이미 실무에서 사용 중인 중요한 Apps Script 코드가 존재합니다.
-- ⚠️ 절대 규칙:
-  1. 아래 제공되는 [기존 Apps Script 소스코드]에 정의된 모든 커스텀 함수(이름, 매개변수, 내부 로직)를 절대 임의로 삭제하거나 기능을 훼손하지 마십시오.
-  2. 기존 코드에 onOpen() 함수가 이미 있다면:
-     - 기존 onOpen()의 UI 메뉴 구조를 100% 보존하면서, 새로 추가되는 SheetBot 기능 메뉴를 기존 메뉴에 깔끔하게 합치거나 하위 메뉴/새 메뉴로 병합하십시오. (onOpen 함수가 2개 존재하면 문법 오류가 나므로 반드시 1개로 병합)
-  3. 신규 자동화 요구사항에 필요한 함수들은 기존 함수들과 충돌하지 않도록 명확한 네이밍으로 새롭게 추가하십시오.
-  4. 결과물 scriptCode는 기존 코드의 모든 함수와 이번 신규 요구사항 구현 코드가 조화롭게 결합된 '완전한 완성형 Code.gs'여야 합니다.
+[🛡️ 지능형 안전 병합(Smart Merge) 모드 지침 (Managed Core vs User Custom)]:
+- 사용자의 구글 시트에는 이미 실무에서 사용 중인 Apps Script 코드가 존재합니다.
+- ⚠️ [영역별 핵심 병합 규칙 - 절대 준수]:
+  1. 👤 [사용자 고유 커스텀 함수 (User Custom)]:
+     - 사용자가 직접 작성하거나 추가한 고유 함수(비즈니스 계산식, 사용자 작성 로직 등)는 100% 무손실 영구 보존하십시오.
+  2. 🚀 [시트봇 관리 함수 (SheetBot Managed Core)]:
+     - 기존에 시트봇이 생성했던 핵심 함수들(onOpen, 발송, 조회, 동기화 등)의 비즈니스 기능 스펙은 온전히 유지하십시오.
+     - ⚠️ [중요 - 적극적 결함 리팩토링 허용]: 사용자가 요구사항에서 **"오류가 발생하지 않도록", "에러 수정", "예외 처리", "기능 수정"** 등을 요청한 경우, 기존의 잘못된 결함 코드(예: 단순 alert 에러창 띄우고 중단하는 코드)를 그대로 보존하지 말고, **기존 함수의 내부 로직을 적극적으로 수정·리팩토링하여 요구사항을 완벽히 충족하는 완성형 코드로 개선**하십시오!
+  3. 🛠️ [시트 탭 부재 오류 방지 자가 치유(Self-Healing) 필수 탑재]:
+     - '시트를 찾을 수 없습니다' 오류를 방지하기 위해 단순 alert 후 종료하는 구문을 절대 사용하지 마십시오.
+     - 대신 대상 시트 탭이 없으면 자동으로 새 시트를 생성하고 양식을 세팅하는 getTargetSheetSafe(sheetName) 자가 치유 함수를 반드시 탑재하고 모든 데이터 조작 함수에서 이를 호출하도록 구현하십시오:
+       \`\`\`javascript
+       function getTargetSheetSafe(sheetName) {
+         const ss = SpreadsheetApp.getActiveSpreadsheet();
+         let sheet = ss.getSheetByName(sheetName);
+         if (!sheet) {
+           sheet = ss.insertSheet(sheetName, 0);
+           if (typeof setupInitialSheetLayout === 'function') {
+             setupInitialSheetLayout();
+           }
+         }
+         return sheet;
+       }
+       \`\`\`
+  4. onOpen() 메뉴 병합:
+     - onOpen()은 반드시 1개로 통합하며, 상단 메뉴명은 무조건 '🚀 SheetBot 메뉴'로 통일하십시오.
+  5. 결과물 scriptCode는 기존 사용자 함수와 시트봇의 개선된 코드가 조화롭게 결합된 '완전한 완성형 Code.gs'여야 합니다.
 
-[기존 Apps Script 소스코드 (반드시 보존 및 융합)]:
+[기존 Apps Script 소스코드]:
 \`\`\`javascript
 ${existingScriptCode.trim()}
 \`\`\`
@@ -372,9 +403,9 @@ ${existingScriptCode.trim()}
 4. 백엔드 주입 함수 구현:
    - executeSelfCodeInjection(userPrompt): 자연어 요청 및 직접 작성 코드를 분석하여 기존 로직과 충돌 없이 안전 병합(Merge)한 후 클라우드 Apps Script(Code.gs)에 주입 및 push
    - 스프레드시트 탭, 컬럼 구조(A열~헤더), 기존 Code.gs 소스코드를 수집.
-   - 프로젝트 메타(gasProjectId, projectId)를 조회:
-     상수 SHEETBOT_GAS_PROJECT_ID 가 있으면 우선 사용하고, 없으면 egdeskUserDataSql("SELECT id, gas_project_id FROM sheetbot_projects WHERE spreadsheet_id = '" + currentSpreadsheetId + "' AND deleted_at IS NULL LIMIT 1") 로 동적 획득.
-   - egdeskToolsCall('ai-caller', 'ai_caller_call', {
+    - 프로젝트 메타(gasProjectId, projectId)를 조회:
+      상수 SHEETBOT_GAS_PROJECT_ID 가 있으면 우선 사용하고, 없으면 egdeskToolsCall('user-data', 'user_data_query', { tableName: 'sheetbot_projects', filters: { spreadsheet_id: currentSpreadsheetId }, limit: 1 }) 로 동적 획득.
+    - egdeskToolsCall('ai-caller', 'ai_caller_call', {
        model: 'gemini-3.8-flash',
        temperature: 0.1,
        prompt: '현재 구글 스프레드시트의 기존 기능과 스키마를 100% 무손실 보존(Merge)하면서, 다음 요구사항을 반영한 완전한 완성형 Code.gs 전체 코드를 생성하세요. [중요]: 사용자가 직접 작성한 JavaScript/Apps Script 코드나 함수 정의(function ...)가 요구사항에 포함되어 있는 경우, 해당 로직을 왜곡하거나 생략하지 말고 원형 그대로 안전하게 융합 반영하세요. 요구사항: ' + userPrompt + ' ...',
@@ -407,8 +438,11 @@ ${existingScriptCode.trim()}
 
 3. 2가지 조회 모드 및 'SQLite_조회결과' 시트 렌더링 (서식 및 ID 보존 원칙):
    - executeSqliteQuery(mode, filterParams, aiPrompt):
+     * ⚠️ [핵심 주의사항: SQL 쿼리 작성 시 반드시 'SELECT *' 사용]:
+       - user_data_sql_query 백엔드는 쿼리 문자열에 'UPDATE', 'DELETE', 'DROP' 등의 키워드가 포함되어 있는지 검사합니다.
+       - 컬럼명에 'updated_at', 'updated_by', 'deleted_at' 등이 포함되면 해당 단어로 인해 'Query contains forbidden keyword: UPDATE' 오류(HTTP 500)가 발생하므로, 컬럼명을 직접 나열하지 말고 반드시 'SELECT * FROM 테이블명 WHERE ... ORDER BY order_date DESC LIMIT ...' 형태로 작성하세요.
      * [조건 검색]: 날짜 범위, 상호/키워드, 색상/유형, 최소금액/수량 등 동적 WHERE 조건 SQL 생성 및 실행.
-     * [🤖 AI 검색 (Text-to-SQL)]: egdeskToolsCall('ai-caller', 'ai_caller_call', ...) 호출로 자연어를 단일 SELECT 문으로 변환 후 안전 검증 및 실행.
+     * [🤖 AI 검색 (Text-to-SQL)]: egdeskToolsCall('ai-caller', 'ai_caller_call', ...) 호출로 자연어를 'SELECT * FROM ...' 형태의 단일 SELECT 문으로 변환 후 안전 검증 및 실행.
    - renderQueryResultsToSheet(rows, queryTitle):
      * 'SQLite_조회결과' 탭이 없으면 생성, 있으면 sheet.clear() 및 sheet.clearFormats()로 이전 날짜 서식 오염 완전 리셋.
      * A열은 반드시 'SQLite ID'로 배치하고, sheet.getRange(3, 1, tableData.length, 1).setNumberFormat("0") 정수 서식을 강제 적용하여 날짜로 오인식되지 않도록 방지.
@@ -417,6 +451,7 @@ ${existingScriptCode.trim()}
 4. 📊 [방안 1] 시트 직접 편집 후 일괄 동기화 (syncEditedResultsToSqlite):
    - 사용자가 'SQLite_조회결과' 시트에서 수량, 금액, 상태 등을 직접 수정한 뒤 메뉴 [3]을 실행하면 작동.
    - A열 ID를 안전하게 파싱하는 extractSqliteId 헬퍼 함수를 필수 탑재 (셀이 날짜 객체로 들어올 경우 1899-12-30 기준일 역산 2중 방어).
+   - 낙관적 잠금 사전 검증 시에도 'SELECT * FROM 테이블명 WHERE id IN (...)' 형태로 조회하여 updated_at 키워드 차단을 방지하세요.
    - 상태가 '삭제'인 행은 user_data_delete_rows로 삭제하고, 나머지 행은 user_data_update_rows로 일괄 수정 반영.
    - 구글 드라이브 동기화 파일('${targetSqliteFileName}')도 최신 상태로 백업 갱신.
 
@@ -488,6 +523,9 @@ ${prompt}
       }
 
       if (!scriptCode || !scriptCode.trim()) return null;
+
+      // 표준 메뉴 규칙 강제: ui.createMenu('...')를 무조건 ui.createMenu('🚀 SheetBot 메뉴')로 100% 통일
+      scriptCode = scriptCode.replace(/ui\.createMenu\s*\(\s*(['"`]).*?\1\s*\)/g, "ui.createMenu('🚀 SheetBot 메뉴')");
 
       return {
         summary: typeof data.summary === "string" ? data.summary : "AI 자동 생성 Apps Script",

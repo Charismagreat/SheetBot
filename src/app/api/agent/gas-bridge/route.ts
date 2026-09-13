@@ -11,6 +11,7 @@ import { setupDatabase } from "@/lib/setup-db";
 import { getAiModelSettings } from "@/lib/ai-settings";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { recordAiUsageLog } from "@/lib/ai-usage";
+import { ensureStandardManifest } from "@/lib/gas-manifest";
 
 /**
  * 1. GET: 외부 AI 에이전트가 스프레드시트의 탭, 헤더(10행 등), 기존 코드 및 코딩 지침 조회
@@ -30,12 +31,24 @@ export async function GET(request: Request) {
 
     // 프로젝트 조회 (id 또는 bridge_token 엄격 매칭)
     let project = null;
-    if (token.startsWith("proj_")) {
-      const idRes = await queryTable("sheetbot_projects", {
-        filters: { id: token },
+    let targetProjectId = token;
+
+    if (token.startsWith("sec_")) {
+      const tokenRes = await queryTable("sheetbot_bridge_tokens", {
+        filters: { token },
         limit: 1,
       }).catch(() => ({ rows: [] }));
-      project = (idRes.rows || []).find((r: any) => r.id === token && !r.deleted_at);
+      if (tokenRes.rows && tokenRes.rows.length > 0) {
+        targetProjectId = tokenRes.rows[0].project_id;
+      }
+    }
+
+    if (targetProjectId.startsWith("proj_")) {
+      const idRes = await queryTable("sheetbot_projects", {
+        filters: { id: targetProjectId },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+      project = (idRes.rows || []).find((r: any) => r.id === targetProjectId && !r.deleted_at);
     } else {
       const allRes = await queryTable("sheetbot_projects", {
         limit: 100,
@@ -194,12 +207,24 @@ export async function POST(request: Request) {
 
     // 프로젝트 조회 (id 또는 bridge_token 엄격 매칭)
     let project = null;
-    if (token.startsWith("proj_")) {
-      const idRes = await queryTable("sheetbot_projects", {
-        filters: { id: token },
+    let targetProjectId = token;
+
+    if (token.startsWith("sec_")) {
+      const tokenRes = await queryTable("sheetbot_bridge_tokens", {
+        filters: { token },
         limit: 1,
       }).catch(() => ({ rows: [] }));
-      project = (idRes.rows || []).find((r: any) => r.id === token && !r.deleted_at);
+      if (tokenRes.rows && tokenRes.rows.length > 0) {
+        targetProjectId = tokenRes.rows[0].project_id;
+      }
+    }
+
+    if (targetProjectId.startsWith("proj_")) {
+      const idRes = await queryTable("sheetbot_projects", {
+        filters: { id: targetProjectId },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+      project = (idRes.rows || []).find((r: any) => r.id === targetProjectId && !r.deleted_at);
     } else {
       const allRes = await queryTable("sheetbot_projects", {
         limit: 100,
@@ -260,6 +285,21 @@ export async function POST(request: Request) {
       );
     }
 
+    // 0-1. 구글 워크스페이스 OAuth 사전 인증 점검 (가짜 성공 원천 차단)
+    const authStatus = await callAppsScriptTool("apps_script_auth_status", {}).catch(() => null);
+    if (authStatus && authStatus.connected === false) {
+      const errorMsg = authStatus.agentInstructions || authStatus.error || "Google Workspace 계정 연결(OAuth)이 해제되어 있습니다. EGDesk에서 Google 계정 로그인을 다시 수행해 주세요.";
+      return NextResponse.json(
+        {
+          success: false,
+          error: `[배포 중단] Google Workspace OAuth 세션 만료: ${errorMsg}`,
+          code: "GOOGLE_OAUTH_TOKEN_MISSING",
+          authStatus,
+        },
+        { status: 401 }
+      );
+    }
+
     // 1. 이지데스크 터널 인프라(EgdeskConfig.gs, EgdeskClient.gs) 자동 주입 보장
     try {
       await callAppsScriptTool("apps_script_setup_egdesk_tunnel", {
@@ -279,18 +319,7 @@ export async function POST(request: Request) {
     });
 
     // 3. appsscript.json 매니페스트 기록
-    const finalManifest =
-      manifest ||
-      JSON.stringify(
-        {
-          timeZone: "Asia/Seoul",
-          dependencies: {},
-          exceptionLogging: "STACKDRIVER",
-          runtimeVersion: "V8",
-        },
-        null,
-        2
-      );
+    const finalManifest = ensureStandardManifest(manifest);
 
     await callAppsScriptTool("apps_script_write_file", {
       projectId: gasProjectId,
@@ -298,10 +327,23 @@ export async function POST(request: Request) {
       content: finalManifest,
     });
 
-    // 4. 구글 클라우드 최종 동기화 (Push)
-    await callAppsScriptTool("apps_script_push_to_google", {
+    // 4. 구글 클라우드 최종 동기화 (Push) 및 응답 무결성 검증
+    const pushRes = await callAppsScriptTool("apps_script_push_to_google", {
       projectId: gasProjectId,
     });
+
+    if (pushRes && (pushRes.error || pushRes.isError || pushRes.code === "GOOGLE_OAUTH_TOKEN")) {
+      const errMsg = pushRes.error || pushRes.message || "구글 클라우드(Apps Script API)로 코드를 업로드하지 못했습니다.";
+      return NextResponse.json(
+        {
+          success: false,
+          error: `[클라우드 푸시 실패] ${errMsg}`,
+          code: pushRes.code || "PUSH_TO_GOOGLE_FAILED",
+          details: pushRes,
+        },
+        { status: 502 }
+      );
+    }
 
     // 5. 웹앱(doGet) 포함 시 웹앱 자동 배포
     if (scriptCode.includes("doGet") || scriptCode.includes("HtmlService")) {
@@ -367,6 +409,7 @@ export async function POST(request: Request) {
         gasProjectId,
         scriptUrl,
         webAppUrl: webAppUrl || null,
+        pushedToGoogle: true,
         deployedAt: new Date().toISOString(),
         comment,
       },
