@@ -100,6 +100,24 @@
    - 발송 결과를 시트(결과메시지 열: `스마트폰(기기명) 실제 전송 완료`) 및 SQLite 발송 대장에 투명하게 기록해야 합니다.
 <!-- END:sms-dispatch-rules -->
 
+<!-- BEGIN:gmail-dispatch-rules -->
+## Gmail 안내 이메일 일괄 발송 및 HTML 템플릿 인코딩 표준 원칙
+
+1. **`GmailApp.sendEmail` 네이티브 엔진 활용 원칙**:
+   - 외부 상용 이메일 API 키 없이 구글 계정 세션 권한으로 발송합니다.
+   - 일반 구글 계정(@gmail.com)은 일일 100건, Google Workspace 계정은 일일 1,500건까지 무료 쿼터가 보장됩니다.
+2. **사전 일일 쿼터 확인 및 원스톱 승인 모달 필수**:
+   - 발송 전 반드시 `MailApp.getRemainingDailyQuota()`를 호출하여 남은 무료 수량을 실시간 점검합니다.
+   - 선택된 발송 대상 건수가 잔여 쿼터를 초과할 경우 즉시 발송을 사전 차단하고 친절한 안내를 제공합니다.
+   - 발송 전 발신 계정, 남은 통수, 대상 건수를 요약하는 통합 승인창(`OK_CANCEL`)을 통해 사용자 동의 후 실제 발송을 개시합니다.
+3. **MIME 변환 이모지 깨짐 방지 (`&#128640;` 등 HTML NCR 필수 적용)**:
+   - Google Apps Script `GmailApp.sendEmail`의 `htmlBody` 파라미터는 4바이트 UTF-8 SMP 이모지(`🚀` 등)를 MIME 인코딩할 때 `??????`로 깨뜨릴 수 있습니다.
+   - 따라서 HTML 이메일 템플릿 내의 모든 특수 이모지는 반드시 HTML 숫자 문자 참조(NCR, 예: `<h1><span style="font-size:22px;">&#128640;</span> SheetBot 알림 센터</h1>`) 및 `&bull;` 형태로 작성하여 전송해야 합니다.
+4. **결과 시트 서식 스타일링 및 SQLite/드라이브 백업 동기화**:
+   - 발송 성공 시 해당 셀을 연한 초록색(`#dcfce7`), 실패 시 연한 빨간색(`#fee2e2`)으로 즉시 서식 변경합니다.
+   - 발송 이력을 SQLite DB(`email_send_logs_sqlite`) 및 구글 드라이브 `SheetBot_Databases` 폴더 내 `.sqlite` 백업 파일에 실시간으로 안전하게 보관합니다.
+<!-- END:gmail-dispatch-rules -->
+
 <!-- BEGIN:egdesk-tunnel-rules -->
 ## 이지데스크 공용 터널(EGDesk Tunnel) 및 원격 클라우드 연동 원칙
 
