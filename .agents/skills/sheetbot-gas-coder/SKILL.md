@@ -11,6 +11,14 @@ description: Google 스프레드시트 분석 및 Google Apps Script(GAS) 자동
 
 ## 1. 워크플로우
 
+### Step 0. Google OAuth 사전 점검 (Pre-flight Token Check, 필수 선행)
+코드 작성이나 시트 생성에 착수하기 전, 반드시 먼저 Google Workspace OAuth 토큰 상태를 점검합니다:
+1. `call_mcp_tool('egdesk-drive', 'drive_auth_status')` 및 `call_mcp_tool('egdesk-apps-script', 'apps_script_auth_status')` 호출.
+2. 만약 `connected: false`이거나 토큰이 만료된 경우:
+   - 코드 작성을 시작하지 말고, `drive_auth_login` 결과의 인증 동의 URL(`https://cbptgzaubhcclkmvkiua.supabase.co/auth/v1/authorize...`)을 사용자에게 먼저 제시.
+   - "구글 시트 및 스크립트 직접 자동 주입을 위해 먼저 계정 연동을 완료해 주세요"라고 사용자에게 승인 요청.
+3. 사용자가 인증을 완료하여 `connected: true`가 확인되면 다음 Step으로 진행.
+
 ### Step 1. 브릿지 URL 수신 시 (GET 요청)
 사용자가 `.../api/agent/gas-bridge?token=...` 형태의 웹 주소를 제공한 경우:
 1. `read_url_content` 도구 또는 HTTP GET 요청을 통해 해당 URL의 데이터를 읽어옵니다.
