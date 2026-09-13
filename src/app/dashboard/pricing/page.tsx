@@ -357,17 +357,39 @@ export default function PricingWalletPage() {
 
           {/* 내 잔여 토큰 뱃지 카드 */}
           {wallet && (
-            <div className="flex items-center gap-3 bg-gradient-to-r from-amber-500/10 to-indigo-500/10 border border-amber-300/60 rounded-2xl px-4 py-2.5 shadow-xs">
-              <div className="p-2 bg-amber-500 text-white rounded-xl shadow-xs">
+            <div
+              className={`flex items-center gap-3 rounded-2xl px-4 py-2.5 shadow-xs border ${
+                wallet.balanceTokens < 0
+                  ? "bg-rose-50/90 border-rose-300 text-rose-900"
+                  : "bg-gradient-to-r from-amber-500/10 to-indigo-500/10 border-amber-300/60"
+              }`}
+            >
+              <div
+                className={`p-2 rounded-xl shadow-xs text-white ${
+                  wallet.balanceTokens < 0 ? "bg-rose-600" : "bg-amber-500"
+                }`}
+              >
                 <Zap className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
-                  현재 보유 토큰
+                <div
+                  className={`text-[10px] font-extrabold uppercase tracking-wider ${
+                    wallet.balanceTokens < 0 ? "text-rose-600" : "text-slate-500"
+                  }`}
+                >
+                  {wallet.balanceTokens < 0 ? "현재 초과 사용분 (미정산)" : "현재 보유 토큰"}
                 </div>
-                <div className="text-base font-black text-slate-900 leading-tight flex items-baseline gap-1">
-                  <span>{wallet.balanceTokens.toLocaleString()}</span>
-                  <span className="text-xs font-bold text-amber-600">Tokens</span>
+                <div className="text-base font-black leading-tight flex items-baseline gap-1">
+                  <span className={wallet.balanceTokens < 0 ? "text-rose-600" : "text-slate-900"}>
+                    {wallet.balanceTokens.toLocaleString()}
+                  </span>
+                  <span
+                    className={`text-xs font-bold ${
+                      wallet.balanceTokens < 0 ? "text-rose-600" : "text-amber-600"
+                    }`}
+                  >
+                    Tokens
+                  </span>
                 </div>
               </div>
             </div>
@@ -376,6 +398,21 @@ export default function PricingWalletPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-8">
+        {/* 초과 사용(Overdraft) 정산 안내 배너 */}
+        {wallet && wallet.balanceTokens < 0 && (
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-rose-500 to-amber-600 text-white shadow-lg flex items-start sm:items-center gap-3 animate-fade-in border border-rose-400">
+            <AlertCircle className="w-6 h-6 shrink-0 text-white mt-0.5 sm:mt-0" />
+            <div className="text-xs sm:text-sm">
+              <span className="font-extrabold">💡 미정산 초과 사용분 자동 상계 안내: </span>
+              이전 AI 자동화 작업에서 정상 완수를 위해 허용된 초과 사용분{" "}
+              <strong className="underline underline-offset-2">
+                {Math.abs(wallet.balanceTokens).toLocaleString()} 토큰
+              </strong>
+              이 존재합니다. 패키지 충전 시 해당 수량이 자동으로 차감 정산된 후 잔여량이 충전됩니다.
+            </div>
+          </div>
+        )}
+
         {/* 성공 알림 배너 */}
         {purchaseSuccess && (
           <div className="p-4 rounded-2xl bg-emerald-500 text-white shadow-lg flex items-center gap-3 animate-fade-in">
@@ -466,6 +503,15 @@ export default function PricingWalletPage() {
                     <div className="flex items-center justify-between text-amber-600 font-bold bg-amber-50/70 p-2 rounded-xl">
                       <span>보너스 추가 토큰</span>
                       <span>+{pkg.bonusTokens.toLocaleString()} Tokens</span>
+                    </div>
+                  )}
+
+                  {wallet && wallet.balanceTokens < 0 && (
+                    <div className="flex items-center justify-between text-rose-700 font-bold bg-rose-50 p-2 rounded-xl border border-rose-200/60">
+                      <span className="text-[11px]">초과분 상계 후 최종 잔여량</span>
+                      <span className="text-xs font-black">
+                        {(pkg.totalTokens + wallet.balanceTokens).toLocaleString()} Tokens
+                      </span>
                     </div>
                   )}
 

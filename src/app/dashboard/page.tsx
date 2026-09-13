@@ -584,42 +584,94 @@ ${recruitForm.introduction}
 
             {/* 카드 2: AI 토큰 지갑 & 충전 */}
             <div
-              className="bg-amber-50/40 hover:bg-amber-50/60 p-4 rounded-2xl border border-amber-200/70 transition-all flex flex-col justify-between"
-              data-easybot-hint="AI 토큰 잔여량: Apps Script 코드 생성 및 AI 대화에 사용되는 보유 크레딧 잔액입니다. 클릭하여 토큰을 충전할 수 있습니다."
+              className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
+                wallet && wallet.balanceTokens < 0
+                  ? "bg-rose-50/60 hover:bg-rose-50/80 border-rose-300"
+                  : "bg-amber-50/40 hover:bg-amber-50/60 border-amber-200/70"
+              }`}
+              data-easybot-hint="AI 토큰 잔여량: Apps Script 코드 생성 및 AI 대화에 사용되는 보유 크레딧 잔액입니다. 마이너스 잔액 시 다음 충전 시 자동 차감 정산됩니다."
             >
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="text-xs font-bold text-amber-900">AI 토큰 지갑</span>
-                  <div className="w-7 h-7 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                  <span
+                    className={`text-xs font-bold ${
+                      wallet && wallet.balanceTokens < 0 ? "text-rose-900" : "text-amber-900"
+                    }`}
+                  >
+                    {wallet && wallet.balanceTokens < 0 ? "AI 토큰 (초과 사용)" : "AI 토큰 지갑"}
+                  </span>
+                  <div
+                    className={`w-7 h-7 rounded-xl flex items-center justify-center ${
+                      wallet && wallet.balanceTokens < 0
+                        ? "bg-rose-200/80 text-rose-800"
+                        : "bg-amber-100 text-amber-700"
+                    }`}
+                  >
                     <Coins className="w-3.5 h-3.5" />
                   </div>
                 </div>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-black text-amber-900 tracking-tight">
+                  <span
+                    className={`text-2xl font-black tracking-tight ${
+                      wallet && wallet.balanceTokens < 0 ? "text-rose-700" : "text-amber-900"
+                    }`}
+                  >
                     {(wallet?.balanceTokens ?? 20000).toLocaleString()}
                   </span>
-                  <span className="text-xs font-bold text-amber-700">Token</span>
-                </div>
-                <p className="text-[11px] text-amber-800/80 font-medium mt-1 flex flex-wrap items-center gap-1.5">
-                  <span className="px-1.5 py-0.2 bg-amber-200/60 text-amber-900 rounded font-bold text-[10px]">
-                    {wallet?.tier || "FREE"} 플랜
+                  <span
+                    className={`text-xs font-bold ${
+                      wallet && wallet.balanceTokens < 0 ? "text-rose-600" : "text-amber-700"
+                    }`}
+                  >
+                    Token
                   </span>
-                  <span>보유 중</span>
+                </div>
+                <p
+                  className={`text-[11px] font-medium mt-1 flex flex-wrap items-center gap-1.5 ${
+                    wallet && wallet.balanceTokens < 0 ? "text-rose-800/90" : "text-amber-800/80"
+                  }`}
+                >
+                  {wallet && wallet.balanceTokens < 0 ? (
+                    <span className="px-1.5 py-0.2 bg-rose-200/80 text-rose-900 rounded font-bold text-[10px]">
+                      ⚠️ 초과 사용분 (다음 충전 시 자동 상계)
+                    </span>
+                  ) : (
+                    <>
+                      <span className="px-1.5 py-0.2 bg-amber-200/60 text-amber-900 rounded font-bold text-[10px]">
+                        {wallet?.tier || "FREE"} 플랜
+                      </span>
+                      <span>보유 중</span>
+                    </>
+                  )}
                   {wallet?.totalPurchasedTokens ? (
-                    <span className="text-[10px] text-amber-800/70 font-semibold">
+                    <span className="text-[10px] opacity-80 font-semibold">
                       (총 적립 {wallet.totalPurchasedTokens.toLocaleString()})
                     </span>
                   ) : null}
                 </p>
               </div>
 
-              <div className="pt-3 mt-3 border-t border-amber-200/60 flex items-center justify-between text-[11px]">
-                <span className="text-amber-700/80 font-medium">선불형 크레딧</span>
+              <div
+                className={`pt-3 mt-3 border-t flex items-center justify-between text-[11px] ${
+                  wallet && wallet.balanceTokens < 0 ? "border-rose-200/80" : "border-amber-200/60"
+                }`}
+              >
+                <span
+                  className={`font-medium ${
+                    wallet && wallet.balanceTokens < 0 ? "text-rose-700" : "text-amber-700/80"
+                  }`}
+                >
+                  {wallet && wallet.balanceTokens < 0 ? "정산 필요" : "선불형 크레딧"}
+                </span>
                 <Link
                   href="/dashboard/pricing"
-                  className="text-amber-800 hover:text-amber-950 font-bold flex items-center gap-0.5 hover:underline"
+                  className={`font-bold flex items-center gap-0.5 hover:underline ${
+                    wallet && wallet.balanceTokens < 0
+                      ? "text-rose-900 hover:text-rose-950 font-black"
+                      : "text-amber-800 hover:text-amber-950"
+                  }`}
                 >
-                  <span>토큰 충전 ➔</span>
+                  <span>{wallet && wallet.balanceTokens < 0 ? "정산 및 충전 ➔" : "토큰 충전 ➔"}</span>
                 </Link>
               </div>
             </div>
