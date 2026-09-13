@@ -114,8 +114,10 @@ export async function POST(req: NextRequest) {
     const resultJson = await upstreamRes.json();
 
     // 6. 키 최종 사용 시간 갱신 (비동기)
-    updateRows("sheetbot_user_api_keys", { api_key: userKey }, {
+    updateRows("sheetbot_user_api_keys", {
       last_used_at: new Date().toISOString()
+    }, {
+      filters: { api_key: userKey }
     }).catch(() => null);
 
     // 7. AI 호출인 경우 감사 로그 기록

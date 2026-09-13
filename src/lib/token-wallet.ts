@@ -137,10 +137,15 @@ export async function checkTokenBalance(
   const wallet = await getOrCreateUserWallet(userEmail);
 
   if (wallet.balanceTokens < requiredTokens) {
+    const isOverdraft = wallet.balanceTokens < 0;
+    const reasonMsg = isOverdraft
+      ? `잔여 토큰이 부족합니다. (현재 미정산 초과 사용분: ${wallet.balanceTokens.toLocaleString()} 토큰 / 필요: 약 ${requiredTokens.toLocaleString()} 토큰). 충전 시 초과 사용분이 자동 상계 정산됩니다.`
+      : `잔여 토큰이 부족합니다. (현재: ${wallet.balanceTokens.toLocaleString()} 토큰 / 필요: 약 ${requiredTokens.toLocaleString()} 토큰).`;
+
     return {
       allowed: false,
       balance: wallet.balanceTokens,
-      reason: `잔여 토큰이 부족합니다. (현재: ${wallet.balanceTokens.toLocaleString()} 토큰 / 필요: 약 ${requiredTokens.toLocaleString()} 토큰)`,
+      reason: reasonMsg,
     };
   }
 
@@ -151,7 +156,7 @@ export async function checkTokenBalance(
 }
 
 /**
- * AI 호출 완료 후 실제 사용된 토큰 차감
+ * AI 호출 완료 후 실제 사용된 토큰 차감 (마이너스 잔액 허용 및 차기 충전 시 자동 상계)
  */
 export async function deductTokens(
   userEmail: string,
@@ -159,7 +164,8 @@ export async function deductTokens(
 ): Promise<{ success: boolean; newBalance: number }> {
   try {
     const wallet = await getOrCreateUserWallet(userEmail);
-    const newBalance = Math.max(0, wallet.balanceTokens - usedTokens);
+    // 초과 사용 시 마이너스(-) 잔액을 그대로 기록하여 다음 충전 시 정산
+    const newBalance = wallet.balanceTokens - usedTokens;
     const newTotalUsed = wallet.totalUsedTokens + usedTokens;
     const now = new Date().toISOString();
 
