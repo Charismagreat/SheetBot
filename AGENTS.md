@@ -81,6 +81,8 @@
      - `https://www.googleapis.com/auth/userinfo.email`
      - `https://www.googleapis.com/auth/script.send_mail`
    - `ensureStandardManifest`(`src/lib/gas-manifest.ts`) 헬퍼를 통해 프로젝트 생성, 수정, 재배포 시 자동으로 스코프가 누락 없이 주입되도록 보장합니다.
+6. **터널 연결 상태 점검 친절 알림 함수(`testEgdeskTunnel`) 오버라이드 필수**:
+   - `EgdeskClient.gs` 기본 템플릿의 500자 날것의 JSON 노출을 방지하기 위해, 모든 프로젝트의 `Code.gs`에는 정돈된 한글 요약 카피(연결 상태, 응답 속도 ms, 백엔드 준비 상태)를 출력하는 완성형 `testEgdeskTunnel()` 함수를 필수로 포함(오버라이드)해야 합니다.
 <!-- END:apps-script-safety-rules -->
 
 <!-- BEGIN:sms-dispatch-rules -->
