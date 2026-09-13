@@ -597,14 +597,14 @@ export default function EditProjectPromptModal({
                     <div>
                       <div className="flex items-center gap-1">
                         <span className="font-extrabold text-xs text-slate-800">
-                          🛡️ 기존 코드 보존 & 새 기능 추가
+                          🛡️ 기존 기능/커스텀 코드 보존 & 스마트 개선
                         </span>
                         <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">
                           권장
                         </span>
                       </div>
                       <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
-                        기존 함수와 메뉴를 100% 보존하면서 새 요구사항을 덧붙여 안전하게 병합합니다.
+                        기존 기능과 사용자 코드를 안전하게 보존하면서, 새 요구사항 및 오류 방지 로직을 똑똑하게 리팩토링합니다.
                       </p>
                     </div>
                   </label>
@@ -627,11 +627,11 @@ export default function EditProjectPromptModal({
                     <div>
                       <div className="flex items-center gap-1">
                         <span className="font-extrabold text-xs text-slate-800">
-                          ⚠️ 기존 코드 덮어쓰기
+                          ⚠️ 전체 코드 새로 작성 (클린 오버라이트)
                         </span>
                       </div>
                       <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
-                        기존 코드를 지우고 이번 요구사항에 맞춰 완전히 새롭게 작성합니다.
+                        기존 코드를 지우고 이번 요구사항을 바탕으로 완전히 새로운 스크립트를 작성합니다.
                       </p>
                     </div>
                   </label>

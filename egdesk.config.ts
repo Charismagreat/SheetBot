@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-11T07:16:57.191Z
+ * Generated at: 2026-09-12T02:48:22.313Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -25,7 +25,7 @@ export const TABLES = {
   table1: {
     name: 'smartti_orders',
     displayName: '스마띠 주문 대장',
-    rowCount: 1,
+    rowCount: 8,
     columnCount: 12,
     columns: ['id', '_version', 'order_date', 'customer_name', 'band_color', 'quantity', 'print_type', 'print_front', 'print_back', 'memo', 'order_amount', 'status']
   } as TableDefinition,
@@ -53,7 +53,7 @@ export const TABLES = {
   table5: {
     name: 'sheetbot_dispatch_logs',
     displayName: 'SheetBot 알림 발송 이력 대장',
-    rowCount: 3,
+    rowCount: 4,
     columnCount: 19,
     columns: ['id', '_version', 'channel', 'event_type', 'rule_name', 'recipient', 'recipient_type', 'title', 'content', 'status', 'error_message', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -130,7 +130,7 @@ export const TABLES = {
   table16: {
     name: 'sheetbot_faqs',
     displayName: 'SheetBot FAQ 관리 대장',
-    rowCount: 24,
+    rowCount: 31,
     columnCount: 14,
     columns: ['id', '_version', 'category', 'question', 'answer', 'sort_order', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -144,7 +144,7 @@ export const TABLES = {
   table18: {
     name: 'sheetbot_payment_orders',
     displayName: 'SheetBot 토큰 결제 및 충전 주문 대장',
-    rowCount: 10,
+    rowCount: 11,
     columnCount: 18,
     columns: ['id', '_version', 'order_id', 'user_email', 'package_name', 'amount_krw', 'tokens_credited', 'pg_provider', 'payment_method', 'status', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,

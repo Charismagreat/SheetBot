@@ -84,7 +84,7 @@ export default function FaqPage() {
                 setSearchQuery(e.target.value);
                 setOpenIdx(null);
               }}
-              placeholder="궁금한 질문이나 키워드를 검색해 보세요 (예: 엑셀, 견적서, 안티그라비티, 토큰 등)"
+              placeholder="궁금한 질문이나 키워드를 검색해 보세요 (예: 문자 발송, 터널 점검, SQLite, 엑셀, 견적서 등)"
               className="w-full pl-12 pr-10 py-3.5 bg-white rounded-2xl border border-slate-200 shadow-xs text-sm placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-slate-800"
             />
             {searchQuery && (

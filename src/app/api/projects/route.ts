@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, insertRows, updateRows, callAppsScriptTool, callDriveTool } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { ensureStandardManifest } from "@/lib/gas-manifest";
 
 export interface SheetBotProject {
   id: string;
@@ -219,13 +220,12 @@ export async function POST(request: Request) {
             content: scriptCode,
           }).catch((err: any) => console.warn("write Code.gs warning:", err.message));
 
-          if (manifest) {
-            await callAppsScriptTool("apps_script_write_file", {
-              projectId: gasProjectId,
-              fileName: "appsscript.json",
-              content: manifest,
-            }).catch((err: any) => console.warn("write appsscript.json warning:", err.message));
-          }
+          const validManifest = ensureStandardManifest(manifest);
+          await callAppsScriptTool("apps_script_write_file", {
+            projectId: gasProjectId,
+            fileName: "appsscript.json",
+            content: validManifest,
+          }).catch((err: any) => console.warn("write appsscript.json warning:", err.message));
 
           // 클라우드 최종 반영 (EgdeskConfig.gs, EgdeskClient.gs, Code.gs, appsscript.json 모두 푸시)
           await callAppsScriptTool("apps_script_push_to_google", {
@@ -433,13 +433,12 @@ export async function PATCH(request: Request) {
           content: targetScriptCode,
         }).catch((err: any) => console.warn("Redeploy Code.gs warning:", err.message));
 
-        if (targetManifest) {
-          await callAppsScriptTool("apps_script_write_file", {
-            projectId: gasProjId,
-            fileName: "appsscript.json",
-            content: targetManifest,
-          }).catch(() => null);
-        }
+        const validManifest = ensureStandardManifest(targetManifest);
+        await callAppsScriptTool("apps_script_write_file", {
+          projectId: gasProjId,
+          fileName: "appsscript.json",
+          content: validManifest,
+        }).catch(() => null);
 
         await callAppsScriptTool("apps_script_push_to_google", {
           projectId: gasProjId,

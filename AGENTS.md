@@ -67,7 +67,34 @@
    - 데이터 전송(`[1]`), 조회(`[2]`), 수정/삭제 일괄 동기화(`[3]`)의 3종 메뉴를 표준 제공합니다.
    - 조회 결과 시트 출력 시 이전 날짜 서식 오염을 방지하기 위해 `sheet.clearFormats()` 후 A열(SQLite ID)을 `setNumberFormat("0")`으로 강제 고정하며, `extractSqliteId` 헬퍼(날짜 오인식 역산 2중 방어)를 필수 적용합니다.
    - 사이드바 UI는 인라인 스크립트 파싱 충돌을 방지하기 위해 `HtmlService.createHtmlOutputFromFile("Sidebar")`를 사용하는 독립 `Sidebar.html` 모듈화 패턴을 필수 적용합니다.
+4. **`user_data_sql_query` 키워드 차단 방지 원칙 (`SELECT *` 필수 적용)**:
+   - `user_data_sql_query` 도구는 보안을 위해 쿼리 텍스트에 `UPDATE`, `DELETE`, `DROP`, `INSERT` 등의 단어가 포함되면 실행을 차단(HTTP 500)합니다.
+   - 이때 `updated_at`, `updated_by`, `deleted_at` 등 감사 컬럼명이 SELECT 절에 직접 명시되면 단순 포함 검사에 걸려 `Query contains forbidden keyword: UPDATE` 에러가 발생합니다.
+   - 따라서 SQL 쿼리 생성 시 컬럼명을 직접 열거하는 대신 반드시 `SELECT * FROM 테이블명 WHERE ...` 형태로 작성해야 하며, 메타 정보 조회 시에는 구조적 도구인 `user_data_query`를 우선 사용합니다.
+5. **Apps Script 매니페스트(`appsscript.json`) 필수 5대 OAuth 권한 기본 보장 원칙**:
+   - `Ui.showSidebar` 또는 모달 창 호출 시 권한 거부(`https://www.googleapis.com/auth/script.container.ui`) 예외가 발생하지 않도록, 모든 프로젝트의 매니페스트에는 다음 5대 필수 권한이 `oauthScopes`에 반드시 포함되어야 합니다:
+     - `https://www.googleapis.com/auth/spreadsheets`
+     - `https://www.googleapis.com/auth/script.container.ui`
+     - `https://www.googleapis.com/auth/script.external_request`
+     - `https://www.googleapis.com/auth/script.scriptapp`
+     - `https://www.googleapis.com/auth/drive`
+   - `ensureStandardManifest`(`src/lib/gas-manifest.ts`) 헬퍼를 통해 프로젝트 생성, 수정, 재배포 시 자동으로 스코프가 누락 없이 주입되도록 보장합니다.
 <!-- END:apps-script-safety-rules -->
+
+<!-- BEGIN:sms-dispatch-rules -->
+## 스마트폰 SMS 문자 발송 표준 프로세스 준수 원칙
+
+1. **실제 발송 및 모의(Mock) 코드 절대 금지**:
+   - 가짜 성공("발송성공", HTTP 200 등)을 대입하는 Mock 코드를 절대 작성하지 않고, 반드시 실제 `phone_send` 또는 상용 통신사 API 통신을 수행해야 합니다.
+2. **발송 전 기기 실시간 점검(`checkActiveSmsDevice`) 및 계정 1:1 매칭 필수**:
+   - My DB(`sheetbot_user_devices`)의 터널 응답(JSON)을 안전하게 언래핑하여 로그인된 세션 이메일(`SHEETBOT_USER_EMAIL`)에 매핑된 활성 기기를 1순위로 탐색해야 합니다.
+3. **기기 미등록 시 발송 사전 차단 및 2가지 대안 안내 모달 표출**:
+   - 연동된 기기나 상용 API 키가 없을 때는 발송을 즉시 중단하고, 1번 스마트폰 연동(무제한 무료)과 2번 상용 API 설정을 안내하는 모달 다이얼로그(`showSmsDeviceNoticeModal`)를 필수로 띄워야 합니다.
+4. **일체형 점검 완료 및 발송 승인 확인창 필수 제공**:
+   - 발송 전 기기 연결 상태, 무료 연동 여부, 발송 대상 건수를 요약 안내하는 통합 확인창을 표출하여 사용자로부터 최종 승인([확인])을 받은 후 실제 발송을 개시해야 합니다.
+5. **결과 피드백 및 SQLite 대장 동기화**:
+   - 발송 결과를 시트(결과메시지 열: `스마트폰(기기명) 실제 전송 완료`) 및 SQLite 발송 대장에 투명하게 기록해야 합니다.
+<!-- END:sms-dispatch-rules -->
 
 <!-- BEGIN:egdesk-tunnel-rules -->
 ## 이지데스크 공용 터널(EGDesk Tunnel) 및 원격 클라우드 연동 원칙

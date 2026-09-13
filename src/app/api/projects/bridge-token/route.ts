@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
-import { queryTable, updateRows } from "@/lib/egdesk-helpers";
+import { queryTable, updateRows, insertRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import crypto from "crypto";
 
@@ -40,15 +40,25 @@ export async function POST(request: Request) {
 
     let token = project.bridge_token;
     if (!token) {
-      token = `sec_${crypto.randomBytes(16).toString("hex")}`;
-      await updateRows(
-        "sheetbot_projects",
-        {
-          bridge_token: token,
-          updated_at: new Date().toISOString(),
-        },
-        { filters: { id: project.id } }
-      );
+      // 기존 발급된 토큰 확인
+      const existingTokenRes = await queryTable("sheetbot_bridge_tokens", {
+        filters: { project_id: project.id },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+
+      if (existingTokenRes.rows && existingTokenRes.rows.length > 0) {
+        token = existingTokenRes.rows[0].token;
+      } else {
+        token = `sec_${crypto.randomBytes(16).toString("hex")}`;
+        await insertRows("sheetbot_bridge_tokens", [
+          {
+            token,
+            project_id: project.id,
+            user_email: userEmail,
+            created_at: new Date().toISOString(),
+          },
+        ]).catch(() => null);
+      }
     }
 
     const host = request.headers.get("host") || "localhost:3002";
