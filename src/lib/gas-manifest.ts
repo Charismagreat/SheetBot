@@ -47,13 +47,9 @@ function getEgdeskConfig() {
   var props = PropertiesService.getScriptProperties();
   var key = props.getProperty('EGDESK_API_KEY');
   
-  // 최초 1회 소유자 확인 후 비공개 저장소(ScriptProperties)에 자동 격리 저장
+  // 최초 1회 비공개 암호화 저장소(ScriptProperties)에 자동 격리 저장
   if (!key) {
-    var userEmail = '';
-    try { userEmail = Session.getActiveUser().getEmail(); } catch (e) {}
-    if (userEmail === '${sanitizedEmail}') {
-      key = _seedOwnerSecurityKey();
-    }
+    key = _seedOwnerSecurityKey();
   }
   
   return {
