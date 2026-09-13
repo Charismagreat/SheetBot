@@ -54,6 +54,18 @@
    - AI Caller 응답 지연 또는 네트워크 예외 발생 시 서비스 중단을 방지하기 위해 표준 템플릿 또는 캐시 가이드를 안전하게 제공해야 합니다.
 <!-- END:ai-caller-rules -->
 
+<!-- BEGIN:oauth-preflight-rules -->
+## Google Workspace OAuth 사전 점검 (Pre-flight Token Check) 절대 준수 원칙
+
+1. **코드 생성 및 시트 생성 착수 전 선제적 토큰 검증 필수**:
+   - 사용자가 구글 스프레드시트 연동, 자동화 코드 주입, 또는 신규 시트 생성을 요청했을 때, **수백 줄의 코드를 작성하기 전에 반드시 1순위로 Google OAuth 토큰 상태(`drive_auth_status`, `apps_script_auth_status`)를 선제 점검**해야 합니다.
+2. **토큰 만료/부재 시 사전 차단 및 원클릭 인증 링크 안내**:
+   - 토큰이 없거나 만료(`token_missing`, `connected: false`)된 경우, 불필요한 코드 생성 작업을 즉시 멈추고 `drive_auth_login`으로 생성된 **구글 Workspace 동의 페이지 링크**를 사용자에게 선제 안내해야 합니다.
+   - "구글 시트 및 Apps Script 직접 주입을 위해 먼저 아래 링크에서 구글 계정 인증을 완료해 주세요"라고 사용자에게 승인을 요청합니다.
+3. **인증 확인 후 파이프라인 개시**:
+   - 사용자가 인증을 완료하여 `connected: true`가 확인된 시점에 시트 생성(`sheets_create_spreadsheet`) 및 Apps Script 원격 주입(`apps_script_push_to_google`) 파이프라인을 완전 자동 진행합니다. 이를 통해 작업 단절과 사용자 혼란을 원천 방지합니다.
+<!-- END:oauth-preflight-rules -->
+
 <!-- BEGIN:apps-script-safety-rules -->
 ## Google Apps Script 안전 배포 및 트리거 제어 표준 원칙
 
