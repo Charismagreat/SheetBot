@@ -11,7 +11,7 @@ import { setupDatabase } from "@/lib/setup-db";
 import { getAiModelSettings } from "@/lib/ai-settings";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { recordAiUsageLog } from "@/lib/ai-usage";
-import { ensureStandardManifest } from "@/lib/gas-manifest";
+import { ensureStandardManifest, generateSecureEgdeskConfig } from "@/lib/gas-manifest";
 
 /**
  * 1. GET: 외부 AI 에이전트가 스프레드시트의 탭, 헤더(10행 등), 기존 코드 및 코딩 지침 조회
@@ -306,7 +306,12 @@ export async function POST(request: Request) {
         projectId: gasProjectId,
         push: false,
       });
-      console.log(`[Gas-Bridge POST] Injected EGDesk tunnel into ${gasProjectId}`);
+      await callAppsScriptTool("apps_script_write_file", {
+        projectId: gasProjectId,
+        fileName: "EgdeskConfig.gs",
+        content: generateSecureEgdeskConfig(project.user_email),
+      }).catch(() => null);
+      console.log(`[Gas-Bridge POST] Injected secured EGDesk tunnel into ${gasProjectId}`);
     } catch (tunnelErr: any) {
       console.warn("[Gas-Bridge POST] Setup tunnel warning:", tunnelErr.message);
     }
