@@ -22,6 +22,7 @@ import {
   Search,
   Bot,
   X,
+  Mic,
 } from "lucide-react";
 
 export default function MarketplacePage() {
@@ -35,6 +36,7 @@ export default function MarketplacePage() {
     { id: "MARKETING", label: "마케팅 / 고객관리" },
     { id: "AUTOMATION", label: "업무 자동화" },
     { id: "AI_OCR", label: "AI 문서 인식(OCR)" },
+    { id: "VOICE_AI", label: "음성 AI & 통화 CRM" },
   ];
 
   const filteredTemplates = MARKETPLACE_TEMPLATES.filter((tpl) => {
@@ -62,7 +64,10 @@ export default function MarketplacePage() {
       case "Mail":
         return <Mail className="w-6 h-6 text-white" />;
       case "ScanText":
+      case "CreditCard":
         return <Camera className="w-6 h-6 text-white" />;
+      case "Mic":
+        return <Mic className="w-6 h-6 text-white" />;
       default:
         return <Zap className="w-6 h-6 text-white" />;
     }
@@ -85,7 +90,7 @@ export default function MarketplacePage() {
                 </span>
               </div>
               <span className="text-[11px] text-slate-400 font-medium block -mt-0.5">
-                실무 검증 3대 핵심 구글 시트 자동화 전용 쇼케이스
+                실무 검증 4대 핵심 구글 시트 자동화 전용 쇼케이스
               </span>
             </div>
           </div>
