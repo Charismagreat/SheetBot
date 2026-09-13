@@ -202,7 +202,8 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
 2. EgdeskClient.gs: 강력한 터널 통신 클라이언트 유틸리티 함수 사전 제공:
    - egdeskToolsCall(service, tool, args): 이지데스크의 모든 백엔드 MCP 도구를 원격 호출 (예: service 'ai-caller', 'user-data' 등)
    - egdeskUserDataCall(tool, args): My DB 도구(user_data_*) 원격 호출
-   - egdeskUserDataSql(query): My DB에 SQL 쿼리 직접 실행 및 결과 반환
+   - queryTable(tableName, options) / egdeskUserDataQuery(tableName, options): My DB 구조적 조회 표준 도구 (SQL 금지 키워드 차단 원천 방지)
+   - egdeskUserDataSql(query): My DB에 SQL 쿼리 직접 실행 및 결과 반환 (SELECT * 필수)
    - egdeskUserDataListTables(): DB 테이블 목록 조회
    - testEgdeskTunnel(): 터널 연결 상태 점검 및 UI 알림 함수
 3. appsscript.json: UrlFetchApp 외부 요청 권한("https://www.googleapis.com/auth/script.external_request") 사전 등록 완료
@@ -462,11 +463,12 @@ ${existingScriptCode.trim()}
 
 3. 2가지 조회 모드 및 'SQLite_조회결과' 시트 렌더링 (서식 및 ID 보존 원칙):
    - executeSqliteQuery(mode, filterParams, aiPrompt):
-     * ⚠️ [핵심 주의사항: SQL 쿼리 작성 시 반드시 'SELECT *' 사용]:
-       - user_data_sql_query 백엔드는 쿼리 문자열에 'UPDATE', 'DELETE', 'DROP' 등의 키워드가 포함되어 있는지 검사합니다.
-       - 컬럼명에 'updated_at', 'updated_by', 'deleted_at' 등이 포함되면 해당 단어로 인해 'Query contains forbidden keyword: UPDATE' 오류(HTTP 500)가 발생하므로, 컬럼명을 직접 나열하지 말고 반드시 'SELECT * FROM 테이블명 WHERE ... ORDER BY order_date DESC LIMIT ...' 형태로 작성하세요.
-     * [조건 검색]: 날짜 범위, 상호/키워드, 색상/유형, 최소금액/수량 등 동적 WHERE 조건 SQL 생성 및 실행.
-     * [🤖 AI 검색 (Text-to-SQL)]: egdeskToolsCall('ai-caller', 'ai_caller_call', ...) 호출로 자연어를 'SELECT * FROM ...' 형태의 단일 SELECT 문으로 변환 후 안전 검증 및 실행.
+     * ⚠️ [핵심 보안 규칙: 조건 검색은 반드시 표준 queryTable(user_data_query) 사용, SQL 키워드 차단 완벽 방지]:
+       - user_data_sql_query 백엔드는 보안을 위해 쿼리 문자열에 'UPDATE', 'DELETE', 'DROP' 등의 키워드가 포함되어 있는지 검사합니다.
+       - 컬럼명에 'updated_at', 'updated_by', 'deleted_at' 등이 포함되면 해당 단어로 인해 'Query contains forbidden keyword: DELETE / UPDATE' 오류(HTTP 500)가 발생합니다.
+       - 따라서:
+         1) [조건 검색]: 날것의 SQL 조립 대신 반드시 사전 제공되는 표준 queryTable(tableName, { filters: { user_email: ... }, limit: 100 }) 함수를 사용하고 세부 조건은 JS 인메모리로 안전하게 필터링하세요.
+         2) [🤖 AI 검색 (Text-to-SQL)]: egdeskToolsCall('ai-caller', ...)로 자연어를 'SELECT * FROM 테이블명 WHERE user_email = ...' 형태의 단일 SELECT 문으로 변환하되, WHERE 조건에 'deleted_at', 'updated_at' 등의 감사 컬럼명을 절대 쓰지 못하도록 AI 프롬프트에 명시하고, 실행 후 JS 상에서 !r.deleted_at 으로 소프트 삭제 레코드를 걸러내세요.
    - renderQueryResultsToSheet(rows, queryTitle):
      * 'SQLite_조회결과' 탭이 없으면 생성, 있으면 sheet.clear() 및 sheet.clearFormats()로 이전 날짜 서식 오염 완전 리셋.
      * A열은 반드시 'SQLite ID'로 배치하고, sheet.getRange(3, 1, tableData.length, 1).setNumberFormat("0") 정수 서식을 강제 적용하여 날짜로 오인식되지 않도록 방지.

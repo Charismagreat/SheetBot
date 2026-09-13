@@ -132,6 +132,26 @@ function egdeskUserDataSql(query) {
 }
 
 /**
+ * egdesk-helpers.ts 와 1:1 호환되는 Apps Script 표준 queryTable 함수
+ * 구조적 user_data_query 도구를 사용하여 DELETE, UPDATE 등 금지 키워드 차단(HTTP 500)을 완벽 방지
+ */
+function egdeskUserDataQuery(tableName, options) {
+  options = options || {};
+  return egdeskUserDataCall('user_data_query', {
+    tableName: tableName,
+    filters: options.filters || {},
+    limit: options.limit || 100,
+    offset: options.offset || 0,
+    orderBy: options.orderBy || 'id',
+    orderDirection: options.orderDirection || 'DESC'
+  });
+}
+
+function queryTable(tableName, options) {
+  return egdeskUserDataQuery(tableName, options);
+}
+
+/**
  * 🛠️ 이지데스크 AI Caller 표준 텍스트 언래핑 헬퍼 (영구 재발 방지)
  * 메타데이터 래퍼({ content: "실제응답", usage: ... })에서 순수 LLM 텍스트를 추출
  */
