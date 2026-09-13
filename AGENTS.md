@@ -52,6 +52,9 @@
    - 이를 통해 사내 AI 토큰 사용량 감사 및 API 키 중앙 관리를 준수합니다.
 2. **지능형 폴백(Fallback) 안전망 유지**:
    - AI Caller 응답 지연 또는 네트워크 예외 발생 시 서비스 중단을 방지하기 위해 표준 템플릿 또는 캐시 가이드를 안전하게 제공해야 합니다.
+3. **AI Caller 응답 메타데이터 2중 언래핑(Unwrapping) 절대 준수 원칙 (재발 방지)**:
+   - 이지데스크 AI Caller(`ai_caller_call`)는 LLM 생성 결과를 항상 `{ "content": "실제응답텍스트", "usage": { ... }, "finishReason": "STOP" }` 형태의 메타데이터 래퍼 JSON으로 감싸서 반환합니다.
+   - 따라서 Google Apps Script나 Node.js에서 AI 응답을 파싱할 때 `res.result.content[0].text`를 그대로 사용하거나 단순 1차 `JSON.parse`만 해서는 안 되며, 반드시 내부의 `.content` 필드를 안전하게 꺼내는 **2중 언래핑 헬퍼(`unwrapAiCallerText`, `unwrapAiCallerJson`) 패턴을 필수로 적용**해야 합니다. 이를 지키지 않아 발생하는 속성 누락(`undefined`)이나 `미확인` 표시는 엄격히 금지됩니다.
 <!-- END:ai-caller-rules -->
 
 <!-- BEGIN:oauth-preflight-rules -->
