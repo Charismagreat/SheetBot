@@ -106,6 +106,13 @@ export default function Navbar() {
               활용 사례
             </Link>
             <Link
+              href="/marketplace"
+              className="px-2.5 py-1.5 rounded-xl text-emerald-700 bg-emerald-50/90 hover:bg-emerald-100 border border-emerald-200/60 font-black transition-all whitespace-nowrap flex items-center gap-1 shadow-2xs"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+              <span>템플릿 마켓</span>
+            </Link>
+            <Link
               href="/faq"
               className="px-2.5 py-1.5 rounded-xl hover:text-indigo-700 hover:bg-indigo-50/70 transition-all whitespace-nowrap"
             >

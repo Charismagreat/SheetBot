@@ -526,6 +526,15 @@ ${recruitForm.introduction}
             </div>
 
             <div className="flex items-center gap-2">
+              <Link
+                href="/marketplace"
+                className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-teal-700 hover:opacity-95 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-all shadow-sm shadow-emerald-500/20"
+                data-easybot-hint="템플릿 마켓: 검증된 3대 핵심 구글 시트 자동화 템플릿(문자 발송, 이메일 발송, 명함 OCR)을 내 구글 드라이브로 1-클릭 복제합니다."
+              >
+                <Sparkles className="w-3.5 h-3.5 text-emerald-200" />
+                <span>템플릿 마켓</span>
+              </Link>
+
               <button
                 onClick={() => setIsApiKeyModalOpen(true)}
                 className="px-3.5 py-1.5 bg-gradient-to-r from-violet-600 via-indigo-600 to-indigo-700 hover:opacity-95 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-all shadow-sm shadow-indigo-500/20 cursor-pointer"
@@ -794,6 +803,37 @@ ${recruitForm.introduction}
               </Link>
             </div>
           </div>
+
+          {/* 마켓플레이스 3대 핵심 템플릿 추천 배너 */}
+          <div className="bg-gradient-to-r from-violet-600 via-indigo-600 to-slate-900 rounded-2xl p-4 sm:p-5 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md shadow-indigo-500/10">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 text-amber-300" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-md bg-amber-400 text-slate-900 text-[10px] font-black">
+                    100% 무료 제공
+                  </span>
+                  <h4 className="font-black text-sm text-white">
+                    SheetBot 공식 검증 3대 킬러 자동화 템플릿
+                  </h4>
+                </div>
+                <p className="text-xs text-indigo-100 mt-0.5 leading-relaxed">
+                  문자 대량 발송 · Gmail 일괄 발송 · 명함/영수증 AI OCR 시트를 클릭 1번에 내 구글 드라이브로 복제하세요.
+                </p>
+              </div>
+            </div>
+
+            <Link
+              href="/marketplace"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-slate-50 text-indigo-950 text-xs font-black rounded-xl shadow-md transition-all shrink-0 active:scale-95 self-end sm:self-center"
+              data-easybot-hint="템플릿 마켓플레이스: 실무 검증 3대 시트를 즉시 내 구글 드라이브로 복제합니다."
+            >
+              <span>템플릿 둘러보기</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
         </div>
 
         {/* 2. 연동된 Apps Script 프로젝트 목록 */}
@@ -805,6 +845,15 @@ ${recruitForm.introduction}
             </h4>
 
             <div className="flex items-center gap-2">
+              <Link
+                href="/marketplace"
+                className="px-3 py-1.5 bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 text-amber-900 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all border border-amber-200/80 cursor-pointer shadow-2xs active:scale-95 whitespace-nowrap"
+                data-easybot-hint="템플릿 마켓: 검증된 시트 사본을 즉시 복제합니다."
+              >
+                <Copy className="w-3.5 h-3.5 text-amber-600" />
+                <span>🛍️ 템플릿 마켓</span>
+              </Link>
+
               <button
                 type="button"
                 onClick={() => setIsPromptGalleryOpen(true)}
