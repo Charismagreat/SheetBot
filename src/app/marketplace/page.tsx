@@ -2,8 +2,6 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 import {
   MARKETPLACE_TEMPLATES,
   MarketplaceTemplate,
@@ -22,6 +20,8 @@ import {
   Mail,
   Camera,
   Search,
+  Bot,
+  X,
 } from "lucide-react";
 
 export default function MarketplacePage() {
@@ -69,8 +69,45 @@ export default function MarketplacePage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      <Navbar />
+    <div className="min-h-screen bg-slate-50 flex flex-col text-slate-800">
+      {/* 템플릿 마켓 전용 독립 헤더 (다른 사이트 메뉴 일체 제거) */}
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 shrink-0">
+              <Bot className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-black text-lg text-slate-900 tracking-tight">SheetBot</span>
+                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[11px] font-black rounded-full">
+                  공식 템플릿 마켓
+                </span>
+              </div>
+              <span className="text-[11px] text-slate-400 font-medium block -mt-0.5">
+                실무 검증 3대 핵심 구글 시트 자동화 전용 쇼케이스
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200/80 rounded-xl transition-all"
+            >
+              <span>내 워크스페이스</span>
+            </Link>
+            <button
+              onClick={() => window.close()}
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200/80 rounded-xl transition-all cursor-pointer"
+              title="이 탭 닫기"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>창 닫기</span>
+            </button>
+          </div>
+        </div>
+      </header>
 
       {/* 상단 알림 배너 (복제 클릭 시 안내) */}
       {copySuccessAlert && (
@@ -436,7 +473,19 @@ export default function MarketplacePage() {
         </div>
       )}
 
-      <Footer />
+      {/* 템플릿 마켓 전용 독립 미니 푸터 */}
+      <footer className="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-500 font-medium">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-slate-700">SheetBot 템플릿 마켓플레이스</span>
+            <span>•</span>
+            <span>Google Apps Script 일체형 시트 100% 무료 제공</span>
+          </div>
+          <div className="text-slate-400 text-[11px]">
+            복제된 사본은 사용자의 개인 구글 드라이브에 안전하게 영구 저장됩니다.
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

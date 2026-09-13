@@ -3,6 +3,7 @@
 import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   Bot,
   ShieldCheck,
@@ -15,7 +16,12 @@ import { DEFAULT_FOOTER, FooterInfo } from "@/lib/default-footer";
 import { SnsIcon } from "@/components/SnsIcons";
 
 export default function Footer() {
+  const pathname = usePathname();
   const [footerInfo, setFooterInfo] = useState<FooterInfo>(DEFAULT_FOOTER);
+
+  if (pathname === "/marketplace") {
+    return null;
+  }
 
   const fetchFooter = async () => {
     try {
