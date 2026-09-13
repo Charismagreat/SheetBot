@@ -315,6 +315,30 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
        * 1행에 확정된 컬럼 헤더들을 깔끔하게 채우고 배경색(에메랄드 또는 네이비 #1e293b)과 굵은 글씨 스타일 적용,
        * 각 열의 너비를 내용에 맞게 자동 조절(autoResizeColumns),
        * 완료 시 SpreadsheetApp.getUi().alert("✅ 시트 양식 및 초기 설정이 완료되었습니다.") 안내.
+   - ⚡ [터널 연결 상태 점검 친절 알림 함수 - testEgdeskTunnel 필수 오버라이드 포함]:
+     - 날것의 JSON 노출을 방지하기 위해 Code.gs 하단에 다음 표준 testEgdeskTunnel() 함수를 반드시 직접 구현하세요:
+       \`\`\`javascript
+       function testEgdeskTunnel() {
+         var ui;
+         try { ui = SpreadsheetApp.getUi(); } catch (e) { ui = null; }
+         try {
+           var config = getEgdeskConfig();
+           var startTime = new Date().getTime();
+           var result = egdeskUserDataListTables();
+           var elapsed = new Date().getTime() - startTime;
+           var message = "✅ SheetBot 클라우드 터널 연결이 정상 작동 중입니다.\\n\\n" +
+             "• 연결 상태: 정상 통신 (응답 속도: " + elapsed + "ms)\\n" +
+             "• 연결 서버: " + (config.serverName || "EGDesk Cloud") + "\\n" +
+             "• 연동 백엔드: My DB 및 구글 메시지 SMS 통신 준비 완료\\n\\n" +
+             "이제 문자 일괄 발송 및 SQLite 양방향 동기화 기능을 안전하게 사용하실 수 있습니다.";
+           if (ui) ui.alert("🚀 SheetBot 클라우드 터널 정상", message, ui.ButtonSet.OK);
+           return result;
+         } catch (err) {
+           if (ui) ui.alert("⚠️ 터널 연결 오류", "❌ 클라우드 터널 통신 실패: " + err.message, ui.ButtonSet.OK);
+           throw err;
+         }
+       }
+       \`\`\`
 6. 🛡️ 예외 처리:
    - try-catch를 꼼꼼히 감싸고, 실패 시 { success: false, error: error.message }를 반환하여 사이드바에 실패 원인이 빨간색 안내창으로 명확히 뜨도록 작성하세요.
 7. 🌐 독립 웹페이지(Web App) 설문/신청서/접수폼 구현 규칙:
