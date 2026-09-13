@@ -152,6 +152,10 @@
 4. **신규 Apps Script 코드 생성 시 터널 자동 주입 강제 및 표준 클라이언트 사용**:
    - Apps Script 프로젝트 생성/배포 시 `apps_script_setup_egdesk_tunnel` 도구를 자동 실행하여 `EgdeskConfig.gs` 및 `EgdeskClient.gs`를 클라우드에 사전 주입합니다.
    - 코드 생성 AI(`src/app/api/generate/route.ts`)는 저수준 `UrlFetchApp`이나 키 하드코딩 대신, 주입된 `egdeskToolsCall('ai-caller', 'ai_caller_call', ...)` 및 `egdeskUserDataSql(query)` 함수를 자율 활용하여 간결하고 신뢰성 높은 자동화 코드를 생성합니다.
+5. **Apps Script 소스코드 내 마스터 API Key 평문 하드코딩 절대 금지 및 ScriptProperties 격리 원칙**:
+   - `EgdeskConfig.gs` 등 어떤 `.gs` 소스코드 파일에도 서버 마스터 API Key(`a67ddc0f...`)를 평문 문자열로 직접 노출해서는 안 됩니다.
+   - 반드시 Google Apps Script의 암호화 저장소(`PropertiesService.getScriptProperties().getProperty('EGDESK_API_KEY')`)를 경유하여 키를 동적으로 참조하도록 구성해야 합니다.
+   - 이를 통해 타인이 시트 에디터에서 마스터 키를 탈취하거나, 시트 사본 복제(Make a copy) 시 마스터 키가 제3자에게 복제·유출되는 보안 사고를 원천 차단합니다.
 <!-- END:egdesk-tunnel-rules -->
 
 <!-- BEGIN:egdesk-dev-context -->

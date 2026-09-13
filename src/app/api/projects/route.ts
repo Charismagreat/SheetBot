@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, insertRows, updateRows, callAppsScriptTool, callDriveTool } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
-import { ensureStandardManifest } from "@/lib/gas-manifest";
+import { ensureStandardManifest, generateSecureEgdeskConfig } from "@/lib/gas-manifest";
 
 export interface SheetBotProject {
   id: string;
@@ -200,7 +200,13 @@ export async function POST(request: Request) {
               projectId: gasProjectId,
               push: false,
             });
-            console.log(`[Projects] Successfully embedded EGDesk tunnel files into ${gasProjectId}`);
+            // 보안 정화: 마스터 API Key 평문 노출 방지를 위한 ScriptProperties 보안 템플릿 즉시 주입
+            await callAppsScriptTool("apps_script_write_file", {
+              projectId: gasProjectId,
+              fileName: "EgdeskConfig.gs",
+              content: generateSecureEgdeskConfig(userEmail),
+            }).catch(() => null);
+            console.log(`[Projects] Successfully embedded secured EGDesk tunnel files into ${gasProjectId}`);
           } catch (tunnelErr: any) {
             console.warn("[Projects] Embed EGDesk tunnel warning:", tunnelErr.message);
           }
@@ -421,11 +427,17 @@ export async function PATCH(request: Request) {
           fileName: "undefined.gs",
         }).catch(() => null);
 
-        // 터널 클라이언트 인프라(EgdeskConfig.gs, EgdeskClient.gs) 최신화 보장
+        // 터널 클라이언트 인프라(EgdeskConfig.gs, EgdeskClient.gs) 최신화 보장 및 보안 정화
         await callAppsScriptTool("apps_script_setup_egdesk_tunnel", {
           projectId: gasProjId,
           push: false,
         }).catch((err: any) => console.warn("Redeploy setup tunnel warning:", err.message));
+
+        await callAppsScriptTool("apps_script_write_file", {
+          projectId: gasProjId,
+          fileName: "EgdeskConfig.gs",
+          content: generateSecureEgdeskConfig(userEmail),
+        }).catch(() => null);
 
         await callAppsScriptTool("apps_script_write_file", {
           projectId: gasProjId,
