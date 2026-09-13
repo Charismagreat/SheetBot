@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-13T10:10:24.501Z
+ * Generated at: 2026-09-13T13:01:39.646Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -23,160 +23,167 @@ export interface TableDefinition {
 
 export const TABLES = {
   table1: {
+    name: 'business_cards_sqlite',
+    displayName: '명함 기록 대장',
+    rowCount: 0,
+    columnCount: 15,
+    columns: ['id', '_version', 'name', 'company', 'position', 'mobile', 'email', 'phone', 'address', 'website', 'image_url', 'is_duplicate', 'memo', 'registered_at', 'user_email']
+  } as TableDefinition,
+  table2: {
     name: 'email_send_logs_sqlite',
     displayName: 'Gmail 발송 대장',
     rowCount: 0,
     columnCount: 10,
     columns: ['id', '_version', 'name', 'email', 'subject', 'content', 'status', 'send_time', 'result_msg', 'user_email']
   } as TableDefinition,
-  table2: {
+  table3: {
     name: 'sheetbot_bridge_tokens',
     displayName: 'SheetBot 브릿지 토큰 매핑 대장',
     rowCount: 2,
     columnCount: 6,
     columns: ['id', '_version', 'token', 'project_id', 'user_email', 'created_at']
   } as TableDefinition,
-  table3: {
+  table4: {
     name: 'smartti_orders',
     displayName: '스마띠 주문 대장',
     rowCount: 11,
     columnCount: 12,
     columns: ['id', '_version', 'order_date', 'customer_name', 'band_color', 'quantity', 'print_type', 'print_front', 'print_back', 'memo', 'order_amount', 'status']
   } as TableDefinition,
-  table4: {
+  table5: {
     name: 'sheetbot_user_api_keys',
     displayName: 'SheetBot 사용자 개인 API 키 대장',
     rowCount: 5,
     columnCount: 15,
     columns: ['id', '_version', 'user_email', 'api_key', 'name', 'status', 'last_used_at', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table5: {
+  table6: {
     name: 'sheetbot_project_feedback',
     displayName: 'SheetBot 프로젝트 만족도 및 AI 자가 학습 대장',
     rowCount: 8,
     columnCount: 19,
     columns: ['id', '_version', 'project_id', 'project_name', 'user_email', 'rating', 'satisfaction_type', 'tags', 'comment', 'script_code_snapshot', 'ai_learned', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table6: {
+  table7: {
     name: 'sheetbot_prompt_templates',
     displayName: 'SheetBot 추천 프롬프트 갤러리 대장',
     rowCount: 6,
     columnCount: 18,
     columns: ['id', '_version', 'category', 'category_name', 'title', 'description', 'prompt_text', 'tags', 'icon', 'is_featured', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table7: {
+  table8: {
     name: 'sheetbot_dispatch_logs',
     displayName: 'SheetBot 알림 발송 이력 대장',
-    rowCount: 4,
+    rowCount: 5,
     columnCount: 19,
     columns: ['id', '_version', 'channel', 'event_type', 'rule_name', 'recipient', 'recipient_type', 'title', 'content', 'status', 'error_message', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table8: {
+  table9: {
     name: 'sheetbot_users',
     displayName: 'SheetBot 회원 마스터 대장',
     rowCount: 4,
     columnCount: 17,
     columns: ['id', '_version', 'email', 'name', 'role', 'status', 'tier', 'note', 'created_at', 'last_login_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table9: {
+  table10: {
     name: 'sheetbot_reviews',
     displayName: 'SheetBot 사용 후기 대장',
     rowCount: 3,
     columnCount: 17,
     columns: ['id', '_version', 'user_email', 'user_name', 'rating', 'title', 'content', 'use_case', 'image_url', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table10: {
+  table11: {
     name: 'sheetbot_inquiries',
     displayName: 'SheetBot 고객 문의 대장',
     rowCount: 1,
     columnCount: 18,
     columns: ['id', '_version', 'user_email', 'user_name', 'category', 'title', 'content', 'status', 'answer', 'answered_at', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table11: {
+  table12: {
     name: 'sheetbot_ai_usage_logs',
     displayName: 'SheetBot AI 토큰 및 사용료 감사 대장',
     rowCount: 30,
     columnCount: 21,
     columns: ['id', '_version', 'user_email', 'user_name', 'caller', 'purpose', 'model', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'estimated_cost_usd', 'estimated_cost_krw', 'prompt_preview', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table12: {
+  table13: {
     name: 'sheetbot_schedules',
     displayName: 'SheetBot 스케줄 및 트리거 대장',
     rowCount: 0,
     columnCount: 28,
     columns: ['id', '_version', 'user_email', 'project_id', 'project_name', 'spreadsheet_id', 'spreadsheet_url', 'name', 'description', 'function_name', 'trigger_type', 'time_frequency', 'interval_value', 'at_hour', 'week_day', 'event_type', 'status', 'last_run_at', 'last_status', 'last_run_message', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table13: {
+  table14: {
     name: 'sheetbot_projects',
     displayName: 'SheetBot 프로젝트 대장',
-    rowCount: 6,
+    rowCount: 7,
     columnCount: 25,
     columns: ['id', '_version', 'user_email', 'name', 'description', 'spreadsheet_id', 'spreadsheet_url', 'gas_project_id', 'script_id', 'script_url', 'script_code', 'manifest', 'summary', 'features', 'triggers', 'prompt', 'status', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table14: {
+  table15: {
     name: 'sheetbot_user_dispatch_logs',
     displayName: 'SheetBot 회원 알림 발송 이력 대장',
     rowCount: 7,
     columnCount: 18,
     columns: ['id', '_version', 'user_email', 'rule_id', 'rule_name', 'device_id', 'recipient', 'content', 'status', 'error_message', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table15: {
+  table16: {
     name: 'sheetbot_user_smart_rules',
     displayName: 'SheetBot 회원 자연어 알림 규칙 대장',
     rowCount: 0,
     columnCount: 20,
     columns: ['id', '_version', 'user_email', 'project_id', 'name', 'prompt', 'trigger_event', 'target_recipient', 'recipient_column', 'custom_phone', 'message_template', 'is_active', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table16: {
+  table17: {
     name: 'sheetbot_user_devices',
     displayName: 'SheetBot 회원 SMS 디바이스 대장',
     rowCount: 4,
     columnCount: 18,
     columns: ['id', '_version', 'user_email', 'label', 'phone_number', 'device_id', 'pairing_mode', 'google_profile_name', 'status', 'last_connected_at', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table17: {
+  table18: {
     name: 'sheetbot_easybot_chats',
     displayName: 'SheetBot AI 대화 이력 대장',
     rowCount: 0,
     columnCount: 13,
     columns: ['id', '_version', 'user_email', 'role', 'message', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table18: {
+  table19: {
     name: 'sheetbot_faqs',
     displayName: 'SheetBot FAQ 관리 대장',
     rowCount: 31,
     columnCount: 14,
     columns: ['id', '_version', 'category', 'question', 'answer', 'sort_order', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table19: {
+  table20: {
     name: 'sheetbot_tax_invoices',
     displayName: 'SheetBot 세금계산서 및 현금영수증 신청 대장',
     rowCount: 0,
     columnCount: 19,
     columns: ['id', '_version', 'order_id', 'user_email', 'type', 'company_name', 'biz_number', 'ceo_name', 'manager_email', 'amount_krw', 'status', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table20: {
+  table21: {
     name: 'sheetbot_payment_orders',
     displayName: 'SheetBot 토큰 결제 및 충전 주문 대장',
-    rowCount: 11,
+    rowCount: 12,
     columnCount: 18,
     columns: ['id', '_version', 'order_id', 'user_email', 'package_name', 'amount_krw', 'tokens_credited', 'pg_provider', 'payment_method', 'status', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table21: {
+  table22: {
     name: 'sheetbot_user_wallets',
     displayName: 'SheetBot 회원 토큰 지갑 대장',
     rowCount: 4,
     columnCount: 15,
     columns: ['id', '_version', 'user_email', 'balance_tokens', 'total_purchased_tokens', 'total_used_tokens', 'tier', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table22: {
+  table23: {
     name: 'sheetbot_settings',
     displayName: 'SheetBot 시스템 및 AI 모델 설정 대장',
     rowCount: 2,
     columnCount: 13,
     columns: ['id', '_version', 'key', 'value', 'description', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
-  table23: {
+  table24: {
     name: 'example_table',
     displayName: 'Example Table',
     rowCount: 0,
@@ -197,27 +204,28 @@ export function getTableByName(tableName: string): TableDefinition | undefined {
 
 // Export table names for easy access
 export const TABLE_NAMES = {
-  table1: 'email_send_logs_sqlite',
-  table2: 'sheetbot_bridge_tokens',
-  table3: 'smartti_orders',
-  table4: 'sheetbot_user_api_keys',
-  table5: 'sheetbot_project_feedback',
-  table6: 'sheetbot_prompt_templates',
-  table7: 'sheetbot_dispatch_logs',
-  table8: 'sheetbot_users',
-  table9: 'sheetbot_reviews',
-  table10: 'sheetbot_inquiries',
-  table11: 'sheetbot_ai_usage_logs',
-  table12: 'sheetbot_schedules',
-  table13: 'sheetbot_projects',
-  table14: 'sheetbot_user_dispatch_logs',
-  table15: 'sheetbot_user_smart_rules',
-  table16: 'sheetbot_user_devices',
-  table17: 'sheetbot_easybot_chats',
-  table18: 'sheetbot_faqs',
-  table19: 'sheetbot_tax_invoices',
-  table20: 'sheetbot_payment_orders',
-  table21: 'sheetbot_user_wallets',
-  table22: 'sheetbot_settings',
-  table23: 'example_table'
+  table1: 'business_cards_sqlite',
+  table2: 'email_send_logs_sqlite',
+  table3: 'sheetbot_bridge_tokens',
+  table4: 'smartti_orders',
+  table5: 'sheetbot_user_api_keys',
+  table6: 'sheetbot_project_feedback',
+  table7: 'sheetbot_prompt_templates',
+  table8: 'sheetbot_dispatch_logs',
+  table9: 'sheetbot_users',
+  table10: 'sheetbot_reviews',
+  table11: 'sheetbot_inquiries',
+  table12: 'sheetbot_ai_usage_logs',
+  table13: 'sheetbot_schedules',
+  table14: 'sheetbot_projects',
+  table15: 'sheetbot_user_dispatch_logs',
+  table16: 'sheetbot_user_smart_rules',
+  table17: 'sheetbot_user_devices',
+  table18: 'sheetbot_easybot_chats',
+  table19: 'sheetbot_faqs',
+  table20: 'sheetbot_tax_invoices',
+  table21: 'sheetbot_payment_orders',
+  table22: 'sheetbot_user_wallets',
+  table23: 'sheetbot_settings',
+  table24: 'example_table'
 } as const;

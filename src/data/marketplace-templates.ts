@@ -5,7 +5,7 @@
 export interface MarketplaceTemplate {
   id: string;
   title: string;
-  category: "MARKETING" | "AUTOMATION" | "AI_OCR";
+  category: "MARKETING" | "AUTOMATION" | "AI_OCR" | "VOICE_AI";
   categoryLabel: string;
   badge: string;
   tagline: string;
@@ -146,6 +146,51 @@ export const MARKETPLACE_TEMPLATES: MarketplaceTemplate[] = [
       "1. [사본 만들기]를 눌러 본인의 구글 드라이브에 시트를 생성합니다.",
       "2. 상단 메뉴 ➔ 📷 [등록] 명함 사진 업로드 및 AI 자동 등록을 실행합니다.",
       "3. 명함 사진이나 PDF를 드래그하여 올리면 AI가 즉시 분석하여 시트에 기록합니다.",
+    ],
+  },
+  {
+    id: "tpl_voice_intelligence_crm",
+    title: "[통화 녹음 AI 분석 & 스마트 CRM 대장]",
+    category: "VOICE_AI",
+    categoryLabel: "음성 AI & 통화 인텔리전스",
+    badge: "최신 킬러 솔루션",
+    tagline: "통화 녹음 파일 업로드로 화자분리 전사, 3줄 요약, PII 마스킹 및 스마트 오디오 CRM 구축",
+    summary:
+      "통화 녹음 오디오(MP3, M4A, WAV 등)를 드래그 앤 드롭하면 음성 AI가 화자별(상담원/고객) 대화록을 분리 전사하고, 개인정보(주민/카드/계좌번호)를 자동 비식별화합니다. 핵심 3줄 요약, 고객 감정 점수, 구매 의향 및 이탈 위험도(Churn Risk)를 자동 산출하며, 사이드바 미니 오디오 플레이어에서 타임스탬프 클릭 시 해당 발화 구간으로 즉시 이동 재생됩니다. 구글 드라이브 SQLite 양방향 동기화 및 자연어 대장 검색을 완벽 지원합니다.",
+    priceKrw: 0,
+    isFree: true,
+    downloadsCount: 890,
+    rating: 4.98,
+    reviewsCount: 54,
+    icon: "Mic",
+    gradient: "from-indigo-600 via-purple-600 to-slate-900",
+    spreadsheetId: "11V1oYLJl3fHafrX7h051u9zDOq_zzk8s0UyaFrnP7Ds",
+    spreadsheetUrl: "https://docs.google.com/spreadsheets/d/11V1oYLJl3fHafrX7h051u9zDOq_zzk8s0UyaFrnP7Ds/edit",
+    copyUrl: "https://docs.google.com/spreadsheets/d/11V1oYLJl3fHafrX7h051u9zDOq_zzk8s0UyaFrnP7Ds/copy",
+    gasProjectId: "2bb408ea-f598-4f9c-a307-584d4d199005",
+    keyFeatures: [
+      "통화 녹음 오디오(MP3, M4A, WAV 등) 화자 분리(상담원 vs 고객) 및 고정밀 STT 전사",
+      "민감정보(주민등록번호, 신용카드, 계좌번호) PII 자동 마스킹 및 비식별화",
+      "핵심 통화 내용 3줄 요약 및 후속 To-Do(액션 아이템) 자동 추출",
+      "고객 감정 점수(-100~+100), 구매 의향 지수 및 이탈 위험도(Churn Risk) 자동 스코어링",
+      "이탈 위험 고객(80점 이상) 시트 행 연한 빨간색(#fee2e2) 자동 강조 서식",
+      "사이드바 미니 오디오 플레이어: 대화록 타임스탬프 클릭 시 해당 발화 구간 즉시 이동 재생(Seek & Play)",
+      "배속 재생(1.0x / 1.2x / 1.5x) 지원 및 구글 드라이브 원본 오디오 무결성 해시(SHA-256) 보관",
+      "구글 드라이브 SheetBot_Databases 폴더 내 .sqlite 파일 실시간 양방향 동기화 및 자연어 Text-to-SQL 검색",
+    ],
+    recommendedFor: [
+      "부동산 공인중개사 (매물 조건, 희망가, 입주일 자동 정리)",
+      "B2B 고관여 영업팀 (BANT 분석 및 핵심 요구사항 망각 방지)",
+      "법률/노무/세무 상담사 (유선 상담 사실관계 정리 및 법적 증빙 보관)",
+      "병원/클리닉 상담실 (예약 부도 방지 및 불만 고객 관리)",
+      "외주 프리랜서 및 개발사 (통화 요구사항 명세서 자동 기록 및 분쟁 방지)",
+    ],
+    techStack: ["Google Apps Script (V8)", "Google Drive API", "Gemini 3.8 Flash Audio", "SQLite 3", "HTML5 Web Audio"],
+    usageGuide: [
+      "1. 상단의 [사본 복제하기] 버튼을 클릭하여 본인의 구글 드라이브로 시트를 복제합니다.",
+      "2. 구글 시트 상단 메뉴 [🚀 SheetBot Voice CRM] > [🎙️ 통화 녹음 파일 업로드 & AI 분석]을 클릭합니다.",
+      "3. 최초 1회 구글 보안 확인 창이 나타나면 [고급] → [프로젝트명으로 이동] → [허용]을 클릭합니다.",
+      "4. 사이드바에서 통화 녹음 파일(mp3, m4a 등)을 선택하고 [AI 화자분리 & 심층 분석 시작]을 누르면 시트에 자동 기록됩니다.",
     ],
   },
 ];
