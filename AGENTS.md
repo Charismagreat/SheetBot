@@ -82,10 +82,12 @@
    - 데이터 전송(`[1]`), 조회(`[2]`), 수정/삭제 일괄 동기화(`[3]`)의 3종 메뉴를 표준 제공합니다.
    - 조회 결과 시트 출력 시 이전 날짜 서식 오염을 방지하기 위해 `sheet.clearFormats()` 후 A열(SQLite ID)을 `setNumberFormat("0")`으로 강제 고정하며, `extractSqliteId` 헬퍼(날짜 오인식 역산 2중 방어)를 필수 적용합니다.
    - 사이드바 UI는 인라인 스크립트 파싱 충돌을 방지하기 위해 `HtmlService.createHtmlOutputFromFile("Sidebar")`를 사용하는 독립 `Sidebar.html` 모듈화 패턴을 필수 적용합니다.
-4. **`user_data_sql_query` 키워드 차단 방지 원칙 (`SELECT *` 필수 적용)**:
-   - `user_data_sql_query` 도구는 보안을 위해 쿼리 텍스트에 `UPDATE`, `DELETE`, `DROP`, `INSERT` 등의 단어가 포함되면 실행을 차단(HTTP 500)합니다.
-   - 이때 `updated_at`, `updated_by`, `deleted_at` 등 감사 컬럼명이 SELECT 절에 직접 명시되면 단순 포함 검사에 걸려 `Query contains forbidden keyword: UPDATE` 에러가 발생합니다.
-   - 따라서 SQL 쿼리 생성 시 컬럼명을 직접 열거하는 대신 반드시 `SELECT * FROM 테이블명 WHERE ...` 형태로 작성해야 하며, 메타 정보 조회 시에는 구조적 도구인 `user_data_query`를 우선 사용합니다.
+4. **`user_data_sql_query` 키워드 차단 방지 및 `queryTable`(`user_data_query`) 표준 사용 원칙**:
+   - `user_data_sql_query` 도구는 보안을 위해 쿼리 텍스트 전체에 `UPDATE`, `DELETE`, `DROP`, `INSERT` 등의 단어가 포함되어 있는지 단순 포함 검사를 수행(HTTP 500 차단)합니다.
+   - 이때 `updated_at`, `updated_by`, `deleted_at` 등 감사 컬럼명이 SELECT 절뿐만 아니라 **WHERE 조건절(예: `deleted_at IS NULL`)에 직접 명시되어도 `DELETE` 키워드 차단 오류가 발생**합니다.
+   - 따라서:
+     - **조건 검색 및 일반 조회**: 날것의 SQL 조립(`user_data_sql_query`)을 절대 사용하지 말고, 반드시 `egdesk-helpers.ts` 및 `EgdeskClient.gs`에 표준 제공되는 구조적 도구인 **`queryTable(tableName, options)` (`user_data_query`)**를 필수로 사용해야 합니다.
+     - **AI 자연어 Text-to-SQL 질의**: 부득이 SQL을 생성할 때는 반드시 `SELECT * FROM 테이블명 WHERE ...` 형태로 작성하고, WHERE 조건절에서도 `deleted_at`, `updated_at` 등의 감사 컬럼명 사용을 엄격히 배제하며, 조회 결과에 대해 애플리케이션 레벨(JS)에서 소프트 삭제(`!r.deleted_at`) 필터링을 수행해야 합니다.
 5. **Apps Script 매니페스트(`appsscript.json`) 필수 5대 OAuth 권한 기본 보장 원칙**:
    - `Ui.showSidebar` 또는 모달 창 호출 시 권한 거부(`https://www.googleapis.com/auth/script.container.ui`) 예외가 발생하지 않도록, 모든 프로젝트의 매니페스트에는 다음 5대 필수 권한이 `oauthScopes`에 반드시 포함되어야 합니다:
      - `https://www.googleapis.com/auth/spreadsheets`
