@@ -78,6 +78,8 @@
      - `https://www.googleapis.com/auth/script.external_request`
      - `https://www.googleapis.com/auth/script.scriptapp`
      - `https://www.googleapis.com/auth/drive`
+     - `https://www.googleapis.com/auth/userinfo.email`
+     - `https://www.googleapis.com/auth/script.send_mail`
    - `ensureStandardManifest`(`src/lib/gas-manifest.ts`) 헬퍼를 통해 프로젝트 생성, 수정, 재배포 시 자동으로 스코프가 누락 없이 주입되도록 보장합니다.
 <!-- END:apps-script-safety-rules -->
 

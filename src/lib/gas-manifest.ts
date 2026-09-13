@@ -8,6 +8,8 @@ export const STANDARD_OAUTH_SCOPES = [
   'https://www.googleapis.com/auth/script.external_request',
   'https://www.googleapis.com/auth/script.scriptapp',
   'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/script.send_mail',
 ];
 
 export function ensureStandardManifest(rawManifest?: string | null): string {
