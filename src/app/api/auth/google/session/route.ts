@@ -10,6 +10,7 @@ export async function POST(req: Request) {
     let email = body.email ? String(body.email).toLowerCase().trim() : "";
     let name = body.name ? String(body.name).trim() : "";
     let image = body.image ? String(body.image).trim() : "";
+    let visitorSessionId = body.visitorSessionId ? String(body.visitorSessionId).trim() : "";
 
     // 이메일이 전달되지 않은 경우 에러 반환 (방문자 로그인에서 소유자 drive_auth_status fallback 차단)
     if (!email || !email.includes("@")) {
@@ -40,15 +41,16 @@ export async function POST(req: Request) {
       const existingUser = (existingUserRes.rows || []).find((r: any) => !r.deleted_at);
 
       if (existingUser) {
-        // 기존 회원이면 last_login_at 갱신
+        // 기존 회원이면 last_login_at 및 visitor_session_id 갱신 (Primary Key id 기반 정확한 업데이트)
         await updateRows(
           "sheetbot_users",
           {
             last_login_at: now,
             updated_at: now,
             name: name || existingUser.name,
+            ...(visitorSessionId ? { visitor_session_id: visitorSessionId } : {}),
           },
-          { ids: [Number(existingUser.id) || existingUser.id] }
+          { filters: { id: String(existingUser.id) } }
         ).catch((err) => console.warn("Update user login time error:", err));
       } else {
         // 신규 회원이면 등록
@@ -64,11 +66,18 @@ export async function POST(req: Request) {
             created_at: now,
             last_login_at: now,
             updated_at: now,
+            visitor_session_id: visitorSessionId || null,
           },
         ]).catch((err) => console.warn("Insert new user error:", err));
       }
 
-      // 2. 토큰 지갑 확보 (신규 시 웰컴 토큰 지급)
+      // 2. 활성 API 키 대장에 방문자 세션 ID 동기화
+      if (visitorSessionId) {
+        const { syncVisitorSessionToUser } = await import("@/lib/api-keys");
+        await syncVisitorSessionToUser(email, visitorSessionId);
+      }
+
+      // 3. 토큰 지갑 확보 (신규 시 웰컴 토큰 지급)
       await getOrCreateUserWallet(email).catch((err) =>
         console.warn("Wallet creation warning:", err)
       );

@@ -71,3 +71,69 @@ export async function callAiCaller(
     raw: json,
   };
 }
+
+/** Run company research search with options */
+export async function runCompanyResearch(
+  query: string,
+  options?: { companyName?: string; clientBusinessNumber?: string; bypassCache?: boolean }
+) {
+  const { callCompanyResearchTool } = await import('../../egdesk-helpers');
+  return callCompanyResearchTool('companyresearch_search', {
+    searchText: query,
+    ...(options || {})
+  });
+}
+
+/**
+ * 서버 사이드에서 유저 방문자 세션으로 Google Workspace MCP 도구(sheets, drive, apps-script)를 호출할 때
+ * X-Visitor-Origin 헤더를 반드시 동봉하여 안전하게 실행하는 헬퍼
+ */
+export async function callVisitorWorkspaceTool(
+  service: 'sheets' | 'drive' | 'apps-script',
+  toolName: string,
+  args: Record<string, any> = {},
+  visitorSessionId?: string | null,
+  siteOrigin: string = 'http://localhost:4003'
+) {
+  const apiUrl =
+    (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+    'http://localhost:8080';
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  const payloadArgs = { ...args };
+
+  if (visitorSessionId) {
+    headers['Authorization'] = `Bearer ${visitorSessionId}`;
+    headers['X-EGDesk-As-Visitor'] = 'true';
+    headers['X-Visitor-Origin'] = siteOrigin;
+    payloadArgs.asVisitor = true;
+  }
+
+  const response = await fetch(`${apiUrl}/${service}/tools/call`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      tool: toolName,
+      arguments: payloadArgs,
+    }),
+  });
+
+  const json = await response.json().catch(() => null);
+  if (!response.ok || !json || json.success === false) {
+    const msg = json?.error || json?.message || `HTTP ${response.status}: ${response.statusText}`;
+    throw new Error(msg);
+  }
+
+  const textContent = json.result?.content?.[0]?.text;
+  if (!textContent) return json.result || json;
+  try {
+    return JSON.parse(textContent);
+  } catch {
+    return textContent;
+  }
+}
+
+

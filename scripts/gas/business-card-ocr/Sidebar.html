@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap');
+    body {
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+    }
+    .drop-zone-active {
+      border-color: #4f46e5;
+      background-color: #eef2ff;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background-color: #cbd5e1;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 p-4 min-h-screen flex flex-col justify-between custom-scrollbar">
+
+  <div>
+    <!-- 상단 헤더 & 상시 초기화 버튼 -->
+    <div class="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
+      <div class="flex items-center space-x-2">
+        <span class="text-xl">📇</span>
+        <div>
+          <h1 class="text-base font-bold text-slate-800 leading-tight">명함 OCR 자동 등록</h1>
+          <p class="text-xs text-slate-500">SheetBot AI 비즈니스 파트너</p>
+        </div>
+      </div>
+      <button 
+        onclick="resetAll()" 
+        class="inline-flex items-center text-xs text-slate-500 hover:text-indigo-600 bg-white border border-slate-200 hover:border-indigo-300 px-2.5 py-1.5 rounded-lg shadow-sm transition"
+        title="화면을 처음 상태로 완전히 초기화합니다.">
+        <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+        초기화
+      </button>
+    </div>
+
+    <!-- 파일 업로드 드롭존 영역 -->
+    <div id="uploadSection" class="mb-4">
+      <div 
+        id="dropZone" 
+        onclick="document.getElementById('fileInput').click()"
+        class="border-2 border-dashed border-indigo-200 bg-indigo-50/50 hover:bg-indigo-50/80 rounded-xl p-5 text-center cursor-pointer transition flex flex-col items-center justify-center group">
+        <div class="w-12 h-12 rounded-full bg-indigo-100 group-hover:bg-indigo-200 flex items-center justify-center text-indigo-600 mb-2 transition">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+          </svg>
+        </div>
+        <p class="text-sm font-semibold text-slate-700">명함 이미지 또는 PDF 파일 선택</p>
+        <p class="text-xs text-slate-400 mt-1">클릭하거나 파일을 여기로 끌어다 놓으세요</p>
+        <span class="inline-block mt-2 text-[10px] bg-white text-indigo-600 border border-indigo-200 px-2 py-0.5 rounded-full font-medium">
+          JPG, PNG, WEBP, PDF 지원
+        </span>
+      </div>
+      <input type="file" id="fileInput" accept="image/*,application/pdf" class="hidden" onchange="handleFileSelected(event)">
+    </div>
+
+    <!-- 파일 미리보기 및 요청 전 교체/취소 바 -->
+    <div id="filePreviewSection" class="hidden mb-4 bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100 mb-2">
+        <span class="text-xs font-semibold text-slate-600 flex items-center">
+          <svg class="w-3.5 h-3.5 text-emerald-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+          </svg>
+          파일 준비 완료
+        </span>
+        <div class="flex items-center space-x-1">
+          <button 
+            onclick="document.getElementById('fileInput').click()" 
+            class="text-[11px] text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-2 py-1 rounded transition">
+            🔄 파일 변경
+          </button>
+          <button 
+            onclick="cancelSelectedFile()" 
+            class="text-[11px] text-rose-500 hover:text-rose-700 hover:bg-rose-50 px-2 py-1 rounded transition">
+            ❌ 취소
+          </button>
+        </div>
+      </div>
+      
+      <!-- 미리보기 이미지 / PDF 아이콘 -->
+      <div class="flex items-center space-x-3">
+        <div id="previewContainer" class="w-16 h-16 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center flex-shrink-0">
+          <img id="imagePreview" src="" alt="미리보기" class="w-full h-full object-cover hidden">
+          <div id="pdfPreview" class="hidden flex flex-col items-center text-rose-500">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+            </svg>
+            <span class="text-[9px] font-bold mt-0.5">PDF</span>
+          </div>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p id="previewFileName" class="text-xs font-semibold text-slate-800 truncate"></p>
+          <p id="previewFileSize" class="text-[11px] text-slate-400"></p>
+          <button 
+            id="btnStartOcr" 
+            onclick="startOcrAnalysis()" 
+            class="mt-1.5 w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow transition flex items-center justify-center space-x-1">
+            <span>✨ AI 명함 분석 시작</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 로딩 스피너 및 진행 상태 -->
+    <div id="loadingSection" class="hidden mb-4 bg-indigo-50/60 border border-indigo-100 rounded-xl p-4 text-center">
+      <div class="inline-block animate-spin rounded-full h-7 w-7 border-3 border-indigo-600 border-t-transparent mb-2"></div>
+      <p id="loadingMessage" class="text-xs font-semibold text-indigo-800">명함 이미지를 고화질로 분석하고 있습니다...</p>
+      <p class="text-[11px] text-indigo-500 mt-0.5">Gemini 초정밀 비전 엔진 구동 중</p>
+    </div>
+
+    <!-- 추출된 데이터 검토 및 수정 폼 -->
+    <div id="formSection" class="hidden mb-4 bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100 mb-3">
+        <h3 class="text-xs font-bold text-slate-800 flex items-center">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 mr-1.5"></span>
+          추출 결과 확인 및 보완
+        </h3>
+        <span id="ocrElapsedBadge" class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">0.0초 소요</span>
+      </div>
+
+      <div class="space-y-2.5 text-xs">
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">성명 <span class="text-rose-500">*</span></label>
+            <input type="text" id="field_name" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">직책/직급</label>
+            <input type="text" id="field_position" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-indigo-500">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">회사명</label>
+            <input type="text" id="field_company" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-indigo-500">
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">부서</label>
+            <input type="text" id="field_department" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-indigo-500">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">휴대전화</label>
+            <input type="text" id="field_mobile" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-indigo-500" placeholder="010-XXXX-XXXX">
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">회사전화</label>
+            <input type="text" id="field_phone" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-indigo-500" placeholder="02-XXXX-XXXX">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">이메일</label>
+          <input type="text" id="field_email" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">사업장 주소</label>
+          <input type="text" id="field_address" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">웹사이트</label>
+          <input type="text" id="field_website" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">메모 / 특이사항</label>
+          <textarea id="field_notes" rows="2" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-indigo-500"></textarea>
+        </div>
+      </div>
+
+      <!-- 시트 등록 액션 버튼 -->
+      <button 
+        id="btnSaveToSheet" 
+        onclick="saveCurrentCardToSheet()" 
+        class="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold py-2 px-3 rounded-lg shadow transition flex items-center justify-center space-x-1">
+        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span>구글 시트에 즉시 등록하기</span>
+      </button>
+    </div>
+
+    <!-- 등록 성공 피드백 & 연속 등록 버튼 -->
+    <div id="successSection" class="hidden mb-4 bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+      <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center mb-2">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+      </div>
+      <h4 class="text-sm font-bold text-emerald-900 mb-1">시트 등록이 완료되었습니다!</h4>
+      <p id="successMessage" class="text-xs text-emerald-700 mb-3"></p>
+      
+      <!-- 완료 후 연속 등록 원클릭 버튼 -->
+      <button 
+        onclick="continuousRegisterNextFile()" 
+        class="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold py-2.5 px-4 rounded-lg shadow transition flex items-center justify-center space-x-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+        </svg>
+        <span>➕ 다음 명함 바로 등록하기</span>
+      </button>
+    </div>
+
+    <!-- 오류 알림 배너 -->
+    <div id="errorBanner" class="hidden mb-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl p-3">
+      <div class="flex items-start">
+        <span class="mr-1.5">⚠️</span>
+        <div class="flex-1" id="errorMessage"></div>
+        <button onclick="document.getElementById('errorBanner').classList.add('hidden')" class="text-rose-400 hover:text-rose-600 ml-1">✕</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 하단 푸터 및 안내 -->
+  <div class="pt-3 border-t border-slate-200 text-center">
+    <p class="text-[11px] text-slate-400">
+      ⚡ Powered by <strong class="text-slate-600">SheetBot & EGDesk Tunnel</strong>
+    </p>
+  </div>
+
+  <script>
+    // 현재 선택된 파일 상태
+    var selectedFileObj = {
+      file: null,
+      base64: null,
+      name: '',
+      size: 0,
+      mimeType: ''
+    };
+
+    // 드래그 앤 드롭 이벤트 설정
+    var dropZone = document.getElementById('dropZone');
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drop-zone-active');
+      }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drop-zone-active');
+      }, false);
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      var dt = e.dataTransfer;
+      var files = dt.files;
+      if (files && files.length > 0) {
+        processFile(files[0]);
+      }
+    }, false);
+
+    function handleFileSelected(event) {
+      var files = event.target.files;
+      if (files && files.length > 0) {
+        processFile(files[0]);
+      }
+    }
+
+    // 파일 로드 및 Base64 인코딩
+    function processFile(file) {
+      showError(null);
+      document.getElementById('successSection').classList.add('hidden');
+      
+      var isImage = file.type.startsWith('image/');
+      var isPdf = file.type === 'application/pdf';
+      
+      if (!isImage && !isPdf) {
+        showError('이미지 파일(JPG, PNG 등) 또는 PDF 파일만 업로드할 수 있습니다.');
+        return;
+      }
+
+      selectedFileObj.file = file;
+      selectedFileObj.name = file.name;
+      selectedFileObj.size = file.size;
+      selectedFileObj.mimeType = file.type;
+
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var result = e.target.result;
+        // Data URL에서 Base64 순수 문자열 추출
+        var base64Index = result.indexOf(';base64,');
+        if (base64Index !== -1) {
+          selectedFileObj.base64 = result.substring(base64Index + 8);
+        } else {
+          selectedFileObj.base64 = result;
+        }
+
+        // 미리보기 UI 세팅
+        document.getElementById('previewFileName').textContent = file.name;
+        document.getElementById('previewFileSize').textContent = formatBytes(file.size);
+
+        var imgElem = document.getElementById('imagePreview');
+        var pdfElem = document.getElementById('pdfPreview');
+
+        if (isImage) {
+          imgElem.src = result;
+          imgElem.classList.remove('hidden');
+          pdfElem.classList.add('hidden');
+        } else {
+          imgElem.classList.add('hidden');
+          pdfElem.classList.remove('hidden');
+        }
+
+        document.getElementById('uploadSection').classList.add('hidden');
+        document.getElementById('filePreviewSection').classList.remove('hidden');
+        document.getElementById('formSection').classList.add('hidden');
+      };
+
+      reader.onerror = function() {
+        showError('파일을 읽는 중 오류가 발생했습니다.');
+      };
+
+      reader.readAsDataURL(file);
+    }
+
+    // [요청 전 취소] 버튼
+    function cancelSelectedFile() {
+      resetFileOnly();
+    }
+
+    function resetFileOnly() {
+      selectedFileObj = { file: null, base64: null, name: '', size: 0, mimeType: '' };
+      document.getElementById('fileInput').value = '';
+      document.getElementById('filePreviewSection').classList.add('hidden');
+      document.getElementById('uploadSection').classList.remove('hidden');
+      document.getElementById('loadingSection').classList.add('hidden');
+    }
+
+    // [상시 초기화] 전체 폼 리셋
+    function resetAll() {
+      resetFileOnly();
+      document.getElementById('formSection').classList.add('hidden');
+      document.getElementById('successSection').classList.add('hidden');
+      showError(null);
+      clearFormFields();
+    }
+
+    function clearFormFields() {
+      ['name', 'position', 'company', 'department', 'mobile', 'phone', 'email', 'address', 'website', 'notes'].forEach(id => {
+        var el = document.getElementById('field_' + id);
+        if (el) el.value = '';
+      });
+    }
+
+    // [완료 후 연속 등록] 다음 파일 바로 등록하기
+    function continuousRegisterNextFile() {
+      resetAll();
+      setTimeout(function() {
+        document.getElementById('fileInput').click();
+      }, 100);
+    }
+
+    // AI OCR 분석 시작
+    function startOcrAnalysis() {
+      if (!selectedFileObj.base64) {
+        showError('선택된 명함 파일이 없습니다.');
+        return;
+      }
+
+      showError(null);
+      document.getElementById('loadingSection').classList.remove('hidden');
+      document.getElementById('btnStartOcr').disabled = true;
+      document.getElementById('btnStartOcr').classList.add('opacity-50', 'cursor-not-allowed');
+
+      google.script.run
+        .withSuccessHandler(handleOcrSuccess)
+        .withFailureHandler(handleOcrFailure)
+        .analyzeBusinessCard(selectedFileObj.base64, selectedFileObj.name, selectedFileObj.mimeType);
+    }
+
+    function handleOcrSuccess(res) {
+      document.getElementById('loadingSection').classList.add('hidden');
+      document.getElementById('btnStartOcr').disabled = false;
+      document.getElementById('btnStartOcr').classList.remove('opacity-50', 'cursor-not-allowed');
+
+      if (!res || !res.success) {
+        showError(res ? res.error : '명함 분석에 실패했습니다.');
+        return;
+      }
+
+      var d = res.data || {};
+      document.getElementById('field_name').value = d.name || '';
+      document.getElementById('field_position').value = d.position || '';
+      document.getElementById('field_company').value = d.company || '';
+      document.getElementById('field_department').value = d.department || '';
+      document.getElementById('field_mobile').value = d.mobile || '';
+      document.getElementById('field_phone').value = d.phone || '';
+      document.getElementById('field_email').value = d.email || '';
+      document.getElementById('field_address').value = d.address || '';
+      document.getElementById('field_website').value = d.website || '';
+      document.getElementById('field_notes').value = d.notes || '';
+
+      if (res.elapsedMs) {
+        document.getElementById('ocrElapsedBadge').textContent = (res.elapsedMs / 1000).toFixed(1) + '초 소요';
+      }
+
+      document.getElementById('formSection').classList.remove('hidden');
+      // 폼 영역으로 부드럽게 스크롤
+      document.getElementById('formSection').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function handleOcrFailure(err) {
+      document.getElementById('loadingSection').classList.add('hidden');
+      document.getElementById('btnStartOcr').disabled = false;
+      document.getElementById('btnStartOcr').classList.remove('opacity-50', 'cursor-not-allowed');
+      showError('서버 통신 실패: ' + (err.message || err.toString()));
+    }
+
+    // 시트에 등록하기
+    function saveCurrentCardToSheet() {
+      var name = document.getElementById('field_name').value.trim();
+      if (!name) {
+        showError('성명(이름)은 필수 입력 항목입니다.');
+        document.getElementById('field_name').focus();
+        return;
+      }
+
+      var cardData = {
+        name: name,
+        position: document.getElementById('field_position').value.trim(),
+        company: document.getElementById('field_company').value.trim(),
+        department: document.getElementById('field_department').value.trim(),
+        mobile: document.getElementById('field_mobile').value.trim(),
+        phone: document.getElementById('field_phone').value.trim(),
+        email: document.getElementById('field_email').value.trim(),
+        address: document.getElementById('field_address').value.trim(),
+        website: document.getElementById('field_website').value.trim(),
+        notes: document.getElementById('field_notes').value.trim()
+      };
+
+      var btn = document.getElementById('btnSaveToSheet');
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳ 시트에 기록 중...</span>';
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btn.disabled = false;
+          btn.innerHTML = '<svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><span>구글 시트에 즉시 등록하기</span>';
+
+          if (res && res.success) {
+            document.getElementById('formSection').classList.add('hidden');
+            document.getElementById('filePreviewSection').classList.add('hidden');
+            document.getElementById('successSection').classList.remove('hidden');
+            document.getElementById('successMessage').textContent = res.message || '명함 정보가 시트에 성공적으로 등록되었습니다.';
+          } else {
+            showError(res ? res.error : '시트 저장 실패');
+          }
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false;
+          btn.innerHTML = '<span>구글 시트에 즉시 등록하기</span>';
+          showError('시트 저장 중 오류: ' + (err.message || err.toString()));
+        })
+        .saveBusinessCardToSheet(cardData);
+    }
+
+    function showError(msg) {
+      var banner = document.getElementById('errorBanner');
+      var text = document.getElementById('errorMessage');
+      if (msg) {
+        text.textContent = msg;
+        banner.classList.remove('hidden');
+      } else {
+        banner.classList.add('hidden');
+      }
+    }
+
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      var k = 1024;
+      var sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      var i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+  </script>
+</body>
+</html>

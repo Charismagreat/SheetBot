@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getCurrentVisitorSessionId } from "@/lib/auth";
 import { getOrCreateUserApiKey, regenerateUserApiKey } from "@/lib/api-keys";
 
 /**
@@ -17,6 +17,12 @@ export async function GET(request: Request) {
     }
 
     const keyInfo = await getOrCreateUserApiKey(userEmail);
+
+    const visitorSessionId = await getCurrentVisitorSessionId(request);
+    if (visitorSessionId) {
+      const { syncVisitorSessionToUser } = await import("@/lib/api-keys");
+      await syncVisitorSessionToUser(userEmail, visitorSessionId);
+    }
 
     return NextResponse.json({
       success: true,
@@ -51,6 +57,12 @@ export async function POST(request: Request) {
 
     const keyName = body.name || "Default Agent Key";
     const newKey = await regenerateUserApiKey(userEmail, keyName);
+
+    const visitorSessionId = await getCurrentVisitorSessionId(request);
+    if (visitorSessionId) {
+      const { syncVisitorSessionToUser } = await import("@/lib/api-keys");
+      await syncVisitorSessionToUser(userEmail, visitorSessionId);
+    }
 
     return NextResponse.json({
       success: true,

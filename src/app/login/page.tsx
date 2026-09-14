@@ -15,6 +15,7 @@ import {
   getVisitorGoogleStatus,
   signOutVisitorGoogle,
   VISITOR_BASIC_SCOPES,
+  VISITOR_WORKSPACE_SCOPES,
   VISITOR_GOOGLE_OAUTH_SCOPES,
 } from "@/egdesk-visitor-google";
 
@@ -41,14 +42,24 @@ export default function LoginPage() {
     void checkVisitorStatus();
   }, []);
 
-  // 1. Google 계정으로 로그인 (최소 권한: 이메일, 기본 프로필만 요청)
+  // SheetBot 자동화를 위한 확장 권한 스코프 (시트 + 드라이브 + Apps Script 프로젝트 생성)
+  const SHEETBOT_WORKSPACE_SCOPES = [
+    ...VISITOR_WORKSPACE_SCOPES,
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/script.projects",
+    "https://www.googleapis.com/auth/script.external_request",
+  ];
+
+  // 1. Google 계정으로 로그인 (스프레드시트 및 드라이브/Apps Script 자동화 권한 포함)
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
+      // 기존에 잔류하는 세션이 있다면 먼저 완전히 폐기(Revoke)하여 세션 누수 방지
+      await signOutVisitorGoogle().catch(() => {});
       await startVisitorGoogleLogin({
         next: "/dashboard",
         forceConsent: true,
-        scopes: VISITOR_BASIC_SCOPES,
+        scopes: SHEETBOT_WORKSPACE_SCOPES,
       });
     } catch (err: any) {
       setIsLoading(false);
@@ -65,7 +76,7 @@ export default function LoginPage() {
       await startVisitorGoogleLogin({
         next: "/dashboard",
         forceConsent: true,
-        scopes: VISITOR_BASIC_SCOPES,
+        scopes: SHEETBOT_WORKSPACE_SCOPES,
       });
     } catch (err: any) {
       setIsLoading(false);

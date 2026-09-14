@@ -31,6 +31,24 @@ function visitorForwardHeaders(request: NextRequest): Record<string, string> {
   return headers;
 }
 
+/** Forward opt-in visitor session headers to Workspace MCP tool calls. */
+function workspaceForwardHeaders(request: NextRequest): Record<string, string> {
+  const headers = buildEgdeskHeaders();
+  const authorization = request.headers.get('authorization');
+  const asVisitor = request.headers.get('x-egdesk-as-visitor');
+  if (authorization) headers['Authorization'] = authorization;
+  if (asVisitor) headers['X-EGDesk-As-Visitor'] = asVisitor;
+  if (asVisitor === 'true' || authorization) {
+    const origin =
+      request.headers.get('x-visitor-origin') ||
+      request.headers.get('origin') ||
+      request.nextUrl.origin;
+    headers['Origin'] = origin;
+    headers['X-Visitor-Origin'] = origin;
+  }
+  return headers;
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -151,7 +169,7 @@ export async function proxy(request: NextRequest) {
       const body = await request.text();
       const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
 
-      const response = await fetch(`${apiUrl}/bizinfo/tools/call`, {
+      const response = await fetch(`${apiUrl}/company-research/tools/call`, {
         method: 'POST',
         headers: buildEgdeskHeaders(),
         body,
@@ -173,7 +191,7 @@ export async function proxy(request: NextRequest) {
       const body = await request.text();
       const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
 
-      const response = await fetch(`${apiUrl}/bidnotice/tools/call`, {
+      const response = await fetch(`${apiUrl}/company-research/tools/call`, {
         method: 'POST',
         headers: buildEgdeskHeaders(),
         body,
@@ -195,7 +213,7 @@ export async function proxy(request: NextRequest) {
       const body = await request.text();
       const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
 
-      const response = await fetch(`${apiUrl}/koneps/tools/call`, {
+      const response = await fetch(`${apiUrl}/company-research/tools/call`, {
         method: 'POST',
         headers: buildEgdeskHeaders(),
         body,
@@ -217,7 +235,7 @@ export async function proxy(request: NextRequest) {
       const body = await request.text();
       const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
 
-      const response = await fetch(`${apiUrl}/nps/tools/call`, {
+      const response = await fetch(`${apiUrl}/company-research/tools/call`, {
         method: 'POST',
         headers: buildEgdeskHeaders(),
         body,
@@ -351,7 +369,7 @@ export async function proxy(request: NextRequest) {
 
       const response = await fetch(`${apiUrl}/drive/tools/call`, {
         method: 'POST',
-        headers: buildEgdeskHeaders(),
+        headers: workspaceForwardHeaders(request),
         body,
       });
 
@@ -373,7 +391,7 @@ export async function proxy(request: NextRequest) {
 
       const response = await fetch(`${apiUrl}/docs/tools/call`, {
         method: 'POST',
-        headers: buildEgdeskHeaders(),
+        headers: workspaceForwardHeaders(request),
         body,
       });
 
@@ -395,7 +413,7 @@ export async function proxy(request: NextRequest) {
 
       const response = await fetch(`${apiUrl}/slides/tools/call`, {
         method: 'POST',
-        headers: buildEgdeskHeaders(),
+        headers: workspaceForwardHeaders(request),
         body,
       });
 
@@ -417,7 +435,7 @@ export async function proxy(request: NextRequest) {
 
       const response = await fetch(`${apiUrl}/sheets/tools/call`, {
         method: 'POST',
-        headers: buildEgdeskHeaders(),
+        headers: workspaceForwardHeaders(request),
         body,
       });
 
@@ -469,7 +487,7 @@ export async function proxy(request: NextRequest) {
       const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
       const response = await fetch(`${apiUrl}/gmail/tools/call`, {
         method: 'POST',
-        headers: buildEgdeskHeaders(),
+        headers: workspaceForwardHeaders(request),
         body,
       });
       const result = await response.json();
@@ -488,7 +506,7 @@ export async function proxy(request: NextRequest) {
       const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
       const response = await fetch(`${apiUrl}/apps-script/tools/call`, {
         method: 'POST',
-        headers: buildEgdeskHeaders(),
+        headers: workspaceForwardHeaders(request),
         body,
       });
       const result = await response.json();

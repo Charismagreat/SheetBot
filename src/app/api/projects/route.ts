@@ -1,8 +1,15 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
-import { queryTable, insertRows, updateRows, callAppsScriptTool, callDriveTool } from "@/lib/egdesk-helpers";
+import { getCurrentUserEmail, getCurrentVisitorSessionId, isCurrentUserAdmin } from "@/lib/auth";
+import {
+  queryTable,
+  insertRows,
+  updateRows,
+  callAppsScriptTool,
+  callDriveTool,
+  WorkspaceVisitorCallOptions,
+} from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { ensureStandardManifest, generateSecureEgdeskConfig } from "@/lib/gas-manifest";
 
@@ -153,12 +160,21 @@ export async function POST(request: Request) {
     let scriptUrl = "";
     let webAppUrl = "";
 
+    // 방문자(Visitor) 구글 세션 추출 (일반 회원이 본인 구글 권한으로 스크립트 직접 주입)
+    const visitorSessionId = await getCurrentVisitorSessionId(request);
+    const isAdmin = await isCurrentUserAdmin(userEmail);
+    const visitorOptions: WorkspaceVisitorCallOptions = visitorSessionId
+      ? { asVisitor: true, visitorSessionId }
+      : !isAdmin
+        ? { asVisitor: true }
+        : {};
+
     try {
       if (spreadsheetId) {
         // 1-0. 이미 해당 스프레드시트에 연결된 바운드 프로젝트가 있는지 우선 검색 (중복 생성 방지)
         let existingGasProject: any = null;
         try {
-          const listRes = await callAppsScriptTool("apps_script_list_projects", {});
+          const listRes = await callAppsScriptTool("apps_script_list_projects", {}, visitorOptions);
           const allProjects = Array.isArray(listRes)
             ? listRes
             : (listRes?.projects || listRes?.result || []);
@@ -179,12 +195,12 @@ export async function POST(request: Request) {
           scriptUrl = existingGasProject.scriptUrl || `https://script.google.com/d/${scriptId}/edit`;
           console.log(`[Projects] Reusing existing bound Apps Script project: ${gasProjectId}`);
         } else {
-          // 기존 프로젝트가 없을 때만 신규 바운드 프로젝트 생성
+          // 기존 프로젝트가 없을 때만 신규 바운드 프로젝트 생성 (방문자 세션으로 유저 시트에 생성)
           const boundRes = await callAppsScriptTool("apps_script_create_bound", {
             fileId: spreadsheetId,
             title: name.trim(),
             scriptCode: scriptCode || undefined,
-          });
+          }, visitorOptions);
           if (boundRes && (boundRes.id || boundRes.projectId)) {
             gasProjectId = boundRes.id || boundRes.projectId;
             scriptId = boundRes.scriptId || gasProjectId;
@@ -199,13 +215,13 @@ export async function POST(request: Request) {
             await callAppsScriptTool("apps_script_setup_egdesk_tunnel", {
               projectId: gasProjectId,
               push: false,
-            });
+            }, visitorOptions);
             // 보안 정화: 마스터 API Key 평문 노출 방지를 위한 ScriptProperties 보안 템플릿 즉시 주입
             await callAppsScriptTool("apps_script_write_file", {
               projectId: gasProjectId,
               fileName: "EgdeskConfig.gs",
               content: generateSecureEgdeskConfig(userEmail),
-            }).catch(() => null);
+            }, visitorOptions).catch(() => null);
             console.log(`[Projects] Successfully embedded secured EGDesk tunnel files into ${gasProjectId}`);
           } catch (tunnelErr: any) {
             console.warn("[Projects] Embed EGDesk tunnel warning:", tunnelErr.message);
@@ -218,25 +234,25 @@ export async function POST(request: Request) {
           await callAppsScriptTool("apps_script_delete_file", {
             projectId: gasProjectId,
             fileName: "undefined.gs",
-          }).catch(() => null);
+          }, visitorOptions).catch(() => null);
 
           await callAppsScriptTool("apps_script_write_file", {
             projectId: gasProjectId,
             fileName: "Code.gs",
             content: scriptCode,
-          }).catch((err: any) => console.warn("write Code.gs warning:", err.message));
+          }, visitorOptions).catch((err: any) => console.warn("write Code.gs warning:", err.message));
 
           const validManifest = ensureStandardManifest(manifest);
           await callAppsScriptTool("apps_script_write_file", {
             projectId: gasProjectId,
             fileName: "appsscript.json",
             content: validManifest,
-          }).catch((err: any) => console.warn("write appsscript.json warning:", err.message));
+          }, visitorOptions).catch((err: any) => console.warn("write appsscript.json warning:", err.message));
 
           // 클라우드 최종 반영 (EgdeskConfig.gs, EgdeskClient.gs, Code.gs, appsscript.json 모두 푸시)
           await callAppsScriptTool("apps_script_push_to_google", {
             projectId: gasProjectId,
-          }).catch((err: any) => console.warn("push to google warning:", err.message));
+          }, visitorOptions).catch((err: any) => console.warn("push to google warning:", err.message));
 
           // 스크립트 코드에 doGet(e) 또는 Web App 폼이 포함된 경우 웹 앱 배포 자동 실행
           if (scriptCode.includes("doGet") || scriptCode.includes("HtmlService")) {
@@ -246,7 +262,7 @@ export async function POST(request: Request) {
                 access: "ANYONE_ANONYMOUS",
                 executeAs: "USER_DEPLOYING",
                 description: `[SheetBot] 공개 웹 폼 배포 (${name.trim()})`,
-              });
+              }, visitorOptions);
               if (deployRes) {
                 webAppUrl =
                   deployRes.webAppUrl ||
@@ -414,6 +430,15 @@ export async function PATCH(request: Request) {
 
     const projRow = existing.rows?.[0];
 
+    // 방문자(Visitor) 구글 세션 추출 (재배포 시에도 유저 권한으로 푸시)
+    const visitorSessionId = await getCurrentVisitorSessionId(request);
+    const isAdmin = await isCurrentUserAdmin(userEmail);
+    const visitorOptions: WorkspaceVisitorCallOptions = visitorSessionId
+      ? { asVisitor: true, visitorSessionId }
+      : !isAdmin
+        ? { asVisitor: true }
+        : {};
+
     // 기존 프로젝트의 AI 생성 코드를 구글 클라우드에 재주입
     if (redeploy && projRow) {
       const gasProjId = projRow.gas_project_id || projRow.script_id;
@@ -425,36 +450,36 @@ export async function PATCH(request: Request) {
         await callAppsScriptTool("apps_script_delete_file", {
           projectId: gasProjId,
           fileName: "undefined.gs",
-        }).catch(() => null);
+        }, visitorOptions).catch(() => null);
 
         // 터널 클라이언트 인프라(EgdeskConfig.gs, EgdeskClient.gs) 최신화 보장 및 보안 정화
         await callAppsScriptTool("apps_script_setup_egdesk_tunnel", {
           projectId: gasProjId,
           push: false,
-        }).catch((err: any) => console.warn("Redeploy setup tunnel warning:", err.message));
+        }, visitorOptions).catch((err: any) => console.warn("Redeploy setup tunnel warning:", err.message));
 
         await callAppsScriptTool("apps_script_write_file", {
           projectId: gasProjId,
           fileName: "EgdeskConfig.gs",
           content: generateSecureEgdeskConfig(userEmail),
-        }).catch(() => null);
+        }, visitorOptions).catch(() => null);
 
         await callAppsScriptTool("apps_script_write_file", {
           projectId: gasProjId,
           fileName: "Code.gs",
           content: targetScriptCode,
-        }).catch((err: any) => console.warn("Redeploy Code.gs warning:", err.message));
+        }, visitorOptions).catch((err: any) => console.warn("Redeploy Code.gs warning:", err.message));
 
         const validManifest = ensureStandardManifest(targetManifest);
         await callAppsScriptTool("apps_script_write_file", {
           projectId: gasProjId,
           fileName: "appsscript.json",
           content: validManifest,
-        }).catch(() => null);
+        }, visitorOptions).catch(() => null);
 
         await callAppsScriptTool("apps_script_push_to_google", {
           projectId: gasProjId,
-        }).catch((err: any) => console.warn("Redeploy push warning:", err.message));
+        }, visitorOptions).catch((err: any) => console.warn("Redeploy push warning:", err.message));
       }
     }
 

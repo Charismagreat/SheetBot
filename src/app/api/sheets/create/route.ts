@@ -1,16 +1,23 @@
 import { NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getCurrentVisitorSessionId, isCurrentUserAdmin } from "@/lib/auth";
 import {
   createSpreadsheet,
   createSpreadsheetInEgdeskFolder,
   callSheetsTool,
   callDriveTool,
+  WorkspaceVisitorCallOptions,
+  callVisitorWorkspaceTool,
 } from "@/lib/egdesk-helpers";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const sheetsAuth = await callSheetsTool("sheets_auth_status", {}).catch(() => null);
-    const driveAuth = await callDriveTool("drive_auth_status", {}).catch(() => null);
+    const visitorSessionId = await getCurrentVisitorSessionId(request);
+    const visitorOptions: WorkspaceVisitorCallOptions = visitorSessionId
+      ? { asVisitor: true, visitorSessionId }
+      : {};
+
+    const sheetsAuth = await callSheetsTool("sheets_auth_status", {}, visitorOptions).catch(() => null);
+    const driveAuth = await callDriveTool("drive_auth_status", {}, visitorOptions).catch(() => null);
 
     const sheetsOk = Boolean(sheetsAuth && sheetsAuth.connected !== false && !sheetsAuth.error);
     const driveOk = Boolean(driveAuth && driveAuth.status === "connected");
@@ -34,33 +41,90 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const sessionEmail = await getCurrentUserEmail();
-    const userEmail = sessionEmail || (process.env.NODE_ENV === "development" ? "test.user@sheetbot.dev" : null);
+    let userEmail = await getCurrentUserEmail();
+    let apiKeyVisitorSessionId: string | null = null;
+
+    // 만약 세션 쿠키가 없다면 API 키(Authorization: Bearer sk_sheetbot_... 또는 x-api-key) 확인
     if (!userEmail) {
-      return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
+      const authHeader = request.headers.get("authorization") || "";
+      let apiKey = "";
+      if (authHeader.startsWith("Bearer ")) {
+        apiKey = authHeader.substring(7).trim();
+      } else {
+        apiKey = request.headers.get("x-api-key")?.trim() || request.headers.get("x-sheetbot-key")?.trim() || "";
+      }
+
+      if (apiKey && apiKey.startsWith("sk_sheetbot_")) {
+        const { verifyApiKey } = await import("@/lib/api-keys");
+        const keyResult = await verifyApiKey(apiKey);
+        if (keyResult.valid && keyResult.userEmail) {
+          userEmail = keyResult.userEmail;
+          apiKeyVisitorSessionId = keyResult.visitorSessionId || null;
+        }
+      }
+    }
+
+    if (!userEmail && process.env.NODE_ENV === "development") {
+      userEmail = "test.user@sheetbot.dev";
+    }
+
+    if (!userEmail) {
+      return NextResponse.json({ success: false, error: "로그인 또는 API 키 인증이 필요합니다." }, { status: 401 });
     }
 
     const body = await request.json();
     const { title = "새 스프레드시트", data = [] } = body;
 
+    let visitorSessionId = await getCurrentVisitorSessionId(request);
+    if (!visitorSessionId && apiKeyVisitorSessionId) {
+      visitorSessionId = apiKeyVisitorSessionId;
+    }
+    const visitorOptions: WorkspaceVisitorCallOptions = visitorSessionId
+      ? { asVisitor: true, visitorSessionId }
+      : {};
+
     let result: any = null;
     let createMethod = "sheets";
 
-    // 1차 시도: Google Sheets API createSpreadsheet
+    const host = request.headers.get("host") || "localhost:4003";
+    const protocol = request.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
+    const siteOrigin = `${protocol}://${host}`;
+
+    // 1차 시도: 방문자(유저) 권한으로 Google Sheets API sheets_create_spreadsheet (유저 본인 드라이브에 생성)
     try {
-      result = await createSpreadsheet(title, data);
+      if (visitorSessionId) {
+        result = await callVisitorWorkspaceTool(
+          "sheets",
+          "sheets_create_spreadsheet",
+          { title, data },
+          visitorSessionId,
+          siteOrigin
+        );
+      } else {
+        result = await callSheetsTool("sheets_create_spreadsheet", { title, data }, visitorOptions);
+      }
     } catch (sheetsErr: any) {
-      console.warn("[Sheets-Create] Primary createSpreadsheet failed, attempting Drive fallback:", sheetsErr?.message);
+      console.warn("[Sheets-Create] Primary sheets_create_spreadsheet failed, attempting fallback:", sheetsErr?.message);
     }
 
     // 2차 시도: 1차가 실패했거나 에러인 경우 Drive API (createSpreadsheetInEgdeskFolder)
     if (!result || (!result.spreadsheetId && !result.id)) {
       try {
-        result = await createSpreadsheetInEgdeskFolder({
-          title,
-          subfolder: "Dev",
-          data,
-        });
+        if (visitorSessionId) {
+          result = await callVisitorWorkspaceTool(
+            "drive",
+            "drive_create_spreadsheet_in_folder",
+            { title, subfolder: "Dev", data },
+            visitorSessionId,
+            siteOrigin
+          );
+        } else {
+          result = await callDriveTool("drive_create_spreadsheet_in_folder", {
+            title,
+            subfolder: "Dev",
+            data,
+          }, visitorOptions);
+        }
         createMethod = "drive";
       } catch (driveErr: any) {
         console.warn("[Sheets-Create] Drive fallback failed:", driveErr?.message);
