@@ -28,27 +28,7 @@ export default function VisitorAuthCallbackPage() {
       return;
     }
     void exchangeVisitorAuthCode(code)
-      .then(async (result: any) => {
-        // 서버 DB에 최신 방문자 세션 ID 및 계정 자동 동기화
-        try {
-          const { getVisitorGoogleStatus } = await import('@/egdesk-visitor-google');
-          const status = await getVisitorGoogleStatus();
-          const email = status?.email || '';
-          const sessionId = result?.sessionId || '';
-
-          if (email && sessionId) {
-            await fetch('/api/auth/google/session', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                email,
-                name: email.split('@')[0],
-                visitorSessionId: sessionId,
-              }),
-            }).catch(() => {});
-          }
-        } catch {}
-
+      .then(() => {
         const dest = resolveVisitorAppPath(next.startsWith('/') ? next : '/');
         window.location.replace(dest);
       })

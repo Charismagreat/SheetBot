@@ -74,9 +74,33 @@ async function parseEgdeskJson(response: Response): Promise<any> {
   return result;
 }
 
+function originFromValue(value?: string | null): string | null {
+  const raw = (value || '').trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    try {
+      return new URL(`https://${raw}`).origin;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function resolveVisitorSiteOrigin(): string | null {
+  if (typeof window !== 'undefined') return window.location.origin;
+  const fromEnv =
+    (typeof process !== 'undefined' &&
+      (process.env?.NEXT_PUBLIC_EGDESK_VISITOR_ORIGIN || process.env?.NEXT_PUBLIC_SITE_URL)) ||
+    '';
+  return originFromValue(fromEnv);
+}
+
 function visitorOriginHeaders(): Record<string, string> {
-  if (typeof window === 'undefined') return {};
-  return { 'X-Visitor-Origin': window.location.origin };
+  const origin = resolveVisitorSiteOrigin();
+  if (!origin) return {};
+  return { Origin: origin, 'X-Visitor-Origin': origin };
 }
 
 /** Tunnel production apps live under /t/{id}/p/{project}. Bare /auth/callback 404s. */

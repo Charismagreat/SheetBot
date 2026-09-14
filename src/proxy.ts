@@ -42,6 +42,8 @@ function workspaceForwardHeaders(request: NextRequest): Record<string, string> {
     const origin =
       request.headers.get('x-visitor-origin') ||
       request.headers.get('origin') ||
+      process.env.NEXT_PUBLIC_EGDESK_VISITOR_ORIGIN ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
       request.nextUrl.origin;
     headers['Origin'] = origin;
     headers['X-Visitor-Origin'] = origin;

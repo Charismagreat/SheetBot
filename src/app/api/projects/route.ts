@@ -109,6 +109,8 @@ export async function GET(request: Request) {
       .filter((r: any) => !r.deleted_at)
       .map(mapRowToProject);
 
+    console.log(`[API /api/projects GET] userEmail=${userEmail}, total=${activeProjects.length}, names=${activeProjects.map((p: any) => p.name).join(", ")}`);
+
     return NextResponse.json({
       success: true,
       userEmail,

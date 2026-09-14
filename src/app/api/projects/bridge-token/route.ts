@@ -61,7 +61,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const host = request.headers.get("host") || "localhost:3002";
+    const host = request.headers.get("host") || request.nextUrl.host;
     const protocol = request.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
     const baseUrl = `${protocol}://${host}`;
     const bridgeUrl = `${baseUrl}/api/agent/gas-bridge?token=${token}`;
