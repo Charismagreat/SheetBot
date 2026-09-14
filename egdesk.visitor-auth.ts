@@ -12,5 +12,5 @@ export const VISITOR_AUTH = {
    * 'workspace' — Drive (per-file), Sheets, Docs, Slides.
    * A page can still pass startVisitorGoogleLogin({ scopes: VISITOR_WORKSPACE_SCOPES }).
    */
-  scopes: 'basic' as 'basic' | 'workspace',
+  scopes: 'workspace' as 'basic' | 'workspace',
 };

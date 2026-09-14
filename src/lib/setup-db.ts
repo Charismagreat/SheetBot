@@ -392,9 +392,15 @@ export async function setupDatabase(force = false): Promise<void> {
         { name: 'note', type: 'TEXT' },
         { name: 'created_at', type: 'TEXT' },
         { name: 'last_login_at', type: 'TEXT' },
+        { name: 'visitor_session_id', type: 'TEXT' },
       ],
       { tableName: 'sheetbot_users' }
     );
+
+    // sheetbot_users에 visitor_session_id 컬럼 마이그레이션 보장
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_users ADD COLUMN visitor_session_id TEXT;`);
+    } catch {}
 
     // 12. sheetbot_dispatch_logs 테이블 생성 (알림 발송 이력 대장)
     await safeCreateTable(
@@ -532,9 +538,15 @@ export async function setupDatabase(force = false): Promise<void> {
         { name: 'status', type: 'TEXT', notNull: true }, // 'ACTIVE', 'REVOKED'
         { name: 'last_used_at', type: 'TEXT' },
         { name: 'created_at', type: 'TEXT' },
+        { name: 'visitor_session_id', type: 'TEXT' },
       ],
       { tableName: 'sheetbot_user_api_keys' }
     );
+
+    // sheetbot_user_api_keys에 visitor_session_id 컬럼 마이그레이션 보장
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_user_api_keys ADD COLUMN visitor_session_id TEXT;`);
+    } catch {}
 
     // 20. 기본 추천 프롬프트 시딩
     await seedDefaultPromptTemplates();

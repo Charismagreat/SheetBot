@@ -10,6 +10,7 @@ export interface UserApiKey {
   status: "ACTIVE" | "REVOKED";
   lastUsedAt?: string | null;
   createdAt: string;
+  visitorSessionId?: string | null;
 }
 
 /**
@@ -47,6 +48,7 @@ export async function getOrCreateUserApiKey(userEmail: string): Promise<UserApiK
       status: row.status || "ACTIVE",
       lastUsedAt: row.last_used_at || null,
       createdAt: row.created_at || "",
+      visitorSessionId: row.visitor_session_id || null,
     };
   }
 
@@ -92,6 +94,7 @@ export async function getOrCreateUserApiKey(userEmail: string): Promise<UserApiK
 export async function verifyApiKey(apiKey: string): Promise<{
   valid: boolean;
   userEmail?: string;
+  visitorSessionId?: string | null;
   apiKeyInfo?: UserApiKey;
   error?: string;
 }> {
@@ -126,9 +129,26 @@ export async function verifyApiKey(apiKey: string): Promise<{
     { filters: { id: row.id } }
   ).catch((err) => console.warn("[VerifyApiKey] Update last_used_at warning:", err.message));
 
+  let visitorSessionId = row.visitor_session_id || null;
+
+  // 만약 API 키 레코드에 세션이 없으면 회원 마스터(sheetbot_users)에서 최신 세션 확인
+  if (!visitorSessionId && row.user_email) {
+    try {
+      const userRes = await queryTable("sheetbot_users", {
+        filters: { email: row.user_email.toLowerCase().trim() },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+      const userRow = (userRes.rows || [])[0];
+      if (userRow && userRow.visitor_session_id) {
+        visitorSessionId = userRow.visitor_session_id;
+      }
+    } catch {}
+  }
+
   return {
     valid: true,
     userEmail: row.user_email,
+    visitorSessionId: visitorSessionId || null,
     apiKeyInfo: {
       id: row.id,
       userEmail: row.user_email,
@@ -137,8 +157,60 @@ export async function verifyApiKey(apiKey: string): Promise<{
       status: row.status,
       lastUsedAt: now,
       createdAt: row.created_at,
+      visitorSessionId: visitorSessionId || null,
     },
   };
+}
+
+/**
+ * 로그인 성공 시 해당 사용자의 활성 API 키 대장에 최신 방문자 세션 ID를 동기화합니다.
+ */
+export async function syncVisitorSessionToUser(userEmail: string, visitorSessionId: string): Promise<void> {
+  if (!userEmail || !visitorSessionId) return;
+  try {
+    await setupDatabase();
+    const email = userEmail.toLowerCase().trim();
+    const now = new Date().toISOString();
+
+    // 1. sheetbot_users 갱신 (Primary Key id 기반 정확한 업데이트)
+    const userRes = await queryTable("sheetbot_users", {
+      filters: { email },
+      limit: 1,
+    }).catch(() => ({ rows: [] }));
+    const userRow = (userRes.rows || []).find((r: any) => !r.deleted_at);
+
+    if (userRow) {
+      await updateRows(
+        "sheetbot_users",
+        {
+          visitor_session_id: visitorSessionId,
+          last_login_at: now,
+          updated_at: now,
+        },
+        { filters: { id: String(userRow.id) } }
+      ).catch(() => null);
+    }
+
+    // 2. 활성 sheetbot_user_api_keys 일괄 갱신
+    const keyRes = await queryTable("sheetbot_user_api_keys", {
+      filters: { user_email: email, status: "ACTIVE" },
+      limit: 20,
+    }).catch(() => ({ rows: [] }));
+
+    const activeKeys = (keyRes.rows || []).filter((r: any) => !r.deleted_at);
+    for (const k of activeKeys) {
+      await updateRows(
+        "sheetbot_user_api_keys",
+        {
+          visitor_session_id: visitorSessionId,
+          updated_at: now,
+        },
+        { filters: { id: k.id } }
+      ).catch(() => null);
+    }
+  } catch (err: any) {
+    console.warn("[SyncVisitorSession] Error:", err.message);
+  }
 }
 
 /**

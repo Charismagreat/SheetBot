@@ -4,12 +4,15 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { verifyApiKey } from "@/lib/api-keys";
 import { checkTokenBalance } from "@/lib/token-wallet";
+import { getCurrentVisitorSessionId, isCurrentUserAdmin } from "@/lib/auth";
 import {
   queryTable,
   insertRows,
   updateRows,
   callAppsScriptTool,
   getSpreadsheetFullContext,
+  WorkspaceVisitorCallOptions,
+  callVisitorWorkspaceTool,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 
@@ -168,11 +171,22 @@ export async function POST(request: Request) {
     let scriptId = "";
     let scriptUrl = "";
 
+    const host = request.headers.get("host") || "localhost:4003";
+    const protocol = request.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
+    const siteOrigin = `${protocol}://${host}`;
+
     try {
+      const visitorSessionId = authCheck.visitorSessionId || (await getCurrentVisitorSessionId(request));
+      const visitorOptions: WorkspaceVisitorCallOptions = visitorSessionId
+        ? { asVisitor: true, visitorSessionId }
+        : {};
+
       // 이미 해당 스프레드시트에 연결된 바운드 프로젝트가 있는지 우선 검색
       let existingGasProject: any = null;
       try {
-        const listRes = await callAppsScriptTool("apps_script_list_projects", {});
+        const listRes = visitorSessionId
+          ? await callVisitorWorkspaceTool("apps-script", "apps_script_list_projects", {}, visitorSessionId, siteOrigin)
+          : await callAppsScriptTool("apps_script_list_projects", {});
         const allProjects = Array.isArray(listRes)
           ? listRes
           : (listRes?.projects || listRes?.result || []);
@@ -193,10 +207,15 @@ export async function POST(request: Request) {
         scriptUrl = existingGasProject.scriptUrl || `https://script.google.com/d/${scriptId}/edit`;
         console.log(`[Agent-Projects] Reusing existing bound Apps Script project: ${gasProjectId}`);
       } else {
-        const boundRes = await callAppsScriptTool("apps_script_create_bound", {
-          fileId: spreadsheetId,
-          title: projectName,
-        });
+        const boundRes = visitorSessionId
+          ? await callVisitorWorkspaceTool("apps-script", "apps_script_create_bound", {
+              fileId: spreadsheetId,
+              title: projectName,
+            }, visitorSessionId, siteOrigin)
+          : await callAppsScriptTool("apps_script_create_bound", {
+              fileId: spreadsheetId,
+              title: projectName,
+            }, visitorOptions);
 
         if (boundRes && (boundRes.id || boundRes.projectId)) {
           gasProjectId = boundRes.id || boundRes.projectId;
@@ -206,9 +225,21 @@ export async function POST(request: Request) {
       }
 
       // 이지데스크 터널 인프라 자동 주입
-      await callAppsScriptTool("apps_script_setup_egdesk_tunnel", {
-        projectId: gasProjectId,
-      }).catch((tErr: any) => console.warn("[Agent-Projects] Tunnel setup warning:", tErr.message));
+      if (gasProjectId) {
+        try {
+          if (visitorSessionId) {
+            await callVisitorWorkspaceTool("apps-script", "apps_script_setup_egdesk_tunnel", {
+              projectId: gasProjectId,
+            }, visitorSessionId, siteOrigin);
+          } else {
+            await callAppsScriptTool("apps_script_setup_egdesk_tunnel", {
+              projectId: gasProjectId,
+            }, visitorOptions);
+          }
+        } catch (tErr: any) {
+          console.warn("[Agent-Projects] Tunnel setup warning:", tErr.message);
+        }
+      }
     } catch (gasErr: any) {
       console.warn("[Agent-Projects] Apps Script create bound warning:", gasErr.message);
     }
@@ -246,8 +277,6 @@ export async function POST(request: Request) {
     await insertRows("sheetbot_projects", [newProjectRow]);
 
     // 7. 반환 URL 및 프롬프트 생성
-    const host = request.headers.get("host") || "localhost:3002";
-    const protocol = request.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
     const baseUrl = `${protocol}://${host}`;
     const bridgeUrl = `${baseUrl}/api/agent/gas-bridge?token=${bridgeToken}`;
 

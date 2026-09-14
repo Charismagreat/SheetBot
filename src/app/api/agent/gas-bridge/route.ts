@@ -1,11 +1,13 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { getCurrentVisitorSessionId, isCurrentUserAdmin } from "@/lib/auth";
 import {
   queryTable,
   updateRows,
   callAppsScriptTool,
   getSpreadsheetFullContext,
+  WorkspaceVisitorCallOptions,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { getAiModelSettings } from "@/lib/ai-settings";
@@ -263,13 +265,58 @@ export async function POST(request: Request) {
     let scriptUrl = project.script_url;
     let webAppUrl = project.webapp_url || "";
 
+    // 방문자(Visitor) 구글 세션 추출 (에이전트 브릿지 요청도 유저 세션이 있는 경우 유저 권한으로 푸시)
+    let visitorSessionId = await getCurrentVisitorSessionId(request);
+
+    // 요청 헤더나 쿠키에 세션이 없으면 프로젝트 소유자의 최신 방문자 세션 DB 조회
+    if (!visitorSessionId && project.user_email) {
+      try {
+        const { queryTable } = await import("@/lib/egdesk-helpers");
+        const userRes = await queryTable("sheetbot_users", {
+          filters: { email: project.user_email.toLowerCase().trim() },
+          limit: 1,
+        }).catch(() => ({ rows: [] }));
+        const userRow = (userRes.rows || [])[0];
+        if (userRow && userRow.visitor_session_id) {
+          visitorSessionId = userRow.visitor_session_id;
+        }
+      } catch {}
+    }
+
+    const visitorOptions: WorkspaceVisitorCallOptions = visitorSessionId
+      ? { asVisitor: true, visitorSessionId }
+      : {};
+
+    // 0-0. 기존 프로젝트 목록에서 gasProjectId 실존 여부 및 시트 바인딩 확인
+    try {
+      const listRes = await callAppsScriptTool("apps_script_list_projects", {}, visitorOptions);
+      const existingProjects = Array.isArray(listRes) ? listRes : listRes?.result || [];
+      const matched = existingProjects.find(
+        (p: any) =>
+          p.id === gasProjectId ||
+          p.projectId === gasProjectId ||
+          p.containerId === project.spreadsheet_id ||
+          p.spreadsheetId === project.spreadsheet_id
+      );
+      if (matched) {
+        gasProjectId = matched.id || matched.projectId;
+        scriptId = matched.scriptId || gasProjectId;
+        scriptUrl = matched.scriptUrl || `https://script.google.com/d/${scriptId}/edit`;
+      } else {
+        // 기존 ID가 Apps Script 엔진에 등록되어 있지 않으면 새로 생성하도록 null 처리
+        gasProjectId = null;
+      }
+    } catch (checkErr: any) {
+      console.warn("[Gas-Bridge POST] apps_script_list_projects check note:", checkErr.message);
+    }
+
     // 바인딩된 Apps Script 프로젝트가 아직 없으면 생성
     if (!gasProjectId && project.spreadsheet_id) {
       const boundRes = await callAppsScriptTool("apps_script_create_bound", {
         fileId: project.spreadsheet_id,
         title: project.name || "SheetBot 자동화",
         scriptCode,
-      });
+      }, visitorOptions);
 
       if (boundRes && (boundRes.id || boundRes.projectId)) {
         gasProjectId = boundRes.id || boundRes.projectId;
@@ -286,7 +333,7 @@ export async function POST(request: Request) {
     }
 
     // 0-1. 구글 워크스페이스 OAuth 사전 인증 점검 (가짜 성공 원천 차단)
-    const authStatus = await callAppsScriptTool("apps_script_auth_status", {}).catch(() => null);
+    const authStatus = await callAppsScriptTool("apps_script_auth_status", {}, visitorOptions).catch(() => null);
     if (authStatus && authStatus.connected === false) {
       const errorMsg = authStatus.agentInstructions || authStatus.error || "Google Workspace 계정 연결(OAuth)이 해제되어 있습니다. EGDesk에서 Google 계정 로그인을 다시 수행해 주세요.";
       return NextResponse.json(
@@ -305,12 +352,12 @@ export async function POST(request: Request) {
       await callAppsScriptTool("apps_script_setup_egdesk_tunnel", {
         projectId: gasProjectId,
         push: false,
-      });
+      }, visitorOptions);
       await callAppsScriptTool("apps_script_write_file", {
         projectId: gasProjectId,
         fileName: "EgdeskConfig.gs",
         content: generateSecureEgdeskConfig(project.user_email),
-      }).catch(() => null);
+      }, visitorOptions).catch(() => null);
       console.log(`[Gas-Bridge POST] Injected secured EGDesk tunnel into ${gasProjectId}`);
     } catch (tunnelErr: any) {
       console.warn("[Gas-Bridge POST] Setup tunnel warning:", tunnelErr.message);
@@ -321,7 +368,7 @@ export async function POST(request: Request) {
       projectId: gasProjectId,
       fileName: "Code.gs",
       content: scriptCode,
-    });
+    }, visitorOptions);
 
     // 3. appsscript.json 매니페스트 기록
     const finalManifest = ensureStandardManifest(manifest);
@@ -330,12 +377,12 @@ export async function POST(request: Request) {
       projectId: gasProjectId,
       fileName: "appsscript.json",
       content: finalManifest,
-    });
+    }, visitorOptions);
 
     // 4. 구글 클라우드 최종 동기화 (Push) 및 응답 무결성 검증
     const pushRes = await callAppsScriptTool("apps_script_push_to_google", {
       projectId: gasProjectId,
-    });
+    }, visitorOptions);
 
     if (pushRes && (pushRes.error || pushRes.isError || pushRes.code === "GOOGLE_OAUTH_TOKEN")) {
       const errMsg = pushRes.error || pushRes.message || "구글 클라우드(Apps Script API)로 코드를 업로드하지 못했습니다.";

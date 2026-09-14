@@ -268,6 +268,23 @@ ${recruitForm.introduction}
     let isMounted = true;
 
     const checkAuth = async () => {
+      // 0. 브라우저 localStorage에 저장된 최신 visitorSessionId를 서버 DB에 무조건 즉시 동기화
+      try {
+        const localSessionId = typeof window !== "undefined" ? localStorage.getItem("egdesk_visitor_session") : null;
+        const currentEmail = session?.user?.email ? session.user.email.toLowerCase().trim() : null;
+        if (localSessionId && currentEmail) {
+          void apiFetch("/api/auth/google/session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: currentEmail,
+              name: session?.user?.name || currentEmail.split("@")[0],
+              visitorSessionId: localSessionId,
+            }),
+          }).catch(() => {});
+        }
+      } catch {}
+
       // 1. 현재 브라우저에 인증된 실제 Visitor Google 계정 상태 확인
       try {
         const { getVisitorGoogleStatus } = await import("@/egdesk-visitor-google");
@@ -276,8 +293,8 @@ ${recruitForm.introduction}
         if (visitorStatus?.connected && visitorStatus?.email) {
           const currentEmail = session?.user?.email ? session.user.email.toLowerCase().trim() : null;
           const targetEmail = visitorStatus.email.toLowerCase().trim();
+          const localSessionId = typeof window !== "undefined" ? localStorage.getItem("egdesk_visitor_session") : null;
 
-          // 세션이 없거나(unauthenticated), 기존 세션 이메일과 로그인된 구글 계정이 다른 경우 즉시 동기화
           if (status === "unauthenticated" || (currentEmail && currentEmail !== targetEmail)) {
             const syncRes = await apiFetch("/api/auth/google/session", {
               method: "POST",
@@ -285,6 +302,7 @@ ${recruitForm.introduction}
               body: JSON.stringify({
                 email: visitorStatus.email,
                 name: visitorStatus.email.split("@")[0],
+                visitorSessionId: localSessionId || undefined,
               }),
             });
             if (syncRes.ok) {

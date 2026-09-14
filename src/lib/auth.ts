@@ -97,6 +97,76 @@ export async function getCurrentUserEmail(): Promise<string | null> {
 }
 
 /**
+ * 서버 사이드에서 현재 요청의 방문자(Visitor) 세션 ID를 가져옵니다.
+ * Request 객체가 전달되면 요청 헤더/쿠키에서, 없으면 next/headers에서 추출합니다.
+ */
+export async function getCurrentVisitorSessionId(req?: Request): Promise<string | null> {
+  // 1. 전달된 Request 객체가 있는 경우 헤더와 쿠키에서 추출
+  if (req) {
+    const fromHeader = req.headers.get("x-visitor-session-id") || req.headers.get("x-egdesk-visitor-session");
+    if (fromHeader) return fromHeader.trim();
+
+    const cookieHeader = req.headers.get("cookie") || "";
+    const match = cookieHeader.match(/egdesk_visitor_session=([^;]+)/);
+    if (match && match[1]) {
+      return decodeURIComponent(match[1]).trim();
+    }
+
+    // API Key (Authorization: Bearer sk_sheetbot_... 또는 x-api-key)가 있는 경우 DB에서 visitorSessionId 자동 추출
+    const authHeader = req.headers.get("authorization") || "";
+    let apiKey = "";
+    if (authHeader.startsWith("Bearer ")) {
+      apiKey = authHeader.substring(7).trim();
+    } else {
+      apiKey = req.headers.get("x-api-key")?.trim() || req.headers.get("x-sheetbot-key")?.trim() || "";
+    }
+
+    if (apiKey && apiKey.startsWith("sk_sheetbot_")) {
+      try {
+        const { verifyApiKey } = await import("@/lib/api-keys");
+        const keyResult = await verifyApiKey(apiKey);
+        if (keyResult.valid && keyResult.visitorSessionId) {
+          return keyResult.visitorSessionId;
+        }
+      } catch (keyErr) {
+        console.warn("[Auth] verifyApiKey for visitorSessionId note:", keyErr);
+      }
+    }
+  }
+
+  // 2. next/headers를 통한 서버 컴포넌트/라우트 핸들러 추출
+  try {
+    const { cookies, headers } = await import("next/headers");
+    const h = await headers();
+    const headerVal = h.get("x-visitor-session-id") || h.get("x-egdesk-visitor-session");
+    if (headerVal) return headerVal.trim();
+
+    const c = await cookies();
+    const cookieVal = c.get("egdesk_visitor_session")?.value;
+    if (cookieVal) return decodeURIComponent(cookieVal).trim();
+
+    // 헤더에 API Key가 있는지 확인
+    const authHeader = h.get("authorization") || "";
+    let apiKey = "";
+    if (authHeader.startsWith("Bearer ")) {
+      apiKey = authHeader.substring(7).trim();
+    } else {
+      apiKey = h.get("x-api-key")?.trim() || h.get("x-sheetbot-key")?.trim() || "";
+    }
+
+    if (apiKey && apiKey.startsWith("sk_sheetbot_")) {
+      const { verifyApiKey } = await import("@/lib/api-keys");
+      const keyResult = await verifyApiKey(apiKey);
+      if (keyResult.valid && keyResult.visitorSessionId) {
+        return keyResult.visitorSessionId;
+      }
+    }
+  } catch {}
+
+  return null;
+}
+
+/**
  * 서버 사이드에서 현재 사용자가 관리자(ADMIN)인지 여부를 판별합니다.
  */
 export async function isCurrentUserAdmin(emailToCheck?: string | null): Promise<boolean> {

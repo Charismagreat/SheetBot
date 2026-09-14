@@ -35,6 +35,7 @@ import {
   Database,
   Search,
   Mail,
+  Contact,
 } from "lucide-react";
 
 export default function GuidePage() {
@@ -126,6 +127,14 @@ export default function GuidePage() {
       icon: FolderPlus,
       color: "border-emerald-200 bg-emerald-50/60 text-emerald-800",
       prompt: "구글 시트가 아직 없어. 고객 성함, 연락처, 상담분야, 희망일정, 문의내용, 접수일시를 기록하는 최적의 상담 접수 대장 시트 양식을 설계하고, 신규 접수 시 담당자에게 즉시 알림을 주는 자동화 시스템을 만들어줘.",
+    },
+    {
+      id: "ex_business_card_ocr",
+      title: "명함 사진·PDF 업로드 기반 AI 정밀 추출 및 '명함 관리 대장' 자동 누적",
+      tag: "명함 AI OCR 대장 등록 (NEW)",
+      icon: Contact,
+      color: "border-sky-200 bg-sky-50/60 text-sky-800",
+      prompt: "구글 시트 상단 [🚀 SheetBot 명함 관리] ➔ [📷 명함 OCR 등록 사이드바 열기]를 누르면 사이드바가 열려. 스마트폰으로 촬영한 명함 사진이나 PDF 파일을 드래그하여 업로드하면, Gemini AI 비전 모델이 성명, 직함, 회사명, 부서, 전화번호, 이메일, 주소, 비고를 1초 만에 자동 추출해줘. 추출된 정보는 현재 활성 시트의 다음 빈 행에 실시간 등록 일시와 함께 깔끔하게 추가 등록해줘.",
     },
     {
       id: "ex0",

@@ -75,6 +75,76 @@ function buildServerEgdeskHeaders(): Record<string, string> {
   return headers;
 }
 
+const VISITOR_SESSION_KEY = 'egdesk_visitor_session';
+
+export type WorkspaceVisitorCallOptions = {
+  asVisitor?: boolean;
+  visitorSessionId?: string;
+};
+
+function getBrowserVisitorSessionId(): string | null {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem(VISITOR_SESSION_KEY);
+}
+
+function buildWorkspaceVisitorHeaders(options: WorkspaceVisitorCallOptions = {}): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (!options.asVisitor) return headers;
+  const sessionId = options.visitorSessionId || getBrowserVisitorSessionId();
+  if (!sessionId) {
+    throw new Error(
+      'asVisitor is set but no visitor session is available. Call startVisitorGoogleLogin() first, or pass visitorSessionId on the server.',
+    );
+  }
+  headers['Authorization'] = `Bearer ${sessionId}`;
+  headers['X-EGDesk-As-Visitor'] = 'true';
+  if (typeof window !== 'undefined') {
+    headers['X-Visitor-Origin'] = window.location.origin;
+  }
+  return headers;
+}
+
+function withVisitorToolArgs(
+  args: Record<string, any>,
+  options: WorkspaceVisitorCallOptions = {},
+): Record<string, any> {
+  if (!options.asVisitor) return args;
+  return { ...args, asVisitor: true };
+}
+
+async function callWorkspaceMcpTool(
+  path: string,
+  proxyPath: string,
+  toolName: string,
+  args: Record<string, any> = {},
+  options: WorkspaceVisitorCallOptions = {},
+): Promise<any> {
+  const body = JSON.stringify({
+    tool: toolName,
+    arguments: withVisitorToolArgs(args, options),
+  });
+  const isServer = typeof window === 'undefined';
+  const visitorHeaders = buildWorkspaceVisitorHeaders(options);
+  let response: Response;
+  if (isServer) {
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
+    response = await fetch(`${apiUrl}${path}`, {
+      method: 'POST',
+      headers: { ...buildServerEgdeskHeaders(), ...visitorHeaders },
+      body,
+    });
+  } else {
+    response = await apiFetch(proxyPath, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...visitorHeaders },
+      body,
+    });
+  }
+  return parseEgdeskMcpToolResponse(response);
+}
+
 /**
  * Parse EGDesk MCP `/tools/call` JSON so `error` is shown even when HTTP status is 500.
  */
@@ -1511,19 +1581,6 @@ export async function callCompanyResearchTool(
   return parseEgdeskMcpToolResponse(response);
 }
 
-/** Run full company research workflow for a domain (several minutes) */
-export async function runCompanyResearch(
-  domain: string,
-  options: {
-    bypassCache?: boolean;
-    inquiryData?: Record<string, any>;
-    companyName?: string;
-    clientBusinessNumber?: string;
-  } = {}
-) {
-  return callCompanyResearchTool('companyresearch_run', { domain, ...options });
-}
-
 /** List company research records */
 export async function listCompanyResearch(
   status?: 'completed' | 'failed' | 'in_progress'
@@ -1541,11 +1598,6 @@ export async function getCompanyResearchById(researchId: string) {
 /** Research records for a domain */
 export async function getCompanyResearchByDomain(domain: string) {
   return callCompanyResearchTool('companyresearch_get_by_domain', { domain });
-}
-
-/** Most recent completed research for a domain */
-export async function getLatestCompletedCompanyResearch(domain: string) {
-  return callCompanyResearchTool('companyresearch_get_latest_completed', { domain });
 }
 
 /** Search company research by company name or domain */
@@ -1754,9 +1806,22 @@ export async function openBrowserRecordingAccount(
   });
 }
 
-/** Numbered live-page elements, including left-nav / header menus */
+/** Numbered live-page elements on the active tab, including tabs[] and left-nav / header menus */
 export async function inspectBrowserRecordingPage(sessionId: string) {
   return callBrowserRecordingTool('browser_recording_inspect_page', { sessionId });
+}
+
+/** Switch the live session to a Chrome tab from inspect tabs[].index */
+export async function focusBrowserRecordingTab(sessionId: string, tabIndex: number) {
+  return callBrowserRecordingTool('browser_recording_focus_tab', { sessionId, tabIndex });
+}
+
+/** Close one Chrome tab. Omit tabIndex to close the active tab. Refuses the last tab. */
+export async function closeBrowserRecordingTab(sessionId: string, tabIndex?: number) {
+  return callBrowserRecordingTool('browser_recording_close_tab', {
+    sessionId,
+    ...(tabIndex !== undefined ? { tabIndex } : {}),
+  });
 }
 
 /** Search live-page labels (exact/substring first). Returns indexes for click. */
@@ -1823,7 +1888,7 @@ export async function listBrowserRecordingSessions() {
   return callBrowserRecordingTool('browser_recording_list_sessions', {});
 }
 
-/** Close a live session only when fully done — not after login */
+/** Close Chrome. Does not save a recording or page HTML — only when fully done. */
 export async function closeBrowserRecordingSession(sessionId: string) {
   return callBrowserRecordingTool('browser_recording_close_session', { sessionId });
 }
@@ -1866,9 +1931,32 @@ export async function uploadBrowserRecordingFile(
   });
 }
 
-/** Save the live session as a new *.spec.js (login prefix + logged workflow). Does not close Chrome. */
+/** Write a replayable recording (click tape). Chrome stays open — not close_session, not save_page_html. */
 export async function saveBrowserRecordingSession(sessionId: string, name: string) {
   return callBrowserRecordingTool('browser_recording_save_session', { sessionId, name });
+}
+
+/** Dump the active tab as HTML. Chrome stays open — not a replayable recording, not close_session. */
+export async function saveBrowserRecordingPageHtml(sessionId: string, name?: string) {
+  return callBrowserRecordingTool('browser_recording_save_page_html', {
+    sessionId,
+    ...(name ? { name } : {}),
+  });
+}
+
+/** After walking one row cycle, bind that recipe to every remaining matching list key. */
+export async function forEachBrowserRecordingRow(
+  sessionId: string,
+  query: string,
+  opts?: { namePrefix?: string; skipExisting?: boolean; maxRows?: number }
+) {
+  return callBrowserRecordingTool('browser_recording_for_each_row', {
+    sessionId,
+    query,
+    ...(opts?.namePrefix ? { namePrefix: opts.namePrefix } : {}),
+    ...(opts?.skipExisting === false ? { skipExisting: false } : {}),
+    ...(opts?.maxRows !== undefined ? { maxRows: opts.maxRows } : {}),
+  });
 }
 
 // ==========================================
@@ -2218,37 +2306,13 @@ export async function getKoreanLawDecision(id: string) {
 /**
  * Call EGDesk Bizinfo MCP tool (기업마당 지원사업 공고 — grants, not company verify).
  *
- * - Server: `POST {apiUrl}/bizinfo/tools/call`
- * - Client: `POST /__bizinfo_proxy` (see proxy.ts / middleware)
- * - Tunnel: `POST https://tunneling-service.onrender.com/t/{id}/bizinfo/tools/call`
+ * Routed through company-research MCP (`POST {apiUrl}/company-research/tools/call`).
  */
 export async function callBizinfoTool(
   toolName: string,
   args: Record<string, any> = {}
 ): Promise<any> {
-  const body = JSON.stringify({ tool: toolName, arguments: args });
-
-  const isServer = typeof window === 'undefined';
-
-  let response: Response;
-  if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
-    response = await fetch(`${apiUrl}/bizinfo/tools/call`, {
-      method: 'POST',
-      headers: buildServerEgdeskHeaders(),
-      body
-    });
-  } else {
-    response = await apiFetch('/__bizinfo_proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body
-    });
-  }
-
-  return parseEgdeskMcpToolResponse(response);
+  return callCompanyResearchTool(toolName, args);
 }
 
 /** Search government grants / 지원사업 (category, region, optional client-side query). Not a company registry. */
@@ -2291,37 +2355,13 @@ export async function getBizinfoAnnouncement(id: string) {
 /**
  * Call EGDesk NPS MCP tool (국민연금 가입 사업장 내역 / 가입자 추이).
  *
- * - Server: `POST {apiUrl}/nps/tools/call`
- * - Client: `POST /__nps_proxy` (see proxy.ts / middleware)
- * - Tunnel: `POST https://tunneling-service.onrender.com/t/{id}/nps/tools/call`
+ * Routed through company-research MCP.
  */
 export async function callNpsTool(
   toolName: string,
   args: Record<string, any> = {}
 ): Promise<any> {
-  const body = JSON.stringify({ tool: toolName, arguments: args });
-
-  const isServer = typeof window === 'undefined';
-
-  let response: Response;
-  if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
-    response = await fetch(`${apiUrl}/nps/tools/call`, {
-      method: 'POST',
-      headers: buildServerEgdeskHeaders(),
-      body
-    });
-  } else {
-    response = await apiFetch('/__nps_proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body
-    });
-  }
-
-  return parseEgdeskMcpToolResponse(response);
+  return callCompanyResearchTool(toolName, args);
 }
 
 /** Search NPS workplaces by name and/or 사업자번호 앞 6자리 */
@@ -2367,26 +2407,7 @@ export async function callKonepsTool(
   toolName: string,
   args: Record<string, any> = {}
 ): Promise<any> {
-  const body = JSON.stringify({ tool: toolName, arguments: args });
-  const isServer = typeof window === 'undefined';
-  let response: Response;
-  if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
-    response = await fetch(`${apiUrl}/koneps/tools/call`, {
-      method: 'POST',
-      headers: buildServerEgdeskHeaders(),
-      body
-    });
-  } else {
-    response = await apiFetch('/__koneps_proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body
-    });
-  }
-  return parseEgdeskMcpToolResponse(response);
+  return callCompanyResearchTool(toolName, args);
 }
 
 export async function searchKonepsContracts(options: Record<string, any> = {}) {
@@ -2416,26 +2437,7 @@ export async function callBidnoticeTool(
   toolName: string,
   args: Record<string, any> = {}
 ): Promise<any> {
-  const body = JSON.stringify({ tool: toolName, arguments: args });
-  const isServer = typeof window === 'undefined';
-  let response: Response;
-  if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
-    response = await fetch(`${apiUrl}/bidnotice/tools/call`, {
-      method: 'POST',
-      headers: buildServerEgdeskHeaders(),
-      body
-    });
-  } else {
-    response = await apiFetch('/__bidnotice_proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body
-    });
-  }
-  return parseEgdeskMcpToolResponse(response);
+  return callCompanyResearchTool(toolName, args);
 }
 
 export async function searchBidNotices(options: Record<string, any> = {}) {
@@ -2772,6 +2774,10 @@ export type AiCallerCallOptions = {
   }>;
   /** Select a specific Google API key by name (as saved in EGDesk AI Keys Manager). Leave empty to use the default key. */
   keyName?: 'wonconduct' | (string & {});
+  /** standard = default. flex = 50% cheaper, slower/sheddable. priority = more expensive. */
+  serviceTier?: 'standard' | 'flex' | 'priority';
+  /** Explicit cache name from createAiCallerCache (cachedContents/...). */
+  cachedContent?: string;
 };
 
 export type AiCallerModelDetails = {
@@ -2818,6 +2824,8 @@ export type AiCallerCallResult = {
   apiKey: { name: string; id: string | null } | null;
   attachments: AiCallerAttachmentsSummary;
   logId: string;
+  serviceTier: 'standard' | 'flex' | 'priority';
+  cachedContent: string | null;
 };
 
 /**
@@ -2852,6 +2860,8 @@ export type AiCallerGenerateImageOptions = {
   caller?: string;
   /** Select a specific Google API key by name (as saved in EGDesk AI Keys Manager). Leave empty to use the default key. */
   keyName?: 'wonconduct' | (string & {});
+  /** standard = default. flex = 50% cheaper, slower/sheddable. */
+  serviceTier?: 'standard' | 'flex' | 'priority';
 };
 
 export type AiCallerGeneratedImage = {
@@ -2927,6 +2937,82 @@ export type AiCallerModelsResult = {
  */
 export async function listAiCallerModels(): Promise<AiCallerModelsResult> {
   return callAiCallerTool('ai_caller_list_models', {});
+}
+
+export type AiCallerBatchRequest = {
+  key?: string;
+  prompt?: string;
+  systemPrompt?: string;
+  temperature?: number;
+  maxOutputTokens?: number;
+  responseSchema?: Record<string, any>;
+  tools?: Array<Record<string, any>>;
+  toolConfig?: AiCallerCallOptions['toolConfig'];
+  cachedContent?: string;
+  images?: string[];
+  filePaths?: string[];
+  files?: AiCallerCallOptions['files'];
+};
+
+export type AiCallerBatchSubmitOptions = {
+  model?: string;
+  displayName?: string;
+  caller?: string;
+  keyName?: 'wonconduct' | (string & {});
+};
+
+/** Submit an async Gemini Batch job (50% of standard price). Poll with getAiCallerBatch. */
+export async function submitAiCallerBatch(
+  requests: AiCallerBatchRequest[],
+  options: AiCallerBatchSubmitOptions = {}
+) {
+  return callAiCallerTool('ai_caller_batch_submit', { requests, ...options });
+}
+
+/** Get a Gemini Batch job. Set waitMs to poll up to 120s per call. */
+export async function getAiCallerBatch(
+  name: string,
+  options: { includeResults?: boolean; waitMs?: number; pollIntervalMs?: number; keyName?: string } = {}
+) {
+  return callAiCallerTool('ai_caller_batch_get', { name, ...options });
+}
+
+export async function listAiCallerBatches(options: { pageSize?: number; pageToken?: string; keyName?: string } = {}) {
+  return callAiCallerTool('ai_caller_batch_list', options);
+}
+
+export async function cancelAiCallerBatch(name: string, options: { keyName?: string } = {}) {
+  return callAiCallerTool('ai_caller_batch_cancel', { name, ...options });
+}
+
+export type AiCallerCacheCreateOptions = {
+  prompt?: string;
+  systemPrompt?: string;
+  model?: string;
+  displayName?: string;
+  ttl?: string | number;
+  images?: string[];
+  filePaths?: string[];
+  files?: AiCallerCallOptions['files'];
+  caller?: string;
+  keyName?: 'wonconduct' | (string & {});
+};
+
+/** Create an explicit Gemini context cache. Pass the returned name as cachedContent on later calls. */
+export async function createAiCallerCache(options: AiCallerCacheCreateOptions = {}) {
+  return callAiCallerTool('ai_caller_cache_create', options);
+}
+
+export async function listAiCallerCaches(options: { pageSize?: number; pageToken?: string; keyName?: string } = {}) {
+  return callAiCallerTool('ai_caller_cache_list', options);
+}
+
+export async function getAiCallerCache(name: string, options: { keyName?: string } = {}) {
+  return callAiCallerTool('ai_caller_cache_get', { name, ...options });
+}
+
+export async function deleteAiCallerCache(name: string, options: { keyName?: string } = {}) {
+  return callAiCallerTool('ai_caller_cache_delete', { name, ...options });
 }
 
 // ==========================================
@@ -3008,10 +3094,9 @@ export async function deletePageIndexDocument(docId: string) {
  * Call EGDesk Drive MCP tool (Google Drive change notifications + poll).
  *
  * Owner MCP auth on EGDesk: GOOGLE_SERVICE_ACCOUNT_JSON or Google Workspace sign-in
- * via startDriveAuthLogin() — configures THIS EGDesk instance, not website visitors.
- * Website visitors should use startVisitorGoogleLogin({ scopes }) from egdesk-visitor-google.ts
- * (EGDesk brokers Auth; the site never receives Supabase keys).
- * Share target folders with the service account when using SA credentials.
+ * via startDriveAuthLogin() — configures THIS EGDesk instance.
+ * Pass { asVisitor: true } to act as the website visitor from startVisitorGoogleLogin().
+ * Watch / sync / drive_auth_login stay owner-only even with asVisitor.
  *
  * - Server: `POST {apiUrl}/drive/tools/call`
  * - Client: `POST /__drive_proxy` (see proxy.ts / middleware)
@@ -3019,31 +3104,10 @@ export async function deletePageIndexDocument(docId: string) {
  */
 export async function callDriveTool(
   toolName: string,
-  args: Record<string, any> = {}
+  args: Record<string, any> = {},
+  options: WorkspaceVisitorCallOptions = {},
 ): Promise<any> {
-  const body = JSON.stringify({ tool: toolName, arguments: args });
-
-  const isServer = typeof window === 'undefined';
-
-  let response: Response;
-  if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
-    response = await fetch(`${apiUrl}/drive/tools/call`, {
-      method: 'POST',
-      headers: buildServerEgdeskHeaders(),
-      body
-    });
-  } else {
-    response = await apiFetch('/__drive_proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body
-    });
-  }
-
-  return parseEgdeskMcpToolResponse(response);
+  return callWorkspaceMcpTool('/drive/tools/call', '/__drive_proxy', toolName, args, options);
 }
 
 /** Check owner Drive auth on this EGDesk instance (service account / Google OAuth) */
@@ -3243,36 +3307,16 @@ export async function syncDrive(options: {
  * Call EGDesk Sheets MCP tool.
  *
  * Auth: personal OAuth, service account, or domain-wide delegation (call getSheetsAuthStatus() first).
+ * Pass { asVisitor: true } to act as the website visitor from startVisitorGoogleLogin().
  * - Server: `POST {apiUrl}/sheets/tools/call`
  * - Client: `POST /__sheets_proxy`
  */
 export async function callSheetsTool(
   toolName: string,
-  args: Record<string, any> = {}
+  args: Record<string, any> = {},
+  options: WorkspaceVisitorCallOptions = {},
 ): Promise<any> {
-  const body = JSON.stringify({ tool: toolName, arguments: args });
-
-  const isServer = typeof window === 'undefined';
-
-  let response: Response;
-  if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
-    response = await fetch(`${apiUrl}/sheets/tools/call`, {
-      method: 'POST',
-      headers: buildServerEgdeskHeaders(),
-      body
-    });
-  } else {
-    response = await apiFetch('/__sheets_proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body
-    });
-  }
-
-  return parseEgdeskMcpToolResponse(response);
+  return callWorkspaceMcpTool('/sheets/tools/call', '/__sheets_proxy', toolName, args, options);
 }
 
 /** Who Sheets/Docs/Slides/Drive calls act as: personal_oauth, service_account, or domain_wide_delegation */
@@ -3355,28 +3399,10 @@ export async function tintSheetDataTab(spreadsheetId: string, sheetName: string)
 
 export async function callDocsTool(
   toolName: string,
-  args: Record<string, any> = {}
+  args: Record<string, any> = {},
+  options: WorkspaceVisitorCallOptions = {},
 ): Promise<any> {
-  const body = JSON.stringify({ tool: toolName, arguments: args });
-  const isServer = typeof window === 'undefined';
-  let response: Response;
-  if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
-    response = await fetch(`${apiUrl}/docs/tools/call`, {
-      method: 'POST',
-      headers: buildServerEgdeskHeaders(),
-      body
-    });
-  } else {
-    response = await apiFetch('/__docs_proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body
-    });
-  }
-  return parseEgdeskMcpToolResponse(response);
+  return callWorkspaceMcpTool('/docs/tools/call', '/__docs_proxy', toolName, args, options);
 }
 
 export async function getGoogleDocsAuthStatus() {
@@ -3414,28 +3440,10 @@ export async function replaceGoogleDocText(
 
 export async function callSlidesTool(
   toolName: string,
-  args: Record<string, any> = {}
+  args: Record<string, any> = {},
+  options: WorkspaceVisitorCallOptions = {},
 ): Promise<any> {
-  const body = JSON.stringify({ tool: toolName, arguments: args });
-  const isServer = typeof window === 'undefined';
-  let response: Response;
-  if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
-    response = await fetch(`${apiUrl}/slides/tools/call`, {
-      method: 'POST',
-      headers: buildServerEgdeskHeaders(),
-      body
-    });
-  } else {
-    response = await apiFetch('/__slides_proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body
-    });
-  }
-  return parseEgdeskMcpToolResponse(response);
+  return callWorkspaceMcpTool('/slides/tools/call', '/__slides_proxy', toolName, args, options);
 }
 
 export async function getGoogleSlidesAuthStatus() {
@@ -3533,28 +3541,10 @@ export async function syncSheets(options: {
  */
 export async function callGmailTool(
   toolName: string,
-  args: Record<string, any> = {}
+  args: Record<string, any> = {},
+  options: WorkspaceVisitorCallOptions = {},
 ): Promise<any> {
-  const body = JSON.stringify({ tool: toolName, arguments: args });
-  const isServer = typeof window === 'undefined';
-  let response: Response;
-  if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
-    response = await fetch(`${apiUrl}/gmail/tools/call`, {
-      method: 'POST',
-      headers: buildServerEgdeskHeaders(),
-      body
-    });
-  } else {
-    response = await apiFetch('/__gmail_proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body
-    });
-  }
-  return parseEgdeskMcpToolResponse(response);
+  return callWorkspaceMcpTool('/gmail/tools/call', '/__gmail_proxy', toolName, args, options);
 }
 
 /** Who Gmail calls act as: personal_oauth, service_account, or domain_wide_delegation */
@@ -3605,28 +3595,10 @@ export async function sendGmailMessage(options: {
  */
 export async function callAppsScriptTool(
   toolName: string,
-  args: Record<string, any> = {}
+  args: Record<string, any> = {},
+  options: WorkspaceVisitorCallOptions = {},
 ): Promise<any> {
-  const body = JSON.stringify({ tool: toolName, arguments: args });
-  const isServer = typeof window === 'undefined';
-  let response: Response;
-  if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
-    response = await fetch(`${apiUrl}/apps-script/tools/call`, {
-      method: 'POST',
-      headers: buildServerEgdeskHeaders(),
-      body
-    });
-  } else {
-    response = await apiFetch('/__apps_script_proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body
-    });
-  }
-  return parseEgdeskMcpToolResponse(response);
+  return callWorkspaceMcpTool('/apps-script/tools/call', '/__apps_script_proxy', toolName, args, options);
 }
 
 /** Apps Script auth mode and identity (OAuth or service account / DWD — call before create/push/run) */
