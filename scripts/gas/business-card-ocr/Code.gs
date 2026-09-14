@@ -106,6 +106,9 @@ function unwrapAiCallerJson(rawResponseText) {
   }
 }
 
+// 2중 언래핑 함수 호환성 별칭
+var egdeskExtractAiJson = unwrapAiCallerJson;
+
 /**
  * 명함 이미지/문서 Base64 데이터를 AI Caller로 전송하여 OCR 데이터 추출
  */
@@ -144,7 +147,6 @@ function analyzeBusinessCard(base64Data, fileName, mimeType) {
       tool: 'ai_caller_call',
       arguments: {
         caller: 'sheetbot-businesscard-ocr',
-        model: 'gemini-2.5-flash',
         temperature: 0.1,
         prompt: promptText,
         files: [

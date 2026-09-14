@@ -80,11 +80,37 @@ const VISITOR_SESSION_KEY = 'egdesk_visitor_session';
 export type WorkspaceVisitorCallOptions = {
   asVisitor?: boolean;
   visitorSessionId?: string;
+  /** Origin the visitor logged in from. Required on the server (no window). */
+  visitorOrigin?: string;
 };
 
 function getBrowserVisitorSessionId(): string | null {
   if (typeof window === 'undefined') return null;
   return window.localStorage.getItem(VISITOR_SESSION_KEY);
+}
+
+function originFromValue(value?: string | null): string | null {
+  const raw = (value || '').trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    try {
+      return new URL(`https://${raw}`).origin;
+    } catch {
+      return null;
+    }
+  }
+}
+
+/** Browser origin, then visitorOrigin, then NEXT_PUBLIC_EGDESK_VISITOR_ORIGIN / NEXT_PUBLIC_SITE_URL. */
+function resolveVisitorSiteOrigin(options: WorkspaceVisitorCallOptions = {}): string | null {
+  if (typeof window !== 'undefined') return window.location.origin;
+  const fromEnv =
+    (typeof process !== 'undefined' &&
+      (process.env?.NEXT_PUBLIC_EGDESK_VISITOR_ORIGIN || process.env?.NEXT_PUBLIC_SITE_URL)) ||
+    '';
+  return originFromValue(options.visitorOrigin) || originFromValue(fromEnv);
 }
 
 function buildWorkspaceVisitorHeaders(options: WorkspaceVisitorCallOptions = {}): Record<string, string> {
@@ -98,8 +124,14 @@ function buildWorkspaceVisitorHeaders(options: WorkspaceVisitorCallOptions = {})
   }
   headers['Authorization'] = `Bearer ${sessionId}`;
   headers['X-EGDesk-As-Visitor'] = 'true';
-  if (typeof window !== 'undefined') {
-    headers['X-Visitor-Origin'] = window.location.origin;
+  const origin = resolveVisitorSiteOrigin(options);
+  if (origin) {
+    headers['Origin'] = origin;
+    headers['X-Visitor-Origin'] = origin;
+  } else if (typeof window === 'undefined') {
+    throw new Error(
+      'asVisitor is set but no site origin is available. Pass visitorOrigin matching startVisitorGoogleLogin, or set NEXT_PUBLIC_EGDESK_VISITOR_ORIGIN.',
+    );
   }
   return headers;
 }
@@ -1888,7 +1920,7 @@ export async function listBrowserRecordingSessions() {
   return callBrowserRecordingTool('browser_recording_list_sessions', {});
 }
 
-/** Close Chrome. Does not save a recording or page HTML — only when fully done. */
+// Close Chrome. Does not save a recording or page HTML — only when fully done.
 export async function closeBrowserRecordingSession(sessionId: string) {
   return callBrowserRecordingTool('browser_recording_close_session', { sessionId });
 }
@@ -3096,6 +3128,7 @@ export async function deletePageIndexDocument(docId: string) {
  * Owner MCP auth on EGDesk: GOOGLE_SERVICE_ACCOUNT_JSON or Google Workspace sign-in
  * via startDriveAuthLogin() — configures THIS EGDesk instance.
  * Pass { asVisitor: true } to act as the website visitor from startVisitorGoogleLogin().
+ * On the server also pass visitorSessionId and visitorOrigin (or NEXT_PUBLIC_EGDESK_VISITOR_ORIGIN).
  * Watch / sync / drive_auth_login stay owner-only even with asVisitor.
  *
  * - Server: `POST {apiUrl}/drive/tools/call`
@@ -3308,6 +3341,7 @@ export async function syncDrive(options: {
  *
  * Auth: personal OAuth, service account, or domain-wide delegation (call getSheetsAuthStatus() first).
  * Pass { asVisitor: true } to act as the website visitor from startVisitorGoogleLogin().
+ * On the server also pass visitorSessionId and visitorOrigin (or NEXT_PUBLIC_EGDESK_VISITOR_ORIGIN).
  * - Server: `POST {apiUrl}/sheets/tools/call`
  * - Client: `POST /__sheets_proxy`
  */

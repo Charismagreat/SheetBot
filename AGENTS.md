@@ -180,13 +180,3 @@
    - 반드시 Google Apps Script의 암호화 저장소(`PropertiesService.getScriptProperties().getProperty('EGDESK_API_KEY')`)를 경유하여 키를 동적으로 참조하도록 구성해야 합니다.
    - 이를 통해 타인이 시트 에디터에서 마스터 키를 탈취하거나, 시트 사본 복제(Make a copy) 시 마스터 키가 제3자에게 복제·유출되는 보안 사고를 원천 차단합니다.
 <!-- END:egdesk-tunnel-rules -->
-
-<!-- BEGIN:egdesk-dev-context -->
-## EGDesk Development Context
-
-EGDesk opened this project with the dev server on **port 3002** (http://localhost:3002, hosting (production)).
-Do not assume port 3000. Use port 3002 for local preview and dev commands.
-EGDesk MCP/API runs at http://localhost:8080.
-
-See `.agents/rules/egdesk-dev-context.md` for full details.
-<!-- END:egdesk-dev-context -->
