@@ -82,6 +82,8 @@ export type WorkspaceVisitorCallOptions = {
   visitorSessionId?: string;
   /** Origin the visitor logged in from. Required on the server (no window). */
   visitorOrigin?: string;
+  /** Owner MCP: use personal Google login before service account when both are configured. */
+  preferOAuth?: boolean;
 };
 
 function getBrowserVisitorSessionId(): string | null {
@@ -140,8 +142,10 @@ function withVisitorToolArgs(
   args: Record<string, any>,
   options: WorkspaceVisitorCallOptions = {},
 ): Record<string, any> {
-  if (!options.asVisitor) return args;
-  return { ...args, asVisitor: true };
+  const out = { ...args };
+  if (options.asVisitor) out.asVisitor = true;
+  if (options.preferOAuth !== undefined) out.preferOAuth = options.preferOAuth;
+  return out;
 }
 
 async function callWorkspaceMcpTool(
@@ -179,7 +183,30 @@ async function callWorkspaceMcpTool(
 
 /**
  * Parse EGDesk MCP `/tools/call` JSON so `error` is shown even when HTTP status is 500.
+ * Envelope `success: true` is not enough — add_account uses accountAdded.
  */
+function finalizeEgdeskMcpPayload(parsed: any): any {
+  const pending =
+    parsed &&
+    typeof parsed === 'object' &&
+    (parsed.requiresConfirmation === true ||
+      (Array.isArray(parsed.needs_more_fields) && parsed.needs_more_fields.length > 0));
+  if (
+    parsed &&
+    typeof parsed === 'object' &&
+    parsed.accountAdded === false &&
+    !pending
+  ) {
+    throw new Error(
+      parsed.agentFeedback ||
+        parsed.message ||
+        parsed.error ||
+        'browser_recording_add_account did not add the account'
+    );
+  }
+  return parsed;
+}
+
 async function parseEgdeskMcpToolResponse(response: Response): Promise<any> {
   const result = await response.json().catch(() => null);
 
@@ -213,13 +240,17 @@ async function parseEgdeskMcpToolResponse(response: Response): Promise<any> {
   }
 
   const content = result.result?.content?.[0]?.text;
-  if (!content) return null;
-  try {
-    return JSON.parse(content);
-  } catch {
-    // Some tools still return a plain sentence (e.g. "Successfully wrote...").
-    return content;
+  if (!content) {
+    if (result.result?.isError) throw new Error('EGDesk tool failed');
+    return null;
   }
+  let parsed: any;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    parsed = content;
+  }
+  return finalizeEgdeskMcpPayload(parsed);
 }
 
 async function parseEgdeskHttpResponse(response: Response): Promise<any> {
@@ -1817,6 +1848,24 @@ export async function listBrowserRecordingSites(site?: string) {
   return callBrowserRecordingTool('browser_recording_list_sites', site ? { site } : {});
 }
 
+/**
+ * Add a site+login to the Browser Recorder catalog.
+ * Throws unless accountAdded is true (confirmation / needs_more_fields are returned, not thrown).
+ * First call without confirmed; after the user approves, call again with confirmed: true.
+ * Discover misses iframe logins (no_login_form). Do not mask sheet passwords on throw.
+ */
+export async function addBrowserRecordingAccount(options: {
+  url: string;
+  password: string;
+  user?: string;
+  id?: string;
+  company?: string;
+  email?: string;
+  confirmed?: boolean;
+}) {
+  return callBrowserRecordingTool('browser_recording_add_account', options);
+}
+
 /** One recorded login: identity + login vs post-login actions (no passwords) */
 export async function getBrowserRecordingAccount(siteKey: string, accountKey: string) {
   return callBrowserRecordingTool('browser_recording_get_account', { siteKey, accountKey });
@@ -1829,12 +1878,14 @@ export async function getBrowserRecordingAccount(siteKey: string, accountKey: st
 export async function openBrowserRecordingAccount(
   siteKey: string,
   accountKey: string,
-  scriptPath?: string
+  scriptPath?: string,
+  confirmed?: boolean,
 ) {
   return callBrowserRecordingTool('browser_recording_open_account', {
     siteKey,
     accountKey,
-    ...(scriptPath ? { scriptPath } : {})
+    ...(scriptPath ? { scriptPath } : {}),
+    ...(confirmed ? { confirmed: true } : {}),
   });
 }
 
@@ -1920,7 +1971,7 @@ export async function listBrowserRecordingSessions() {
   return callBrowserRecordingTool('browser_recording_list_sessions', {});
 }
 
-// Close Chrome. Does not save a recording or page HTML — only when fully done.
+/** Close Chrome. Does not save a recording or page HTML — only when fully done. */
 export async function closeBrowserRecordingSession(sessionId: string) {
   return callBrowserRecordingTool('browser_recording_close_session', { sessionId });
 }
@@ -3237,18 +3288,23 @@ export async function uploadDriveFile(options: {
 }
 
 /** List Drive files by folder and/or query */
-export async function listDriveFiles(options: {
-  folderId?: string;
-  query?: string;
-  pageSize?: number;
-  pageToken?: string;
-} = {}) {
-  return callDriveTool('drive_list_files', options);
+export async function listDriveFiles(
+  options: {
+    folderId?: string;
+    query?: string;
+    pageSize?: number;
+    pageToken?: string;
+  } = {},
+  callOptions: WorkspaceVisitorCallOptions = {},
+) {
+  const preferOAuth = callOptions.preferOAuth ?? true;
+  return callDriveTool('drive_list_files', { ...options, preferOAuth }, { ...callOptions, preferOAuth });
 }
 
 /** Get Drive file or folder metadata */
-export async function getDriveFile(fileId: string) {
-  return callDriveTool('drive_get_file', { fileId });
+export async function getDriveFile(fileId: string, options: WorkspaceVisitorCallOptions = {}) {
+  const preferOAuth = options.preferOAuth ?? true;
+  return callDriveTool('drive_get_file', { fileId, preferOAuth }, { ...options, preferOAuth });
 }
 
 /** Create a Drive folder */
@@ -3340,6 +3396,7 @@ export async function syncDrive(options: {
  * Call EGDesk Sheets MCP tool.
  *
  * Auth: personal OAuth, service account, or domain-wide delegation (call getSheetsAuthStatus() first).
+ * Read helpers default preferOAuth: true when both credentials exist.
  * Pass { asVisitor: true } to act as the website visitor from startVisitorGoogleLogin().
  * On the server also pass visitorSessionId and visitorOrigin (or NEXT_PUBLIC_EGDESK_VISITOR_ORIGIN).
  * - Server: `POST {apiUrl}/sheets/tools/call`
@@ -3359,37 +3416,73 @@ export async function getSheetsAuthStatus() {
 }
 
 /** Spreadsheet metadata (tabs, dimensions) */
-export async function getSpreadsheet(spreadsheetId: string) {
-  return callSheetsTool('sheets_get_spreadsheet', { spreadsheetId });
+export async function getSpreadsheet(
+  spreadsheetId: string,
+  options: WorkspaceVisitorCallOptions = {},
+) {
+  const preferOAuth = options.preferOAuth ?? true;
+  return callSheetsTool('sheets_get_spreadsheet', { spreadsheetId, preferOAuth }, options);
 }
 
 /** Read a range (A1 notation) */
-export async function getSheetRange(spreadsheetId: string, range: string) {
-  return callSheetsTool('sheets_get_range', { spreadsheetId, range });
+export async function getSheetRange(
+  spreadsheetId: string,
+  range: string,
+  options: WorkspaceVisitorCallOptions = {},
+) {
+  const preferOAuth = options.preferOAuth ?? true;
+  return callSheetsTool('sheets_get_range', { spreadsheetId, range, preferOAuth }, options);
 }
 
 /** Read a range including formula vs literal per cell */
-export async function getSheetRangeWithFormulas(spreadsheetId: string, range: string) {
-  return callSheetsTool('sheets_get_range_with_formulas', { spreadsheetId, range });
+export async function getSheetRangeWithFormulas(
+  spreadsheetId: string,
+  range: string,
+  options: WorkspaceVisitorCallOptions = {},
+) {
+  const preferOAuth = options.preferOAuth ?? true;
+  return callSheetsTool(
+    'sheets_get_range_with_formulas',
+    { spreadsheetId, range, preferOAuth },
+    options,
+  );
 }
 
 /** Header row of a tab */
-export async function getSheetHeaders(spreadsheetId: string, sheetName?: string) {
-  return callSheetsTool('sheets_get_headers', { spreadsheetId, sheetName });
+export async function getSheetHeaders(
+  spreadsheetId: string,
+  sheetName?: string,
+  options: WorkspaceVisitorCallOptions = {},
+) {
+  const preferOAuth = options.preferOAuth ?? true;
+  return callSheetsTool('sheets_get_headers', { spreadsheetId, sheetName, preferOAuth }, options);
 }
 
 /** First N rows of a tab */
-export async function getSheetSampleData(options: {
-  spreadsheetId: string;
-  sheetName?: string;
-  rows?: number;
-}) {
-  return callSheetsTool('sheets_get_sample_data', options);
+export async function getSheetSampleData(
+  options: {
+    spreadsheetId: string;
+    sheetName?: string;
+    rows?: number;
+  },
+  callOptions: WorkspaceVisitorCallOptions = {},
+) {
+  const preferOAuth = callOptions.preferOAuth ?? true;
+  return callSheetsTool('sheets_get_sample_data', { ...options, preferOAuth }, callOptions);
 }
 
 /** Metadata + headers + sample rows for every tab */
-export async function getSpreadsheetFullContext(spreadsheetId: string, sampleRows?: number) {
-  return callSheetsTool('sheets_get_full_context', { spreadsheetId, sampleRows });
+export async function getSpreadsheetFullContext(
+  spreadsheetId: string,
+  sampleRows?: number,
+  options: WorkspaceVisitorCallOptions = {},
+) {
+  const preferOAuth = options.preferOAuth ?? true;
+  return callSheetsTool(
+    'sheets_get_full_context',
+    { spreadsheetId, sampleRows, preferOAuth },
+    options,
+  );
 }
 
 /** Create a spreadsheet, optionally seeding Sheet1 */
@@ -3624,6 +3717,10 @@ export async function sendGmailMessage(options: {
 /**
  * Call EGDesk Apps Script MCP tool.
  *
+ * Owner MCP: personal Google login is used by default (service accounts cannot
+ * call Apps Script as themselves).
+ * Pass { asVisitor: true } to act as the website visitor from startVisitorGoogleLogin().
+ *
  * - Server: `POST {apiUrl}/apps-script/tools/call`
  * - Client: `POST /__apps_script_proxy`
  */
@@ -3654,29 +3751,46 @@ export async function pullAppsScriptFromGoogle(projectId: string) {
 }
 
 /** Create a container-bound Apps Script on a Sheet, Doc, Slide, or Form and register it */
-export async function createAppsScriptBound(options: {
-  fileId: string;
-  title?: string;
-  scriptCode?: string;
-  force?: boolean;
-}) {
-  return callAppsScriptTool('apps_script_create_bound', options);
+export async function createAppsScriptBound(
+  options: {
+    fileId: string;
+    title?: string;
+    scriptCode?: string;
+    force?: boolean;
+  },
+  callOptions: WorkspaceVisitorCallOptions = {},
+) {
+  const preferOAuth = callOptions.preferOAuth ?? true;
+  return callAppsScriptTool(
+    'apps_script_create_bound',
+    { ...options, preferOAuth },
+    { ...callOptions, preferOAuth },
+  );
 }
 
 /** Alias of createAppsScriptBound */
-export async function createAppsScriptForSpreadsheet(options: {
-  spreadsheetId?: string;
-  fileId?: string;
-  title?: string;
-  scriptCode?: string;
-  force?: boolean;
-}) {
-  return callAppsScriptTool('apps_script_create_bound', {
-    fileId: options.fileId || options.spreadsheetId,
-    title: options.title,
-    scriptCode: options.scriptCode,
-    force: options.force,
-  });
+export async function createAppsScriptForSpreadsheet(
+  options: {
+    spreadsheetId?: string;
+    fileId?: string;
+    title?: string;
+    scriptCode?: string;
+    force?: boolean;
+  },
+  callOptions: WorkspaceVisitorCallOptions = {},
+) {
+  const preferOAuth = callOptions.preferOAuth ?? true;
+  return callAppsScriptTool(
+    'apps_script_create_bound',
+    {
+      fileId: options.fileId || options.spreadsheetId,
+      title: options.title,
+      scriptCode: options.scriptCode,
+      force: options.force,
+      preferOAuth,
+    },
+    { ...callOptions, preferOAuth },
+  );
 }
 
 /**

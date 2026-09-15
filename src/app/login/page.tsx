@@ -9,6 +9,8 @@ import {
   CheckCircle2,
   RefreshCw,
   ExternalLink,
+  Sparkles,
+  FileSpreadsheet,
 } from "lucide-react";
 import {
   startVisitorGoogleLogin,
@@ -21,11 +23,28 @@ import {
 
 export default function LoginPage() {
   const [visitorEmail, setVisitorEmail] = useState<string | null>(null);
+  const [pendingSheetUrl, setPendingSheetUrl] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
-  // 현재 브라우저에 저장된 방문자(Visitor) 구글 세션 상태 확인
+  // 현재 브라우저에 저장된 방문자(Visitor) 구글 세션 상태 확인 및 래핑 시트 주소 확인
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const cb = params.get("callbackUrl");
+      const localSheet = localStorage.getItem("pending_sheet_url");
+      if (localSheet) {
+        setPendingSheetUrl(localSheet);
+      } else if (cb && cb.includes("sheetUrl=")) {
+        try {
+          const match = cb.match(/sheetUrl=([^&]+)/);
+          if (match && match[1]) {
+            setPendingSheetUrl(decodeURIComponent(match[1]));
+          }
+        } catch (e) {}
+      }
+    }
+
     const checkVisitorStatus = async () => {
       try {
         const status = await getVisitorGoogleStatus();
@@ -42,6 +61,18 @@ export default function LoginPage() {
     void checkVisitorStatus();
   }, []);
 
+  // 로그인 성공 후 돌아갈 타깃 URL 계산
+  const getTargetRedirectUrl = () => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const cb = params.get("callbackUrl");
+      if (cb) return cb;
+      const localSheet = localStorage.getItem("pending_sheet_url");
+      if (localSheet) return `/dashboard?sheetUrl=${encodeURIComponent(localSheet)}`;
+    }
+    return "/dashboard";
+  };
+
   // SheetBot 자동화를 위한 확장 권한 스코프 (시트 + 드라이브 + Apps Script 프로젝트 생성)
   const SHEETBOT_WORKSPACE_SCOPES = [
     ...VISITOR_WORKSPACE_SCOPES,
@@ -57,7 +88,7 @@ export default function LoginPage() {
       // 기존에 잔류하는 세션이 있다면 먼저 완전히 폐기(Revoke)하여 세션 누수 방지
       await signOutVisitorGoogle().catch(() => {});
       await startVisitorGoogleLogin({
-        next: "/dashboard",
+        next: getTargetRedirectUrl(),
         forceConsent: true,
         scopes: SHEETBOT_WORKSPACE_SCOPES,
       });
@@ -74,7 +105,7 @@ export default function LoginPage() {
       await signOutVisitorGoogle().catch(() => {});
       setVisitorEmail(null);
       await startVisitorGoogleLogin({
-        next: "/dashboard",
+        next: getTargetRedirectUrl(),
         forceConsent: true,
         scopes: SHEETBOT_WORKSPACE_SCOPES,
       });
@@ -110,6 +141,27 @@ export default function LoginPage() {
               Google 계정으로 로그인하여<br />스프레드시트 Apps Script 자동화를 시작하세요.
             </p>
           </div>
+
+          {/* 🌟 1초 래핑 대기 중인 시트 안내 배너 */}
+          {pendingSheetUrl && (
+            <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-300/80 rounded-2xl text-left space-y-1.5 shadow-xs animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 font-black text-xs text-emerald-900">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                  <span>⚡ 1초 래핑 대기 중</span>
+                </span>
+                <span className="text-[10px] font-bold bg-emerald-200/60 text-emerald-800 px-2 py-0.5 rounded-full">
+                  자동 연동
+                </span>
+              </div>
+              <p className="text-[11px] text-emerald-800 font-mono truncate select-all bg-white/70 px-2 py-1 rounded-lg border border-emerald-100">
+                {pendingSheetUrl}
+              </p>
+              <p className="text-[11px] text-slate-600 leading-relaxed break-keep">
+                Google 1초 로그인 완료 시 <strong>래핑 브릿지 주소, sk 키, 원클릭 코드 주입 권한</strong>이 즉시 발급됩니다.
+              </p>
+            </div>
+          )}
 
           {/* 메인 Google 로그인 영역 */}
           <div className="space-y-3 pt-2">

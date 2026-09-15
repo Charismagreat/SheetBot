@@ -180,3 +180,19 @@
    - 반드시 Google Apps Script의 암호화 저장소(`PropertiesService.getScriptProperties().getProperty('EGDESK_API_KEY')`)를 경유하여 키를 동적으로 참조하도록 구성해야 합니다.
    - 이를 통해 타인이 시트 에디터에서 마스터 키를 탈취하거나, 시트 사본 복제(Make a copy) 시 마스터 키가 제3자에게 복제·유출되는 보안 사고를 원천 차단합니다.
 <!-- END:egdesk-tunnel-rules -->
+
+<!-- BEGIN:resource-lifecycle-and-revocation-rules -->
+## 프로젝트 삭제 및 회원 탈퇴 시 연동 주소/API 키 생명주기 제어 원칙 (구현 대기)
+
+1. **프로젝트 삭제 시 연동 주소/엔드포인트 무효화 원칙 (Edge-based Soft Revocation)**:
+   - **즉각 차단(Immediate Cut-off)**: 프로젝트가 삭제되면 구글 시트 등 외부에서 호출하는 해당 프로젝트 전용 연동 주소(엔드포인트, 웹훅, 트리거 API)는 지연 없이 즉시 차단되어야 합니다.
+   - **선제 거부(410 Gone / 403 Forbidden)**: 방치된 구글 시트의 Apps Script 좀비 트리거(`onEdit` 등)로 인한 불필요한 AI 토큰 과금 및 백엔드 부하를 차단하기 위해, 게이트웨이/미들웨어 레벨에서 `410 Gone` 또는 `403 Forbidden`을 즉시 반환해야 합니다.
+   - **소프트 삭제 및 복구 유예(Grace Period)**: 물리적 즉시 삭제 대신 `status: 'PENDING_DELETE'` 상태로 두고 14일간 유예 기간을 제공합니다. 사용자가 복원할 경우 기존 구글 시트 스크립트 수정 없이 즉시 재활성화됩니다.
+   - **GAS 클라이언트 자가 비활성화(Self-disable)**: 주입되는 Apps Script는 `410 Gone` 응답을 수신했을 때 사용자에게 안내 토스트를 띄우고 스스로 트리거 실행을 멈추도록 예외 처리를 내장합니다.
+
+2. **회원 탈퇴 시 에이전트 API 키 즉각 전체 차단 및 복구 시 재발급 원칙 (Rotate on Recovery)**:
+   - **전체 킬스위치(Global Kill-Switch)**: 회원 탈퇴 시 해당 계정에 속한 모든 에이전트 API 키는 T=0초에 즉시 `SUSPENDED` 처리되어 `401 Unauthorized`로 100% 호출이 차단되어야 합니다 (고아 키 및 무단 자원 점유 방지).
+   - **유예 기간 중 API 호출 엄격 차단**: 계정 복구 유예 기간(예: 14~30일) 중이라도 API 호출은 절대 허용되지 않습니다.
+   - **계정 복구 시 기존 키 재활성화 금지(Rotate on Recovery)**: 유예 기간 내에 사용자가 탈퇴를 취소하고 계정을 복구하더라도, 보안 유출 방지를 위해 **과거에 사용하던 기존 API 키는 영구 폐기(Revoked)** 처리하며, 대시보드에서 반드시 **새로운 API 키를 신규 발급**받도록 강제합니다.
+<!-- END:resource-lifecycle-and-revocation-rules -->
+

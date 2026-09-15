@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-14T09:53:01.069Z
+ * Generated at: 2026-09-15T10:49:17.758Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -47,7 +47,7 @@ export const TABLES = {
   table4: {
     name: 'sheetbot_bridge_tokens',
     displayName: 'SheetBot 브릿지 토큰 매핑 대장',
-    rowCount: 3,
+    rowCount: 4,
     columnCount: 6,
     columns: ['id', '_version', 'token', 'project_id', 'user_email', 'created_at']
   } as TableDefinition,
@@ -124,7 +124,7 @@ export const TABLES = {
   table15: {
     name: 'sheetbot_projects',
     displayName: 'SheetBot 프로젝트 대장',
-    rowCount: 10,
+    rowCount: 12,
     columnCount: 25,
     columns: ['id', '_version', 'user_email', 'name', 'description', 'spreadsheet_id', 'spreadsheet_url', 'gas_project_id', 'script_id', 'script_url', 'script_code', 'manifest', 'summary', 'features', 'triggers', 'prompt', 'status', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,

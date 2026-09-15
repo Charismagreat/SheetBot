@@ -548,10 +548,30 @@ export async function setupDatabase(force = false): Promise<void> {
       await executeSQL(`ALTER TABLE sheetbot_user_api_keys ADD COLUMN visitor_session_id TEXT;`);
     } catch {}
 
-    // 20. 기본 추천 프롬프트 시딩
+    // 20. sheetbot_enterprise_inquiries 테이블 생성 (기업 맞춤 AX 및 경량 ERP 문의 대장)
+    await safeCreateTable(
+      'SheetBot 기업 맞춤 AX 문의 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'company_name', type: 'TEXT', notNull: true },
+        { name: 'contact_name', type: 'TEXT', notNull: true },
+        { name: 'contact_position', type: 'TEXT' },
+        { name: 'phone', type: 'TEXT', notNull: true },
+        { name: 'email', type: 'TEXT', notNull: true },
+        { name: 'industry', type: 'TEXT' },
+        { name: 'target_areas', type: 'TEXT' },
+        { name: 'use_voucher', type: 'TEXT' },
+        { name: 'content', type: 'TEXT' },
+        { name: 'status', type: 'TEXT' }, // 'PENDING', 'CONTACTED', 'PROPOSED', 'CLOSED'
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_enterprise_inquiries' }
+    );
+
+    // 21. 기본 추천 프롬프트 시딩
     await seedDefaultPromptTemplates();
 
-    // 21. 레거시 데이터 마이그레이션 실행
+    // 22. 레거시 데이터 마이그레이션 실행
     await migrateLegacySettingsData();
 
     isDbInitialized = true;

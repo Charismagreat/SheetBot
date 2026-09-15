@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { DEFAULT_FOOTER, FooterInfo } from "@/lib/default-footer";
 import { SnsIcon } from "@/components/SnsIcons";
+import SheetBotLogo from "@/components/SheetBotLogo";
 
 export default function Footer() {
   const pathname = usePathname();
@@ -59,17 +60,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-8 border-b border-slate-100">
           {/* 좌측 2열 (md:col-span-2): 서비스 브랜드 소개, 신뢰 뱃지, 고객 지원 센터 */}
           <div className="md:col-span-2 space-y-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-indigo-600 flex items-center justify-center text-white shadow-xs">
-                <Bot className="w-4 h-4" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-black text-base text-slate-800 tracking-tight">SheetBot</span>
-                <span className="px-1.5 py-0.2 bg-emerald-50 text-emerald-700 text-[10px] font-black rounded border border-emerald-200/60">
-                  SaaS
-                </span>
-              </div>
-            </div>
+            <SheetBotLogo size="sm" subText="" />
             <p className="text-slate-500 text-xs leading-relaxed max-w-md">
               {footerInfo.brand_description}
             </p>

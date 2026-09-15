@@ -68,7 +68,7 @@ export default function ApiKeyModal({ isOpen, onClose }: ApiKeyModalProps) {
 
   const samplePrompt = `내 시트봇 API 키는 ${apiKey || "sk_sheetbot_..."}야.
 이 구글 시트 주소([구글 시트 URL 입력])로 프로젝트를 만들고,
-[원하는 자동화 기능(예: 매일 자정 미수금 집계 및 슬랙 발송)] 코드를 짜서 배포해줘.`;
+[사이드바에서 영수증/명함 이미지를 업로드하면 AI가 텍스트를 분석해 시트 행에 자동 기입하는] 코드를 짜서 배포해줘.`;
 
   const handleCopyPrompt = async () => {
     await navigator.clipboard.writeText(samplePrompt);

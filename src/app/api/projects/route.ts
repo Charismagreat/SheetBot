@@ -96,6 +96,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const includeTrashed = searchParams.get("includeTrashed") === "true";
+
     const res = await queryTable("sheetbot_projects", {
       filters: { user_email: userEmail.toLowerCase().trim() },
       orderBy: "id",
@@ -104,9 +107,12 @@ export async function GET(request: Request) {
     }).catch(() => ({ rows: [] }));
 
     const rawRows = res.rows || [];
-    // 소프트 삭제(deleted_at) 필터링
+    // 소프트 삭제(deleted_at) 및 유예 상태(PENDING_DELETE, TRASHED) 필터링
     const activeProjects = rawRows
-      .filter((r: any) => !r.deleted_at)
+      .filter((r: any) => {
+        const isDeleted = Boolean(r.deleted_at) || r.status === "PENDING_DELETE" || r.status === "TRASHED";
+        return includeTrashed ? isDeleted : !isDeleted;
+      })
       .map(mapRowToProject);
 
     console.log(`[API /api/projects GET] userEmail=${userEmail}, total=${activeProjects.length}, names=${activeProjects.map((p: any) => p.name).join(", ")}`);
@@ -346,13 +352,13 @@ export async function DELETE(request: Request) {
 
     const nowStr = new Date().toISOString();
 
-    // 소프트 삭제 처리 (deleted_at, deleted_by, status 업데이트)
+    // 소프트 삭제 및 14일 유예 상태(PENDING_DELETE) 전환
     await updateRows(
       "sheetbot_projects",
       {
         deleted_at: nowStr,
         deleted_by: userEmail,
-        status: "TRASHED",
+        status: "PENDING_DELETE",
         updated_at: nowStr,
         updated_by: userEmail,
       },
@@ -366,7 +372,7 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "프로젝트가 성공적으로 삭제(소프트 삭제)되었습니다.",
+      message: "프로젝트가 성공적으로 삭제 처리되었습니다. (14일 복구 유예 기간 내 대시보드에서 복원 가능)",
     });
   } catch (error: any) {
     console.error("DELETE SheetBot project error:", error);
@@ -375,7 +381,7 @@ export async function DELETE(request: Request) {
 }
 
 /**
- * PATCH: 프로젝트 정보 부분 수정 (이름 동기화 및 갱신 지원)
+ * PATCH: 프로젝트 정보 부분 수정 및 14일 유예 복원(restore) 지원
  */
 export async function PATCH(request: Request) {
   try {
@@ -386,13 +392,59 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
-    const { id, name, description, prompt, scriptCode, manifest, summary, features, triggers, redeploy } = body;
+    const { id, name, description, prompt, scriptCode, manifest, summary, features, triggers, redeploy, restore } = body;
 
     if (!id) {
       return NextResponse.json({ success: false, error: "수정할 프로젝트 ID가 필요합니다." }, { status: 400 });
     }
 
     const nowStr = new Date().toISOString();
+
+    // 1. [복원(Restore) 액션 처리]
+    if (restore) {
+      const existingRes = await queryTable("sheetbot_projects", {
+        filters: { id, user_email: userEmail.toLowerCase().trim() },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+
+      const existingRow = (existingRes.rows || [])[0];
+      if (!existingRow) {
+        return NextResponse.json({ success: false, error: "복원할 대상 프로젝트를 찾을 수 없습니다." }, { status: 404 });
+      }
+
+      if (existingRow.deleted_at) {
+        const deletedTime = new Date(existingRow.deleted_at).getTime();
+        const diffDays = (Date.now() - deletedTime) / (1000 * 60 * 60 * 24);
+        if (diffDays > 14) {
+          return NextResponse.json(
+            { success: false, error: "삭제 후 14일이 경과하여 복구 유예 기간이 만료되었습니다." },
+            { status: 400 }
+          );
+        }
+      }
+
+      await updateRows(
+        "sheetbot_projects",
+        {
+          status: "ACTIVE",
+          deleted_at: null,
+          deleted_by: null,
+          restored_at: nowStr,
+          restored_by: userEmail,
+          updated_at: nowStr,
+          updated_by: userEmail,
+        },
+        {
+          filters: { id, user_email: userEmail.toLowerCase().trim() },
+        }
+      );
+
+      return NextResponse.json({
+        success: true,
+        message: "프로젝트가 성공적으로 복원되었습니다. 이제 모든 서비스 연동이 재활성화됩니다.",
+      });
+    }
+
     const updateData: any = {
       updated_at: nowStr,
       updated_by: userEmail,

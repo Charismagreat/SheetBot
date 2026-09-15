@@ -112,6 +112,12 @@ function egdeskToolsCall(service, tool, args) {
   } catch (err) {
     throw new Error('EGDesk tunnel returned non-JSON (' + response.getResponseCode() + '): ' + text);
   }
+  if (response.getResponseCode() === 410) {
+    try {
+      SpreadsheetApp.getActiveSpreadsheet().toast('⚠️ 삭제된 프로젝트입니다. 자동화 실행이 즉시 중단되었습니다.', 'SheetBot 서비스 차단', 10);
+    } catch (eToast) {}
+    throw new Error('PROJECT_REVOKED (HTTP 410): 삭제된 프로젝트이므로 서비스 실행이 즉시 중단되었습니다.');
+  }
   if (response.getResponseCode() >= 400) {
     var message = parsed.error || parsed.message || text;
     throw new Error('EGDesk tunnel HTTP ' + response.getResponseCode() + ': ' + message);
