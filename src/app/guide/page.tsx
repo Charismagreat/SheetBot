@@ -36,6 +36,11 @@ import {
   Search,
   Mail,
   Contact,
+  Landmark,
+  Scale,
+  PhoneCall,
+  Printer,
+  Building2,
 } from "lucide-react";
 
 export default function GuidePage() {
@@ -51,10 +56,10 @@ export default function GuidePage() {
   const steps = [
     {
       step: "01",
-      title: "구글 계정 최소 권한 로그인 & 3대 프로젝트 시작 모드 선택",
-      desc: "보안을 위해 초기 가입/로그인 시에는 최소 권한(이메일·기본 프로필)만 요청하므로 안심하고 로그인할 수 있습니다. 20,000 웰컴 토큰과 개인 에이전트 API 키가 자동 발급되며, [새 프로젝트 추가]에서 스프레드시트/드라이브 권한을 필요 시점에만 점진적으로 안전하게 부여할 수 있습니다. ① '✨ 새 시트 자동 생성', ② '📁 엑셀 파일 업로드 변환', ③ '🔗 기존 시트 URL' 중 원하는 방식을 자유롭게 선택하세요.",
-      tip: "초기 가입 시 불필요한 드라이브 전체 권한을 요구하지 않는 구글 최소 권한 원칙(Least Privilege)을 준수합니다.",
-      badge: "최소 권한 가입",
+      title: "구글 계정 최소 권한 로그인 & 4대 프로젝트 시작 모드 (템플릿 복제 포함)",
+      desc: "보안을 위해 초기 가입/로그인 시에는 최소 권한(이메일·기본 프로필)만 요청하므로 안심하고 로그인할 수 있습니다. 20,000 웰컴 토큰과 개인 에이전트 API 키가 자동 발급되며, ① '✨ 새 시트 자동 생성', ② '📁 엑셀 파일 업로드 변환', ③ '🔗 기존 시트 URL', ④ '🛍️ 공식 템플릿 마켓 사본 복제' 중 원하는 방식을 자유롭게 선택하세요. 템플릿을 복제할 때도 원본 제작자의 API 키나 개인정보는 100% 격리 배제되며, 본인 구글 세션으로만 안전하게 작동합니다.",
+      tip: "구글 최소 권한 원칙(Least Privilege) 및 템플릿 복제 시 ScriptProperties 암호화 분리 표준을 철저히 준수합니다.",
+      badge: "최소 권한 & 안전 복제",
     },
     {
       step: "02",
@@ -232,6 +237,38 @@ export default function GuidePage() {
       color: "border-indigo-200 bg-indigo-50/60 text-indigo-800",
       prompt: "사이드바의 AI 검색 탭에서 '주문금액 상위 5건', '수량 100개 이상'처럼 자연어로 질문하면 Gemini AI가 SELECT SQL로 즉시 변환하여 시트에 자동 서식과 함께 추출하고, 최근 성공한 질문을 보관함과 즐겨찾기(⭐)로 관리할 수 있도록 해줘.",
     },
+    {
+      id: "ex_mcp_financehub",
+      title: "국세청 홈택스 전자세금계산서 & 법인통장 실시간 자동 전표화 및 미수금 정산",
+      tag: "홈택스 & 법인통장 연동 (MCP)",
+      icon: Landmark,
+      color: "border-emerald-200 bg-emerald-50/60 text-emerald-800",
+      prompt: "매일 아침 8시에 FinanceHub 도구를 호출하여 홈택스 매입/매출 전자세금계산서와 법인통장 거래내역을 수집해줘. 시트 1행 헤더에 맞게 공급가액과 부가세를 분리해 기록하고, 세금계산서와 통장 입금액이 일치하는 거래는 '정산완료'로 자동 마킹해줘.",
+    },
+    {
+      id: "ex_mcp_bizinfo",
+      title: "기업마당(BizInfo) 맞춤 정부지원사업 및 R&D 지원금 공고 매일 스크랩",
+      tag: "정부지원사업 공고 스캔 (MCP)",
+      icon: Landmark,
+      color: "border-blue-200 bg-blue-50/60 text-blue-800",
+      prompt: "매일 평일 오전 8시 30분에 BizInfo 도구를 이용해 '인공지능', '소프트웨어', '수출바우처' 키워드의 최신 정부지원사업 공고를 조회해줘. 접수 중인 사업들의 사업명, 주관기관, 마감일자, 상세URL을 '정부지원공고' 시트에 자동으로 최신화해줘.",
+    },
+    {
+      id: "ex_mcp_koneps",
+      title: "조달청 나라장터(KONEPS) 맞춤 공공입찰 공고 자동 수집 & 마감 3일 전 알림",
+      tag: "조달청 공공입찰 수집 (MCP)",
+      icon: Scale,
+      color: "border-indigo-200 bg-indigo-50/60 text-indigo-800",
+      prompt: "매일 아침 9시에 KONEPS 도구로 조달청 나라장터에서 배정예산 5천만 원 이상의 '웹 개발' 및 '데이터 분석' 입찰 공고를 검색해줘. 공고번호, 수요기관, 추정가격, 마감일을 시트에 채우고, 마감 3일 전인 건은 비고란에 '긴급'으로 표시해줘.",
+    },
+    {
+      id: "ex_mcp_voice_transcript",
+      title: "사이드바 통화 녹음 파일 업로드 ➔ 화자 분리(STT) 및 상담 일지 자동 기입",
+      tag: "음성통화 AI 상담일지 (MCP)",
+      icon: PhoneCall,
+      color: "border-purple-200 bg-purple-50/60 text-purple-800",
+      prompt: "구글 시트 우측 사이드바에서 고객 통화 녹음 파일(MP3/M4A)을 올리면 Voice Transcript 도구로 화자를 분리해 텍스트를 전사해줘. 통화 내용에서 고객의 핵심 문의사항, 불만 요점, 후속 조치 약속일을 추출해 시트의 고객 행에 자동으로 추가해줘.",
+    },
   ];
 
   return (
@@ -247,11 +284,11 @@ export default function GuidePage() {
               <BookOpen className="w-3.5 h-3.5" />
               <span>사용 가이드 &amp; 업무 자동화 마스터 레시피</span>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight">
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight break-keep">
               SheetBot 완벽 가이드:<br />
               구글 시트 자동화부터 통신비 0원 문자 발송까지
             </h1>
-            <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
+            <p className="text-slate-300 text-xs sm:text-sm leading-relaxed break-keep">
               복잡한 코딩이나 통신사 유료 API 계약 없이도 충분합니다.
               Google Apps Script(GAS) 자동 생성, 정기 스케줄 실행, 내 폰을 통한 무료 문자 자동 발송, 
               그리고 이전 대화를 기억하는 시트봇 AI까지 누구나 3분 만에 시작할 수 있는 실전 가이드를 확인하세요.
@@ -279,10 +316,10 @@ export default function GuidePage() {
         <section className="space-y-6">
           <div className="text-center max-w-2xl mx-auto space-y-2">
             <span className="text-xs font-extrabold text-emerald-600 uppercase tracking-wider">Step-by-Step Roadmap</span>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight break-keep">
               누구나 3분 만에 마스터하는 5단계 자동화 여정
             </h2>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 break-keep">
               구글 계정 로그인부터 스마트폰 연동, AI 비서 협업까지 직관적인 단계로 구성되어 있습니다.
             </p>
           </div>
@@ -302,8 +339,8 @@ export default function GuidePage() {
                       {s.badge}
                     </span>
                   </div>
-                  <h3 className="text-xs font-extrabold text-slate-900 leading-snug">{s.title}</h3>
-                  <p className="text-[11px] text-slate-500 leading-relaxed">{s.desc}</p>
+                  <h3 className="text-xs font-extrabold text-slate-900 leading-snug break-keep">{s.title}</h3>
+                  <p className="text-[11px] text-slate-500 leading-relaxed break-keep">{s.desc}</p>
                 </div>
                 <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 text-[10.5px] text-slate-600">
                   <strong className="text-slate-800">💡 팁:</strong> {s.tip}
@@ -321,10 +358,10 @@ export default function GuidePage() {
                 <Smartphone className="w-3.5 h-3.5" />
                 <span>신규 기능: 통신 비용 0원 문자 자동화</span>
               </div>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900">
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 break-keep">
                 내 안드로이드 폰을 Google 메시지로 연동하는 방법
               </h2>
-              <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+              <p className="text-xs text-slate-600 max-w-2xl leading-relaxed break-keep">
                 시중의 알림톡/문자 대행 서비스(건당 15~40원) 대신, 내가 사용하는 안드로이드 스마트폰(요금제 기본 제공 무제한 문자)을 
                 게이트웨이로 연동하여 구글 시트 이벤트 발생 시 무료로 문자를 자동 발송할 수 있습니다.
               </p>
@@ -380,10 +417,10 @@ export default function GuidePage() {
                 <Bot className="w-3.5 h-3.5" />
                 <span>핵심 업그레이드: 개인 API 키 기반 원스톱 자동화 &amp; 안티그라비티 연동</span>
               </div>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900">
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 break-keep">
                 안티그라비티(Antigravity)와 시트봇의 100% 완전 자동화 연동
               </h2>
-              <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+              <p className="text-xs text-slate-600 max-w-2xl leading-relaxed break-keep">
                 시트봇 대시보드에 일일이 들어와 프로젝트를 만들지 않아도 됩니다. 
                 로그인 즉시 자동 발급된 <strong>내 개인 API 키(sk_sheetbot_...)</strong>와 구글 시트 주소만 안티그라비티에 던지면, 
                 프로젝트 생성부터 10행 헤더/데이터 분석, Apps Script 코드 작성, 구글 클라우드 원클릭 배포까지 단 한 번의 대화로 완성됩니다.
@@ -409,9 +446,9 @@ export default function GuidePage() {
                 <span className="px-2 py-0.5 rounded-md bg-violet-100 text-violet-800 font-extrabold text-[10px]">
                   방식 A (강력 추천!)
                 </span>
-                <h4 className="font-extrabold text-xs text-slate-900">개인 API 키 원스톱 자동 생성 &amp; 배포</h4>
+                <h4 className="font-extrabold text-xs text-slate-900 break-keep">개인 API 키 원스톱 자동 생성 &amp; 배포</h4>
               </div>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
+              <p className="text-[11px] text-slate-500 leading-relaxed break-keep">
                 대시보드 상단 <strong>[🔑 에이전트 API 키]</strong>를 복사한 후, 안티그라비티에게 "내 API 키는 sk_...이고, 이 시트 주소로 프로젝트 만들어서 배포해줘"라고만 하세요. 프로젝트 생성부터 배포까지 알아서 끝냅니다.
               </p>
             </div>
@@ -421,9 +458,9 @@ export default function GuidePage() {
                 <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-extrabold text-[10px]">
                   방식 B
                 </span>
-                <h4 className="font-extrabold text-xs text-slate-900">프로젝트별 브릿지 URL 복사 &amp; 주입</h4>
+                <h4 className="font-extrabold text-xs text-slate-900 break-keep">프로젝트별 브릿지 URL 복사 &amp; 주입</h4>
               </div>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
+              <p className="text-[11px] text-slate-500 leading-relaxed break-keep">
                 이미 생성된 프로젝트가 있다면 카드 우측의 <strong>[🤖 AI 연동 주소 복사]</strong>를 눌러 고유 브릿지 웹 주소(gas-bridge?token=...)를 AI 채팅창에 전달하여 대화형으로 코드를 수정하고 주입할 수 있습니다.
               </p>
             </div>
@@ -435,8 +472,8 @@ export default function GuidePage() {
               <div className="w-8 h-8 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center font-bold text-xs">
                 1
               </div>
-              <h4 className="font-extrabold text-xs text-slate-900">개인 API 키 자동 확인</h4>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
+              <h4 className="font-extrabold text-xs text-slate-900 break-keep">개인 API 키 자동 확인</h4>
+              <p className="text-[11px] text-slate-500 leading-relaxed break-keep">
                 시트봇 회원가입 즉시 20,000 웰컴 토큰과 함께 고유 개인 API 키(sk_sheetbot_...)가 자동 발급됩니다. 워크스페이스 상단에서 클릭 한 번으로 복사할 수 있습니다.
               </p>
             </div>
@@ -445,8 +482,8 @@ export default function GuidePage() {
               <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">
                 2
               </div>
-              <h4 className="font-extrabold text-xs text-slate-900">안티그라비티 원격 프로젝트 생성</h4>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
+              <h4 className="font-extrabold text-xs text-slate-900 break-keep">안티그라비티 원격 프로젝트 생성</h4>
+              <p className="text-[11px] text-slate-500 leading-relaxed break-keep">
                 안티그라비티에게 키와 시트 주소만 주면 AI가 시트봇 API를 호출하여 시트 구조(탭, 10행 헤더, 샘플 데이터)를 자동 분석하고 프로젝트를 원격 등록합니다.
               </p>
             </div>
@@ -455,8 +492,8 @@ export default function GuidePage() {
               <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
                 3
               </div>
-              <h4 className="font-extrabold text-xs text-slate-900">10행 헤더 &amp; SQLite DB 연동</h4>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
+              <h4 className="font-extrabold text-xs text-slate-900 break-keep">10행 헤더 &amp; SQLite DB 연동</h4>
+              <p className="text-[11px] text-slate-500 leading-relaxed break-keep">
                 견적서 고정 셀/하단 =SUM 수식 보존은 물론, "내 PC의 SQLite DB에서 발주 내역 뽑아서 시트에 채워줘"와 같은 복합 자동화 로직도 Apps Script로 완성합니다.
               </p>
             </div>
@@ -465,8 +502,8 @@ export default function GuidePage() {
               <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
                 4
               </div>
-              <h4 className="font-extrabold text-xs text-slate-900">구글 클라우드 원클릭 배포</h4>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
+              <h4 className="font-extrabold text-xs text-slate-900 break-keep">구글 클라우드 원클릭 배포</h4>
+              <p className="text-[11px] text-slate-500 leading-relaxed break-keep">
                 안티그라비티가 완성된 코드를 브릿지 URL로 전송하면 구글 스프레드시트에 즉시 자동 배포되며, 상단 메뉴 등록 및 주기적 정기 스케줄까지 자율 가동됩니다.
               </p>
             </div>
@@ -481,10 +518,10 @@ export default function GuidePage() {
                 <Database className="w-3.5 h-3.5" />
                 <span>엔터프라이즈 신기능: Google Drive SQLite 양방향 동기화 &amp; 풀 CRUD</span>
               </div>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900">
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 break-keep">
                 구글 드라이브 SQLite 연동: 데이터 전송·조회·수정·삭제(CRUD)
               </h2>
-              <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+              <p className="text-xs text-slate-600 max-w-2xl leading-relaxed break-keep">
                 스프레드시트의 방대한 데이터를 구글 드라이브의 SQLite DB 파일(<strong>SheetBot_Databases/파일명.sqlite</strong>)로 안전하게 아카이빙하고,
                 정밀 조건 검색과 <strong>Gemini AI 자연어(Text-to-SQL)</strong>를 통해 원하는 데이터만 시트에 즉시 추출합니다.
                 추출된 데이터는 시트에서 직접 수정하거나 사이드바 폼을 통해 SQLite DB와 양방향으로 실시간 동기화할 수 있습니다.
@@ -500,8 +537,8 @@ export default function GuidePage() {
                   메뉴 [1] 데이터 전송
                 </span>
               </div>
-              <h4 className="font-extrabold text-xs text-slate-900">구글 드라이브 SQLite 자동 동기화</h4>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
+              <h4 className="font-extrabold text-xs text-slate-900 break-keep">구글 드라이브 SQLite 자동 동기화</h4>
+              <p className="text-[11px] text-slate-500 leading-relaxed break-keep">
                 시트에서 미전송 상태인 주문/거래 내역을 원클릭으로 구글 드라이브 지정 폴더의 SQLite DB 파일로 안전하게 전송합니다. 전송된 행은 초록색 완료 라벨이 마킹되어 중복 전송이 방지됩니다.
               </p>
             </div>
@@ -512,8 +549,8 @@ export default function GuidePage() {
                   메뉴 [2] 데이터 조회
                 </span>
               </div>
-              <h4 className="font-extrabold text-xs text-slate-900">조건 필터 &amp; AI 자연어 (Text-to-SQL)</h4>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
+              <h4 className="font-extrabold text-xs text-slate-900 break-keep">조건 필터 &amp; AI 자연어 (Text-to-SQL)</h4>
+              <p className="text-[11px] text-slate-500 leading-relaxed break-keep">
                 기간, 상호, 금액 등 상세 조건 검색뿐만 아니라, "지난달 주문금액 상위 5건"처럼 일상어로 질문하면 AI가 SQL로 즉시 변환하여 시트에 자동 서식과 합계 행을 구성해 추출합니다.
               </p>
             </div>
@@ -524,8 +561,8 @@ export default function GuidePage() {
                   메뉴 [3] 수정·삭제 (CRUD)
                 </span>
               </div>
-              <h4 className="font-extrabold text-xs text-slate-900">시트 직접 편집 &amp; 사이드바 폼 제어</h4>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
+              <h4 className="font-extrabold text-xs text-slate-900 break-keep">시트 직접 편집 &amp; 사이드바 폼 제어</h4>
+              <p className="text-[11px] text-slate-500 leading-relaxed break-keep">
                 'SQLite_조회결과' 탭에서 수량/금액을 바꾸거나 상태를 '삭제'로 변경한 뒤 메뉴 [3]을 누르면 DB에 일괄 반영됩니다. 사이드바 [행 수정/삭제] 탭에서 개별 건을 불러와 정밀 수정·삭제도 가능합니다.
               </p>
             </div>
@@ -545,7 +582,7 @@ export default function GuidePage() {
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
             <div>
               <span className="text-xs font-extrabold text-indigo-600 uppercase tracking-wider">Best Recipes</span>
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight break-keep">
                 복사해서 바로 쓰는 실전 자동화 프롬프트 레시피
               </h2>
             </div>
@@ -568,7 +605,7 @@ export default function GuidePage() {
                       </span>
                       <Sparkles className="w-4 h-4 text-amber-500" />
                     </div>
-                    <h3 className="font-extrabold text-sm text-slate-900 leading-snug">{ex.title}</h3>
+                    <h3 className="font-extrabold text-sm text-slate-900 leading-snug break-keep">{ex.title}</h3>
                     <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 font-mono text-[11px] text-slate-700 leading-relaxed select-all">
                       "{ex.prompt}"
                     </div>
@@ -604,10 +641,10 @@ export default function GuidePage() {
               <Bot className="w-3.5 h-3.5" />
               <span>우측 하단 플로팅 비서</span>
             </div>
-            <h2 className="text-2xl font-black tracking-tight">
+            <h2 className="text-2xl font-black tracking-tight break-keep">
               시트봇 AI (SheetBot AI) 100% 활용 꿀팁
             </h2>
-            <p className="text-slate-300 text-xs sm:text-sm max-w-2xl leading-relaxed">
+            <p className="text-slate-300 text-xs sm:text-sm max-w-2xl leading-relaxed break-keep">
               화면 우측 하단의 시트봇 AI는 단순한 챗봇이 아닙니다. 내 구글 시트 작업을 옆에서 지켜보며 코드를 작성해 주는 1:1 페어 프로그래머입니다.
             </p>
           </div>
@@ -618,7 +655,7 @@ export default function GuidePage() {
                 <Move className="w-4 h-4" />
                 <span>마우스 드래그 &amp; 8방향 크기 조절</span>
               </div>
-              <p className="text-slate-300 text-[11px] leading-relaxed">
+              <p className="text-slate-300 text-[11px] leading-relaxed break-keep">
                 상단 바를 잡고 원하는 위치로 이동하거나 테두리를 당겨 자유롭게 창 크기를 조절할 수 있으며, 설정한 위치와 크기는 브라우저에 자동 기억됩니다.
               </p>
             </div>
@@ -628,7 +665,7 @@ export default function GuidePage() {
                 <ShieldCheck className="w-4 h-4" />
                 <span>회원별 대화 내용 클라우드 영구 기억</span>
               </div>
-              <p className="text-slate-300 text-[11px] leading-relaxed">
+              <p className="text-slate-300 text-[11px] leading-relaxed break-keep">
                 로그인된 계정으로 과거 나눈 대화가 안전하게 영구 저장되어, 페이지를 새로고침(F5)하거나 다른 PC에서 접속해도 대화 맥락이 그대로 복원됩니다.
               </p>
             </div>
@@ -638,7 +675,7 @@ export default function GuidePage() {
                 <Coins className="w-4 h-4" />
                 <span>관리자(ADMIN) 전액 면제 &amp; 토큰 충전</span>
               </div>
-              <p className="text-slate-300 text-[11px] leading-relaxed">
+              <p className="text-slate-300 text-[11px] leading-relaxed break-keep">
                 관리자 계정은 대화 토큰이 무제한 무료로 제공되며, 일반 회원은 내 워크스페이스 요약 카드의 [토큰 충전] 버튼에서 1회성 선불형으로 부담 없이 이용할 수 있습니다.
               </p>
             </div>
@@ -648,8 +685,8 @@ export default function GuidePage() {
         {/* 추가 가이드 및 문의 배너 */}
         <div className="p-8 rounded-3xl bg-gradient-to-r from-amber-50 to-indigo-50 border border-amber-200/60 flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="space-y-2 text-center sm:text-left">
-            <h3 className="text-base font-black text-slate-900">더 궁금한 점이 있으신가요?</h3>
-            <p className="text-xs text-slate-600">
+            <h3 className="text-base font-black text-slate-900 break-keep">더 궁금한 점이 있으신가요?</h3>
+            <p className="text-xs text-slate-600 break-keep">
               우측 하단 <strong>시트봇 AI</strong>에게 실시간으로 질문하시거나, 1:1 고객 문의 게시판을 통해 언제든 운영팀의 지원을 받으세요!
             </p>
           </div>
@@ -667,6 +704,29 @@ export default function GuidePage() {
               1:1 운영팀 문의하기
             </Link>
           </div>
+        </div>
+
+        {/* 기업 전용 맞춤 경량 ERP 및 AX 구축 안내 배너 */}
+        <div className="p-8 sm:p-10 rounded-3xl bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 border border-teal-800/40 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
+          <div className="space-y-2 text-center md:text-left">
+            <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-teal-400/20 text-teal-300 text-[11px] font-bold border border-teal-400/30">
+              <Building2 className="w-3.5 h-3.5" />
+              <span>중소기업·소상공인 전용 턴키 구축</span>
+            </div>
+            <h3 className="text-lg sm:text-xl font-black break-keep">
+              직접 개발하기엔 전산 인력이 부족하신가요?
+            </h3>
+            <p className="text-xs text-slate-300 max-w-xl leading-relaxed break-keep">
+              사내 개발팀 없이도 <strong>1~2주 안에 대표님 회사 전용 경량 ERP / MES</strong>를 완벽히 구축해 드립니다. (정부지원금 최대 90% 매칭)
+            </p>
+          </div>
+          <Link
+            href="/enterprise"
+            className="px-6 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black rounded-xl transition-all shadow-md shrink-0 flex items-center gap-1.5 active:scale-95"
+          >
+            <span>기업 맞춤 AX 구축 상담 신청</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
         </div>
       </main>
     </div>

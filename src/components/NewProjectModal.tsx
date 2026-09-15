@@ -47,9 +47,10 @@ interface NewProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  initialSheetUrl?: string;
 }
 
-export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProjectModalProps) {
+export default function NewProjectModal({ isOpen, onClose, onSuccess, initialSheetUrl }: NewProjectModalProps) {
   // 생성 모드: NEW_SHEET (새 시트 자동 설계), EXCEL_UPLOAD (엑셀 업로드 변환), EXISTING_URL (기존 구글 시트 URL)
   const [sourceMode, setSourceMode] = useState<"NEW_SHEET" | "EXCEL_UPLOAD" | "EXISTING_URL">("NEW_SHEET");
 
@@ -57,6 +58,17 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [sheetUrl, setSheetUrl] = useState("");
   const [projectName, setProjectName] = useState("");
+
+  useEffect(() => {
+    if (initialSheetUrl && isOpen) {
+      if (initialSheetUrl === "NEW_SHEET" || initialSheetUrl.includes("spreadsheets/create")) {
+        setSourceMode("NEW_SHEET");
+      } else {
+        setSourceMode("EXISTING_URL");
+        setSheetUrl(initialSheetUrl);
+      }
+    }
+  }, [initialSheetUrl, isOpen]);
   const [isFetchingTitle, setIsFetchingTitle] = useState(false);
   const [autoDetectedTitle, setAutoDetectedTitle] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");

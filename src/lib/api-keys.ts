@@ -116,6 +116,31 @@ export async function verifyApiKey(apiKey: string): Promise<{
     return { valid: false, error: "유효하지 않거나 만료(해지)된 API 키입니다." };
   }
 
+  // 1-1. 회원 마스터(sheetbot_users) 상태 검증: 탈퇴(WITHDRAWN) 또는 정지(SUSPENDED) 시 T=0초 즉시 차단
+  let visitorSessionId = row.visitor_session_id || null;
+  if (row.user_email) {
+    try {
+      const userRes = await queryTable("sheetbot_users", {
+        filters: { email: row.user_email.toLowerCase().trim() },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+      const userRow = (userRes.rows || [])[0];
+      if (userRow) {
+        if (userRow.status === "WITHDRAWN" || userRow.status === "SUSPENDED" || userRow.deleted_at) {
+          return {
+            valid: false,
+            error: "탈퇴하였거나 이용이 일시 정지된 회원 계정입니다. (API 호출 즉시 차단)",
+          };
+        }
+        if (!visitorSessionId && userRow.visitor_session_id) {
+          visitorSessionId = userRow.visitor_session_id;
+        }
+      }
+    } catch (err: any) {
+      console.warn("[VerifyApiKey] Check user status note:", err.message);
+    }
+  }
+
   const now = new Date().toISOString();
 
   // 최근 사용 일시 비동기 갱신
@@ -128,22 +153,6 @@ export async function verifyApiKey(apiKey: string): Promise<{
     },
     { filters: { id: row.id } }
   ).catch((err) => console.warn("[VerifyApiKey] Update last_used_at warning:", err.message));
-
-  let visitorSessionId = row.visitor_session_id || null;
-
-  // 만약 API 키 레코드에 세션이 없으면 회원 마스터(sheetbot_users)에서 최신 세션 확인
-  if (!visitorSessionId && row.user_email) {
-    try {
-      const userRes = await queryTable("sheetbot_users", {
-        filters: { email: row.user_email.toLowerCase().trim() },
-        limit: 1,
-      }).catch(() => ({ rows: [] }));
-      const userRow = (userRes.rows || [])[0];
-      if (userRow && userRow.visitor_session_id) {
-        visitorSessionId = userRow.visitor_session_id;
-      }
-    } catch {}
-  }
 
   return {
     valid: true,
@@ -276,3 +285,39 @@ export async function regenerateUserApiKey(userEmail: string, keyName = "Default
     createdAt: now,
   };
 }
+
+/**
+ * 회원 탈퇴 시 해당 계정의 모든 활성 API 키를 T=0초에 즉시 영구 폐기(REVOKED 및 소프트 삭제)합니다.
+ * (Global Kill-Switch)
+ */
+export async function revokeAllUserApiKeys(userEmail: string): Promise<number> {
+  await setupDatabase();
+  const email = userEmail.toLowerCase().trim();
+  const now = new Date().toISOString();
+
+  const existingRes = await queryTable("sheetbot_user_api_keys", {
+    filters: { user_email: email },
+    limit: 100,
+  }).catch(() => ({ rows: [] }));
+
+  const activeExisting = (existingRes.rows || []).filter((r: any) => !r.deleted_at || r.status === "ACTIVE");
+  let revokedCount = 0;
+
+  for (const keyRow of activeExisting) {
+    await updateRows(
+      "sheetbot_user_api_keys",
+      {
+        status: "REVOKED",
+        deleted_at: now,
+        deleted_by: email,
+        updated_at: now,
+        updated_by: "withdraw_killswitch",
+      },
+      { filters: { id: keyRow.id } }
+    ).catch(() => null);
+    revokedCount++;
+  }
+
+  return revokedCount;
+}
+

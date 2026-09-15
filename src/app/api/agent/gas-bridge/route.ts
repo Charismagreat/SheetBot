@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { getCurrentVisitorSessionId, isCurrentUserAdmin } from "@/lib/auth";
 import {
   queryTable,
@@ -16,54 +16,129 @@ import { recordAiUsageLog } from "@/lib/ai-usage";
 import { ensureStandardManifest, generateSecureEgdeskConfig } from "@/lib/gas-manifest";
 
 /**
+ * 브릿지 토큰을 통해 프로젝트를 조회하고 삭제(소프트 삭제/PENDING_DELETE/TRASHED) 및 소유자 탈퇴 여부를 검증합니다.
+ * 차단 사유 발생 시 HTTP 410 Gone을 즉각 반환합니다.
+ */
+async function findAndValidateBridgeProject(token: string): Promise<{
+  project?: any;
+  errorResponse?: NextResponse;
+}> {
+  if (!token) {
+    return {
+      errorResponse: NextResponse.json(
+        { success: false, error: "토큰(?token=...)이 필요합니다." },
+        { status: 400 }
+      ),
+    };
+  }
+
+  let rawProject: any = null;
+  let targetProjectId = token;
+
+  if (token.startsWith("sec_")) {
+    const tokenRes = await queryTable("sheetbot_bridge_tokens", {
+      filters: { token },
+      limit: 1,
+    }).catch(() => ({ rows: [] }));
+
+    if (tokenRes.rows && tokenRes.rows.length > 0) {
+      const tokenRow = tokenRes.rows[0];
+      if (tokenRow.deleted_at) {
+        return {
+          errorResponse: NextResponse.json(
+            {
+              success: false,
+              code: "TOKEN_REVOKED",
+              error: "해지되었거나 만료된 브릿지 토큰입니다. (서비스 차단)",
+            },
+            { status: 410 }
+          ),
+        };
+      }
+      targetProjectId = tokenRow.project_id;
+    }
+  }
+
+  if (targetProjectId.startsWith("proj_")) {
+    const idRes = await queryTable("sheetbot_projects", {
+      filters: { id: targetProjectId },
+      limit: 1,
+    }).catch(() => ({ rows: [] }));
+    rawProject = (idRes.rows || []).find((r: any) => r.id === targetProjectId);
+  } else {
+    const allRes = await queryTable("sheetbot_projects", {
+      limit: 100,
+    }).catch(() => ({ rows: [] }));
+    rawProject = (allRes.rows || []).find((r: any) => r.bridge_token === token || r.id === token);
+  }
+
+  if (!rawProject) {
+    return {
+      errorResponse: NextResponse.json(
+        { success: false, error: "유효하지 않거나 존재하지 않는 브릿지 토큰입니다." },
+        { status: 404 }
+      ),
+    };
+  }
+
+  // 1. 프로젝트 소프트 삭제 및 유예 상태(PENDING_DELETE, TRASHED) 검증 -> HTTP 410 Gone 선제 거부
+  if (
+    rawProject.deleted_at ||
+    rawProject.status === "PENDING_DELETE" ||
+    rawProject.status === "TRASHED" ||
+    rawProject.status === "REVOKED"
+  ) {
+    return {
+      errorResponse: NextResponse.json(
+        {
+          success: false,
+          code: "PROJECT_REVOKED",
+          error: "삭제된 프로젝트이므로 서비스가 즉시 차단되었습니다. 시트봇 대시보드에서 프로젝트를 복원하세요.",
+        },
+        { status: 410 }
+      ),
+    };
+  }
+
+  // 2. 소유자 회원 탈퇴 상태(WITHDRAWN, SUSPENDED) 검증 -> HTTP 410 Gone 즉각 차단
+  if (rawProject.user_email) {
+    try {
+      const userRes = await queryTable("sheetbot_users", {
+        filters: { email: rawProject.user_email.toLowerCase().trim() },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+      const userRow = (userRes.rows || [])[0];
+      if (userRow && (userRow.status === "WITHDRAWN" || userRow.status === "SUSPENDED" || userRow.deleted_at)) {
+        return {
+          errorResponse: NextResponse.json(
+            {
+              success: false,
+              code: "ACCOUNT_WITHDRAWN",
+              error: "탈퇴하였거나 이용 정지된 회원 계정의 프로젝트이므로 서비스가 영구 차단되었습니다.",
+            },
+            { status: 410 }
+          ),
+        };
+      }
+    } catch (err: any) {
+      console.warn("[Bridge Validation] User status check error:", err.message);
+    }
+  }
+
+  return { project: rawProject };
+}
+
+/**
  * 1. GET: 외부 AI 에이전트가 스프레드시트의 탭, 헤더(10행 등), 기존 코드 및 코딩 지침 조회
  */
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     await setupDatabase();
     const { searchParams } = new URL(request.url);
-    const token = searchParams.get("token");
+    const token = searchParams.get("token") || "";
 
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: "토큰(?token=...)이 필요합니다." },
-        { status: 400 }
-      );
-    }
-
-    // 프로젝트 조회 (id 또는 bridge_token 엄격 매칭)
-    let project = null;
-    let targetProjectId = token;
-
-    if (token.startsWith("sec_")) {
-      const tokenRes = await queryTable("sheetbot_bridge_tokens", {
-        filters: { token },
-        limit: 1,
-      }).catch(() => ({ rows: [] }));
-      if (tokenRes.rows && tokenRes.rows.length > 0) {
-        targetProjectId = tokenRes.rows[0].project_id;
-      }
-    }
-
-    if (targetProjectId.startsWith("proj_")) {
-      const idRes = await queryTable("sheetbot_projects", {
-        filters: { id: targetProjectId },
-        limit: 1,
-      }).catch(() => ({ rows: [] }));
-      project = (idRes.rows || []).find((r: any) => r.id === targetProjectId && !r.deleted_at);
-    } else {
-      const allRes = await queryTable("sheetbot_projects", {
-        limit: 100,
-      }).catch(() => ({ rows: [] }));
-      project = (allRes.rows || []).find((r: any) => (r.bridge_token === token || r.id === token) && !r.deleted_at);
-    }
-
-    if (!project) {
-      return NextResponse.json(
-        { success: false, error: "유효하지 않거나 만료된 브릿지 토큰입니다." },
-        { status: 404 }
-      );
-    }
+    const { project, errorResponse } = await findAndValidateBridgeProject(token);
+    if (errorResponse) return errorResponse;
 
     const spreadsheetId = project.spreadsheet_id;
     let sheetsContext: any = null;
@@ -207,39 +282,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // 프로젝트 조회 (id 또는 bridge_token 엄격 매칭)
-    let project = null;
-    let targetProjectId = token;
-
-    if (token.startsWith("sec_")) {
-      const tokenRes = await queryTable("sheetbot_bridge_tokens", {
-        filters: { token },
-        limit: 1,
-      }).catch(() => ({ rows: [] }));
-      if (tokenRes.rows && tokenRes.rows.length > 0) {
-        targetProjectId = tokenRes.rows[0].project_id;
-      }
-    }
-
-    if (targetProjectId.startsWith("proj_")) {
-      const idRes = await queryTable("sheetbot_projects", {
-        filters: { id: targetProjectId },
-        limit: 1,
-      }).catch(() => ({ rows: [] }));
-      project = (idRes.rows || []).find((r: any) => r.id === targetProjectId && !r.deleted_at);
-    } else {
-      const allRes = await queryTable("sheetbot_projects", {
-        limit: 100,
-      }).catch(() => ({ rows: [] }));
-      project = (allRes.rows || []).find((r: any) => (r.bridge_token === token || r.id === token) && !r.deleted_at);
-    }
-
-    if (!project) {
-      return NextResponse.json(
-        { success: false, error: "유효하지 않거나 만료된 브릿지 토큰입니다." },
-        { status: 404 }
-      );
-    }
+    // 0. 프로젝트 검증 및 410 Gone 차단 검사
+    const { project, errorResponse } = await findAndValidateBridgeProject(token || "");
+    if (errorResponse) return errorResponse;
 
     // 0. 관리자 설정 토큰 차감량 확인 및 사전 잔액 검증
     const aiSettings = await getAiModelSettings();

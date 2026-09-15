@@ -9,30 +9,105 @@ import {
   Bot, Plus, FileCode, Clock, RefreshCw, CheckCircle2, AlertTriangle,
   X, ArrowRight, ExternalLink, Sparkles, Layers, ShieldCheck, Trash2, Smartphone, Edit3,
   Globe, Star, Coins, Activity, Cpu, Settings, FileSpreadsheet, Copy, Briefcase, Send,
-  KeyRound
+  KeyRound, LogOut
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import nextDynamic from "next/dynamic";
 
 const NewProjectModal = nextDynamic(() => import("@/components/NewProjectModal"));
+const QuickWrapSuccessModal = nextDynamic(() => import("@/components/QuickWrapSuccessModal"));
 const EditProjectPromptModal = nextDynamic(() => import("@/components/EditProjectPromptModal"));
 const ScheduleManager = nextDynamic(() => import("@/components/ScheduleManager"));
 const PromptGalleryModal = nextDynamic(() => import("@/components/PromptGalleryModal"));
 const FeedbackModal = nextDynamic(() => import("@/components/FeedbackModal"));
 const ApiKeyModal = nextDynamic(() => import("@/components/ApiKeyModal"));
+const WithdrawModal = nextDynamic(() => import("@/components/WithdrawModal"));
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
   const [projects, setProjects] = useState<any[]>([]);
+  const [trashedProjects, setTrashedProjects] = useState<any[]>([]);
+  const [showTrashed, setShowTrashed] = useState(false);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
+  const [urlSheetParam, setUrlSheetParam] = useState<string>("");
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<any | null>(null);
   const [alertMessage, setAlertMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [copyingBridgeProjectId, setCopyingBridgeProjectId] = useState<string | null>(null);
+
+  // 1초 래핑 전용 초심플 모달 상태
+  const [quickWrapData, setQuickWrapData] = useState<{
+    isOpen: boolean;
+    sheetUrl: string;
+    bridgeUrl: string;
+    promptTemplate: string;
+    projectName: string;
+    isExisting?: boolean;
+  }>({
+    isOpen: false,
+    sheetUrl: "",
+    bridgeUrl: "",
+    promptTemplate: "",
+    projectName: "",
+    isExisting: false,
+  });
+
+  // 랜딩페이지에서 ?sheetUrl=... 또는 localStorage로 유입된 경우 1초 래핑 즉시 실행 및 전용 모달 오픈
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      let sheetUrl = params.get("sheetUrl");
+      if (!sheetUrl) {
+        try {
+          sheetUrl = localStorage.getItem("pending_sheet_url");
+        } catch (e) {}
+      }
+
+      if (sheetUrl) {
+        try {
+          localStorage.removeItem("pending_sheet_url");
+          window.history.replaceState({}, "", "/dashboard");
+        } catch (e) {}
+
+        // 백엔드에 1초 래핑 등록 요청 후 심플 전용 화면 팝업
+        (async () => {
+          try {
+            const res = await apiFetch("/api/projects/quick-wrap", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sheetUrl }),
+            });
+            const data = await res.json();
+            if (data.success) {
+              setQuickWrapData({
+                isOpen: true,
+                sheetUrl: data.sheetUrl || sheetUrl,
+                bridgeUrl: data.bridgeUrl,
+                promptTemplate: data.promptTemplate,
+                projectName: data.projectName || "시트봇 자동화 프로젝트",
+                isExisting: Boolean(data.isExisting),
+              });
+              // 프로젝트 목록 리로드
+              void fetchData();
+            } else {
+              // 폴백: 일반 모달로 열기
+              setUrlSheetParam(sheetUrl);
+              setIsNewProjectModalOpen(true);
+            }
+          } catch (err) {
+            console.error("1초 래핑 처리 오류:", err);
+            setUrlSheetParam(sheetUrl);
+            setIsNewProjectModalOpen(true);
+          }
+        })();
+      }
+    }
+  }, []);
 
   // 요약 카드용 실시간 계정 자원 상태
   const [wallet, setWallet] = useState<{
@@ -225,8 +300,9 @@ ${recruitForm.introduction}
     try {
       const now = Date.now();
       const userParam = session?.user?.email ? `&userEmail=${encodeURIComponent(session.user.email)}` : "";
-      const [projRes, schedRes, walletRes, usageRes, devRes, ruleRes, settingsRes] = await Promise.all([
+      const [projRes, trashedProjRes, schedRes, walletRes, usageRes, devRes, ruleRes, settingsRes] = await Promise.all([
         apiFetch(`/api/projects?_t=${now}`).then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/projects?includeTrashed=true&_t=${now}`).then((r) => r.json()).catch(() => ({})),
         apiFetch(`/api/schedules?_t=${now}`).then((r) => r.json()).catch(() => ({})),
         apiFetch(`/api/wallet?_t=${now}`).then((r) => r.json()).catch(() => ({})),
         apiFetch(`/api/admin/ai-usage?range=month&limit=1${userParam}&_t=${now}`).then((r) => r.json()).catch(() => ({})),
@@ -236,6 +312,7 @@ ${recruitForm.introduction}
       ]);
 
       if (projRes?.success) setProjects(projRes.projects || []);
+      if (trashedProjRes?.success) setTrashedProjects(trashedProjRes.projects || []);
       if (schedRes?.success) setSchedules(schedRes.schedules || []);
       if (walletRes?.success && walletRes.wallet) setWallet(walletRes.wallet);
       if (usageRes?.success) {
@@ -462,16 +539,45 @@ ${recruitForm.introduction}
   };
 
   const handleDeleteProject = async (p: any) => {
-    if (!window.confirm(`'${p.name}' 프로젝트를 삭제하시겠습니까?`)) return;
+    if (
+      !window.confirm(
+        `'${p.name}' 프로젝트를 삭제하시겠습니까?\n\n[안내]\n1. 삭제 즉시 구글 시트 및 외부 AI(안티그라비티 등) 연동이 즉시 차단(HTTP 410)됩니다.\n2. 삭제 후 14일 복구 유예 기간 내에는 휴지통에서 언제든 1클릭 복원할 수 있습니다.`
+      )
+    ) {
+      return;
+    }
 
     try {
       const res = await apiFetch(`/api/projects?id=${p.id}`, { method: "DELETE" });
       const data = await res.json();
       if (data.success) {
-        showAlert({ type: "success", text: "프로젝트가 성공적으로 삭제되었습니다." });
+        showAlert({ type: "success", text: "프로젝트가 성공적으로 삭제되었습니다. (14일 내 휴지통에서 복원 가능)" });
         fetchData();
       } else {
         showAlert({ type: "error", text: data.error || "삭제 실패" });
+      }
+    } catch (err: any) {
+      showAlert({ type: "error", text: err.message || "통신 오류" });
+    }
+  };
+
+  const handleRestoreProject = async (p: any) => {
+    if (!window.confirm(`'${p.name}' 프로젝트를 복원하시겠습니까?\n복원 즉시 외부 AI 에이전트 연동 및 서비스가 다시 활성화됩니다.`)) {
+      return;
+    }
+
+    try {
+      const res = await apiFetch("/api/projects", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: p.id, restore: true }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showAlert({ type: "success", text: "프로젝트가 성공적으로 복원되었습니다!" });
+        fetchData();
+      } else {
+        showAlert({ type: "error", text: data.error || "복원 실패" });
       }
     } catch (err: any) {
       showAlert({ type: "error", text: err.message || "통신 오류" });
@@ -562,6 +668,16 @@ ${recruitForm.introduction}
               >
                 <KeyRound className="w-3.5 h-3.5 text-violet-200" />
                 <span>에이전트 API 키</span>
+              </button>
+
+              <button
+                onClick={() => setIsWithdrawModalOpen(true)}
+                className="px-2.5 py-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 text-xs font-semibold rounded-xl flex items-center gap-1 transition-all cursor-pointer border border-transparent hover:border-rose-200"
+                title="회원 탈퇴 및 서비스 즉각 차단"
+                data-easybot-hint="회원 탈퇴: 계정을 탈퇴하고 모든 API 키, 연동 주소, 스케줄을 즉시 100% 영구 차단합니다."
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden xl:inline">회원 탈퇴</span>
               </button>
 
               <button
@@ -860,13 +976,43 @@ ${recruitForm.introduction}
 
         {/* 2. 연동된 Apps Script 프로젝트 목록 */}
         <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
-              <FileCode className="w-4 h-4 text-emerald-600" />
-              <span>연동된 Apps Script 프로젝트 목록</span>
-            </h4>
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                <FileCode className="w-4 h-4 text-emerald-600" />
+                <span>Apps Script 프로젝트</span>
+              </h4>
 
-            <div className="flex items-center gap-2">
+              {/* 활성 vs 휴지통(14일 유예) 탭 스위처 */}
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-xl text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setShowTrashed(false)}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    !showTrashed
+                      ? "bg-white text-emerald-800 shadow-2xs"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  활성 ({projects.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowTrashed(true)}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                    showTrashed
+                      ? "bg-white text-rose-700 shadow-2xs"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                  title="삭제된 프로젝트 (14일 복구 유예)"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>휴지통 ({trashedProjects.length})</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
               <Link
                 href="/marketplace"
                 target="_blank"
@@ -912,24 +1058,86 @@ ${recruitForm.introduction}
                 <span>🤝 FDE 파트너 모집</span>
               </button>
 
-              <button
-                onClick={() => setIsNewProjectModalOpen(true)}
-                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
-                data-easybot-hint="새 프로젝트 추가: 새 구글 스프레드시트 URL을 바인딩하고 AI 프롬프트로 Apps Script를 자동 생성합니다."
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>새 프로젝트 추가</span>
-              </button>
+              {!showTrashed && (
+                <button
+                  onClick={() => setIsNewProjectModalOpen(true)}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
+                  data-easybot-hint="새 프로젝트 추가: 새 구글 스프레드시트 URL을 바인딩하고 AI 프롬프트로 Apps Script를 자동 생성합니다."
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>새 프로젝트 추가</span>
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* 새 프로젝트 추가 점선 카드 */}
-            <div
-              onClick={() => setIsNewProjectModalOpen(true)}
-              className="p-5 rounded-2xl border-2 border-dashed border-emerald-200/80 bg-emerald-50/40 hover:bg-emerald-50 hover:border-emerald-400/90 transition-all cursor-pointer flex flex-col justify-between gap-3 group text-left min-h-[110px]"
-              data-easybot-hint="새 프로젝트 생성 카드: 클릭하여 새 구글 시트 자동화 프로젝트 마법사를 시작합니다."
-            >
+          {showTrashed ? (
+            trashedProjects.length === 0 ? (
+              <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-2">
+                <Trash2 className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="text-xs font-bold text-slate-600">휴지통에 보관된 삭제 프로젝트가 없습니다.</p>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  삭제된 프로젝트는 방치된 트리거 차단(HTTP 410) 후 14일간 유예 보관되며 언제든 복원할 수 있습니다.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {trashedProjects.map((p) => {
+                  const deletedTime = p.deleted_at ? new Date(p.deleted_at).getTime() : Date.now();
+                  const daysLeft = Math.max(0, Math.ceil(14 - (Date.now() - deletedTime) / (1000 * 60 * 60 * 24)));
+
+                  return (
+                    <div
+                      key={p.id}
+                      className="p-4 rounded-2xl border border-rose-200 bg-rose-50/20 shadow-xs flex flex-col justify-between gap-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1 flex-1 min-w-0">
+                          <h5 className="font-bold text-xs text-slate-800 truncate" title={p.name}>
+                            {p.name}
+                          </h5>
+                          <div className="text-[10px] text-slate-400 font-mono truncate">
+                            ID: {p.scriptId || p.gasProjectId || p.id}
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 bg-rose-100 text-rose-800 text-[10px] font-bold rounded-md flex items-center gap-1 shrink-0">
+                          <span>차단됨 (D-{daysLeft})</span>
+                        </span>
+                      </div>
+
+                      <div className="p-2.5 bg-white rounded-xl border border-rose-100 text-[11px] text-slate-600 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-rose-700">⚠️ 외부 호출 즉시 차단 (HTTP 410)</span>
+                          <span className="text-[10px] text-slate-400">유예 기간: {daysLeft}일 남음</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 leading-snug">
+                          삭제되어 외부 AI 및 구글 시트에서의 호출이 차단된 상태입니다. 복원 시 모든 연동이 다시 활성화됩니다.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-1 border-t border-rose-100/60">
+                        <button
+                          type="button"
+                          onClick={() => handleRestoreProject(p)}
+                          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>프로젝트 복원하기</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* 새 프로젝트 추가 점선 카드 */}
+              <div
+                onClick={() => setIsNewProjectModalOpen(true)}
+                className="p-5 rounded-2xl border-2 border-dashed border-emerald-200/80 bg-emerald-50/40 hover:bg-emerald-50 hover:border-emerald-400/90 transition-all cursor-pointer flex flex-col justify-between gap-3 group text-left min-h-[110px]"
+                data-easybot-hint="새 프로젝트 생성 카드: 클릭하여 새 구글 시트 자동화 프로젝트 마법사를 시작합니다."
+              >
               <div className="flex items-start gap-3">
                 <div className="p-2 bg-white text-emerald-600 rounded-xl shadow-xs group-hover:scale-110 group-hover:bg-emerald-600 group-hover:text-white transition-all shrink-0">
                   <Plus className="w-4 h-4" />
@@ -997,10 +1205,17 @@ ${recruitForm.introduction}
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-md flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        <span>연결 완료</span>
-                      </span>
+                      {p.scriptId || p.gasProjectId ? (
+                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-md flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          <span>연결 완료</span>
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-violet-100 text-violet-800 text-[10px] font-bold rounded-md flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" />
+                          <span>래핑 완료</span>
+                        </span>
+                      )}
 
                       <button
                         onClick={() => handleDeleteProject(p)}
@@ -1037,7 +1252,7 @@ ${recruitForm.introduction}
                         </a>
                       )}
 
-                      {/* 스크립트 편집기 직접 열기 버튼 */}
+                      {/* 스크립트 편집기 직접 열기 버튼 (미생성 시 '코드 주입 대기 중' 안내 버튼 제공) */}
                       {(() => {
                         const editorUrl =
                           p.scriptUrl ||
@@ -1054,7 +1269,18 @@ ${recruitForm.introduction}
                             <span>스크립트 편집기</span>
                             <ExternalLink className="w-3 h-3 text-indigo-600/70 shrink-0" />
                           </a>
-                        ) : null;
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleCopyAgentBridgeUrl(p)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 hover:bg-violet-50 text-slate-500 hover:text-violet-700 font-bold rounded-lg transition-all border border-slate-200/80 hover:border-violet-200 shadow-2xs whitespace-nowrap text-xs cursor-pointer group"
+                            title="안티그라비티/AI에 래핑 주소를 전달해 첫 코드를 주입하면 스크립트 편집기가 활성화됩니다. (클릭 시 래핑 주소 복사)"
+                            data-easybot-hint="코드 주입 대기: 래핑 주소는 발급되었으나 아직 AI가 첫 코드를 주입하기 전 상태입니다. 클릭하면 AI 연동 주소가 복사됩니다."
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-amber-500 group-hover:scale-110 transition-transform shrink-0" />
+                            <span>코드 주입 대기 중</span>
+                          </button>
+                        );
                       })()}
 
                       {/* 🌐 공개 웹페이지 바로가기 (Web App인 경우) */}
@@ -1135,6 +1361,7 @@ ${recruitForm.introduction}
             );
           })}
         </div>
+      )}
 
           {/* 전문가(FDE) 맞춤 제작 안내 슬림 배너 */}
           <div className="pt-3 mt-1 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs bg-gradient-to-r from-indigo-50/60 via-purple-50/40 to-slate-50 p-3.5 rounded-2xl border border-indigo-100/80">
@@ -1170,10 +1397,25 @@ ${recruitForm.introduction}
         />
       </main>
 
+      {/* 🌟 1초 래핑 전용 초심플 안티그라비티 연동 모달 */}
+      <QuickWrapSuccessModal
+        isOpen={quickWrapData.isOpen}
+        sheetUrl={quickWrapData.sheetUrl}
+        bridgeUrl={quickWrapData.bridgeUrl}
+        promptTemplate={quickWrapData.promptTemplate}
+        projectName={quickWrapData.projectName}
+        isExisting={quickWrapData.isExisting}
+        onClose={() => setQuickWrapData((prev) => ({ ...prev, isOpen: false }))}
+      />
+
       {/* 새 프로젝트 생성 모달 */}
       <NewProjectModal
         isOpen={isNewProjectModalOpen}
-        onClose={() => setIsNewProjectModalOpen(false)}
+        initialSheetUrl={urlSheetParam || undefined}
+        onClose={() => {
+          setIsNewProjectModalOpen(false);
+          setUrlSheetParam("");
+        }}
         onSuccess={() => {
           fetchData();
           showAlert({ type: "success", text: "새 Apps Script 프로젝트가 성공적으로 생성되었습니다!" });
@@ -1674,6 +1916,13 @@ ${recruitForm.introduction}
       <ApiKeyModal
         isOpen={isApiKeyModalOpen}
         onClose={() => setIsApiKeyModalOpen(false)}
+      />
+
+      {/* 회원 탈퇴 (전역 킬스위치) 모달 */}
+      <WithdrawModal
+        isOpen={isWithdrawModalOpen}
+        onClose={() => setIsWithdrawModalOpen(false)}
+        userEmail={session?.user?.email || ""}
       />
     </div>
   );

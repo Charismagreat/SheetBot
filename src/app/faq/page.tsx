@@ -4,7 +4,7 @@ import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
-import { HelpCircle, ChevronDown, Sparkles, MessageSquare, ArrowRight, RefreshCw, Search, X } from "lucide-react";
+import { HelpCircle, ChevronDown, Sparkles, MessageSquare, ArrowRight, RefreshCw, Search, X, Building2 } from "lucide-react";
 import { DEFAULT_FAQS } from "@/lib/default-faqs";
 
 interface FaqItem {
@@ -68,7 +68,7 @@ export default function FaqPage() {
             <HelpCircle className="w-3.5 h-3.5 text-indigo-600" />
             <span>자주 묻는 질문</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight break-keep">
             자주 묻는 질문 (FAQ)
           </h1>
         </div>
@@ -209,8 +209,8 @@ export default function FaqPage() {
               <Sparkles className="w-3.5 h-3.5" />
               <span>원하는 답변을 찾지 못하셨나요?</span>
             </div>
-            <h3 className="text-xl font-bold">1:1 고객센터로 직접 문의해 보세요</h3>
-            <p className="text-xs text-indigo-200/80">
+            <h3 className="text-xl font-bold break-keep">1:1 고객센터로 직접 문의해 보세요</h3>
+            <p className="text-xs text-indigo-200/80 break-keep">
               자동화 구축 에러, 결제 영수증 처리, 맞춤형 기능 요청 등 전문 매니저가 친절하게 안내해 드립니다.
             </p>
           </div>
@@ -221,6 +221,29 @@ export default function FaqPage() {
             <MessageSquare className="w-4 h-4 text-indigo-600" />
             <span>1:1 문의 남기기</span>
             <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
+          </Link>
+        </div>
+
+        {/* 기업 맞춤형 경량 ERP & AX 구축 안내 배너 */}
+        <div className="p-8 sm:p-10 rounded-3xl bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 border border-teal-800/40 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
+          <div className="space-y-2 text-center md:text-left">
+            <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-teal-400/20 text-teal-300 text-[11px] font-bold border border-teal-400/30">
+              <Building2 className="w-3.5 h-3.5" />
+              <span>중소기업·소상공인 맞춤 턴키 구축</span>
+            </div>
+            <h3 className="text-lg sm:text-xl font-black break-keep">
+              사내 전산팀 없이도 전사 AX 전환 &amp; 경량 ERP 구축 가능!
+            </h3>
+            <p className="text-xs text-slate-300 max-w-xl leading-relaxed break-keep">
+              기존 엑셀 장부 그대로 1~2주 안에 완성해 드립니다. 정부지원금 80~90% 매칭과 무료 진단을 받아보세요.
+            </p>
+          </div>
+          <Link
+            href="/enterprise"
+            className="px-6 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black rounded-xl transition-all shadow-md shrink-0 flex items-center gap-1.5 active:scale-95"
+          >
+            <span>기업 맞춤 AX 구축 상담 신청</span>
+            <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
       </main>
