@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
@@ -81,7 +82,7 @@ export default function EnterprisePage() {
 
     try {
       setLoading(true);
-      const res = await fetch("/api/enterprise/inquiry", {
+      const res = await apiFetch("/api/enterprise/inquiry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
