@@ -63,6 +63,23 @@ export async function POST(req: NextRequest) {
 
     await insertRows("sheetbot_inquiries", [newRow]);
 
+    // 백그라운드 AI 추천 답변 초안 비동기 사전 생성
+    try {
+      const { generateAndSaveAiDraftAsync } = await import("@/lib/ai-draft-helper");
+      const isFdeApp = newRow.category === "FDE_APPLICATION" || newRow.title.includes("파트너 지원");
+      const isFdeReq = newRow.category === "FDE_REQUEST" || newRow.title.includes("맞춤 구축 의뢰");
+
+      generateAndSaveAiDraftAsync("sheetbot_inquiries", newId, {
+        type: isFdeApp ? "FDE_APPLICATION" : isFdeReq ? "FDE_REQUEST" : "GENERAL",
+        contactName: newRow.user_name,
+        userEmail: newRow.user_email,
+        title: newRow.title,
+        content: newRow.content,
+      });
+    } catch (e: any) {
+      console.warn("[Inquiries API] Failed to trigger background AI draft:", e.message);
+    }
+
     // 알림 발송 통합 처리 (스마트 발송 규칙 우선 실행, 미매칭 시 기본 설정 자동 폴백)
     executeSmartDispatchRules("inquiry", {
       userEmail,

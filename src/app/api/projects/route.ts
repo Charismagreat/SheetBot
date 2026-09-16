@@ -33,6 +33,8 @@ export interface SheetBotProject {
   status: "ACTIVE" | "TRASHED";
   created_at: string;
   updated_at: string;
+  createdAt?: string;
+  updatedAt?: string;
   deleted_at?: string | null;
 }
 
@@ -81,6 +83,8 @@ function mapRowToProject(row: any): SheetBotProject {
     status: row.status || "ACTIVE",
     created_at: row.created_at || "",
     updated_at: row.updated_at || "",
+    createdAt: row.created_at || "",
+    updatedAt: row.updated_at || "",
     deleted_at: row.deleted_at || null,
   };
 }

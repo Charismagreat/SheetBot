@@ -342,11 +342,24 @@ export async function setupDatabase(force = false): Promise<void> {
         { name: 'content', type: 'TEXT', notNull: true },
         { name: 'status', type: 'TEXT' }, // 'PENDING', 'ANSWERED'
         { name: 'answer', type: 'TEXT' },
+        { name: 'ai_draft', type: 'TEXT' }, // AI가 사전 작성한 추천 답변 초안
+        { name: 'ai_score', type: 'TEXT' }, // AI 리드 스코어링 (Tier S/A/B, 수주확률, 예상견적)
+        { name: 'ai_company_analysis', type: 'TEXT' }, // AI 기업 분석 및 정부지원금 매칭 요약
         { name: 'answered_at', type: 'TEXT' },
         { name: 'created_at', type: 'TEXT' },
       ],
       { tableName: 'sheetbot_inquiries' }
     );
+
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_inquiries ADD COLUMN ai_draft TEXT;`);
+    } catch {}
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_inquiries ADD COLUMN ai_score TEXT;`);
+    } catch {}
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_inquiries ADD COLUMN ai_company_analysis TEXT;`);
+    } catch {}
 
     // 9. sheetbot_reviews 테이블 생성 (사용 후기 및 평점 대장)
     await safeCreateTable(
@@ -561,12 +574,41 @@ export async function setupDatabase(force = false): Promise<void> {
         { name: 'industry', type: 'TEXT' },
         { name: 'target_areas', type: 'TEXT' },
         { name: 'use_voucher', type: 'TEXT' },
+        { name: 'biz_number', type: 'TEXT' }, // 사업자등록번호 (선택)
+        { name: 'website_url', type: 'TEXT' }, // 회사 웹사이트 / 쇼핑몰 URL (선택)
+        { name: 'candidate_profiles', type: 'TEXT' }, // 동명/유사 공공데이터 기업 후보군 JSON
         { name: 'content', type: 'TEXT' },
-        { name: 'status', type: 'TEXT' }, // 'PENDING', 'CONTACTED', 'PROPOSED', 'CLOSED'
+        { name: 'status', type: 'TEXT' }, // 'PENDING', 'CONTACTED', 'PROPOSED', 'CLOSED', 'ANSWERED'
+        { name: 'answer', type: 'TEXT' }, // 관리자 상담 메모 및 회신 기록
+        { name: 'ai_draft', type: 'TEXT' }, // AI가 사전 작성한 기업 맞춤 AX 상담/견적 초안
+        { name: 'ai_score', type: 'TEXT' }, // AI 리드 스코어링 (Tier S/A/B, 수주확률, 예상견적)
+        { name: 'ai_company_analysis', type: 'TEXT' }, // AI 기업 배경 및 정부지원사업 매칭 요약
         { name: 'created_at', type: 'TEXT' },
       ],
       { tableName: 'sheetbot_enterprise_inquiries' }
     );
+
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_enterprise_inquiries ADD COLUMN answer TEXT;`);
+    } catch {}
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_enterprise_inquiries ADD COLUMN ai_draft TEXT;`);
+    } catch {}
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_enterprise_inquiries ADD COLUMN ai_score TEXT;`);
+    } catch {}
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_enterprise_inquiries ADD COLUMN ai_company_analysis TEXT;`);
+    } catch {}
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_enterprise_inquiries ADD COLUMN biz_number TEXT;`);
+    } catch {}
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_enterprise_inquiries ADD COLUMN website_url TEXT;`);
+    } catch {}
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_enterprise_inquiries ADD COLUMN candidate_profiles TEXT;`);
+    } catch {}
 
     // 21. 기본 추천 프롬프트 시딩
     await seedDefaultPromptTemplates();

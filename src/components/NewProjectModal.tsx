@@ -41,7 +41,6 @@ import {
   VISITOR_WORKSPACE_SCOPES,
   VISITOR_GOOGLE_OAUTH_SCOPES,
 } from "@/egdesk-visitor-google";
-import PromptGalleryModal from "./PromptGalleryModal";
 
 interface NewProjectModalProps {
   isOpen: boolean;
@@ -97,8 +96,6 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
   const [autoCreatedSheet, setAutoCreatedSheet] = useState<{ id: string; url: string } | null>(null);
 
-  // 추천 프롬프트 갤러리 모달 상태
-  const [showPromptGallery, setShowPromptGallery] = useState(false);
 
   // 기존 Apps Script 안전 감지 및 보존(Merge) / 덮어쓰기(Overwrite) 상태
   const [isDetectingGas, setIsDetectingGas] = useState(false);
@@ -1472,14 +1469,6 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
             >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-slate-400 block">⚡ 추천 프롬프트 빠른 채우기:</span>
-                <button
-                  type="button"
-                  onClick={() => setShowPromptGallery(true)}
-                  className="text-[11px] font-extrabold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/80 px-2.5 py-0.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                >
-                  <Sparkles className="w-3 h-3 text-emerald-600" />
-                  <span>✨ 실무 추천 프롬프트 갤러리 둘러보기 ↗</span>
-                </button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                 <button
@@ -2289,18 +2278,6 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
         )}
       </div>
 
-      {/* 추천 프롬프트 갤러리 모달 */}
-      <PromptGalleryModal
-        isOpen={showPromptGallery}
-        onClose={() => setShowPromptGallery(false)}
-        onSelectPrompt={(tpl) => {
-          setPrompt(tpl.prompt_text);
-          if (!projectName) {
-            setProjectName(tpl.title);
-          }
-          setShowPromptGallery(false);
-        }}
-      />
     </div>
   );
 }

@@ -18,6 +18,10 @@ import {
   Smartphone,
   Radio,
   Wand2,
+  TrendingUp,
+  Award,
+  Coins,
+  Clock,
 } from "lucide-react";
 import { DEFAULT_FOOTER, FooterInfo } from "@/lib/default-footer";
 import { DEFAULT_SMS_SETTINGS, AdminSmsSettings } from "@/lib/admin-sms-types";
@@ -616,7 +620,7 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // 통계 계산
+  // 플랫폼 기본 통계 계산
   const totalUsersCount = users.length;
   const proUsersCount = users.filter((u) => u.tier === "PRO" || u.tier === "ENTERPRISE").length;
   const pendingInquiriesCount = inquiries.filter((i) => i.status === "PENDING").length;
@@ -624,6 +628,20 @@ export default function AdminDashboardPage() {
     ? (reviews.reduce((acc, r) => acc + (Number(r.rating) || 5), 0) / reviews.length).toFixed(1)
     : "5.0";
   const requestedTaxCount = taxInvoices.filter((t) => t.status === "REQUESTED").length;
+
+  // Enterprise AX 비즈니스 & 세일즈 파이프라인 통계 계산
+  const enterpriseInquiries = inquiries.filter(
+    (i) => i.source === "ENTERPRISE_INQUIRY" || i.category === "ENTERPRISE_AX"
+  );
+  const tierSCount = enterpriseInquiries.filter((i) => i.ai_score?.tier === "S").length;
+  const tierACount = enterpriseInquiries.filter((i) => i.ai_score?.tier === "A").length;
+  const highTierCount = tierSCount + tierACount;
+  const voucherMatchedCount = enterpriseInquiries.filter(
+    (i) => i.ai_company_analysis?.matchedVouchers && i.ai_company_analysis.matchedVouchers.length > 0
+  ).length;
+  const mfgInquiriesCount = enterpriseInquiries.filter(
+    (i) => i.industry && /제조|생산|가공|조명/.test(i.industry)
+  ).length;
 
   // 관리자 권한 체크 중일 때
   if (isAdmin === null) {
@@ -747,6 +765,126 @@ export default function AdminDashboardPage() {
             <div className="text-xl sm:text-2xl font-black text-slate-900">
               {requestedTaxCount}
               <span className="text-xs font-normal text-slate-400 ml-1">/ {taxInvoices.length}건</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 🚀 Enterprise AX 비즈니스 & 수주 파이프라인 지표 (신규 추가) */}
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between gap-2 px-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-emerald-600" />
+                <span>Enterprise AX 세일즈 &amp; 수주 파이프라인</span>
+              </span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold border border-emerald-300">
+                B2B 경영 지표
+              </span>
+            </div>
+            <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
+              기업 맞춤 AX 견적 의뢰, AI 리드 스코어링(Tier S/A), 정부 바우처 매칭 현황 실시간 통제
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            {/* 1. 기업 AX 견적 접수 */}
+            <div
+              onClick={() => setActiveTab("inquiries")}
+              className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-white to-slate-50 border border-slate-200/90 shadow-xs space-y-2 hover:border-emerald-400 hover:shadow-md transition-all cursor-pointer group"
+            >
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-xs font-bold text-slate-600 group-hover:text-emerald-700 transition-colors">
+                  기업 AX 견적 접수
+                </span>
+                <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100">
+                  <Building2 className="w-4 h-4" />
+                </div>
+              </div>
+              <div>
+                <div className="text-xl sm:text-2xl font-black text-slate-900 group-hover:text-emerald-950">
+                  {enterpriseInquiries.length}
+                  <span className="text-xs font-normal text-slate-400 ml-1">개사</span>
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
+                  <span>제조·생산 <strong className="text-slate-700">{mfgInquiriesCount}</strong>건</span>
+                  <span className="text-slate-300">·</span>
+                  <span>기타 <strong className="text-slate-700">{Math.max(0, enterpriseInquiries.length - mfgInquiriesCount)}</strong>건</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Tier S/A 고가치 타겟 */}
+            <div
+              onClick={() => setActiveTab("inquiries")}
+              className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-white to-amber-50/40 border border-amber-200/70 shadow-xs space-y-2 hover:border-amber-400 hover:shadow-md transition-all cursor-pointer group"
+            >
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-xs font-bold text-amber-800 flex items-center gap-1">
+                  <Award className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Tier S/A 우선 타겟</span>
+                </span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-800 font-extrabold">
+                  수주율 80%↑
+                </span>
+              </div>
+              <div>
+                <div className="text-xl sm:text-2xl font-black text-amber-900">
+                  {highTierCount}
+                  <span className="text-xs font-normal text-slate-400 ml-1">개사</span>
+                </div>
+                <div className="text-[11px] text-amber-800/80 mt-1 font-medium">
+                  Tier S <strong className="text-amber-900">{tierSCount}</strong>건 · Tier A <strong className="text-amber-900">{tierACount}</strong>건
+                </div>
+              </div>
+            </div>
+
+            {/* 3. 정부지원 바우처 매칭 파이프라인 */}
+            <div
+              onClick={() => setActiveTab("inquiries")}
+              className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-white to-indigo-50/40 border border-indigo-200/70 shadow-xs space-y-2 hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer group"
+            >
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-xs font-bold text-indigo-800 flex items-center gap-1">
+                  <Coins className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>바우처 매칭 파이프라인</span>
+                </span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-800 font-extrabold">
+                  국비 80~90%
+                </span>
+              </div>
+              <div>
+                <div className="text-xl sm:text-2xl font-black text-indigo-950">
+                  {voucherMatchedCount}
+                  <span className="text-xs font-normal text-slate-400 ml-1">개사 매칭</span>
+                </div>
+                <div className="text-[11px] text-indigo-700 mt-1 font-medium">
+                  중기부/소진공 스마트공방 등
+                </div>
+              </div>
+            </div>
+
+            {/* 4. 고객사 업무 시간 절감 성과 (Social Proof) */}
+            <div
+              onClick={() => setActiveTab("reviews")}
+              className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-white to-teal-50/40 border border-teal-200/70 shadow-xs space-y-2 hover:border-teal-400 hover:shadow-md transition-all cursor-pointer group"
+            >
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-xs font-bold text-teal-800 flex items-center gap-1">
+                  <TrendingUp className="w-3.5 h-3.5 text-teal-600" />
+                  <span>고객사 업무시간 절감</span>
+                </span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-800 font-extrabold">
+                  AX 실증효과
+                </span>
+              </div>
+              <div>
+                <div className="text-xl sm:text-2xl font-black text-teal-950">
+                  월 480시간+
+                </div>
+                <div className="text-[11px] text-teal-700 mt-1 font-medium">
+                  도입 기업 평균 85% 수작업 단축
+                </div>
+              </div>
             </div>
           </div>
         </div>
