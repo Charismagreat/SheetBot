@@ -30,6 +30,7 @@ import {
   X,
 } from "lucide-react";
 import AdminProposalModal from "./AdminProposalModal";
+import AdminVocAnalyticsSection from "./AdminVocAnalyticsSection";
 
 interface AdminInquiriesTabProps {
   inquiries: any[];
@@ -456,7 +457,11 @@ export default function AdminInquiriesTab({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden space-y-0">
+    <div className="space-y-4">
+      {/* 📊 AI VOC & 자동화 기능 수요 히트맵 대시보드 위젯 */}
+      <AdminVocAnalyticsSection totalInquiriesCount={counts.ALL} />
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden space-y-0">
       {/* 상단 헤더 & 카테고리 필터 탭 */}
       <div className="p-4 border-b border-slate-100 bg-slate-50/70 space-y-3">
         <div className="flex items-center justify-between">
@@ -1833,6 +1838,7 @@ export default function AdminInquiriesTab({
           onClose={() => setProposalInquiry(null)}
         />
       )}
+      </div>
     </div>
   );
 }
