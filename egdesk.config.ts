@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-16T05:17:26.189Z
+ * Generated at: 2026-09-16T09:05:57.365Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -32,7 +32,7 @@ export const TABLES = {
   table2: {
     name: 'sheetbot_enterprise_inquiries',
     displayName: 'SheetBot 기업 맞춤 AX 문의 대장',
-    rowCount: 1,
+    rowCount: 2,
     columnCount: 24,
     columns: ['id', '_version', 'company_name', 'contact_name', 'contact_position', 'phone', 'email', 'industry', 'target_areas', 'use_voucher', 'content', 'status', 'answer', 'ai_draft', 'ai_score', 'ai_company_analysis', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -96,7 +96,7 @@ export const TABLES = {
   table11: {
     name: 'sheetbot_dispatch_logs',
     displayName: 'SheetBot 알림 발송 이력 대장',
-    rowCount: 8,
+    rowCount: 9,
     columnCount: 19,
     columns: ['id', '_version', 'channel', 'event_type', 'rule_name', 'recipient', 'recipient_type', 'title', 'content', 'status', 'error_message', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
