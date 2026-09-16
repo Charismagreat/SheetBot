@@ -161,6 +161,12 @@ export default function LandingPage() {
         <div className="w-full max-w-3xl space-y-8 pt-2 sm:pt-6">
           {/* 구글 감성의 SheetBot 로고 & 타이틀 */}
           <div className="space-y-4">
+            {/* 상단 킬러 슬로건 뱃지 */}
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-[11px] sm:text-xs font-black shadow-2xs mx-auto animate-fade-in">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+              <span>설정 스트레스 0초 • 키 유출 걱정 0% • 100% 원화 결제 &amp; 한글 지원</span>
+            </div>
+
             <div className="flex items-center justify-center gap-3 sm:gap-4 select-none">
               <SheetBotIcon size="xl" className="shadow-lg shadow-emerald-500/25 ring-4 ring-emerald-500/10" />
               <div className="flex items-baseline text-4xl sm:text-6xl font-black tracking-tight">
@@ -169,10 +175,18 @@ export default function LandingPage() {
                 <span className="text-teal-600 font-extrabold text-2xl sm:text-3xl ml-1">.ai</span>
               </div>
             </div>
-            <p className="text-xs sm:text-base text-slate-500 max-w-xl mx-auto leading-relaxed break-keep">
-              API 키 발급 없이, <strong>시트 주소를 넣고 바이브코딩</strong>으로 완성하는<br className="hidden sm:inline" />
-              가장 안전한 구글 시트 AI 자동화
-            </p>
+
+            {/* 강력한 헤드카피 & 서브카피 */}
+            <div className="space-y-2 max-w-2xl mx-auto break-keep">
+              <h1 className="text-lg sm:text-2xl font-black text-slate-800 leading-snug">
+                복잡한 API 키 발급도, 해외 카드 등록도 필요 없습니다.<br className="hidden sm:inline" />
+                <span className="text-emerald-700">구글 시트 하나로 완성하는 가장 안전한 AI 자동화</span>
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+                머리 아픈 GCP 콘솔 설정, 소스코드 키 유출 공포, 복잡한 트리거 예약까지—<br className="hidden sm:inline" />
+                이제 시트봇이 전부 대신합니다. 당신은 업무에만 집중하세요.
+              </p>
+            </div>
           </div>
 
           {/* 🌟 구글 검색창 형태의 대형 단일 입력 박스 (Pill-shaped Search Bar) */}
@@ -312,131 +326,179 @@ export default function LandingPage() {
         </div>
 
         {/* =========================================================================
-            3. 어떤 Pain을 해결해주나? (Pain vs Solution 카드)
+            3. 어떤 Pain을 해결해주나? (Before vs After 킬러 가치 제안 카드)
            ========================================================================= */}
         <div className="w-full space-y-8 pt-6">
-          <div className="space-y-2 text-center">
-            <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">Why SheetBot?</span>
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 break-keep">기존 AI 자동화가 막막했던 5가지 이유</h2>
-            <p className="text-xs sm:text-sm text-slate-500 break-keep">시트봇은 번거로운 개발 장벽과 보안 걱정을 완전히 없앴습니다.</p>
+          <div className="space-y-3 text-center">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200/60">
+              Why SheetBot?
+            </span>
+            <h2 className="text-2xl sm:text-4xl font-black text-slate-900 break-keep">
+              "이런 번거로움, 시트봇 하나로 영구 작별하세요"
+            </h2>
+            <p className="text-xs sm:text-base text-slate-500 max-w-2xl mx-auto break-keep leading-relaxed">
+              개발자도 기피하는 복잡한 5대 진입 장벽을 단 0초 만에 해결했습니다.<br className="hidden sm:inline" />
+              시트봇과 함께 가장 간편하고 안전하게 업무를 혁신해 보세요.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">
             {/* Pain 1 */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-lg hover:border-emerald-300 transition-all flex flex-col justify-between space-y-4 group">
               <div className="space-y-3">
-                <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl w-max">
-                  <KeyRound className="w-6 h-6" />
+                <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl w-max group-hover:scale-110 transition-transform">
+                  <CreditCard className="w-6 h-6" />
                 </div>
-                <h3 className="font-extrabold text-base text-slate-900 break-keep">AI API 키 발급 지옥 해결</h3>
-                <div className="space-y-2 text-xs leading-relaxed">
-                  <div className="flex items-start gap-1.5 text-rose-500">
-                    <XCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <span>OpenAI, GCP 콘솔 가입하고 개발자 문서 헤매기</span>
+                <div>
+                  <span className="text-[11px] font-black text-amber-600 uppercase tracking-wide">진입 장벽 01</span>
+                  <h3 className="font-black text-base sm:text-lg text-slate-900 break-keep mt-0.5">
+                    복잡한 API 키 발급 &amp; 해외 카드 등록 NO!
+                  </h3>
+                </div>
+                <div className="space-y-2.5 text-xs leading-relaxed pt-1">
+                  <div className="flex items-start gap-2 text-rose-500 bg-rose-50/50 p-2.5 rounded-xl border border-rose-100">
+                    <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                    <span>해외 콘솔 가입, 달러 결제 카드 등록, 예측 불가능한 환율 및 수수료</span>
                   </div>
-                  <div className="flex items-start gap-1.5 text-emerald-600 font-semibold">
-                    <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <span><strong>Zero-Key</strong>: 키 발급 없이 로그인 즉시 최신 AI 활용</span>
+                  <div className="flex items-start gap-2 text-emerald-700 bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-100 font-medium">
+                    <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-emerald-600" />
+                    <span><strong>원클릭 시작</strong>: 내장 AI 엔진으로 로그인 즉시 사용, 간편한 국내 원화 결제 &amp; 세금계산서 지원</span>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Pain 2 */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-lg hover:border-emerald-300 transition-all flex flex-col justify-between space-y-4 group">
               <div className="space-y-3">
-                <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl w-max">
-                  <CreditCard className="w-6 h-6" />
+                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl w-max group-hover:scale-110 transition-transform">
+                  <ShieldCheck className="w-6 h-6" />
                 </div>
-                <h3 className="font-extrabold text-base text-slate-900 break-keep">복잡한 신용카드 등록 & 과금 불안</h3>
-                <div className="space-y-2 text-xs leading-relaxed">
-                  <div className="flex items-start gap-1.5 text-rose-500">
-                    <XCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <span>해외 결제 카드 등록과 예측 불가능한 요금 폭탄 두려움</span>
+                <div>
+                  <span className="text-[11px] font-black text-indigo-600 uppercase tracking-wide">보안 강화 02</span>
+                  <h3 className="font-black text-base sm:text-lg text-slate-900 break-keep mt-0.5">
+                    소스코드 키 노출 과금 공포 0%
+                  </h3>
+                </div>
+                <div className="space-y-2.5 text-xs leading-relaxed pt-1">
+                  <div className="flex items-start gap-2 text-rose-500 bg-rose-50/50 p-2.5 rounded-xl border border-rose-100">
+                    <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                    <span>시트나 스크립트에 API 키를 평문으로 적어두어 공유 시 유출 및 수백만 원 과금 위험</span>
                   </div>
-                  <div className="flex items-start gap-1.5 text-emerald-600 font-semibold">
-                    <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <span><strong>통합 관리</strong>: 투명한 토큰 감사로 안전하고 예측 가능한 사용</span>
+                  <div className="flex items-start gap-2 text-emerald-700 bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-100 font-medium">
+                    <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-emerald-600" />
+                    <span><strong>특허급 터널 격리</strong>: 시트엔 순수 실행 로직만 주입, API 키는 엔터프라이즈 백엔드 터널로 완전 격리</span>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Pain 3 */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-lg hover:border-emerald-300 transition-all flex flex-col justify-between space-y-4 group">
               <div className="space-y-3">
-                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl w-max">
-                  <ShieldCheck className="w-6 h-6" />
+                <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl w-max group-hover:scale-110 transition-transform">
+                  <FileSpreadsheet className="w-6 h-6" />
                 </div>
-                <h3 className="font-extrabold text-base text-slate-900 break-keep">API 키 노출 & 탈취 위험 제로</h3>
-                <div className="space-y-2 text-xs leading-relaxed">
-                  <div className="flex items-start gap-1.5 text-rose-500">
-                    <XCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <span>시트 소스코드에 API 키가 그대로 적혀 공유 시 유출 위험</span>
+                <div>
+                  <span className="text-[11px] font-black text-blue-600 uppercase tracking-wide">원스톱 연동 03</span>
+                  <h3 className="font-black text-base sm:text-lg text-slate-900 break-keep mt-0.5">
+                    구글 앱 연동, 클릭 한 번으로 끝
+                  </h3>
+                </div>
+                <div className="space-y-2.5 text-xs leading-relaxed pt-1">
+                  <div className="flex items-start gap-2 text-rose-500 bg-rose-50/50 p-2.5 rounded-xl border border-rose-100">
+                    <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                    <span>GCP 프로젝트 생성, OAuth 동의 화면, 복잡한 스코프 권한 설정 중 오류 속출</span>
                   </div>
-                  <div className="flex items-start gap-1.5 text-emerald-600 font-semibold">
-                    <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <span><strong>완전 보안 격리</strong>: 시트엔 로직만 주입, 키는 백엔드 터널로 안전 격리</span>
+                  <div className="flex items-start gap-2 text-emerald-700 bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-100 font-medium">
+                    <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-emerald-600" />
+                    <span><strong>표준 브릿지 탑재</strong>: 스프레드시트, Gmail, 드라이브 연동을 사전 승인된 파이프라인으로 단 5초에 완성</span>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Pain 4 */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-lg hover:border-emerald-300 transition-all flex flex-col justify-between space-y-4 group">
               <div className="space-y-3">
-                <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl w-max">
-                  <FileSpreadsheet className="w-6 h-6" />
+                <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl w-max group-hover:scale-110 transition-transform">
+                  <Clock className="w-6 h-6" />
                 </div>
-                <h3 className="font-extrabold text-base text-slate-900 break-keep">구글 Workspace 복잡한 설정</h3>
-                <div className="space-y-2 text-xs leading-relaxed">
-                  <div className="flex items-start gap-1.5 text-rose-500">
-                    <XCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <span>시트, 드라이브, 지메일 연동 시 발생하는 복잡한 권한 에러</span>
+                <div>
+                  <span className="text-[11px] font-black text-emerald-600 uppercase tracking-wide">스마트 자동화 04</span>
+                  <h3 className="font-black text-base sm:text-lg text-slate-900 break-keep mt-0.5">
+                    말 한마디로 끝나는 스마트 스케줄러
+                  </h3>
+                </div>
+                <div className="space-y-2.5 text-xs leading-relaxed pt-1">
+                  <div className="flex items-start gap-2 text-rose-500 bg-rose-50/50 p-2.5 rounded-xl border border-rose-100">
+                    <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                    <span>Apps Script 시간 트리거, 별도 웹훅 서버나 cron 서버를 구축하고 유지보수하는 부담</span>
                   </div>
-                  <div className="flex items-start gap-1.5 text-emerald-600 font-semibold">
-                    <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <span><strong>표준 연동 보장</strong>: 100% 사전 검증된 구글 앱스 파이프라인 자동 탑재</span>
+                  <div className="flex items-start gap-2 text-emerald-700 bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-100 font-medium">
+                    <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-emerald-600" />
+                    <span><strong>자연어 스케줄러</strong>: "매일 아침 9시에 요약해 줘" 말 한마디로 자동 데이터 수집 및 알림 예약 완료</span>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Pain 5 */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-lg hover:border-emerald-300 transition-all flex flex-col justify-between space-y-4 group">
               <div className="space-y-3">
-                <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl w-max">
-                  <Clock className="w-6 h-6" />
+                <div className="p-3 bg-teal-50 text-teal-600 rounded-2xl w-max group-hover:scale-110 transition-transform">
+                  <Workflow className="w-6 h-6" />
                 </div>
-                <h3 className="font-extrabold text-base text-slate-900 break-keep">복잡한 실행 스케줄 & 서버 구축</h3>
-                <div className="space-y-2 text-xs leading-relaxed">
-                  <div className="flex items-start gap-1.5 text-rose-500">
-                    <XCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <span>정기 실행을 위해 별도 클라우드 크론, 웹훅 서버를 구축하는 번거로움</span>
+                <div>
+                  <span className="text-[11px] font-black text-teal-600 uppercase tracking-wide">비즈니스 가치 05</span>
+                  <h3 className="font-black text-base sm:text-lg text-slate-900 break-keep mt-0.5">
+                    수천만 원 외주 개발비 절감
+                  </h3>
+                </div>
+                <div className="space-y-2.5 text-xs leading-relaxed pt-1">
+                  <div className="flex items-start gap-2 text-rose-500 bg-rose-50/50 p-2.5 rounded-xl border border-rose-100">
+                    <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                    <span>단순 엑셀 취합 및 알림 자동화에도 수백~수천만 원 개발 외주 견적과 수개월 소요</span>
                   </div>
-                  <div className="flex items-start gap-1.5 text-emerald-600 font-semibold">
-                    <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <span><strong>자연어 스케줄러</strong>: "매일 아침 8시 실행" 한마디로 브라우저 & 시트 예약 완성</span>
+                  <div className="flex items-start gap-2 text-emerald-700 bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-100 font-medium">
+                    <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-emerald-600" />
+                    <span><strong>0원 문자 &amp; 현업 즉시 가동</strong>: 1인 기업부터 중소기업까지 합리적인 비용으로 당일 즉시 구축</span>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Call to Action Box in Grid */}
-            <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-6 rounded-3xl shadow-md text-white flex flex-col justify-between space-y-4">
-              <div className="space-y-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-emerald-200">Start in 1 Minute</span>
-                <h3 className="font-black text-lg text-white break-keep">지금 내 구글 시트에 AI 엔진을 장착해 보세요</h3>
-                <p className="text-xs text-emerald-100 leading-relaxed break-keep">
-                  복잡한 절차 없이 구글 로그인 한 번으로 모든 자동화 인프라가 준비됩니다.
+            <div className="bg-gradient-to-br from-slate-900 via-emerald-950 to-teal-900 p-6 sm:p-7 rounded-3xl shadow-xl text-white flex flex-col justify-between space-y-5 border border-emerald-500/30 relative overflow-hidden">
+              <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+              <div className="space-y-3">
+                <span className="text-[11px] font-black px-2.5 py-1 bg-emerald-500/20 text-emerald-300 rounded-full border border-emerald-400/30 uppercase tracking-wider">
+                  ⚡ 5초 만에 무료 시작
+                </span>
+                <h3 className="font-black text-xl text-white break-keep leading-snug">
+                  지금 내 구글 시트에<br />최신 AI 엔진을 장착하세요
+                </h3>
+                <p className="text-xs text-emerald-100/80 leading-relaxed break-keep">
+                  복잡한 설정 없이 구글 계정으로 로그인만 하면 모든 준비가 끝납니다.
                 </p>
               </div>
-              <Link
-                href={session?.user ? "/dashboard" : "/login"}
-                className="w-full py-3 bg-white text-emerald-800 font-extrabold text-xs sm:text-sm rounded-xl text-center shadow-sm hover:bg-emerald-50 transition-all"
-              >
-                {session?.user ? "대시보드로 이동하기" : "무료로 시작하기"}
-              </Link>
+
+              <div className="space-y-2 pt-2">
+                <Link
+                  href={session?.user ? "/dashboard" : "/login"}
+                  className="w-full py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-extrabold text-xs sm:text-sm rounded-xl text-center shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  <span>{session?.user ? "대시보드로 바로 이동하기" : "5초 만에 무료로 시작하기"}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+                <Link
+                  href="/use-cases"
+                  className="w-full py-2.5 px-4 bg-white/10 hover:bg-white/15 text-white/90 font-bold text-xs rounded-xl text-center transition-all flex items-center justify-center gap-1 border border-white/10"
+                >
+                  <span>📖 1분 만에 끝나는 활용사례 보기</span>
+                </Link>
+              </div>
             </div>
           </div>
         </div>
