@@ -28,7 +28,7 @@ export default function QuickWrapSuccessModal({
 
   // 복사 시 안티그라비티가 즉시 인식할 수 있는 최적화된 바이브코딩 텍스트 복사
   const handleCopy = async () => {
-    const textToCopy = promptTemplate || `아래 웹 주소를 통해 내 구글 시트의 헤더 구조와 기존 코드를 확인하고, 필요한 기능 코드를 주입해줘:\n웹 주소: ${bridgeUrl}\n요구사항: [원하는 기능 입력 (예: 사이드바에서 영수증/명함 이미지를 올리면 분석 후 자동 기입)]`;
+    const textToCopy = promptTemplate || `아래 웹 주소를 통해 내 구글 시트의 헤더 구조와 기존 코드를 확인하고, 필요한 기능 코드를 주입해줘:\n웹 주소: ${bridgeUrl}\n요구사항: 내 구글 시트 구조에 맞는 스프레드시트 자동화 메뉴와 기능을 주입해줘.`;
     await navigator.clipboard.writeText(textToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
@@ -43,9 +43,16 @@ export default function QuickWrapSuccessModal({
         {/* 상단 헤더 */}
         <div className="px-6 pt-6 pb-4 flex items-start justify-between border-b border-slate-100">
           <div>
-            <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>{isExisting ? "기존 연결 프로젝트 확인!" : "내 구글 시트 래핑 완료!"}</span>
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <span>{isExisting ? "기존 연결 프로젝트 확인!" : "내 구글 시트 래핑 완료!"}</span>
+              </h3>
+              {projectName && (
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 truncate max-w-[180px]">
+                  {projectName}
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-500 mt-1">
               {isExisting ? (
                 <span>

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
-  Bot, Plus, FileCode, Clock, RefreshCw, CheckCircle2, AlertTriangle,
+  Bot, Plus, FileCode, Clock, Calendar, RefreshCw, CheckCircle2, AlertTriangle,
   X, ArrowRight, ExternalLink, Sparkles, Layers, ShieldCheck, Trash2, Smartphone, Edit3,
   Globe, Star, Coins, Activity, Cpu, Settings, FileSpreadsheet, Copy, Briefcase, Send,
   KeyRound, LogOut
@@ -14,11 +14,29 @@ import {
 import Navbar from "@/components/Navbar";
 import nextDynamic from "next/dynamic";
 
+// 날짜 및 시각 표시 헬퍼 (YYYY.MM.DD HH:mm)
+function formatDateTime(dateStr?: string | null): string {
+  if (!dateStr) return "-";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) {
+      return String(dateStr).replace("T", " ").slice(0, 16);
+    }
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const min = String(d.getMinutes()).padStart(2, "0");
+    return `${yyyy}.${mm}.${dd} ${hh}:${min}`;
+  } catch {
+    return String(dateStr).slice(0, 16);
+  }
+}
+
 const NewProjectModal = nextDynamic(() => import("@/components/NewProjectModal"));
 const QuickWrapSuccessModal = nextDynamic(() => import("@/components/QuickWrapSuccessModal"));
 const EditProjectPromptModal = nextDynamic(() => import("@/components/EditProjectPromptModal"));
 const ScheduleManager = nextDynamic(() => import("@/components/ScheduleManager"));
-const PromptGalleryModal = nextDynamic(() => import("@/components/PromptGalleryModal"));
 const FeedbackModal = nextDynamic(() => import("@/components/FeedbackModal"));
 const ApiKeyModal = nextDynamic(() => import("@/components/ApiKeyModal"));
 const WithdrawModal = nextDynamic(() => import("@/components/WithdrawModal"));
@@ -59,18 +77,26 @@ export default function DashboardPage() {
 
   // 랜딩페이지에서 ?sheetUrl=... 또는 localStorage로 유입된 경우 1초 래핑 즉시 실행 및 전용 모달 오픈
   useEffect(() => {
+    if (status === "loading") return;
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       let sheetUrl = params.get("sheetUrl");
+      let templateName = params.get("templateName") || "";
+      let presetPrompt = params.get("presetPrompt") || "";
+
       if (!sheetUrl) {
         try {
           sheetUrl = localStorage.getItem("pending_sheet_url");
+          if (!templateName) templateName = localStorage.getItem("pending_template_name") || "";
+          if (!presetPrompt) presetPrompt = localStorage.getItem("pending_preset_prompt") || "";
         } catch (e) {}
       }
 
       if (sheetUrl) {
         try {
           localStorage.removeItem("pending_sheet_url");
+          localStorage.removeItem("pending_template_name");
+          localStorage.removeItem("pending_preset_prompt");
           window.history.replaceState({}, "", "/dashboard");
         } catch (e) {}
 
@@ -80,7 +106,7 @@ export default function DashboardPage() {
             const res = await apiFetch("/api/projects/quick-wrap", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ sheetUrl }),
+              body: JSON.stringify({ sheetUrl, templateName, presetPrompt }),
             });
             const data = await res.json();
             if (data.success) {
@@ -89,25 +115,22 @@ export default function DashboardPage() {
                 sheetUrl: data.sheetUrl || sheetUrl,
                 bridgeUrl: data.bridgeUrl,
                 promptTemplate: data.promptTemplate,
-                projectName: data.projectName || "시트봇 자동화 프로젝트",
+                projectName: data.projectName || templateName || "시트봇 자동화 프로젝트",
                 isExisting: Boolean(data.isExisting),
               });
               // 프로젝트 목록 리로드
               void fetchData();
             } else {
-              // 폴백: 일반 모달로 열기
-              setUrlSheetParam(sheetUrl);
-              setIsNewProjectModalOpen(true);
+              showAlert({ type: "error", text: data.error || "1초 래핑 처리에 실패했습니다." });
             }
-          } catch (err) {
+          } catch (err: any) {
             console.error("1초 래핑 처리 오류:", err);
-            setUrlSheetParam(sheetUrl);
-            setIsNewProjectModalOpen(true);
+            showAlert({ type: "error", text: err?.message || "1초 래핑 처리 중 오류가 발생했습니다." });
           }
         })();
       }
     }
-  }, []);
+  }, [status]);
 
   // 요약 카드용 실시간 계정 자원 상태
   const [wallet, setWallet] = useState<{
@@ -124,8 +147,7 @@ export default function DashboardPage() {
   const [ruleCount, setRuleCount] = useState<number>(0);
   const [currentModel, setCurrentModel] = useState<string>("Gemini 3.8 Flash");
 
-  // 추천 프롬프트 갤러리 및 피드백 모달 상태
-  const [isPromptGalleryOpen, setIsPromptGalleryOpen] = useState(false);
+  // 피드백 모달 상태
   const [feedbackTargetProject, setFeedbackTargetProject] = useState<any | null>(null);
 
   // 전문가(FDE) 맞춤 의뢰 모달 상태
@@ -1024,15 +1046,6 @@ ${recruitForm.introduction}
                 <span>🛍️ 템플릿 마켓</span>
               </Link>
 
-              <button
-                type="button"
-                onClick={() => setIsPromptGalleryOpen(true)}
-                className="px-3 py-1.5 bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all border border-emerald-200/80 cursor-pointer shadow-2xs active:scale-95 whitespace-nowrap"
-                data-easybot-hint="추천 프롬프트 갤러리: 실무에서 검증된 우수 프롬프트를 탐색하고 즉시 적용합니다."
-              >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                <span>✨ 추천 프롬프트 갤러리</span>
-              </button>
 
               <button
                 type="button"
@@ -1098,6 +1111,15 @@ ${recruitForm.introduction}
                           </h5>
                           <div className="text-[10px] text-slate-400 font-mono truncate">
                             ID: {p.scriptId || p.gasProjectId || p.id}
+                          </div>
+                          {/* 📅 생성일자 및 삭제일시 */}
+                          <div className="flex items-center gap-2.5 text-[10px] text-slate-400 pt-0.5 flex-wrap">
+                            {(p.created_at || p.createdAt) && (
+                              <span>생성: {formatDateTime(p.created_at || p.createdAt)}</span>
+                            )}
+                            {(p.deleted_at || p.updated_at) && (
+                              <span className="text-rose-500">삭제: {formatDateTime(p.deleted_at || p.updated_at)}</span>
+                            )}
                           </div>
                         </div>
                         <span className="px-2 py-0.5 bg-rose-100 text-rose-800 text-[10px] font-bold rounded-md flex items-center gap-1 shrink-0">
@@ -1201,6 +1223,22 @@ ${recruitForm.introduction}
                         >
                           {p.scriptId || p.gasProjectId || p.id}
                         </span>
+                      </div>
+
+                      {/* 📅 생성일자 및 최종수정일시 */}
+                      <div className="flex items-center gap-3 text-[10px] text-slate-400 pt-0.5 flex-wrap">
+                        {(p.created_at || p.createdAt) && (
+                          <span className="inline-flex items-center gap-1 text-slate-500 font-medium">
+                            <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span>생성: {formatDateTime(p.created_at || p.createdAt)}</span>
+                          </span>
+                        )}
+                        {(p.updated_at || p.updatedAt) && (
+                          <span className="inline-flex items-center gap-1 text-slate-500 font-medium">
+                            <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span>수정: {formatDateTime(p.updated_at || p.updatedAt)}</span>
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -1433,15 +1471,6 @@ ${recruitForm.introduction}
         }}
       />
 
-      {/* 추천 프롬프트 갤러리 모달 */}
-      <PromptGalleryModal
-        isOpen={isPromptGalleryOpen}
-        onClose={() => setIsPromptGalleryOpen(false)}
-        onSelectPrompt={(tpl) => {
-          setIsPromptGalleryOpen(false);
-          setIsNewProjectModalOpen(true);
-        }}
-      />
 
       {/* 프로젝트 만족도 평가 및 AI 자가 학습 모달 */}
       {feedbackTargetProject && (

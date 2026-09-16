@@ -29,11 +29,13 @@ import Navbar from "@/components/Navbar";
 import { SheetBotIcon } from "@/components/SheetBotLogo";
 
 // 하단 퀵 바로가기 템플릿 프리셋 5종
-const TEMPLATE_SHORTCUTS = [
+export const TEMPLATE_SHORTCUTS = [
   {
     id: "new",
     title: "빈 시트로 시작",
     sub: "원클릭 시트 생성",
+    projectName: "스마트 자동화 시트",
+    defaultPrompt: "내 비즈니스에 맞는 컬럼 구조와 스프레드시트 자동화 함수를 설계하고, 필요한 Apps Script 코드를 주입해줘.",
     icon: PlusCircle,
     color: "bg-teal-50 text-teal-600 border-teal-200",
     url: "NEW_SHEET"
@@ -42,6 +44,8 @@ const TEMPLATE_SHORTCUTS = [
     id: "sms",
     title: "주문 문자 알림",
     sub: "실시간 SMS 발송",
+    projectName: "주문 접수 및 실시간 SMS 발송",
+    defaultPrompt: "주문 대장 시트에 신규 주문이 추가되거나 발송 체크박스를 선택하면, 고객 연락처로 주문 확인 및 배송 안내 SMS 문자를 자동으로 발송하는 기능을 주입해줘.",
     icon: MessageSquare,
     color: "bg-emerald-50 text-emerald-600 border-emerald-200",
     url: "https://docs.google.com/spreadsheets/d/197paXClC1QLJV88e_TranJffhTt4UGU9FBcqnYQhcwE/edit"
@@ -50,6 +54,8 @@ const TEMPLATE_SHORTCUTS = [
     id: "email",
     title: "Gmail 대량 발송",
     sub: "고객 맞춤 이메일",
+    projectName: "Gmail 고객 맞춤 대량 발송",
+    defaultPrompt: "고객 명단 시트에서 발송 대상을 선택하고 상단 메뉴를 누르면, 고객 이름과 맞춤 정보를 반영한 정중한 HTML 안내 이메일을 Gmail로 일괄 발송하는 기능을 주입해줘.",
     icon: Mail,
     color: "bg-rose-50 text-rose-600 border-rose-200",
     url: "https://docs.google.com/spreadsheets/d/1oyr_On_t2zV2Ii5w3rX2QWHuHYoQgAwQduvJ-J1nWPA/edit"
@@ -58,6 +64,8 @@ const TEMPLATE_SHORTCUTS = [
     id: "mes",
     title: "MES·ERP 연동",
     sub: "생산 실적 동기화",
+    projectName: "생산 실적 집계 및 MES·ERP 연동",
+    defaultPrompt: "생산 라인별 작업 일지와 재고 수량을 집계하고, 일일 마감 통계 및 공정 불량률을 자동으로 산출하여 일일 보고서 탭에 기록하는 기능을 주입해줘.",
     icon: Cpu,
     color: "bg-amber-50 text-amber-600 border-amber-200",
     url: "https://docs.google.com/spreadsheets/d/1AmOiCgzS2H3FBMJJ8hgSiXprnbUXyKk7sUZmOubEuCY/edit"
@@ -66,6 +74,8 @@ const TEMPLATE_SHORTCUTS = [
     id: "ocr",
     title: "명함·영수증 OCR",
     sub: "AI 문서 자동 입력",
+    projectName: "명함·영수증 AI 문서 자동 기입",
+    defaultPrompt: "구글 시트 사이드바에서 영수증이나 명함 이미지를 업로드하면 AI가 상호명, 금액, 일자, 연락처를 정밀 분석하여 시트 행에 최신순으로 자동 등록하는 기능을 주입해줘.",
     icon: ScanText,
     color: "bg-indigo-50 text-indigo-600 border-indigo-200",
     url: "https://docs.google.com/spreadsheets/d/1SP_wJwYlOsjnJ8Y1soxAhpdm8mlmZVhh6Bj1N7nVIro/edit"
@@ -95,17 +105,20 @@ export default function LandingPage() {
   // [래핑 & AI 시작] 실행
   const handleStartWrapping = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const url = inputUrl.trim();
+    const rawUrl = inputUrl.trim();
+    // 주소가 비어있으면 기본값으로 'NEW_SHEET'(빈 시트로 즉시 시작) 적용
+    const url = rawUrl || "NEW_SHEET";
 
-    if (!url) {
-      setErrorMessage("구글 스프레드시트 주소를 입력하거나 아래 템플릿을 선택해 주세요.");
-      return;
-    }
-
-    if (!url.includes("docs.google.com/spreadsheets") && url !== "NEW_SHEET") {
+    const isNewSheet = url === "NEW_SHEET" || url.includes("spreadsheets/create");
+    if (!isNewSheet && !url.includes("docs.google.com/spreadsheets")) {
       setErrorMessage("올바른 Google 스프레드시트 주소(https://docs.google.com/spreadsheets/d/...)를 입력해 주세요.");
       return;
     }
+
+    // 선택된 템플릿 메타데이터 추출
+    const matchedTpl = TEMPLATE_SHORTCUTS.find((t) => t.id === selectedTemplate || t.url === rawUrl);
+    const templateName = matchedTpl?.projectName || (isNewSheet ? "스마트 자동화 시트" : "");
+    const presetPrompt = matchedTpl?.defaultPrompt || "";
 
     setErrorMessage(null);
     setIsWrapping(true);
@@ -114,17 +127,25 @@ export default function LandingPage() {
     if (typeof window !== "undefined") {
       try {
         localStorage.setItem("pending_sheet_url", url);
+        if (templateName) localStorage.setItem("pending_template_name", templateName);
+        if (presetPrompt) localStorage.setItem("pending_preset_prompt", presetPrompt);
       } catch (e) {
         console.warn("localStorage error:", e);
       }
     }
 
+    // 대시보드 쿼리 스트링 조립
+    const queryParams = new URLSearchParams({ sheetUrl: url });
+    if (templateName) queryParams.set("templateName", templateName);
+    if (presetPrompt) queryParams.set("presetPrompt", presetPrompt);
+    const targetUrl = `/dashboard?${queryParams.toString()}`;
+
     // 타깃 URL 생성 후 이동 (로그인 여부에 따라 리다이렉트)
     setTimeout(() => {
       if (session?.user) {
-        router.push(`/dashboard?sheetUrl=${encodeURIComponent(url)}`);
+        router.push(targetUrl);
       } else {
-        router.push(`/login?callbackUrl=${encodeURIComponent(`/dashboard?sheetUrl=${encodeURIComponent(url)}`)}`);
+        router.push(`/login?callbackUrl=${encodeURIComponent(targetUrl)}`);
       }
     }, 600);
   };

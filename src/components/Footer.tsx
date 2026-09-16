@@ -20,10 +20,6 @@ export default function Footer() {
   const pathname = usePathname();
   const [footerInfo, setFooterInfo] = useState<FooterInfo>(DEFAULT_FOOTER);
 
-  if (pathname === "/marketplace") {
-    return null;
-  }
-
   const fetchFooter = async () => {
     try {
       const res = await apiFetch("/api/footer");
@@ -37,6 +33,7 @@ export default function Footer() {
   };
 
   useEffect(() => {
+    if (pathname === "/marketplace") return;
     fetchFooter();
 
     const handleUpdate = () => {
@@ -49,7 +46,11 @@ export default function Footer() {
         window.removeEventListener("sheetbot-footer-updated", handleUpdate);
       };
     }
-  }, []);
+  }, [pathname]);
+
+  if (pathname === "/marketplace") {
+    return null;
+  }
 
   const activeSnsChannels = (footerInfo.sns_channels || []).filter((ch) => ch.enabled && ch.url);
 
