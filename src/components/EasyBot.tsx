@@ -22,11 +22,46 @@ import {
   Minimize,
 } from "lucide-react";
 
+interface ActionChip {
+  label: string;
+  url?: string;
+  onClick?: () => void;
+  highlight?: boolean;
+}
+
 interface ChatMessage {
   id: string;
   role: "user" | "bot";
   text: string;
   time: string;
+  actionChips?: ActionChip[];
+}
+
+/**
+ * Web Audio API 기반 소프트 차임벨 알림음 재생
+ */
+function playNotificationChime() {
+  try {
+    if (typeof window === "undefined") return;
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+    osc.frequency.setValueAtTime(880.0, ctx.currentTime + 0.12); // A5
+
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.38);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.4);
+  } catch {}
 }
 
 const SAMPLE_QUESTIONS = [
@@ -62,6 +97,11 @@ export default function EasyBot() {
   const [isResetting, setIsResetting] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
+  const [isAdminUser, setIsAdminUser] = useState<boolean>(false);
+  const lastKnownEntIdRef = useRef<number>(0);
+  const lastKnownTaxIdRef = useRef<number>(0);
+  const suppressedSlaRef = useRef<boolean>(false);
+  const suppressedDeviceRef = useRef<boolean>(false);
 
   // 창 위치 및 크기 상태
   const [position, setPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -442,6 +482,151 @@ export default function EasyBot() {
     };
   }, [session?.user?.email, sessionStatus]);
 
+  // 🌟 [능동형 AI 수석 비서] 관리자 6대 시나리오 실시간 모니터링 엔진
+  useEffect(() => {
+    if (sessionStatus === "loading" || !session?.user?.email) return;
+
+    let isSubscribed = true;
+    let pollTimer: any = null;
+
+    const initAdminAssistant = async () => {
+      try {
+        const res = await apiFetch("/api/admin/monitor/briefing");
+        const json = await res.json();
+        if (!isSubscribed || !json.success || !json.isAdmin) return;
+
+        setIsAdminUser(true);
+
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const briefingStorageKey = `sheetbot_briefed_${session.user.email}_${todayStr}`;
+        const hasBriefed = typeof window !== "undefined" && sessionStorage.getItem(briefingStorageKey);
+
+        // 최신 기준점 초기화
+        if (json.data?.vipAlert?.id) {
+          lastKnownEntIdRef.current = Number(json.data.vipAlert.id);
+        }
+
+        // ☀️ [시나리오 2 & 시나리오 6] 첫 접속 시 자동 오픈 & 브리핑 (모닝 경영 브리핑 / 퇴근길 마감 리포트)
+        if (!hasBriefed && json.data?.formattedText) {
+          sessionStorage.setItem(briefingStorageKey, "done");
+          setTimeout(() => {
+            if (!isSubscribed) return;
+            setIsOpen(true);
+            playNotificationChime();
+
+            const isEvening = Boolean(json.data?.isEvening);
+            const chips = isEvening
+              ? [
+                  {
+                    label: "🌇 마감 대장 최종 확인",
+                    url: "/dashboard/admin",
+                    highlight: true,
+                  },
+                  {
+                    label: "📊 오늘의 AI VOC 수요 리포트",
+                    url: "/dashboard/admin",
+                  },
+                ]
+              : [
+                  {
+                    label: "📋 고객 문의 대장 바로가기",
+                    url: "/dashboard/admin",
+                    highlight: true,
+                  },
+                  {
+                    label: "📊 AI VOC 수요 히트맵 보기",
+                    url: "/dashboard/admin",
+                  },
+                ];
+
+            const briefingMsg: ChatMessage = {
+              id: `briefing_${Date.now()}`,
+              role: "bot",
+              text: json.data.formattedText,
+              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              actionChips: chips,
+            };
+
+            setMessages((prev) => [...prev, briefingMsg]);
+          }, 1400);
+        }
+
+        // 🚨 [실시간 감시 종합 폴러] 40초 주기로 4대 긴급 이벤트 감시
+        // - 시나리오 1: VIP 고액 리드 인입
+        // - 시나리오 3: 24시간 방치 방지 골든타임 임박 미답변 경보
+        // - 시나리오 4: 0원 문자 스마트폰 연결 이상 감지
+        // - 시나리오 5: 전자세금계산서 신규 신청 즉시 감지
+        const pollAdminEvents = async () => {
+          if (!isSubscribed || (typeof document !== "undefined" && document.hidden)) return;
+          try {
+            const params = new URLSearchParams({
+              lastKnownEntId: String(lastKnownEntIdRef.current || 0),
+              lastKnownTaxId: String(lastKnownTaxIdRef.current || 0),
+              suppressSla: suppressedSlaRef.current ? "1" : "0",
+              suppressDevice: suppressedDeviceRef.current ? "1" : "0",
+            });
+
+            const pollRes = await apiFetch(`/api/admin/monitor/poll?${params.toString()}`);
+            const pollJson = await pollRes.json();
+            if (!isSubscribed || !pollJson.success) return;
+
+            // 기준점 최신화
+            if (pollJson.maxEntId) {
+              lastKnownEntIdRef.current = Math.max(lastKnownEntIdRef.current, Number(pollJson.maxEntId));
+            }
+            if (pollJson.maxTaxId) {
+              lastKnownTaxIdRef.current = Math.max(lastKnownTaxIdRef.current, Number(pollJson.maxTaxId));
+            }
+
+            // 긴급 이벤트 발생 시 -> 능동형 자동 팝업 & 차임벨 & 즉시 조치 액션 칩 표출
+            if (pollJson.hasNewAlert && pollJson.alert) {
+              setIsOpen(true);
+              playNotificationChime();
+
+              // SLA 경보나 기기 경보는 세션 중복 알림 방지
+              if (pollJson.alertType === "SLA_WARNING") {
+                suppressedSlaRef.current = true;
+              } else if (pollJson.alertType === "DEVICE_OFFLINE") {
+                suppressedDeviceRef.current = true;
+              }
+
+              const alertMsg: ChatMessage = {
+                id: `alert_${pollJson.alertType}_${Date.now()}`,
+                role: "bot",
+                text: pollJson.alert.message,
+                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                actionChips: pollJson.alert.chips || [
+                  {
+                    label: "📋 관리자 대장 바로가기",
+                    url: "/dashboard/admin",
+                    highlight: true,
+                  },
+                ],
+              };
+
+              setMessages((prev) => [...prev, alertMsg]);
+            }
+          } catch (e) {
+            // 폴링 예외 시 조용히 유지
+          }
+        };
+
+        // 첫 진입 시 기준점 동기화 1회 즉시 실행 후 40초 주기 반복
+        setTimeout(pollAdminEvents, 3000);
+        pollTimer = setInterval(pollAdminEvents, 40000);
+      } catch (err) {
+        // 일반 유저인 경우 무시
+      }
+    };
+
+    initAdminAssistant();
+
+    return () => {
+      isSubscribed = false;
+      if (pollTimer) clearInterval(pollTimer);
+    };
+  }, [session?.user?.email, sessionStatus]);
+
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => {
@@ -719,6 +904,11 @@ export default function EasyBot() {
               <div className="min-w-0">
                 <h3 className="text-sm font-extrabold flex items-center gap-1.5 truncate">
                   <span>시트봇 AI</span>
+                  {isAdminUser && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 text-[10px] font-black border border-amber-400/40 shrink-0">
+                      수석 비서
+                    </span>
+                  )}
                   {health.status === "healthy" && (
                     <span
                       className="px-1.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 text-[10px] font-bold border border-emerald-400/30 shrink-0"
@@ -862,6 +1052,32 @@ export default function EasyBot() {
                   }`}
                 >
                   {renderMessageContent(msg.text, msg.id)}
+
+                  {/* 🌟 인터랙티브 퀵 액션 버튼 칩 */}
+                  {msg.actionChips && msg.actionChips.length > 0 && (
+                    <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-wrap gap-1.5">
+                      {msg.actionChips.map((chip, cIdx) => (
+                        <a
+                          key={cIdx}
+                          href={chip.url || "#"}
+                          onClick={(e) => {
+                            if (chip.onClick) {
+                              e.preventDefault();
+                              chip.onClick();
+                            }
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition-all inline-flex items-center gap-1 shadow-2xs active:scale-95 cursor-pointer ${
+                            chip.highlight
+                              ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white hover:opacity-90 ring-1 ring-indigo-400/40"
+                              : "bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200"
+                          }`}
+                        >
+                          <span>{chip.label}</span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+
                   <span
                     className={`block text-[9px] mt-1.5 text-right font-medium ${
                       msg.role === "user" ? "text-indigo-200" : "text-slate-400"
