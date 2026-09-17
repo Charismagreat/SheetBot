@@ -155,6 +155,8 @@ export default function Navbar() {
             {/* 3. 템플릿 마켓 */}
             <Link
               href="/marketplace"
+              target="_blank"
+              rel="noopener noreferrer"
               className="px-3 py-2 rounded-xl text-slate-700 hover:text-emerald-700 hover:bg-emerald-50/70 font-bold transition-all whitespace-nowrap flex items-center gap-1.5"
             >
               <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
@@ -426,6 +428,8 @@ export default function Navbar() {
             </Link>
             <Link
               href="/marketplace"
+              target="_blank"
+              rel="noopener noreferrer"
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 transition-all"
             >
