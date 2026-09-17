@@ -10,8 +10,33 @@ export const DEFAULT_BANK_INFO = {
   bankName: process.env.SHEETBOT_BANK_NAME || "카카오뱅크",
   accountNumber: process.env.SHEETBOT_ACCOUNT_NUMBER || "3333-28-9876543",
   accountHolder: process.env.SHEETBOT_ACCOUNT_HOLDER || "시트봇",
-  tossMeId: process.env.SHEETBOT_TOSS_ME_ID || "sheetbot",
+  tossMeId: process.env.SHEETBOT_TOSS_ME_ID || "",
 };
+
+async function getDepositBankInfo() {
+  try {
+    const res = await queryTable("sheetbot_settings", {
+      filters: { key: "sheetbot_footer_info" },
+      limit: 1,
+    }).catch(() => ({ rows: [] }));
+
+    const validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
+    if (validRows.length > 0 && validRows[0].value) {
+      const footer = JSON.parse(validRows[0].value);
+      if (footer.deposit_account_number) {
+        return {
+          bankName: footer.deposit_bank_name || DEFAULT_BANK_INFO.bankName,
+          accountNumber: footer.deposit_account_number || DEFAULT_BANK_INFO.accountNumber,
+          accountHolder: footer.deposit_account_holder || DEFAULT_BANK_INFO.accountHolder,
+          tossMeId: footer.deposit_toss_id || DEFAULT_BANK_INFO.tossMeId,
+        };
+      }
+    }
+  } catch (e) {
+    console.warn("Failed to load bank info from footer settings:", e);
+  }
+  return DEFAULT_BANK_INFO;
+}
 
 export async function POST(request: Request) {
   try {
@@ -28,6 +53,7 @@ export async function POST(request: Request) {
 
     const email = userEmail.toLowerCase().trim();
     const pkg = TOKEN_PACKAGES.find((p) => p.id === packageId) || TOKEN_PACKAGES[1];
+    const bankInfo = await getDepositBankInfo();
 
     // 첫 글자 대문자 1자리 + 3자리 숫자 (예: charisma -> C670, 홍길동 -> 홍670)
     const cleanChars = (userName || email.split("@")[0] || "S").replace(/[^a-zA-Z0-9가-힣]/g, "");
@@ -39,11 +65,11 @@ export async function POST(request: Request) {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 30 * 60 * 1000).toISOString();
 
-    const tossUrl = DEFAULT_BANK_INFO.tossMeId
-      ? "https://toss.me/" + DEFAULT_BANK_INFO.tossMeId + "/" + pkg.priceKrw
+    const tossUrl = bankInfo.tossMeId
+      ? "https://toss.me/" + bankInfo.tossMeId + "/" + pkg.priceKrw
       : "";
 
-    const qrPayload = tossUrl || (DEFAULT_BANK_INFO.bankName + " " + DEFAULT_BANK_INFO.accountNumber + " " + pkg.priceKrw + "원 (입금자: " + depositCode + ")");
+    const qrPayload = tossUrl || (bankInfo.bankName + " " + bankInfo.accountNumber + " " + pkg.priceKrw + "원 (입금자: " + depositCode + ")");
     const qrImageUrl = "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=" + encodeURIComponent(qrPayload);
 
     await insertRows("sheetbot_deposit_requests", [
@@ -56,8 +82,8 @@ export async function POST(request: Request) {
         package_name: pkg.name,
         amount_krw: pkg.priceKrw,
         tokens_to_credit: pkg.totalTokens,
-        bank_name: DEFAULT_BANK_INFO.bankName,
-        account_number: DEFAULT_BANK_INFO.accountNumber,
+        bank_name: bankInfo.bankName,
+        account_number: bankInfo.accountNumber,
         account_holder: DEFAULT_BANK_INFO.accountHolder,
         status: "PENDING",
         expires_at: expiresAt,

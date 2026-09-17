@@ -58,6 +58,10 @@ export async function POST(req: NextRequest) {
       easybot_info: body.easybot_info?.trim() || DEFAULT_FOOTER.easybot_info,
       brand_description: body.brand_description?.trim() || DEFAULT_FOOTER.brand_description,
       copyright_text: body.copyright_text?.trim() || DEFAULT_FOOTER.copyright_text,
+      deposit_bank_name: body.deposit_bank_name?.trim() || DEFAULT_FOOTER.deposit_bank_name,
+      deposit_account_number: body.deposit_account_number?.trim() || DEFAULT_FOOTER.deposit_account_number,
+      deposit_account_holder: body.deposit_account_holder?.trim() || DEFAULT_FOOTER.deposit_account_holder,
+      deposit_toss_id: body.deposit_toss_id?.trim() || "",
       sns_channels: Array.isArray(body.sns_channels) ? body.sns_channels : DEFAULT_FOOTER.sns_channels,
     };
 

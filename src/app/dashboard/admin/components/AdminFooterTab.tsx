@@ -10,6 +10,7 @@ import {
   FileText,
   Phone,
   Globe,
+  CreditCard,
 } from "lucide-react";
 import { FooterInfo, SnsChannel } from "@/lib/default-footer";
 import { SnsIcon } from "@/components/SnsIcons";
@@ -195,6 +196,75 @@ export default function AdminFooterTab({
             ))}
           </div>
         )}
+      </div>
+
+      {/* 💳 인-시트 토큰 충전 전용 무통장 입금 계좌 설정 카드 */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+        <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <CreditCard className="w-4 h-4 text-emerald-600" />
+              <span>💳 인-시트 토큰 충전 다이렉트 입금 계좌 설정</span>
+            </h4>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              구글 스프레드시트 상단 메뉴 [💳 토큰 잔액 확인 및 즉시 충전] 모달에 노출될 공식 입금 계좌입니다. 여기서 저장 시 모든 시트에 실시간 반영됩니다.
+            </p>
+          </div>
+          <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full font-bold text-[10px] border border-emerald-200 self-start sm:self-auto shrink-0">
+            실시간 연동
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold text-slate-600">입금 은행명 *</label>
+            <input
+              type="text"
+              required
+              value={footerForm.deposit_bank_name || ""}
+              onChange={(e) => onFooterFormChange((prev) => ({ ...prev, deposit_bank_name: e.target.value }))}
+              placeholder="예: 카카오뱅크, 신한은행"
+              className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-600 font-semibold text-slate-800"
+            />
+          </div>
+
+          <div className="space-y-1 sm:col-span-2">
+            <label className="text-[11px] font-bold text-slate-600">계좌번호 *</label>
+            <input
+              type="text"
+              required
+              value={footerForm.deposit_account_number || ""}
+              onChange={(e) => onFooterFormChange((prev) => ({ ...prev, deposit_account_number: e.target.value }))}
+              placeholder="예: 3333-01-9876543"
+              className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-600 font-mono font-bold text-slate-900"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold text-slate-600">예금주명 *</label>
+            <input
+              type="text"
+              required
+              value={footerForm.deposit_account_holder || ""}
+              onChange={(e) => onFooterFormChange((prev) => ({ ...prev, deposit_account_holder: e.target.value }))}
+              placeholder="예: 주식회사 시트봇"
+              className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-600 font-semibold text-slate-800"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold text-slate-600">토스 송금 ID (선택사항)</label>
+            <input
+              type="text"
+              value={footerForm.deposit_toss_id || ""}
+              onChange={(e) => onFooterFormChange((prev) => ({ ...prev, deposit_toss_id: e.target.value }))}
+              placeholder="toss.me 아이디 (선택 시 토스 바로 송금 링크 활성화)"
+              className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-600 font-mono text-slate-700"
+            />
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
