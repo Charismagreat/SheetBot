@@ -42,7 +42,7 @@ import {
 import Navbar from "@/components/Navbar";
 import { SheetBotIcon } from "@/components/SheetBotLogo";
 
-// 🔥 대중 반응 폭발 킬러 웹앱 TOP 5 쇼케이스 프리셋
+// 🔥 대중 반응 폭발 킬러 웹앱 쇼케이스 프리셋 (3x2 그리드 완성)
 export const KILLER_WEBAPPS = [
   {
     rank: "🥇 1위",
@@ -50,8 +50,8 @@ export const KILLER_WEBAPPS = [
     target: "식당 · 카페 · 공방 · 1인 미용실 사장님",
     badge: "월정액 0원 • 수수료 0%",
     pain: "캐치테이블/네이버예약 월 3~5만원 수수료 부담",
-    solution: "시트에 [이름, 번호, 시간, 인원]만 적으면 인스타 프로필용 감성 예약 웹앱 30초 완성!",
-    columns: ["예약자명", "연락처", "예약일시", "인원수", "요청사항", "확정여부"],
+    solution: "시트에 [이름, 번호, 시간, 인원]만 적으면 감성 예약 웹앱 1초 완성!",
+    columns: ["예약자명", "연락처", "일시", "인원수", "요청사항", "확정여부"],
     icon: CalendarCheck,
     color: "from-rose-500 to-pink-600",
     lightColor: "bg-rose-50 border-rose-200 text-rose-700",
@@ -64,7 +64,7 @@ export const KILLER_WEBAPPS = [
     target: "인스타 셀러 · 블로그 마켓 · 농산물 직거래",
     badge: "네이버 폼 탈피 • 링크트리 일체형",
     pain: "촌스러운 네이버 폼, 복잡한 쇼핑몰 솔루션 구축 비용",
-    solution: "링크트리처럼 세련된 모바일 카드 + 수량 선택 + 입금 계좌 원클릭 복사 일체형 웹앱!",
+    solution: "링크트리처럼 세련된 모바일 카드 + 수량 선택 + 계좌 복사 일체형 웹앱!",
     columns: ["상품명", "옵션", "판매단가", "주문자명", "배송주소", "입금확인"],
     icon: ShoppingBag,
     color: "from-amber-500 to-orange-600",
@@ -74,11 +74,11 @@ export const KILLER_WEBAPPS = [
   },
   {
     rank: "🥉 3위",
-    title: "전화문의 90% 줄이는 '실시간 재고·단가 조회기'",
-    target: "동대문·남대문 도매 · 부품 유통 · 쇼핑몰 관리자",
+    title: "전화문의 90% 줄이는 '재고·단가 조회기'",
+    target: "도소매 유통 · 부품 대리점 · 쇼핑몰 관리자",
     badge: "원본 시트 100% 보안",
     pain: "하루 50통씩 오는 '재고 있어요? 단가 얼마예요?' 전화",
-    solution: "원본 시트는 완벽 숨김! 거래처가 품번만 검색하면 재고/단가가 깔끔하게 뜨는 전용 검색기!",
+    solution: "원본 시트는 안전하게 숨김! 품번만 검색하면 재고/단가가 뜨는 전용 검색기!",
     columns: ["상품코드", "상품명", "규격", "현재재고", "도매단가", "창고위치"],
     icon: Search,
     color: "from-blue-500 to-indigo-600",
@@ -88,12 +88,12 @@ export const KILLER_WEBAPPS = [
   },
   {
     rank: "🎖️ 4위",
-    title: "단톡방 공유용 '점심·회식 메뉴 실시간 투표기'",
+    title: "단톡방 공유용 '점심·회식 실시간 투표기'",
     target: "직장인 막내 · 총무팀 · 동호회 운영진",
     badge: "단톡방 취합 고통 0초 해결",
     pain: "카톡 단톡방에서 '뭐 먹을래요?' 묻고 수동 취합하는 고통",
-    solution: "카톡에 링크 하나 올리면 버튼 눌러 투표하고 실시간 득표율 그래프가 짠! 움직이는 투표 웹앱!",
-    columns: ["메뉴후보", "득표수", "투표자", "마감시간"],
+    solution: "카톡 링크 클릭 한 번으로 투표하고 실시간 득표율 그래프가 짠! 움직이는 웹앱!",
+    columns: ["메뉴후보", "득표수", "투표자", "마감시간", "실시간집계"],
     icon: Vote,
     color: "from-teal-500 to-emerald-600",
     lightColor: "bg-teal-50 border-teal-200 text-teal-700",
@@ -102,17 +102,31 @@ export const KILLER_WEBAPPS = [
   },
   {
     rank: "🎖️ 5위",
-    title: "번호 4자리 '모바일 원터치 출결 키패드'",
+    title: "번호 4자리 '원터치 모바일 출결 키패드'",
     target: "학원 · 스터디룸 · 운동 클래스 · 소모임",
     badge: "출결 기계 0원 대체",
     pain: "매달 수만 원씩 나가는 비싼 지문/얼굴 출결 기계",
-    solution: "태블릿이나 폰에 키패드가 뜨고, 전화번호 뒤 4자리만 누르면 출석 도장이 쾅! 찍히는 웹앱!",
-    columns: ["학생명", "전화번호뒷자리", "출석일자", "출석시간", "지각여부"],
+    solution: "태블릿이나 폰에 번호 키패드가 뜨고, 뒤 4자리만 누르면 출석 도장 쾅!",
+    columns: ["학생명", "전화번호뒤4자리", "출석일자", "출석시간", "지각여부"],
     icon: QrCode,
     color: "from-purple-500 to-indigo-600",
     lightColor: "bg-purple-50 border-purple-200 text-purple-700",
     url: "https://docs.google.com/spreadsheets/d/1PbE0jDn7-k70ZH2mEWRf3VoW6IjGlVgF4UOQiA75niE/edit",
     defaultPrompt: "[원터치 출결 키패드 웹앱 제작] 태블릿이나 모바일 화면에 0~9 번호 키패드가 뜨고, 수강생이 전화번호 뒤 4자리를 입력하면 출석 시간이 시트에 자동 기록되는 출결 웹앱(Web App)을 배포해줘."
+  },
+  {
+    rank: "✨ 맞춤형",
+    title: "내 구글 시트로 '나만의 맞춤 웹앱' 만들기",
+    target: "사내 특수 업무 · 커스텀 DB · 모든 비즈니스",
+    badge: "100% 자율 구성 • 1초 AI 래핑",
+    pain: "기성 템플릿에 맞지 않는 복잡한 사내 전용 업무 양식과 시트",
+    solution: "내 시트 링크만 넣고 원하는 기능을 적으면 AI가 맞춤형 웹앱을 1초 만에 완성!",
+    columns: ["자유 컬럼", "계산 수식", "커스텀 버튼", "원격 배포"],
+    icon: Sparkles,
+    color: "from-slate-800 to-slate-900",
+    lightColor: "bg-slate-100 border-slate-300 text-slate-800",
+    url: "NEW_SHEET",
+    defaultPrompt: "[맞춤형 웹앱 제작] 이 구글 시트의 데이터를 기반으로 스마트폰과 PC 어디서나 편리하게 조회, 입력, 처리할 수 있는 직관적인 반응형 모바일 웹앱(Web App)을 배포해줘."
   }
 ];
 
@@ -374,35 +388,35 @@ export default function LandingPage() {
         </div>
 
         {/* =========================================================================
-            1.5. 🔥 대중 반응 폭발! 구글 시트 킬러 웹앱 TOP 5 쇼케이스
+            1.5. 🔥 대중 반응 폭발! 구글 시트 킬러 웹앱 쇼케이스 (3x2 완벽 대칭)
            ========================================================================= */}
         <div id="killer-webapps" className="w-full space-y-8 pt-6">
           <div className="space-y-3 text-center">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-rose-50 via-amber-50 to-emerald-50 border border-amber-200 text-amber-900 text-xs font-black shadow-xs mx-auto">
               <Sparkles className="w-4 h-4 text-amber-600 animate-bounce" />
-              <span>화제의 킬러 기능 • 구글 시트가 30초 만에 웹앱이 되는 마법</span>
+              <span>화제의 킬러 기능 • 구글 시트가 1초 만에 웹앱이 되는 마법</span>
             </div>
             <h2 className="text-2xl sm:text-4xl font-black text-slate-900 tracking-tight break-keep">
-              "구글 시트 링크 하나로 30초 만에 열리는 킬러 웹앱 TOP 5"
+              "구글 시트 링크 하나로 1초 만에 열리는 킬러 웹앱 6선"
             </h2>
             <p className="text-xs sm:text-base text-slate-500 max-w-2xl mx-auto break-keep leading-relaxed">
               비싼 외주 개발비나 월 구독료 없이, 구글 시트에 데이터만 적어두면<br className="hidden sm:inline" />
-              스마트폰으로 누구나 접속할 수 있는 모바일 웹앱 링크(URL)를 30초 만에 배포해 드립니다.
+              스마트폰으로 누구나 접속할 수 있는 모바일 웹앱 링크(URL)를 1초 만에 배포해 드립니다.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left max-w-6xl mx-auto items-stretch">
             {KILLER_WEBAPPS.map((app, idx) => {
               const IconComp = app.icon;
               return (
                 <div
                   key={idx}
-                  className="bg-white rounded-3xl border-2 border-slate-200/90 hover:border-emerald-500 hover:shadow-xl transition-all duration-300 p-6 flex flex-col justify-between space-y-5 group relative overflow-hidden"
+                  className="bg-white rounded-3xl border-2 border-slate-200/90 hover:border-emerald-500 hover:shadow-xl transition-all duration-300 p-6 flex flex-col justify-between space-y-5 group relative overflow-hidden h-full"
                 >
                   {/* 상단 액센트 그라디언트 바 */}
                   <div className={`absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r ${app.color}`} />
 
-                  <div className="space-y-4">
+                  <div className="space-y-4 flex-1 flex flex-col">
                     {/* 순위 & 뱃지 */}
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-black px-3 py-1 bg-slate-900 text-white rounded-xl shadow-xs">
@@ -418,36 +432,38 @@ export default function LandingPage() {
                       <div className={`p-3 rounded-2xl bg-gradient-to-br ${app.color} text-white shadow-md group-hover:scale-110 transition-transform shrink-0`}>
                         <IconComp className="w-6 h-6" />
                       </div>
-                      <div>
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wide">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-wide truncate">
                           타깃: {app.target}
-                        </span>
-                        <h3 className="font-black text-base sm:text-lg text-slate-900 leading-snug mt-0.5">
-                          {app.title}
-                        </h3>
+                        </div>
+                        <div className="min-h-[3.25rem] flex items-center mt-0.5">
+                          <h3 className="font-black text-base sm:text-[17px] text-slate-900 leading-snug break-keep">
+                            {app.title}
+                          </h3>
+                        </div>
                       </div>
                     </div>
 
                     {/* Pain vs SheetBot Solution 대비 */}
-                    <div className="space-y-2 text-xs">
-                      <div className="p-2.5 bg-rose-50/70 border border-rose-100 rounded-xl text-rose-700 flex items-start gap-2">
+                    <div className="space-y-2 text-xs min-h-[7rem] flex flex-col justify-between">
+                      <div className="p-2.5 bg-rose-50/70 border border-rose-100 rounded-xl text-rose-700 flex items-start gap-2 flex-1">
                         <XCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
-                        <span className="line-clamp-2 leading-relaxed">{app.pain}</span>
+                        <span className="leading-relaxed break-keep line-clamp-2">{app.pain}</span>
                       </div>
-                      <div className="p-2.5 bg-emerald-50/80 border border-emerald-200/80 rounded-xl text-emerald-900 flex items-start gap-2 font-medium">
+                      <div className="p-2.5 bg-emerald-50/80 border border-emerald-200/80 rounded-xl text-emerald-900 flex items-start gap-2 font-medium flex-1">
                         <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
-                        <span className="leading-relaxed"><strong>{app.solution}</strong></span>
+                        <span className="leading-relaxed break-keep"><strong>{app.solution}</strong></span>
                       </div>
                     </div>
 
                     {/* 시트 컬럼 태그 목록 */}
-                    <div className="space-y-1.5 pt-1">
+                    <div className="space-y-1.5 pt-1 min-h-[3.25rem]">
                       <div className="text-[10px] font-bold text-slate-400">필요한 구글 시트 컬럼:</div>
                       <div className="flex flex-wrap gap-1">
                         {app.columns.map((col, cIdx) => (
                           <span
                             key={cIdx}
-                            className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-semibold rounded-md border border-slate-200"
+                            className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-semibold rounded-md border border-slate-200 whitespace-nowrap"
                           >
                             {col}
                           </span>
@@ -456,13 +472,13 @@ export default function LandingPage() {
                     </div>
                   </div>
 
-                  {/* 하단 생성 버튼 */}
+                  {/* 하단 생성 버튼 (칼각 정렬) */}
                   <button
                     type="button"
                     onClick={() => handleSelectKillerWebApp(app)}
-                    className="w-full py-3 px-4 bg-slate-900 hover:bg-emerald-600 text-white font-extrabold text-xs rounded-2xl shadow-xs transition-all flex items-center justify-center gap-2 group-hover:shadow-md cursor-pointer active:scale-95"
+                    className="w-full py-3 px-4 bg-slate-900 hover:bg-emerald-600 text-white font-extrabold text-xs rounded-2xl shadow-xs transition-all flex items-center justify-center gap-2 group-hover:shadow-md cursor-pointer active:scale-95 mt-auto"
                   >
-                    <span>🚀 이 웹앱 30초 만에 만들기</span>
+                    <span>🚀 1초 만에 이 웹앱 래핑하기</span>
                     <ArrowRight className="w-4 h-4 text-emerald-400 group-hover:translate-x-0.5 transition-transform" />
                   </button>
                 </div>
