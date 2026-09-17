@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
-import { queryTable, updateRows } from "@/lib/egdesk-helpers";
+import { insertRows, queryTable, updateRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 
 /**
@@ -42,11 +42,19 @@ export async function GET(req: NextRequest) {
         }
       } catch {}
 
+      let actionChips = undefined;
+      if (r.action_chips) {
+        try {
+          actionChips = typeof r.action_chips === "string" ? JSON.parse(r.action_chips) : r.action_chips;
+        } catch {}
+      }
+
       return {
         id: String(r.id || ("msg_" + Date.now())),
         role: (r.role === "user" ? "user" : "bot") as "user" | "bot",
         text: String(r.message || ""),
         time: timeStr || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        actionChips,
       };
     });
 
@@ -57,6 +65,51 @@ export async function GET(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("[EasyBot-Messages-API] GET error:", err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
+/**
+ * POST /api/easybot/messages
+ * 시스템/자율 보고 메시지(브리핑, 경보 등) 또는 사용자 메시지를 영구 저장합니다.
+ */
+export async function POST(req: NextRequest) {
+  try {
+    await setupDatabase();
+    const userEmail = await getCurrentUserEmail();
+
+    if (!userEmail) {
+      return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
+    }
+
+    const cleanEmail = userEmail.toLowerCase().trim();
+    const body = await req.json();
+    const { role, message, actionChips, id } = body;
+
+    if (!message) {
+      return NextResponse.json({ success: false, error: "메시지 내용이 비어있습니다." }, { status: 400 });
+    }
+
+    const msgId = id || `chat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const nowTime = new Date().toISOString().replace("T", " ").slice(0, 19);
+
+    await insertRows("sheetbot_easybot_chats", [
+      {
+        id: msgId,
+        user_email: cleanEmail,
+        role: role === "user" ? "user" : "bot",
+        message: String(message),
+        action_chips: actionChips ? JSON.stringify(actionChips) : null,
+        created_at: nowTime,
+      },
+    ]);
+
+    return NextResponse.json({
+      success: true,
+      messageId: msgId,
+    });
+  } catch (err: any) {
+    console.error("[EasyBot-Messages-API] POST error:", err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

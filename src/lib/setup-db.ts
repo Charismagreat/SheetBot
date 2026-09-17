@@ -442,10 +442,16 @@ export async function setupDatabase(force = false): Promise<void> {
         { name: 'user_email', type: 'TEXT', notNull: true },
         { name: 'role', type: 'TEXT', notNull: true }, // 'user', 'bot'
         { name: 'message', type: 'TEXT', notNull: true },
+        { name: 'action_chips', type: 'TEXT' }, // 버튼 칩 목록 (JSON 문자열)
         { name: 'created_at', type: 'TEXT' },
       ],
       { tableName: 'sheetbot_easybot_chats' }
     );
+
+    // sheetbot_easybot_chats 테이블에 action_chips 컬럼 마이그레이션 보장
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_easybot_chats ADD COLUMN action_chips TEXT;`);
+    } catch {}
 
     // 14. sheetbot_user_devices 테이블 생성 (회원 전용 구글메시지 디바이스 대장)
     await safeCreateTable(

@@ -3,6 +3,7 @@
 import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter, usePathname } from "next/navigation";
 import {
   Bot,
   Sparkles,
@@ -88,9 +89,21 @@ const MIN_WIDTH = 340;
 const MIN_HEIGHT = 440;
 
 export default function EasyBot() {
+  const router = useRouter();
+  const pathname = usePathname();
   const { data: session, status: sessionStatus } = useSession();
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+
+  // 대화창 열림/닫힘 제어 및 세션 스토리지 지속성 보장 (페이지 이동 시에도 열린 상태 유지)
+  const setOpenWithPersistence = useCallback((open: boolean) => {
+    setIsOpen(open);
+    try {
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("sheetbot_easybot_open", open ? "1" : "0");
+      }
+    } catch {}
+  }, []);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -163,6 +176,13 @@ export default function EasyBot() {
   useEffect(() => {
     setMounted(true);
     checkHealth();
+
+    // 이전에 대화창이 열려있었다면 페이지 이동/새로고침 후에도 열린 상태 자동 복원
+    try {
+      if (typeof window !== "undefined" && sessionStorage.getItem("sheetbot_easybot_open") === "1") {
+        setIsOpen(true);
+      }
+    } catch {}
 
     // 저장된 크기 및 위치 복원
     try {
@@ -498,7 +518,7 @@ export default function EasyBot() {
         setIsAdminUser(true);
 
         const todayStr = new Date().toISOString().slice(0, 10);
-        const briefingStorageKey = `sheetbot_briefed_${session.user.email}_${todayStr}`;
+        const briefingStorageKey = `sheetbot_briefed_${session?.user?.email || "admin"}_${todayStr}`;
         const hasBriefed = typeof window !== "undefined" && sessionStorage.getItem(briefingStorageKey);
 
         // 최신 기준점 초기화
@@ -511,7 +531,7 @@ export default function EasyBot() {
           sessionStorage.setItem(briefingStorageKey, "done");
           setTimeout(() => {
             if (!isSubscribed) return;
-            setIsOpen(true);
+            setOpenWithPersistence(true);
             playNotificationChime();
 
             const isEvening = Boolean(json.data?.isEvening);
@@ -519,23 +539,23 @@ export default function EasyBot() {
               ? [
                   {
                     label: "🌇 마감 대장 최종 확인",
-                    url: "/dashboard/admin",
+                    url: "/dashboard/admin?tab=inquiries",
                     highlight: true,
                   },
                   {
                     label: "📊 오늘의 AI VOC 수요 리포트",
-                    url: "/dashboard/admin",
+                    url: "/dashboard/admin?tab=inquiries",
                   },
                 ]
               : [
                   {
                     label: "📋 고객 문의 대장 바로가기",
-                    url: "/dashboard/admin",
+                    url: "/dashboard/admin?tab=inquiries",
                     highlight: true,
                   },
                   {
                     label: "📊 AI VOC 수요 히트맵 보기",
-                    url: "/dashboard/admin",
+                    url: "/dashboard/admin?tab=inquiries",
                   },
                 ];
 
@@ -548,6 +568,18 @@ export default function EasyBot() {
             };
 
             setMessages((prev) => [...prev, briefingMsg]);
+
+            // 💾 시트봇 AI 자율 브리핑 메시지 DB 영구 저장 (새로고침/페이지 이동 시에도 보존)
+            apiFetch("/api/easybot/messages", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                id: briefingMsg.id,
+                role: "bot",
+                message: briefingMsg.text,
+                actionChips: chips,
+              }),
+            }).catch((err) => console.warn("[EasyBot] Failed to persist briefing:", err));
           }, 1400);
         }
 
@@ -580,7 +612,7 @@ export default function EasyBot() {
 
             // 긴급 이벤트 발생 시 -> 능동형 자동 팝업 & 차임벨 & 즉시 조치 액션 칩 표출
             if (pollJson.hasNewAlert && pollJson.alert) {
-              setIsOpen(true);
+              setOpenWithPersistence(true);
               playNotificationChime();
 
               // SLA 경보나 기기 경보는 세션 중복 알림 방지
@@ -598,13 +630,25 @@ export default function EasyBot() {
                 actionChips: pollJson.alert.chips || [
                   {
                     label: "📋 관리자 대장 바로가기",
-                    url: "/dashboard/admin",
+                    url: "/dashboard/admin?tab=inquiries",
                     highlight: true,
                   },
                 ],
               };
 
               setMessages((prev) => [...prev, alertMsg]);
+
+              // 💾 실시간 긴급 경보 메시지 DB 영구 저장
+              apiFetch("/api/easybot/messages", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  id: alertMsg.id,
+                  role: "bot",
+                  message: alertMsg.text,
+                  actionChips: alertMsg.actionChips,
+                }),
+              }).catch((err) => console.warn("[EasyBot] Failed to persist alert:", err));
             }
           } catch (e) {
             // 폴링 예외 시 조용히 유지
@@ -625,7 +669,7 @@ export default function EasyBot() {
       isSubscribed = false;
       if (pollTimer) clearInterval(pollTimer);
     };
-  }, [session?.user?.email, sessionStatus]);
+  }, [session?.user?.email, sessionStatus, setOpenWithPersistence]);
 
   useEffect(() => {
     if (isOpen) {
@@ -635,6 +679,46 @@ export default function EasyBot() {
       }, 100);
     }
   }, [isOpen, messages]);
+
+  // 액션 칩 클릭 핸들러 (부드러운 SPA 라우팅 & 대화창 보존)
+  const handleChipClick = useCallback(
+    (e: React.MouseEvent, chip: ActionChip) => {
+      e.preventDefault();
+      if (chip.onClick) {
+        chip.onClick();
+        return;
+      }
+
+      if (!chip.url || chip.url === "#") return;
+
+      // 외부 링크 처리
+      if (chip.url.startsWith("http://") || chip.url.startsWith("https://")) {
+        window.open(chip.url, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      try {
+        const targetUrl = new URL(chip.url, window.location.origin);
+        const targetPath = targetUrl.pathname;
+        const targetTab = targetUrl.searchParams.get("tab");
+
+        // 이미 관리자 페이지에 머무르고 있는 경우 -> 전체 새로고침 없이 탭만 즉각 전환
+        if (pathname === "/dashboard/admin" && targetPath === "/dashboard/admin") {
+          if (targetTab) {
+            window.dispatchEvent(new CustomEvent("sheetbot_switch_admin_tab", { detail: targetTab }));
+            window.history.pushState(null, "", chip.url);
+          }
+          return;
+        }
+
+        // 다른 페이지에서 이동하는 경우 -> Next.js SPA 클라이언트 라우팅 (대화창 상태 100% 보존)
+        router.push(chip.url);
+      } catch {
+        router.push(chip.url);
+      }
+    },
+    [pathname, router]
+  );
 
   const handleSend = async (questionText?: string) => {
     const textToSend = (questionText || input).trim();
@@ -792,7 +876,7 @@ export default function EasyBot() {
       {!isOpen && (
         <button
           onClick={() => {
-            setIsOpen(true);
+            setOpenWithPersistence(true);
             checkHealth();
           }}
           className="fixed bottom-6 right-6 z-[9990] group flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 text-white rounded-full shadow-2xl hover:shadow-indigo-500/40 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
@@ -977,7 +1061,7 @@ export default function EasyBot() {
               {/* 닫기 */}
               <button
                 type="button"
-                onClick={() => setIsOpen(false)}
+                onClick={() => setOpenWithPersistence(false)}
                 title="닫기"
                 className="p-1.5 rounded-lg hover:bg-white/20 text-white/80 hover:text-white transition-colors cursor-pointer"
               >
@@ -1053,19 +1137,14 @@ export default function EasyBot() {
                 >
                   {renderMessageContent(msg.text, msg.id)}
 
-                  {/* 🌟 인터랙티브 퀵 액션 버튼 칩 */}
+                  {/* 🌟 인터랙티브 퀵 액션 버튼 칩 (새로고침 없이 SPA 네비게이션 & 대화창 보존) */}
                   {msg.actionChips && msg.actionChips.length > 0 && (
                     <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-wrap gap-1.5">
                       {msg.actionChips.map((chip, cIdx) => (
-                        <a
+                        <button
                           key={cIdx}
-                          href={chip.url || "#"}
-                          onClick={(e) => {
-                            if (chip.onClick) {
-                              e.preventDefault();
-                              chip.onClick();
-                            }
-                          }}
+                          type="button"
+                          onClick={(e) => handleChipClick(e, chip)}
                           className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition-all inline-flex items-center gap-1 shadow-2xs active:scale-95 cursor-pointer ${
                             chip.highlight
                               ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white hover:opacity-90 ring-1 ring-indigo-400/40"
@@ -1073,7 +1152,7 @@ export default function EasyBot() {
                           }`}
                         >
                           <span>{chip.label}</span>
-                        </a>
+                        </button>
                       ))}
                     </div>
                   )}

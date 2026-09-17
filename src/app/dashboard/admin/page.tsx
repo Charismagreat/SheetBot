@@ -103,6 +103,51 @@ export default function AdminDashboardPage() {
     checkAdmin();
   }, []);
 
+  // URL ?tab=... 쿼리 파라미터 및 시트봇 AI 탭 전환 커스텀 이벤트 연동
+  useEffect(() => {
+    const validTabs: TabType[] = [
+      "users",
+      "inquiries",
+      "reviews",
+      "faqs",
+      "tax_invoices",
+      "pricing_cost",
+      "footer",
+      "sms",
+      "email",
+      "smart_rules",
+      "dispatch_logs",
+      "prompts",
+    ];
+
+    const syncTabFromUrl = () => {
+      if (typeof window === "undefined") return;
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab") as TabType | null;
+      if (tabParam && validTabs.includes(tabParam)) {
+        setActiveTab(tabParam);
+      }
+    };
+
+    syncTabFromUrl();
+
+    // 시트봇 AI 대화창 칩 클릭 이벤트 수신 (동일 페이지에서 부드러운 탭 전환)
+    const handleSwitchEvent = (e: any) => {
+      const targetTab = e?.detail as TabType;
+      if (targetTab && validTabs.includes(targetTab)) {
+        setActiveTab(targetTab);
+      }
+    };
+
+    window.addEventListener("sheetbot_switch_admin_tab", handleSwitchEvent);
+    window.addEventListener("popstate", syncTabFromUrl);
+
+    return () => {
+      window.removeEventListener("sheetbot_switch_admin_tab", handleSwitchEvent);
+      window.removeEventListener("popstate", syncTabFromUrl);
+    };
+  }, []);
+
   const checkAdmin = async () => {
     setLoading(true);
     try {

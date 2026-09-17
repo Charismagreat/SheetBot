@@ -87,8 +87,8 @@ export async function GET(req: NextRequest) {
           estimatedPrice,
           message: alertMessage,
           chips: [
-            { label: "📑 VIP 견적서/제안서 확인", url: "/dashboard/admin", highlight: true },
-            { label: "📲 0원 문자 즉시 회신", url: "/dashboard/admin" },
+            { label: "📑 VIP 견적서/제안서 확인", url: "/dashboard/admin?tab=inquiries", highlight: true },
+            { label: "📲 0원 문자 즉시 회신", url: "/dashboard/admin?tab=sms" },
           ],
         },
       });
@@ -116,8 +116,8 @@ export async function GET(req: NextRequest) {
             title: "세금계산서 신청",
             message: taxMessage,
             chips: [
-              { label: "📑 세금계산서 승인 검토", url: "/dashboard/admin", highlight: true },
-              { label: "🏛️ 홈택스 연동 확인", url: "/dashboard/admin" },
+              { label: "📑 세금계산서 승인 검토", url: "/dashboard/admin?tab=tax_invoices", highlight: true },
+              { label: "🏛️ 홈택스 연동 확인", url: "/dashboard/admin?tab=tax_invoices" },
             ],
           },
         });
@@ -169,8 +169,8 @@ export async function GET(req: NextRequest) {
             title: "SLA 골든타임 경보",
             message: slaMessage,
             chips: [
-              { label: "⚡ 골든타임 미답변 문의 확인", url: "/dashboard/admin", highlight: true },
-              { label: "🤖 AI 자동 초안 검토", url: "/dashboard/admin" },
+              { label: "⚡ 골든타임 미답변 문의 확인", url: "/dashboard/admin?tab=inquiries", highlight: true },
+              { label: "🤖 AI 자동 초안 검토", url: "/dashboard/admin?tab=inquiries" },
             ],
           },
         });
