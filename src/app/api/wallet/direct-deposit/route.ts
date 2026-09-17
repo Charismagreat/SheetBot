@@ -29,11 +29,11 @@ export async function POST(request: Request) {
     const email = userEmail.toLowerCase().trim();
     const pkg = TOKEN_PACKAGES.find((p) => p.id === packageId) || TOKEN_PACKAGES[1];
 
-    const baseName = (userName || email.split("@")[0] || "회원")
-      .replace(/[^a-zA-Z0-9가-힣]/g, "")
-      .substring(0, 3);
+    // 첫 글자 대문자 1자리 + 3자리 숫자 (예: charisma -> C670, 홍길동 -> 홍670)
+    const cleanChars = (userName || email.split("@")[0] || "S").replace(/[^a-zA-Z0-9가-힣]/g, "");
+    const initialChar = cleanChars ? cleanChars.charAt(0).toUpperCase() : "S";
     const randomSuffix = Math.floor(100 + Math.random() * 900);
-    const depositCode = baseName + randomSuffix;
+    const depositCode = initialChar + randomSuffix;
 
     const requestId = "dep_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
     const now = new Date();
