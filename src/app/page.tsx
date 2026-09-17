@@ -82,7 +82,7 @@ export const TEMPLATE_SHORTCUTS = [
     defaultPrompt: "구글 시트 사이드바에서 영수증이나 명함 이미지를 업로드하면 AI가 상호명, 금액, 일자, 연락처를 정밀 분석하여 시트 행에 최신순으로 자동 등록하는 기능을 주입해줘.",
     icon: ScanText,
     color: "bg-indigo-50 text-indigo-600 border-indigo-200",
-    url: "https://docs.google.com/spreadsheets/d/1SP_wJwYlOsjnJ8Y1soxAhpdm8mlmZVhh6Bj1N7nVIro/edit"
+    url: "https://docs.google.com/spreadsheets/d/1PbE0jDn7-k70ZH2mEWRf3VoW6IjGlVgF4UOQiA75niE/edit"
   }
 ];
 
