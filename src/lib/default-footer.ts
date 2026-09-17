@@ -83,7 +83,7 @@ export const DEFAULT_FOOTER: FooterInfo = {
   brand_description: "SheetBot은 복잡한 구글 스프레드시트 수식과 Google Apps Script(GAS)를 자연어로 간편하게 자동화하는 B2B 업무 생산성 플랫폼입니다.",
   copyright_text: "© 2026 SheetBot Corp. All rights reserved.",
   deposit_bank_name: "카카오뱅크",
-  deposit_account_number: "3333121695965",
+  deposit_account_number: "3333-12-1695965",
   deposit_account_holder: "차호석",
   deposit_toss_id: "",
   deposit_notify_phone: "01072165884",
