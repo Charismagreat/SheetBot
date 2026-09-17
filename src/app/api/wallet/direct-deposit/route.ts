@@ -8,8 +8,8 @@ import { setupDatabase } from "@/lib/setup-db";
 // 대표자/운영사 입금 기본 계좌 정보
 export const DEFAULT_BANK_INFO = {
   bankName: process.env.SHEETBOT_BANK_NAME || "카카오뱅크",
-  accountNumber: process.env.SHEETBOT_ACCOUNT_NUMBER || "3333-28-9876543",
-  accountHolder: process.env.SHEETBOT_ACCOUNT_HOLDER || "시트봇",
+  accountNumber: process.env.SHEETBOT_ACCOUNT_NUMBER || "3333121695965",
+  accountHolder: process.env.SHEETBOT_ACCOUNT_HOLDER || "차호석",
   tossMeId: process.env.SHEETBOT_TOSS_ME_ID || "",
 };
 
