@@ -311,6 +311,29 @@ export async function setupDatabase(force = false): Promise<void> {
       { tableName: 'sheetbot_payment_orders' }
     );
 
+    // 6-1. sheetbot_deposit_requests 테이블 생성 (다이렉트 송금 입금 대기 세션 대장)
+    await safeCreateTable(
+      'SheetBot 다이렉트 송금 입금 대기 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'deposit_code', type: 'TEXT', notNull: true }, // 예: '홍길동429'
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'user_name', type: 'TEXT' },
+        { name: 'package_id', type: 'TEXT', notNull: true },
+        { name: 'package_name', type: 'TEXT', notNull: true },
+        { name: 'amount_krw', type: 'INTEGER', notNull: true },
+        { name: 'tokens_to_credit', type: 'INTEGER', notNull: true },
+        { name: 'bank_name', type: 'TEXT' },
+        { name: 'account_number', type: 'TEXT' },
+        { name: 'account_holder', type: 'TEXT' },
+        { name: 'status', type: 'TEXT', notNull: true }, // 'PENDING', 'COMPLETED', 'EXPIRED'
+        { name: 'expires_at', type: 'TEXT' },
+        { name: 'completed_at', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_deposit_requests' }
+    );
+
     // 7. sheetbot_tax_invoices 테이블 생성 (세금계산서 및 현금영수증 발행 요청 대장)
     await safeCreateTable(
       'SheetBot 세금계산서 및 현금영수증 신청 대장',

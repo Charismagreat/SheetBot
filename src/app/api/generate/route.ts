@@ -424,6 +424,7 @@ ${existingScriptCode.trim()}
    - 상단 메뉴에는 관리/점검/삭제 등 부가 항목을 일절 노출하지 말고, 메뉴의 다른 업무 기능들이 모두 등록된 후 맨 마지막에 구분선(.addSeparator())과 함께 다음 순서대로 슬림하게 배치하세요:
      .addSeparator()
      .addItem('🤖 SheetBot AI 코파일럿', 'showAiCopilotSidebar')
+     .addItem('💳 토큰 잔액 확인 및 즉시 충전', 'openTokenRechargeModal')
      .addItem('📖 SheetBot 사용법 및 활용사례', 'openSheetBotGuide')
      .addToUi();
 2. 사이드바 표출 함수 showAiCopilotSidebar():
@@ -676,9 +677,17 @@ function onOpen() {
     .addItem('▶️ 자동화 작업 실행', 'runSheetBotAutomatedTask')
     .addItem('📊 일일 통계 집계', 'calculateDailySummary')
     .addSeparator()
+    .addItem('💳 토큰 잔액 확인 및 즉시 충전', 'openTokenRechargeModal')
     .addItem('🤖 SheetBot AI 코파일럿', 'showAiCopilotSidebar')
     .addItem('📖 SheetBot 사용법 및 활용사례', 'openSheetBotGuide')
     .addToUi();
+}
+
+function openTokenRechargeModal() {
+  var html = HtmlService.createHtmlOutput(
+    '<!DOCTYPE html><html><head><base target="_blank"><script>window.onload=function(){window.open("https://sheetbot.cloud/billing","_blank");google.script.host.close();};</script><style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f8fafc;color:#334155;}.btn{display:inline-block;margin-top:10px;padding:8px 16px;background:#059669;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:12px;}</style></head><body><div style="font-weight:bold;font-size:13px;margin-bottom:6px;">💳 SheetBot 토큰 충전 센터</div><div style="font-size:11px;color:#64748b;margin-bottom:10px;">새 창이 열리지 않으면 아래 버튼을 클릭하세요.</div><a href="https://sheetbot.cloud/billing" target="_blank" class="btn">토큰 충전 페이지 열기</a></body></html>'
+  ).setWidth(340).setHeight(150);
+  SpreadsheetApp.getUi().showModalDialog(html, "💳 SheetBot 토큰 충전 센터");
 }
 
 function openSheetBotGuide() {
