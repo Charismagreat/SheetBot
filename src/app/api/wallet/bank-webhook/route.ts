@@ -5,6 +5,7 @@ import { queryTable, updateRows } from "../../../../../egdesk-helpers";
 import { creditTokens } from "@/lib/token-wallet";
 import { executeSmartDispatchRules } from "@/lib/smart-dispatch-rules";
 import { setupDatabase } from "@/lib/setup-db";
+import { parseBankDepositSms } from "@/lib/bank-sms-parser";
 
 /**
  * POST /api/wallet/bank-webhook
@@ -15,11 +16,28 @@ export async function POST(request: Request) {
   try {
     await setupDatabase();
     const body = await request.json();
-    const { depositorName, amountKrw, bankName, requestId } = body;
+    let { depositorName, amountKrw, bankName, requestId } = body;
+
+    // 스마트폰 전달 앱에서 본문 텍스트 통째로 넘어온 경우 (smsText, text, content, message 등)
+    const rawSms = body.smsText || body.text || body.content || body.message || body.msg || depositorName || "";
+    if (typeof rawSms === "string" && rawSms.length > 5) {
+      const parsed = parseBankDepositSms(rawSms);
+      if (parsed.success) {
+        if (!amountKrw || Number(amountKrw) <= 0) {
+          amountKrw = parsed.amountKrw;
+        }
+        if (!depositorName || depositorName === rawSms) {
+          depositorName = parsed.depositCode;
+        }
+        if (!bankName || bankName === "자동감지") {
+          bankName = parsed.bankName;
+        }
+      }
+    }
 
     if (!depositorName || !amountKrw) {
       return NextResponse.json(
-        { success: false, error: "depositorName과 amountKrw가 필요합니다." },
+        { success: false, error: "depositorName과 amountKrw(또는 은행 입금 SMS 문자 본문)가 필요합니다." },
         { status: 400 }
       );
     }
