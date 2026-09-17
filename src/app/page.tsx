@@ -23,7 +23,11 @@ import {
   Cpu,
   ScanText,
   PlusCircle,
-  AlertCircle
+  AlertCircle,
+  Zap,
+  Bot,
+  Smartphone,
+  Database
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { SheetBotIcon } from "@/components/SheetBotLogo";
@@ -179,11 +183,10 @@ export default function LandingPage() {
             {/* 강력한 헤드카피 & 서브카피 */}
             <div className="space-y-2 max-w-2xl mx-auto break-keep">
               <h1 className="text-xl sm:text-3xl font-black text-slate-900 leading-snug tracking-tight">
-                <span className="text-emerald-700">구글 시트 하나로 완성하는 가장 안전한 AI 자동화</span>
+                <span className="text-emerald-700">구글 시트 주소만 넣으면, 시트 안에 AI를 탑재해드립니다.</span>
               </h1>
               <p className="text-xs sm:text-base text-slate-500 leading-relaxed">
-                머리 아픈 GCP 콘솔 설정, API 키 유출 공포, 복잡한 트리거 예약까지—<br className="hidden sm:inline" />
-                이제 시트봇이 전부 대신합니다. 당신은 업무에만 집중하세요.
+                어려운 GCP 설정이나 코딩 없이, 구글 시트 주소만 입력하면 AI가 시트 안으로 직접 장착됩니다.
               </p>
             </div>
           </div>
@@ -213,7 +216,7 @@ export default function LandingPage() {
               <button
                 type="submit"
                 disabled={isWrapping}
-                className="shrink-0 inline-flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white font-extrabold text-xs sm:text-sm rounded-full shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-70"
+                className="shrink-0 inline-flex items-center justify-center whitespace-nowrap gap-1.5 sm:gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white font-extrabold text-xs sm:text-sm rounded-full shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-70"
               >
                 {isWrapping ? (
                   <>
@@ -221,11 +224,7 @@ export default function LandingPage() {
                     <span>1초 래핑 중...</span>
                   </>
                 ) : (
-                  <>
-                    <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" />
-                    <span>⚡ 1초 래핑</span>
-                    <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 hidden sm:inline" />
-                  </>
+                  <span>1초 래핑(시트에 AI 탑재)</span>
                 )}
               </button>
             </div>
@@ -320,6 +319,135 @@ export default function LandingPage() {
               <p className="text-xs sm:text-sm text-slate-600 leading-relaxed break-keep">
                 완성된 코드가 구글 시트에 원클릭으로 직접 주입됩니다. API 키는 소스에 노출되지 않으며, 시트 상단 메뉴와 버튼으로 즉시 자동화가 가동됩니다.
               </p>
+            </div>
+          </div>
+        </div>
+
+        {/* =========================================================================
+            2.5. 일반 코딩 AI vs SheetBot 차별점 비교 섹션 (Killer Feature Showcase)
+           ========================================================================= */}
+        <div className="w-full space-y-8 pt-4">
+          <div className="space-y-3 text-center">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100/70 border border-emerald-300 text-emerald-800 text-[11px] sm:text-xs font-black mx-auto">
+              <Zap className="w-3.5 h-3.5 text-emerald-600" />
+              <span>일반 코딩 AI와 무엇이 다른가요?</span>
+            </div>
+            <h2 className="text-2xl sm:text-4xl font-black text-slate-900 break-keep">
+              "ChatGPT는 코드를 복사하라고 하지만,<br className="hidden sm:inline" /> SheetBot은 시트에 직접 꽂아 넣습니다"
+            </h2>
+            <p className="text-xs sm:text-base text-slate-500 max-w-2xl mx-auto break-keep leading-relaxed">
+              개발자가 아니어도 괜찮습니다. 복잡한 Apps Script 에디터를 열 필요도,<br className="hidden sm:inline" />
+              GCP 콘솔에서 비싼 Vision API 키를 카드로 결제할 필요도 없습니다.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-5xl mx-auto text-left">
+            {/* Diff Card 1: 코드 반영 방식 */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-xs hover:shadow-md transition-all p-6 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                    <Terminal className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-extrabold text-base text-slate-900">1. 코드 주입 &amp; 실행 방식</h3>
+                </div>
+                <span className="text-[11px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md">배포의 차이</span>
+              </div>
+              <div className="space-y-2 text-xs leading-relaxed">
+                <div className="p-3 bg-rose-50/70 border border-rose-100 rounded-2xl text-rose-700 flex items-start gap-2">
+                  <XCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
+                  <div>
+                    <span className="font-bold">일반 AI (ChatGPT / Cursor):</span> 수백 줄 코드를 텍스트로 받아 사용자가 직접 Apps Script 에디터에 복사·붙여넣고, 매니페스트 권한을 수동 설정해야 함 (초보자 에러 빈번)
+                  </div>
+                </div>
+                <div className="p-3 bg-emerald-50/80 border border-emerald-200/80 rounded-2xl text-emerald-900 flex items-start gap-2 font-medium">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-emerald-800">SheetBot + 안티그라비티:</span> 시트 URL만 주면 <strong>0초 만에 구글 클라우드에 원격 직접 주입(Direct Push)</strong>. 시트에서 <kbd className="px-1.5 py-0.5 bg-white border border-emerald-300 rounded text-[10px] font-mono font-bold shadow-2xs">F5</kbd> 새로고침만 누르면 상단 메뉴 생성 완료!
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Diff Card 2: 명함·영수증 AI 비전 OCR */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-xs hover:shadow-md transition-all p-6 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                    <ScanText className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-extrabold text-base text-slate-900">2. 명함·영수증 AI 비전 분석</h3>
+                </div>
+                <span className="text-[11px] font-bold px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md">비전 OCR</span>
+              </div>
+              <div className="space-y-2 text-xs leading-relaxed">
+                <div className="p-3 bg-rose-50/70 border border-rose-100 rounded-2xl text-rose-700 flex items-start gap-2">
+                  <XCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
+                  <div>
+                    <span className="font-bold">일반 AI (ChatGPT / Cursor):</span> 코드만 짜줄 뿐, 실제로 사진을 읽으려면 사용자가 GCP 결제 계좌를 등록하고 유료 Vision API 키를 발급받아 코드에 넣으라고 요구
+                  </div>
+                </div>
+                <div className="p-3 bg-emerald-50/80 border border-emerald-200/80 rounded-2xl text-emerald-900 flex items-start gap-2 font-medium">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-emerald-800">SheetBot + 안티그라비티:</span> <strong>최첨단 Gemini 비전 AI 터널 기본 내장</strong>. 복잡한 API 키 구매 없이, 사이드바에 명함/영수증 사진만 끌어다 놓으면 1초 만에 시트 표로 자동 정리!
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Diff Card 3: 스마트폰 문자(SMS) 실제 발송 */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-xs hover:shadow-md transition-all p-6 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                    <Smartphone className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-extrabold text-base text-slate-900">3. 스마트폰 SMS 문자 일괄 발송</h3>
+                </div>
+                <span className="text-[11px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md">통신 인프라</span>
+              </div>
+              <div className="space-y-2 text-xs leading-relaxed">
+                <div className="p-3 bg-rose-50/70 border border-rose-100 rounded-2xl text-rose-700 flex items-start gap-2">
+                  <XCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
+                  <div>
+                    <span className="font-bold">일반 AI (ChatGPT / Cursor):</span> 문자 통신망이 없어 가짜 시뮬레이션(Mock) 코드를 작성하거나, 유료 문자 대행사(알리고 등) API 키를 충전해서 쓰라고 안내
+                  </div>
+                </div>
+                <div className="p-3 bg-emerald-50/80 border border-emerald-200/80 rounded-2xl text-emerald-900 flex items-start gap-2 font-medium">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-emerald-800">SheetBot + 안티그라비티:</span> <strong>내 스마트폰 원클릭 연동으로 평생 통신비 0원</strong>! 시트에서 체크박스 선택 후 버튼 하나로 실제 수신자에게 무료 실시간 SMS 발송
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Diff Card 4: SQLite DB 백업 & 동시 수정 안전성 */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-xs hover:shadow-md transition-all p-6 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-purple-50 text-purple-600 rounded-xl">
+                    <Database className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-extrabold text-base text-slate-900">4. 대용량 데이터 보관 &amp; 충돌 방지</h3>
+                </div>
+                <span className="text-[11px] font-bold px-2 py-0.5 bg-purple-50 text-purple-700 rounded-md">데이터 안전</span>
+              </div>
+              <div className="space-y-2 text-xs leading-relaxed">
+                <div className="p-3 bg-rose-50/70 border border-rose-100 rounded-2xl text-rose-700 flex items-start gap-2">
+                  <XCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
+                  <div>
+                    <span className="font-bold">일반 AI (ChatGPT / Cursor):</span> 구글 시트 셀 한계(데이터 누적 시 속도 저하, 다른 사람이 덮어써서 유실되는 충돌 문제)를 해결할 외부 DB 인프라 부재
+                  </div>
+                </div>
+                <div className="p-3 bg-emerald-50/80 border border-emerald-200/80 rounded-2xl text-emerald-900 flex items-start gap-2 font-medium">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-emerald-800">SheetBot + 안티그라비티:</span> <strong>구글 드라이브 SQLite 양방향 백업</strong> &amp; <strong>낙관적 락킹(동시 수정 충돌 자동 방지)</strong> 기본 탑재로 대용량 데이터도 안전하게 관리!
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

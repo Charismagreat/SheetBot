@@ -64,7 +64,7 @@ export const MARKETPLACE_TEMPLATES: MarketplaceTemplate[] = [
     techStack: ["Google Apps Script", "EGDesk Phone MCP", "SQLite 3", "Tailwind CSS"],
     usageGuide: [
       "1. [사본 만들기]를 눌러 본인 구글 드라이브로 시트를 복제합니다.",
-      "2. 시트 상단 🚀 SheetBot 메뉴 ➔ ⚡ 터널 연결 상태 점검을 클릭하여 연동을 확인합니다.",
+      "2. 시트 상단 🚀 SheetBot 메뉴 ➔ 🤖 SheetBot AI 코파일럿을 열어 터널 정상 연결(초록불)을 확인합니다.",
       "3. 2행부터 수신자 목록을 작성하고 A열 체크 후 [발송] 선택 행 문자 일괄 발송을 누르면 즉시 전송됩니다.",
     ],
   },

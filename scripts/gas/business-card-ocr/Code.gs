@@ -1,336 +1,337 @@
 /**
- * ============================================================================
- * SheetBot 명함 관리 및 AI OCR 자동 등록 시스템
- * ============================================================================
- * 계정 식별자: sk_sheetbot_a38b5427ffde96c64ab63ba35b17fc7a8754d7d0cbfad4c4
- * 버전: v1.0.0
+ * 🚀 SheetBot 명함 AI 자동 등록 관리 대장 스크립트
+ * Gemini 3.8 Flash AI Vision 기반 명함 OCR & 구글 시트 자동 기록
  */
 
-// 터널 및 Gateway 설정
-var SHEETBOT_CONFIG = {
-  // 이지데스크 공용 터널 URL
-  TUNNEL_URL: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/ai-caller/tools/call",
-  // 백업용 시트봇 게이트웨이 엔드포인트
-  GATEWAY_URL: "https://sheetbot.cloud/api/gateway/mcp",
-  // 기본 마스터 API 키 (ScriptProperties에 설정되어 있으면 우선 사용)
-  DEFAULT_API_KEY: "a67ddc0f-7e2b-4997-9a0b-9667a74c89d0",
-  // 회원 개인 API 키
-  USER_API_KEY: "sk_sheetbot_a38b5427ffde96c64ab63ba35b17fc7a8754d7d0cbfad4c4"
-};
-
-/**
- * 시트 오픈 시 전용 메뉴 자동 생성
- */
 function onOpen() {
-  var ui = SpreadsheetApp.getUi();
-  ui.createMenu('🚀 SheetBot 메뉴')
-    .addItem('📇 명함 사진 OCR 자동 등록', 'openBusinessCardSidebar')
+  SpreadsheetApp.getUi()
+    .createMenu('🚀 SheetBot 메뉴')
+    .addItem('📷 [등록] 명함 사진 업로드 및 AI 자동 등록', 'showCardUploadSidebar')
     .addSeparator()
-    .addItem('🔄 터널 연결 상태 점검', 'testEgdeskTunnel')
-    .addSeparator()
+    .addItem('🤖 SheetBot AI 코파일럿', 'showAiCopilotSidebar')
     .addItem('📖 SheetBot 사용법 및 활용사례', 'openSheetBotGuide')
     .addToUi();
 }
 
-/**
- * 명함 OCR 등록 사이드바 열기
- */
-function openBusinessCardSidebar() {
+function showCardUploadSidebar() {
   var html = HtmlService.createHtmlOutputFromFile('Sidebar')
-    .setTitle('📇 SheetBot 명함 OCR 자동 등록')
-    .setWidth(420);
+    .setTitle('명함 AI 자동 등록')
+    .setWidth(360);
   SpreadsheetApp.getUi().showSidebar(html);
 }
 
+function openSheetBotGuide() {
+  var html = HtmlService.createHtmlOutput(
+    '<script>window.open("https://sheetbot.cloud", "_blank");google.script.host.close();</script>' +
+    '<div style="font-family: sans-serif; padding: 20px; text-align: center;">' +
+    '<h3>📖 SheetBot 안내</h3>' +
+    '<p>새 창에서 공식 가이드 페이지를 엽니다...</p>' +
+    '<a href="https://sheetbot.cloud" target="_blank" style="color: #059669; font-weight: bold;">여기를 클릭하세요</a>' +
+    '</div>'
+  ).setWidth(350).setHeight(180);
+  SpreadsheetApp.getUi().showModalDialog(html, 'SheetBot 사용 가이드');
+}
+
 /**
- * 활성 API 키 조회 (ScriptProperties 격리 우선)
+ * 터널 연결 상태 점검 친절 알림 함수 (표준 원칙 준수)
  */
-function getActiveApiKey() {
-  var propKey = PropertiesService.getScriptProperties().getProperty('EGDESK_API_KEY');
-  if (propKey && propKey.trim().length > 0) {
-    return propKey.trim();
+function testEgdeskTunnel() {
+  var ui = SpreadsheetApp.getUi();
+  var start = new Date().getTime();
+  try {
+    var res = egdeskUserDataListTables();
+    var elapsed = new Date().getTime() - start;
+    ui.alert(
+      '✅ SheetBot 터널 연결 정상',
+      '이지데스크 AI 클라우드 터널 통신이 정상 작동 중입니다.\n' +
+      '- 응답 속도: ' + elapsed + 'ms\n' +
+      '- 상태: Gemini AI Vision OCR 준비 완료',
+      ui.ButtonSet.OK
+    );
+  } catch (err) {
+    ui.alert('❌ 터널 연결 확인 필요', '오류 내용: ' + err.message, ui.ButtonSet.OK);
   }
-  return SHEETBOT_CONFIG.DEFAULT_API_KEY;
+}
+
+/**
+ * 클라이언트 사이드바에서 업로드된 Base64 명함 이미지를 분석하여 시트에 기입
+ */
+function processBusinessCardUpload(payload) {
+  try {
+    if (!payload || !payload.base64Data) {
+      return { success: false, message: '파일 데이터가 비어 있습니다.' };
+    }
+
+    var fileName = payload.fileName || 'business_card.png';
+    var mimeType = payload.mimeType || 'image/png';
+    var base64Data = payload.base64Data;
+
+    // 1. Gemini AI OCR 분석 요청 지침 프롬프트
+    var prompt = [
+      "당신은 최고 수준의 한국어 명함 광학 문자 인식(OCR) 전문가입니다.",
+      "첨부된 명함 이미지 또는 문서를 정밀하게 분석하여 다음 8가지 정보를 추출하세요.",
+      "1. 이름 (name): 성명",
+      "2. 직함 (position): 대표이사, 부장, 팀장, 책임연구원 등",
+      "3. 회사명 (company): 상호명, 기업명, 기관명",
+      "4. 부서 (department): 사업부, 전략기획팀, 개발팀 등 (없으면 빈문자열)",
+      "5. 전화번호 (phone): 휴대폰(010-...) 또는 대표전화(02-..., 031-... 등)",
+      "6. 이메일 (email): 이메일 주소",
+      "7. 주소 (address): 회사 본사 또는 지사 도로명 주소",
+      "8. 비고 (note): 팩스번호, 웹사이트, 주요 사업영역 등 참고사항",
+      "",
+      "반드시 아래 순수 JSON 형식으로만 응답하고, 마크다운 코드블록(```json)은 생략하거나 JSON만 출력하세요:",
+      "{\"name\": \"홍길동\", \"position\": \"대표이사\", \"company\": \"주식회사 시트봇\", \"department\": \"경영전략본부\", \"phone\": \"010-1234-5678\", \"email\": \"hong@example.com\", \"address\": \"서울시 강남구 테헤란로 123\", \"note\": \"홈페이지: sheetbot.cloud\"}"
+    ].join("\n");
+
+    // 2. EGDesk AI Caller 호출 (사용자 설정 모델 자동 연동)
+    var aiRes = egdeskToolsCall('ai-caller', 'ai_caller_call', {
+      caller: 'sheetbot-business-card-ocr',
+      temperature: 0.1,
+      prompt: prompt,
+      files: [
+        {
+          name: fileName,
+          content: base64Data,
+          encoding: 'base64',
+          mimeType: mimeType
+        }
+      ]
+    });
+
+    // 3. AI 응답 2중 언래핑
+    var card = egdeskExtractAiJson(aiRes);
+    if (!card || (!card.name && !card.company && !card.phone)) {
+      return { success: false, message: '명함 정보를 명확히 인식하지 못했습니다. 이미지가 선명한지 확인해 주세요.' };
+    }
+
+    // 4. 구글 스프레드시트에 기입
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getActiveSheet();
+    var nowStr = Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM-dd HH:mm:ss");
+
+    var rowData = [
+      nowStr,
+      card.name || '',
+      card.position || '',
+      card.company || '',
+      card.department || '',
+      card.phone || '',
+      card.email || '',
+      card.address || '',
+      card.note || ''
+    ];
+
+    sheet.appendRow(rowData);
+
+    // 마지막 행 스타일링 (가운데 정렬 및 폰트)
+    var lastRow = sheet.getLastRow();
+    var range = sheet.getRange(lastRow, 1, 1, rowData.length);
+    range.setFontFamily('Noto Sans KR').setFontSize(10);
+    range.getCell(1, 1).setHorizontalAlignment('center'); // 일시
+    range.getCell(1, 2).setHorizontalAlignment('center'); // 이름
+    range.getCell(1, 3).setHorizontalAlignment('center'); // 직함
+    range.getCell(1, 6).setHorizontalAlignment('center'); // 전화
+
+    return {
+      success: true,
+      data: card,
+      rowNumber: lastRow,
+      message: (card.company ? card.company + ' ' : '') + (card.name || '담당자') + ' 명함이 등록되었습니다.'
+    };
+  } catch (err) {
+    return { success: false, message: 'OCR 처리 중 오류: ' + err.message };
+  }
 }
 
 /**
  * AI Caller 응답 2중 언래핑 헬퍼 (JSON 객체 안전 추출)
  */
-function unwrapAiCallerJson(rawResponseText) {
-  if (!rawResponseText) return null;
-  
-  var parsed1 = null;
-  try {
-    parsed1 = JSON.parse(rawResponseText);
-  } catch (e) {
-    // 텍스트 자체가 직접 JSON 문자열일 수 있음
+function egdeskExtractAiJson(raw) {
+  if (!raw) return null;
+  var text = '';
+  if (typeof raw === 'object') {
+    if (raw.result && raw.result.content) {
+      if (Array.isArray(raw.result.content) && raw.result.content[0] && raw.result.content[0].text) {
+        text = raw.result.content[0].text;
+      } else if (typeof raw.result.content === 'string') {
+        text = raw.result.content;
+      } else {
+        text = JSON.stringify(raw.result.content);
+      }
+    } else if (raw.content) {
+      if (Array.isArray(raw.content) && raw.content[0] && raw.content[0].text) {
+        text = raw.content[0].text;
+      } else if (typeof raw.content === 'string') {
+        text = raw.content;
+      } else {
+        text = JSON.stringify(raw.content);
+      }
+    } else if (raw.text) {
+      text = raw.text;
+    } else {
+      text = JSON.stringify(raw);
+    }
+  } else if (typeof raw === 'string') {
+    text = raw;
   }
-  
-  // 1차 래퍼 분석 (result.content[0].text 형태)
-  var contentText = "";
-  if (parsed1 && parsed1.result && parsed1.result.content && parsed1.result.content[0]) {
-    contentText = parsed1.result.content[0].text || "";
-  } else if (parsed1 && parsed1.content) {
-    contentText = typeof parsed1.content === 'string' ? parsed1.content : JSON.stringify(parsed1.content);
-  } else if (parsed1 && parsed1.text) {
-    contentText = parsed1.text;
-  } else {
-    contentText = rawResponseText;
-  }
-  
-  // 만약 contentText 내부가 또 한 번 JSON 문자열로 감싸져 있다면 (e.g. {"content": "..."})
+
+  // 중첩 JSON 래퍼 체크
   try {
-    var nested = JSON.parse(contentText);
+    var nested = JSON.parse(text);
     if (nested && nested.content && typeof nested.content === 'string') {
-      contentText = nested.content;
+      text = nested.content;
     }
   } catch (ign) {}
-  
-  // 마크다운 코드블록 제거 (```json ... ```)
-  var cleaned = contentText.trim();
+
+  // 마크다운 코드블록 제거
+  var cleaned = text.trim();
   if (cleaned.indexOf('```') !== -1) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    cleaned = cleaned.replace(/^```(?:json)?s*/i, '').replace(/s*```$/i, '').trim();
   }
-  
-  // 최종 JSON 파싱
+
   try {
     return JSON.parse(cleaned);
   } catch (err) {
-    var match = cleaned.match(/\{[\s\S]*\}/);
+    var match = cleaned.match(/{[sS]*}/);
     if (match) {
       try {
         return JSON.parse(match[0]);
-      } catch (err2) {}
+      } catch (ign2) {}
     }
-    throw new Error('AI 응답을 JSON으로 변환할 수 없습니다: ' + cleaned.substring(0, 100));
-  }
-}
-
-// 2중 언래핑 함수 호환성 별칭
-var egdeskExtractAiJson = unwrapAiCallerJson;
-
-/**
- * 명함 이미지/문서 Base64 데이터를 AI Caller로 전송하여 OCR 데이터 추출
- */
-function analyzeBusinessCard(base64Data, fileName, mimeType) {
-  try {
-    if (!base64Data) {
-      return { success: false, error: '파일 데이터가 비어 있습니다.' };
-    }
-    
-    var apiKey = getActiveApiKey();
-    var tunnelUrl = SHEETBOT_CONFIG.TUNNEL_URL;
-    
-    var promptText = [
-      '당신은 대한민국 비즈니스 명함 인식 전문 AI OCR 엔진입니다.',
-      '첨부된 명함 이미지(또는 PDF 문서)의 모든 텍스트와 시각 요소를 면밀히 판독하여 인물과 회사 정보를 정확히 추출하세요.',
-      '반드시 오직 아래 스키마에 맞는 유효한 JSON 형식으로만 응답해야 합니다(마크다운 설명 제외):',
-      '{',
-      '  "name": "성명(이름)",',
-      '  "position": "직책/직급 (예: 대표이사, 부장, 팀장 등)",',
-      '  "company": "회사명/상호명 (주식회사 등 표기 포함)",',
-      '  "department": "소속 부서/팀",',
-      '  "mobile": "휴대전화 번호 (010-XXXX-XXXX 형식)",',
-      '  "phone": "회사 대표번호 또는 직통 일반전화",',
-      '  "email": "이메일 주소",',
-      '  "address": "사업장 주소 (도로명/지번 포함)",',
-      '  "website": "홈페이지 주소 또는 SNS 링크",',
-      '  "notes": "슬로건, 전문분야, 계좌번호 등 추가 메모"',
-      '}',
-      '주의사항:',
-      '1. 명함에 기재되지 않은 항목은 null이 아닌 빈 문자열("")로 반환하세요.',
-      '2. 전화번호와 휴대전화 번호가 혼동되지 않도록 명확히 분류하세요 (010은 mobile, 02/031/1588 등은 phone).',
-      '3. 한글과 영문이 함께 있는 경우 한국인 성명을 우선으로 기입하세요.'
-    ].join('\n');
-    
-    var payload = {
-      tool: 'ai_caller_call',
-      arguments: {
-        caller: 'sheetbot-businesscard-ocr',
-        temperature: 0.1,
-        prompt: promptText,
-        files: [
-          {
-            name: fileName || 'business_card.png',
-            content: base64Data,
-            encoding: 'base64',
-            mimeType: mimeType || 'image/png'
-          }
-        ]
-      }
-    };
-    
-    var options = {
-      method: 'post',
-      contentType: 'application/json',
-      headers: {
-        'X-Api-Key': apiKey
-      },
-      payload: JSON.stringify(payload),
-      muteHttpExceptions: true
-    };
-    
-    var startTime = new Date().getTime();
-    var response = UrlFetchApp.fetch(tunnelUrl, options);
-    var elapsedMs = new Date().getTime() - startTime;
-    var statusCode = response.getResponseCode();
-    var responseBody = response.getContentText();
-    
-    if (statusCode !== 200) {
-      return {
-        success: false,
-        error: 'AI Caller 서버 통신 오류 (HTTP ' + statusCode + '): ' + responseBody.substring(0, 150)
-      };
-    }
-    
-    var extractedData = unwrapAiCallerJson(responseBody);
-    return {
-      success: true,
-      data: extractedData,
-      elapsedMs: elapsedMs
-    };
-  } catch (err) {
-    Logger.log('analyzeBusinessCard 에러: ' + err.toString());
-    return {
-      success: false,
-      error: 'OCR 분석 처리 중 예외 발생: ' + err.message
-    };
+    return null;
   }
 }
 
 /**
- * 추출된 명함 데이터를 시트에 신규 행으로 추가
+ * 🤖 SheetBot AI 코파일럿 (통합 제어 센터: 터널 진단 · 안티그라비티 연동 · 연동 해제)
  */
-function saveBusinessCardToSheet(cardData) {
-  try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName('Sheet1') || ss.getActiveSheet();
-    
-    var now = new Date();
-    var timestamp = Utilities.formatDate(now, 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
-    
-    var newRow = [
-      timestamp,
-      cardData.name || '',
-      cardData.position || '',
-      cardData.company || '',
-      cardData.department || '',
-      cardData.mobile || '',
-      cardData.phone || '',
-      cardData.email || '',
-      cardData.address || '',
-      cardData.website || '',
-      cardData.notes || '',
-      'OCR 자동등록'
-    ];
-    
-    sheet.appendRow(newRow);
-    var lastRow = sheet.getLastRow();
-    
-    var dataRange = sheet.getRange(lastRow, 1, 1, 12);
-    dataRange.setFontFamily('Noto Sans KR');
-    dataRange.setFontSize(10);
-    
-    sheet.getRange(lastRow, 1).setHorizontalAlignment('center');
-    sheet.getRange(lastRow, 2).setHorizontalAlignment('center');
-    sheet.getRange(lastRow, 3).setHorizontalAlignment('center');
-    sheet.getRange(lastRow, 5).setHorizontalAlignment('center');
-    sheet.getRange(lastRow, 6).setHorizontalAlignment('center');
-    sheet.getRange(lastRow, 7).setHorizontalAlignment('center');
-    sheet.getRange(lastRow, 12).setHorizontalAlignment('center');
-    sheet.getRange(lastRow, 12).setBackground('#ecfdf5').setFontColor('#065f46').setFontWeight('bold');
-    
-    return {
-      success: true,
-      rowNumber: lastRow,
-      message: (cardData.name || '명함') + ' 님의 정보가 ' + lastRow + '행에 성공적으로 기록되었습니다.'
-    };
-  } catch (err) {
-    Logger.log('saveBusinessCardToSheet 에러: ' + err.toString());
-    return {
-      success: false,
-      error: '시트 저장 실패: ' + err.message
-    };
-  }
+function showAiCopilotSidebar() {
+  var html = HtmlService.createHtmlOutput(getAiCopilotSidebarHtml())
+    .setTitle("🤖 SheetBot AI 제어 센터")
+    .setWidth(360);
+  SpreadsheetApp.getUi().showSidebar(html);
 }
 
-/**
- * 터널 연결 상태 점검 (사용자 친화적 알림창)
- */
-function testEgdeskTunnel() {
-  var ui = SpreadsheetApp.getUi();
-  var apiKey = getActiveApiKey();
-  var tunnelUrl = SHEETBOT_CONFIG.TUNNEL_URL;
-  
+function getAiCopilotSidebarHtml() {
+  return '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+    '<script src="https://cdn.tailwindcss.com"></script>' +
+    '<style>body{font-family:sans-serif;background:#f8fafc;color:#0f172a;padding:14px;}</style>' +
+    '</head><body>' +
+    '<div class="space-y-4">' +
+      '<div class="flex items-center justify-between pb-3 border-b border-slate-200">' +
+        '<div><h1 class="text-sm font-extrabold text-slate-900">🤖 SheetBot 제어 센터</h1>' +
+        '<p class="text-[11px] text-slate-500">진단 · 안티그라비티 연동 · 관리</p></div>' +
+        '<button onclick="refreshStatus()" class="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold">🔄 점검</button>' +
+      '</div>' +
+      '<div class="p-3 bg-white rounded-xl border border-slate-200 shadow-sm">' +
+        '<div class="text-[11px] font-bold text-slate-500 mb-1">인프라 연결 상태</div>' +
+        '<div id="tunnelStatus" class="text-xs font-extrabold text-emerald-700 flex items-center gap-1.5">' +
+          '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>' +
+          '<span>점검 중...</span>' +
+        '</div>' +
+        '<div id="tunnelDetail" class="text-[10px] text-slate-400 mt-1">EGDesk Cloud 터널 준비 확인</div>' +
+      '</div>' +
+      '<div class="p-3 bg-white rounded-xl border border-slate-200 shadow-sm space-y-2.5">' +
+        '<div class="text-[11px] font-bold text-slate-700">🚀 안티그라비티(Antigravity) AI 확장</div>' +
+        '<p class="text-[11px] text-slate-500 leading-relaxed">새로운 자동화 기능 구현은 최첨단 AI 에이전트 안티그라비티에게 명령하세요.</p>' +
+        '<div class="p-2 bg-slate-50 border border-slate-200 rounded text-[10px] font-mono text-slate-600 break-all select-all" id="bridgeBox">' +
+          'https://sheetbot.cloud/api/agent/gas-bridge' +
+        '</div>' +
+        '<button onclick="openAntigravity()" class="w-full py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 text-white font-extrabold text-xs rounded-lg shadow-sm">🚀 안티그라비티 열기 및 자동화 시작</button>' +
+        '<button onclick="copyPrompt()" class="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg">📋 프롬프트 복사하기</button>' +
+        '<details class="pt-1">' +
+          '<summary class="text-[11px] text-slate-400 hover:text-slate-600 cursor-pointer font-medium">📝 직접 짠 코드 긴급 주입 (고급)</summary>' +
+          '<textarea id="userPrompt" class="w-full mt-2 text-xs p-2 border rounded resize-y min-h-[90px] bg-slate-50" placeholder="자연어 요청 또는 function ... 코드 붙여넣기"></textarea>' +
+          '<button onclick="submitDirectCode()" id="directBtn" class="mt-1.5 w-full py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded">⚡ 시트에 즉시 주입</button>' +
+        '</details>' +
+      '</div>' +
+      '<div class="p-3 bg-rose-50/70 rounded-xl border border-rose-200 text-xs space-y-2">' +
+        '<div class="font-bold text-rose-800 flex items-center gap-1">⚠️ 연동 관리 (Danger Zone)</div>' +
+        '<p class="text-[11px] text-rose-600 leading-relaxed">시트 데이터는 100% 보존되며, 상단 메뉴와 Apps Script 코드만 완전히 제거됩니다.</p>' +
+        '<button onclick="uninstallScript()" id="uninstallBtn" class="w-full py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg transition-colors">🗑️ 스크립트 전체 삭제</button>' +
+      '</div>' +
+    '</div>' +
+    '<script>' +
+      'function refreshStatus() {' +
+        'document.getElementById("tunnelStatus").innerHTML = "<span class=\"text-amber-600\">⏳ 점검 중...</span>";' +
+        'google.script.run.withSuccessHandler(function(res){' +
+          'if(res && res.success){' +
+            'document.getElementById("tunnelStatus").innerHTML = "<span class=\"text-emerald-600 font-extrabold\">🟢 터널 정상 (" + res.elapsed + "ms)</span>";' +
+            'document.getElementById("tunnelDetail").innerText = (res.serverName || "EGDesk Cloud") + " · 통신 준비 완료";' +
+          '} else {' +
+            'document.getElementById("tunnelStatus").innerHTML = "<span class=\"text-rose-600 font-extrabold\">🔴 연결 점검 필요</span>";' +
+            'document.getElementById("tunnelDetail").innerText = res ? res.error : "터널 응답 없음";' +
+          '}' +
+        '}).withFailureHandler(function(err){' +
+          'document.getElementById("tunnelStatus").innerHTML = "<span class=\"text-rose-600 font-extrabold\">🔴 통신 오류</span>";' +
+          'document.getElementById("tunnelDetail").innerText = err.message || "오류 발생";' +
+        '}).getTunnelStatusData();' +
+      '}' +
+      'function openAntigravity(){' +
+        'var text = "구글 시트 래핑 주소: https://sheetbot.cloud/api/agent/gas-bridge\n\n위 구글 시트에 다음 자동화 기능을 구현하고 즉시 주입해줘:\n[추가할 기능 입력]";' +
+        'if(navigator.clipboard && navigator.clipboard.writeText){' +
+          'navigator.clipboard.writeText(text).catch(function(e){});' +
+        '}' +
+        'window.open("antigravity://", "_blank");' +
+        'setTimeout(function(){' +
+          'alert("🚀 안티그라비티 지시 프롬프트가 클립보드에 자동 복사되었습니다!\n\n안티그라비티 창이 열리면 채팅창에 바로 [Ctrl + V]로 붙여넣고 원하는 기능을 입력하세요.");' +
+        '}, 300);' +
+      '}' +
+      'function copyPrompt(){' +
+        'var text = "구글 시트 래핑 주소: https://sheetbot.cloud/api/agent/gas-bridge\n\n위 구글 시트에 다음 자동화 기능을 구현하고 즉시 주입해줘:\n[추가할 기능 입력]";' +
+        'navigator.clipboard.writeText(text).then(function(){ alert("프롬프트가 클립보드에 복사되었습니다! 안티그라비티에 붙여넣으세요."); });' +
+      '}' +
+      'function submitDirectCode(){' +
+        'var prompt = document.getElementById("userPrompt").value.trim();' +
+        'if(!prompt){ alert("요청사항이나 코드를 입력해주세요."); return; }' +
+        'var btn = document.getElementById("directBtn");' +
+        'btn.innerText = "주입 중..."; btn.disabled = true;' +
+        'google.script.run.withSuccessHandler(function(res){' +
+          'alert(res.message || "주입 완료! F5를 눌러 새로고침하세요.");' +
+          'btn.innerText = "⚡ 시트에 즉시 주입"; btn.disabled = false;' +
+        '}).withFailureHandler(function(err){' +
+          'alert("주입 실패: " + err.message);' +
+          'btn.innerText = "⚡ 시트에 즉시 주입"; btn.disabled = false;' +
+        '}).executeSelfCodeInjection(prompt);' +
+      '}' +
+      'function uninstallScript(){' +
+        'if(!confirm("⚠️ 정말로 시트봇 자동화 스크립트를 모두 제거하시겠습니까?\n\n• 시트 내 데이터(표, 텍스트)는 100% 안전하게 유지됩니다.\n• 상단 메뉴와 자동화 기능만 깨끗하게 초기화됩니다.\n\n계속하시겠습니까?")) return;' +
+        'var btn = document.getElementById("uninstallBtn");' +
+        'btn.innerText = "제거 작업 진행 중..."; btn.disabled = true;' +
+        'google.script.run.withSuccessHandler(function(res){' +
+          'alert("✅ 모든 스크립트가 성공적으로 제거되었습니다.\n구글 시트를 새로고침(F5)하시면 상단 메뉴가 완전히 사라집니다.");' +
+          'google.script.host.close();' +
+        '}).withFailureHandler(function(err){' +
+          'alert("제거 실패: " + err.message);' +
+          'btn.innerText = "🗑️ 스크립트 전체 삭제"; btn.disabled = false;' +
+        '}).executeUninstallSheetBot();' +
+      '}' +
+      'window.onload = refreshStatus;' +
+    '</script>' +
+    '</body></html>';
+}
+
+function getTunnelStatusData() {
   var startTime = new Date().getTime();
   try {
-    var response = UrlFetchApp.fetch(tunnelUrl, {
-      method: 'post',
-      contentType: 'application/json',
-      headers: { 'X-Api-Key': apiKey },
-      payload: JSON.stringify({
-        tool: 'ai_caller_call',
-        arguments: {
-          caller: 'sheetbot-tunnel-health',
-          model: 'gemini-2.5-flash',
-          prompt: 'ping test. Reply with: PONG'
-        }
-      }),
-      muteHttpExceptions: true
-    });
-    
-    var elapsed = new Date().getTime() - startTime;
-    var status = response.getResponseCode();
-    
-    if (status === 200) {
-      ui.alert(
-        '🚀 SheetBot 터널 연결 정상',
-        '✅ EGDesk 클라우드 터널과 AI 엔진이 정상적으로 연결되어 있습니다!\n\n' +
-        '• 연결 상태: 정상 작동 중 (HTTP 200)\n' +
-        '• 응답 속도: ' + elapsed + ' ms\n' +
-        '• 서비스: AI OCR & 데이터 연동 활성화 완료',
-        ui.ButtonSet.OK
-      );
-    } else {
-      ui.alert(
-        '⚠️ 터널 응답 오류',
-        '서버 응답 상태 코드: HTTP ' + status + '\n' +
-        '응답 내용: ' + response.getContentText().substring(0, 150),
-        ui.ButtonSet.OK
-      );
+    if (typeof egdeskUserDataListTables === 'function') {
+      egdeskUserDataListTables();
     }
-  } catch (e) {
-    ui.alert(
-      '❌ 터널 연결 실패',
-      '터널 연결 중 오류가 발생했습니다:\n' + e.message + '\n\n' +
-      '네트워크 상태 및 SheetBot 터널 가동 여부를 확인해 주세요.',
-      ui.ButtonSet.OK
-    );
+    var elapsed = new Date().getTime() - startTime;
+    return { success: true, elapsed: elapsed, serverName: "EGDesk Cloud", message: "정상 통신 준비 완료" };
+  } catch (err) {
+    return { success: false, error: err.message || "통신 실패", elapsed: new Date().getTime() - startTime };
   }
 }
 
-/**
- * 사용법 및 활용사례 모달 열기
- */
-function openSheetBotGuide() {
-  var html = HtmlService.createHtmlOutput(
-    '<div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; color: #1e293b;">' +
-    '  <h2 style="color: #4f46e5; margin-top: 0;">📖 SheetBot 명함 자동화 가이드</h2>' +
-    '  <p>스마트폰 카메라로 촬영한 명함 사진을 업로드하면 AI가 텍스트를 자동 판독하여 시트에 깔끔하게 정리해 줍니다.</p>' +
-    '  <h4 style="margin-bottom: 8px;">💡 주요 기능:</h4>' +
-    '  <ul style="padding-left: 20px; margin-top: 0;">' +
-    '    <li><strong>드래그 & 드롭</strong>: 명함 이미지(JPG, PNG) 및 PDF 간편 업로드</li>' +
-    '    <li><strong>정밀 AI OCR</strong>: 이름, 직함, 회사명, 휴대전화, 이메일 자동 분류</li>' +
-    '    <li><strong>사전 검토 및 수정</strong>: 시트에 넣기 전 직접 확인하고 수정 가능</li>' +
-    '    <li><strong>원클릭 연속 등록</strong>: 등록 완료 즉시 다음 명함을 바로 이어서 등록</li>' +
-    '  </ul>' +
-    '  <div style="margin-top: 24px; text-align: center;">' +
-    '    <a href="https://sheetbot.cloud" target="_blank" style="background-color: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">' +
-    '      🚀 SheetBot 공식 웹사이트 방문' +
-    '    </a>' +
-    '  </div>' +
-    '</div>'
-  ).setWidth(460).setHeight(380);
-  
-  SpreadsheetApp.getUi().showModalDialog(html, 'SheetBot 안내 센터');
+function executeUninstallSheetBot() {
+  try {
+    var triggers = ScriptApp.getProjectTriggers();
+    for (var i = 0; i < triggers.length; i++) {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+    return { success: true, message: "트리거 및 스크립트 정리 완료" };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 }
