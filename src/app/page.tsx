@@ -320,10 +320,10 @@ export default function LandingPage() {
                 {isWrapping ? (
                   <>
                     <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>30초 웹앱 배포 중...</span>
+                    <span>1초 AI 래핑 중...</span>
                   </>
                 ) : (
-                  <span>🚀 30초 웹앱·AI 배포</span>
+                  <span>1초 AI 래핑</span>
                 )}
               </button>
             </div>
