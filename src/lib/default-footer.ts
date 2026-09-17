@@ -23,6 +23,11 @@ export interface FooterInfo {
   deposit_account_number?: string;
   deposit_account_holder?: string;
   deposit_toss_id?: string;
+  deposit_notify_phone?: string;
+  google_messages_enabled?: boolean;
+  fast_burst_scan?: boolean;
+  bank_origin_number?: string;
+  auto_webhook_secret?: string;
   sns_channels: SnsChannel[];
 }
 
@@ -81,5 +86,10 @@ export const DEFAULT_FOOTER: FooterInfo = {
   deposit_account_number: "3333-01-9876543",
   deposit_account_holder: "주식회사 시트봇",
   deposit_toss_id: "",
+  deposit_notify_phone: "010-1234-5678",
+  google_messages_enabled: true,
+  fast_burst_scan: true,
+  bank_origin_number: "1599-3333",
+  auto_webhook_secret: "sb_wh_sec_2026",
   sns_channels: DEFAULT_SNS_CHANNELS,
 };

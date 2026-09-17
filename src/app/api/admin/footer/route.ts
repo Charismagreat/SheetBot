@@ -62,6 +62,11 @@ export async function POST(req: NextRequest) {
       deposit_account_number: body.deposit_account_number?.trim() || DEFAULT_FOOTER.deposit_account_number,
       deposit_account_holder: body.deposit_account_holder?.trim() || DEFAULT_FOOTER.deposit_account_holder,
       deposit_toss_id: body.deposit_toss_id?.trim() || "",
+      deposit_notify_phone: body.deposit_notify_phone?.trim() || DEFAULT_FOOTER.deposit_notify_phone,
+      google_messages_enabled: body.google_messages_enabled !== undefined ? Boolean(body.google_messages_enabled) : DEFAULT_FOOTER.google_messages_enabled,
+      fast_burst_scan: body.fast_burst_scan !== undefined ? Boolean(body.fast_burst_scan) : DEFAULT_FOOTER.fast_burst_scan,
+      bank_origin_number: body.bank_origin_number?.trim() || DEFAULT_FOOTER.bank_origin_number,
+      auto_webhook_secret: body.auto_webhook_secret?.trim() || DEFAULT_FOOTER.auto_webhook_secret,
       sns_channels: Array.isArray(body.sns_channels) ? body.sns_channels : DEFAULT_FOOTER.sns_channels,
     };
 
