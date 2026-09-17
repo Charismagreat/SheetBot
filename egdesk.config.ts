@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-17T08:52:57.853Z
+ * Generated at: 2026-09-17T13:52:04.565Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -25,7 +25,7 @@ export const TABLES = {
   table1: {
     name: 'sheetbot_deposit_requests',
     displayName: 'SheetBot 다이렉트 송금 입금 대기 대장',
-    rowCount: 2,
+    rowCount: 8,
     columnCount: 23,
     columns: ['id', '_version', 'deposit_code', 'user_email', 'user_name', 'package_id', 'package_name', 'amount_krw', 'tokens_to_credit', 'bank_name', 'account_number', 'account_holder', 'status', 'expires_at', 'completed_at', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -166,7 +166,7 @@ export const TABLES = {
   table21: {
     name: 'sheetbot_easybot_chats',
     displayName: 'SheetBot AI 대화 이력 대장',
-    rowCount: 1,
+    rowCount: 2,
     columnCount: 13,
     columns: ['id', '_version', 'user_email', 'role', 'message', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,

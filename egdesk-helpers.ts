@@ -1484,16 +1484,16 @@ export async function deleteFinanceHubBankProductRows(options: {
 }
 
 // ==========================================
-// INTERNAL KNOWLEDGE / BUSINESS IDENTITY / COMPANY RESEARCH (MCP)
+// BUSINESS IDENTITY / COMPANY RESEARCH (MCP)
 // ==========================================
 
 /**
- * Call EGDesk Internal Knowledge MCP tool (knowledge docs, business identity snapshots, company research).
+ * Call EGDesk Business Identity MCP tool (snapshots, product catalog, brand faces).
  *
- * - Server: `POST {apiUrl}/internal-knowledge/tools/call`
- * - Client: `POST /__internal_knowledge_proxy` (see proxy.ts / middleware)
+ * - Server: `POST {apiUrl}/business-identity/tools/call`
+ * - Client: `POST /__business_identity_proxy` (see proxy.ts / middleware)
  */
-export async function callInternalKnowledgeTool(
+export async function callBusinessIdentityTool(
   toolName: string,
   args: Record<string, any> = {}
 ): Promise<any> {
@@ -1506,13 +1506,13 @@ export async function callInternalKnowledgeTool(
     const apiUrl =
       (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
       EGDESK_CONFIG.apiUrl;
-    response = await fetch(`${apiUrl}/internal-knowledge/tools/call`, {
+    response = await fetch(`${apiUrl}/business-identity/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
       body
     });
   } else {
-    response = await apiFetch('/__internal_knowledge_proxy', {
+    response = await apiFetch('/__business_identity_proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body
@@ -1522,91 +1522,55 @@ export async function callInternalKnowledgeTool(
   return parseEgdeskMcpToolResponse(response);
 }
 
-/** List internal knowledge documents for a business identity snapshot */
-export async function listKnowledgeDocuments(
-  snapshotId: string,
-  category?: 'hierarchy' | 'process' | 'policy' | 'note'
-) {
-  return callInternalKnowledgeTool('knowledge_list_documents', {
-    snapshotId,
-    ...(category != null ? { category } : {})
-  });
-}
-
-/** Get one knowledge document by ID (full markdown content) */
-export async function getKnowledgeDocument(documentId: string) {
-  return callInternalKnowledgeTool('knowledge_get_document', { documentId });
-}
-
-/** Search knowledge documents by text in title or content */
-export async function searchKnowledgeContent(
-  snapshotId: string,
-  searchText: string,
-  category?: 'hierarchy' | 'process' | 'policy' | 'note'
-) {
-  return callInternalKnowledgeTool('knowledge_search_content', {
-    snapshotId,
-    searchText,
-    ...(category != null ? { category } : {})
-  });
-}
-
-/** Get all documents of a single category for a snapshot */
-export async function getKnowledgeByCategory(
-  snapshotId: string,
-  category: 'hierarchy' | 'process' | 'policy' | 'note'
-) {
-  return callInternalKnowledgeTool('knowledge_get_by_category', { snapshotId, category });
-}
-
-/** Create a new knowledge document */
-export async function createKnowledgeDocument(
-  snapshotId: string,
-  title: string,
-  category: 'hierarchy' | 'process' | 'policy' | 'note',
-  content?: string
-) {
-  return callInternalKnowledgeTool('knowledge_create_document', {
-    snapshotId,
-    title,
-    category,
-    ...(content != null ? { content } : {})
-  });
-}
-
-/** Update an existing knowledge document */
-export async function updateKnowledgeDocument(
-  documentId: string,
-  updates: { title?: string; category?: 'hierarchy' | 'process' | 'policy' | 'note'; content?: string }
-) {
-  return callInternalKnowledgeTool('knowledge_update_document', { documentId, ...updates });
-}
-
-/** Delete a knowledge document */
-export async function deleteKnowledgeDocument(documentId: string) {
-  return callInternalKnowledgeTool('knowledge_delete_document', { documentId });
-}
-
 /** List business identity snapshots (optional brand filter) */
 export async function listBusinessIdentitySnapshots(brandKey?: string) {
-  return callInternalKnowledgeTool('businessidentity_list_snapshots', {
+  return callBusinessIdentityTool('bi_list_snapshots', {
     ...(brandKey != null ? { brandKey } : {})
   });
 }
 
 /** Full snapshot by ID (identity JSON, SEO/SSL analysis, etc.) */
 export async function getBusinessIdentitySnapshot(snapshotId: string) {
-  return callInternalKnowledgeTool('businessidentity_get_snapshot', { snapshotId });
+  return callBusinessIdentityTool('bi_get_snapshot', { snapshotId });
 }
 
 /** Company info slice from a snapshot (contact, structure, partners, industries) */
 export async function getBusinessIdentityCompanyInfo(snapshotId: string) {
-  return callInternalKnowledgeTool('businessidentity_get_company_info', { snapshotId });
+  return callBusinessIdentityTool('bi_get_company_info', { snapshotId });
 }
 
 /** Services and products from a snapshot */
 export async function getBusinessIdentityServicesProducts(snapshotId: string) {
-  return callInternalKnowledgeTool('businessidentity_get_services_products', { snapshotId });
+  return callBusinessIdentityTool('bi_get_services_products', { snapshotId });
+}
+
+/** List managed catalog products for a BI snapshot */
+export async function listBusinessIdentityCatalogProducts(snapshotId: string) {
+  return callBusinessIdentityTool('bi_catalog_list_products', { snapshotId });
+}
+
+/** Get one catalog product by id or name */
+export async function getBusinessIdentityCatalogProduct(
+  snapshotId: string,
+  productIdOrName: string,
+  includeImages?: boolean
+) {
+  return callBusinessIdentityTool('bi_catalog_get_product', {
+    snapshotId,
+    productIdOrName,
+    includeImages
+  });
+}
+
+/** List AI brand faces / spokespersons for a BI snapshot */
+export async function listBusinessIdentityFaces(
+  snapshotId: string,
+  includePortraitBase64?: boolean
+) {
+  return callBusinessIdentityTool('bi_face_list', {
+    snapshotId,
+    includePortraitBase64
+  });
 }
 
 /**
@@ -1944,6 +1908,20 @@ export async function fillBrowserRecordingForm(
   return callBrowserRecordingTool('browser_recording_fill_form', { sessionId, fields });
 }
 
+/**
+ * Set a start/end date range filter (startDate/endDate as YYYY-MM-DD), trying a preset
+ * button (exact-range match only), a plain start/end input pair, then an ecount-style
+ * composite day picker (day-only, gated on year/month already matching). Returns
+ * strategy="unsupported" with a message rather than guessing when none apply.
+ */
+export async function setBrowserRecordingDateRange(
+  sessionId: string,
+  startDate: string,
+  endDate: string
+) {
+  return callBrowserRecordingTool('browser_recording_set_date_range', { sessionId, startDate, endDate });
+}
+
 /** Type into a lookup/search field (does not bind hidden id). Then inspect and double-click a row. */
 export async function typeIntoBrowserRecording(
   sessionId: string,
@@ -2027,11 +2005,16 @@ export async function saveBrowserRecordingPageHtml(sessionId: string, name?: str
   });
 }
 
-/** After walking one row cycle, bind that recipe to every remaining matching list key. */
+/** After walking one row cycle, bind that recipe to every remaining matching list key. Optional nextPage walks list pagers. */
 export async function forEachBrowserRecordingRow(
   sessionId: string,
   query: string,
-  opts?: { namePrefix?: string; skipExisting?: boolean; maxRows?: number }
+  opts?: {
+    namePrefix?: string;
+    skipExisting?: boolean;
+    maxRows?: number;
+    nextPage?: { elementIndex?: number; selector?: string; maxPages?: number };
+  }
 ) {
   return callBrowserRecordingTool('browser_recording_for_each_row', {
     sessionId,
@@ -2039,6 +2022,7 @@ export async function forEachBrowserRecordingRow(
     ...(opts?.namePrefix ? { namePrefix: opts.namePrefix } : {}),
     ...(opts?.skipExisting === false ? { skipExisting: false } : {}),
     ...(opts?.maxRows !== undefined ? { maxRows: opts.maxRows } : {}),
+    ...(opts?.nextPage ? { nextPage: opts.nextPage } : {}),
   });
 }
 
@@ -2610,16 +2594,16 @@ export async function getSeoIssuesSummary(reportId: string) {
 }
 
 // ==========================================
-// SSL (MCP)
+// HOSTING & CODING (MCP)
 // ==========================================
 
 /**
- * Call EGDesk SSL MCP tool (TLS/security analysis and certificate management).
+ * Call EGDesk Hosting & Coding MCP tool (SSL, certificates, and local dev servers).
  *
- * - Server: `POST {apiUrl}/ssl/tools/call`
- * - Client: `POST /__ssl_proxy` (see proxy.ts / middleware)
+ * - Server: `POST {apiUrl}/hosting-coding/tools/call`
+ * - Client: `POST /__hosting_coding_proxy` (see proxy.ts / middleware)
  */
-export async function callSslTool(
+export async function callHostingCodingTool(
   toolName: string,
   args: Record<string, any> = {}
 ): Promise<any> {
@@ -2632,13 +2616,13 @@ export async function callSslTool(
     const apiUrl =
       (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
       EGDESK_CONFIG.apiUrl;
-    response = await fetch(`${apiUrl}/ssl/tools/call`, {
+    response = await fetch(`${apiUrl}/hosting-coding/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
       body
     });
   } else {
-    response = await apiFetch('/__ssl_proxy', {
+    response = await apiFetch('/__hosting_coding_proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body
@@ -2649,64 +2633,104 @@ export async function callSslTool(
 }
 
 /** Full SSL/security audit: cert, headers, and letter grade (A+ to F) */
-export async function analyzeSslSite(url: string, save: boolean = true) {
-  return callSslTool('ssl_analyze_site', { url, save });
+export async function analyzeHostingSite(url: string, save: boolean = true) {
+  return callHostingCodingTool('hosting_analyze_site', { url, save });
 }
 
 /** Inspect TLS certificate for a URL (expiry, issuer, SANs) */
-export async function checkSslCertificate(url: string) {
-  return callSslTool('ssl_check_certificate', { url });
+export async function checkHostingCertificate(url: string) {
+  return callHostingCodingTool('hosting_check_certificate', { url });
 }
 
 /** Check security headers (HSTS, CSP, X-Frame-Options, etc.) */
-export async function checkSecurityHeaders(url: string) {
-  return callSslTool('ssl_check_security_headers', { url });
+export async function checkHostingSecurityHeaders(url: string) {
+  return callHostingCodingTool('hosting_check_security_headers', { url });
 }
 
 /** List saved SSL analysis history entries */
-export async function listSslAnalyses(options: { websiteUrl?: string; limit?: number } = {}) {
-  return callSslTool('ssl_list_analyses', options);
+export async function listHostingAnalyses(options: { websiteUrl?: string; limit?: number } = {}) {
+  return callHostingCodingTool('hosting_list_analyses', options);
 }
 
 /** Get a saved SSL analysis by ID */
-export async function getSslAnalysis(id: string) {
-  return callSslTool('ssl_get_analysis', { id });
+export async function getHostingAnalysis(id: string) {
+  return callHostingCodingTool('hosting_get_analysis', { id });
 }
 
 /** List stored SSL certificates (metadata only, no private keys) */
-export async function listSslCertificates() {
-  return callSslTool('ssl_list_certificates', {});
+export async function listHostingCertificates() {
+  return callHostingCodingTool('hosting_list_certificates', {});
 }
 
 /** Get stored certificate metadata by ID */
-export async function getSslCertificate(id: string) {
-  return callSslTool('ssl_get_certificate', { id });
+export async function getHostingCertificate(id: string) {
+  return callHostingCodingTool('hosting_get_certificate', { id });
 }
 
 /** Generate a self-signed certificate for local development */
-export async function generateSelfSignedCertificate(domain: string) {
-  return callSslTool('ssl_generate_self_signed', { domain });
+export async function generateHostingSelfSignedCertificate(domain: string) {
+  return callHostingCodingTool('hosting_generate_self_signed', { domain });
 }
 
 /** Generate a mkcert-trusted local development certificate (macOS) */
-export async function generateTrustedLocalCertificate(domain: string = 'egdesk.local') {
-  return callSslTool('ssl_generate_trusted_local', { domain });
+export async function generateHostingTrustedLocalCertificate(domain: string = 'egdesk.local') {
+  return callHostingCodingTool('hosting_generate_trusted_local', { domain });
 }
 
 /** Request a Let's Encrypt certificate via ACME HTTP-01 */
-export async function generateLetsEncryptCertificate(domain: string, email?: string) {
-  return callSslTool('ssl_generate_lets_encrypt', { domain, email });
+export async function generateHostingLetsEncryptCertificate(domain: string, email?: string) {
+  return callHostingCodingTool('hosting_generate_lets_encrypt', { domain, email });
 }
 
 /** Set the active certificate used by EGDesk dev servers */
-export async function setActiveSslCertificate(certificateId: string | null) {
-  return callSslTool('ssl_set_active_certificate', { certificateId });
+export async function setActiveHostingCertificate(certificateId: string | null) {
+  return callHostingCodingTool('hosting_set_active_certificate', { certificateId });
 }
 
 /** Delete a stored certificate by ID */
-export async function deleteSslCertificate(id: string) {
-  return callSslTool('ssl_delete_certificate', { id });
+export async function deleteHostingCertificate(id: string) {
+  return callHostingCodingTool('hosting_delete_certificate', { id });
 }
+
+/** List all registered projects and their current hosting/server status */
+export async function listHostingProjects() {
+  return callHostingCodingTool('coding_list_projects', {});
+}
+
+/** Start a development or production server for a project folder */
+export async function startHostingServer(folderPath: string, options: { mode?: 'dev' | 'production', forceBuild?: boolean, watch?: boolean } = {}) {
+  return callHostingCodingTool('coding_start_server', { folderPath, ...options });
+}
+
+/** Stop a running development or production server */
+export async function stopHostingServer(folderPath: string, mode?: 'dev' | 'production') {
+  return callHostingCodingTool('coding_stop_server', { folderPath, mode });
+}
+
+/** Get details and status for a specific project mode */
+export async function getHostingServerStatus(folderPath: string, mode: 'dev' | 'production') {
+  return callHostingCodingTool('coding_get_server_status', { folderPath, mode });
+}
+
+/** Update project access mode between public (tunneled) and private (local only) */
+export async function updateHostingAccessMode(projectName: string, accessMode: 'public' | 'private') {
+  return callHostingCodingTool('coding_update_access_mode', { projectName, accessMode });
+}
+
+/** Alias for compatibility with old SSL calls */
+export const callSslTool = callHostingCodingTool;
+export const analyzeSslSite = analyzeHostingSite;
+export const checkSslCertificate = checkHostingCertificate;
+export const checkSecurityHeaders = checkHostingSecurityHeaders;
+export const listSslAnalyses = listHostingAnalyses;
+export const getSslAnalysis = getHostingAnalysis;
+export const listSslCertificates = listHostingCertificates;
+export const getSslCertificate = getHostingCertificate;
+export const generateSelfSignedCertificate = generateHostingSelfSignedCertificate;
+export const generateTrustedLocalCertificate = generateHostingTrustedLocalCertificate;
+export const generateLetsEncryptCertificate = generateHostingLetsEncryptCertificate;
+export const setActiveSslCertificate = setActiveHostingCertificate;
+export const deleteSslCertificate = deleteHostingCertificate;
 
 // ==========================================
 // Local Agent AI (MCP)
@@ -3277,12 +3301,18 @@ export async function setDriveTargetFolders(folderIds: string[]) {
   return callDriveTool('drive_set_target_folders', { folderIds });
 }
 
-/** Upload a local file into a Drive folder (local → Workspace) */
+/**
+ * Upload a local file into a Drive folder (local → Workspace).
+ * Pass preferOAuth: true to upload as the signed-in Google user instead of the
+ * service account — needed when the service account has no Drive storage of its
+ * own (e.g. writing into a personal Gmail account without domain-wide delegation).
+ */
 export async function uploadDriveFile(options: {
   filePath: string;
   folderId?: string;
   destName?: string;
   mimeType?: string;
+  preferOAuth?: boolean;
 }) {
   return callDriveTool('drive_upload', options);
 }
@@ -3307,38 +3337,44 @@ export async function getDriveFile(fileId: string, options: WorkspaceVisitorCall
   return callDriveTool('drive_get_file', { fileId, preferOAuth }, { ...options, preferOAuth });
 }
 
-/** Create a Drive folder */
-export async function createDriveFolder(name: string, parentId?: string) {
-  return callDriveTool('drive_create_folder', { name, parentId });
+/**
+ * Create a Drive folder.
+ * Pass preferOAuth: true to create it as the signed-in Google user instead of
+ * the service account — needed when the service account has no Drive storage of
+ * its own (e.g. creating in a personal Gmail account without domain-wide delegation).
+ */
+export async function createDriveFolder(name: string, parentId?: string, preferOAuth?: boolean) {
+  return callDriveTool('drive_create_folder', { name, parentId, preferOAuth });
 }
 
-/** Download a Drive file to a local path */
-export async function downloadDriveFile(fileId: string, destPath: string) {
-  return callDriveTool('drive_download', { fileId, destPath });
+/** Download a Drive file to a local path. Pass preferOAuth: true to act as the signed-in Google user. */
+export async function downloadDriveFile(fileId: string, destPath: string, preferOAuth?: boolean) {
+  return callDriveTool('drive_download', { fileId, destPath, preferOAuth });
 }
 
-/** Move a file or folder into destFolderId */
-export async function moveDriveFile(fileId: string, destFolderId: string) {
-  return callDriveTool('drive_move', { fileId, destFolderId });
+/** Move a file or folder into destFolderId. Pass preferOAuth: true to act as the signed-in Google user. */
+export async function moveDriveFile(fileId: string, destFolderId: string, preferOAuth?: boolean) {
+  return callDriveTool('drive_move', { fileId, destFolderId, preferOAuth });
 }
 
-/** Copy a Drive file */
+/** Copy a Drive file. Pass preferOAuth: true to act as the signed-in Google user. */
 export async function copyDriveFile(options: {
   fileId: string;
   destName?: string;
   destFolderId?: string;
+  preferOAuth?: boolean;
 }) {
   return callDriveTool('drive_copy', options);
 }
 
-/** Rename a Drive file or folder */
-export async function renameDriveFile(fileId: string, name: string) {
-  return callDriveTool('drive_rename', { fileId, name });
+/** Rename a Drive file or folder. Pass preferOAuth: true to act as the signed-in Google user. */
+export async function renameDriveFile(fileId: string, name: string, preferOAuth?: boolean) {
+  return callDriveTool('drive_rename', { fileId, name, preferOAuth });
 }
 
-/** Move a Drive file or folder to trash */
-export async function trashDriveFile(fileId: string) {
-  return callDriveTool('drive_trash', { fileId });
+/** Move a Drive file or folder to trash. Pass preferOAuth: true to act as the signed-in Google user. */
+export async function trashDriveFile(fileId: string, preferOAuth?: boolean) {
+  return callDriveTool('drive_trash', { fileId, preferOAuth });
 }
 
 /** Find or create the top-level EGDesk Drive folder */
