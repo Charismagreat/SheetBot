@@ -42,6 +42,7 @@ import {
   PhoneCall,
   Printer,
   TrendingUp,
+  Wrench,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 
@@ -840,7 +841,123 @@ export default function UseCasesPage() {
       </section>
 
       {/* 활용사례 카드 그리드 */}
-      <main className="flex-1 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 w-full">
+      <main className="flex-1 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full space-y-12">
+        {/* =========================================================================
+            [신규 킬러 쇼케이스] 구글 시트 3장으로 끝내는 초경량 ERP 멀티 시트 파이프라인
+           ========================================================================= */}
+        <section className="bg-gradient-to-br from-slate-900 via-slate-800 to-teal-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-teal-500/30 space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-5">
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-500/20 border border-teal-400/40 text-teal-300 text-xs font-black">
+                <Layers className="w-3.5 h-3.5 text-teal-400" />
+                <span>엔터프라이즈 멀티 시트 오케스트레이션</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-white break-keep">
+                "A시트 입력 ➔ B시트 자동 가공 ➔ C시트 무료 고객 문자"
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 break-keep">
+                수천만 원짜리 맞춤형 ERP나 월 수십만 원 Zapier 없이, 서로 다른 구글 시트 3개만 이으면 우리 회사 자동화 완성!
+              </p>
+            </div>
+            <div className="text-xs px-3.5 py-2 rounded-2xl bg-white/5 border border-white/10 text-teal-200 shrink-0 font-mono">
+              💡 부서 간 시트 권한 완벽 격리 + 평생 통신비 0원
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* 1. 유통/쇼핑몰 */}
+            <div className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-5 space-y-3 transition-all">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="p-2 bg-emerald-500/20 text-emerald-300 rounded-xl">
+                    <ShoppingBag className="w-4 h-4" />
+                  </span>
+                  <h3 className="font-extrabold text-sm sm:text-base text-white">1. 유통·쇼핑몰: 주문 ➔ 창고 ➔ 배송문자</h3>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-500/20 text-emerald-300 rounded-md">일 2시간 절감</span>
+              </div>
+              <div className="text-xs space-y-1.5 text-slate-300 bg-black/30 p-3 rounded-xl font-mono leading-relaxed">
+                <div>• <span className="text-emerald-400 font-bold">[A] 주문 접수처:</span> 쇼핑몰 주문 인입 시트</div>
+                <div className="text-[11px] text-teal-400 pl-3">↳ 박스 규격·창고 위치 자동 연산 &amp; 포장팀 실시간 전달</div>
+                <div>• <span className="text-teal-400 font-bold">[B] 창고 출고대장:</span> 출고 지시서 생성 (창고에 매출 시트 차단)</div>
+                <div className="text-[11px] text-emerald-400 pl-3">↳ 송장 등록 즉시 고객 스마트폰으로 무료 알림 발송</div>
+                <div>• <span className="text-amber-300 font-bold">[C] 고객 DB:</span> "OO님 주문이 출고되었습니다" 무료 SMS</div>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                <strong className="text-white">실제 효과:</strong> 창고 직원에게 매출 시트 노출 원천 차단 + 오배송 0건
+              </p>
+            </div>
+
+            {/* 2. B2B / 영업·회계 */}
+            <div className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-5 space-y-3 transition-all">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="p-2 bg-indigo-500/20 text-indigo-300 rounded-xl">
+                    <Building2 className="w-4 h-4" />
+                  </span>
+                  <h3 className="font-extrabold text-sm sm:text-base text-white">2. B2B·에이전시: 수주 ➔ 회계원장 ➔ 입금안내</h3>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-500/20 text-indigo-300 rounded-md">미수금 누락 0%</span>
+              </div>
+              <div className="text-xs space-y-1.5 text-slate-300 bg-black/30 p-3 rounded-xl font-mono leading-relaxed">
+                <div>• <span className="text-indigo-400 font-bold">[A] 영업 수주대장:</span> 영업팀 계약 체결 및 발주 품목 입력</div>
+                <div className="text-[11px] text-indigo-300 pl-3">↳ 공급가액·세액(10%)·마진율 자동 계산 후 회계 원장 전송</div>
+                <div>• <span className="text-teal-400 font-bold">[B] 회계 미수금원장:</span> 입금 기한별 정산 대장 기입 (영업팀 차단)</div>
+                <div className="text-[11px] text-emerald-400 pl-3">↳ 결제일 D-3일 전 거래처 경리 스마트폰으로 무료 알림 발송</div>
+                <div>• <span className="text-amber-300 font-bold">[C] 거래처 경리DB:</span> "[OO상사] 세금계산서 입금 예정일 안내" SMS</div>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                <strong className="text-white">실제 효과:</strong> 부서 간 엑셀 대조 업무 0건 + 미수금 회수 속도 3배 개선
+              </p>
+            </div>
+
+            {/* 3. 학원 / 병의원 / 상담 */}
+            <div className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-5 space-y-3 transition-all">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="p-2 bg-amber-500/20 text-amber-300 rounded-xl">
+                    <GraduationCap className="w-4 h-4" />
+                  </span>
+                  <h3 className="font-extrabold text-sm sm:text-base text-white">3. 학원·병원: 상담예약 ➔ 강사배정 ➔ 노쇼방지</h3>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded-md">노쇼율 80% 급감</span>
+              </div>
+              <div className="text-xs space-y-1.5 text-slate-300 bg-black/30 p-3 rounded-xl font-mono leading-relaxed">
+                <div>• <span className="text-amber-400 font-bold">[A] 상담 예약접수:</span> 웹 설문지/홈페이지 신청서 접수</div>
+                <div className="text-[11px] text-amber-300 pl-3">↳ 희망 시간대 분석 후 담당 강사/의사별 빈 시간대 자동 배정</div>
+                <div>• <span className="text-teal-400 font-bold">[B] 스케줄 캘린더:</span> 강사·의사별 진료/수업 일정 자동 기입</div>
+                <div className="text-[11px] text-emerald-400 pl-3">↳ 배정 즉시 확정 안내 및 방문 D-1일 리마인드 무료 SMS</div>
+                <div>• <span className="text-amber-300 font-bold">[C] 수강생·환자DB:</span> 약도·준비물이 포함된 확정 &amp; 리마인드 SMS</div>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                <strong className="text-white">실제 효과:</strong> 월 10만 원 예약 솔루션 구독료 0원 + 노쇼 손실 완전 차단
+              </p>
+            </div>
+
+            {/* 4. 제조 / 현장 AS */}
+            <div className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-5 space-y-3 transition-all">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="p-2 bg-teal-500/20 text-teal-300 rounded-xl">
+                    <Wrench className="w-4 h-4" />
+                  </span>
+                  <h3 className="font-extrabold text-sm sm:text-base text-white">4. 제조·현장AS: 고장접수 ➔ 부품출고 ➔ 기사출동</h3>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-teal-500/20 text-teal-300 rounded-md">전화 통화 0건</span>
+              </div>
+              <div className="text-xs space-y-1.5 text-slate-300 bg-black/30 p-3 rounded-xl font-mono leading-relaxed">
+                <div>• <span className="text-teal-400 font-bold">[A] AS 고장접수:</span> 고객 장비 모델명 및 고장 증상 접수</div>
+                <div className="text-[11px] text-teal-300 pl-3">↳ 수리 부품 본사 재고 자동 차감 &amp; 수리 이력 대장 이관</div>
+                <div>• <span className="text-indigo-400 font-bold">[B] 부품재고 대장:</span> 본사 부품 재고 실시간 동기화</div>
+                <div className="text-[11px] text-emerald-400 pl-3">↳ 지역 관할 현장 기사에게 고객 위치·증상 담긴 출동 SMS</div>
+                <div>• <span className="text-amber-300 font-bold">[C] 기사·고객 DB:</span> 출동 지시 SMS &amp; 고객 방문 예정 알림</div>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                <strong className="text-white">실제 효과:</strong> 현장-창고-기사 간 전화 통화 0건 + 고객 AS 당일 즉시 출동
+              </p>
+            </div>
+          </div>
+        </section>
         {filteredUseCases.length === 0 ? (
           <div className="bg-white rounded-3xl border border-slate-200/80 p-12 text-center max-w-md mx-auto space-y-4">
             <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
