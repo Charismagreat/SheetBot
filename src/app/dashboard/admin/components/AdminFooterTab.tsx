@@ -11,6 +11,11 @@ import {
   Phone,
   Globe,
   CreditCard,
+  Smartphone,
+  Zap,
+  CheckCircle2,
+  Radio,
+  MessageSquare,
 } from "lucide-react";
 import { FooterInfo, SnsChannel } from "@/lib/default-footer";
 import { SnsIcon } from "@/components/SnsIcons";
@@ -28,6 +33,32 @@ export default function AdminFooterTab({
   saving,
   onSave,
 }: AdminFooterTabProps) {
+  // 은행 SMS 테스트 시뮬레이터 상태
+  const [testSmsInput, setTestSmsInput] = React.useState<string>(
+    "[카카오뱅크] 09/17 15:35 입금 12,000원(C670) 잔액 1,234,000원"
+  );
+  const [testSmsResult, setTestSmsResult] = React.useState<any>(null);
+  const [testingSms, setTestingSms] = React.useState<boolean>(false);
+
+  const handleTestSmsParse = async () => {
+    if (!testSmsInput.trim()) return;
+    setTestingSms(true);
+    setTestSmsResult(null);
+    try {
+      const res = await fetch("/api/wallet/test-sms-parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ smsText: testSmsInput }),
+      });
+      const data = await res.json();
+      setTestSmsResult(data);
+    } catch (err: any) {
+      setTestSmsResult({ success: false, message: "통신 오류: " + err.message });
+    } finally {
+      setTestingSms(false);
+    }
+  };
+
   // SNS 채널 조작 함수들
   const handleAddSnsChannel = () => {
     const newChan: SnsChannel = {
@@ -264,6 +295,175 @@ export default function AdminFooterTab({
               className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-600 font-mono text-slate-700"
             />
           </div>
+        </div>
+      </div>
+
+      {/* 📱 구글 메시지 연동 결제 확인 전용 폰 & 초고속 감지 설정 카드 */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+        <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <Smartphone className="w-4 h-4 text-indigo-600" />
+              <span>📱 구글 메시지(Google Messages) 연동 결제 확인 전용 폰 & 초고속 감지</span>
+            </h4>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              은행 입금 통지 문자를 수신하는 전용 스마트폰을 연동하여, 입금 시 1~2초 이내에 금액과 입금자 코드(예: C670)를 핀포인트 대조하고 토큰을 0초 자동 충전합니다.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full font-bold text-[10px] border border-indigo-200 flex items-center gap-1">
+              <Radio className="w-3 h-3 text-indigo-500 animate-pulse" />
+              <span>초고속 핀포인트 대조 모드</span>
+            </span>
+          </div>
+        </div>
+
+        {/* 1행: 입금 알림 수신 번호 & 은행 발신 대표번호 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+              <span>결제 확인 전용 전화번호 *</span>
+              <span className="text-[10px] text-indigo-600 font-normal">(은행 통지 SMS 수신 폰)</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={footerForm.deposit_notify_phone || ""}
+              onChange={(e) => onFooterFormChange((prev) => ({ ...prev, deposit_notify_phone: e.target.value }))}
+              placeholder="예: 010-1234-5678"
+              className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-600 font-mono font-bold text-slate-800"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-bold text-slate-600">은행 발신 대표번호 핀포인트</label>
+              <span className="text-[10px] text-slate-400">사생활 문자 배제 필터</span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={footerForm.bank_origin_number || ""}
+                onChange={(e) => onFooterFormChange((prev) => ({ ...prev, bank_origin_number: e.target.value }))}
+                placeholder="예: 1599-3333 (카카오뱅크)"
+                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-600 font-mono font-semibold text-slate-700"
+              />
+              <select
+                onChange={(e) => {
+                  if (e.target.value) {
+                    onFooterFormChange((prev) => ({ ...prev, bank_origin_number: e.target.value }));
+                  }
+                }}
+                className="text-xs p-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold cursor-pointer shrink-0"
+              >
+                <option value="">은행 선택</option>
+                <option value="1599-3333">카카오뱅크 (1599-3333)</option>
+                <option value="1661-7654">토스뱅크 (1661-7654)</option>
+                <option value="1588-9999">KB국민 (1588-9999)</option>
+                <option value="1577-8000">신한은행 (1577-8000)</option>
+                <option value="1588-5000">우리은행 (1588-5000)</option>
+                <option value="1599-1111">하나은행 (1599-1111)</option>
+                <option value="1588-2100">NH농협 (1588-2100)</option>
+                <option value="1566-2566">IBK기업 (1566-2566)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* 2행: 초고속 옵션 체크박스 2종 */}
+        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+          <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800">
+            <input
+              type="checkbox"
+              checked={footerForm.fast_burst_scan !== false}
+              onChange={(e) => onFooterFormChange((prev) => ({ ...prev, fast_burst_scan: e.target.checked }))}
+              className="w-4 h-4 text-indigo-600 rounded"
+            />
+            <span className="flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+              <span>동적 1초 버스트 가속 모드 (입금 세션 발생 시에만 1초 주기로 초고속 스캔)</span>
+            </span>
+          </label>
+          <p className="text-[11px] text-slate-400 pl-6 leading-relaxed">
+            평소에는 30초 주기로 스마트폰 배터리를 90% 이상 절약하며, 사용자가 구글 시트에서 입금 코드를 발급받았을 때만 1초 주기로 가속하여 즉시 대조합니다.
+          </p>
+
+          <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800 pt-1">
+            <input
+              type="checkbox"
+              checked={footerForm.google_messages_enabled !== false}
+              onChange={(e) => onFooterFormChange((prev) => ({ ...prev, google_messages_enabled: e.target.checked }))}
+              className="w-4 h-4 text-indigo-600 rounded"
+            />
+            <span className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>은행 공식 발신번호 핀포인트 1건 우선 스캔 (사적인 문자 스캔 완전 배제 및 0.03초 응답)</span>
+            </span>
+          </label>
+        </div>
+
+        {/* 3행: 구글 메시지 웹 페어링 바로가기 & 백업 웹훅 안내 */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 bg-indigo-50/50 border border-indigo-100 rounded-xl text-xs">
+          <div className="flex items-center gap-2 text-indigo-950 font-medium">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Google Messages RCS 연동 파이프라인 대기 중</span>
+          </div>
+          <a
+            href="https://messages.google.com/web"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-[11px] transition-colors flex items-center gap-1 shadow-xs"
+          >
+            <span>📲 구글 메시지 웹 페어링 열기</span>
+          </a>
+        </div>
+
+        {/* 4행: 은행 입금 SMS 즉시 파싱 & 매칭 시뮬레이터 */}
+        <div className="p-4 bg-slate-900 rounded-xl text-white space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+              <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+              <span>은행 입금 문자 즉시 파싱 & 대조 시뮬레이터</span>
+            </span>
+            <span className="text-[10px] text-slate-400">정규식 & 금액/식별코드 자동 검증</span>
+          </div>
+
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={testSmsInput}
+              onChange={(e) => setTestSmsInput(e.target.value)}
+              placeholder="테스트할 은행 입금 문자를 입력하세요 (예: [카카오뱅크] 입금 12,000원(C670))"
+              className="flex-1 text-xs p-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-mono placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
+            />
+            <button
+              type="button"
+              onClick={handleTestSmsParse}
+              disabled={testingSms}
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-lg transition-all shrink-0 cursor-pointer disabled:opacity-50"
+            >
+              {testingSms ? "파싱 중..." : "⚡ 파싱 테스트"}
+            </button>
+          </div>
+
+          {testSmsResult && (
+            <div className={`p-3 rounded-lg text-xs font-mono space-y-1 ${
+              testSmsResult.success ? "bg-emerald-950/80 border border-emerald-500/50 text-emerald-200" : "bg-rose-950/80 border border-rose-500/50 text-rose-200"
+            }`}>
+              <div className="font-bold flex items-center gap-1.5">
+                <span>{testSmsResult.success ? "✓ 파싱 성공" : "✕ 파싱 실패"}</span>
+                <span className="text-[11px] opacity-80">- {testSmsResult.message}</span>
+              </div>
+              {testSmsResult.parsed && (
+                <div className="text-[11px] opacity-90 flex flex-wrap gap-x-4 gap-y-1 pt-1 border-t border-white/10">
+                  <span>은행: <b>{testSmsResult.parsed.bankName}</b></span>
+                  <span>금액: <b>{Number(testSmsResult.parsed.amountKrw).toLocaleString()}원</b></span>
+                  <span>입금자명: <b className="text-amber-300">{testSmsResult.parsed.depositCode}</b></span>
+                  <span>적용규칙: <code>{testSmsResult.parsed.matchedRule}</code></span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
