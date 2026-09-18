@@ -128,7 +128,16 @@ export default function WrapPage() {
           <p className="mt-2 text-sm text-slate-400 leading-relaxed max-w-lg mx-auto">
             구글 시트에 시트봇을 래핑(감싸기)하세요.<br />
             래핑된 주소를 복사한 후<br />
-            바이브코딩 도구(안티그라비티)에 붙여넣고 자연어로 자동화 하세요.
+            바이브코딩 도구(
+            <a
+              href="https://antigravity.google/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-400 hover:text-indigo-300 underline underline-offset-4 transition-colors"
+            >
+              안티그라비티
+            </a>
+            )에 붙여넣고 자연어로 자동화 하세요.
           </p>
         </div>
 
