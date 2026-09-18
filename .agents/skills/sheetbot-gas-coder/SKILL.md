@@ -45,8 +45,12 @@ description: Google 스프레드시트 분석 및 Google Apps Script(GAS) 자동
    - 시트에 감지된 실제 컬럼(A열~Z열)의 순서와 개수를 1:1로 엄격히 맞추어 배열을 구성합니다.
 4. **다중 품목 분리 삽입**:
    - 발주서, 견적서, 거래명세서 등 품목이 여러 개인 문서는 1행으로 뭉뚱그리지 않고 품목당 1행씩(총 N개 행) 분리 삽입합니다.
-5. **표준 UI 및 진입점**:
+5. **표준 UI 및 3대 기본 메뉴 진입점**:
    - `onOpen()` 함수에서 반드시 `🚀 SheetBot 메뉴`를 등록합니다.
+   - 업무 기능 등록 후 구분선(`.addSeparator()`) 아래에 다음 **3대 고정 기본 메뉴**를 순서대로 반드시 포함합니다:
+     - `🤖 SheetBot AI 코파일럿` (`showAiCopilotSidebar`)
+     - `💳 토큰 잔액 확인 및 즉시 충전` (`openTokenRechargeModal`)
+     - `📖 SheetBot 사용법 및 활용사례` (`openSheetBotGuide`)
    - 웹 설문/신청서 요구 시 `doGet(e)` + Tailwind CSS 기반 모바일 반응형 독립 웹페이지 폼을 제공합니다.
 6. **SMS 문자 발송 표준 프로세스 (절대 원칙)**:
    - 가짜 성공(Mock) 절대 금지: `egdeskToolsCall('phone', 'phone_send', ...)`를 통한 실제 발송 구현.

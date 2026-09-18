@@ -13,7 +13,7 @@ import { setupDatabase } from "@/lib/setup-db";
 import { getAiModelSettings } from "@/lib/ai-settings";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { recordAiUsageLog } from "@/lib/ai-usage";
-import { ensureStandardManifest, generateSecureEgdeskConfig } from "@/lib/gas-manifest";
+import { ensureStandardManifest, generateSecureEgdeskConfig, generateStandardTokenRecharge } from "@/lib/gas-manifest";
 
 /**
  * 브릿지 토큰을 통해 프로젝트를 조회하고 삭제(소프트 삭제/PENDING_DELETE/TRASHED) 및 소유자 탈퇴 여부를 검증합니다.
@@ -239,7 +239,7 @@ export async function GET(request: NextRequest) {
           "1. [개인 API 키 요구 금지]: 사용자에게 Gemini/OpenAI API 키를 요구하는 팝업/UI를 만들지 마세요. 이미 주입된 egdeskToolsCall('ai-caller', 'ai_caller_call', ...) 함수를 호출하세요.",
           "2. [실제 헤더 1:1 매핑]: 상단에 보고서 타이틀/결재란이 있어 헤더가 10행 등에 위치하는 경우, suggestedHeaderRow 및 dataStartRow를 엄격히 준수하여 신규 데이터를 기입하세요.",
           "3. [다중 품목 분리 삽입]: 발주서나 견적서 등 다중 품목 문서는 1건당 1행이 아니라 품목별로 1행씩(N개 행) 분리하여 시트에 순차 기록하세요.",
-          "4. [onOpen 메뉴 등록]: 구글 시트 상단에 '🚀 SheetBot 메뉴' 메뉴를 등록하는 onOpen() 함수를 반드시 포함하고, 최하단에는 '📖 SheetBot 사용법 및 활용사례'(sheetbot.cloud 새 탭 열기) 메뉴를 필수로 포함하세요.",
+          "4. [onOpen 메뉴 등록]: 구글 시트 상단에 '🚀 SheetBot 메뉴'를 등록하는 onOpen() 함수를 반드시 포함하세요. 업무 기능 이후 구분선(.addSeparator()) 아래에 3대 고정 기본 메뉴 ['🤖 SheetBot AI 코파일럿', '💳 토큰 잔액 확인 및 즉시 충전', '📖 SheetBot 사용법 및 활용사례']를 필수로 순서대로 포함하세요.",
           "5. [AI 응답 언래핑 함수]: parseAiCallerResponse(toolRes) 유틸리티 함수를 Code.gs에 포함하여 안전하게 JSON을 추출하세요.",
         ],
         postEndpoint,
@@ -403,7 +403,13 @@ export async function POST(request: Request) {
         fileName: "EgdeskConfig.gs",
         content: generateSecureEgdeskConfig(project.user_email),
       }, visitorOptions).catch(() => null);
-      console.log(`[Gas-Bridge POST] Injected secured EGDesk tunnel into ${gasProjectId}`);
+      // 💳 기본 메뉴: 인-시트 실시간 토큰 충전 모듈(TokenRecharge.gs) 항상 자동 주입
+      await callAppsScriptTool("apps_script_write_file", {
+        projectId: gasProjectId,
+        fileName: "TokenRecharge.gs",
+        content: generateStandardTokenRecharge(),
+      }, visitorOptions).catch(() => null);
+      console.log(`[Gas-Bridge POST] Injected secured EGDesk tunnel & TokenRecharge into ${gasProjectId}`);
     } catch (tunnelErr: any) {
       console.warn("[Gas-Bridge POST] Setup tunnel warning:", tunnelErr.message);
     }
