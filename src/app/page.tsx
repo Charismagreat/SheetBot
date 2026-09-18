@@ -304,7 +304,7 @@ export default function LandingPage() {
                     className="underline underline-offset-4 decoration-emerald-500 hover:text-emerald-900 transition-colors"
                   >
                     구글시트
-                  </a>
+                  </a>{" "}
                   주소를 래핑한 후<br />
                   바이브코딩 도구(
                   <a
@@ -319,7 +319,8 @@ export default function LandingPage() {
                 </span>
               </h1>
               <p className="text-xs sm:text-base text-slate-500 leading-relaxed">
-                어려운 웹 개발도, 복잡한 GCP 설정도 필요 없습니다. 시트 링크 하나로 예약 접수, 공구 주문서, 재고 조회 웹앱까지 즉시 배포됩니다.
+                어려운 웹 개발도, 복잡한 GCP 설정도 필요 없습니다.<br />
+                랩핑된 시트 링크 하나로 자동화 프로그램이 완성됩니다.
               </p>
             </div>
           </div>
