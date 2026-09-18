@@ -298,7 +298,16 @@ export default function LandingPage() {
               <h1 className="text-xl sm:text-3xl font-black text-slate-900 leading-snug tracking-tight">
                 <span className="text-emerald-700">
                   구글시트 주소를 래핑한 후<br />
-                  바이브코딩 도구(안티그라비티)에 붙여넣고 자연어로 자동화 하세요.
+                  바이브코딩 도구(
+                  <a
+                    href="https://antigravity.google/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-4 decoration-emerald-500 hover:text-emerald-900 transition-colors"
+                  >
+                    안티그라비티
+                  </a>
+                  )에 붙여넣고 자연어로 자동화 하세요.
                 </span>
               </h1>
               <p className="text-xs sm:text-base text-slate-500 leading-relaxed">
