@@ -127,7 +127,8 @@ export default function WrapPage() {
           </h1>
           <p className="mt-2 text-sm text-slate-400 leading-relaxed max-w-lg mx-auto">
             구글 시트에 시트봇을 래핑(감싸기)하세요.<br />
-            래핑된 주소를 복사하여 바이브코딩 도구(안티그라비티, Cursor, Claude Code)에 붙여넣고 자연어로 자동화 하세요.
+            래핑된 주소를 복사한 후<br />
+            바이브코딩 도구(안티그라비티)에 붙여넣고 자연어로 자동화 하세요.
           </p>
         </div>
 
