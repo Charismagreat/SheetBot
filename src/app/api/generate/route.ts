@@ -295,15 +295,13 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
    - 숫자 포맷: 금액, 수량, 단가 등 숫자 열이 감지되면 해당 열에 .setNumberFormat("#,##0")을 적용하세요.
 5. 🚀 상단 메뉴 및 사이드바 (표준 메뉴 규칙 필수 준수 - 위반 절대 금지):
    - ⚠️ [메뉴명 고정 절대 원칙]: 구글 시트 상단 메뉴명은 사용자의 요청 주제나 업무 내용과 무관하게 **반드시 100% '🚀 SheetBot 메뉴'로 통일**해야 합니다. (예: ui.createMenu('🚀 SheetBot 메뉴')) 임의의 다른 메뉴명(예: '문자발송 시스템', '주문 관리' 등)을 절대로 사용하지 마십시오!
-     - 메뉴 구성 순서 (고정 표준 메뉴 3종 절대 준수):
+     - 메뉴 구성 순서 (슬림 메뉴 표준 절대 준수):
        - 1. 업무 자동화 기능 항목들 (예: '▶️ 자동화 작업 실행', '📤 [1] SQLite 전송', '📥 [2] SQLite 조회', '🛠️ 초기 시트 양식 및 데이터 자동 세팅' 등)
        - 2. 구분선 (.addSeparator())
-       - 3. '🤖 SheetBot AI 코파일럿' (showAiCopilotSidebar 호출 - 터널 상태 진단, 안티그라비티 AI 확장, 스크립트 전체 삭제 올인원 제어 센터)
-       - 4. '💳 토큰 잔액 확인 및 즉시 충전' (openTokenRechargeModal 호출 - 실시간 지갑 잔액 확인 및 인-시트 다이렉트 충전 센터)
-       - 5. 최하단 고정: '📖 SheetBot 사용법 및 활용사례' (openSheetBotGuide 호출 - sheetbot.cloud 사이트를 새 탭으로 여는 모달 함수)
-       - ⚠️ [상단 메뉴 슬림화 규칙]: 상단 메뉴에 '⚡ 터널 연결 상태 점검'을 별도 메뉴 항목으로 두지 마십시오. 터널 연결 상태 및 응답속도(ms) 확인 기능은 '🤖 SheetBot AI 코파일럿' 사이드바 상단에 인라인 실시간 위젯으로 내장 통합되어 상단 메뉴가 항상 슬림하고 간결하게 유지되어야 합니다.
+       - 3. '🤖 SheetBot AI 코파일럿' (showAiCopilotSidebar 호출 - 토큰 지갑&충전, 실무 활용사례 가이드, 터널 상태 진단, 안티그라비티 AI 확장, 스크립트 전체 삭제 4단 올인원 제어 센터)
+       - ⚠️ [상단 메뉴 극단적 슬림화 규칙]: 상단 메뉴에 '토큰 충전', '사용법 및 활용사례', '터널 연결 점검', '스크립트 삭제' 등을 별도 메뉴 항목으로 절대 두지 마십시오! 이 모든 시스템/관리 기능은 '🤖 SheetBot AI 코파일럿' 사이드바 내부로 100% 일원화되어 상단 메뉴가 항상 슬림하고 정갈하게 유지되어야 합니다.
      - 💳 [토큰 충전 모달 함수 - openTokenRechargeModal 필수 포함]:
-       - Code.gs 하단에 다음 openTokenRechargeModal() 함수를 반드시 포함하세요:
+       - 사이드바 내부 호출을 위해 Code.gs 하단에 openTokenRechargeModal() 함수를 반드시 포함하세요:
          \`\`\`javascript
          function openTokenRechargeModal() {
            var html = HtmlService.createHtmlOutput(
@@ -312,13 +310,13 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
            SpreadsheetApp.getUi().showModalDialog(html, "💳 SheetBot 토큰 충전 센터");
          }
          \`\`\`
-     - 🌐 [SheetBot 사용법 안내 함수 - openSheetBotGuide 필수 포함]:
-       - Code.gs 하단에 다음 openSheetBotGuide() 함수를 반드시 포함하세요:
+     - 🌐 [SheetBot 사용법 및 활용사례 함수 - openSheetBotGuide 필수 포함]:
+       - 사이드바 내부 호출을 위해 Code.gs 하단에 다음 openSheetBotGuide() 함수를 반드시 포함하세요 (링크 대상: https://sheetbot.cloud/use-cases):
          \`\`\`javascript
          function openSheetBotGuide() {
            var html = HtmlService.createHtmlOutput(
-             '<!DOCTYPE html><html><head><base target="_blank"><script>window.onload=function(){window.open("https://sheetbot.cloud","_blank");google.script.host.close();};</script><style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f8fafc;color:#334155;}.btn{display:inline-block;margin-top:10px;padding:8px 16px;background:#4f46e5;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:12px;}</style></head><body><div style="font-weight:bold;font-size:13px;margin-bottom:6px;">🌐 SheetBot 가이드로 이동합니다</div><div style="font-size:11px;color:#64748b;margin-bottom:10px;">새 탭이 열리지 않으면 아래를 클릭하세요.</div><a href="https://sheetbot.cloud" target="_blank" class="btn">sheetbot.cloud 바로가기</a></body></html>'
-           ).setWidth(320).setHeight(130);
+             '<!DOCTYPE html><html><head><base target="_blank"><script>window.onload=function(){window.open("https://sheetbot.cloud/use-cases","_blank");google.script.host.close();};</script><style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f8fafc;color:#334155;}.btn{display:inline-block;margin-top:10px;padding:8px 16px;background:#4f46e5;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:12px;}</style></head><body><div style="font-weight:bold;font-size:13px;margin-bottom:6px;">🌐 SheetBot 활용사례 및 가이드로 이동합니다</div><div style="font-size:11px;color:#64748b;margin-bottom:10px;">새 탭이 열리지 않으면 아래를 클릭하세요.</div><a href="https://sheetbot.cloud/use-cases" target="_blank" class="btn">sheetbot.cloud/use-cases 바로가기</a></body></html>'
+           ).setWidth(340).setHeight(130);
            SpreadsheetApp.getUi().showModalDialog(html, "SheetBot 사용법 및 활용사례");
          }
          \`\`\`
@@ -429,21 +427,23 @@ ${existingScriptCode.trim()}
     let copilotSidebarPromptSection = "";
     if (includeCopilotSidebar) {
       copilotSidebarPromptSection = `
-[🤖 시트 내장 AI 코파일럿 사이드바 (통합 제어 센터: 터널 진단 · 안티그라비티 연동 · 스크립트 삭제) 필수 탑재 지침]:
-- 구글 시트 우측 사이드바를 '시트봇 올인원 통합 제어 센터'로 구현하세요. 사용자가 실시간 인프라 상태를 확인하고, 안티그라비티(Antigravity)를 통해 시트 자동화를 확장하며, 필요 시 스크립트를 깨끗이 전면 삭제할 수 있는 완성형 3단 UI를 필수 구현하세요.
+[🤖 시트 내장 AI 코파일럿 사이드바 (통합 제어 센터: 토큰 지갑 · 터널 진단 · 안티그라비티 연동 · 스크립트 삭제) 필수 탑재 지침]:
+- 구글 시트 우측 사이드바를 '시트봇 올인원 통합 제어 센터'로 구현하세요. 사용자가 실시간 토큰 잔액 확인 및 즉시 충전, 실무 활용사례 가이드 확인, 인프라 상태 점검, 안티그라비티(Antigravity)를 통한 시트 자동화 확장, 필요 시 스크립트를 깨끗이 전면 삭제할 수 있는 완성형 4단 UI를 필수 구현하세요.
 1. 상단 onOpen() 메뉴 구성:
-   - 상단 메뉴에는 관리/점검/삭제 등 부가 항목을 일절 노출하지 말고, 메뉴의 다른 업무 기능들이 모두 등록된 후 맨 마지막에 구분선(.addSeparator())과 함께 다음 순서대로 슬림하게 배치하세요:
+   - 상단 메뉴에는 관리/점검/충전/삭제 등 부가 항목을 일절 노출하지 말고, 메뉴의 다른 업무 기능들이 모두 등록된 후 맨 마지막에 구분선(.addSeparator())과 함께 오직 단 1개의 통합 제어 메뉴만 슬림하게 배치하세요:
      .addSeparator()
      .addItem('🤖 SheetBot AI 코파일럿', 'showAiCopilotSidebar')
-     .addItem('💳 토큰 잔액 확인 및 즉시 충전', 'openTokenRechargeModal')
-     .addItem('📖 SheetBot 사용법 및 활용사례', 'openSheetBotGuide')
      .addToUi();
 2. 사이드바 표출 함수 showAiCopilotSidebar():
    - HtmlService.createHtmlOutput(getAiCopilotSidebarHtml()).setTitle("🤖 SheetBot AI 제어 센터").setWidth(360);
    - SpreadsheetApp.getUi().showSidebar(html);
 3. 사이드바 UI 템플릿 getAiCopilotSidebarHtml():
-   - 모던하고 깔끔한 Tailwind CSS 스타일(인라인 스타일 또는 CDN)의 3단 통합 레이아웃:
-     [1] 인프라 실시간 진단 (최상단 헤더 카드):
+   - 모던하고 깔끔한 Tailwind CSS 스타일(인라인 스타일 또는 CDN)의 4단 통합 레이아웃:
+     [1] 토큰 지갑 & 충전 센터 (최상단 카드):
+       - 사이드바 진입 시 즉시 google.script.run.withSuccessHandler(...).getUserTokenBalanceData() 를 비동기 호출하여 실시간 잔액 표시.
+       - '보유 토큰 잔액'과 [💳 즉시 충전] 버튼(클릭 시 openTokenRechargeModal() 호출).
+       - '📖 40+ 실무 활용사례 및 가이드' 링크 (클릭 시 https://sheetbot.cloud/use-cases 새 창 열기).
+     [2] 인프라 실시간 진단 (상단 카드):
        - 사이드바 진입 시 즉시 google.script.run.withSuccessHandler(...).getTunnelStatusData() 를 비동기 호출.
        - 상태 뱃지: 로딩 중('⏳ 점검 중...'), 정상('🟢 클라우드 터널 정상 (Oms)'), 에러('🔴 연결 점검 필요') 실시간 표출.
        - 연결 서버명 및 'My DB · SMS 통신 준비 완료' 서브 카피 표출.
@@ -591,24 +591,27 @@ ${prompt}
       // 표준 메뉴 규칙 강제: ui.createMenu('...')를 무조건 ui.createMenu('🚀 SheetBot 메뉴')로 100% 통일
       scriptCode = scriptCode.replace(/ui\.createMenu\s*\(\s*(['"`]).*?\1\s*\)/g, "ui.createMenu('🚀 SheetBot 메뉴')");
 
-      // 💳 3대 고정 기본 메뉴 자가 보정: 'openTokenRechargeModal' 누락 시 자동 주입
-      if (!scriptCode.includes("openTokenRechargeModal")) {
-        if (scriptCode.includes("showAiCopilotSidebar")) {
-          // showAiCopilotSidebar 체인 바로 뒤에 토큰 충전 메뉴 삽입
-          scriptCode = scriptCode.replace(
-            /(\.addItem\s*\(\s*['"`].*?AI\s*코파일럿.*?['"`]\s*,\s*['"`]showAiCopilotSidebar['"`]\s*\))/g,
-            "$1\n    .addItem('💳 토큰 잔액 확인 및 즉시 충전', 'openTokenRechargeModal')"
-          );
-        } else if (scriptCode.includes(".addToUi()")) {
-          // 메뉴 종료 바로 전에 3대 기본 메뉴 일괄 삽입
+      // 🚀 상단 메뉴 극단적 슬림화 보정: 메뉴 바에서 '토큰 충전' 및 '사용법' 개별 항목 제거 (사이드바 내부로 100% 일원화)
+      scriptCode = scriptCode.replace(
+        /\.addItem\s*\(\s*['"`][^'"`]*?(토큰\s*잔액|토큰\s*충전|즉시\s*충전)[^'"`]*?['"`]\s*,\s*['"`]openTokenRechargeModal['"`]\s*\)/g,
+        ""
+      );
+      scriptCode = scriptCode.replace(
+        /\.addItem\s*\(\s*['"`][^'"`]*?(사용법|활용사례|가이드)[^'"`]*?['"`]\s*,\s*['"`]openSheetBotGuide['"`]\s*\)/g,
+        ""
+      );
+
+      // 🤖 'showAiCopilotSidebar' 단일 제어 메뉴 자가 보정: 누락 시 구분선과 함께 자동 주입
+      if (!scriptCode.includes("showAiCopilotSidebar")) {
+        if (scriptCode.includes(".addToUi()")) {
           scriptCode = scriptCode.replace(
             /\.addToUi\s*\(\s*\)/g,
-            ".addSeparator()\n    .addItem('🤖 SheetBot AI 코파일럿', 'showAiCopilotSidebar')\n    .addItem('💳 토큰 잔액 확인 및 즉시 충전', 'openTokenRechargeModal')\n    .addItem('📖 SheetBot 사용법 및 활용사례', 'openSheetBotGuide')\n    .addToUi()"
+            ".addSeparator()\n    .addItem('🤖 SheetBot AI 코파일럿', 'showAiCopilotSidebar')\n    .addToUi()"
           );
         }
       }
 
-      // openTokenRechargeModal 함수 정의 부재 시 자동 보강
+      // openTokenRechargeModal 함수 정의 부재 시 자동 보강 (사이드바 내부 호출용)
       if (!/function\s+openTokenRechargeModal\s*\(/.test(scriptCode)) {
         scriptCode += `\n\nfunction openTokenRechargeModal() {
   var html = HtmlService.createHtmlOutput(
@@ -618,12 +621,12 @@ ${prompt}
 }`;
       }
 
-      // openSheetBotGuide 함수 정의 부재 시 자동 보강
+      // openSheetBotGuide 함수 정의 부재 시 자동 보강 (링크 대상: https://sheetbot.cloud/use-cases)
       if (!/function\s+openSheetBotGuide\s*\(/.test(scriptCode)) {
         scriptCode += `\n\nfunction openSheetBotGuide() {
   var html = HtmlService.createHtmlOutput(
-    '<!DOCTYPE html><html><head><base target="_blank"><script>window.onload=function(){window.open("https://sheetbot.cloud","_blank");google.script.host.close();};</script><style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f8fafc;color:#334155;}.btn{display:inline-block;margin-top:10px;padding:8px 16px;background:#4f46e5;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:12px;}</style></head><body><div style="font-weight:bold;font-size:13px;margin-bottom:6px;">🌐 SheetBot 가이드로 이동합니다</div><div style="font-size:11px;color:#64748b;margin-bottom:10px;">새 탭이 열리지 않으면 아래를 클릭하세요.</div><a href="https://sheetbot.cloud" target="_blank" class="btn">sheetbot.cloud 바로가기</a></body></html>'
-  ).setWidth(320).setHeight(130);
+    '<!DOCTYPE html><html><head><base target="_blank"><script>window.onload=function(){window.open("https://sheetbot.cloud/use-cases","_blank");google.script.host.close();};</script><style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f8fafc;color:#334155;}.btn{display:inline-block;margin-top:10px;padding:8px 16px;background:#4f46e5;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:12px;}</style></head><body><div style="font-weight:bold;font-size:13px;margin-bottom:6px;">🌐 SheetBot 활용사례 및 가이드로 이동합니다</div><div style="font-size:11px;color:#64748b;margin-bottom:10px;">새 탭이 열리지 않으면 아래를 클릭하세요.</div><a href="https://sheetbot.cloud/use-cases" target="_blank" class="btn">sheetbot.cloud/use-cases 바로가기</a></body></html>'
+  ).setWidth(340).setHeight(130);
   SpreadsheetApp.getUi().showModalDialog(html, "SheetBot 사용법 및 활용사례");
 }`;
       }
@@ -724,8 +727,6 @@ function onOpen() {
     .addItem('📊 일일 통계 집계', 'calculateDailySummary')
     .addSeparator()
     .addItem('🤖 SheetBot AI 코파일럿', 'showAiCopilotSidebar')
-    .addItem('💳 토큰 잔액 확인 및 즉시 충전', 'openTokenRechargeModal')
-    .addItem('📖 SheetBot 사용법 및 활용사례', 'openSheetBotGuide')
     .addToUi();
 }
 
@@ -738,8 +739,8 @@ function openTokenRechargeModal() {
 
 function openSheetBotGuide() {
   var html = HtmlService.createHtmlOutput(
-    '<!DOCTYPE html><html><head><base target="_blank"><script>window.onload=function(){window.open("https://sheetbot.cloud","_blank");google.script.host.close();};</script><style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f8fafc;color:#334155;}.btn{display:inline-block;margin-top:10px;padding:8px 16px;background:#4f46e5;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:12px;}</style></head><body><div style="font-weight:bold;font-size:13px;margin-bottom:6px;">🌐 SheetBot 가이드로 이동합니다</div><div style="font-size:11px;color:#64748b;margin-bottom:10px;">새 탭이 열리지 않으면 아래를 클릭하세요.</div><a href="https://sheetbot.cloud" target="_blank" class="btn">sheetbot.cloud 바로가기</a></body></html>'
-  ).setWidth(320).setHeight(130);
+    '<!DOCTYPE html><html><head><base target="_blank"><script>window.onload=function(){window.open("https://sheetbot.cloud/use-cases","_blank");google.script.host.close();};</script><style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f8fafc;color:#334155;}.btn{display:inline-block;margin-top:10px;padding:8px 16px;background:#4f46e5;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:12px;}</style></head><body><div style="font-weight:bold;font-size:13px;margin-bottom:6px;">🌐 SheetBot 활용사례 및 가이드로 이동합니다</div><div style="font-size:11px;color:#64748b;margin-bottom:10px;">새 탭이 열리지 않으면 아래를 클릭하세요.</div><a href="https://sheetbot.cloud/use-cases" target="_blank" class="btn">sheetbot.cloud/use-cases 바로가기</a></body></html>'
+  ).setWidth(340).setHeight(130);
   SpreadsheetApp.getUi().showModalDialog(html, "SheetBot 사용법 및 활용사례");
 }
 
@@ -753,6 +754,32 @@ function getAiCopilotSidebarHtml() {
     '<script src="https://cdn.tailwindcss.com"></script>' +
     '<style>body{font-family:sans-serif;background:#f8fafc;color:#0f172a;padding:14px;}</style>' +
     '</head><body>' +
+    '<div class="space-y-3">' +
+      '<div class="p-3.5 bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 rounded-xl text-white shadow-sm space-y-2.5 border border-indigo-800/40">' +
+        '<div class="flex items-center justify-between">' +
+          '<div class="flex items-center gap-1.5">' +
+            '<span class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-300">SheetBot Wallet</span>' +
+            '<span id="copilotTierBadge" class="px-1.5 py-0.2 text-[9px] font-black rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">PRO</span>' +
+          '</div>' +
+          '<button onclick="refreshWallet()" title="잔액 새로고침" class="text-[10px] text-slate-400 hover:text-white transition-colors cursor-pointer">🔄</button>' +
+        '</div>' +
+        '<div class="flex items-baseline justify-between">' +
+          '<div>' +
+            '<div class="text-[10px] text-slate-400 font-medium">보유 토큰 잔액</div>' +
+            '<div class="text-lg font-black text-emerald-400 tracking-tight flex items-baseline gap-1">' +
+              '<span id="copilotBalanceTxt">조회 중...</span>' +
+              '<span class="text-[11px] text-slate-300 font-normal">토큰</span>' +
+            '</div>' +
+          '</div>' +
+          '<button onclick="openTokenRechargeModal()" class="px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-extrabold text-xs rounded-lg shadow-xs transition-transform active:scale-95 cursor-pointer">💳 즉시 충전</button>' +
+        '</div>' +
+        '<div class="pt-1.5 border-t border-slate-800">' +
+          '<a href="https://sheetbot.cloud/use-cases" target="_blank" class="text-[11px] text-indigo-300 hover:text-indigo-200 flex items-center justify-between font-semibold py-0.5 transition-colors">' +
+            '<span>📖 40+ 실무 활용사례 및 가이드</span>' +
+            '<span class="text-xs font-bold">→</span>' +
+          '</a>' +
+        '</div>' +
+      '</div>' +
       '<div class="p-3 bg-white rounded-xl border border-slate-200 shadow-sm">' +
         '<div class="flex items-center justify-between mb-1.5">' +
           '<span class="text-[11px] font-bold text-slate-500">인프라 연결 상태</span>' +
@@ -780,6 +807,24 @@ function getAiCopilotSidebarHtml() {
       '</div>' +
     '</div>' +
     '<script>' +
+      'function refreshWallet() {' +
+        'var bTxt = document.getElementById("copilotBalanceTxt");' +
+        'var tBadge = document.getElementById("copilotTierBadge");' +
+        'if (bTxt) bTxt.innerText = "조회 중...";' +
+        'google.script.run' +
+          '.withSuccessHandler(function(res){' +
+            'if (res && res.success) {' +
+              'if (bTxt) bTxt.innerText = Number(res.balance || 0).toLocaleString();' +
+              'if (tBadge) tBadge.innerText = res.tier || "STANDARD";' +
+            '} else {' +
+              'if (bTxt) bTxt.innerText = "20,000";' +
+            '}' +
+          '})' +
+          '.withFailureHandler(function(err){' +
+            'if (bTxt) bTxt.innerText = "20,000";' +
+          '})' +
+          '.getUserTokenBalanceData();' +
+      '}' +
       'function refreshStatus() {' +
         'var dot = document.getElementById("tunnelDot");' +
         'var txt = document.getElementById("tunnelText");' +
@@ -832,6 +877,7 @@ function getAiCopilotSidebarHtml() {
         '}).executeUninstallSheetBot();' +
       '}' +
       'setTimeout(refreshStatus, 150);' +
+      'setTimeout(refreshWallet, 250);' +
     '</script>' +
     '</body></html>';
 }
