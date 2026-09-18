@@ -198,142 +198,170 @@ export default function WrapPage() {
           </div>
         </div>
 
-        {/* 결과 카드: 사용자 스크린샷(QuickWrapSuccessModal)과 100% 동일한 완성 뷰 */}
+        {/* 결과 팝업창 (모달 다이얼로그): 사용자 요청 팝업창 구조 */}
         <div
-          id="wrap-result-box"
-          className={`bg-white text-slate-900 rounded-3xl shadow-2xl border border-slate-100 p-6 sm:p-7 transition-all ${result ? 'block' : 'hidden'}`}
-          style={result ? { display: 'block' } : { display: 'none' }}
+          id="wrap-modal-overlay"
+          className="fixed inset-0 z-50 items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs transition-opacity"
+          style={result ? { display: 'flex' } : { display: 'none' }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              if ((window as any).__closeNativeModal) (window as any).__closeNativeModal();
+              else resetAll();
+            }
+          }}
         >
-          {/* 상단 헤더 */}
-          <div className="flex items-start justify-between pb-4 border-b border-slate-100">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-xl font-black text-slate-900 tracking-tight">
-                  내 구글 시트 래핑 완료!
-                </h3>
-                <span 
-                  id="res-badge-name" 
-                  className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200"
-                >
-                  {result?.projectName || '스마트 자동화 시트'}
-                </span>
+          <div
+            id="wrap-modal-card"
+            className="bg-white text-slate-900 rounded-3xl shadow-2xl border border-slate-100 p-6 sm:p-7 max-w-lg w-full relative animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 우측 상단 닫기 (X) 버튼 */}
+            <button
+              type="button"
+              id="btn-close-modal"
+              onClick={() => {
+                if ((window as any).__closeNativeModal) (window as any).__closeNativeModal();
+                else resetAll();
+              }}
+              className="absolute top-5 right-5 p-1.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition-all cursor-pointer"
+              title="닫기"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* 상단 헤더 */}
+            <div className="flex items-start justify-between pb-4 border-b border-slate-100 pr-8">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-black text-slate-900 tracking-tight">
+                    내 구글 시트 래핑 완료!
+                  </h3>
+                  <span 
+                    id="res-badge-name" 
+                    className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200"
+                  >
+                    {result?.projectName || '스마트 자동화 시트'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  안티그라비티, Cursor, Claude Code 등에 전달할 <strong className="text-slate-700">전용 래핑 주소</strong>가 발급되었습니다.
+                </p>
               </div>
-              <p className="text-xs text-slate-500 mt-1">
-                안티그라비티, Cursor, Claude Code 등에 전달할 <strong className="text-slate-700">전용 래핑 주소</strong>가 발급되었습니다.
-              </p>
             </div>
-          </div>
 
-          {/* 본문 콘텐츠 */}
-          <div className="py-5 space-y-5 text-left">
-            {/* [1] 발급된 래핑 주소 표시 박스 */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-extrabold text-slate-700 flex items-center gap-1.5">
-                  <span className="text-emerald-600">🔗</span>
-                  <span>발급된 래핑 주소</span>
-                </span>
-                <span className="text-[11px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                  연결 준비 완료
-                </span>
+            {/* 본문 콘텐츠 */}
+            <div className="py-5 space-y-5 text-left">
+              {/* [1] 발급된 래핑 주소 표시 박스 */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-extrabold text-slate-700 flex items-center gap-1.5">
+                    <span className="text-emerald-600">🔗</span>
+                    <span>발급된 래핑 주소</span>
+                  </span>
+                  <span className="text-[11px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    연결 준비 완료
+                  </span>
+                </div>
+
+                <div
+                  id="res-bridge-url-box"
+                  onClick={() => {
+                    if ((window as any).__copyNativePrompt) (window as any).__copyNativePrompt();
+                    else handleCopyPrompt();
+                  }}
+                  className="p-3.5 bg-slate-900 rounded-2xl border border-slate-800 cursor-pointer hover:border-emerald-500/60 transition-colors"
+                  title="클릭하여 복사"
+                >
+                  <div
+                    id="res-bridge-url"
+                    className="font-mono text-xs text-emerald-400 break-all select-all leading-relaxed"
+                  >
+                    {result?.bridgeUrl || 'https://sheetbot.cloud/api/agent/gas-bridge?token=...'}
+                  </div>
+                </div>
               </div>
 
-              <div
-                id="res-bridge-url-box"
+              {/* [2] 🌟 눈에 확 띄는 초대형 메인 복사하기 버튼 */}
+              <button
+                type="button"
+                id="btn-copy-action"
                 onClick={() => {
                   if ((window as any).__copyNativePrompt) (window as any).__copyNativePrompt();
                   else handleCopyPrompt();
                 }}
-                className="p-3.5 bg-slate-900 rounded-2xl border border-slate-800 cursor-pointer hover:border-emerald-500/60 transition-colors"
-                title="클릭하여 복사"
+                className="w-full py-4 px-6 rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all shadow-lg cursor-pointer active:scale-98 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-700 text-white shadow-emerald-600/30 hover:shadow-xl hover:shadow-emerald-600/35 hover:scale-[1.01]"
               >
-                <div
-                  id="res-bridge-url"
-                  className="font-mono text-xs text-emerald-400 break-all select-all leading-relaxed"
-                >
-                  {result?.bridgeUrl || 'https://sheetbot.cloud/api/agent/gas-bridge?token=...'}
-                </div>
-              </div>
-            </div>
-
-            {/* [2] 🌟 눈에 확 띄는 초대형 메인 복사하기 버튼 */}
-            <button
-              type="button"
-              id="btn-copy-action"
-              onClick={() => {
-                if ((window as any).__copyNativePrompt) (window as any).__copyNativePrompt();
-                else handleCopyPrompt();
-              }}
-              className="w-full py-4 px-6 rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all shadow-lg cursor-pointer active:scale-98 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-700 text-white shadow-emerald-600/30 hover:shadow-xl hover:shadow-emerald-600/35 hover:scale-[1.01]"
-            >
-              <span id="btn-copy-icon">📋</span>
-              <span id="btn-copy-text">{copied ? '래핑 주소가 복사되었습니다!' : '래핑 주소 복사하기'}</span>
-            </button>
-
-            {/* [3] 눈에 쏙 들어오는 3단계 사용 및 결과 확인 가이드 */}
-            <div className="bg-slate-50 border-2 border-emerald-100 rounded-2xl p-4.5 space-y-3">
-              <div className="font-extrabold text-xs text-emerald-950 flex items-center justify-between">
-                <span className="text-emerald-800 text-[13px]">💡 AI 에이전트 연동 및 결과 확인법</span>
-                <span className="text-[10px] text-emerald-600 font-bold bg-emerald-100/70 px-2 py-0.5 rounded-md">30초 완성</span>
-              </div>
-
-              <div className="space-y-2.5 text-xs">
-                {/* 1단계 */}
-                <div className="flex items-start gap-2.5 bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-xs">
-                  <span className="w-5 h-5 rounded-full bg-emerald-500 text-white font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">
-                    1
-                  </span>
-                  <div className="leading-relaxed text-slate-700">
-                    위 <strong className="text-emerald-700 font-extrabold">[래핑 주소 복사하기]</strong> 버튼을 누릅니다.
-                  </div>
-                </div>
-
-                {/* 2단계 */}
-                <div className="flex items-start gap-2.5 bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-xs">
-                  <span className="w-5 h-5 rounded-full bg-emerald-500 text-white font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">
-                    2
-                  </span>
-                  <div className="leading-relaxed text-slate-700">
-                    <strong className="text-slate-900">안티그라비티, Cursor, Claude Code</strong> 등 사용 중인 AI 채팅창에 붙여넣고, 원하는 기능을 적어 전송합니다.<br />
-                    <span className="text-[11px] text-slate-400">예시: &quot;매일 아침 8시 발주서 받아와줘&quot;, &quot;신규 주문 시 문자 발송해줘&quot;</span>
-                  </div>
-                </div>
-
-                {/* 3단계 */}
-                <div className="flex items-start gap-2.5 bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200/80 shadow-xs">
-                  <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">
-                    3
-                  </span>
-                  <div className="leading-relaxed text-slate-800">
-                    <strong className="text-emerald-900 font-extrabold">[시트에서 결과 확인]</strong><br />
-                    AI가 코드를 주입한 후 내 <strong className="text-slate-900">구글 시트를 새로고침(F5)</strong>하면,<br />
-                    상단에 <strong className="text-emerald-700 bg-white px-1.5 py-0.5 rounded border border-emerald-200">🚀 SheetBot 메뉴</strong>가 자동 생성되어 바로 실행할 수 있습니다!
-                  </div>
-                </div>
-              </div>
-
-              {/* 호환 안내 팁 */}
-              <div className="text-center pt-0.5">
-                <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 font-medium bg-slate-100/90 px-2.5 py-1 rounded-full border border-slate-200/60">
-                  <span>✨</span>
-                  Antigravity · Cursor · Claude Code · Windsurf 완벽 호환
-                </span>
-              </div>
-            </div>
-
-            {/* 하단 다시 래핑하기 링크 */}
-            <div className="text-center pt-1">
-              <button
-                type="button"
-                id="btn-reset-wrap"
-                onClick={() => {
-                  if ((window as any).__resetNativeWrap) (window as any).__resetNativeWrap();
-                  else resetAll();
-                }}
-                className="text-xs text-slate-400 hover:text-slate-600 font-bold hover:underline cursor-pointer"
-              >
-                🔄 다른 구글 시트 래핑하기
+                <span id="btn-copy-icon">📋</span>
+                <span id="btn-copy-text">{copied ? '래핑 주소가 복사되었습니다!' : '래핑 주소 복사하기'}</span>
               </button>
+
+              {/* [3] 눈에 쏙 들어오는 3단계 사용 및 결과 확인 가이드 */}
+              <div className="bg-slate-50 border-2 border-emerald-100 rounded-2xl p-4.5 space-y-3">
+                <div className="font-extrabold text-xs text-emerald-950 flex items-center justify-between">
+                  <span className="text-emerald-800 text-[13px]">💡 AI 에이전트 연동 및 결과 확인법</span>
+                  <span className="text-[10px] text-emerald-600 font-bold bg-emerald-100/70 px-2 py-0.5 rounded-md">30초 완성</span>
+                </div>
+
+                <div className="space-y-2.5 text-xs">
+                  {/* 1단계 */}
+                  <div className="flex items-start gap-2.5 bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-xs">
+                    <span className="w-5 h-5 rounded-full bg-emerald-500 text-white font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">
+                      1
+                    </span>
+                    <div className="leading-relaxed text-slate-700">
+                      위 <strong className="text-emerald-700 font-extrabold">[래핑 주소 복사하기]</strong> 버튼을 누릅니다.
+                    </div>
+                  </div>
+
+                  {/* 2단계 */}
+                  <div className="flex items-start gap-2.5 bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-xs">
+                    <span className="w-5 h-5 rounded-full bg-emerald-500 text-white font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">
+                      2
+                    </span>
+                    <div className="leading-relaxed text-slate-700">
+                      <strong className="text-slate-900">안티그라비티, Cursor, Claude Code</strong> 등 사용 중인 AI 채팅창에 붙여넣고, 원하는 기능을 적어 전송합니다.<br />
+                      <span className="text-[11px] text-slate-400">예시: &quot;매일 아침 8시 발주서 받아와줘&quot;, &quot;신규 주문 시 문자 발송해줘&quot;</span>
+                    </div>
+                  </div>
+
+                  {/* 3단계 */}
+                  <div className="flex items-start gap-2.5 bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200/80 shadow-xs">
+                    <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">
+                      3
+                    </span>
+                    <div className="leading-relaxed text-slate-800">
+                      <strong className="text-emerald-900 font-extrabold">[시트에서 결과 확인]</strong><br />
+                      AI가 코드를 주입한 후 내 <strong className="text-slate-900">구글 시트를 새로고침(F5)</strong>하면,<br />
+                      상단에 <strong className="text-emerald-700 bg-white px-1.5 py-0.5 rounded border border-emerald-200">🚀 SheetBot 메뉴</strong>가 자동 생성되어 바로 실행할 수 있습니다!
+                    </div>
+                  </div>
+                </div>
+
+                {/* 호환 안내 팁 */}
+                <div className="text-center pt-0.5">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 font-medium bg-slate-100/90 px-2.5 py-1 rounded-full border border-slate-200/60">
+                    <span>✨</span>
+                    Antigravity · Cursor · Claude Code · Windsurf 완벽 호환
+                  </span>
+                </div>
+              </div>
+
+              {/* 하단 다시 래핑하기 링크 */}
+              <div className="text-center pt-1">
+                <button
+                  type="button"
+                  id="btn-reset-wrap"
+                  onClick={() => {
+                    if ((window as any).__closeNativeModal) (window as any).__closeNativeModal();
+                    else resetAll();
+                  }}
+                  className="text-xs text-slate-400 hover:text-slate-600 font-bold hover:underline cursor-pointer"
+                >
+                  🔄 다른 구글 시트 래핑하기 (닫기)
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -365,29 +393,28 @@ export default function WrapPage() {
     window.__currentBridgeUrl = bridgeUrl;
     window.__currentPrompt = promptTemplate;
 
-    var formBox = document.getElementById("wrap-form-box");
-    var resultBox = document.getElementById("wrap-result-box");
+    var modalOverlay = document.getElementById("wrap-modal-overlay");
     var urlEl = document.getElementById("res-bridge-url");
     var badgeEl = document.getElementById("res-badge-name");
 
     if (urlEl) urlEl.innerText = bridgeUrl;
     if (badgeEl && projectName) badgeEl.innerText = projectName;
 
-    if (formBox) formBox.style.display = "none";
-    if (resultBox) {
-      resultBox.style.display = "block";
-      resultBox.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (modalOverlay) {
+      modalOverlay.style.display = "flex";
     }
   };
 
+  window.__closeNativeModal = function() {
+    var modalOverlay = document.getElementById("wrap-modal-overlay");
+    if (modalOverlay) modalOverlay.style.display = "none";
+  };
+
   window.__resetNativeWrap = function() {
-    var formBox = document.getElementById("wrap-form-box");
-    var resultBox = document.getElementById("wrap-result-box");
+    window.__closeNativeModal();
     var errBox = document.getElementById("native-error-box");
     var inputEl = document.getElementById("sheet-url-input");
 
-    if (formBox) formBox.style.display = "block";
-    if (resultBox) resultBox.style.display = "none";
     if (errBox) errBox.className = "p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 hidden";
     if (inputEl) inputEl.value = "";
 
@@ -514,6 +541,8 @@ export default function WrapPage() {
     var btnCopy = document.getElementById("btn-copy-action");
     var urlBox = document.getElementById("res-bridge-url-box");
     var btnReset = document.getElementById("btn-reset-wrap");
+    var btnClose = document.getElementById("btn-close-modal");
+    var modalOverlay = document.getElementById("wrap-modal-overlay");
 
     if (btnMain) {
       btnMain.onclick = function(e) {
@@ -545,6 +574,25 @@ export default function WrapPage() {
         window.__resetNativeWrap();
       };
     }
+    if (btnClose) {
+      btnClose.onclick = function(e) {
+        if (e) e.preventDefault();
+        window.__closeNativeModal();
+      };
+    }
+    if (modalOverlay) {
+      modalOverlay.onclick = function(e) {
+        if (e.target === modalOverlay) {
+          window.__closeNativeModal();
+        }
+      };
+    }
+
+    document.onkeydown = function(e) {
+      if (e.key === "Escape") {
+        window.__closeNativeModal();
+      }
+    };
   }
 
   if (document.readyState === "loading") {
