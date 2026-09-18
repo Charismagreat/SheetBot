@@ -126,7 +126,7 @@ export default function WrapPage() {
             Google 시트 초간편 AI 래퍼
           </h1>
           <p className="mt-2 text-sm text-slate-400 leading-relaxed max-w-md mx-auto">
-            시트 주소가 없어도 즉시 래핑할 수 있습니다. 안티그라비티, Cursor, Claude Code가 시트를 제어할 수 있는 브릿지 주소를 즉시 발급합니다.
+            시트 주소를 AI로 감싼(래핑) 주소를 바이브코딩 도구(안티그라비티, Cursor, Claude Code)에 입력하고 자동화 하세요.
           </p>
         </div>
 
