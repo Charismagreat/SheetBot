@@ -165,33 +165,45 @@ export async function GET() {
   </div>
 
   <div class="footer-note">
-    SheetBot Cloud Engine &bull; Auto-synced v2.3
+    SheetBot Cloud Engine &bull; Auto-synced v2.4
   </div>
 
   <script>
     function refreshBalance() {
       var amountEl = document.getElementById('token-amount');
       var userEl = document.getElementById('token-user');
+      amountEl.innerText = '동기화 중...';
+      userEl.innerText = '요청 전송';
 
       if (window.google && window.google.script && window.google.script.run) {
         try {
           google.script.run
             .withSuccessHandler(function(res) {
-              if (res && res.success && res.balance !== undefined) {
+              if (!res) {
+                amountEl.innerText = '응답 없음';
+                userEl.innerText = 'null 반환됨';
+                return;
+              }
+              if (res.balance !== undefined) {
                 amountEl.innerText = Number(res.balance).toLocaleString() + ' P';
-                userEl.innerText = res.email || '연동됨';
-              } else if (res && res.balance !== undefined) {
-                amountEl.innerText = Number(res.balance).toLocaleString() + ' P';
-                userEl.innerText = res.email || 'PRO 계정';
+                userEl.innerText = res.email || (res.isAdmin ? 'ADMIN' : 'PRO');
+              } else {
+                amountEl.innerText = '포맷 이상';
+                userEl.innerText = JSON.stringify(res).substring(0, 25);
               }
             })
             .withFailureHandler(function(err) {
-              console.log('Balance fetch failed:', err);
+              amountEl.innerText = '조회 실패';
+              userEl.innerText = (err && err.message) ? err.message : String(err);
             })
             .getUserTokenBalanceData();
         } catch(e) {
-          console.log('Error invoking getUserTokenBalanceData:', e);
+          amountEl.innerText = '호출 예외';
+          userEl.innerText = e.message;
         }
+      } else {
+        amountEl.innerText = 'GAS 미연동';
+        userEl.innerText = '브라우저 단독 모드';
       }
     }
 
@@ -210,12 +222,12 @@ export async function GET() {
               }
             })
             .withFailureHandler(function(err) {
-              console.log('Tunnel check failed:', err);
+              statusEl.innerText = '점검 실패';
+              statusEl.style.color = '#dc2626';
+              latEl.innerText = (err && err.message) ? err.message.substring(0, 20) : '오류';
             })
             .getTunnelStatusData();
-        } catch(e) {
-          console.log('Error invoking getTunnelStatusData:', e);
-        }
+        } catch(e) {}
       }
     }
 
@@ -272,19 +284,27 @@ export async function GET() {
       }
     }
 
-    // Google Apps Script 비동기 주입 감지 즉시 실시간 잔액/터널 동기화
+    // Google Apps Script 비동기 바인딩 감지 즉시 실행
     (function initGasBridge() {
       var attempts = 0;
       var interval = setInterval(function() {
         attempts++;
         if (window.google && window.google.script && window.google.script.run) {
           clearInterval(interval);
-          refreshBalance();
-          checkTunnel();
-        } else if (attempts >= 30) {
+          setTimeout(function() {
+            refreshBalance();
+            checkTunnel();
+          }, 150);
+        } else if (attempts >= 40) {
           clearInterval(interval);
+          var amountEl = document.getElementById('token-amount');
+          var userEl = document.getElementById('token-user');
+          if (amountEl.innerText === '동기화 중...') {
+            amountEl.innerText = 'GAS 지연';
+            userEl.innerText = '새로고침 클릭 권장';
+          }
         }
-      }, 80);
+      }, 50);
     })();
   </script>
 </body>
