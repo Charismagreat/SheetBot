@@ -822,24 +822,19 @@ function getAiCopilotSidebarHtml() {
       '<!-- [🌟] 시트봇 다목적 공지 & 광고 배너 (정사각형 화사한 광고 포맷) -->' +
       '<a href="https://sheetbot.cloud/wrap/guide" target="_blank" class="block p-5 bg-gradient-to-br from-white via-blue-50/50 to-indigo-50/60 rounded-2xl border-2 border-indigo-400 hover:border-indigo-600 shadow-md transition-all text-slate-900 no-underline group mt-3.5 flex flex-col justify-between" style="min-height: 330px; aspect-ratio: 1 / 1;">' +
         '<div class="flex items-center justify-between">' +
-          '<span class="text-xs font-black px-2.5 py-1 rounded-lg bg-indigo-600 text-white flex items-center gap-1 shadow-sm">📖 1분 사진 가이드</span>' +
-          '<span class="text-xs text-indigo-600 font-extrabold tracking-tight">무료 가이드 • 바로보기</span>' +
+          '<span class="text-sm font-black px-3.5 py-1.5 rounded-lg bg-indigo-600 text-white flex items-center gap-1.5 shadow-sm">📖 1분 사용법</span>' +
         '</div>' +
         '<div class="my-auto py-2.5">' +
-          '<div class="text-lg font-black text-slate-900 leading-snug tracking-tight">' +
+          '<div class="text-xl font-black text-slate-900 leading-snug tracking-tight">' +
             'Google 시트 AI 래핑<br>' +
             '<span class="text-indigo-600">사진으로 1분 완성하기</span>' +
           '</div>' +
-          '<div class="mt-3.5 space-y-2 text-[13.5px] text-slate-700 font-bold leading-normal">' +
-            '<div class="flex items-center gap-2">' +
-              '<span class="text-emerald-500 font-black text-base flex-shrink-0">✔</span>' +
-              '<span>실제 스크린샷 4장으로 초보자도 1분 마스터</span>' +
-            '</div>' +
-            '<div class="flex items-center gap-2">' +
+          '<div class="mt-4 space-y-3 text-sm text-slate-700 font-bold leading-normal">' +
+            '<div class="flex items-center gap-2.5">' +
               '<span class="text-emerald-500 font-black text-base flex-shrink-0">✔</span>' +
               '<span>복잡한 코딩 없이 안티그라비티 즉시 연동</span>' +
             '</div>' +
-            '<div class="flex items-center gap-2">' +
+            '<div class="flex items-center gap-2.5">' +
               '<span class="text-emerald-500 font-black text-base flex-shrink-0">✔</span>' +
               '<span>구글 시트 상단 전용 메뉴 자동 생성</span>' +
             '</div>' +

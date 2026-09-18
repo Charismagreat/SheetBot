@@ -230,35 +230,32 @@ export async function GET() {
       justify-content: space-between;
     }
     .ad-pill {
-      font-size: 12.5px;
+      font-size: 14px;
       font-weight: 800;
-      padding: 4px 10px;
-      border-radius: 8px;
+      padding: 6px 14px;
+      border-radius: 9px;
       background: #4f46e5;
       color: #ffffff;
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 6px;
       letter-spacing: -0.2px;
-      box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
+      box-shadow: 0 3px 8px rgba(79, 70, 229, 0.35);
     }
     .ad-tag {
-      font-size: 13px;
-      color: #6366f1;
-      font-weight: 800;
-      letter-spacing: -0.2px;
+      display: none;
     }
     .ad-content-box {
       margin: auto 0;
-      padding: 10px 0;
+      padding: 12px 0;
     }
     .ad-headline {
-      font-size: 19px;
+      font-size: 20px;
       font-weight: 900;
       color: #0f172a;
       line-height: 1.4;
       letter-spacing: -0.5px;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
       word-break: keep-all;
     }
     .ad-headline-highlight {
@@ -269,11 +266,11 @@ export async function GET() {
     .ad-feature-list {
       display: flex;
       flex-direction: column;
-      gap: 9px;
-      margin-bottom: 4px;
+      gap: 12px;
+      margin-bottom: 6px;
     }
     .ad-feature-item {
-      font-size: 13.5px;
+      font-size: 14px;
       color: #334155;
       font-weight: 700;
       line-height: 1.5;
@@ -524,8 +521,7 @@ export async function GET() {
   <!-- [🌟] 시트봇 다목적 공지 & 광고 배너 (정사각형 화사한 프리미엄 광고 포맷) -->
   <a href="https://sheetbot.cloud/wrap/guide" target="_blank" class="promo-banner-card">
     <div class="ad-badge-row">
-      <span class="ad-pill">📖 1분 사진 가이드</span>
-      <span class="ad-tag">무료 가이드 &bull; 바로보기</span>
+      <span class="ad-pill">📖 1분 사용법</span>
     </div>
 
     <div class="ad-content-box">
@@ -535,10 +531,6 @@ export async function GET() {
       </div>
 
       <div class="ad-feature-list">
-        <div class="ad-feature-item">
-          <span class="ad-feature-bullet">✔</span>
-          <span>실제 스크린샷 4장으로 초보자도 1분 마스터</span>
-        </div>
         <div class="ad-feature-item">
           <span class="ad-feature-bullet">✔</span>
           <span>복잡한 코딩 없이 안티그라비티 즉시 연동</span>
