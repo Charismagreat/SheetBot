@@ -126,7 +126,15 @@ export default function WrapPage() {
             Google 시트 초간편 AI 래퍼
           </h1>
           <p className="mt-2 text-sm text-slate-400 leading-relaxed max-w-lg mx-auto">
-            구글 시트에 시트봇을 래핑(감싸기)하세요.<br />
+            <a
+              href="https://docs.google.com/spreadsheets/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-400 hover:text-indigo-300 underline underline-offset-4 transition-colors"
+            >
+              구글 시트
+            </a>
+            에 시트봇을 래핑(감싸기)하세요.<br />
             래핑된 주소를 복사한 후<br />
             바이브코딩 도구(
             <a
