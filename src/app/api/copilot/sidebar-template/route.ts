@@ -165,7 +165,7 @@ export async function GET() {
   </div>
 
   <div class="footer-note">
-    SheetBot Cloud Engine &bull; Auto-synced v2.4
+    SheetBot Cloud Engine &bull; Auto-synced v2.5
   </div>
 
   <script>
@@ -181,14 +181,14 @@ export async function GET() {
             .withSuccessHandler(function(res) {
               if (!res) {
                 amountEl.innerText = '응답 없음';
-                userEl.innerText = 'null 반환됨';
+                userEl.innerText = 'null 반환';
                 return;
               }
               if (res.balance !== undefined) {
                 amountEl.innerText = Number(res.balance).toLocaleString() + ' P';
                 userEl.innerText = res.email || (res.isAdmin ? 'ADMIN' : 'PRO');
               } else {
-                amountEl.innerText = '포맷 이상';
+                amountEl.innerText = '형식 오류';
                 userEl.innerText = JSON.stringify(res).substring(0, 25);
               }
             })
@@ -241,42 +241,51 @@ export async function GET() {
       window.open('https://sheetbot.cloud/dashboard/pricing', '_blank');
     }
 
+    function getBridgePromptText() {
+      return [
+        '구글 시트 래핑 주소: https://sheetbot.cloud/api/agent/gas-bridge',
+        '',
+        '위 구글 시트에 다음 자동화 기능을 구현하고 즉시 주입해줘:',
+        '[추가할 기능 입력]'
+      ].join(String.fromCharCode(10));
+    }
+
     function openAntigravity() {
-      var promptText = "구글 시트 래핑 주소: https://sheetbot.cloud/api/agent/gas-bridge\n\n위 구글 시트에 다음 자동화 기능을 구현하고 즉시 주입해줘:\n[추가할 기능 입력]";
+      var promptText = getBridgePromptText();
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(promptText).catch(function(){});
       }
-      window.open("antigravity://", "_blank");
+      window.open('antigravity://', '_blank');
       setTimeout(function() {
-        alert("🚀 안티그라비티가 실행되었습니다!\n\n채팅창에 [Ctrl + V]로 프롬프트를 붙여넣고 원하는 자동화를 요청하세요.");
+        alert('안티그라비티가 실행되었습니다! 채팅창에 [Ctrl + V]로 프롬프트를 붙여넣고 원하는 자동화를 요청하세요.');
       }, 200);
     }
 
     function copyPrompt() {
-      var promptText = "구글 시트 래핑 주소: https://sheetbot.cloud/api/agent/gas-bridge\n\n위 구글 시트에 다음 자동화 기능을 구현하고 즉시 주입해줘:\n[추가할 기능 입력]";
+      var promptText = getBridgePromptText();
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(promptText).then(function() {
-          alert("✅ 안티그라비티 지시 프롬프트가 복사되었습니다!\n[Ctrl + V]로 붙여넣어 사용하세요.");
+          alert('안티그라비티 지시 프롬프트가 복사되었습니다! [Ctrl + V]로 붙여넣어 사용하세요.');
         }).catch(function() {
-          prompt("아래 프롬프트를 복사하세요:", promptText);
+          prompt('아래 프롬프트를 복사하세요:', promptText);
         });
       } else {
-        prompt("아래 프롬프트를 복사하세요:", promptText);
+        prompt('아래 프롬프트를 복사하세요:', promptText);
       }
     }
 
     function confirmUninstall() {
-      if (!confirm("⚠️ 정말로 시트봇 연동을 해제하고 모든 자동화 스크립트를 삭제하시겠습니까?\n(시트의 원본 데이터는 절대 삭제되지 않습니다)")) return;
+      if (!confirm('정말로 시트봇 연동을 해제하고 모든 자동화 스크립트를 삭제하시겠습니까?\n(시트의 원본 데이터는 절대 삭제되지 않습니다)')) return;
       if (window.google && window.google.script && window.google.script.run) {
         try {
           var fn = google.script.run.uninstallScript || google.script.run.uninstallSheetBot || google.script.run.resetSheetBotIntegration;
           if (fn) {
             google.script.run
               .withSuccessHandler(function(msg) {
-                alert(msg || "스크립트가 안전하게 삭제되었습니다. 구글 시트를 새로고침(F5)하세요.");
+                alert(msg || '스크립트가 안전하게 삭제되었습니다. 구글 시트를 새로고침(F5)하세요.');
               })
               .withFailureHandler(function(err) {
-                alert("삭제 처리 완료. 시트를 새로고침(F5)하세요.");
+                alert('삭제 처리 완료. 시트를 새로고침(F5)하세요.');
               });
             fn();
           }
@@ -299,7 +308,7 @@ export async function GET() {
           clearInterval(interval);
           var amountEl = document.getElementById('token-amount');
           var userEl = document.getElementById('token-user');
-          if (amountEl.innerText === '동기화 중...') {
+          if (amountEl && amountEl.innerText === '동기화 중...') {
             amountEl.innerText = 'GAS 지연';
             userEl.innerText = '새로고침 클릭 권장';
           }
