@@ -187,106 +187,134 @@ export async function GET() {
     .btn-cases:hover { background: rgba(255, 255, 255, 0.18); color: #ffffff; }
 
     /* [🌟] 시트봇 다목적 공지/광고 배너 슬롯 */
+    /* [🌟] 시트봇 다목적 광고/공지 배너 (정사각형 화사한 프리미엄 광고 포맷) */
     .promo-banner-card {
       width: 100%;
-      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 55%, #0f172a 100%);
-      border: 1.5px solid rgba(129, 140, 248, 0.45);
-      border-radius: 12px;
-      padding: 14px 13px;
-      margin-top: 10px;
-      margin-bottom: 8px;
-      box-shadow: 0 4px 16px rgba(79, 70, 229, 0.18);
+      min-height: 330px;
+      aspect-ratio: 1 / 1;
+      background: linear-gradient(145deg, #ffffff 0%, #f8faff 40%, #eef2ff 100%);
+      border: 2px solid #818cf8;
+      border-radius: 16px;
+      padding: 18px 16px;
+      margin-top: 14px;
+      margin-bottom: 12px;
+      box-shadow: 0 10px 25px -4px rgba(79, 70, 229, 0.16), 0 4px 12px rgba(0, 0, 0, 0.05);
       text-decoration: none;
-      display: block;
-      color: #ffffff;
-      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      color: #0f172a;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
       position: relative;
       overflow: hidden;
+      box-sizing: border-box;
     }
     .promo-banner-card:hover {
-      border-color: rgba(129, 140, 248, 0.85);
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(79, 70, 229, 0.32);
+      border-color: #4f46e5;
+      transform: translateY(-3px);
+      box-shadow: 0 16px 32px -4px rgba(79, 70, 229, 0.24), 0 6px 16px rgba(0, 0, 0, 0.08);
     }
     .promo-banner-card::before {
       content: "";
       position: absolute;
-      top: -30px;
-      right: -30px;
-      width: 110px;
-      height: 110px;
-      background: radial-gradient(circle, rgba(99, 102, 241, 0.32) 0%, transparent 70%);
+      top: -40px;
+      right: -40px;
+      width: 140px;
+      height: 140px;
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
       pointer-events: none;
     }
-    .promo-top-row {
+    .ad-badge-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 8px;
     }
-    .promo-badge {
-      font-size: 10.5px;
+    .ad-pill {
+      font-size: 12.5px;
       font-weight: 800;
-      letter-spacing: 0.3px;
-      padding: 3px 8px;
-      border-radius: 6px;
-      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+      padding: 4px 10px;
+      border-radius: 8px;
+      background: #4f46e5;
       color: #ffffff;
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
+      gap: 5px;
+      letter-spacing: -0.2px;
+      box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
     }
-    .promo-badge-tag {
-      font-size: 11px;
-      color: #c7d2fe;
-      font-weight: 700;
-      letter-spacing: 0.2px;
+    .ad-tag {
+      font-size: 13px;
+      color: #6366f1;
+      font-weight: 800;
+      letter-spacing: -0.2px;
     }
-    .promo-title {
-      font-size: 14.5px;
+    .ad-content-box {
+      margin: auto 0;
+      padding: 10px 0;
+    }
+    .ad-headline {
+      font-size: 19px;
       font-weight: 900;
-      color: #ffffff;
-      line-height: 1.35;
-      margin-bottom: 6px;
+      color: #0f172a;
+      line-height: 1.4;
+      letter-spacing: -0.5px;
+      margin-bottom: 12px;
+      word-break: keep-all;
+    }
+    .ad-headline-highlight {
+      color: #4f46e5;
+      position: relative;
+      display: inline-block;
+    }
+    .ad-feature-list {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      margin-bottom: 4px;
+    }
+    .ad-feature-item {
+      font-size: 13.5px;
+      color: #334155;
+      font-weight: 700;
+      line-height: 1.5;
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      gap: 8px;
+      letter-spacing: -0.3px;
     }
-    .promo-title-arrow {
-      color: #818cf8;
-      font-size: 16px;
+    .ad-feature-bullet {
+      color: #10b981;
+      font-size: 15px;
       font-weight: 900;
-      transition: transform 0.2s;
+      flex-shrink: 0;
     }
-    .promo-banner-card:hover .promo-title-arrow {
-      transform: translateX(4px);
-      color: #a5b4fc;
-    }
-    .promo-desc {
-      font-size: 12px;
-      color: #cbd5e1;
-      line-height: 1.45;
-      margin-bottom: 10px;
-    }
-    .promo-cta-bar {
+    .ad-cta-button {
+      width: 100%;
+      background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+      color: #ffffff;
+      padding: 13px 16px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 900;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
-      background: rgba(99, 102, 241, 0.18);
-      border: 1px solid rgba(129, 140, 248, 0.35);
-      border-radius: 8px;
-      padding: 7px 10px;
-      color: #e0e7ff;
-      font-size: 11.5px;
-      font-weight: 800;
-      transition: all 0.15s ease;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+      transition: all 0.2s ease;
+      letter-spacing: -0.3px;
     }
-    .promo-banner-card:hover .promo-cta-bar {
-      background: rgba(99, 102, 241, 0.38);
-      border-color: rgba(129, 140, 248, 0.7);
-      color: #ffffff;
+    .promo-banner-card:hover .ad-cta-button {
+      background: linear-gradient(135deg, #4338ca 0%, #4f46e5 100%);
+      transform: scale(1.01);
+      box-shadow: 0 6px 18px rgba(79, 70, 229, 0.45);
+    }
+    .ad-cta-arrow {
+      font-size: 17px;
+      transition: transform 0.2s ease;
+    }
+    .promo-banner-card:hover .ad-cta-arrow {
+      transform: translateX(4px);
     }
 
     /* [3] 안티그라비티 AI 스튜디오 허브 */
@@ -493,22 +521,38 @@ export async function GET() {
     </div>
   </details>
 
-  <!-- [🌟] 시트봇 다목적 공지 & 배너 슬롯 (하단 와이드 영역 - 고가독성 가이드/이벤트 카드) -->
+  <!-- [🌟] 시트봇 다목적 공지 & 광고 배너 (정사각형 화사한 프리미엄 광고 포맷) -->
   <a href="https://sheetbot.cloud/wrap/guide" target="_blank" class="promo-banner-card">
-    <div class="promo-top-row">
-      <span class="promo-badge">📖 1분 완성 사진 가이드</span>
-      <span class="promo-badge-tag">SheetBot Visual Guide</span>
+    <div class="ad-badge-row">
+      <span class="ad-pill">📖 1분 사진 가이드</span>
+      <span class="ad-tag">무료 가이드 &bull; 바로보기</span>
     </div>
-    <div class="promo-title">
-      <span>Google 시트 AI 래핑 사진 가이드</span>
-      <span class="promo-title-arrow">→</span>
+
+    <div class="ad-content-box">
+      <div class="ad-headline">
+        Google 시트 AI 래핑<br>
+        <span class="ad-headline-highlight">사진으로 1분 완성하기</span>
+      </div>
+
+      <div class="ad-feature-list">
+        <div class="ad-feature-item">
+          <span class="ad-feature-bullet">✔</span>
+          <span>실제 스크린샷 4장으로 초보자도 1분 마스터</span>
+        </div>
+        <div class="ad-feature-item">
+          <span class="ad-feature-bullet">✔</span>
+          <span>복잡한 코딩 없이 안티그라비티 즉시 연동</span>
+        </div>
+        <div class="ad-feature-item">
+          <span class="ad-feature-bullet">✔</span>
+          <span>구글 시트 상단 전용 메뉴 자동 생성</span>
+        </div>
+      </div>
     </div>
-    <div class="promo-desc">
-      초보자도 클릭 몇 번으로 완성하는 안티그라비티 3단계 연동법을 사진으로 확인하세요.
-    </div>
-    <div class="promo-cta-bar">
-      <span>📸 스크린샷 4장으로 1분 만에 마스터하기</span>
-      <span>↗</span>
+
+    <div class="ad-cta-button">
+      <span>🚀 사진 가이드 전체보기</span>
+      <span class="ad-cta-arrow">→</span>
     </div>
   </a>
 
