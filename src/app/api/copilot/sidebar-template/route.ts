@@ -195,7 +195,7 @@ export async function GET() {
       background: linear-gradient(145deg, #ffffff 0%, #f8faff 40%, #eef2ff 100%);
       border: 2px solid #818cf8;
       border-radius: 16px;
-      padding: 18px 16px;
+      padding: 18px 14px;
       margin-top: 14px;
       margin-bottom: 12px;
       box-shadow: 0 10px 25px -4px rgba(79, 70, 229, 0.16), 0 4px 12px rgba(0, 0, 0, 0.05);
@@ -270,14 +270,16 @@ export async function GET() {
       margin-bottom: 6px;
     }
     .ad-feature-item {
-      font-size: 14px;
+      font-size: 13.5px;
       color: #334155;
       font-weight: 700;
       line-height: 1.5;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 7px;
       letter-spacing: -0.3px;
+      white-space: nowrap;
+      word-break: keep-all;
     }
     .ad-feature-bullet {
       color: #10b981;
@@ -527,7 +529,7 @@ export async function GET() {
     <div class="ad-content-box">
       <div class="ad-headline">
         Google 시트 AI 래핑<br>
-        <span class="ad-headline-highlight">사진으로 1분 완성하기</span>
+        <span class="ad-headline-highlight">스크린샷 보며 따라하기</span>
       </div>
 
       <div class="ad-feature-list">
@@ -543,7 +545,7 @@ export async function GET() {
     </div>
 
     <div class="ad-cta-button">
-      <span>🚀 사진 가이드 전체보기</span>
+      <span>🚀 초간단 사용법 보기</span>
       <span class="ad-cta-arrow">→</span>
     </div>
   </a>
