@@ -297,7 +297,15 @@ export default function LandingPage() {
             <div className="space-y-2 max-w-2xl mx-auto break-keep">
               <h1 className="text-xl sm:text-3xl font-black text-slate-900 leading-snug tracking-tight">
                 <span className="text-emerald-700">
-                  구글시트 주소를 래핑한 후<br />
+                  <a
+                    href="https://docs.google.com/spreadsheets/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-4 decoration-emerald-500 hover:text-emerald-900 transition-colors"
+                  >
+                    구글시트
+                  </a>
+                  주소를 래핑한 후<br />
                   바이브코딩 도구(
                   <a
                     href="https://antigravity.google/"
