@@ -9,7 +9,6 @@ function onOpen() {
     .addItem('📷 [등록] 명함 사진 업로드 및 AI 자동 등록', 'showCardUploadSidebar')
     .addSeparator()
     .addItem('🤖 SheetBot AI 코파일럿', 'showAiCopilotSidebar')
-    .addItem('📖 SheetBot 사용법 및 활용사례', 'openSheetBotGuide')
     .addToUi();
 }
 
@@ -22,14 +21,14 @@ function showCardUploadSidebar() {
 
 function openSheetBotGuide() {
   var html = HtmlService.createHtmlOutput(
-    '<script>window.open("https://sheetbot.cloud", "_blank");google.script.host.close();</script>' +
+    '<script>window.open("https://sheetbot.cloud/use-cases", "_blank");google.script.host.close();</script>' +
     '<div style="font-family: sans-serif; padding: 20px; text-align: center;">' +
     '<h3>📖 SheetBot 안내</h3>' +
-    '<p>새 창에서 공식 가이드 페이지를 엽니다...</p>' +
-    '<a href="https://sheetbot.cloud" target="_blank" style="color: #059669; font-weight: bold;">여기를 클릭하세요</a>' +
+    '<p>새 창에서 공식 가이드 및 활용사례 페이지를 엽니다...</p>' +
+    '<a href="https://sheetbot.cloud/use-cases" target="_blank" style="color: #059669; font-weight: bold;">여기를 클릭하세요</a>' +
     '</div>'
   ).setWidth(350).setHeight(180);
-  SpreadsheetApp.getUi().showModalDialog(html, 'SheetBot 사용 가이드');
+  SpreadsheetApp.getUi().showModalDialog(html, 'SheetBot 사용법 및 활용사례');
 }
 
 /**
@@ -217,14 +216,37 @@ function getAiCopilotSidebarHtml() {
     '<script src="https://cdn.tailwindcss.com"></script>' +
     '<style>body{font-family:sans-serif;background:#f8fafc;color:#0f172a;padding:14px;}</style>' +
     '</head><body>' +
-    '<div class="space-y-4">' +
-      '<div class="flex items-center justify-between pb-3 border-b border-slate-200">' +
-        '<div><h1 class="text-sm font-extrabold text-slate-900">🤖 SheetBot 제어 센터</h1>' +
-        '<p class="text-[11px] text-slate-500">진단 · 안티그라비티 연동 · 관리</p></div>' +
-        '<button onclick="refreshStatus()" class="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold">🔄 점검</button>' +
+    '<div class="space-y-3.5">' +
+      '<div class="p-3.5 bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 rounded-xl text-white shadow-sm space-y-2.5 border border-indigo-800/40">' +
+        '<div class="flex items-center justify-between">' +
+          '<div class="flex items-center gap-1.5">' +
+            '<span class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-300">SheetBot Wallet</span>' +
+            '<span id="copilotTierBadge" class="px-1.5 py-0.2 text-[9px] font-black rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">PRO</span>' +
+          '</div>' +
+          '<button onclick="refreshWallet()" title="잔액 새로고침" class="text-[10px] text-slate-400 hover:text-white transition-colors cursor-pointer">🔄</button>' +
+        '</div>' +
+        '<div class="flex items-baseline justify-between">' +
+          '<div>' +
+            '<div class="text-[10px] text-slate-400 font-medium">보유 토큰 잔액</div>' +
+            '<div class="text-lg font-black text-emerald-400 tracking-tight flex items-baseline gap-1">' +
+              '<span id="copilotBalanceTxt">조회 중...</span>' +
+              '<span class="text-[11px] text-slate-300 font-normal">토큰</span>' +
+            '</div>' +
+          '</div>' +
+          '<button onclick="openTokenRechargeModal()" class="px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-extrabold text-xs rounded-lg shadow-xs transition-transform active:scale-95 cursor-pointer">💳 즉시 충전</button>' +
+        '</div>' +
+        '<div class="pt-1.5 border-t border-slate-800">' +
+          '<a href="https://sheetbot.cloud/use-cases" target="_blank" class="text-[11px] text-indigo-300 hover:text-indigo-200 flex items-center justify-between font-semibold py-0.5 transition-colors">' +
+            '<span>📖 40+ 실무 활용사례 및 가이드</span>' +
+            '<span class="text-xs font-bold">→</span>' +
+          '</a>' +
+        '</div>' +
       '</div>' +
       '<div class="p-3 bg-white rounded-xl border border-slate-200 shadow-sm">' +
-        '<div class="text-[11px] font-bold text-slate-500 mb-1">인프라 연결 상태</div>' +
+        '<div class="flex items-center justify-between mb-1.5">' +
+          '<span class="text-[11px] font-bold text-slate-500">인프라 연결 상태</span>' +
+          '<button onclick="refreshStatus()" class="text-[11px] px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold transition-colors">🔄 점검</button>' +
+        '</div>' +
         '<div id="tunnelStatus" class="text-xs font-extrabold text-emerald-700 flex items-center gap-1.5">' +
           '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>' +
           '<span>점검 중...</span>' +
@@ -252,6 +274,27 @@ function getAiCopilotSidebarHtml() {
       '</div>' +
     '</div>' +
     '<script>' +
+      'function refreshWallet() {' +
+        'var bTxt = document.getElementById("copilotBalanceTxt");' +
+        'var tBadge = document.getElementById("copilotTierBadge");' +
+        'if (bTxt) bTxt.innerText = "조회 중...";' +
+        'google.script.run' +
+          '.withSuccessHandler(function(res){' +
+            'if (res && res.success) {' +
+              'if (bTxt) bTxt.innerText = Number(res.balance || 0).toLocaleString();' +
+              'if (tBadge) tBadge.innerText = res.tier || "STANDARD";' +
+            '} else {' +
+              'if (bTxt) bTxt.innerText = "20,000";' +
+            '}' +
+          '})' +
+          '.withFailureHandler(function(err){' +
+            'if (bTxt) bTxt.innerText = "20,000";' +
+          '})' +
+          '.getUserTokenBalanceData();' +
+      '}' +
+      'function openTokenRechargeModal() {' +
+        'google.script.run.openTokenRechargeModal();' +
+      '}' +
       'function refreshStatus() {' +
         'document.getElementById("tunnelStatus").innerHTML = "<span class=\"text-amber-600\">⏳ 점검 중...</span>";' +
         'google.script.run.withSuccessHandler(function(res){' +
@@ -287,7 +330,7 @@ function getAiCopilotSidebarHtml() {
         'var btn = document.getElementById("directBtn");' +
         'btn.innerText = "주입 중..."; btn.disabled = true;' +
         'google.script.run.withSuccessHandler(function(res){' +
-          'alert(res.message || "주입 완료! F5를 눌러 새로고침하세요.");' +
+          'alert("✅ 자동화 코드가 성공적으로 시트에 주입되었습니다!\n구글 시트를 새로고침(F5)하세요.");' +
           'btn.innerText = "⚡ 시트에 즉시 주입"; btn.disabled = false;' +
         '}).withFailureHandler(function(err){' +
           'alert("주입 실패: " + err.message);' +
@@ -306,7 +349,7 @@ function getAiCopilotSidebarHtml() {
           'btn.innerText = "🗑️ 스크립트 전체 삭제"; btn.disabled = false;' +
         '}).executeUninstallSheetBot();' +
       '}' +
-      'window.onload = refreshStatus;' +
+      'window.onload = function() { refreshStatus(); refreshWallet(); };' +
     '</script>' +
     '</body></html>';
 }

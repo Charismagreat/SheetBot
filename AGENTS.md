@@ -72,10 +72,11 @@
 <!-- BEGIN:apps-script-safety-rules -->
 ## Google Apps Script 안전 배포 및 트리거 제어 표준 원칙
 
-1. **자동 생성 코드 품질 및 3대 표준 기본 메뉴 보장**:
+1. **자동 생성 코드 품질 및 상단 메뉴 슬림화·사이드바 일원화 원칙**:
    - 생성되는 `Code.gs`는 반드시 `onOpen()`을 포함하여 구글 시트 상단에 **`🚀 SheetBot 메뉴`** 전용 메뉴를 등록해야 합니다.
-   - 상단 메뉴는 업무 기능 등록 후 구분선(`addSeparator()`), **`🤖 SheetBot AI 코파일럿`**(사이드바 제어 센터), **`💳 토큰 잔액 확인 및 즉시 충전`**(인-시트 충전 센터), **`📖 SheetBot 사용법 및 활용사례`**(새 탭 열기)의 **3대 고정 기본 메뉴 순서**로 깔끔하고 슬림하게 구성합니다. '터널 점검'이나 '삭제' 등 부가 제어 기능은 상단 메뉴에 별도로 두지 않고 코파일럿 사이드바 내부로 일원화합니다.
-   - 메뉴에는 항상 **`💳 토큰 잔액 확인 및 즉시 충전`**(`openTokenRechargeModal` - 실시간 지갑 잔액 확인 및 3대 패키지 다이렉트 충전 모달)과 **`📖 SheetBot 사용법 및 활용사례`**(`https://sheetbot.cloud` 새 탭 열기 모달 함수 `openSheetBotGuide`)를 필수로 포함해야 합니다.
+   - 상단 메뉴는 업무 기능 등록 후 구분선(`addSeparator()`), 그리고 **`🤖 SheetBot AI 코파일럿`**(`showAiCopilotSidebar` - 단 1개의 일체형 제어 센터 메뉴)만 깔끔하고 슬림하게 배치합니다.
+   - '토큰 잔액 확인 및 즉시 충전', '사용법 및 활용사례(`https://sheetbot.cloud/use-cases`)', '터널 점검', '스크립트 전체 삭제' 등 모든 시스템·관리 기능은 상단 메뉴를 어지럽히지 않고 **코파일럿 사이드바 내부로 100% 일원화**합니다.
+   - 단, 사이드바 내부 UI 및 필요 시 다이렉트 호출을 위해 `openTokenRechargeModal`과 `openSheetBotGuide`(`https://sheetbot.cloud/use-cases` 새 탭 오픈) 함수 정의는 `Code.gs` 내에 안전하게 보존합니다.
    - 예외 처리를 위한 `try-catch` 및 구글 시트 알림 UI(`SpreadsheetApp.getUi().alert`, `toast`)를 필수로 포함해야 합니다.
 2. **트리거 등록 및 중복 방지**:
    - Apps Script 원격 함수 실행(`apps_script_run_function`) 시 실행 결과 및 로그를 `last_run_at`, `last_status`, `last_run_message`에 투명하게 기록해야 합니다.
@@ -99,11 +100,12 @@
      - `https://www.googleapis.com/auth/userinfo.email`
      - `https://www.googleapis.com/auth/script.send_mail`
    - `ensureStandardManifest`(`src/lib/gas-manifest.ts`) 헬퍼를 통해 프로젝트 생성, 수정, 재배포 시 자동으로 스코프가 누락 없이 주입되도록 보장합니다.
-6. **코파일럿 사이드바 통합 제어 센터(터널 실시간 진단 · 안티그라비티 AI 확장 · 스크립트 전체 삭제) 원칙**:
-   - `🤖 SheetBot AI 코파일럿`(`showAiCopilotSidebar`) 화면은 3단 일체형 제어 센터로 동작해야 합니다:
-     - **[1. 인프라 실시간 진단]**: 사이드바 로드 즉시 비동기 `getTunnelStatusData()`를 호출하여 응답속도(ms) 및 정상 연결 뱃지를 표시하고 `[🔄 재점검]` 지원.
-     - **[2. 안티그라비티(Antigravity) AI 확장]**: 래핑 브릿지 주소 표시, `[🚀 안티그라비티 열기 및 자동화 시작]` 버튼, 프롬프트 원클릭 복사, 접이식 직접 코드 주입 지원.
-     - **[3. 연동 관리 Danger Zone]**: `[🗑️ 시트봇 연동 해제 및 스크립트 전체 삭제]` 버튼을 제공하여, 클릭 시 2중 확인 후 설치형 트리거 전체 해제 및 `Code.gs` 초기화 배포를 실행하고 시트 새로고침(F5) 안내.
+6. **코파일럿 사이드바 올인원 조종석(Cockpit) 4단 통합 제어 센터 원칙**:
+   - `🤖 SheetBot AI 코파일럿`(`showAiCopilotSidebar`) 화면은 4단 일체형 제어 센터로 동작해야 합니다:
+     - **[1. 토큰 지갑 & 즉시 충전 센터 (최상단)]**: 실시간 보유 토큰 잔액 조회(`getUserTokenBalanceData()`) 뱃지, `[💳 즉시 충전]`(모달 호출) 버튼, `[📖 40+ 실무 활용사례 및 가이드]`(`https://sheetbot.cloud/use-cases` 새 탭 이동) 배너 제공.
+     - **[2. 인프라 실시간 진단]**: 사이드바 로드 즉시 비동기 `getTunnelStatusData()`를 호출하여 응답속도(ms) 및 정상 연결 뱃지를 표시하고 `[🔄 재점검]` 지원.
+     - **[3. 안티그라비티(Antigravity) AI 확장]**: 래핑 브릿지 주소 표시, `[🚀 안티그라비티 열기 및 자동화 시작]` 버튼, 프롬프트 원클릭 복사, 접이식 직접 코드 주입 지원.
+     - **[4. 연동 관리 Danger Zone]**: `[🗑️ 시트봇 연동 해제 및 스크립트 전체 삭제]` 버튼을 제공하여, 클릭 시 2중 확인 후 설치형 트리거 전체 해제 및 `Code.gs` 초기화 배포를 실행하고 시트 새로고침(F5) 안내.
 7. **OCR 파일 업로드 사이드바 파일 생명주기 관리 원칙 (파일 교체/취소/연속등록/상시초기화)**:
    - 명함, 영수증, 세금계산서, 발주서 등 파일 업로드 기반 OCR 사이드바를 구축할 때는 다음 4대 UI/UX 인터랙션을 기본 제공해야 합니다:
      - **[상시 초기화]**: 사이드바 상단 헤더에 `[🔄 초기화]` 버튼을 배치하여 언제든 폼을 최초 상태로 리셋 가능하게 함.
