@@ -20,8 +20,15 @@ export default function WrapPage() {
   const executeWrap = async (targetUrl?: string) => {
     const inputVal = document.getElementById('sheet-url-input') as HTMLInputElement | null;
     const currentInput = inputVal ? inputVal.value : sheetUrl;
-    const finalUrl = (targetUrl !== undefined ? targetUrl : currentInput).trim();
-    const isNew = !finalUrl || finalUrl === 'NEW_SHEET';
+    let finalUrl = (targetUrl !== undefined ? targetUrl : currentInput).trim();
+    
+    if (!finalUrl || finalUrl === 'NEW_SHEET') {
+      finalUrl = 'https://docs.google.com/spreadsheets/create';
+    }
+    setSheetUrl(finalUrl);
+    if (inputVal) inputVal.value = finalUrl;
+
+    const isNew = finalUrl.includes('spreadsheets/create') || finalUrl === 'NEW_SHEET';
 
     setErrorMsg('');
     setIsLoading(true);
@@ -31,7 +38,10 @@ export default function WrapPage() {
       const res = await fetch('/api/projects/quick-wrap', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sheetUrl: isNew ? 'NEW_SHEET' : finalUrl }),
+        body: JSON.stringify({ 
+          sheetUrl: finalUrl,
+          templateName: '스마트 자동화 시트'
+        }),
       });
 
       const data = await res.json();
@@ -44,17 +54,14 @@ export default function WrapPage() {
         spreadsheetId: data.spreadsheetId || '',
         token: data.token || '',
         bridgePrompt: data.promptTemplate || (
-          data.isNewSheet
-            ? `아래 웹 주소를 통해 새 구글 시트의 컬럼 구조와 자동화 스크립트를 처음부터 설계하고 주입해줘:\n웹 주소: ${data.bridgeUrl}\n요구사항: 새 구글 시트에 내 비즈니스에 맞는 시트 탭과 컬럼 헤더 구조를 설계하고, 필요한 자동화 기능과 Apps Script 코드를 즉시 주입해줘.`
-            : `아래 웹 주소를 통해 내 구글 시트의 헤더 구조와 기존 코드를 확인하고, 필요한 기능 코드를 주입해줘:\n웹 주소: ${data.bridgeUrl}\n요구사항: 내 구글 시트의 헤더 구조와 데이터를 파악하고, 실무에 필요한 스프레드시트 자동화 메뉴와 기능을 주입해줘.`
+          `아래 웹 주소를 통해 새 구글 시트의 컬럼 구조와 자동화 스크립트를 처음부터 설계하고 주입해줘:\n웹 주소: ${data.bridgeUrl}\n요구사항: 새 구글 시트에 내 비즈니스에 맞는 시트 탭과 컬럼 헤더 구조를 설계하고, 필요한 자동화 기능과 Apps Script 코드를 즉시 주입해줘.`
         ),
-        isNewSheet: Boolean(data.isNewSheet),
+        isNewSheet: Boolean(data.isNewSheet) || isNew,
       });
     } catch (err: any) {
       console.error('[quick-wrap error]', err);
       const msg = err.message || '래핑 요청에 실패했습니다.';
       setErrorMsg(msg);
-      alert('⚠️ ' + msg);
     } finally {
       setIsLoading(false);
       setIsStartingNew(false);
@@ -66,7 +73,7 @@ export default function WrapPage() {
       e.preventDefault();
       e.stopPropagation();
     }
-    executeWrap(sheetUrl.trim() || 'NEW_SHEET');
+    executeWrap(sheetUrl.trim() || 'https://docs.google.com/spreadsheets/create');
   };
 
   const handleNewSheetWrap = (e?: React.MouseEvent) => {
@@ -74,21 +81,12 @@ export default function WrapPage() {
       e.preventDefault();
       e.stopPropagation();
     }
-    executeWrap('NEW_SHEET');
+    const createUrl = 'https://docs.google.com/spreadsheets/create';
+    setSheetUrl(createUrl);
+    const inputVal = document.getElementById('sheet-url-input') as HTMLInputElement | null;
+    if (inputVal) inputVal.value = createUrl;
+    executeWrap(createUrl);
   };
-
-  React.useEffect(() => {
-    const newBtn = document.getElementById('btn-new-sheet-wrap');
-    if (newBtn) {
-      const listener = (e: MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        executeWrap('NEW_SHEET');
-      };
-      newBtn.addEventListener('click', listener);
-      return () => newBtn.removeEventListener('click', listener);
-    }
-  }, []);
 
   const copyToClipboard = (text: string, type: 'bridge' | 'prompt') => {
     if (navigator.clipboard) {
@@ -165,6 +163,21 @@ export default function WrapPage() {
                   placeholder="https://docs.google.com/spreadsheets/d/... (없으면 비워두세요)"
                   className="w-full px-4 py-3.5 bg-slate-950/70 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                 />
+                <div className="flex items-center justify-between mt-2 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = 'https://docs.google.com/spreadsheets/create';
+                      setSheetUrl(url);
+                      const elem = document.getElementById('sheet-url-input') as HTMLInputElement;
+                      if (elem) elem.value = url;
+                    }}
+                    className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold cursor-pointer inline-flex items-center gap-1.5 transition-colors bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-lg hover:bg-indigo-500/20 active:scale-95"
+                  >
+                    <span>✨ 빈 시트 주소 자동 채우기</span>
+                  </button>
+                  <span className="text-[11px] text-slate-500">클릭 즉시 주소 입력</span>
+                </div>
               </div>
 
               {errorMsg && (
