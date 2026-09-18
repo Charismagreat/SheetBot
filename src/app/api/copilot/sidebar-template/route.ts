@@ -12,57 +12,70 @@ export async function GET() {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background: #f8fafc;
       color: #0f172a;
-      padding: 12px 10px;
+      padding: 10px 8px;
       font-size: 13px;
       line-height: 1.4;
       -webkit-font-smoothing: antialiased;
     }
 
-    /* 헤더 */
-    .top-header {
+    /* [1] 최상단 1줄 슬림 인프라 상태 바 (Top Status Strip) */
+    .top-status-strip {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 6px 10px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 12px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #e2e8f0;
+      margin-bottom: 8px;
+      font-size: 11px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
     }
-    .brand-title {
-      font-size: 14px;
-      font-weight: 800;
-      color: #0f172a;
+    .status-left {
       display: flex;
       align-items: center;
       gap: 6px;
-      letter-spacing: -0.3px;
+      color: #334155;
+      font-weight: 600;
     }
-    .live-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 7px;
-      border-radius: 9999px;
-      background: #ecfdf5;
-      border: 1px solid #a7f3d0;
-      color: #059669;
-      font-size: 10px;
-      font-weight: 700;
-    }
-    .pulse-dot {
-      width: 6px;
-      height: 6px;
+    .status-dot-sm {
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
       background: #10b981;
       box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
     }
+    .status-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .latency-tag {
+      background: #f1f5f9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #475569;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .strip-reload {
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: #94a3b8;
+      font-size: 11px;
+      padding: 2px;
+      transition: color 0.15s;
+    }
+    .strip-reload:hover { color: #2563eb; }
 
-    /* [1] 프리미엄 토큰 지갑 카드 */
+    /* [2] 프리미엄 토큰 지갑 카드 */
     .wallet-card {
       background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #0f172a 100%);
       border-radius: 12px;
-      padding: 14px 12px;
+      padding: 13px 12px;
       color: #ffffff;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.15), 0 0 0 1px rgba(99, 102, 241, 0.25) inset;
     }
     .wallet-top-row {
@@ -84,7 +97,7 @@ export async function GET() {
     .user-email-text {
       font-size: 11px;
       color: #94a3b8;
-      max-width: 170px;
+      max-width: 175px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -93,7 +106,7 @@ export async function GET() {
       display: flex;
       align-items: baseline;
       justify-content: space-between;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
     .balance-num-box {
       display: flex;
@@ -168,61 +181,13 @@ export async function GET() {
     }
     .btn-cases:hover { background: rgba(255, 255, 255, 0.18); color: #ffffff; }
 
-    /* [2] 1줄 슬림 인프라 상태 바 */
-    .status-strip {
-      background: #ffffff;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 8px 10px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 10px;
-      font-size: 11px;
-    }
-    .status-left {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      color: #334155;
-      font-weight: 600;
-    }
-    .status-dot-sm {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: #10b981;
-    }
-    .status-right {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .latency-tag {
-      background: #f1f5f9;
-      padding: 2px 6px;
-      border-radius: 4px;
-      color: #475569;
-      font-weight: 700;
-      font-variant-numeric: tabular-nums;
-    }
-    .strip-reload {
-      border: none;
-      background: none;
-      cursor: pointer;
-      color: #94a3b8;
-      font-size: 11px;
-      padding: 2px;
-    }
-    .strip-reload:hover { color: #2563eb; }
-
     /* [3] 안티그라비티 AI 스튜디오 허브 */
     .studio-card {
       background: #ffffff;
       border: 1px solid #e2e8f0;
       border-radius: 12px;
       padding: 12px;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
     }
     .studio-header {
@@ -287,7 +252,6 @@ export async function GET() {
 
     /* [4] 접이식 고급 관리 아코디언 */
     details.advanced-box {
-      margin-top: 6px;
       background: #ffffff;
       border: 1px solid #e2e8f0;
       border-radius: 8px;
@@ -295,7 +259,7 @@ export async function GET() {
       overflow: hidden;
     }
     details.advanced-box summary {
-      padding: 8px 10px;
+      padding: 7px 10px;
       color: #64748b;
       font-weight: 600;
       cursor: pointer;
@@ -306,7 +270,7 @@ export async function GET() {
     }
     details.advanced-box summary:hover { color: #334155; background: #f8fafc; }
     .danger-inner {
-      padding: 10px;
+      padding: 9px 10px;
       background: #fff1f2;
       border-top: 1px solid #fecdd3;
     }
@@ -335,24 +299,25 @@ export async function GET() {
       text-align: center;
       font-size: 10px;
       color: #94a3b8;
-      margin-top: 12px;
+      margin-top: 10px;
       letter-spacing: -0.2px;
     }
   </style>
 </head>
 <body>
-  <!-- 헤더 -->
-  <div class="top-header">
-    <div class="brand-title">
-      <span>🤖 SheetBot AI 코파일럿</span>
+  <!-- [1] 최상단 1줄 슬림 인프라 상태 바 (중복 타이틀 대체) -->
+  <div class="top-status-strip">
+    <div class="status-left">
+      <span class="status-dot-sm" id="tunnel-dot"></span>
+      <span id="tunnel-status">EGDesk SSL 터널 정상</span>
     </div>
-    <div class="live-badge">
-      <span class="pulse-dot"></span>
-      <span>Cloud Live</span>
+    <div class="status-right">
+      <span class="latency-tag" id="tunnel-latency">112 ms</span>
+      <button class="strip-reload" onclick="checkTunnel()" title="인프라 재점검">🔄</button>
     </div>
   </div>
 
-  <!-- [1] 프리미엄 토큰 지갑 카드 -->
+  <!-- [2] 프리미엄 토큰 지갑 카드 -->
   <div class="wallet-card">
     <div class="wallet-top-row">
       <div style="display: flex; align-items: center; gap: 6px;">
@@ -374,18 +339,6 @@ export async function GET() {
     <div class="wallet-btn-grid">
       <button class="btn-charge" onclick="openRechargeModal()">💳 즉시 충전</button>
       <a href="https://sheetbot.cloud/use-cases" class="btn-cases">📖 활용사례 40+</a>
-    </div>
-  </div>
-
-  <!-- [2] 1줄 슬림 인프라 상태 바 -->
-  <div class="status-strip">
-    <div class="status-left">
-      <span class="status-dot-sm" id="tunnel-dot"></span>
-      <span id="tunnel-status">EGDesk SSL 터널 정상</span>
-    </div>
-    <div class="status-right">
-      <span class="latency-tag" id="tunnel-latency">112 ms</span>
-      <button class="strip-reload" onclick="checkTunnel()" title="인프라 재점검">🔄</button>
     </div>
   </div>
 
@@ -431,7 +384,7 @@ export async function GET() {
   </details>
 
   <div class="copilot-footer">
-    SheetBot Cloud Engine &bull; Auto-synced v3.0
+    SheetBot Cloud Engine &bull; Auto-synced v3.1
   </div>
 
   <script>
