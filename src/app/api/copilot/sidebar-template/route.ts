@@ -8,18 +8,22 @@ export async function GET() {
   <meta charset="UTF-8">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    html, body {
+      width: 100%;
       background: #f8fafc;
       color: #0f172a;
-      padding: 10px 8px;
+      margin: 0;
+      padding: 6px 4px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       font-size: 13px;
       line-height: 1.4;
       -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
     }
 
-    /* [1] 최상단 1줄 슬림 인프라 상태 바 (Top Status Strip) */
+    /* [1] 최상단 1줄 슬림 인프라 상태 바 */
     .top-status-strip {
+      width: 100%;
       background: #ffffff;
       border: 1px solid #e2e8f0;
       border-radius: 8px;
@@ -27,7 +31,7 @@ export async function GET() {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 8px;
+      margin-bottom: 7px;
       font-size: 11px;
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
     }
@@ -71,11 +75,12 @@ export async function GET() {
 
     /* [2] 프리미엄 토큰 지갑 카드 */
     .wallet-card {
+      width: 100%;
       background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #0f172a 100%);
-      border-radius: 12px;
-      padding: 13px 12px;
+      border-radius: 10px;
+      padding: 12px 10px;
       color: #ffffff;
-      margin-bottom: 8px;
+      margin-bottom: 7px;
       box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.15), 0 0 0 1px rgba(99, 102, 241, 0.25) inset;
     }
     .wallet-top-row {
@@ -97,7 +102,7 @@ export async function GET() {
     .user-email-text {
       font-size: 11px;
       color: #94a3b8;
-      max-width: 175px;
+      max-width: 190px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -114,7 +119,7 @@ export async function GET() {
       gap: 5px;
     }
     .balance-val {
-      font-size: 22px;
+      font-size: 23px;
       font-weight: 900;
       letter-spacing: -0.5px;
       color: #38bdf8;
@@ -183,11 +188,12 @@ export async function GET() {
 
     /* [3] 안티그라비티 AI 스튜디오 허브 */
     .studio-card {
+      width: 100%;
       background: #ffffff;
       border: 1px solid #e2e8f0;
-      border-radius: 12px;
-      padding: 12px;
-      margin-bottom: 8px;
+      border-radius: 10px;
+      padding: 12px 10px;
+      margin-bottom: 7px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
     }
     .studio-header {
@@ -219,7 +225,7 @@ export async function GET() {
       align-items: center;
       justify-content: center;
       gap: 6px;
-      margin-bottom: 8px;
+      margin-bottom: 7px;
       transition: filter 0.2s, transform 0.1s;
       box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);
     }
@@ -252,6 +258,7 @@ export async function GET() {
 
     /* [4] 접이식 고급 관리 아코디언 */
     details.advanced-box {
+      width: 100%;
       background: #ffffff;
       border: 1px solid #e2e8f0;
       border-radius: 8px;
@@ -299,13 +306,13 @@ export async function GET() {
       text-align: center;
       font-size: 10px;
       color: #94a3b8;
-      margin-top: 10px;
+      margin-top: 8px;
       letter-spacing: -0.2px;
     }
   </style>
 </head>
 <body>
-  <!-- [1] 최상단 1줄 슬림 인프라 상태 바 (중복 타이틀 대체) -->
+  <!-- [1] 최상단 1줄 슬림 인프라 상태 바 -->
   <div class="top-status-strip">
     <div class="status-left">
       <span class="status-dot-sm" id="tunnel-dot"></span>
@@ -384,7 +391,7 @@ export async function GET() {
   </details>
 
   <div class="copilot-footer">
-    SheetBot Cloud Engine &bull; Auto-synced v3.1
+    SheetBot Cloud Engine &bull; Auto-synced v3.2
   </div>
 
   <script>
