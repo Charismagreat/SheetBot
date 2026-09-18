@@ -205,18 +205,30 @@ function egdeskExtractAiJson(raw) {
  * 🤖 SheetBot AI 코파일럿 (통합 제어 센터: 터널 진단 · 안티그라비티 연동 · 연동 해제)
  */
 function showAiCopilotSidebar() {
-  var html = HtmlService.createHtmlOutput(getAiCopilotSidebarHtml())
-    .setTitle("🤖 SheetBot AI 제어 센터")
-    .setWidth(360);
-  SpreadsheetApp.getUi().showSidebar(html);
+  var htmlOutput;
+  try {
+    var res = UrlFetchApp.fetch("https://sheetbot.cloud/api/copilot/sidebar-template", {
+      muteHttpExceptions: true
+    });
+    if (res.getResponseCode() === 200) {
+      htmlOutput = HtmlService.createHtmlOutput(res.getContentText());
+    }
+  } catch (e) {
+    Logger.log("원격 코파일럿 사이드바 로드 실패: " + e.message);
+  }
+  if (!htmlOutput) {
+    htmlOutput = HtmlService.createHtmlOutput(getAiCopilotSidebarHtml());
+  }
+  htmlOutput.setTitle("🤖 SheetBot AI 코파일럿").setWidth(360);
+  SpreadsheetApp.getUi().showSidebar(htmlOutput);
 }
 
 function getAiCopilotSidebarHtml() {
   return '<!DOCTYPE html><html><head><meta charset="utf-8">' +
     '<script src="https://cdn.tailwindcss.com"></script>' +
-    '<style>body{font-family:sans-serif;background:#f8fafc;color:#0f172a;padding:14px;}</style>' +
+    '<style>body{font-family:sans-serif;background:#f8fafc;color:#0f172a;padding:10px 6px;}</style>' +
     '</head><body>' +
-    '<div class="space-y-3.5">' +
+    '<div class="space-y-3">' +
       '<div class="p-3.5 bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 rounded-xl text-white shadow-sm space-y-2.5 border border-indigo-800/40">' +
         '<div class="flex items-center justify-between">' +
           '<div class="flex items-center gap-1.5">' +
