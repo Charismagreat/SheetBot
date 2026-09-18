@@ -819,19 +819,35 @@ function getAiCopilotSidebarHtml() {
         '<p class="text-[11px] text-rose-600 leading-relaxed">시트 데이터는 100% 보존되며, 상단 메뉴와 Apps Script 코드만 완전히 제거됩니다.</p>' +
         '<button onclick="uninstallScript()" id="uninstallBtn" class="w-full py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg transition-colors">🗑️ 스크립트 전체 삭제</button>' +
       '</div>' +
-      '<!-- [🌟] 시트봇 다목적 공지 & 배너 슬롯 (하단 와이드 영역 - 가이드/이벤트 고가독성 카드) -->' +
-      '<a href="https://sheetbot.cloud/wrap/guide" target="_blank" class="block p-4 bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-950 rounded-xl border border-indigo-500/40 hover:border-indigo-400 shadow-md transition-all text-white no-underline group mt-3">' +
-        '<div class="flex items-center justify-between mb-2">' +
-          '<span class="text-[10px] font-black px-2 py-0.5 rounded-md bg-indigo-600 text-white flex items-center gap-1 shadow-sm">📖 1분 완성 사진 가이드</span>' +
-          '<span class="text-[11px] text-indigo-300 font-bold">SheetBot Visual Guide</span>' +
+      '<!-- [🌟] 시트봇 다목적 공지 & 광고 배너 (정사각형 화사한 광고 포맷) -->' +
+      '<a href="https://sheetbot.cloud/wrap/guide" target="_blank" class="block p-5 bg-gradient-to-br from-white via-blue-50/50 to-indigo-50/60 rounded-2xl border-2 border-indigo-400 hover:border-indigo-600 shadow-md transition-all text-slate-900 no-underline group mt-3.5 flex flex-col justify-between" style="min-height: 330px; aspect-ratio: 1 / 1;">' +
+        '<div class="flex items-center justify-between">' +
+          '<span class="text-xs font-black px-2.5 py-1 rounded-lg bg-indigo-600 text-white flex items-center gap-1 shadow-sm">📖 1분 사진 가이드</span>' +
+          '<span class="text-xs text-indigo-600 font-extrabold tracking-tight">무료 가이드 • 바로보기</span>' +
         '</div>' +
-        '<div class="text-sm font-black text-white flex items-center justify-between mt-1">' +
-          '<span>Google 시트 AI 래핑 사진 가이드</span>' +
-          '<span class="text-indigo-400 group-hover:translate-x-1 transition-transform text-base font-black">→</span>' +
+        '<div class="my-auto py-2.5">' +
+          '<div class="text-lg font-black text-slate-900 leading-snug tracking-tight">' +
+            'Google 시트 AI 래핑<br>' +
+            '<span class="text-indigo-600">사진으로 1분 완성하기</span>' +
+          '</div>' +
+          '<div class="mt-3.5 space-y-2 text-[13.5px] text-slate-700 font-bold leading-normal">' +
+            '<div class="flex items-center gap-2">' +
+              '<span class="text-emerald-500 font-black text-base flex-shrink-0">✔</span>' +
+              '<span>실제 스크린샷 4장으로 초보자도 1분 마스터</span>' +
+            '</div>' +
+            '<div class="flex items-center gap-2">' +
+              '<span class="text-emerald-500 font-black text-base flex-shrink-0">✔</span>' +
+              '<span>복잡한 코딩 없이 안티그라비티 즉시 연동</span>' +
+            '</div>' +
+            '<div class="flex items-center gap-2">' +
+              '<span class="text-emerald-500 font-black text-base flex-shrink-0">✔</span>' +
+              '<span>구글 시트 상단 전용 메뉴 자동 생성</span>' +
+            '</div>' +
+          '</div>' +
         '</div>' +
-        '<div class="text-xs text-slate-300 mt-1.5 leading-relaxed font-medium">초보자도 클릭 몇 번으로 완성하는 안티그라비티 3단계 연동법을 사진으로 확인하세요.</div>' +
-        '<div class="mt-2.5 py-1.5 px-2.5 bg-indigo-900/40 border border-indigo-500/30 rounded-lg text-center text-xs font-bold text-indigo-200 group-hover:text-white group-hover:bg-indigo-800/60 transition-all flex items-center justify-center gap-1">' +
-          '<span>📸 스크린샷 4장으로 1분 만에 마스터하기 ↗</span>' +
+        '<div class="w-full py-3 px-4 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-black text-[15px] rounded-xl shadow-md text-center flex items-center justify-center gap-2 tracking-tight group-hover:scale-[1.01] transition-transform">' +
+          '<span>🚀 사진 가이드 전체보기</span>' +
+          '<span class="group-hover:translate-x-1 transition-transform text-lg">→</span>' +
         '</div>' +
       '</a>' +
     '</div>' +
