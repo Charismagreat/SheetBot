@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import {
   Sparkles,
   ArrowLeft,
@@ -16,9 +15,8 @@ import {
   FileSearch,
   Database,
   BarChart3,
-  ExternalLink,
   MousePointerClick,
-  CheckCircle2,
+  ExternalLink,
 } from "lucide-react";
 
 export default function WrapGuidePage() {
@@ -118,9 +116,9 @@ export default function WrapGuidePage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-indigo-500 selection:text-white">
       {/* 상단 은은한 블러 조명 */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-96 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[650px] h-96 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="relative max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-16">
+      <div className="relative max-w-4xl mx-auto px-4 sm:px-6 py-10 sm:py-16">
         {/* 상단 네비게이션 바 */}
         <div className="flex items-center justify-between pb-8 border-b border-slate-800/80 mb-10">
           <Link
@@ -142,7 +140,7 @@ export default function WrapGuidePage() {
 
         {/* 메인 헤더 섹션 */}
         <div className="text-center space-y-4 mb-14">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-bold">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-bold">
             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
             <span>SheetBot Wrapping Visual Guide</span>
           </div>
@@ -177,155 +175,212 @@ export default function WrapGuidePage() {
           </p>
         </div>
 
-        {/* 🌟 3단계 실전 비주얼 가이드 (실제 화면 스크린샷 포함) */}
-        <div className="space-y-8 mb-20">
+        {/* 🌟 1열 세로형 대형 비주얼 3단계 가이드 (가독성 극대화) */}
+        <div className="space-y-10 mb-20">
           <div className="text-center space-y-1">
-            <div className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Visual 3-Steps</div>
+            <div className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Visual 3-Steps Walkthrough</div>
             <h2 className="text-2xl sm:text-3xl font-black text-white">화면으로 보는 초간단 3단계 사용법</h2>
             <p className="text-xs sm:text-sm text-slate-400">
-              각 단계별 실제 화면을 확인하며 그대로 따라 해보세요.
+              실제 화면 스크린샷과 함께 1분 만에 시트를 래핑하고 자동화를 완성해 보세요.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Step 1 카드: 래핑 주소 발급 화면 */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-5 sm:p-6 flex flex-col justify-between hover:border-indigo-500/40 transition-all shadow-xl group">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-8 h-8 rounded-xl bg-indigo-600/20 text-indigo-400 font-black text-sm flex items-center justify-center border border-indigo-500/30">
-                      01
-                    </span>
-                    <span className="text-sm font-black text-white">주소 발급</span>
-                  </div>
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    1초 완성
+          <div className="space-y-8">
+            {/* Step 1 카드: 대형 스크린샷 포함 1열 카드 */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 hover:border-indigo-500/40 transition-all">
+              {/* 상단 헤더 */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+                <div className="flex items-center gap-3">
+                  <span className="w-9 h-9 rounded-2xl bg-indigo-600/20 text-indigo-400 font-black text-base flex items-center justify-center border border-indigo-500/30 shrink-0">
+                    01
                   </span>
-                </div>
-
-                {/* 실제 스크린샷 이미지 프레임 */}
-                <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-950/80 shadow-md group-hover:border-indigo-500/30 transition-colors">
-                  <img
-                    src="/images/guide/step1-input.png"
-                    alt="구글 시트 URL 입력 및 래핑 버튼 화면"
-                    className="w-full h-auto object-cover transform group-hover:scale-[1.02] transition-transform duration-300"
-                  />
-                  <div className="p-2.5 bg-slate-900/90 border-t border-slate-800 text-[11px] text-slate-300 flex items-center justify-between">
-                    <span>💡 시트 주소 없어도 시작 가능</span>
-                    <span className="text-indigo-400 font-bold">1클릭 발급</span>
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-black text-white">
+                      구글 시트 래핑 주소 발급하기
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      시트 URL을 입력하거나, 시트 주소 없이 빈 시트로 즉시 시작할 수 있습니다.
+                    </p>
                   </div>
                 </div>
+                <span className="self-start sm:self-auto text-xs font-bold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+                  ⚡ 1초 발급 완료
+                </span>
+              </div>
 
-                <div className="space-y-1.5 text-left">
-                  <h3 className="text-base font-bold text-white group-hover:text-indigo-300 transition-colors">
-                    구글 시트 래핑 주소 발급
-                  </h3>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    구글 시트 주소를 넣고 <strong className="text-white">[⚡ 3초 만에 래핑하기]</strong>를 누르거나, 시트가 없다면 <strong className="text-indigo-300">[✨ 시트 주소 없이 새 시트로 즉시 시작]</strong>을 누르세요.
+              {/* 대형 스크린샷 이미지 프레임 (1열 전체 너비) */}
+              <div className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-950/90 shadow-2xl p-2 sm:p-4">
+                <img
+                  src="/images/guide/step1-input.png"
+                  alt="구글 시트 URL 입력 및 래핑 버튼 화면"
+                  className="w-full max-w-2xl mx-auto h-auto rounded-xl object-contain border border-slate-800/80 shadow-md"
+                />
+                <div className="mt-3 px-2 text-center text-xs text-slate-400">
+                  ▲ 위 화면에서 주소를 넣고 <strong className="text-white">[⚡ 3초 만에 래핑하기]</strong>를 누르거나, 시트가 없으면 <strong className="text-indigo-300">[✨ 시트 주소 없이 새 시트로 즉시 시작]</strong>을 클릭하세요.
+                </div>
+              </div>
+
+              {/* 설명 및 팁 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-slate-300 text-left">
+                <div className="p-4 bg-slate-950/60 rounded-2xl border border-slate-800 space-y-1">
+                  <div className="font-bold text-white flex items-center gap-1.5">
+                    <span>🔗</span>
+                    <span>시트 주소가 있는 경우</span>
+                  </div>
+                  <p className="text-slate-400 leading-relaxed">
+                    입력창에 내 구글 시트 주소를 넣고 래핑하면, 기존에 작성된 데이터와 수식, 서식을 100% 안전하게 보존하면서 AI 브릿지가 연결됩니다.
+                  </p>
+                </div>
+                <div className="p-4 bg-slate-950/60 rounded-2xl border border-slate-800 space-y-1">
+                  <div className="font-bold text-indigo-300 flex items-center gap-1.5">
+                    <span>✨</span>
+                    <span>시트 주소가 없는 경우</span>
+                  </div>
+                  <p className="text-slate-400 leading-relaxed">
+                    [✨ 시트 주소 없이 새 시트로 즉시 시작]을 클릭하면 새 시트 연동 주소가 생성되며, AI가 필요한 컬럼 헤더 구조를 처음부터 스마트하게 설계해 줍니다.
                   </p>
                 </div>
               </div>
+            </div>
 
-              <div className="mt-4 p-3 bg-slate-950/70 rounded-xl border border-slate-800 text-[11px] text-slate-400 leading-normal">
-                💡 <strong className="text-slate-300">Tip:</strong> 새 시트로 시작하면 AI가 필요한 컬럼 헤더와 양식을 알아서 처음부터 설계해 줍니다.
+            {/* Step 2 카드: 대형 스크린샷 포함 1열 카드 */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 hover:border-emerald-500/40 transition-all">
+              {/* 상단 헤더 */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+                <div className="flex items-center gap-3">
+                  <span className="w-9 h-9 rounded-2xl bg-emerald-600/20 text-emerald-400 font-black text-base flex items-center justify-center border border-emerald-500/30 shrink-0">
+                    02
+                  </span>
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-black text-white">
+                      래핑 주소 복사 후 바이브코딩 AI에 전달하기
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      버튼 하나로 프롬프트가 복사되며, 안티그라비티/Cursor/Claude Code에 그대로 붙여넣습니다.
+                    </p>
+                  </div>
+                </div>
+                <span className="self-start sm:self-auto text-xs font-bold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+                  📋 원클릭 복사
+                </span>
+              </div>
+
+              {/* 대형 스크린샷 이미지 프레임 (1열 전체 너비) */}
+              <div className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-950/90 shadow-2xl p-2 sm:p-4 text-center">
+                <img
+                  src="/images/guide/step2-modal.png"
+                  alt="래핑 주소 복사하기 팝업 화면"
+                  className="w-full max-w-lg mx-auto h-auto rounded-xl object-contain border border-slate-800/80 shadow-md"
+                />
+                <div className="mt-3 px-2 text-center text-xs text-slate-400">
+                  ▲ 팝업창에서 초대형 초록색 <strong className="text-emerald-400">[📋 래핑 주소 복사하기]</strong> 버튼을 누르면 AI가 즉시 인식할 수 있는 프롬프트가 복사됩니다.
+                </div>
+              </div>
+
+              {/* 설명 및 팁 */}
+              <div className="p-4 bg-slate-950/60 rounded-2xl border border-slate-800 text-xs text-left space-y-2">
+                <div className="font-bold text-white flex items-center gap-1.5">
+                  <span>💬</span>
+                  <span>AI 채팅창에 이렇게 입력해 보세요</span>
+                </div>
+                <div className="p-3 bg-slate-900 rounded-xl font-mono text-[11px] text-emerald-400 border border-slate-800 leading-relaxed select-all">
+                  [Ctrl + V로 복사된 래핑 주소 붙여넣기]<br />
+                  &quot;신규 주문이 들어오면 고객에게 알림 문자를 보내고, A열 체크박스로 선택해서 일괄 발송하는 메뉴를 만들어줘&quot;
+                </div>
+                <p className="text-slate-400 text-[11px]">
+                  💡 <strong>안티그라비티(Antigravity), Cursor, Claude Code, Windsurf</strong> 등 사용 중인 AI 채팅창에 복사된 내용을 붙여넣고 엔터만 치면 AI가 시트에 필요한 코드를 알아서 주입합니다.
+                </p>
               </div>
             </div>
 
-            {/* Step 2 카드: 완성 팝업 및 복사 화면 */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-5 sm:p-6 flex flex-col justify-between hover:border-emerald-500/40 transition-all shadow-xl group">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-8 h-8 rounded-xl bg-emerald-600/20 text-emerald-400 font-black text-sm flex items-center justify-center border border-emerald-500/30">
-                      02
-                    </span>
-                    <span className="text-sm font-black text-white">주소 복사 & 지시</span>
-                  </div>
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    원클릭 복사
+            {/* Step 3 카드: 대형 구글 시트 메뉴 목업 포함 1열 카드 */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 hover:border-blue-500/40 transition-all">
+              {/* 상단 헤더 */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+                <div className="flex items-center gap-3">
+                  <span className="w-9 h-9 rounded-2xl bg-blue-600/20 text-blue-400 font-black text-base flex items-center justify-center border border-blue-500/30 shrink-0">
+                    03
                   </span>
-                </div>
-
-                {/* 실제 스크린샷 이미지 프레임 */}
-                <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-950/80 shadow-md group-hover:border-emerald-500/30 transition-colors max-h-[175px]">
-                  <img
-                    src="/images/guide/step2-modal.png"
-                    alt="래핑 주소 복사하기 팝업 화면"
-                    className="w-full h-auto object-top object-cover transform group-hover:scale-[1.02] transition-transform duration-300"
-                  />
-                  <div className="absolute bottom-0 inset-x-0 p-2.5 bg-gradient-to-t from-slate-950 via-slate-900/90 to-transparent text-[11px] text-emerald-300 font-bold flex items-center justify-between">
-                    <span>📋 [래핑 주소 복사하기] 클릭</span>
-                    <span className="text-white text-[10px] bg-emerald-600 px-1.5 py-0.5 rounded">클릭 한 번으로 끝</span>
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-black text-white">
+                      구글 시트 새로고침(F5) 후 자동화 메뉴 실행하기
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      시트 상단 툴바에 [🚀 SheetBot 메뉴]가 생성되어 모든 기능을 바로 클릭 실행할 수 있습니다.
+                    </p>
                   </div>
                 </div>
-
-                <div className="space-y-1.5 text-left">
-                  <h3 className="text-base font-bold text-white group-hover:text-emerald-300 transition-colors">
-                    바이브코딩 AI에 붙여넣기
-                  </h3>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    팝업창에서 초록색 <strong className="text-emerald-400">[📋 래핑 주소 복사하기]</strong> 버튼을 누른 후, <strong className="text-white">안티그라비티</strong>나 Cursor 채팅창에 붙여넣고 원하는 기능을 자연어로 지시하세요.
-                  </p>
-                </div>
+                <span className="self-start sm:self-auto text-xs font-bold px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0">
+                  ✨ 자동 완성
+                </span>
               </div>
 
-              <div className="mt-4 p-3 bg-slate-950/70 rounded-xl border border-slate-800 text-[11px] text-slate-400 leading-normal">
-                💡 <strong className="text-slate-300">Tip:</strong> "주문 들어오면 고객에게 알림 문자 보내줘" 등 편안하게 한국어로 말씀하시면 됩니다.
-              </div>
-            </div>
-
-            {/* Step 3 카드: 시트 메뉴 생성 및 실행 화면 */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-5 sm:p-6 flex flex-col justify-between hover:border-indigo-500/40 transition-all shadow-xl group">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-8 h-8 rounded-xl bg-blue-600/20 text-blue-400 font-black text-sm flex items-center justify-center border border-blue-500/30">
-                      03
-                    </span>
-                    <span className="text-sm font-black text-white">시트 메뉴 실행</span>
-                  </div>
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                    F5 새로고침
+              {/* 대형 구글 시트 툴바 및 메뉴 UI 목업 프레임 */}
+              <div className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-950/90 shadow-2xl p-4 sm:p-6 text-left space-y-3">
+                {/* 시트 상단 메뉴바 */}
+                <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400 border-b border-slate-800 pb-3 overflow-x-auto">
+                  <span className="text-slate-500 hover:text-slate-300 cursor-pointer">파일</span>
+                  <span className="text-slate-500 hover:text-slate-300 cursor-pointer">수정</span>
+                  <span className="text-slate-500 hover:text-slate-300 cursor-pointer">보기</span>
+                  <span className="text-slate-500 hover:text-slate-300 cursor-pointer">삽입</span>
+                  <span className="text-slate-500 hover:text-slate-300 cursor-pointer">서식</span>
+                  <span className="text-slate-500 hover:text-slate-300 cursor-pointer">데이터</span>
+                  <span className="bg-indigo-950 text-indigo-300 font-bold px-2 py-1 rounded-lg border border-indigo-500/50 shadow-sm flex items-center gap-1">
+                    <span>🚀 SheetBot 메뉴</span>
+                    <span className="text-[10px] text-indigo-400">▼</span>
                   </span>
+                  <span className="text-slate-500 hover:text-slate-300 cursor-pointer">도움말</span>
                 </div>
 
-                {/* 구글 시트 상단 메뉴 UI 목업 프리뷰 */}
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-3 shadow-md group-hover:border-blue-500/30 transition-colors space-y-2">
-                  <div className="flex items-center gap-1 text-[11px] text-slate-400 border-b border-slate-800 pb-2 overflow-x-hidden">
-                    <span className="text-slate-500">파일</span>
-                    <span className="text-slate-500">수정</span>
-                    <span className="text-slate-500">보기</span>
-                    <span className="text-slate-500">삽입</span>
-                    <span className="bg-indigo-950 text-indigo-300 font-bold px-1.5 py-0.5 rounded border border-indigo-500/40">🚀 SheetBot 메뉴</span>
-                  </div>
-                  <div className="bg-slate-900 rounded-xl p-2.5 space-y-1.5 text-[11px] text-slate-300 border border-slate-800 text-left">
-                    <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                {/* 드롭다운 메뉴 항목 시각화 */}
+                <div className="max-w-md bg-slate-900/95 rounded-2xl p-3 sm:p-4 border border-slate-700 shadow-2xl space-y-2 text-xs">
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-emerald-300 font-bold cursor-pointer transition-colors">
+                    <span className="flex items-center gap-2">
                       <span>📱</span>
-                      <span>[발송] 선택 행 문자 일괄 발송</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-blue-300">
+                      <span>[발송] 선택 행 스마트폰 알림 문자 일괄 발송</span>
+                    </span>
+                    <span className="text-[10px] bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30">실행</span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-slate-800/50 hover:bg-slate-700/80 text-blue-300 font-medium cursor-pointer transition-colors">
+                    <span className="flex items-center gap-2">
                       <span>✉️</span>
-                      <span>[발송] 안내 이메일 일괄 발송</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-slate-400 border-t border-slate-800 pt-1">
+                      <span>[발송] 선택 행 Gmail 맞춤 안내메일 일괄 발송</span>
+                    </span>
+                    <span className="text-[10px] bg-blue-950 text-blue-400 px-2 py-0.5 rounded border border-blue-500/30">실행</span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-slate-800/50 hover:bg-slate-700/80 text-slate-300 font-medium cursor-pointer transition-colors">
+                    <span className="flex items-center gap-2">
+                      <span>🧾</span>
+                      <span>[OCR] 영수증 / 명함 사진 AI 자동 분석 사이드바</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">열기</span>
+                  </div>
+
+                  <div className="border-t border-slate-800 pt-2 flex items-center justify-between p-2 rounded-xl bg-indigo-950/40 text-indigo-300 font-bold cursor-pointer">
+                    <span className="flex items-center gap-2">
                       <span>🤖</span>
-                      <span>SheetBot AI 코파일럿</span>
-                    </div>
+                      <span>SheetBot AI 코파일럿 제어 센터</span>
+                    </span>
+                    <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded">올인원</span>
                   </div>
                 </div>
 
-                <div className="space-y-1.5 text-left">
-                  <h3 className="text-base font-bold text-white group-hover:text-blue-300 transition-colors">
-                    시트 새로고침(F5) 후 즉시 실행
-                  </h3>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    AI가 작업을 완료하면 내 구글 시트를 열어 <strong className="text-white">새로고침(F5)</strong>하세요. 상단에 <strong className="text-indigo-300">🚀 SheetBot 메뉴</strong>가 자동 생성되어 원클릭으로 바로 실행됩니다.
-                  </p>
+                <div className="pt-2 text-center text-xs text-slate-400">
+                  ▲ AI가 코드를 주입한 후 내 구글 시트에서 <strong className="text-white">F5(새로고침)</strong>를 누르면 위와 같은 메뉴가 즉시 나타납니다.
                 </div>
               </div>
 
-              <div className="mt-4 p-3 bg-slate-950/70 rounded-xl border border-slate-800 text-[11px] text-slate-400 leading-normal">
-                💡 <strong className="text-slate-300">Tip:</strong> 추가 기능이 필요하면 시트 내장 [🤖 SheetBot AI 코파일럿] 사이드바에서 언제든 대화로 코드를 확장할 수 있습니다.
+              {/* 설명 및 팁 */}
+              <div className="p-4 bg-slate-950/60 rounded-2xl border border-slate-800 text-xs text-slate-300 text-left space-y-1.5">
+                <div className="font-bold text-white flex items-center gap-1.5">
+                  <span>💡</span>
+                  <span>시트 내장 코파일럿으로 언제든 추가 업그레이드</span>
+                </div>
+                <p className="text-slate-400 leading-relaxed">
+                  구글 시트 상단의 <strong className="text-indigo-300">[🤖 SheetBot AI 코파일럿]</strong> 메뉴를 누르면 시트 오른쪽에 전용 사이드바가 열립니다. 사이드바 안에서 원하는 추가 기능을 자연어로 요청하거나 실시간 토큰 잔액을 확인하고 즉시 충전할 수 있습니다.
+                </p>
               </div>
             </div>
           </div>
