@@ -202,3 +202,23 @@
    - **계정 복구 시 기존 키 재활성화 금지(Rotate on Recovery)**: 유예 기간 내에 사용자가 탈퇴를 취소하고 계정을 복구하더라도, 보안 유출 방지를 위해 **과거에 사용하던 기존 API 키는 영구 폐기(Revoked)** 처리하며, 대시보드에서 반드시 **새로운 API 키를 신규 발급**받도록 강제합니다.
 <!-- END:resource-lifecycle-and-revocation-rules -->
 
+<!-- BEGIN:copilot-dynamic-banner-rules -->
+## SheetBot AI 코파일럿 동적 배너 시스템 구축 원칙 (2단계 구현 대기)
+
+1. **사이드바 다목적 배너 데이터 피드 동적화**:
+   - 현재 1단계의 하드코딩된 '1분 사진 가이드' 배너 슬롯을 서버 API(`GET /api/copilot/banners`) 또는 설정 파일(`src/data/copilot-banners.ts`) 기반의 동적 피드 체계로 고도화합니다.
+   - 배너 데이터 스키마:
+     - `id`: 고유 식별자 (예: `guide-2026`, `contest-spring`, `hiring-gas`)
+     - `category`: `GUIDE` (가이드), `CONTEST` (공모전), `HIRING` (채용), `UNPACK` (언팩/행사), `NOTICE` (일반공지)
+     - `badge`: 표시 뱃지 문구 (예: `📖 1분 사진 가이드`, `🏆 총상금 500만원`, `💼 GAS 엔지니어 채용`, `🚀 신기능 언팩`)
+     - `title`: 헤드라인 텍스트
+     - `description`: 상세 설명 텍스트
+     - `linkUrl`: 클릭 시 이동할 URL
+     - `startDate` / `endDate`: 노출 기간 제어 (기간 경과 시 자동 숨김)
+     - `priority`: 우선순위 (높은 순으로 노출)
+     - `isActive`: 노출 활성화 여부
+2. **관리자 대시보드(Admin CMS) 연동**:
+   - 관리자 페이지(`/dashboard/admin`)에서 배너 목록 조회, 신규 등록, 수정, ON/OFF 토글 및 순서 변경을 코딩 없이 제어할 수 있는 관리 UI를 구축합니다.
+3. **클라이언트(사이드바) 다중 배너 노출 및 캐러셀 지원**:
+   - 활성화된 배너가 여러 개일 경우 자동 롤링(3~5초 주기) 또는 좌우 스와이프 인디케이터를 제공하여 다양한 이벤트가 골고루 노출되도록 지원합니다.
+<!-- END:copilot-dynamic-banner-rules -->

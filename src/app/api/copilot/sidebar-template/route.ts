@@ -189,12 +189,13 @@ export async function GET() {
     /* [🌟] 시트봇 다목적 공지/광고 배너 슬롯 */
     .promo-banner-card {
       width: 100%;
-      background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 60%, #1e1b4b 100%);
-      border: 1px solid rgba(129, 140, 248, 0.35);
-      border-radius: 10px;
-      padding: 10px 11px;
-      margin-bottom: 7px;
-      box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 55%, #0f172a 100%);
+      border: 1.5px solid rgba(129, 140, 248, 0.45);
+      border-radius: 12px;
+      padding: 14px 13px;
+      margin-top: 10px;
+      margin-bottom: 8px;
+      box-shadow: 0 4px 16px rgba(79, 70, 229, 0.18);
       text-decoration: none;
       display: block;
       color: #ffffff;
@@ -203,66 +204,89 @@ export async function GET() {
       overflow: hidden;
     }
     .promo-banner-card:hover {
-      border-color: rgba(129, 140, 248, 0.65);
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+      border-color: rgba(129, 140, 248, 0.85);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(79, 70, 229, 0.32);
     }
     .promo-banner-card::before {
       content: "";
       position: absolute;
-      top: -20px;
-      right: -20px;
-      width: 80px;
-      height: 80px;
-      background: radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, transparent 70%);
+      top: -30px;
+      right: -30px;
+      width: 110px;
+      height: 110px;
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.32) 0%, transparent 70%);
       pointer-events: none;
     }
     .promo-top-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 5px;
+      margin-bottom: 8px;
     }
     .promo-badge {
-      font-size: 9px;
+      font-size: 10.5px;
       font-weight: 800;
       letter-spacing: 0.3px;
-      padding: 2px 6px;
-      border-radius: 4px;
+      padding: 3px 8px;
+      border-radius: 6px;
       background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
       color: #ffffff;
       display: inline-flex;
       align-items: center;
-      gap: 3px;
+      gap: 4px;
+      box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
     }
     .promo-badge-tag {
-      font-size: 10px;
-      color: #a5b4fc;
-      font-weight: 600;
+      font-size: 11px;
+      color: #c7d2fe;
+      font-weight: 700;
+      letter-spacing: 0.2px;
     }
     .promo-title {
-      font-size: 12px;
-      font-weight: 800;
+      font-size: 14.5px;
+      font-weight: 900;
       color: #ffffff;
-      line-height: 1.3;
-      margin-bottom: 3px;
+      line-height: 1.35;
+      margin-bottom: 6px;
       display: flex;
       align-items: center;
       justify-content: space-between;
     }
     .promo-title-arrow {
       color: #818cf8;
-      font-size: 13px;
-      transition: transform 0.15s;
+      font-size: 16px;
+      font-weight: 900;
+      transition: transform 0.2s;
     }
     .promo-banner-card:hover .promo-title-arrow {
-      transform: translateX(2px);
+      transform: translateX(4px);
       color: #a5b4fc;
     }
     .promo-desc {
-      font-size: 10.5px;
+      font-size: 12px;
       color: #cbd5e1;
-      line-height: 1.35;
+      line-height: 1.45;
+      margin-bottom: 10px;
+    }
+    .promo-cta-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      background: rgba(99, 102, 241, 0.18);
+      border: 1px solid rgba(129, 140, 248, 0.35);
+      border-radius: 8px;
+      padding: 7px 10px;
+      color: #e0e7ff;
+      font-size: 11.5px;
+      font-weight: 800;
+      transition: all 0.15s ease;
+    }
+    .promo-banner-card:hover .promo-cta-bar {
+      background: rgba(99, 102, 241, 0.38);
+      border-color: rgba(129, 140, 248, 0.7);
+      color: #ffffff;
     }
 
     /* [3] 안티그라비티 AI 스튜디오 허브 */
@@ -428,21 +452,6 @@ export async function GET() {
     </div>
   </div>
 
-  <!-- [🌟] 시트봇 다목적 공지 & 배너 슬롯 (가이드, 공모전, 채용, 언팩 고정 영역) -->
-  <a href="https://sheetbot.cloud/wrap/guide" target="_blank" class="promo-banner-card">
-    <div class="promo-top-row">
-      <span class="promo-badge">📖 1분 사진 가이드</span>
-      <span class="promo-badge-tag">SheetBot Visual Guide</span>
-    </div>
-    <div class="promo-title">
-      <span>Google 시트 AI 래핑 사진 가이드</span>
-      <span class="promo-title-arrow">→</span>
-    </div>
-    <div class="promo-desc">
-      사진으로 쉽게 배우는 안티그라비티 3단계 연동법 ↗
-    </div>
-  </a>
-
   <!-- [3] 안티그라비티 AI 스튜디오 허브 -->
   <div class="studio-card">
     <div class="studio-header">
@@ -483,6 +492,25 @@ export async function GET() {
       </button>
     </div>
   </details>
+
+  <!-- [🌟] 시트봇 다목적 공지 & 배너 슬롯 (하단 와이드 영역 - 고가독성 가이드/이벤트 카드) -->
+  <a href="https://sheetbot.cloud/wrap/guide" target="_blank" class="promo-banner-card">
+    <div class="promo-top-row">
+      <span class="promo-badge">📖 1분 완성 사진 가이드</span>
+      <span class="promo-badge-tag">SheetBot Visual Guide</span>
+    </div>
+    <div class="promo-title">
+      <span>Google 시트 AI 래핑 사진 가이드</span>
+      <span class="promo-title-arrow">→</span>
+    </div>
+    <div class="promo-desc">
+      초보자도 클릭 몇 번으로 완성하는 안티그라비티 3단계 연동법을 사진으로 확인하세요.
+    </div>
+    <div class="promo-cta-bar">
+      <span>📸 스크린샷 4장으로 1분 만에 마스터하기</span>
+      <span>↗</span>
+    </div>
+  </a>
 
   <div class="copilot-footer">
     SheetBot Cloud Engine &bull; Auto-synced v3.2
