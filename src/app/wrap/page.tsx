@@ -81,12 +81,26 @@ export default function WrapPage() {
       e.preventDefault();
       e.stopPropagation();
     }
+    // 새 구글 스프레드시트 생성 창을 새 탭으로 즉시 열기 (기존 SheetBot 표준 동작)
+    if (typeof window !== 'undefined') {
+      try {
+        window.open('https://docs.google.com/spreadsheets/create', '_blank');
+      } catch (e) {}
+    }
     const createUrl = 'https://docs.google.com/spreadsheets/create';
     setSheetUrl(createUrl);
     const inputVal = document.getElementById('sheet-url-input') as HTMLInputElement | null;
     if (inputVal) inputVal.value = createUrl;
     executeWrap(createUrl);
   };
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__handleNewSheetWrap = () => {
+        handleNewSheetWrap();
+      };
+    }
+  }, []);
 
   const copyToClipboard = (text: string, type: 'bridge' | 'prompt') => {
     if (navigator.clipboard) {
@@ -163,21 +177,6 @@ export default function WrapPage() {
                   placeholder="https://docs.google.com/spreadsheets/d/... (없으면 비워두세요)"
                   className="w-full px-4 py-3.5 bg-slate-950/70 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                 />
-                <div className="flex items-center justify-between mt-2 pt-0.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const url = 'https://docs.google.com/spreadsheets/create';
-                      setSheetUrl(url);
-                      const elem = document.getElementById('sheet-url-input') as HTMLInputElement;
-                      if (elem) elem.value = url;
-                    }}
-                    className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold cursor-pointer inline-flex items-center gap-1.5 transition-colors bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-lg hover:bg-indigo-500/20 active:scale-95"
-                  >
-                    <span>✨ 빈 시트 주소 자동 채우기</span>
-                  </button>
-                  <span className="text-[11px] text-slate-500">클릭 즉시 주소 입력</span>
-                </div>
               </div>
 
               {errorMsg && (
