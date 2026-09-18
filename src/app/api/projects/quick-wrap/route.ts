@@ -24,12 +24,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { sheetUrl, templateName, presetPrompt } = body;
 
-    if (!sheetUrl) {
-      return NextResponse.json({ success: false, error: "sheetUrl이 필요합니다." }, { status: 400 });
-    }
-
-    const isNewSheet = !sheetUrl || sheetUrl === "NEW_SHEET" || sheetUrl.includes("spreadsheets/create");
-    const spreadsheetId = extractSpreadsheetId(sheetUrl);
+    const rawSheetUrl = (sheetUrl || "").trim();
+    const isNewSheet = !rawSheetUrl || rawSheetUrl === "NEW_SHEET" || rawSheetUrl.includes("spreadsheets/create");
+    const spreadsheetId = extractSpreadsheetId(rawSheetUrl);
     if (!spreadsheetId && !isNewSheet) {
       return NextResponse.json({ success: false, error: "올바른 구글 스프레드시트 주소(https://docs.google.com/spreadsheets/d/...)를 입력해 주세요." }, { status: 400 });
     }
@@ -91,7 +88,7 @@ export async function POST(request: NextRequest) {
       // 2. 신규 프로젝트 즉시 생성
       const projectId = `proj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const projectName = templateName || (isNewSheet ? "스마트 자동화 시트" : "시트봇 자동화 프로젝트");
-      const finalSheetUrl = isNewSheet ? "https://docs.google.com/spreadsheets/create" : sheetUrl;
+      const finalSheetUrl = isNewSheet ? "https://sheets.new" : rawSheetUrl;
 
       const newRow = {
         id: projectId,
@@ -148,17 +145,22 @@ export async function POST(request: NextRequest) {
 
     const defaultRequirement = presetPrompt || (
       isNewSheet
-        ? "내 비즈니스에 맞는 컬럼 구조와 스프레드시트 자동화 함수를 설계하고, 필요한 Apps Script 코드를 주입해줘."
+        ? "새 구글 시트에 내 비즈니스에 맞는 시트 탭과 컬럼 헤더 구조를 설계하고, 필요한 자동화 기능과 Apps Script 코드를 즉시 주입해줘."
         : "내 구글 시트의 헤더 구조와 데이터를 파악하고, 실무에 필요한 스프레드시트 자동화 메뉴와 기능을 주입해줘."
     );
 
-    const promptTemplate = `아래 웹 주소를 통해 내 구글 시트의 헤더 구조와 기존 코드를 확인하고, 필요한 기능 코드를 주입해줘:
+    const promptTemplate = isNewSheet
+      ? `아래 웹 주소를 통해 새 구글 시트의 컬럼 구조와 자동화 스크립트를 처음부터 설계하고 주입해줘:
+웹 주소: ${bridgeUrl}
+요구사항: ${defaultRequirement}`
+      : `아래 웹 주소를 통해 내 구글 시트의 헤더 구조와 기존 코드를 확인하고, 필요한 기능 코드를 주입해줘:
 웹 주소: ${bridgeUrl}
 요구사항: ${defaultRequirement}`;
 
     return NextResponse.json({
       success: true,
       isExisting,
+      isNewSheet,
       projectId: project.id,
       projectName: project.name,
       sheetUrl: project.spreadsheet_url,
