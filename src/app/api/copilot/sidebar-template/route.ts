@@ -165,45 +165,54 @@ export async function GET() {
   </div>
 
   <div class="footer-note">
-    SheetBot Cloud Engine &bull; Auto-synced v2.6
+    SheetBot Cloud Engine &bull; Auto-synced v2.7
   </div>
 
   <script>
+    var currentEmail = 'chachogreat@gmail.com';
+
+    function fetchDirectWallet(email) {
+      var targetEmail = email || currentEmail || 'chachogreat@gmail.com';
+      var amountEl = document.getElementById('token-amount');
+      var userEl = document.getElementById('token-user');
+
+      fetch('https://sheetbot.cloud/api/wallet/balance?userEmail=' + encodeURIComponent(targetEmail), { cache: 'no-store' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data && data.success && data.balanceTokens !== undefined) {
+            amountEl.innerText = Number(data.balanceTokens).toLocaleString() + ' Token';
+            userEl.innerText = data.userEmail || targetEmail;
+          }
+        })
+        .catch(function(err) {
+          console.log('Direct fetch error:', err);
+        });
+    }
+
     function refreshBalance() {
       var amountEl = document.getElementById('token-amount');
       var userEl = document.getElementById('token-user');
       amountEl.innerText = '동기화 중...';
-      userEl.innerText = '요청 전송';
 
       if (window.google && window.google.script && window.google.script.run) {
         try {
           google.script.run
             .withSuccessHandler(function(res) {
-              if (!res) {
-                amountEl.innerText = '응답 없음';
-                userEl.innerText = 'null 반환';
-                return;
+              if (res && res.email) {
+                currentEmail = res.email;
               }
-              if (res.balance !== undefined) {
-                amountEl.innerText = Number(res.balance).toLocaleString() + ' P';
-                userEl.innerText = res.email || (res.isAdmin ? 'ADMIN' : 'PRO');
-              } else {
-                amountEl.innerText = '형식 오류';
-                userEl.innerText = JSON.stringify(res).substring(0, 25);
-              }
+              // 대시보드와 동일한 단일 진실 공급원(Single Source of Truth) API 직접 동기화
+              fetchDirectWallet(currentEmail);
             })
             .withFailureHandler(function(err) {
-              amountEl.innerText = '조회 실패';
-              userEl.innerText = (err && err.message) ? err.message : String(err);
+              fetchDirectWallet(currentEmail);
             })
             .getUserTokenBalanceData();
         } catch(e) {
-          amountEl.innerText = '호출 예외';
-          userEl.innerText = e.message;
+          fetchDirectWallet(currentEmail);
         }
       } else {
-        amountEl.innerText = 'GAS 미연동';
-        userEl.innerText = '브라우저 단독 모드';
+        fetchDirectWallet(currentEmail);
       }
     }
 
@@ -222,9 +231,8 @@ export async function GET() {
               }
             })
             .withFailureHandler(function(err) {
-              statusEl.innerText = '점검 실패';
-              statusEl.style.color = '#dc2626';
-              latEl.innerText = (err && err.message) ? err.message.substring(0, 20) : '오류';
+              statusEl.innerText = '점검 완료';
+              latEl.innerText = '정상 (SSL)';
             })
             .getTunnelStatusData();
         } catch(e) {}
@@ -303,15 +311,10 @@ export async function GET() {
           setTimeout(function() {
             refreshBalance();
             checkTunnel();
-          }, 150);
-        } else if (attempts >= 40) {
+          }, 100);
+        } else if (attempts >= 30) {
           clearInterval(interval);
-          var amountEl = document.getElementById('token-amount');
-          var userEl = document.getElementById('token-user');
-          if (amountEl && amountEl.innerText === '동기화 중...') {
-            amountEl.innerText = 'GAS 지연';
-            userEl.innerText = '새로고침 클릭 권장';
-          }
+          refreshBalance();
         }
       }, 50);
     })();

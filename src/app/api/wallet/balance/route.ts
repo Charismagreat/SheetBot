@@ -26,6 +26,7 @@ export async function GET(request: Request) {
       },
       {
         headers: {
+          "Access-Control-Allow-Origin": "*",
           "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
         },
       }
