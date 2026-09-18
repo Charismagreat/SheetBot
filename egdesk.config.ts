@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-18T01:47:53.063Z
+ * Generated at: 2026-09-18T13:09:52.637Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -68,7 +68,7 @@ export const TABLES = {
   table7: {
     name: 'sheetbot_bridge_tokens',
     displayName: 'SheetBot 브릿지 토큰 매핑 대장',
-    rowCount: 8,
+    rowCount: 9,
     columnCount: 6,
     columns: ['id', '_version', 'token', 'project_id', 'user_email', 'created_at']
   } as TableDefinition,
@@ -124,7 +124,7 @@ export const TABLES = {
   table15: {
     name: 'sheetbot_ai_usage_logs',
     displayName: 'SheetBot AI 토큰 및 사용료 감사 대장',
-    rowCount: 33,
+    rowCount: 36,
     columnCount: 21,
     columns: ['id', '_version', 'user_email', 'user_name', 'caller', 'purpose', 'model', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'estimated_cost_usd', 'estimated_cost_krw', 'prompt_preview', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -138,7 +138,7 @@ export const TABLES = {
   table17: {
     name: 'sheetbot_projects',
     displayName: 'SheetBot 프로젝트 대장',
-    rowCount: 14,
+    rowCount: 15,
     columnCount: 25,
     columns: ['id', '_version', 'user_email', 'name', 'description', 'spreadsheet_id', 'spreadsheet_url', 'gas_project_id', 'script_id', 'script_url', 'script_code', 'manifest', 'summary', 'features', 'triggers', 'prompt', 'status', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -166,7 +166,7 @@ export const TABLES = {
   table21: {
     name: 'sheetbot_easybot_chats',
     displayName: 'SheetBot AI 대화 이력 대장',
-    rowCount: 4,
+    rowCount: 6,
     columnCount: 13,
     columns: ['id', '_version', 'user_email', 'role', 'message', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
