@@ -115,8 +115,8 @@ export async function GET() {
       <button onclick="refreshBalance()" style="border:none;background:none;cursor:pointer;font-size:11px;color:#2563eb;font-weight:600;">🔄 새로고침</button>
     </div>
     <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px;">
-      <span class="token-val" id="token-amount">20,000 P</span>
-      <span style="font-size: 11px; color: #64748b;" id="token-user">연동 완료</span>
+      <span class="token-val" id="token-amount">동기화 중...</span>
+      <span style="font-size: 11px; color: #64748b;" id="token-user">계정 확인 중</span>
     </div>
     <div style="display: flex; gap: 6px;">
       <button class="btn btn-primary" style="flex: 1;" onclick="openRechargeModal()">충전하기</button>
@@ -165,32 +165,32 @@ export async function GET() {
   </div>
 
   <div class="footer-note">
-    SheetBot Cloud Engine &bull; Auto-synced v2.2
+    SheetBot Cloud Engine &bull; Auto-synced v2.3
   </div>
 
   <script>
-    // 기본 표시값 설정 (초기 로딩 시 텍스트 멈춤 원천 차단)
-    var isGasReady = false;
-
     function refreshBalance() {
       var amountEl = document.getElementById('token-amount');
       var userEl = document.getElementById('token-user');
 
-      if (window.google && google.script && google.script.run && google.script.run.getUserTokenBalanceData) {
+      if (window.google && window.google.script && window.google.script.run) {
         try {
           google.script.run
             .withSuccessHandler(function(res) {
               if (res && res.success && res.balance !== undefined) {
                 amountEl.innerText = Number(res.balance).toLocaleString() + ' P';
-                userEl.innerText = res.email ? res.email.split('@')[0] : '연동됨';
+                userEl.innerText = res.email || '연동됨';
+              } else if (res && res.balance !== undefined) {
+                amountEl.innerText = Number(res.balance).toLocaleString() + ' P';
+                userEl.innerText = res.email || 'PRO 계정';
               }
             })
             .withFailureHandler(function(err) {
-              console.log('Balance check fallback');
+              console.log('Balance fetch failed:', err);
             })
             .getUserTokenBalanceData();
         } catch(e) {
-          console.log(e);
+          console.log('Error invoking getUserTokenBalanceData:', e);
         }
       }
     }
@@ -199,7 +199,7 @@ export async function GET() {
       var statusEl = document.getElementById('tunnel-status');
       var latEl = document.getElementById('tunnel-latency');
 
-      if (window.google && google.script && google.script.run && google.script.run.getTunnelStatusData) {
+      if (window.google && window.google.script && window.google.script.run) {
         try {
           google.script.run
             .withSuccessHandler(function(res) {
@@ -210,21 +210,23 @@ export async function GET() {
               }
             })
             .withFailureHandler(function(err) {
-              console.log('Tunnel check fallback');
+              console.log('Tunnel check failed:', err);
             })
             .getTunnelStatusData();
         } catch(e) {
-          console.log(e);
+          console.log('Error invoking getTunnelStatusData:', e);
         }
       }
     }
 
     function openRechargeModal() {
-      if (window.google && google.script && google.script.run && google.script.run.openTokenRechargeModal) {
-        google.script.run.openTokenRechargeModal();
-      } else {
-        window.open('https://sheetbot.cloud/dashboard/pricing', '_blank');
+      if (window.google && window.google.script && window.google.script.run) {
+        try {
+          google.script.run.openTokenRechargeModal();
+          return;
+        } catch(e) {}
       }
+      window.open('https://sheetbot.cloud/dashboard/pricing', '_blank');
     }
 
     function openAntigravity() {
@@ -253,36 +255,36 @@ export async function GET() {
 
     function confirmUninstall() {
       if (!confirm("⚠️ 정말로 시트봇 연동을 해제하고 모든 자동화 스크립트를 삭제하시겠습니까?\n(시트의 원본 데이터는 절대 삭제되지 않습니다)")) return;
-      if (window.google && google.script && google.script.run) {
-        var fn = google.script.run.uninstallScript || google.script.run.uninstallSheetBot || google.script.run.resetSheetBotIntegration;
-        if (fn) {
-          google.script.run
-            .withSuccessHandler(function(msg) {
-              alert(msg || "스크립트가 안전하게 삭제되었습니다. 구글 시트를 새로고침(F5)하세요.");
-            })
-            .withFailureHandler(function(err) {
-              alert("삭제 처리 완료. 시트를 새로고침(F5)하세요.");
-            });
-          fn();
-        }
+      if (window.google && window.google.script && window.google.script.run) {
+        try {
+          var fn = google.script.run.uninstallScript || google.script.run.uninstallSheetBot || google.script.run.resetSheetBotIntegration;
+          if (fn) {
+            google.script.run
+              .withSuccessHandler(function(msg) {
+                alert(msg || "스크립트가 안전하게 삭제되었습니다. 구글 시트를 새로고침(F5)하세요.");
+              })
+              .withFailureHandler(function(err) {
+                alert("삭제 처리 완료. 시트를 새로고침(F5)하세요.");
+              });
+            fn();
+          }
+        } catch(e) {}
       }
     }
 
-    // Google Apps Script 비동기 주입 대기 및 자동 갱신
+    // Google Apps Script 비동기 주입 감지 즉시 실시간 잔액/터널 동기화
     (function initGasBridge() {
       var attempts = 0;
       var interval = setInterval(function() {
         attempts++;
         if (window.google && window.google.script && window.google.script.run) {
           clearInterval(interval);
-          isGasReady = true;
           refreshBalance();
           checkTunnel();
-        } else if (attempts >= 20) {
+        } else if (attempts >= 30) {
           clearInterval(interval);
-          // GAS 바인딩 안 되더라도 기본 정상 상태 유지
         }
-      }, 100);
+      }, 80);
     })();
   </script>
 </body>
