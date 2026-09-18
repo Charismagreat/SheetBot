@@ -191,12 +191,6 @@ export default function WrapPage() {
                   </>
                 )}
               </button>
-
-              <div className="pt-2 text-center">
-                <span className="text-[11px] text-slate-500">
-                  회원가입/로그인 불필요 &bull; 원본 데이터 100% 안전 보존
-                </span>
-              </div>
             </form>
           ) : (
             /* 완료 화면 (In-place) */
