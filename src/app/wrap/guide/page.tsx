@@ -243,7 +243,7 @@ export default function WrapGuidePage() {
               </div>
             </div>
 
-            {/* Step 2 카드: 대형 스크린샷 포함 1열 카드 */}
+            {/* Step 2 카드: 대형 스크린샷 2종(복사 팝업 + 안티그라비티 입력창) 포함 1열 카드 */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 hover:border-emerald-500/40 transition-all">
               {/* 상단 헤더 */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
@@ -253,27 +253,59 @@ export default function WrapGuidePage() {
                   </span>
                   <div>
                     <h3 className="text-lg sm:text-xl font-black text-white">
-                      래핑 주소 복사 후 바이브코딩 AI에 전달하기
+                      래핑 주소 복사 후 안티그라비티(Antigravity)에 입력하기
                     </h3>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      버튼 하나로 프롬프트가 복사되며, 안티그라비티/Cursor/Claude Code에 그대로 붙여넣습니다.
+                      버튼 하나로 복사한 뒤, 안티그라비티 채팅창에 그대로 붙여넣고 엔터를 누르세요.
                     </p>
                   </div>
                 </div>
                 <span className="self-start sm:self-auto text-xs font-bold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
-                  📋 원클릭 복사
+                  📋 원클릭 복사 & 입력
                 </span>
               </div>
 
-              {/* 대형 스크린샷 이미지 프레임 (1열 전체 너비) */}
-              <div className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-950/90 shadow-2xl p-2 sm:p-4 text-center">
-                <img
-                  src="/images/guide/step2-modal.png"
-                  alt="래핑 주소 복사하기 팝업 화면"
-                  className="w-full max-w-lg mx-auto h-auto rounded-xl object-contain border border-slate-800/80 shadow-md"
-                />
-                <div className="mt-3 px-2 text-center text-xs text-slate-400">
-                  ▲ 팝업창에서 초대형 초록색 <strong className="text-emerald-400">[📋 래핑 주소 복사하기]</strong> 버튼을 누르면 AI가 즉시 인식할 수 있는 프롬프트가 복사됩니다.
+              {/* [화면 A] 팝업창 복사하기 화면 */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+                  <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-black flex items-center justify-center">1</span>
+                  <span>팝업창에서 [래핑 주소 복사하기] 버튼 클릭</span>
+                </div>
+                <div className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-950/90 shadow-2xl p-2 sm:p-4 text-center">
+                  <img
+                    src="/images/guide/step2-modal.png"
+                    alt="래핑 주소 복사하기 팝업 화면"
+                    className="w-full max-w-lg mx-auto h-auto rounded-xl object-contain border border-slate-800/80 shadow-md"
+                  />
+                  <div className="mt-2.5 px-2 text-center text-xs text-slate-400">
+                    ▲ 팝업창에서 초대형 초록색 <strong className="text-emerald-400">[📋 래핑 주소 복사하기]</strong> 버튼을 누르면 AI 전용 프롬프트가 클립보드에 자동 복사됩니다.
+                  </div>
+                </div>
+              </div>
+
+              {/* 연결 화살표 아이콘 */}
+              <div className="flex justify-center my-1 text-emerald-500">
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-xs font-bold text-emerald-400">
+                  <span>↓</span>
+                  <span>안티그라비티(Antigravity) 채팅창에 [Ctrl + V] 붙여넣기</span>
+                </div>
+              </div>
+
+              {/* [화면 B] 안티그라비티 실제 프롬프트 입력 화면 (신규 추가) */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[11px] font-black flex items-center justify-center">2</span>
+                  <span>안티그라비티 채팅창에 붙여넣고 원하는 자동화 기능 전송</span>
+                </div>
+                <div className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-950/90 shadow-2xl p-2 sm:p-4 text-center">
+                  <img
+                    src="/images/guide/step2-antigravity-chat.png"
+                    alt="안티그라비티 채팅창에 래핑 주소와 요구사항을 입력한 실제 화면"
+                    className="w-full max-w-2xl mx-auto h-auto rounded-xl object-contain border border-slate-800/80 shadow-md"
+                  />
+                  <div className="mt-2.5 px-2 text-center text-xs text-slate-400">
+                    ▲ <strong className="text-white">안티그라비티(Antigravity)</strong> 채팅창에 복사한 주소를 붙여넣고, 원하는 요구사항(명함 OCR, 주문 알림 등)을 자연어로 적어 전송한 실제 화면입니다.
+                  </div>
                 </div>
               </div>
 
@@ -315,60 +347,15 @@ export default function WrapGuidePage() {
                 </span>
               </div>
 
-              {/* 대형 구글 시트 툴바 및 메뉴 UI 목업 프레임 */}
-              <div className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-950/90 shadow-2xl p-4 sm:p-6 text-left space-y-3">
-                {/* 시트 상단 메뉴바 */}
-                <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400 border-b border-slate-800 pb-3 overflow-x-auto">
-                  <span className="text-slate-500 hover:text-slate-300 cursor-pointer">파일</span>
-                  <span className="text-slate-500 hover:text-slate-300 cursor-pointer">수정</span>
-                  <span className="text-slate-500 hover:text-slate-300 cursor-pointer">보기</span>
-                  <span className="text-slate-500 hover:text-slate-300 cursor-pointer">삽입</span>
-                  <span className="text-slate-500 hover:text-slate-300 cursor-pointer">서식</span>
-                  <span className="text-slate-500 hover:text-slate-300 cursor-pointer">데이터</span>
-                  <span className="bg-indigo-950 text-indigo-300 font-bold px-2 py-1 rounded-lg border border-indigo-500/50 shadow-sm flex items-center gap-1">
-                    <span>🚀 SheetBot 메뉴</span>
-                    <span className="text-[10px] text-indigo-400">▼</span>
-                  </span>
-                  <span className="text-slate-500 hover:text-slate-300 cursor-pointer">도움말</span>
-                </div>
-
-                {/* 드롭다운 메뉴 항목 시각화 */}
-                <div className="max-w-md bg-slate-900/95 rounded-2xl p-3 sm:p-4 border border-slate-700 shadow-2xl space-y-2 text-xs">
-                  <div className="flex items-center justify-between p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-emerald-300 font-bold cursor-pointer transition-colors">
-                    <span className="flex items-center gap-2">
-                      <span>📱</span>
-                      <span>[발송] 선택 행 스마트폰 알림 문자 일괄 발송</span>
-                    </span>
-                    <span className="text-[10px] bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30">실행</span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-2 rounded-xl bg-slate-800/50 hover:bg-slate-700/80 text-blue-300 font-medium cursor-pointer transition-colors">
-                    <span className="flex items-center gap-2">
-                      <span>✉️</span>
-                      <span>[발송] 선택 행 Gmail 맞춤 안내메일 일괄 발송</span>
-                    </span>
-                    <span className="text-[10px] bg-blue-950 text-blue-400 px-2 py-0.5 rounded border border-blue-500/30">실행</span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-2 rounded-xl bg-slate-800/50 hover:bg-slate-700/80 text-slate-300 font-medium cursor-pointer transition-colors">
-                    <span className="flex items-center gap-2">
-                      <span>🧾</span>
-                      <span>[OCR] 영수증 / 명함 사진 AI 자동 분석 사이드바</span>
-                    </span>
-                    <span className="text-[10px] text-slate-400">열기</span>
-                  </div>
-
-                  <div className="border-t border-slate-800 pt-2 flex items-center justify-between p-2 rounded-xl bg-indigo-950/40 text-indigo-300 font-bold cursor-pointer">
-                    <span className="flex items-center gap-2">
-                      <span>🤖</span>
-                      <span>SheetBot AI 코파일럿 제어 센터</span>
-                    </span>
-                    <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded">올인원</span>
-                  </div>
-                </div>
-
-                <div className="pt-2 text-center text-xs text-slate-400">
-                  ▲ AI가 코드를 주입한 후 내 구글 시트에서 <strong className="text-white">F5(새로고침)</strong>를 누르면 위와 같은 메뉴가 즉시 나타납니다.
+              {/* 대형 구글 시트 실제 캡처 화면 프레임 */}
+              <div className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-950/90 shadow-2xl p-2 sm:p-4 text-center">
+                <img
+                  src="/images/guide/step3-sheet-menu.png"
+                  alt="구글 시트 상단 SheetBot 메뉴 및 AI 코파일럿 사이드바 실제 실행 화면"
+                  className="w-full max-w-3xl mx-auto h-auto rounded-xl object-contain border border-slate-800/80 shadow-md"
+                />
+                <div className="mt-3 px-2 text-center text-xs text-slate-400">
+                  ▲ <strong className="text-white">구글 시트를 새로고침(F5)</strong>하면 상단에 <strong className="text-indigo-300">🚀 SheetBot 메뉴</strong>가 자동 생성되고, 우측에 <strong className="text-emerald-300">SheetBot AI 코파일럿</strong> 사이드바가 즉시 활성화된 실제 모습입니다.
                 </div>
               </div>
 
