@@ -73,7 +73,8 @@ export default function WrapPage() {
       e.preventDefault();
       e.stopPropagation();
     }
-    executeWrap(sheetUrl.trim() || 'https://docs.google.com/spreadsheets/create');
+    const currentInput = (document.getElementById('sheet-url-input') as HTMLInputElement)?.value || sheetUrl;
+    executeWrap(currentInput.trim() || 'NEW_SHEET');
   };
 
   const handleNewSheetWrap = (e?: React.MouseEvent) => {
@@ -81,26 +82,8 @@ export default function WrapPage() {
       e.preventDefault();
       e.stopPropagation();
     }
-    // 새 구글 스프레드시트 생성 창을 새 탭으로 즉시 열기 (기존 SheetBot 표준 동작)
-    if (typeof window !== 'undefined') {
-      try {
-        window.open('https://docs.google.com/spreadsheets/create', '_blank');
-      } catch (e) {}
-    }
-    const createUrl = 'https://docs.google.com/spreadsheets/create';
-    setSheetUrl(createUrl);
-    const inputVal = document.getElementById('sheet-url-input') as HTMLInputElement | null;
-    if (inputVal) inputVal.value = createUrl;
-    executeWrap(createUrl);
+    executeWrap('NEW_SHEET');
   };
-
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      (window as any).__handleNewSheetWrap = () => {
-        handleNewSheetWrap();
-      };
-    }
-  }, []);
 
   const copyToClipboard = (text: string, type: 'bridge' | 'prompt') => {
     if (navigator.clipboard) {
@@ -239,85 +222,107 @@ export default function WrapPage() {
               </button>
             </div>
           ) : (
-            /* 완료 화면 (In-place) */
-            <div className="space-y-5 animate-in fade-in zoom-in-95 duration-200">
-              <div className="text-center pb-1">
-                <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-2 text-emerald-400 text-xl font-bold">
-                  ✓
+            /* 완료 화면: QuickWrapSuccessModal과 100% 동일한 완성형 뷰 */
+            <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
+              {/* 상단 타이틀 */}
+              <div className="text-left pb-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-black text-white tracking-tight">
+                    내 구글 시트 래핑 완료!
+                  </h3>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    스마트 자동화 시트
+                  </span>
                 </div>
-                <h3 className="text-lg font-bold text-white">
-                  {result.isNewSheet ? '새 시트 래핑이 완료되었습니다!' : '래핑이 완료되었습니다!'}
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {result.isNewSheet
-                    ? '아래 새 구글 시트를 열고, 프롬프트를 AI 에이전트에 전달하세요.'
-                    : '아래 브릿지 주소 또는 프롬프트를 복사하여 AI 에이전트에 전달하세요.'}
+                <p className="text-xs text-slate-400 mt-1">
+                  안티그라비티, Cursor, Claude Code 등에 전달할 <strong className="text-slate-300">전용 래핑 주소</strong>가 발급되었습니다.
                 </p>
               </div>
 
-              {/* 신규 시트인 경우 새 시트 열기 카드 */}
-              {result.isNewSheet && (
-                <div className="p-3.5 bg-indigo-950/40 border border-indigo-500/30 rounded-xl flex items-center justify-between gap-3 shadow-inner">
-                  <div className="text-left">
-                    <div className="text-xs font-bold text-indigo-200 flex items-center gap-1.5">
-                      <span>📄 새 구글 스프레드시트</span>
-                      <span className="px-1.5 py-0.5 bg-indigo-500/20 text-indigo-300 text-[10px] rounded font-medium">원클릭</span>
-                    </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">구글의 빈 시트가 새 탭에서 즉시 열립니다.</div>
-                  </div>
-                  <a
-                    href="https://sheets.new"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold text-xs rounded-lg transition-all inline-flex items-center gap-1.5 shrink-0 shadow-md shadow-indigo-500/20 cursor-pointer"
-                  >
-                    <span>새 시트 열기</span>
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                  </a>
-                </div>
-              )}
-
-              {/* 브릿지 URL */}
-              <div>
-                <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5 font-medium">
-                  <span>안티그라비티 브릿지 주소</span>
-                  <button
-                    onClick={() => copyToClipboard(result.bridgeUrl, 'bridge')}
-                    className="text-indigo-400 hover:text-indigo-300 font-bold transition-colors cursor-pointer"
-                  >
-                    {copiedBridge ? '✓ 복사됨!' : '주소 복사'}
-                  </button>
+              {/* 발급된 래핑 주소 카드 */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
+                  <span className="flex items-center gap-1.5">
+                    <span>🔗</span>
+                    <span>발급된 래핑 주소</span>
+                  </span>
+                  <span className="text-[10px] text-emerald-300 font-bold bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                    연결 준비 완료
+                  </span>
                 </div>
                 <div
                   onClick={() => copyToClipboard(result.bridgeUrl, 'bridge')}
-                  className="p-3 bg-slate-950/80 border border-slate-700/80 rounded-xl text-xs font-mono text-indigo-300 break-all cursor-pointer hover:border-indigo-500/50 transition-colors select-all"
+                  className="p-3.5 bg-slate-950 rounded-xl border border-slate-700/80 font-mono text-xs text-emerald-400 break-all cursor-pointer hover:border-emerald-500/50 transition-colors select-all"
+                  title="클릭하여 복사"
                 >
                   {result.bridgeUrl}
                 </div>
               </div>
 
-              {/* 실행 액션 버튼들 */}
-              <div className="space-y-2 pt-1">
-                <button
-                  onClick={openAntigravity}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-purple-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <span>🚀 안티그라비티 바로 열기 (프롬프트 자동 복사)</span>
-                </button>
+              {/* 대형 메인 액션 버튼: 래핑 주소 복사하기 */}
+              <button
+                type="button"
+                onClick={() => copyToClipboard(result.bridgePrompt, 'prompt')}
+                className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-sm rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>📋</span>
+                <span>{copiedPrompt ? '✓ 복사 완료!' : '래핑 주소 복사하기'}</span>
+              </button>
 
-                <button
-                  onClick={() => copyToClipboard(result.bridgePrompt, 'prompt')}
-                  className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl border border-slate-700 transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <span>📋 {copiedPrompt ? '✓ 지시문 복사 완료!' : 'AI 에이전트 지시문 복사하기'}</span>
-                </button>
+              {/* 안티그라비티 바로 열기 보조 버튼 */}
+              <button
+                type="button"
+                onClick={openAntigravity}
+                className="w-full py-2.5 px-4 bg-indigo-600/90 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl border border-indigo-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+              >
+                <span>🚀 안티그라비티 바로 열기 (자동 복사)</span>
+              </button>
+
+              {/* AI 에이전트 연동 및 결과 확인법 (30초 완성 가이드) */}
+              <div className="p-3.5 bg-slate-950/50 border border-slate-800 rounded-xl space-y-2 text-left">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-200">
+                  <span className="flex items-center gap-1.5">
+                    <span>💡</span>
+                    <span>AI 에이전트 연동 및 결과 확인법</span>
+                  </span>
+                  <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30 font-medium">
+                    30초 완성
+                  </span>
+                </div>
+
+                <div className="space-y-2 text-xs text-slate-300 pt-1">
+                  <div className="flex items-start gap-2 bg-slate-900/60 p-2 rounded-lg border border-slate-800/80">
+                    <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">1</span>
+                    <span>위 <strong className="text-white">[래핑 주소 복사하기]</strong> 버튼을 누릅니다.</span>
+                  </div>
+
+                  <div className="flex items-start gap-2 bg-slate-900/60 p-2 rounded-lg border border-slate-800/80">
+                    <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">2</span>
+                    <div>
+                      <div><strong className="text-white">안티그라비티, Cursor, Claude Code</strong> 등 사용 중인 AI 채팅창에 붙여넣고, 원하는 기능을 적어 전송합니다.</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">예시: &quot;매일 아침 8시 발주서 받아와줘&quot;, &quot;신규 주문 시 문자 발송해줘&quot;</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2 bg-emerald-950/20 p-2 rounded-lg border border-emerald-500/20">
+                    <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">3</span>
+                    <div>
+                      <strong className="text-emerald-300">[시트에서 결과 확인]</strong> AI가 코드를 주입한 후 구글 시트를 새로고침(F5)하면, 상단에 <strong className="text-white">🚀 SheetBot 메뉴</strong>가 자동 생성되어 바로 실행할 수 있습니다!
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* 초기화 링크 */}
+              {/* 하단 호환 뱃지 */}
+              <div className="text-center pt-1 text-[11px] text-slate-400 font-medium flex items-center justify-center gap-1.5">
+                <span>✨</span>
+                <span>Antigravity &bull; Cursor &bull; Claude Code &bull; Windsurf 완벽 호환</span>
+              </div>
+
+              {/* 다시 래핑하기 링크 */}
               <div className="pt-2 text-center border-t border-slate-800/80">
                 <button
+                  type="button"
                   onClick={resetForm}
                   className="text-xs text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
                 >
