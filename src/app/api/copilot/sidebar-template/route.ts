@@ -165,7 +165,7 @@ export async function GET() {
   </div>
 
   <div class="footer-note">
-    SheetBot Cloud Engine &bull; Auto-synced v2.5
+    SheetBot Cloud Engine &bull; Auto-synced v2.6
   </div>
 
   <script>
@@ -275,7 +275,7 @@ export async function GET() {
     }
 
     function confirmUninstall() {
-      if (!confirm('정말로 시트봇 연동을 해제하고 모든 자동화 스크립트를 삭제하시겠습니까?\n(시트의 원본 데이터는 절대 삭제되지 않습니다)')) return;
+      if (!confirm('정말로 시트봇 연동을 해제하고 모든 자동화 스크립트를 삭제하시겠습니까? (시트 데이터는 보존됩니다)')) return;
       if (window.google && window.google.script && window.google.script.run) {
         try {
           var fn = google.script.run.uninstallScript || google.script.run.uninstallSheetBot || google.script.run.resetSheetBotIntegration;
