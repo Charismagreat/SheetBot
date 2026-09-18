@@ -827,21 +827,21 @@ function getAiCopilotSidebarHtml() {
         '<div class="my-auto py-2.5">' +
           '<div class="text-xl font-black text-slate-900 leading-snug tracking-tight">' +
             'Google 시트 AI 래핑<br>' +
-            '<span class="text-indigo-600">사진으로 1분 완성하기</span>' +
+            '<span class="text-indigo-600">스크린샷 보며 따라하기</span>' +
           '</div>' +
-          '<div class="mt-4 space-y-3 text-sm text-slate-700 font-bold leading-normal">' +
-            '<div class="flex items-center gap-2.5">' +
+          '<div class="mt-4 space-y-3 text-[13.5px] text-slate-700 font-bold leading-normal whitespace-nowrap">' +
+            '<div class="flex items-center gap-2">' +
               '<span class="text-emerald-500 font-black text-base flex-shrink-0">✔</span>' +
               '<span>복잡한 코딩 없이 안티그라비티 즉시 연동</span>' +
             '</div>' +
-            '<div class="flex items-center gap-2.5">' +
+            '<div class="flex items-center gap-2">' +
               '<span class="text-emerald-500 font-black text-base flex-shrink-0">✔</span>' +
               '<span>구글 시트 상단 전용 메뉴 자동 생성</span>' +
             '</div>' +
           '</div>' +
         '</div>' +
         '<div class="w-full py-3 px-4 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-black text-[15px] rounded-xl shadow-md text-center flex items-center justify-center gap-2 tracking-tight group-hover:scale-[1.01] transition-transform">' +
-          '<span>🚀 사진 가이드 전체보기</span>' +
+          '<span>🚀 초간단 사용법 보기</span>' +
           '<span class="group-hover:translate-x-1 transition-transform text-lg">→</span>' +
         '</div>' +
       '</a>' +
