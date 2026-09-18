@@ -134,11 +134,11 @@ export async function POST(request: NextRequest) {
     const host = request.headers.get("host") || request.nextUrl.host;
     const protocol = request.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
 
-    // 1순위: 환경변수 (배포 시 NEXT_PUBLIC_APP_URL 지정 시 최우선 사용)
-    // 2순위: 현재 접속 호스트 자동 감지 (로컬 개발 시 localhost:4003, 실서버 호스팅 시 실제 도메인 자동 채택)
-    let baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.SHEETBOT_BASE_URL || "";
-    if (!baseUrl) {
-      baseUrl = `${protocol}://${host}`;
+    let baseUrl = "";
+    if (host && !host.includes("localhost")) {
+      baseUrl = `https://${host}`;
+    } else {
+      baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.SHEETBOT_BASE_URL || `${protocol}://${host}`;
     }
     baseUrl = baseUrl.replace(/\/$/, "");
     const bridgeUrl = `${baseUrl}/api/agent/gas-bridge?token=${token}`;
@@ -164,6 +164,8 @@ export async function POST(request: NextRequest) {
       projectId: project.id,
       projectName: project.name,
       sheetUrl: project.spreadsheet_url,
+      spreadsheetId: project.spreadsheet_id || "",
+      token,
       bridgeUrl,
       promptTemplate,
     });

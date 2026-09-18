@@ -39,8 +39,8 @@ export default function WrapPage() {
 
       setResult({
         bridgeUrl: data.bridgeUrl,
-        spreadsheetId: data.spreadsheetId,
-        token: data.token,
+        spreadsheetId: data.spreadsheetId || '',
+        token: data.token || '',
         bridgePrompt: data.promptTemplate || (
           data.isNewSheet
             ? `아래 웹 주소를 통해 새 구글 시트의 컬럼 구조와 자동화 스크립트를 처음부터 설계하고 주입해줘:\n웹 주소: ${data.bridgeUrl}\n요구사항: 새 구글 시트에 내 비즈니스에 맞는 시트 탭과 컬럼 헤더 구조를 설계하고, 필요한 자동화 기능과 Apps Script 코드를 즉시 주입해줘.`
@@ -49,7 +49,10 @@ export default function WrapPage() {
         isNewSheet: Boolean(data.isNewSheet),
       });
     } catch (err: any) {
-      setErrorMsg(err.message || '래핑 요청에 실패했습니다.');
+      console.error('[quick-wrap error]', err);
+      const msg = err.message || '래핑 요청에 실패했습니다.';
+      setErrorMsg(msg);
+      alert('⚠️ ' + msg);
     } finally {
       setIsLoading(false);
       setIsStartingNew(false);
@@ -61,7 +64,11 @@ export default function WrapPage() {
     executeWrap(sheetUrl.trim() || 'NEW_SHEET');
   };
 
-  const handleNewSheetClick = () => {
+  const handleNewSheetClick = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     executeWrap('NEW_SHEET');
   };
 
@@ -118,7 +125,7 @@ export default function WrapPage() {
         <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl shadow-indigo-950/40">
           {!result ? (
             /* 입력 화면 */
-            <form onSubmit={handleFormSubmit} className="space-y-4">
+            <form onSubmit={handleFormSubmit} noValidate className="space-y-4">
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
@@ -127,12 +134,11 @@ export default function WrapPage() {
                   <span className="text-[11px] text-indigo-400/90 font-medium">시트 없이도 시작 가능</span>
                 </div>
                 <input
-                  type="url"
+                  type="text"
                   value={sheetUrl}
                   onChange={(e) => setSheetUrl(e.target.value)}
                   placeholder="https://docs.google.com/spreadsheets/d/... (없으면 비워두세요)"
                   className="w-full px-4 py-3.5 bg-slate-950/70 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                  autoFocus
                 />
               </div>
 
@@ -173,9 +179,9 @@ export default function WrapPage() {
               {/* 시트 주소 없이 새 시트로 시작 버튼 */}
               <button
                 type="button"
-                onClick={handleNewSheetClick}
+                onClick={(e) => handleNewSheetClick(e)}
                 disabled={isLoading}
-                className="w-full py-3 px-4 bg-slate-800/90 hover:bg-slate-700/90 hover:border-indigo-500/50 text-indigo-300 hover:text-indigo-200 font-bold text-xs rounded-xl border border-slate-700/80 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
+                className="w-full py-3 px-4 bg-slate-800/90 hover:bg-slate-700/90 hover:border-indigo-500/50 text-indigo-300 hover:text-indigo-200 font-bold text-xs rounded-xl border border-slate-700/80 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.98]"
               >
                 {isLoading && isStartingNew ? (
                   <>
