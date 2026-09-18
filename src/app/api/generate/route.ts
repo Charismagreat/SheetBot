@@ -794,6 +794,18 @@ function getAiCopilotSidebarHtml() {
           '</a>' +
         '</div>' +
       '</div>' +
+      '<!-- [🌟] 시트봇 다목적 공지 & 배너 슬롯 (가이드, 공모전, 채용, 언팩 고정 영역) -->' +
+      '<a href="https://sheetbot.cloud/wrap/guide" target="_blank" class="block p-3 bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 rounded-xl border border-indigo-500/30 hover:border-indigo-400 shadow-sm transition-all text-white no-underline group">' +
+        '<div class="flex items-center justify-between mb-1">' +
+          '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-600 text-white flex items-center gap-1">📖 1분 사진 가이드</span>' +
+          '<span class="text-[10px] text-indigo-300 font-semibold">SheetBot Visual Guide</span>' +
+        '</div>' +
+        '<div class="text-xs font-bold text-white flex items-center justify-between mt-1">' +
+          '<span>Google 시트 AI 래핑 사진 가이드</span>' +
+          '<span class="text-indigo-400 group-hover:translate-x-0.5 transition-transform text-xs font-black">→</span>' +
+        '</div>' +
+        '<div class="text-[10px] text-slate-300 mt-0.5 font-medium">사진으로 쉽게 배우는 안티그라비티 3단계 연동법 ↗</div>' +
+      '</a>' +
       '<div class="p-3 bg-white rounded-xl border border-slate-200 shadow-sm">' +
         '<div class="flex items-center justify-between mb-1.5">' +
           '<span class="text-[11px] font-bold text-slate-500">인프라 연결 상태</span>' +
