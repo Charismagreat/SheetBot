@@ -126,7 +126,7 @@ export default function WrapPage() {
             Google 시트 초간편 AI 래퍼
           </h1>
           <p className="mt-2 text-sm text-slate-400 leading-relaxed max-w-md mx-auto">
-            시트 주소를 AI로 감싼(래핑) 주소를 바이브코딩 도구(안티그라비티, Cursor, Claude Code)에 입력하고 자동화 하세요.
+            구글 시트에 시트봇을 래핑(감싸기)하세요. 래핑된 주소를 복사하여 바이브코딩 도구(안티그라비티, Cursor, Claude Code)에 붙여넣고 자연어로 자동화 하세요.
           </p>
         </div>
 
