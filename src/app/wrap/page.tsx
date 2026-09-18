@@ -118,9 +118,20 @@ export default function WrapPage() {
       <div className="relative w-full max-w-lg">
         {/* 상단 헤더 */}
         <div id="wrap-page-header" className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold mb-3">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            SheetBot Instant Wrapper
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              SheetBot Instant Wrapper
+            </div>
+            <a
+              href="/wrap/guide"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700/80 text-slate-300 hover:text-white text-xs font-bold transition-all shadow-sm group"
+            >
+              <span>📖 사용법 보기</span>
+              <span className="text-slate-500 group-hover:translate-x-0.5 transition-transform text-[10px]">↗</span>
+            </a>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
             Google 시트 초간편 AI 래퍼
@@ -214,6 +225,19 @@ export default function WrapPage() {
             >
               <span id="btn-new-text">✨ 시트 주소 없이 새 시트로 즉시 시작</span>
             </button>
+
+            {/* 사용법 가이드 안내 링크 */}
+            <div className="pt-2 text-center">
+              <a
+                href="/wrap/guide"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-indigo-300 transition-colors"
+              >
+                <span>💡 래핑이 처음이신가요?</span>
+                <span className="font-semibold underline underline-offset-2">1분 사용법 가이드 보기 ↗</span>
+              </a>
+            </div>
           </div>
         </div>
 
@@ -320,7 +344,17 @@ export default function WrapPage() {
               <div className="bg-slate-50 border-2 border-emerald-100 rounded-2xl p-4.5 space-y-3">
                 <div className="font-extrabold text-xs text-emerald-950 flex items-center justify-between">
                   <span className="text-emerald-800 text-[13px]">💡 AI 에이전트 연동 및 결과 확인법</span>
-                  <span className="text-[10px] text-emerald-600 font-bold bg-emerald-100/70 px-2 py-0.5 rounded-md">30초 완성</span>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href="/wrap/guide"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold underline underline-offset-2"
+                    >
+                      📖 상세 가이드 ↗
+                    </a>
+                    <span className="text-[10px] text-emerald-600 font-bold bg-emerald-100/70 px-2 py-0.5 rounded-md">30초 완성</span>
+                  </div>
                 </div>
 
                 <div className="space-y-2.5 text-xs">
