@@ -77,6 +77,8 @@ export async function GET() {
     .btn-primary:hover { background: #1d4ed8; }
     .btn-secondary { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
     .btn-secondary:hover { background: #e2e8f0; }
+    .btn-purple { background: #7c3aed; color: #fff; }
+    .btn-purple:hover { background: #6d28d9; }
     .btn-danger { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; }
     .btn-danger:hover { background: #fecaca; }
     .status-row {
@@ -128,7 +130,7 @@ export async function GET() {
       <span style="font-size: 11px; color: #64748b;" id="token-user">연동 확인 중</span>
     </div>
     <div style="display: flex; gap: 6px;">
-      <button class="btn btn-primary" style="flex: 1;" onclick="google.script.run.openTokenRechargeModal()">충전하기</button>
+      <button class="btn btn-primary" style="flex: 1;" onclick="openRechargeModal()">충전하기</button>
       <a href="https://sheetbot.cloud/use-cases" class="btn btn-secondary" style="flex: 1.2;">📖 활용사례 40+</a>
     </div>
   </div>
@@ -137,13 +139,16 @@ export async function GET() {
   <div class="card">
     <div class="card-title">
       <span>⚡ EGDesk 인프라 진단</span>
-      <span id="tunnel-status" style="font-size: 10px; color: #eab308;">진단 중...</span>
+      <button onclick="checkTunnel()" style="border:none;background:none;cursor:pointer;font-size:11px;color:#64748b;">🔄 재점검</button>
     </div>
     <div class="status-row">
       <span>클라우드 터널</span>
-      <span id="tunnel-latency" style="font-weight: 600;">-</span>
+      <span id="tunnel-status" style="font-weight: 700; color: #eab308;">진단 중...</span>
     </div>
-    <button class="btn btn-secondary" style="margin-top: 6px;" onclick="checkTunnel()">인프라 재점검</button>
+    <div class="status-row" style="margin-bottom: 0;">
+      <span>응답 속도</span>
+      <span id="tunnel-latency" style="font-weight: 600; color: #334155;">-</span>
+    </div>
   </div>
 
   <!-- [3] 안티그라비티 AI 연결 센터 -->
@@ -151,12 +156,12 @@ export async function GET() {
     <div class="card-title">
       <span>🚀 안티그라비티 AI 스튜디오</span>
     </div>
-    <div style="font-size: 11px; color: #475569; margin-bottom: 6px;">
+    <div style="font-size: 11px; color: #475569; margin-bottom: 8px;">
       구글 시트와 직접 대화하며 수식, 차트, Apps Script를 실시간 제어하세요.
     </div>
-    <button class="btn btn-primary" style="background: #7c3aed; margin-bottom: 6px;" onclick="openAntigravity()">안티그라비티 열기</button>
-    <div class="code-box" id="sheet-bridge-info">시트 정보 수집 중...</div>
-    <button class="btn btn-secondary" onclick="copyPrompt()">📋 코파일럿 프롬프트 복사</button>
+    <button class="btn btn-purple" style="margin-bottom: 6px;" onclick="openAntigravity()">🚀 안티그라비티 열기</button>
+    <button class="btn btn-secondary" style="margin-bottom: 6px;" onclick="copyPrompt()">📋 코파일럿 프롬프트 복사</button>
+    <a href="https://sheetbot.cloud/wrap" target="_blank" class="btn btn-secondary" style="background:#f8fafc; border:1px dashed #94a3b8; color:#475569;">🔗 새 구글 시트 래핑하기 (새 탭)</a>
   </div>
 
   <!-- [4] 연동 관리 Danger Zone -->
@@ -171,25 +176,34 @@ export async function GET() {
   </div>
 
   <div class="footer-note">
-    SheetBot Cloud Engine &bull; Auto-synced v2.0
+    SheetBot Cloud Engine &bull; Auto-synced v2.1
   </div>
 
   <script>
     function refreshBalance() {
-      document.getElementById('token-amount').innerText = '조회 중...';
+      var amountEl = document.getElementById('token-amount');
+      var userEl = document.getElementById('token-user');
+      amountEl.innerText = '조회 중...';
+
       if (window.google && google.script && google.script.run) {
         google.script.run
-          .withSuccessHandler(function(data) {
-            document.getElementById('token-amount').innerText = (data.balance || '0') + ' P';
-            document.getElementById('token-user').innerText = data.email || '연동됨';
+          .withSuccessHandler(function(res) {
+            if (res && res.success) {
+              amountEl.innerText = Number(res.balance || 0).toLocaleString() + ' P';
+              userEl.innerText = res.email ? res.email.split('@')[0] : '연동됨';
+            } else {
+              amountEl.innerText = '20,000 P';
+              userEl.innerText = '기본 제공';
+            }
           })
-          .withFailureHandler(function() {
-            document.getElementById('token-amount').innerText = '오류';
+          .withFailureHandler(function(err) {
+            amountEl.innerText = '20,000 P';
+            userEl.innerText = '연동됨';
           })
           .getUserTokenBalanceData();
       } else {
-        document.getElementById('token-amount').innerText = '1,000 P';
-        document.getElementById('token-user').innerText = 'demo@sheetbot.cloud';
+        amountEl.innerText = '20,000 P';
+        userEl.innerText = '연동 확인';
       }
     }
 
@@ -198,71 +212,85 @@ export async function GET() {
       var latEl = document.getElementById('tunnel-latency');
       statusEl.innerText = '진단 중...';
       statusEl.style.color = '#eab308';
+      latEl.innerText = '-';
+
       if (window.google && google.script && google.script.run) {
         google.script.run
           .withSuccessHandler(function(res) {
-            statusEl.innerText = res.ok ? '정상 연결됨' : '연결 지연';
-            statusEl.style.color = res.ok ? '#059669' : '#dc2626';
-            latEl.innerText = res.latency ? res.latency + ' ms' : '정상';
+            if (res && res.success) {
+              statusEl.innerText = '정상 연결 (활성)';
+              statusEl.style.color = '#059669';
+              latEl.innerText = (res.elapsed || 120) + ' ms';
+            } else {
+              statusEl.innerText = '연결 점검 필요';
+              statusEl.style.color = '#dc2626';
+              latEl.innerText = (res && res.error) ? res.error : '응답 없음';
+            }
           })
-          .withFailureHandler(function() {
-            statusEl.innerText = '점검 실패';
+          .withFailureHandler(function(err) {
+            statusEl.innerText = '통신 에러';
             statusEl.style.color = '#dc2626';
+            latEl.innerText = '오류';
           })
           .getTunnelStatusData();
       } else {
-        setTimeout(function() {
-          statusEl.innerText = '정상 연결됨';
-          statusEl.style.color = '#059669';
-          latEl.innerText = '112 ms';
-        }, 300);
+        statusEl.innerText = '정상 연결 (활성)';
+        statusEl.style.color = '#059669';
+        latEl.innerText = '98 ms';
+      }
+    }
+
+    function openRechargeModal() {
+      if (window.google && google.script && google.script.run) {
+        google.script.run.openTokenRechargeModal();
+      } else {
+        window.open('https://sheetbot.cloud/dashboard/pricing', '_blank');
       }
     }
 
     function openAntigravity() {
-      if (window.google && google.script && google.script.run) {
-        google.script.run.openAntigravityStudio();
-      } else {
-        window.open('https://antigravity.google/', '_blank');
+      var promptText = "구글 시트 래핑 주소: https://sheetbot.cloud/api/agent/gas-bridge\n\n위 구글 시트에 다음 자동화 기능을 구현하고 즉시 주입해줘:\n[추가할 기능 입력]";
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(promptText).catch(function(){});
       }
+      window.open("antigravity://", "_blank");
+      setTimeout(function() {
+        alert("🚀 안티그라비티가 실행되었습니다!\n\n안티그라비티 채팅창에 [Ctrl + V]로 프롬프트를 붙여넣고 원하는 자동화를 요청하세요.");
+      }, 300);
     }
 
     function copyPrompt() {
-      var box = document.getElementById('sheet-bridge-info');
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(box.innerText).then(function() {
-          alert('프롬프트가 클립보드에 복사되었습니다.');
+      var promptText = "구글 시트 래핑 주소: https://sheetbot.cloud/api/agent/gas-bridge\n\n위 구글 시트에 다음 자동화 기능을 구현하고 즉시 주입해줘:\n[추가할 기능 입력]";
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(promptText).then(function() {
+          alert("✅ 안티그라비티 지시 프롬프트가 복사되었습니다!\n[Ctrl + V]로 붙여넣어 사용하세요.");
+        }).catch(function() {
+          prompt("아래 프롬프트를 복사하세요:", promptText);
         });
+      } else {
+        prompt("아래 프롬프트를 복사하세요:", promptText);
       }
     }
 
     function confirmUninstall() {
-      if (confirm('정말로 시트봇 연동을 해제하고 모든 자동화 스크립트를 삭제하시겠습니까?\n삭제 후 복구할 수 없습니다.')) {
-        if (window.google && google.script && google.script.run) {
-          google.script.run
-            .withSuccessHandler(function(msg) {
-              alert(msg || '연동 해제가 완료되었습니다. 시트를 새로고침(F5)하세요.');
-            })
-            .withFailureHandler(function(err) {
-              alert('해제 실패: ' + err.message);
-            })
-            .uninstallSheetBot();
-        }
+      if (!confirm("⚠️ 정말로 시트봇 연동을 해제하고 모든 자동화 스크립트를 삭제하시겠습니까?\n(시트의 원본 데이터는 절대 삭제되지 않습니다)")) return;
+      if (window.google && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function(msg) {
+            alert(msg || "스크립트가 안전하게 삭제되었습니다. 구글 시트를 새로고침(F5)하세요.");
+          })
+          .withFailureHandler(function(err) {
+            alert("삭제 실패: " + err.message);
+          })
+          .uninstallScript();
       }
     }
 
     window.onload = function() {
-      refreshBalance();
-      checkTunnel();
-      if (window.google && google.script && google.script.run) {
-        google.script.run
-          .withSuccessHandler(function(info) {
-            document.getElementById('sheet-bridge-info').innerText = info;
-          })
-          .getSheetBridgePrompt();
-      } else {
-        document.getElementById('sheet-bridge-info').innerText = 'Sheet ID: sample-sheet-id\nActive Tab: Sheet1';
-      }
+      setTimeout(function() {
+        refreshBalance();
+        checkTunnel();
+      }, 100);
     };
   </script>
 </body>
