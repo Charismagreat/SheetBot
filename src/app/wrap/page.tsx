@@ -18,7 +18,9 @@ export default function WrapPage() {
   const [copiedPrompt, setCopiedPrompt] = useState(false);
 
   const executeWrap = async (targetUrl?: string) => {
-    const finalUrl = (targetUrl !== undefined ? targetUrl : sheetUrl).trim();
+    const inputVal = document.getElementById('sheet-url-input') as HTMLInputElement | null;
+    const currentInput = inputVal ? inputVal.value : sheetUrl;
+    const finalUrl = (targetUrl !== undefined ? targetUrl : currentInput).trim();
     const isNew = !finalUrl || finalUrl === 'NEW_SHEET';
 
     setErrorMsg('');
@@ -59,18 +61,34 @@ export default function WrapPage() {
     }
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleMainWrap = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     executeWrap(sheetUrl.trim() || 'NEW_SHEET');
   };
 
-  const handleNewSheetClick = (e?: React.MouseEvent) => {
+  const handleNewSheetWrap = (e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
     executeWrap('NEW_SHEET');
   };
+
+  React.useEffect(() => {
+    const newBtn = document.getElementById('btn-new-sheet-wrap');
+    if (newBtn) {
+      const listener = (e: MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        executeWrap('NEW_SHEET');
+      };
+      newBtn.addEventListener('click', listener);
+      return () => newBtn.removeEventListener('click', listener);
+    }
+  }, []);
 
   const copyToClipboard = (text: string, type: 'bridge' | 'prompt') => {
     if (navigator.clipboard) {
@@ -124,8 +142,8 @@ export default function WrapPage() {
         {/* 메인 카드 */}
         <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl shadow-indigo-950/40">
           {!result ? (
-            /* 입력 화면 */
-            <form onSubmit={handleFormSubmit} noValidate className="space-y-4">
+            /* 입력 화면 (순수 div 레이아웃으로 폼 충돌 100% 방지) */
+            <div className="space-y-4">
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
@@ -135,8 +153,15 @@ export default function WrapPage() {
                 </div>
                 <input
                   type="text"
+                  id="sheet-url-input"
                   value={sheetUrl}
                   onChange={(e) => setSheetUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleMainWrap();
+                    }
+                  }}
                   placeholder="https://docs.google.com/spreadsheets/d/... (없으면 비워두세요)"
                   className="w-full px-4 py-3.5 bg-slate-950/70 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                 />
@@ -150,7 +175,9 @@ export default function WrapPage() {
 
               {/* 메인 버튼 */}
               <button
-                type="submit"
+                type="button"
+                id="btn-main-wrap"
+                onClick={handleMainWrap}
                 disabled={isLoading}
                 className="w-full py-3.5 px-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
               >
@@ -179,7 +206,8 @@ export default function WrapPage() {
               {/* 시트 주소 없이 새 시트로 시작 버튼 */}
               <button
                 type="button"
-                onClick={(e) => handleNewSheetClick(e)}
+                id="btn-new-sheet-wrap"
+                onClick={handleNewSheetWrap}
                 disabled={isLoading}
                 className="w-full py-3 px-4 bg-slate-800/90 hover:bg-slate-700/90 hover:border-indigo-500/50 text-indigo-300 hover:text-indigo-200 font-bold text-xs rounded-xl border border-slate-700/80 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.98]"
               >
@@ -197,7 +225,7 @@ export default function WrapPage() {
                   </>
                 )}
               </button>
-            </form>
+            </div>
           ) : (
             /* 완료 화면 (In-place) */
             <div className="space-y-5 animate-in fade-in zoom-in-95 duration-200">

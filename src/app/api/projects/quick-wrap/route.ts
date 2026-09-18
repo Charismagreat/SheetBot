@@ -131,14 +131,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const host = request.headers.get("host") || request.nextUrl.host;
-    const protocol = request.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
+    const forwardedHost = request.headers.get("x-forwarded-host");
+    const host = forwardedHost || request.headers.get("host") || request.nextUrl.host || "";
 
-    let baseUrl = "";
-    if (host && !host.includes("localhost")) {
+    let baseUrl = "https://sheetbot.cloud";
+    if (host && host.includes("localhost")) {
+      baseUrl = `http://${host}`;
+    } else if (host) {
       baseUrl = `https://${host}`;
-    } else {
-      baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.SHEETBOT_BASE_URL || `${protocol}://${host}`;
     }
     baseUrl = baseUrl.replace(/\/$/, "");
     const bridgeUrl = `${baseUrl}/api/agent/gas-bridge?token=${token}`;
