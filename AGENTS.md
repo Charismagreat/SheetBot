@@ -72,10 +72,10 @@
 <!-- BEGIN:apps-script-safety-rules -->
 ## Google Apps Script 안전 배포 및 트리거 제어 표준 원칙
 
-1. **자동 생성 코드 품질 및 표준 메뉴 보장**:
+1. **자동 생성 코드 품질 및 3대 표준 기본 메뉴 보장**:
    - 생성되는 `Code.gs`는 반드시 `onOpen()`을 포함하여 구글 시트 상단에 **`🚀 SheetBot 메뉴`** 전용 메뉴를 등록해야 합니다.
-   - 상단 메뉴는 업무 기능 등록 후 구분선(`addSeparator()`), **`🤖 SheetBot AI 코파일럿`**(사이드바 제어 센터), **`📖 SheetBot 사용법 및 활용사례`**(새 탭 열기) 순으로 깔끔하고 슬림하게 구성합니다. '터널 점검'이나 '삭제' 등 부가 제어 기능은 상단 메뉴에 별도로 두지 않고 코파일럿 사이드바 내부로 일원화합니다.
-   - 메뉴 최하단에는 항상 **`📖 SheetBot 사용법 및 활용사례`**(`https://sheetbot.cloud` 새 탭 열기 모달 함수 `openSheetBotGuide`)를 필수로 포함해야 합니다.
+   - 상단 메뉴는 업무 기능 등록 후 구분선(`addSeparator()`), **`🤖 SheetBot AI 코파일럿`**(사이드바 제어 센터), **`💳 토큰 잔액 확인 및 즉시 충전`**(인-시트 충전 센터), **`📖 SheetBot 사용법 및 활용사례`**(새 탭 열기)의 **3대 고정 기본 메뉴 순서**로 깔끔하고 슬림하게 구성합니다. '터널 점검'이나 '삭제' 등 부가 제어 기능은 상단 메뉴에 별도로 두지 않고 코파일럿 사이드바 내부로 일원화합니다.
+   - 메뉴에는 항상 **`💳 토큰 잔액 확인 및 즉시 충전`**(`openTokenRechargeModal` - 실시간 지갑 잔액 확인 및 3대 패키지 다이렉트 충전 모달)과 **`📖 SheetBot 사용법 및 활용사례`**(`https://sheetbot.cloud` 새 탭 열기 모달 함수 `openSheetBotGuide`)를 필수로 포함해야 합니다.
    - 예외 처리를 위한 `try-catch` 및 구글 시트 알림 UI(`SpreadsheetApp.getUi().alert`, `toast`)를 필수로 포함해야 합니다.
 2. **트리거 등록 및 중복 방지**:
    - Apps Script 원격 함수 실행(`apps_script_run_function`) 시 실행 결과 및 로그를 `last_run_at`, `last_status`, `last_run_message`에 투명하게 기록해야 합니다.

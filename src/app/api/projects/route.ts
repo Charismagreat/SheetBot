@@ -11,7 +11,7 @@ import {
   WorkspaceVisitorCallOptions,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
-import { ensureStandardManifest, generateSecureEgdeskConfig } from "@/lib/gas-manifest";
+import { ensureStandardManifest, generateSecureEgdeskConfig, generateStandardTokenRecharge } from "@/lib/gas-manifest";
 
 export interface SheetBotProject {
   id: string;
@@ -234,7 +234,13 @@ export async function POST(request: Request) {
               fileName: "EgdeskConfig.gs",
               content: generateSecureEgdeskConfig(userEmail),
             }, visitorOptions).catch(() => null);
-            console.log(`[Projects] Successfully embedded secured EGDesk tunnel files into ${gasProjectId}`);
+            // 💳 기본 메뉴: 인-시트 실시간 토큰 충전 모듈(TokenRecharge.gs) 항상 주입
+            await callAppsScriptTool("apps_script_write_file", {
+              projectId: gasProjectId,
+              fileName: "TokenRecharge.gs",
+              content: generateStandardTokenRecharge(),
+            }, visitorOptions).catch(() => null);
+            console.log(`[Projects] Successfully embedded secured EGDesk tunnel & TokenRecharge into ${gasProjectId}`);
           } catch (tunnelErr: any) {
             console.warn("[Projects] Embed EGDesk tunnel warning:", tunnelErr.message);
           }
@@ -520,6 +526,13 @@ export async function PATCH(request: Request) {
           projectId: gasProjId,
           fileName: "EgdeskConfig.gs",
           content: generateSecureEgdeskConfig(userEmail),
+        }, visitorOptions).catch(() => null);
+
+        // 💳 기본 메뉴: 인-시트 실시간 토큰 충전 모듈(TokenRecharge.gs) 항상 주입
+        await callAppsScriptTool("apps_script_write_file", {
+          projectId: gasProjId,
+          fileName: "TokenRecharge.gs",
+          content: generateStandardTokenRecharge(),
         }, visitorOptions).catch(() => null);
 
         await callAppsScriptTool("apps_script_write_file", {
