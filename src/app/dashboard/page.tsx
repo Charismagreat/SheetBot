@@ -80,6 +80,18 @@ export default function DashboardPage() {
     if (status === "loading") return;
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
+      if (params.get("modal") === "fde" || params.get("fde") === "true") {
+        setIsFdeModalOpen(true);
+        const fdeSheet = params.get("sheetUrl");
+        const fdeReq = params.get("req");
+        if (fdeSheet || fdeReq) {
+          setFdeForm(prev => ({
+            ...prev,
+            sheetUrl: fdeSheet || prev.sheetUrl,
+            requirement: fdeReq || prev.requirement,
+          }));
+        }
+      }
       let sheetUrl = params.get("sheetUrl");
       let templateName = params.get("templateName") || "";
       let presetPrompt = params.get("presetPrompt") || "";
