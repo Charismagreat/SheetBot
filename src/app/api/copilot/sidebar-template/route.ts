@@ -632,6 +632,75 @@ export async function GET() {
       transform: translateY(-1px);
     }
 
+    /* [3-2] FDE 파트너스 모집 배너 */
+    .fde-recruit-card {
+      width: 100%;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      border: 1px solid #334155;
+      border-radius: 9px;
+      padding: 10px 11px;
+      margin-bottom: 7px;
+      box-sizing: border-box;
+      text-decoration: none;
+      display: block;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.2);
+    }
+    .fde-recruit-card:hover {
+      border-color: #38bdf8;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(56, 189, 248, 0.15);
+    }
+    .fde-recruit-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    .fde-recruit-badge {
+      font-size: 9.5px;
+      font-weight: 800;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      padding: 2px 6px;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .fde-recruit-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: #ffffff;
+      margin-bottom: 2px;
+      line-height: 1.35;
+    }
+    .fde-recruit-desc {
+      font-size: 10.5px;
+      color: #94a3b8;
+      line-height: 1.4;
+      margin-bottom: 6px;
+    }
+    .fde-recruit-cta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #f8fafc;
+      transition: background 0.15s;
+    }
+    .fde-recruit-card:hover .fde-recruit-cta {
+      background: rgba(56, 189, 248, 0.18);
+      color: #38bdf8;
+      border-color: rgba(56, 189, 248, 0.35);
+    }
+
     /* [4] 접이식 고급 관리 아코디언 */
     details.advanced-box {
       width: 100%;
@@ -823,6 +892,24 @@ export async function GET() {
       <span style="font-size: 11px; opacity: 0.9;">↗</span>
     </a>
   </div>
+
+  <!-- [3-2] FDE 파트너스 모집 배너 -->
+  <a href="http://localhost:4004/dashboard?modal=fde-recruit" target="_blank" class="fde-recruit-card" title="시트봇 공인 FDE 파트너 지원하기">
+    <div class="fde-recruit-header">
+      <span class="fde-recruit-badge">👨‍💻 파트너스 1기 모집</span>
+      <span style="font-size: 9.5px; color: #34d399; font-weight: 700;">수익 창출</span>
+    </div>
+    <div class="fde-recruit-title">
+      시트 제작 능력을 수익으로 전환하세요
+    </div>
+    <div class="fde-recruit-desc">
+      고객 맞춤 자동화 제작 건당 5만~30만원 부수입 창출
+    </div>
+    <div class="fde-recruit-cta">
+      <span>🚀 공인 FDE 파트너 지원하기</span>
+      <span>↗</span>
+    </div>
+  </a>
 
   <!-- [4] 접이식 고급 관리 아코디언 -->
   <details class="advanced-box">
