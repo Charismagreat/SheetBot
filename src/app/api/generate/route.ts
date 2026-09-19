@@ -683,12 +683,64 @@ ${prompt}
 
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
-  ui.createMenu('🚀 SheetBot 메뉴')
-    .addItem('▶️ 자동화 작업 실행', 'runSheetBotAutomatedTask')
+  var cachedBal = null;
+  try {
+    cachedBal = PropertiesService.getScriptProperties().getProperty("SHEETBOT_CACHED_BALANCE");
+  } catch (e) {}
+
+  var balNum = cachedBal !== null && cachedBal !== "" ? Number(cachedBal) : null;
+  var menuTitle = "🚀 SheetBot 메뉴";
+  var showWarningItem = false;
+  var warningItemText = "";
+
+  if (balNum !== null && !isNaN(balNum)) {
+    if (balNum <= 0) {
+      menuTitle = "🚀 SheetBot [🚨토큰소진]";
+      showWarningItem = true;
+      warningItemText = "🚨 [서비스 일시중지] 토큰 소진 - 즉시 충전";
+    } else if (balNum <= 5000) {
+      menuTitle = "🚀 SheetBot [⚠️잔액부족: " + balNum.toLocaleString() + "T]";
+      showWarningItem = true;
+      warningItemText = "⚠️ [주의] 잔여 토큰 부족 (" + balNum.toLocaleString() + "T 남음) - 즉시 충전";
+    }
+  }
+
+  var menu = ui.createMenu(menuTitle);
+  if (showWarningItem) {
+    menu.addItem(warningItemText, "openTokenRechargeModal");
+    menu.addSeparator();
+  }
+
+  menu.addItem('▶️ 자동화 작업 실행', 'runSheetBotAutomatedTask')
     .addItem('📊 일일 통계 집계', 'calculateDailySummary')
     .addSeparator()
     .addItem('🤖 SheetBot AI 코파일럿', 'showAiCopilotSidebar')
     .addToUi();
+
+  if (balNum !== null && !isNaN(balNum) && balNum <= 5000) {
+    try {
+      SpreadsheetApp.getActiveSpreadsheet().toast(
+        balNum <= 0
+          ? "🚨 토큰이 모두 소진되어 AI 자동화가 일시 중지되었습니다. 메뉴줄 또는 사이드바에서 충전해 주세요."
+          : "⚠️ 토큰 잔액이 " + balNum.toLocaleString() + "토큰으로 부족합니다 (5,000 이하). 안정적인 자동화를 위해 충전을 권장합니다.",
+        "SheetBot 잔액 주의",
+        8
+      );
+    } catch (tErr) {}
+  }
+}
+
+function updateSheetBotMenuWithBalance(bal) {
+  try {
+    var balNum = Number(bal);
+    if (isNaN(balNum)) return;
+    try {
+      PropertiesService.getScriptProperties().setProperty("SHEETBOT_CACHED_BALANCE", String(balNum));
+    } catch (e) {}
+    onOpen();
+  } catch (err) {
+    Logger.log("updateSheetBotMenuWithBalance error: " + err.message);
+  }
 }
 
 function openTokenRechargeModal() {

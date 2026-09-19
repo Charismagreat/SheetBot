@@ -147,6 +147,56 @@ export async function GET() {
       background: rgba(255, 255, 255, 0.16);
       color: #ffffff;
     }
+    .token-warning-box {
+      margin-top: 8px;
+      margin-bottom: 10px;
+      padding: 9px 12px;
+      border-radius: 9px;
+      font-size: 11px;
+      line-height: 1.45;
+      transition: all 0.25s ease;
+      box-sizing: border-box;
+    }
+    .token-warning-box.warning-low {
+      background: rgba(245, 158, 11, 0.16);
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      color: #fef3c7;
+    }
+    .token-warning-box.warning-low .warning-title {
+      color: #fcd34d;
+      font-weight: 800;
+      font-size: 11.5px;
+    }
+    .token-warning-box.warning-low .warning-desc {
+      color: #fde68a;
+      margin-top: 3px;
+      font-size: 10.5px;
+    }
+    .token-warning-box.warning-depleted {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.55);
+      color: #fee2e2;
+      animation: alertPulse 2s infinite ease-in-out;
+    }
+    .token-warning-box.warning-depleted .warning-title {
+      color: #fca5a5;
+      font-weight: 800;
+      font-size: 11.5px;
+    }
+    .token-warning-box.warning-depleted .warning-desc {
+      color: #fecaca;
+      margin-top: 3px;
+      font-size: 10.5px;
+    }
+    @keyframes alertPulse {
+      0%, 100% { border-color: rgba(239, 68, 68, 0.55); box-shadow: 0 0 0 rgba(239, 68, 68, 0); }
+      50% { border-color: rgba(239, 68, 68, 0.95); box-shadow: 0 0 12px rgba(239, 68, 68, 0.4); }
+    }
+    .warning-header {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
     .wallet-btn-grid {
       display: grid;
       grid-template-columns: 1fr 1.2fr;
@@ -473,6 +523,17 @@ export async function GET() {
       </div>
     </div>
 
+    <!-- [⚠️] 동적 토큰 잔액 경고 알림 박스 (5,000 이하 또는 소진 시 자동 노출) -->
+    <div id="token-warning-box" class="token-warning-box" style="display: none;">
+      <div class="warning-header">
+        <span id="warning-icon">⚠️</span>
+        <span id="warning-title" class="warning-title">잔여 토큰 부족 주의</span>
+      </div>
+      <div id="warning-desc" class="warning-desc">
+        잔여 토큰이 5,000 이하입니다. 원활한 AI 자동화를 위해 충전을 권장합니다.
+      </div>
+    </div>
+
     <div class="wallet-btn-grid">
       <button class="btn-charge" onclick="openRechargeModal()">💳 즉시 충전</button>
       <a href="https://sheetbot.cloud/use-cases" class="btn-cases">📖 활용사례 40+</a>
@@ -557,6 +618,60 @@ export async function GET() {
   <script>
     var currentEmail = 'chachogreat@gmail.com';
 
+    function updateTokenWarningState(bal) {
+      var amountEl = document.getElementById('token-amount');
+      var warningBox = document.getElementById('token-warning-box');
+      var warningIcon = document.getElementById('warning-icon');
+      var warningTitle = document.getElementById('warning-title');
+      var warningDesc = document.getElementById('warning-desc');
+
+      if (bal === undefined || bal === null || isNaN(bal)) return;
+      var num = Number(bal);
+
+      if (num <= 0) {
+        if (amountEl) {
+          amountEl.style.color = '#ef4444';
+          amountEl.style.textShadow = '0 0 12px rgba(239, 68, 68, 0.55)';
+        }
+        if (warningBox) {
+          warningBox.style.display = 'block';
+          warningBox.className = 'token-warning-box warning-depleted';
+          if (warningIcon) warningIcon.innerText = '🚨';
+          if (warningTitle) warningTitle.innerText = '토큰 소진 (AI 기능 일시 중지)';
+          if (warningDesc) warningDesc.innerText = '잔여 토큰이 0이 되어 AI 자동화 호출이 중지되었습니다. 즉시 충전 후 계속 이용해 주세요.';
+        }
+      } else if (num <= 5000) {
+        if (amountEl) {
+          amountEl.style.color = '#f59e0b';
+          amountEl.style.textShadow = '0 0 8px rgba(245, 158, 11, 0.4)';
+        }
+        if (warningBox) {
+          warningBox.style.display = 'block';
+          warningBox.className = 'token-warning-box warning-low';
+          if (warningIcon) warningIcon.innerText = '⚠️';
+          if (warningTitle) warningTitle.innerText = '잔여 토큰 부족 주의 (' + num.toLocaleString() + ' Token)';
+          if (warningDesc) warningDesc.innerText = '잔여 토큰이 5,000 이하입니다. 원활한 AI 자동화를 위해 충전을 권장합니다.';
+        }
+      } else {
+        if (amountEl) {
+          amountEl.style.color = '#38bdf8';
+          amountEl.style.textShadow = 'none';
+        }
+        if (warningBox) {
+          warningBox.style.display = 'none';
+        }
+      }
+
+      // 구글 시트 상단 메뉴줄 갱신 연동 (Apps Script 환경)
+      if (window.google && window.google.script && window.google.script.run) {
+        try {
+          if (typeof google.script.run.updateSheetBotMenuWithBalance === 'function') {
+            google.script.run.updateSheetBotMenuWithBalance(num);
+          }
+        } catch (e) {}
+      }
+    }
+
     function fetchDirectWallet(email) {
       var targetEmail = email || currentEmail || 'chachogreat@gmail.com';
       var amountEl = document.getElementById('token-amount');
@@ -567,11 +682,13 @@ export async function GET() {
         .then(function(res) { return res.json(); })
         .then(function(data) {
           if (data && data.success && data.balanceTokens !== undefined) {
-            amountEl.innerText = Number(data.balanceTokens).toLocaleString();
+            var bal = Number(data.balanceTokens);
+            amountEl.innerText = bal.toLocaleString();
             userEl.innerText = data.userEmail || targetEmail;
             if (tierEl && data.tier) {
               tierEl.innerText = data.tier;
             }
+            updateTokenWarningState(bal);
           }
         })
         .catch(function(err) {
@@ -589,6 +706,10 @@ export async function GET() {
             .withSuccessHandler(function(res) {
               if (res && res.email) {
                 currentEmail = res.email;
+              }
+              if (res && res.balance !== undefined) {
+                amountEl.innerText = Number(res.balance).toLocaleString();
+                updateTokenWarningState(Number(res.balance));
               }
               fetchDirectWallet(currentEmail);
             })
