@@ -459,30 +459,15 @@ export async function GET() {
       border-color: #64748b;
     }
 
-    /* [3] 안티그라비티 AI 스튜디오 허브 */
+    /* [3] 안티그라비티 허브 */
     .studio-card {
       width: 100%;
       background: #ffffff;
       border: 1px solid #e2e8f0;
       border-radius: 10px;
-      padding: 12px 10px;
+      padding: 10px;
       margin-bottom: 7px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
-    }
-    .studio-header {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 13px;
-      font-weight: 800;
-      color: #1e293b;
-      margin-bottom: 4px;
-    }
-    .studio-desc {
-      font-size: 11px;
-      color: #64748b;
-      margin-bottom: 10px;
-      line-height: 1.35;
     }
     .btn-main-antigravity {
       width: 100%;
@@ -651,25 +636,18 @@ export async function GET() {
       <span class="phone-tag">무료 안심</span>
     </div>
     <div class="phone-desc">
-      토큰 소진/실행 오류 비상 안내를 스마트폰 문자로 받고, 고객 무료 단체 문자도 함께 이용하세요.
+      토큰 잔액이 부족할 때, 오류 발생시 문자로 안내 받으세요
     </div>
-    <button class="btn-phone-register" onclick="openPhoneModal()" title="휴대폰 번호 등록 및 스마트폰 기기 연결">
-      <span>📲 전화번호 등록 / 기기 연결</span>
+    <button class="btn-phone-register" onclick="openPhoneModal()" title="문자 수신/발신 기기 등록">
+      <span>📲 문자 수신/발신 기기 등록</span>
     </button>
   </div>
 
-  <!-- [3] 안티그라비티 AI 스튜디오 허브 -->
+  <!-- [3] 안티그라비티 허브 -->
   <div class="studio-card">
-    <div class="studio-header">
-      <span>🚀 안티그라비티 AI 스튜디오</span>
-    </div>
-    <p class="studio-desc">
-      구글 시트와 자연어로 대화하며 수식, 차트, Apps Script를 실시간 제어하세요.
-    </p>
-
     <!-- 메인 CTA -->
     <button class="btn-main-antigravity" onclick="openAntigravity()">
-      <span>🚀 안티그라비티 열기 및 제어</span>
+      <span>🚀 안티그라비티에서 작업</span>
     </button>
 
     <!-- 서브 액션 2열 그리드 -->
