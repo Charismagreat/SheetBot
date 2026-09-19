@@ -679,7 +679,7 @@ export async function GET() {
       <button class="btn-charge" onclick="openRechargeModal()" title="토큰 충전 모달 열기">
         <span>💳 즉시 충전</span>
       </button>
-      <a id="btn-workspace-link" href="https://sheetbot.cloud/dashboard" target="_blank" class="btn-workspace" title="내 시트봇 대시보드(워크스페이스)로 이동">
+      <a id="btn-workspace-link" href="http://localhost:4004/dashboard" target="_blank" class="btn-workspace" title="내 시트봇 대시보드(워크스페이스)로 이동">
         <span>💼 내 워크스페이스</span>
         <span style="font-size: 10px; opacity: 0.8;">↗</span>
       </a>
@@ -735,7 +735,7 @@ export async function GET() {
     <div class="fde-desc">
       복잡한 연동이나 맞춤 수식이 필요하신가요? 시트봇 전담 엔지니어에게 바로 의뢰하세요.
     </div>
-    <a href="https://sheetbot.cloud/dashboard?modal=fde" target="_blank" class="btn-fde-request" id="btn-fde-request-link" title="시트봇 전담 엔지니어에게 1:1 맞춤 제작 의뢰">
+    <a href="http://localhost:4004/dashboard?modal=fde" target="_blank" class="btn-fde-request" id="btn-fde-request-link" title="시트봇 전담 엔지니어에게 1:1 맞춤 제작 의뢰">
       <span>🛠️ 전문가에게 이 기능 의뢰하기</span>
       <span style="font-size: 11px; opacity: 0.9;">↗</span>
     </a>
@@ -945,15 +945,20 @@ export async function GET() {
       alert('스마트폰 및 비상 알림 번호 등록은 구글 시트 상단 메뉴 [SheetBot 메뉴] 또는 앱스스크립트에서 안전하게 지원됩니다.');
     }
 
+    var BASE_DASHBOARD_URL = 'http://localhost:4004/dashboard';
+
     function openFdeRequestModal() {
-      window.open('https://sheetbot.cloud/dashboard?modal=fde', '_blank');
+      var link = document.getElementById('btn-fde-request-link');
+      var targetUrl = (link && link.href) ? link.href : (BASE_DASHBOARD_URL + '?modal=fde');
+      window.open(targetUrl, '_blank');
     }
 
     function bindFdeSheetUrl(url) {
-      if (!url) return;
       var link = document.getElementById('btn-fde-request-link');
       if (link) {
-        link.href = 'https://sheetbot.cloud/dashboard?modal=fde&sheetUrl=' + encodeURIComponent(url);
+        var href = BASE_DASHBOARD_URL + '?modal=fde';
+        if (url) href += '&sheetUrl=' + encodeURIComponent(url);
+        link.href = href;
       }
     }
 
@@ -1019,6 +1024,13 @@ export async function GET() {
           setTimeout(function() {
             refreshBalance();
             checkTunnel();
+            try {
+              if (google.script.run.getSpreadsheetUrl) {
+                google.script.run.withSuccessHandler(function(url) {
+                  if (url) bindFdeSheetUrl(url);
+                }).getSpreadsheetUrl();
+              }
+            } catch(e) {}
           }, 100);
         } else if (attempts >= 30) {
           clearInterval(interval);
