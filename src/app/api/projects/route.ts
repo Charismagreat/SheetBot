@@ -63,8 +63,10 @@ function mapRowToProject(row: any): SheetBotProject {
     parsedTriggers = [];
   }
 
+  const safeId = row.id || row.uuid || row.gas_project_id || row.spreadsheet_id || `proj_${Date.now()}`;
+
   return {
-    id: row.id,
+    id: safeId,
     userEmail: row.user_email || row.userEmail || "",
     name: row.name || "",
     description: row.description || "",
@@ -363,7 +365,7 @@ export async function DELETE(request: Request) {
     const nowStr = new Date().toISOString();
 
     // 소프트 삭제 및 14일 유예 상태(PENDING_DELETE) 전환
-    await updateRows(
+    const updateRes = await updateRows(
       "sheetbot_projects",
       {
         deleted_at: nowStr,
@@ -378,7 +380,44 @@ export async function DELETE(request: Request) {
           user_email: userEmail.toLowerCase().trim(),
         },
       }
-    );
+    ).catch(() => ({ updated: 0 }));
+
+    // id 컬럼 매칭으로 삭제된 행이 없고 projectId가 UUID/ID 형태인 경우 gas_project_id 또는 spreadsheet_id로 2차 시도
+    if (!updateRes?.updated) {
+      await updateRows(
+        "sheetbot_projects",
+        {
+          deleted_at: nowStr,
+          deleted_by: userEmail,
+          status: "PENDING_DELETE",
+          updated_at: nowStr,
+          updated_by: userEmail,
+        },
+        {
+          filters: {
+            gas_project_id: projectId,
+            user_email: userEmail.toLowerCase().trim(),
+          },
+        }
+      ).catch(() => {});
+
+      await updateRows(
+        "sheetbot_projects",
+        {
+          deleted_at: nowStr,
+          deleted_by: userEmail,
+          status: "PENDING_DELETE",
+          updated_at: nowStr,
+          updated_by: userEmail,
+        },
+        {
+          filters: {
+            spreadsheet_id: projectId,
+            user_email: userEmail.toLowerCase().trim(),
+          },
+        }
+      ).catch(() => {});
+    }
 
     return NextResponse.json({
       success: true,
