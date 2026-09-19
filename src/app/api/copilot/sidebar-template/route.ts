@@ -199,31 +199,37 @@ export async function GET() {
     }
     .wallet-btn-grid {
       display: grid;
-      grid-template-columns: 1fr 1.2fr;
+      grid-template-columns: 1fr 1fr;
       gap: 6px;
+      margin-bottom: 6px;
     }
     .btn-charge {
       background: linear-gradient(135deg, #10b981 0%, #059669 100%);
       color: #ffffff;
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 700;
-      padding: 8px 10px;
+      padding: 8px 6px;
       border-radius: 7px;
       border: none;
       cursor: pointer;
       text-align: center;
       transition: transform 0.1s, filter 0.2s;
       box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      white-space: nowrap;
     }
     .btn-charge:hover { filter: brightness(1.08); }
     .btn-charge:active { transform: scale(0.98); }
-    .btn-cases {
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      color: #f1f5f9;
-      font-size: 12px;
-      font-weight: 600;
-      padding: 8px 10px;
+    .btn-workspace {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      color: #ffffff;
+      font-size: 11.5px;
+      font-weight: 700;
+      padding: 8px 6px;
       border-radius: 7px;
       text-decoration: none;
       text-align: center;
@@ -233,8 +239,36 @@ export async function GET() {
       align-items: center;
       justify-content: center;
       gap: 4px;
+      white-space: nowrap;
     }
-    .btn-cases:hover { background: rgba(255, 255, 255, 0.18); color: #ffffff; }
+    .btn-workspace:hover {
+      background: rgba(255, 255, 255, 0.22);
+      border-color: rgba(255, 255, 255, 0.35);
+      color: #ffffff;
+    }
+    .btn-workspace:active { transform: scale(0.98); }
+    .btn-cases-full {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #cbd5e1;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 6px;
+      text-decoration: none;
+      text-align: center;
+      transition: all 0.2s;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .btn-cases-full:hover {
+      background: rgba(255, 255, 255, 0.14);
+      color: #ffffff;
+    }
 
     /* [🌟] 시트봇 다목적 공지/광고 배너 슬롯 */
     /* [🌟] 시트봇 다목적 광고/공지 배너 (정사각형 화사한 프리미엄 광고 포맷) */
@@ -535,9 +569,18 @@ export async function GET() {
     </div>
 
     <div class="wallet-btn-grid">
-      <button class="btn-charge" onclick="openRechargeModal()">💳 즉시 충전</button>
-      <a href="https://sheetbot.cloud/use-cases" class="btn-cases">📖 활용사례 40+</a>
+      <button class="btn-charge" onclick="openRechargeModal()" title="토큰 충전 모달 열기">
+        <span>💳 즉시 충전</span>
+      </button>
+      <a id="btn-workspace-link" href="https://sheetbot.cloud/dashboard" target="_blank" class="btn-workspace" title="내 시트봇 대시보드(워크스페이스)로 이동">
+        <span>💼 내 워크스페이스</span>
+        <span style="font-size: 10px; opacity: 0.8;">↗</span>
+      </a>
     </div>
+    <a href="https://sheetbot.cloud/use-cases" target="_blank" class="btn-cases-full" title="실무 활용사례 40선 보기">
+      <span>📖 40+ 실무 활용사례 및 가이드</span>
+      <span style="font-size: 10px; opacity: 0.7;">↗</span>
+    </a>
   </div>
 
   <!-- [3] 안티그라비티 AI 스튜디오 허브 -->
