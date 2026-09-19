@@ -14,7 +14,7 @@ export default function WrapPage() {
     bridgePrompt: string;
     projectName?: string;
   } | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copiedType, setCopiedType] = useState<'antigravity' | 'copy' | null>(null);
 
   // 클라이언트 로드 시 전역 핸들러 등록 (하이드레이션 여부와 무관하게 100% 작동)
   useEffect(() => {
@@ -79,14 +79,31 @@ export default function WrapPage() {
     }
   };
 
+  // 🚀 안티그라비티 원클릭 열기
+  const handleOpenAntigravity = async () => {
+    const promptText = result?.bridgePrompt || (window as any).__currentPrompt || (
+      `구글 시트 래핑 주소: ${result?.bridgeUrl || (window as any).__currentBridgeUrl}\n위 구글 시트 구조를 확인하고 원하는 자동화 기능을 주입해줘:\n[추가할 기능 입력]`
+    );
+    try {
+      await navigator.clipboard.writeText(promptText);
+    } catch {}
+
+    if (typeof window !== 'undefined') {
+      window.open('antigravity://', '_blank');
+    }
+
+    setCopiedType('antigravity');
+    setTimeout(() => setCopiedType(null), 4000);
+  };
+
   const handleCopyPrompt = async () => {
     const promptText = result?.bridgePrompt || (window as any).__currentPrompt || '';
     if (!promptText) return;
 
     try {
       await navigator.clipboard.writeText(promptText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+      setCopiedType('copy');
+      setTimeout(() => setCopiedType(null), 2500);
     } catch {
       // fallback
       const ta = document.createElement('textarea');
@@ -95,8 +112,8 @@ export default function WrapPage() {
       ta.select();
       document.execCommand('copy');
       document.body.removeChild(ta);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+      setCopiedType('copy');
+      setTimeout(() => setCopiedType(null), 2500);
     }
   };
 
@@ -104,7 +121,7 @@ export default function WrapPage() {
     setResult(null);
     setSheetUrl('');
     setErrorMsg('');
-    setCopied(false);
+    setCopiedType(null);
     if (typeof window !== 'undefined' && (window as any).__resetNativeWrap) {
       (window as any).__resetNativeWrap();
     }
@@ -326,19 +343,45 @@ export default function WrapPage() {
                 </div>
               </div>
 
-              {/* [2] 🌟 눈에 확 띄는 초대형 메인 복사하기 버튼 */}
-              <button
-                type="button"
-                id="btn-copy-action"
-                onClick={() => {
-                  if ((window as any).__copyNativePrompt) (window as any).__copyNativePrompt();
-                  else handleCopyPrompt();
-                }}
-                className="w-full py-4 px-6 rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all shadow-lg cursor-pointer active:scale-98 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-700 text-white shadow-emerald-600/30 hover:shadow-xl hover:shadow-emerald-600/35 hover:scale-[1.01]"
-              >
-                <span id="btn-copy-icon">📋</span>
-                <span id="btn-copy-text">{copied ? '래핑 주소가 복사되었습니다!' : '래핑 주소 복사하기'}</span>
-              </button>
+              {/* [2] 🌟 듀얼 액션 버튼 영역 (안티그라비티 원클릭 + 복사하기) */}
+              <div className="space-y-2.5">
+                {/* 1단: 🚀 안티그라비티 원클릭 열기 메인 CTA 버튼 */}
+                <button
+                  type="button"
+                  id="btn-open-antigravity"
+                  onClick={() => {
+                    if ((window as any).__openNativeAntigravity) (window as any).__openNativeAntigravity();
+                    else handleOpenAntigravity();
+                  }}
+                  className="w-full py-3.5 px-6 rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all shadow-lg cursor-pointer active:scale-98 bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 text-white shadow-purple-600/30 hover:shadow-xl hover:shadow-purple-600/35 hover:scale-[1.01]"
+                >
+                  <span className="text-base sm:text-lg">🚀</span>
+                  <span id="btn-antigravity-text">{copiedType === 'antigravity' ? '프롬프트 복사 & 안티그라비티 실행됨!' : '안티그라비티 열기 및 자동화 시작'}</span>
+                  <span className="text-xs opacity-70">↗</span>
+                </button>
+
+                {/* 안티그라비티 클릭 후 실시간 안내 말풍선 */}
+                <div 
+                  id="antigravity-copied-notice" 
+                  className={`p-2.5 bg-purple-50 rounded-xl border border-purple-200 text-[11px] text-purple-900 font-bold text-center ${copiedType === 'antigravity' ? 'block' : 'hidden'}`}
+                >
+                  ✨ 프롬프트가 클립보드에 자동 복사되었습니다! 안티그라비티 창에서 바로 <strong>[Ctrl + V]</strong>로 붙여넣으세요.
+                </div>
+
+                {/* 2단: 📋 일반 복사하기 서브 버튼 (Cursor, Claude Code 등) */}
+                <button
+                  type="button"
+                  id="btn-copy-action"
+                  onClick={() => {
+                    if ((window as any).__copyNativePrompt) (window as any).__copyNativePrompt();
+                    else handleCopyPrompt();
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-200/80 hover:border-slate-300"
+                >
+                  <span id="btn-copy-icon">📋</span>
+                  <span id="btn-copy-text">{copiedType === 'copy' ? '프롬프트가 복사되었습니다!' : '프롬프트만 복사하기 (Cursor · Claude Code 등)'}</span>
+                </button>
+              </div>
 
               {/* [3] 눈에 쏙 들어오는 3단계 사용 및 결과 확인 가이드 */}
               <div className="bg-slate-50 border-2 border-emerald-100 rounded-2xl p-4.5 space-y-3">
@@ -360,11 +403,12 @@ export default function WrapPage() {
                 <div className="space-y-2.5 text-xs">
                   {/* 1단계 */}
                   <div className="flex items-start gap-2.5 bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-xs">
-                    <span className="w-5 h-5 rounded-full bg-emerald-500 text-white font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="w-5 h-5 rounded-full bg-purple-600 text-white font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">
                       1
                     </span>
                     <div className="leading-relaxed text-slate-700">
-                      위 <strong className="text-emerald-700 font-extrabold">[래핑 주소 복사하기]</strong> 버튼을 누릅니다.
+                      위 <strong className="text-purple-700 font-extrabold">[🚀 안티그라비티 열기]</strong>를 누르면 프롬프트가 복사되고 앱이 자동 실행됩니다.<br />
+                      <span className="text-[11px] text-slate-500">※ Cursor, Claude Code 사용자는 [프롬프트만 복사하기]를 누르시면 됩니다.</span>
                     </div>
                   </div>
 
@@ -482,6 +526,32 @@ export default function WrapPage() {
     if (btnNew) btnNew.disabled = false;
   };
 
+  window.__openNativeAntigravity = function() {
+    var text = window.__currentPrompt || window.__currentBridgeUrl;
+    if (!text) return;
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(function() { fallbackCopy(text); });
+    } else {
+      fallbackCopy(text);
+    }
+
+    try {
+      window.open("antigravity://", "_blank");
+    } catch(e) {}
+
+    var btnTxt = document.getElementById("btn-antigravity-text");
+    var noticeBox = document.getElementById("antigravity-copied-notice");
+
+    if (btnTxt) btnTxt.innerText = "프롬프트 복사 & 안티그라비티 실행됨!";
+    if (noticeBox) noticeBox.className = "p-2.5 bg-purple-50 rounded-xl border border-purple-200 text-[11px] text-purple-900 font-bold text-center block";
+
+    setTimeout(function() {
+      if (btnTxt) btnTxt.innerText = "안티그라비티 열기 및 자동화 시작";
+      if (noticeBox) noticeBox.className = "hidden";
+    }, 4000);
+  };
+
   window.__copyNativePrompt = function() {
     var text = window.__currentPrompt || window.__currentBridgeUrl;
     if (!text) return;
@@ -490,10 +560,10 @@ export default function WrapPage() {
     var btnIcon = document.getElementById("btn-copy-icon");
 
     function onSuccess() {
-      if (btnText) btnText.innerText = "✓ 래핑 주소가 복사되었습니다!";
+      if (btnText) btnText.innerText = "✓ 프롬프트가 복사되었습니다!";
       if (btnIcon) btnIcon.innerText = "✓";
       setTimeout(function() {
-        if (btnText) btnText.innerText = "래핑 주소 복사하기";
+        if (btnText) btnText.innerText = "프롬프트만 복사하기 (Cursor · Claude Code 등)";
         if (btnIcon) btnIcon.innerText = "📋";
       }, 2500);
     }
