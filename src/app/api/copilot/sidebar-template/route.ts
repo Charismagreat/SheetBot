@@ -514,6 +514,66 @@ export async function GET() {
     }
     .btn-sub:hover { background: #f1f5f9; border-color: #94a3b8; color: #0f172a; }
 
+    /* [3-1] 전문가(FDE) 맞춤 제작 카드 */
+    .fde-card {
+      width: 100%;
+      background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+      border: 1px solid #bbf7d0;
+      border-radius: 9px;
+      padding: 10px;
+      margin-bottom: 7px;
+      box-sizing: border-box;
+    }
+    .fde-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .fde-title {
+      font-size: 11.5px;
+      font-weight: 800;
+      color: #166534;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .fde-tag {
+      font-size: 9.5px;
+      padding: 1px 5px;
+      background: #86efac;
+      color: #14532d;
+      border-radius: 4px;
+      font-weight: 800;
+    }
+    .fde-desc {
+      font-size: 10.5px;
+      color: #15803d;
+      line-height: 1.4;
+      margin-bottom: 7px;
+    }
+    .btn-fde-request {
+      width: 100%;
+      background: #15803d;
+      border: none;
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 7px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: all 0.2s;
+      box-shadow: 0 1px 3px rgba(21, 128, 61, 0.2);
+    }
+    .btn-fde-request:hover {
+      background: #166534;
+      filter: brightness(1.05);
+    }
+
     /* [4] 접이식 고급 관리 아코디언 */
     details.advanced-box {
       width: 100%;
@@ -659,6 +719,22 @@ export async function GET() {
         <span>🔗 새 시트 래핑</span>
       </a>
     </div>
+  </div>
+
+  <!-- [3-1] 전문가(FDE) 맞춤 제작 카드 -->
+  <div class="fde-card">
+    <div class="fde-header">
+      <div class="fde-title">
+        <span>👨‍💻 전문가(FDE) 맞춤 제작</span>
+      </div>
+      <span class="fde-tag">1:1 전담</span>
+    </div>
+    <div class="fde-desc">
+      복잡한 연동이나 맞춤 수식이 필요하신가요? 시트봇 전담 엔지니어에게 바로 의뢰하세요.
+    </div>
+    <button class="btn-fde-request" onclick="openFdeRequestModal()" title="시트봇 전담 엔지니어에게 1:1 맞춤 제작 의뢰">
+      <span>🛠️ 전문가에게 이 기능 의뢰하기</span>
+    </button>
   </div>
 
   <!-- [4] 접이식 고급 관리 아코디언 -->
@@ -865,6 +941,18 @@ export async function GET() {
         } catch(e) {}
       }
       alert('스마트폰 및 비상 알림 번호 등록은 구글 시트 상단 메뉴 [SheetBot 메뉴] 또는 앱스스크립트에서 안전하게 지원됩니다.');
+    }
+
+    function openFdeRequestModal() {
+      if (window.google && window.google.script && window.google.script.run) {
+        try {
+          if (typeof google.script.run.openFdeRequestModal === 'function') {
+            google.script.run.openFdeRequestModal();
+            return;
+          }
+        } catch(e) {}
+      }
+      window.open('https://sheetbot.cloud/dashboard', '_blank');
     }
 
     function getBridgePromptText() {
