@@ -783,6 +783,54 @@ export async function GET() {
     </div>
   </a>
 
+  <!-- [FDE 맞춤 제작 인-사이드바 모달 다이얼로그 오버레이] -->
+  <div id="fde-modal-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.78); backdrop-filter:blur(3px); z-index:99999; padding:12px 10px; overflow-y:auto; box-sizing:border-box;">
+    <div style="background:#ffffff; border-radius:12px; padding:16px 14px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.3); border:1px solid #bbf7d0; max-width:340px; margin:8px auto; box-sizing:border-box;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+        <div style="font-size:14px; font-weight:800; color:#166534; display:flex; align-items:center; gap:5px;">
+          <span>👨‍💻</span><span>전문가 1:1 맞춤 제작 의뢰</span>
+        </div>
+        <button onclick="closeFdeModal()" style="border:none; background:#f1f5f9; color:#64748b; font-size:13px; font-weight:bold; width:26px; height:26px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center;">✕</button>
+      </div>
+      <div style="font-size:11px; color:#64748b; line-height:1.45; margin-bottom:10px;">
+        원하시는 기능이나 수식을 남겨주시면 시트봇 전담 엔지니어가 직접 구현해 드립니다.
+      </div>
+      <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:8px 10px; font-size:10.5px; color:#15803d; line-height:1.45; margin-bottom:12px;">
+        <b>• 지원 분야:</b> 카카오 알림톡/문자, ERP/DB 연동, 특수 수식, OCR 영수증/명함 자동화 등
+      </div>
+      
+      <div style="margin-bottom:10px;">
+        <label style="display:block; font-size:11px; font-weight:700; color:#334155; margin-bottom:4px;">의뢰자 이메일</label>
+        <input type="email" id="inSidebarFdeEmail" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:11.5px; box-sizing:border-box; background:#f8fafc; color:#334155;" />
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <label style="display:block; font-size:11px; font-weight:700; color:#334155; margin-bottom:4px;">연락처 (휴대폰 번호)</label>
+        <input type="tel" id="inSidebarFdePhone" placeholder="예: 010-1234-5678" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:11.5px; box-sizing:border-box;" />
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <label style="display:block; font-size:11px; font-weight:700; color:#334155; margin-bottom:4px;">희망 기능 및 요구사항 (자연어로 편하게 작성)</label>
+        <textarea id="inSidebarFdeContent" rows="4" placeholder="예: 매일 저녁 7시에 오늘 입력된 주문 내역을 대표님 이메일로 요약 발송하고, 입금 상태가 되면 고객에게 카카오 알림톡을 보내는 기능을 만들어주세요." style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:11.5px; box-sizing:border-box; resize:vertical; font-family:inherit;"></textarea>
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="display:block; font-size:11px; font-weight:700; color:#334155; margin-bottom:4px;">희망 완료 일정</label>
+        <select id="inSidebarFdeUrgency" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:11.5px; box-sizing:border-box; background:#ffffff;">
+          <option value="NORMAL">보통 (3~5일 이내)</option>
+          <option value="URGENT">급함 (24시간 이내 빠른 진행)</option>
+          <option value="RELAXED">여유있음 (1주일 이상)</option>
+        </select>
+      </div>
+
+      <button id="btnInSidebarSubmit" onclick="submitInSidebarFdeRequest()" style="width:100%; padding:10px; background:linear-gradient(135deg, #16a34a 0%, #15803d 100%); color:#ffffff; border:none; border-radius:8px; font-weight:800; font-size:12px; cursor:pointer; box-shadow:0 2px 6px rgba(22,163,74,0.3);">
+        🚀 전담 엔지니어에게 의뢰 접수하기
+      </button>
+
+      <div id="inSidebarStatus" style="display:none; margin-top:10px; padding:8px; border-radius:6px; font-size:11px; text-align:center;"></div>
+    </div>
+  </div>
+
   <div class="copilot-footer">
     SheetBot Cloud Engine &bull; Auto-synced v3.2
   </div>
@@ -942,13 +990,107 @@ export async function GET() {
     }
 
     function openFdeRequestModal() {
-      if (window.google && window.google.script && window.google.script.run) {
+      // 1. 구글 시트 Apps Script 네이티브 모달 함수가 있는 경우 중앙 모달 우선 호출
+      if (window.google && window.google.script && window.google.script.run && typeof google.script.run.openFdeRequestModal === 'function') {
         try {
           google.script.run.openFdeRequestModal();
           return;
-        } catch(e) {}
+        } catch(e) {
+          console.log('Native modal fallback:', e);
+        }
       }
-      window.open('https://sheetbot.cloud/dashboard', '_blank');
+      // 2. Apps Script 네이티브 모달 부재 시 또는 독립 환경에서는 사이드바 내장 1:1 의뢰 모달 표출 (대시보드로 이동하지 않음)
+      showInSidebarFdeModal();
+    }
+
+    function showInSidebarFdeModal() {
+      var overlay = document.getElementById('fde-modal-overlay');
+      if (overlay) {
+        var emailInput = document.getElementById('inSidebarFdeEmail');
+        if (emailInput && !emailInput.value) {
+          emailInput.value = currentEmail || 'chachogreat@gmail.com';
+        }
+        overlay.style.display = 'block';
+      }
+    }
+
+    function closeFdeModal() {
+      var overlay = document.getElementById('fde-modal-overlay');
+      if (overlay) {
+        overlay.style.display = 'none';
+      }
+    }
+
+    function submitInSidebarFdeRequest() {
+      var emailEl = document.getElementById('inSidebarFdeEmail');
+      var phoneEl = document.getElementById('inSidebarFdePhone');
+      var contentEl = document.getElementById('inSidebarFdeContent');
+      var urgencyEl = document.getElementById('inSidebarFdeUrgency');
+      var btn = document.getElementById('btnInSidebarSubmit');
+      var status = document.getElementById('inSidebarStatus');
+
+      var email = emailEl ? emailEl.value.trim() : '';
+      var phone = phoneEl ? phoneEl.value.trim() : '';
+      var content = contentEl ? contentEl.value.trim() : '';
+      var urgency = urgencyEl ? urgencyEl.value : 'NORMAL';
+
+      if (!content) {
+        alert('추가하고자 하시는 요구사항을 입력해 주세요.');
+        return;
+      }
+
+      var urgencyLabel = urgency === 'URGENT' ? '급함 (24시간 이내)' : urgency === 'RELAXED' ? '여유있음 (1주일 이상)' : '보통 (3~5일 이내)';
+      var title = '[FDE 맞춤 구축 의뢰] ' + email;
+      var fullContent = '[의뢰자 정보]\n' +
+        '- 이메일: ' + email + '\n' +
+        '- 연락처: ' + (phone || '미기재') + '\n\n' +
+        '[희망 일정]\n' +
+        '- ' + urgencyLabel + '\n\n' +
+        '[상세 요구사항]\n' + content;
+
+      btn.disabled = true;
+      btn.innerText = '전담 엔지니어에게 접수 중...';
+      status.style.display = 'block';
+      status.style.background = '#f1f5f9';
+      status.style.color = '#475569';
+      status.innerText = '의뢰를 접수하는 중입니다...';
+
+      fetch('https://sheetbot.cloud/api/inquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category: 'FDE_REQUEST',
+          email: email || currentEmail || 'chachogreat@gmail.com',
+          name: (email || currentEmail || '고객').split('@')[0],
+          title: title,
+          content: fullContent
+        })
+      })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        btn.disabled = false;
+        btn.innerText = '🚀 전담 엔지니어에게 의뢰 접수하기';
+        if (data && data.success) {
+          status.style.background = '#dcfce7';
+          status.style.color = '#15803d';
+          status.innerHTML = '<b>✅ 의뢰 접수 완료!</b><br>24시간 내에 검토 후 빠르게 회신드립니다.';
+          setTimeout(function() {
+            closeFdeModal();
+            status.style.display = 'none';
+          }, 2500);
+        } else {
+          status.style.background = '#fee2e2';
+          status.style.color = '#dc2626';
+          status.innerText = '❌ 접수 실패: ' + (data.error || '오류가 발생했습니다.');
+        }
+      })
+      .catch(function(err) {
+        btn.disabled = false;
+        btn.innerText = '🚀 전담 엔지니어에게 의뢰 접수하기';
+        status.style.background = '#fee2e2';
+        status.style.color = '#dc2626';
+        status.innerText = '❌ 통신 오류: ' + err.message;
+      });
     }
 
     function getBridgePromptText() {
