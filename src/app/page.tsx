@@ -193,6 +193,19 @@ export default function LandingPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isWrapping, setIsWrapping] = useState(false);
 
+  // [1단계] 추천인 코드(?ref=...) 감지 및 보존
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get("ref");
+      if (ref) {
+        try {
+          localStorage.setItem("pending_ref", ref);
+        } catch (e) {}
+      }
+    }
+  }, []);
+
   // 템플릿 숏컷 클릭 시 인풋에 주소 자동 주입
   const handleSelectTemplate = (item: typeof TEMPLATE_SHORTCUTS[0]) => {
     setSelectedTemplate(item.id);
