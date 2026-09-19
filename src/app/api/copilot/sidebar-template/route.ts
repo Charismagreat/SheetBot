@@ -433,6 +433,73 @@ export async function GET() {
       margin-bottom: 7px;
       box-sizing: border-box;
     }
+
+    /* [2-2] ⚡ 1초 실무 템플릿 모음 카드 */
+    .templates-card {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 9px;
+      padding: 9px 10px;
+      margin-bottom: 7px;
+      box-sizing: border-box;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+    }
+    .templates-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .templates-title {
+      font-size: 11.5px;
+      font-weight: 800;
+      color: #1e293b;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .templates-tag {
+      font-size: 9.5px;
+      padding: 1px 6px;
+      background: #e0e7ff;
+      color: #4338ca;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+    .templates-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+    }
+    .template-chip {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 6px 4px;
+      font-size: 10.5px;
+      font-weight: 600;
+      color: #334155;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 3px;
+      transition: all 0.15s ease;
+      box-sizing: border-box;
+      white-space: nowrap;
+    }
+    .template-chip:hover {
+      background: #eff6ff;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
+    }
+    .template-chip:active {
+      transform: scale(0.98);
+    }
     .phone-header {
       display: flex;
       align-items: center;
@@ -696,6 +763,30 @@ export async function GET() {
       <span>📲 문자 수신/발신 기기 등록</span>
       <span style="font-size: 11px; opacity: 0.8;">↗</span>
     </a>
+  </div>
+
+  <!-- [2-2] ⚡ 1초 실무 템플릿 모음 카드 -->
+  <div class="templates-card">
+    <div class="templates-header">
+      <div class="templates-title">
+        <span>⚡ 1초 실무 템플릿 모음</span>
+      </div>
+      <span class="templates-tag">원클릭 복제</span>
+    </div>
+    <div class="templates-grid">
+      <a href="http://localhost:4004/wrap?tpl=delivery" target="_blank" class="template-chip" title="배송·송장 실시간 배송상태 자동조회">
+        <span>📦 송장 자동조회</span>
+      </a>
+      <a href="http://localhost:4004/wrap?tpl=ocr" target="_blank" class="template-chip" title="영수증·명함 스마트 AI OCR">
+        <span>🧾 영수증 OCR</span>
+      </a>
+      <a href="http://localhost:4004/wrap?tpl=kakao" target="_blank" class="template-chip" title="카카오 알림톡/문자 자동 발송">
+        <span>💬 알림톡 발송</span>
+      </a>
+      <a href="http://localhost:4004/wrap?tpl=inventory" target="_blank" class="template-chip" title="실시간 재고·단가 관리 대장">
+        <span>📊 실시간 재고</span>
+      </a>
+    </div>
   </div>
 
   <!-- [3] 안티그라비티 허브 -->

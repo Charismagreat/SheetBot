@@ -2,11 +2,46 @@
 
 import React, { useState, useEffect } from 'react';
 
+interface TemplatePreset {
+  title: string;
+  desc: string;
+  icon: string;
+  prompt: string;
+}
+
+const TEMPLATE_PRESETS: Record<string, TemplatePreset> = {
+  delivery: {
+    title: '배송·송장 자동조회 대장',
+    desc: 'CJ대한통운, 롯데, 한진, 우체국 등 택배 운송장 실시간 배송상태 추적 및 완료 자동 업데이트',
+    icon: '📦',
+    prompt: 'CJ대한통운, 우체국 등 주요 택배사의 운송장 번호를 기반으로 실시간 배송 상태를 자동 조회하고 시트에 반영하는 배송 관리 대장을 구축해줘.',
+  },
+  ocr: {
+    title: '영수증·명함 스마트 OCR 대장',
+    desc: '영수증, 세금계산서, 명함 이미지/PDF를 드라이브에 올리면 Gemini AI가 품목/금액/상호명을 자동 추출',
+    icon: '🧾',
+    prompt: '영수증 및 명함 이미지를 분석하여 상호명, 사업자번호, 일자, 공급가액, 부가세를 자동으로 표에 정리해주는 AI OCR 대장을 구축해줘.',
+  },
+  kakao: {
+    title: '카카오 알림톡 자동 발송 대장',
+    desc: '시트의 고객 전화번호와 주문 상태 변경에 맞춰 카카오 알림톡 또는 비상 SMS를 1초 만에 자동 발송',
+    icon: '💬',
+    prompt: '시트의 주문 상태가 변경되면 고객 전화번호로 카카오 알림톡 또는 SMS 안내 문자를 자동 발송하는 알림 연동 대장을 구축해줘.',
+  },
+  inventory: {
+    title: '실시간 재고·단가 관리 대장',
+    desc: '입출고 내역 실시간 집계, 안전재고 미달 시 자동 경고 알림 및 최신 원가/단가 자동 반영',
+    icon: '📊',
+    prompt: '입고와 출고 내역을 실시간 집계하여 현재고를 계산하고, 안전재고 미달 시 알림을 보내는 재고 관리 대장을 구축해줘.',
+  },
+};
+
 export default function WrapPage() {
   const [sheetUrl, setSheetUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isStartingNew, setIsStartingNew] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplatePreset | null>(null);
   const [result, setResult] = useState<{
     bridgeUrl: string;
     spreadsheetId: string;
@@ -16,9 +51,17 @@ export default function WrapPage() {
   } | null>(null);
   const [copiedType, setCopiedType] = useState<'antigravity' | 'copy' | null>(null);
 
-  // 클라이언트 로드 시 전역 핸들러 등록 (하이드레이션 여부와 무관하게 100% 작동)
+  // 클라이언트 로드 시 전역 핸들러 등록 및 tpl 쿼리 파라미터 감지
   useEffect(() => {
     (window as any).__reactSetResult = setResult;
+
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const tplParam = searchParams.get('tpl');
+      if (tplParam && TEMPLATE_PRESETS[tplParam.toLowerCase()]) {
+        setSelectedTemplate(TEMPLATE_PRESETS[tplParam.toLowerCase()]);
+      }
+    } catch {}
   }, []);
 
   const executeWrap = async (targetUrl?: string) => {
@@ -39,12 +82,13 @@ export default function WrapPage() {
     setIsStartingNew(isNew);
 
     try {
+      const tplTitle = selectedTemplate ? selectedTemplate.title : '스마트 자동화 시트';
       const res = await fetch('/api/projects/quick-wrap', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sheetUrl: finalUrl,
-          templateName: '스마트 자동화 시트',
+          templateName: tplTitle,
         }),
       });
 
@@ -53,16 +97,18 @@ export default function WrapPage() {
         throw new Error(data.error || '래핑 중 오류가 발생했습니다.');
       }
 
-      const promptTemplate = data.promptTemplate || (
-        `아래 웹 주소를 통해 새 구글 시트의 컬럼 구조와 자동화 스크립트를 처음부터 설계하고 주입해줘:\n웹 주소: ${data.bridgeUrl}\n요구사항: 새 구글 시트에 내 비즈니스에 맞는 시트 탭과 컬럼 헤더 구조를 설계하고, 필요한 자동화 기능과 Apps Script 코드를 즉시 주입해줘.`
-      );
+      const defaultPrompt = selectedTemplate
+        ? `아래 웹 주소를 통해 새 구글 시트의 컬럼 구조와 자동화 스크립트를 처음부터 설계하고 주입해줘:\n웹 주소: ${data.bridgeUrl}\n목표 업무: ${selectedTemplate.title}\n세부 요구사항: ${selectedTemplate.prompt}`
+        : `아래 웹 주소를 통해 새 구글 시트의 컬럼 구조와 자동화 스크립트를 처음부터 설계하고 주입해줘:\n웹 주소: ${data.bridgeUrl}\n요구사항: 새 구글 시트에 내 비즈니스에 맞는 시트 탭과 컬럼 헤더 구조를 설계하고, 필요한 자동화 기능과 Apps Script 코드를 즉시 주입해줘.`;
+
+      const promptTemplate = data.promptTemplate || defaultPrompt;
 
       setResult({
         bridgeUrl: data.bridgeUrl,
         spreadsheetId: data.spreadsheetId || '',
         token: data.token || '',
         bridgePrompt: promptTemplate,
-        projectName: data.projectName || '스마트 자동화 시트',
+        projectName: data.projectName || tplTitle,
       });
 
       // 네이티브 DOM 동기화
@@ -180,6 +226,32 @@ export default function WrapPage() {
             )에 붙여넣고 자연어로 자동화 하세요.
           </p>
         </div>
+
+        {/* 선택된 템플릿 안내 배너 */}
+        {selectedTemplate && !result && (
+          <div className="mb-5 p-4 rounded-2xl bg-indigo-950/50 border border-indigo-500/30 backdrop-blur-md shadow-lg shadow-indigo-950/20 flex items-start justify-between gap-3 animate-fadeIn">
+            <div className="flex items-start gap-3">
+              <span className="text-3xl p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20">{selectedTemplate.icon}</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">⚡ 1초 실무 템플릿</span>
+                  <h3 className="text-sm font-bold text-white">{selectedTemplate.title}</h3>
+                </div>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">{selectedTemplate.desc}</p>
+                <div className="mt-2 text-[11px] text-indigo-300 font-medium">
+                  👉 아래 &apos;3초 만에 래핑하기&apos; 또는 &apos;새 시트로 바로 시작&apos;을 누르면 이 템플릿의 설계 지침이 자동 적용됩니다.
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedTemplate(null)}
+              className="text-slate-400 hover:text-white p-1 text-xs rounded-md hover:bg-slate-800 transition-colors"
+              title="템플릿 해제"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* 폼 카드 (초기 표시) */}
         <div 
