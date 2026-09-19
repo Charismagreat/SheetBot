@@ -89,50 +89,63 @@ export async function POST(req: NextRequest) {
           const evalResult = JSON.parse(jsonMatch[0]);
 
           if (evalResult.matched && evalResult.recipient && evalResult.finalMessage) {
-            // 발송 대상 전화번호 결정 (AI 추출 번호 우선 또는 고정/본인 번호 폴백)
-            const targetPhone = evalResult.recipient.trim();
+            const rawPhone = evalResult.recipient.trim();
             const messageToSend = evalResult.finalMessage.trim();
 
-            let sendSuccess = false;
-            let errorMsg = "";
+            // 본인/관리자 비상 알림 대상이거나 등록 기기가 복수일 때 모든 등록 스마트폰 번호로 다중 동시 발송
+            const isSelfTarget = rule.target_recipient === "self" || rule.target_recipient === "admin" || !rawPhone || rawPhone === "self";
+            let recipientsToSend: string[] = [];
 
-            try {
-              const sendRes = await sendPhoneSms({
-                phoneNumber: targetPhone,
-                message: messageToSend,
-                deviceId: activeDevice?.device_id || undefined,
-                isMarketing: false,
-              });
-              sendSuccess = !!(sendRes && (sendRes.success || sendRes.status === "sent" || sendRes.messageId));
-            } catch (sErr: any) {
-              sendSuccess = false;
-              errorMsg = sErr.message || "문자 발송 실패";
+            if (isSelfTarget && userDevices.length > 0) {
+              const allPhones = userDevices.map((d: any) => d.phone_number).filter(Boolean);
+              recipientsToSend = Array.from(new Set(allPhones));
+            }
+            if (recipientsToSend.length === 0) {
+              recipientsToSend = [rawPhone];
             }
 
-            // 발송 로그 DB 적재
-            const logId = `dlog_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-            await insertRows("sheetbot_user_dispatch_logs", [
-              {
-                id: logId,
-                user_email: cleanEmail,
-                rule_id: rule.id,
-                rule_name: rule.name,
-                device_id: activeDevice?.device_id || "default",
-                recipient: targetPhone,
-                content: messageToSend,
-                status: sendSuccess ? "SUCCESS" : "FAILED",
-                error_message: errorMsg || null,
-                created_at: new Date().toISOString(),
-              },
-            ]).catch(() => {});
+            for (const targetPhone of recipientsToSend) {
+              let sendSuccess = false;
+              let errorMsg = "";
 
-            dispatchCount++;
-            dispatchResults.push({
-              ruleName: rule.name,
-              recipient: targetPhone,
-              status: sendSuccess ? "SUCCESS" : "FAILED",
-              error: errorMsg || undefined,
-            });
+              try {
+                const sendRes = await sendPhoneSms({
+                  phoneNumber: targetPhone,
+                  message: messageToSend,
+                  deviceId: activeDevice?.device_id || undefined,
+                  isMarketing: false,
+                });
+                sendSuccess = !!(sendRes && (sendRes.success || sendRes.status === "sent" || sendRes.messageId));
+              } catch (sErr: any) {
+                sendSuccess = false;
+                errorMsg = sErr.message || "문자 발송 실패";
+              }
+
+              // 발송 로그 DB 적재
+              const logId = `dlog_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+              await insertRows("sheetbot_user_dispatch_logs", [
+                {
+                  id: logId,
+                  user_email: cleanEmail,
+                  rule_id: rule.id,
+                  rule_name: rule.name,
+                  device_id: activeDevice?.device_id || "default",
+                  recipient: targetPhone,
+                  content: messageToSend,
+                  status: sendSuccess ? "SUCCESS" : "FAILED",
+                  error_message: errorMsg || null,
+                  created_at: new Date().toISOString(),
+                },
+              ]).catch(() => {});
+
+              dispatchCount++;
+              dispatchResults.push({
+                ruleName: rule.name,
+                recipient: targetPhone,
+                status: sendSuccess ? "SUCCESS" : "FAILED",
+                error: errorMsg || undefined,
+              });
+            }
           }
         }
       } catch (ruleEvalErr: any) {
