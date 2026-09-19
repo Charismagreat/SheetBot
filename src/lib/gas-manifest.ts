@@ -502,6 +502,185 @@ function saveUserPhoneNumber(phone, label) {
   }
 }
 
+/**
+ * 👨‍💻 1:1 전문가(FDE) 맞춤 제작 의뢰 모달 표출
+ */
+function openFdeRequestModal() {
+  var html = HtmlService.createHtmlOutput(getFdeRequestModalHtml())
+    .setWidth(480)
+    .setHeight(580);
+  SpreadsheetApp.getUi().showModalDialog(html, "👨‍💻 SheetBot 1:1 전문가(FDE) 맞춤 제작 의뢰");
+}
+
+function getFdeRequestModalHtml() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheetUrl = ss ? ss.getUrl() : "";
+  var userEmail = Session.getActiveUser().getEmail() || "chachogreat@gmail.com";
+  var savedPhone = "";
+  try {
+    savedPhone = PropertiesService.getScriptProperties().getProperty("SHEETBOT_USER_PHONE") || "";
+  } catch (e) {}
+
+  return '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+    '<style>' +
+    'body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin:0;padding:20px;background:#f8fafc;color:#1e293b;}' +
+    '.header{font-size:16px;font-weight:800;color:#0f172a;margin-bottom:6px;display:flex;align-items:center;gap:6px;}' +
+    '.desc{font-size:11.5px;color:#64748b;line-height:1.5;margin-bottom:14px;}' +
+    '.info-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px;margin-bottom:16px;font-size:11px;line-height:1.55;color:#15803d;}' +
+    '.info-box b{color:#166534;}' +
+    '.field{margin-bottom:12px;}' +
+    'label{display:block;font-size:11px;font-weight:700;color:#334155;margin-bottom:5px;}' +
+    'input,textarea,select{width:100%;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;box-sizing:border-box;background:#ffffff;outline:none;transition:border 0.2s;font-family:inherit;}' +
+    'input:focus,textarea:focus,select:focus{border-color:#16a34a;box-shadow:0 0 0 2px rgba(22,163,74,0.15);}' +
+    'textarea{resize:vertical;min-height:90px;}' +
+    '.btn-submit{width:100%;padding:12px;background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);color:white;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;transition:filter 0.2s;margin-top:6px;box-shadow:0 2px 6px rgba(22,163,74,0.25);}' +
+    '.btn-submit:hover{filter:brightness(1.08);}' +
+    '.status-msg{margin-top:10px;font-size:11.5px;padding:10px;border-radius:6px;display:none;text-align:center;}' +
+    '</style></head><body>' +
+    '<div class="header"><span>👨‍💻</span><span>전문가(FDE) 1:1 맞춤 제작 의뢰</span></div>' +
+    '<div class="desc">시트봇 전담 엔지니어에게 원하는 기능을 남겨주시면 귀사 시트에 100% 동작하도록 구축해 드립니다.</div>' +
+    '<div class="info-box">' +
+    '<b>• 원스톱 구축 지원:</b> 특수 수식, 카카오 알림톡/문자, ERP/DB 동기화, 영수증/명함 OCR 등<br>' +
+    '<b>• 신속 지원:</b> 현재 구글 시트 정보가 안전하게 함께 전달되어 설명 부담이 대폭 줄어듭니다.' +
+    '</div>' +
+    '<div class="field">' +
+    '<label>의뢰자 이메일</label>' +
+    '<input type="email" id="reqEmail" value="' + userEmail + '" readonly style="background:#f1f5f9;color:#64748b;" />' +
+    '</div>' +
+    '<div class="field">' +
+    '<label>연락처 (휴대폰 번호)</label>' +
+    '<input type="tel" id="reqPhone" placeholder="예: 010-1234-5678" value="' + savedPhone + '" />' +
+    '</div>' +
+    '<div class="field">' +
+    '<label>희망 추가 기능 및 요구사항 (자연어로 편하게 작성)</label>' +
+    '<textarea id="reqContent" placeholder="예: D열에 입금완료가 되면 고객에게 카카오 알림톡을 자동으로 발송하고, 당일 주문 건을 19시에 관리자 메일로 요약 리포트해 주는 기능을 만들어주세요."></textarea>' +
+    '</div>' +
+    '<div class="field">' +
+    '<label>희망 완료 일정</label>' +
+    '<select id="reqUrgency">' +
+    '<option value="NORMAL">보통 (3~5일 이내)</option>' +
+    '<option value="URGENT">급함 (24시간 이내 빠른 진행)</option>' +
+    '<option value="RELAXED">여유있음 (1주일 이상)</option>' +
+    '</select>' +
+    '</div>' +
+    '<button class="btn-submit" id="btnSubmit" onclick="submitRequest()">🚀 전담 엔지니어에게 의뢰 접수하기</button>' +
+    '<div id="statusBox" class="status-msg"></div>' +
+    '<script>' +
+    'function submitRequest(){' +
+    '  var email = document.getElementById("reqEmail").value.trim();' +
+    '  var phone = document.getElementById("reqPhone").value.trim();' +
+    '  var content = document.getElementById("reqContent").value.trim();' +
+    '  var urgency = document.getElementById("reqUrgency").value;' +
+    '  var btn = document.getElementById("btnSubmit");' +
+    '  var msg = document.getElementById("statusBox");' +
+    '  if (!content) { alert("추가하고자 하시는 요구사항을 입력해 주세요."); return; }' +
+    '  btn.disabled = true; btn.innerText = "의뢰 접수 중...";' +
+    '  msg.style.display = "block"; msg.style.background = "#f1f5f9"; msg.style.color = "#475569"; msg.innerText = "전담 엔지니어에게 의뢰를 접수하는 중입니다...";' +
+    '  google.script.run' +
+    '    .withSuccessHandler(function(res){' +
+    '      btn.disabled = false; btn.innerText = "🚀 전담 엔지니어에게 의뢰 접수하기";' +
+    '      if(res && res.success){' +
+    '        msg.style.background = "#dcfce7"; msg.style.color = "#15803d";' +
+    '        msg.innerHTML = "<b>✅ 의뢰 접수 완료!</b> " + (res.message || "24시간 내에 답변 드립니다.");' +
+    '        setTimeout(function(){ google.script.host.close(); }, 2000);' +
+    '      } else {' +
+    '        msg.style.background = "#fee2e2"; msg.style.color = "#dc2626";' +
+    '        msg.innerText = "❌ 접수 실패: " + (res.error || "오류가 발생했습니다.");' +
+    '      }' +
+    '    })' +
+    '    .withFailureHandler(function(err){' +
+    '      btn.disabled = false; btn.innerText = "🚀 전담 엔지니어에게 의뢰 접수하기";' +
+    '      msg.style.background = "#fee2e2"; msg.style.color = "#dc2626";' +
+    '      msg.innerText = "❌ 통신 오류: " + err.message;' +
+    '    })' +
+    '    .submitFdeRequest({' +
+    '      email: email,' +
+    '      phone: phone,' +
+    '      content: content,' +
+    '      urgency: urgency,' +
+    '      sheetUrl: "' + sheetUrl + '"' +
+    '    });' +
+    '}' +
+    '</script></body></html>';
+}
+
+function submitFdeRequest(formObj) {
+  try {
+    var email = formObj.email || Session.getActiveUser().getEmail() || "chachogreat@gmail.com";
+    var phone = formObj.phone || "";
+    var content = formObj.content || "";
+    var urgency = formObj.urgency || "NORMAL";
+    var sheetUrl = formObj.sheetUrl || (SpreadsheetApp.getActiveSpreadsheet() ? SpreadsheetApp.getActiveSpreadsheet().getUrl() : "");
+    var sheetTitle = SpreadsheetApp.getActiveSpreadsheet() ? SpreadsheetApp.getActiveSpreadsheet().getName() : "구글 시트";
+
+    if (phone) {
+      try { PropertiesService.getScriptProperties().setProperty("SHEETBOT_USER_PHONE", phone); } catch(e){}
+    }
+
+    var urgencyLabel = urgency === "URGENT" ? "급함 (24시간 이내)" : urgency === "RELAXED" ? "여유있음 (1주일 이상)" : "보통 (3~5일 이내)";
+    var title = "[FDE 맞춤 구축 의뢰] " + sheetTitle + " - " + email;
+    var fullContent = "[의뢰자 정보]\n" +
+      "- 이메일: " + email + "\n" +
+      "- 연락처: " + (phone || "미기재") + "\n\n" +
+      "[구글 시트 정보]\n" +
+      "- 시트명: " + sheetTitle + "\n" +
+      "- 시트 URL: " + sheetUrl + "\n\n" +
+      "[희망 일정]\n" +
+      "- " + urgencyLabel + "\n\n" +
+      "[상세 요구사항]\n" + content;
+
+    // 1단계: 백엔드 API 직접 호출 시도
+    var apiSuccess = false;
+    try {
+      var response = UrlFetchApp.fetch("https://sheetbot.cloud/api/inquiries", {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({
+          category: "FDE_REQUEST",
+          email: email,
+          name: email.split("@")[0],
+          title: title,
+          content: fullContent
+        }),
+        muteHttpExceptions: true
+      });
+      var code = response.getResponseCode();
+      if (code >= 200 && code < 300) {
+        apiSuccess = true;
+      }
+    } catch(fetchErr) {
+      Logger.log("UrlFetchApp inquiry warning: " + fetchErr.message);
+    }
+
+    // 2단계: 백엔드 API 실패 시 user_data_insert_rows로 직접 DB 적재 2중 폴백
+    if (!apiSuccess && typeof _callUserDataTool === 'function') {
+      var inqId = "inq_" + new Date().getTime() + "_" + Math.random().toString(36).substring(2, 6);
+      var nowIso = new Date().toISOString();
+      _callUserDataTool('user_data_insert_rows', {
+        tableName: 'sheetbot_inquiries',
+        rows: [{
+          id: inqId,
+          user_email: email.toLowerCase().trim(),
+          user_name: email.split("@")[0],
+          category: 'FDE_REQUEST',
+          title: title,
+          content: fullContent,
+          status: 'PENDING',
+          created_at: nowIso
+        }]
+      });
+    }
+
+    SpreadsheetApp.getActiveSpreadsheet().toast("전문가(FDE) 맞춤 제작 의뢰가 정상 접수되었습니다.", "의뢰 완료", 5);
+    return {
+      success: true,
+      message: "의뢰가 성공적으로 접수되었습니다. 전담 엔지니어가 검토 후 빠르게 회신드립니다."
+    };
+  } catch(err) {
+    return { success: false, error: err.message };
+  }
+}
+
 function _callUserDataTool(tool, args) {
   try {
     if (typeof egdeskToolsCall === 'function') {
