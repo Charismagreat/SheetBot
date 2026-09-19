@@ -514,67 +514,30 @@ export async function GET() {
     }
     .btn-sub:hover { background: #f1f5f9; border-color: #94a3b8; color: #0f172a; }
 
-    /* [3-1] 전문가(FDE) 맞춤 제작 카드 */
-    .fde-card {
-      width: 100%;
-      background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-      border: 1px solid #bbf7d0;
-      border-radius: 9px;
-      padding: 10px;
-      margin-bottom: 7px;
-      box-sizing: border-box;
-    }
-    .fde-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 4px;
-    }
-    .fde-title {
-      font-size: 11.5px;
-      font-weight: 800;
-      color: #166534;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-    .fde-tag {
-      font-size: 9.5px;
-      padding: 1px 5px;
-      background: #86efac;
-      color: #14532d;
-      border-radius: 4px;
-      font-weight: 800;
-    }
-    .fde-desc {
-      font-size: 10.5px;
-      color: #15803d;
-      line-height: 1.4;
-      margin-bottom: 7px;
-    }
+    /* [3-1] 전문가(FDE) 문의 버튼 */
     .btn-fde-request {
       width: 100%;
-      background: #15803d;
-      border: none;
+      background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+      border: 1px solid #15803d;
       color: #ffffff;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 700;
-      padding: 7px 8px;
-      border-radius: 6px;
+      padding: 9px 12px;
+      border-radius: 8px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 5px;
+      gap: 6px;
       text-decoration: none;
       box-sizing: border-box;
       transition: all 0.2s;
-      box-shadow: 0 1px 3px rgba(21, 128, 61, 0.2);
+      box-shadow: 0 1px 3px rgba(21, 128, 61, 0.25);
     }
     .btn-fde-request:hover {
-      background: #166534;
-      color: #ffffff;
+      background: linear-gradient(135deg, #15803d 0%, #166534 100%);
       filter: brightness(1.05);
+      transform: translateY(-1px);
     }
 
     /* [4] 접이식 고급 관리 아코디언 */
@@ -724,17 +687,8 @@ export async function GET() {
     </div>
   </div>
 
-  <!-- [3-1] 전문가(FDE) 맞춤 제작 카드 -->
-  <div class="fde-card">
-    <div class="fde-header">
-      <div class="fde-title">
-        <span>👨‍💻 전문가(FDE) 맞춤 제작</span>
-      </div>
-      <span class="fde-tag">1:1 전담</span>
-    </div>
-    <div class="fde-desc">
-      복잡한 연동이나 맞춤 수식이 필요하신가요? 시트봇 전담 엔지니어에게 바로 의뢰하세요.
-    </div>
+  <!-- [3-1] 전문가(FDE) 문의 버튼 -->
+  <div style="margin-bottom: 7px;">
     <?
       var _initialSheetUrl = '';
       try {
@@ -744,8 +698,8 @@ export async function GET() {
       } catch(e) {}
       var _fdeHref = 'http://localhost:4004/dashboard?modal=fde' + (_initialSheetUrl ? '&sheetUrl=' + encodeURIComponent(_initialSheetUrl) : '');
     ?>
-    <a href="<?= _fdeHref ?>" target="_blank" class="btn-fde-request" id="btn-fde-request-link" onclick="handleFdeClick(event)" title="시트봇 전담 엔지니어에게 1:1 맞춤 제작 의뢰">
-      <span>🛠️ 전문가에게 이 기능 의뢰하기</span>
+    <a href="<?= _fdeHref ?>" target="_blank" class="btn-fde-request" id="btn-fde-request-link" onclick="handleFdeClick(event)" title="시트봇 전담 엔지니어에게 1:1 맞춤 제작 문의">
+      <span>🛠️ 전문가에게 문의하기</span>
       <span style="font-size: 11px; opacity: 0.9;">↗</span>
     </a>
   </div>
