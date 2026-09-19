@@ -569,8 +569,14 @@ ${recruitForm.introduction}
       return;
     }
 
+    const targetId = p.id || p.gasProjectId || p.spreadsheetId;
+    if (!targetId) {
+      showAlert({ type: "error", text: "삭제할 프로젝트의 식별자(ID)를 찾을 수 없습니다." });
+      return;
+    }
+
     try {
-      const res = await apiFetch(`/api/projects?id=${p.id}`, { method: "DELETE" });
+      const res = await apiFetch(`/api/projects?id=${encodeURIComponent(targetId)}`, { method: "DELETE" });
       const data = await res.json();
       if (data.success) {
         showAlert({ type: "success", text: "프로젝트가 성공적으로 삭제되었습니다. (14일 내 휴지통에서 복원 가능)" });
@@ -1183,10 +1189,10 @@ ${recruitForm.introduction}
 
             {/* 기존 프로젝트 목록 */}
             {projects.map((p) => {
-              const isSyncing = syncingProjectId === p.id;
+              const isSyncing = Boolean(syncingProjectId && p.id && syncingProjectId === p.id);
               return (
                 <div
-                  key={p.id}
+                  key={p.id || p.gasProjectId || p.spreadsheetId}
                   className="p-4 rounded-2xl border border-emerald-100 shadow-xs hover:border-emerald-300 bg-white transition-all flex flex-col justify-between gap-3"
                   data-easybot-hint={`프로젝트 카드: '${p.name}' 자동화 프로젝트입니다. 구글 시트 바인딩 및 코드 배포 상태를 확인합니다.`}
                 >
@@ -1341,13 +1347,13 @@ ${recruitForm.introduction}
                       <button
                         type="button"
                         onClick={() => handleCopyAgentBridgeUrl(p)}
-                        disabled={copyingBridgeProjectId === p.id}
+                        disabled={Boolean(copyingBridgeProjectId && p.id && copyingBridgeProjectId === p.id)}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-lg transition-colors border border-purple-200/80 shadow-2xs whitespace-nowrap text-xs cursor-pointer active:scale-95 disabled:opacity-50"
                         data-easybot-hint="AI 에이전트 연동: 안티그라비티나 외부 AI에 전달할 원격 코드 주입용 웹 주소와 프롬프트를 원클릭 복사합니다."
                         title="안티그라비티/외부 AI에 전달하여 코드를 자동 주입할 웹 주소를 복사합니다."
                       >
                         <Bot className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                        <span>{copyingBridgeProjectId === p.id ? "주소 생성 중..." : "AI 연동 주소 복사"}</span>
+                        <span>{Boolean(copyingBridgeProjectId && p.id && copyingBridgeProjectId === p.id) ? "주소 생성 중..." : "AI 연동 주소 복사"}</span>
                         <Copy className="w-3 h-3 text-purple-600/70 shrink-0" />
                       </button>
                     </div>
@@ -1360,13 +1366,13 @@ ${recruitForm.introduction}
                       <button
                         type="button"
                         onClick={() => handleSyncProjectCode(p)}
-                        disabled={syncingCodeProjectId === p.id}
+                        disabled={Boolean(syncingCodeProjectId && p.id && syncingCodeProjectId === p.id)}
                         className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 text-slate-600 font-bold rounded-lg transition-all border border-slate-200 cursor-pointer shadow-2xs text-[11px] whitespace-nowrap disabled:opacity-50"
                         title="구글 시트에서 직접 수정한 최신 Apps Script 코드를 SheetBot DB로 가져옵니다."
                         data-easybot-hint="최신 코드 동기화: 사용자가 구글 시트에서 직접 수정한 Apps Script 최신 코드를 즉시 읽어와 SheetBot에 일치시킵니다."
                       >
-                        <RefreshCw className={`w-3 h-3 ${syncingCodeProjectId === p.id ? "animate-spin text-emerald-600" : "text-slate-500"}`} />
-                        <span>{syncingCodeProjectId === p.id ? "동기화 중..." : "코드 동기화"}</span>
+                        <RefreshCw className={`w-3 h-3 ${Boolean(syncingCodeProjectId && p.id && syncingCodeProjectId === p.id) ? "animate-spin text-emerald-600" : "text-slate-500"}`} />
+                        <span>{Boolean(syncingCodeProjectId && p.id && syncingCodeProjectId === p.id) ? "동기화 중..." : "코드 동기화"}</span>
                       </button>
 
                       {/* ✏️ 자연어 요구사항 수정 및 AI 코드 재배포 버튼 */}
