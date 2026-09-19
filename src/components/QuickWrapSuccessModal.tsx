@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Copy, Check, X, Link as LinkIcon, Sparkles } from "lucide-react";
+import { Copy, Check, X, Link as LinkIcon, Sparkles, ExternalLink } from "lucide-react";
 
 interface QuickWrapSuccessModalProps {
   isOpen: boolean;
@@ -22,16 +22,35 @@ export default function QuickWrapSuccessModal({
   projectName,
   isExisting = false,
 }: QuickWrapSuccessModalProps) {
-  const [copied, setCopied] = useState(false);
+  const [copiedType, setCopiedType] = useState<"antigravity" | "copy" | null>(null);
 
   if (!isOpen) return null;
 
-  // 복사 시 안티그라비티가 즉시 인식할 수 있는 최적화된 바이브코딩 텍스트 복사
+  // 🚀 안티그라비티 원클릭 열기: 프롬프트 자동 복사 + antigravity:// 딥링크 실행
+  const handleOpenAntigravity = async () => {
+    const textToCopy =
+      promptTemplate ||
+      `구글 시트 래핑 주소: ${bridgeUrl}\n위 구글 시트 구조를 확인하고 원하는 자동화 기능을 주입해줘:\n[추가할 기능 입력]`;
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+    } catch (e) {}
+
+    if (typeof window !== "undefined") {
+      window.open("antigravity://", "_blank");
+    }
+
+    setCopiedType("antigravity");
+    setTimeout(() => setCopiedType(null), 4000);
+  };
+
+  // 📋 일반 프롬프트/주소 복사: Cursor, Claude Code 등 타 에이전트 사용자용
   const handleCopy = async () => {
-    const textToCopy = promptTemplate || `아래 웹 주소를 통해 내 구글 시트의 헤더 구조와 기존 코드를 확인하고, 필요한 기능 코드를 주입해줘:\n웹 주소: ${bridgeUrl}\n요구사항: 내 구글 시트 구조에 맞는 스프레드시트 자동화 메뉴와 기능을 주입해줘.`;
+    const textToCopy =
+      promptTemplate ||
+      `아래 웹 주소를 통해 내 구글 시트의 헤더 구조와 기존 코드를 확인하고, 필요한 기능 코드를 주입해줘:\n웹 주소: ${bridgeUrl}\n요구사항: 내 구글 시트 구조에 맞는 스프레드시트 자동화 메뉴와 기능을 주입해줘.`;
     await navigator.clipboard.writeText(textToCopy);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    setCopiedType("copy");
+    setTimeout(() => setCopiedType(null), 2500);
   };
 
   return (
@@ -105,28 +124,62 @@ export default function QuickWrapSuccessModal({
             </div>
           </div>
 
-          {/* [2] 🌟 눈에 확 띄는 초대형 메인 복사하기 버튼 (단 하나로 집중!) */}
-          <button
-            type="button"
-            onClick={handleCopy}
-            className={`w-full py-4 px-6 rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all shadow-lg cursor-pointer active:scale-98 ${
-              copied
-                ? "bg-slate-900 text-emerald-300 shadow-slate-900/20 border-2 border-emerald-500"
-                : "bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-700 text-white shadow-emerald-600/30 hover:shadow-xl hover:shadow-emerald-600/35 hover:scale-[1.01]"
-            }`}
-          >
-            {copied ? (
-              <>
-                <Check className="w-5 h-5 text-emerald-400 stroke-[3]" />
-                <span>래핑 주소가 복사되었습니다!</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-5 h-5" />
-                <span>래핑 주소 복사하기</span>
-              </>
+          {/* [2] 🌟 듀얼 액션 버튼 영역 (안티그라비티 원클릭 + 복사하기) */}
+          <div className="space-y-2.5">
+            {/* 1단: 🚀 안티그라비티 원클릭 열기 메인 CTA 버튼 */}
+            <button
+              type="button"
+              onClick={handleOpenAntigravity}
+              className={`w-full py-3.5 px-6 rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all shadow-lg cursor-pointer active:scale-98 ${
+                copiedType === "antigravity"
+                  ? "bg-slate-900 text-purple-300 shadow-slate-900/20 border-2 border-purple-400"
+                  : "bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 text-white shadow-purple-600/30 hover:shadow-xl hover:shadow-purple-600/35 hover:scale-[1.01]"
+              }`}
+            >
+              {copiedType === "antigravity" ? (
+                <>
+                  <Check className="w-5 h-5 text-purple-400 stroke-[3]" />
+                  <span>프롬프트 복사 & 안티그라비티 실행됨!</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-base sm:text-lg">🚀</span>
+                  <span>안티그라비티 열기 및 자동화 시작</span>
+                  <ExternalLink className="w-4 h-4 opacity-80" />
+                </>
+              )}
+            </button>
+
+            {/* 안티그라비티 클릭 후 실시간 안내 말풍선 */}
+            {copiedType === "antigravity" && (
+              <div className="p-2.5 bg-purple-50 rounded-xl border border-purple-200 text-[11px] text-purple-900 font-bold text-center animate-in fade-in duration-200 shadow-2xs">
+                ✨ 프롬프트가 클립보드에 자동 복사되었습니다! 안티그라비티 창에서 바로 <strong>[Ctrl + V]</strong>로 붙여넣으세요.
+              </div>
             )}
-          </button>
+
+            {/* 2단: 📋 일반 복사하기 서브 버튼 (Cursor, Claude Code, Windsurf 등) */}
+            <button
+              type="button"
+              onClick={handleCopy}
+              className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 ${
+                copiedType === "copy"
+                  ? "bg-slate-900 text-emerald-300 border border-emerald-500"
+                  : "bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-200/80 hover:border-slate-300"
+              }`}
+            >
+              {copiedType === "copy" ? (
+                <>
+                  <Check className="w-4 h-4 text-emerald-400 stroke-[3]" />
+                  <span>프롬프트가 클립보드에 복사되었습니다!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4 text-slate-500" />
+                  <span>프롬프트만 복사하기 (Cursor · Claude Code 등)</span>
+                </>
+              )}
+            </button>
+          </div>
 
           {/* [3] 눈에 쏙 들어오는 3단계 사용 및 결과 확인 가이드 */}
           <div className="bg-slate-50 border-2 border-emerald-100 rounded-2xl p-4.5 space-y-3">
@@ -138,13 +191,15 @@ export default function QuickWrapSuccessModal({
             <div className="space-y-2.5 text-xs">
               {/* 1단계 */}
               <div className="flex items-start gap-2.5 bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-2xs">
-                <span className="w-5 h-5 rounded-full bg-emerald-500 text-white font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">
+                <span className="w-5 h-5 rounded-full bg-purple-600 text-white font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">
                   1
                 </span>
                 <div className="leading-relaxed text-slate-700">
-                  위 <strong className="text-emerald-700 font-extrabold">[래핑 주소 복사하기]</strong> 버튼을 누릅니다.
+                  위 <strong className="text-purple-700 font-extrabold">[🚀 안티그라비티 열기]</strong>를 누르면 프롬프트가 복사되고 앱이 자동 실행됩니다.<br />
+                  <span className="text-[11px] text-slate-500">※ Cursor, Claude Code 사용자는 [프롬프트만 복사하기]를 누르시면 됩니다.</span>
                 </div>
               </div>
+
 
               {/* 2단계 */}
               <div className="flex items-start gap-2.5 bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-2xs">
