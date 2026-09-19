@@ -14,6 +14,7 @@ import { getAiModelSettings } from "@/lib/ai-settings";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { recordAiUsageLog } from "@/lib/ai-usage";
 import { ensureStandardManifest, generateSecureEgdeskConfig, generateStandardTokenRecharge } from "@/lib/gas-manifest";
+import { sanitizeGasScriptCode } from "@/lib/gas-sanitizer";
 
 /**
  * 브릿지 토큰을 통해 프로젝트를 조회하고 삭제(소프트 삭제/PENDING_DELETE/TRASHED) 및 소유자 탈퇴 여부를 검증합니다.
@@ -239,8 +240,9 @@ export async function GET(request: NextRequest) {
           "1. [개인 API 키 요구 금지]: 사용자에게 Gemini/OpenAI API 키를 요구하는 팝업/UI를 만들지 마세요. 이미 주입된 egdeskToolsCall('ai-caller', 'ai_caller_call', ...) 함수를 호출하세요.",
           "2. [실제 헤더 1:1 매핑]: 상단에 보고서 타이틀/결재란이 있어 헤더가 10행 등에 위치하는 경우, suggestedHeaderRow 및 dataStartRow를 엄격히 준수하여 신규 데이터를 기입하세요.",
           "3. [다중 품목 분리 삽입]: 발주서나 견적서 등 다중 품목 문서는 1건당 1행이 아니라 품목별로 1행씩(N개 행) 분리하여 시트에 순차 기록하세요.",
-          "4. [onOpen 메뉴 등록]: 구글 시트 상단에 '🚀 SheetBot 메뉴'를 등록하는 onOpen() 함수를 반드시 포함하세요. 업무 기능 이후 구분선(.addSeparator()) 아래에 3대 고정 기본 메뉴 ['🤖 SheetBot AI 코파일럿', '💳 토큰 잔액 확인 및 즉시 충전', '📖 SheetBot 사용법 및 활용사례']를 필수로 순서대로 포함하세요.",
+          "4. [onOpen 메뉴 등록 및 상단 메뉴 슬림화]: 구글 시트 상단에 '🚀 SheetBot 메뉴'를 등록하는 onOpen() 함수를 포함하세요. 업무 기능 이후 구분선(.addSeparator()) 아래에는 오직 단 1개의 일체형 제어 센터인 ['🤖 SheetBot AI 코파일럿'](showAiCopilotSidebar)만 배치하세요. '토큰 충전', '사용법 및 활용사례' 등은 상단 메뉴에 절대 개별 등록하지 말고 코파일럿 사이드바 내부로 100% 일원화해야 합니다.",
           "5. [AI 응답 언래핑 함수]: parseAiCallerResponse(toolRes) 유틸리티 함수를 Code.gs에 포함하여 안전하게 JSON을 추출하세요.",
+          "6. [빈 시트 기본 탭 무손실 단일화]: 빈 시트 초기화 시 insertSheet로 새 탭을 추가하여 탭을 2개로 쪼개지 마세요. 기본 탭(Sheet1 또는 시트1)이 1개뿐인 경우 반드시 ss.getSheets()[0].setName(TARGET_NAME)으로 이름을 변경하여 단 1개의 메인 탭만 유지하세요.",
         ],
         postEndpoint,
         postPayloadExample: {
@@ -273,7 +275,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { scriptCode, manifest, comment = "AI 에이전트 자동 코드 주입" } = body;
+    const { scriptCode, manifest, comment = "AI 에이전트 자동 코드 주입", spreadsheetId } = body;
 
     if (!scriptCode || !scriptCode.trim()) {
       return NextResponse.json(
@@ -281,6 +283,9 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    // 🚀 상단 메뉴 슬림화 및 코파일럿 단일 메뉴 표준 정제 강제 적용
+    const sanitizedScriptCode = sanitizeGasScriptCode(scriptCode.trim());
 
     // 0. 프로젝트 검증 및 410 Gone 차단 검사
     const { project, errorResponse } = await findAndValidateBridgeProject(token || "");
@@ -332,6 +337,8 @@ export async function POST(request: Request) {
       ? { asVisitor: true, visitorSessionId }
       : {};
 
+    const targetSpreadsheetId = project.spreadsheet_id || spreadsheetId;
+
     // 0-0. 기존 프로젝트 목록에서 gasProjectId 실존 여부 및 시트 바인딩 확인
     try {
       const listRes = await callAppsScriptTool("apps_script_list_projects", {}, visitorOptions);
@@ -340,8 +347,7 @@ export async function POST(request: Request) {
         (p: any) =>
           p.id === gasProjectId ||
           p.projectId === gasProjectId ||
-          p.containerId === project.spreadsheet_id ||
-          p.spreadsheetId === project.spreadsheet_id
+          (targetSpreadsheetId && (p.containerId === targetSpreadsheetId || p.spreadsheetId === targetSpreadsheetId))
       );
       if (matched) {
         gasProjectId = matched.id || matched.projectId;
@@ -356,11 +362,11 @@ export async function POST(request: Request) {
     }
 
     // 바인딩된 Apps Script 프로젝트가 아직 없으면 생성
-    if (!gasProjectId && project.spreadsheet_id) {
+    if (!gasProjectId && targetSpreadsheetId) {
       const boundRes = await callAppsScriptTool("apps_script_create_bound", {
-        fileId: project.spreadsheet_id,
+        fileId: targetSpreadsheetId,
         title: project.name || "SheetBot 자동화",
-        scriptCode,
+        scriptCode: sanitizedScriptCode,
       }, visitorOptions);
 
       if (boundRes && (boundRes.id || boundRes.projectId)) {
@@ -414,11 +420,11 @@ export async function POST(request: Request) {
       console.warn("[Gas-Bridge POST] Setup tunnel warning:", tunnelErr.message);
     }
 
-    // 2. Code.gs 파일 기록
+    // 2. Code.gs 파일 기록 (상단 메뉴 슬림화 정제 완료된 소스코드)
     await callAppsScriptTool("apps_script_write_file", {
       projectId: gasProjectId,
       fileName: "Code.gs",
-      content: scriptCode,
+      content: sanitizedScriptCode,
     }, visitorOptions);
 
     // 3. appsscript.json 매니페스트 기록
@@ -469,18 +475,34 @@ export async function POST(request: Request) {
       }
     }
 
-    // 6. DB 상태 갱신
+    // 6. DB 상태 갱신 (Dual Naming Policy: 기본 이름일 경우 의미 있는 이름으로 자동 갱신)
+    const updatePayload: any = {
+      spreadsheet_id: targetSpreadsheetId,
+      gas_project_id: gasProjectId,
+      script_id: scriptId || gasProjectId,
+      script_url: scriptUrl,
+      script_code: sanitizedScriptCode,
+      manifest: finalManifest,
+      webapp_url: webAppUrl,
+      updated_at: new Date().toISOString(),
+    };
+
+    // 프로젝트 이름이 기본값이면 배포 comment를 기반으로 스마트 갱신
+    const currentName = String(project.name || "").trim();
+    const isDefaultName =
+      !currentName ||
+      currentName === "스마트 자동화 시트" ||
+      currentName === "[SheetBot] 스마트 자동화 시트" ||
+      currentName === "시트봇 자동화 프로젝트";
+
+    if (isDefaultName && comment && comment !== "AI 에이전트 자동 코드 주입") {
+      const cleanComment = comment.replace(/(기능\s*주입|자동화\s*코드|자동\s*주입|개발\s*완료)$/i, "").trim();
+      updatePayload.name = `[SheetBot] ${cleanComment}`;
+    }
+
     await updateRows(
       "sheetbot_projects",
-      {
-        gas_project_id: gasProjectId,
-        script_id: scriptId || gasProjectId,
-        script_url: scriptUrl,
-        script_code: scriptCode,
-        manifest: finalManifest,
-        webapp_url: webAppUrl,
-        updated_at: new Date().toISOString(),
-      },
+      updatePayload,
       {
         filters: { id: project.id },
       }

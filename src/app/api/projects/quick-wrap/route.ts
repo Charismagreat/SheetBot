@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse, NextRequest } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
-import { queryTable, insertRows, updateRows } from "@/lib/egdesk-helpers";
+import { queryTable, insertRows, updateRows, getSpreadsheetFullContext } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import crypto from "crypto";
 
@@ -85,9 +85,31 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString();
 
     if (!project) {
-      // 2. 신규 프로젝트 즉시 생성
+      // 2. 신규 프로젝트 즉시 생성 (Dual Naming Policy: 빈 시트는 [SheetBot], 기존 시트는 원래 이름 100% 보존)
       const projectId = `proj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      const projectName = templateName || (isNewSheet ? "스마트 자동화 시트" : "시트봇 자동화 프로젝트");
+      let projectName = templateName || "";
+
+      if (isNewSheet) {
+        // [빈 시트]: [SheetBot] 접두사 표준 적용
+        projectName = templateName
+          ? `[SheetBot] ${templateName.replace(/^\[SheetBot\]\s*/i, "")}`
+          : "[SheetBot] 스마트 자동화 시트";
+      } else if (!projectName && spreadsheetId) {
+        // [기존 시트]: 구글 시트 원본 파일명을 100% 그대로 프로젝트명으로 채택
+        try {
+          const fullContext = await getSpreadsheetFullContext(spreadsheetId, 1);
+          if (fullContext?.metadata?.title) {
+            projectName = fullContext.metadata.title.trim();
+          }
+        } catch (e: any) {
+          console.warn("[Quick-Wrap] Failed to get spreadsheet title:", e.message);
+        }
+      }
+
+      if (!projectName) {
+        projectName = isNewSheet ? "[SheetBot] 스마트 자동화 시트" : "시트봇 자동화 프로젝트";
+      }
+
       const finalSheetUrl = isNewSheet ? "https://sheets.new" : rawSheetUrl;
 
       const newRow = {

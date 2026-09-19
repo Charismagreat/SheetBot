@@ -45,12 +45,12 @@ description: Google 스프레드시트 분석 및 Google Apps Script(GAS) 자동
    - 시트에 감지된 실제 컬럼(A열~Z열)의 순서와 개수를 1:1로 엄격히 맞추어 배열을 구성합니다.
 4. **다중 품목 분리 삽입**:
    - 발주서, 견적서, 거래명세서 등 품목이 여러 개인 문서는 1행으로 뭉뚱그리지 않고 품목당 1행씩(총 N개 행) 분리 삽입합니다.
-5. **표준 UI 및 3대 기본 메뉴 진입점**:
+5. **상단 메뉴 슬림화 및 코파일럿 단일 제어 센터 원칙 (절대 준수)**:
    - `onOpen()` 함수에서 반드시 `🚀 SheetBot 메뉴`를 등록합니다.
-   - 업무 기능 등록 후 구분선(`.addSeparator()`) 아래에 다음 **3대 고정 기본 메뉴**를 순서대로 반드시 포함합니다:
+   - 업무 기능 등록 후 구분선(`.addSeparator()`) 아래에는 오직 **단 1개의 제어 센터**만 배치합니다:
      - `🤖 SheetBot AI 코파일럿` (`showAiCopilotSidebar`)
-     - `💳 토큰 잔액 확인 및 즉시 충전` (`openTokenRechargeModal`)
-     - `📖 SheetBot 사용법 및 활용사례` (`openSheetBotGuide`)
+   - ⚠️ **[상단 메뉴 등록 엄격 금지]**: '토큰 잔액 확인 및 즉시 충전', 'SheetBot 사용법 및 활용사례' 등 시스템/관리 메뉴를 상단 메뉴 바에 개별 항목으로 절대 추가하지 마십시오.
+   - 이 모든 기능은 '🤖 SheetBot AI 코파일럿' 사이드바 내부 4단 제어 센터로 100% 일원화되어야 합니다. (단, 사이드바 내부 연동을 위해 `openTokenRechargeModal`, `openSheetBotGuide` 함수 정의는 `Code.gs` 하단에 안전하게 보존)
    - 웹 설문/신청서 요구 시 `doGet(e)` + Tailwind CSS 기반 모바일 반응형 독립 웹페이지 폼을 제공합니다.
 6. **SMS 문자 발송 표준 프로세스 (절대 원칙)**:
    - 가짜 성공(Mock) 절대 금지: `egdeskToolsCall('phone', 'phone_send', ...)`를 통한 실제 발송 구현.
@@ -58,6 +58,10 @@ description: Google 스프레드시트 분석 및 Google Apps Script(GAS) 자동
    - 기기 미연결 시: 즉시 발송을 차단하고 2가지 대안 모달(`showSmsDeviceNoticeModal`) 표출.
    - 정상 연결 시: 기기명, 무료 연동 상태, 발송 건수가 명시된 [점검 완료 및 발송 확인] 일체형 알림창을 띄워 사용자 최종 승인 후 발송.
    - 투명한 결과 피드백: 시트의 결과메시지 열(`스마트폰(기기명) 실제 전송 완료`) 및 SQLite 대장에 투명 기록.
+7. **빈 시트 기본 탭 무손실 단일화 (Sheet1 Rename)**:
+   - 신규 빈 시트에서 시작할 때, `insertSheet(targetName)`으로 새 탭을 추가하지 않고, 반드시 기존 기본 탭(`Sheet1` 또는 `시트1`)의 이름을 `sheets[0].setName(targetName)`으로 변경하여 단 1개의 메인 탭으로 운영합니다.
+8. **임의 시트 매핑 절대 금지 (Strict No-Arbitrary Mapping)**:
+   - 브릿지 URL에 `spreadsheetId`가 없거나 새 시트 자동 생성이 불가능할 때, 사용자의 확인 없이 드라이브에 있는 과거 기존 시트 ID를 임의로 탐색하여 연결하거나 덮어씌워 배포하지 않습니다. 반드시 사용자에게 시트 생성을 요청하거나 시트 주소를 확인받아야 합니다.
 
 ---
 

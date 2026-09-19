@@ -7,6 +7,7 @@ import { recordAiUsageLog } from "@/lib/ai-usage";
 import { getAiModelSettings, getModelTokenMultiplier } from "@/lib/ai-settings";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { queryTable } from "@/lib/setup-db";
+import { sanitizeGasScriptCode } from "@/lib/gas-sanitizer";
 
 // 구글 스프레드시트 URL에서 ID 추출
 function extractSpreadsheetId(urlOrId: string): string | null {
@@ -322,7 +323,7 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
          \`\`\`
     - 🛠️ [신규 시트 양식/엑셀 데이터 초기화 함수 - setupInitialSheetLayout]:
       - 사용자가 빈 구글 시트에서 시작하거나 엑셀 데이터를 가져왔을 때를 대비하여, setupInitialSheetLayout() 함수를 구현하세요:
-        * 대상 시트 탭이 없으면 새로 생성,
+        * 대상 시트 탭이 없을 때 기존 탭이 'Sheet1' 또는 '시트1' 1개뿐인 빈 시트라면 추가(insertSheet)하지 않고 기존 탭 이름을 대상 탭명으로 변경(sheets[0].setName)하여 탭이 2개로 쪼개지는 것을 방지하고, 이미 다른 업무 탭들이 존재할 때만 새로 생성(insertSheet),
         * 1행에 확정된 컬럼 헤더들을 깔끔하게 채우고 배경색(에메랄드 또는 네이비 #1e293b)과 굵은 글씨 스타일 적용,
         * 각 열의 너비를 내용에 맞게 자동 조절(autoResizeColumns),
         * 완료 시 SpreadsheetApp.getUi().alert("✅ 시트 양식 및 초기 설정이 완료되었습니다.") 안내.
@@ -588,48 +589,8 @@ ${prompt}
         scriptCode = data.scriptCode["Code.gs"] || Object.values(data.scriptCode).join("\n\n");
       }
 
-      // 표준 메뉴 규칙 강제: ui.createMenu('...')를 무조건 ui.createMenu('🚀 SheetBot 메뉴')로 100% 통일
-      scriptCode = scriptCode.replace(/ui\.createMenu\s*\(\s*(['"`]).*?\1\s*\)/g, "ui.createMenu('🚀 SheetBot 메뉴')");
-
-      // 🚀 상단 메뉴 극단적 슬림화 보정: 메뉴 바에서 '토큰 충전' 및 '사용법' 개별 항목 제거 (사이드바 내부로 100% 일원화)
-      scriptCode = scriptCode.replace(
-        /\.addItem\s*\(\s*['"`][^'"`]*?(토큰\s*잔액|토큰\s*충전|즉시\s*충전)[^'"`]*?['"`]\s*,\s*['"`]openTokenRechargeModal['"`]\s*\)/g,
-        ""
-      );
-      scriptCode = scriptCode.replace(
-        /\.addItem\s*\(\s*['"`][^'"`]*?(사용법|활용사례|가이드)[^'"`]*?['"`]\s*,\s*['"`]openSheetBotGuide['"`]\s*\)/g,
-        ""
-      );
-
-      // 🤖 'showAiCopilotSidebar' 단일 제어 메뉴 자가 보정: 누락 시 구분선과 함께 자동 주입
-      if (!scriptCode.includes("showAiCopilotSidebar")) {
-        if (scriptCode.includes(".addToUi()")) {
-          scriptCode = scriptCode.replace(
-            /\.addToUi\s*\(\s*\)/g,
-            ".addSeparator()\n    .addItem('🤖 SheetBot AI 코파일럿', 'showAiCopilotSidebar')\n    .addToUi()"
-          );
-        }
-      }
-
-      // openTokenRechargeModal 함수 정의 부재 시 자동 보강 (사이드바 내부 호출용)
-      if (!/function\s+openTokenRechargeModal\s*\(/.test(scriptCode)) {
-        scriptCode += `\n\nfunction openTokenRechargeModal() {
-  var html = HtmlService.createHtmlOutput(
-    '<!DOCTYPE html><html><head><base target="_blank"><script>window.onload=function(){window.open("https://sheetbot.cloud/billing","_blank");google.script.host.close();};</script><style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f8fafc;color:#334155;}.btn{display:inline-block;margin-top:10px;padding:8px 16px;background:#059669;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:12px;}</style></head><body><div style="font-weight:bold;font-size:13px;margin-bottom:6px;">💳 SheetBot 토큰 충전 센터</div><div style="font-size:11px;color:#64748b;margin-bottom:10px;">새 창이 열리지 않으면 아래 버튼을 클릭하세요.</div><a href="https://sheetbot.cloud/billing" target="_blank" class="btn">토큰 충전 페이지 열기</a></body></html>'
-  ).setWidth(340).setHeight(150);
-  SpreadsheetApp.getUi().showModalDialog(html, "💳 SheetBot 토큰 충전 센터");
-}`;
-      }
-
-      // openSheetBotGuide 함수 정의 부재 시 자동 보강 (링크 대상: https://sheetbot.cloud/use-cases)
-      if (!/function\s+openSheetBotGuide\s*\(/.test(scriptCode)) {
-        scriptCode += `\n\nfunction openSheetBotGuide() {
-  var html = HtmlService.createHtmlOutput(
-    '<!DOCTYPE html><html><head><base target="_blank"><script>window.onload=function(){window.open("https://sheetbot.cloud/use-cases","_blank");google.script.host.close();};</script><style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f8fafc;color:#334155;}.btn{display:inline-block;margin-top:10px;padding:8px 16px;background:#4f46e5;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:12px;}</style></head><body><div style="font-weight:bold;font-size:13px;margin-bottom:6px;">🌐 SheetBot 활용사례 및 가이드로 이동합니다</div><div style="font-size:11px;color:#64748b;margin-bottom:10px;">새 탭이 열리지 않으면 아래를 클릭하세요.</div><a href="https://sheetbot.cloud/use-cases" target="_blank" class="btn">sheetbot.cloud/use-cases 바로가기</a></body></html>'
-  ).setWidth(340).setHeight(130);
-  SpreadsheetApp.getUi().showModalDialog(html, "SheetBot 사용법 및 활용사례");
-}`;
-      }
+      // 표준 메뉴 규칙 강제 및 상단 메뉴 슬림화/코파일럿 일원화 공통 정제기 실행
+      scriptCode = sanitizeGasScriptCode(scriptCode);
 
       return {
         summary: typeof data.summary === "string" ? data.summary : "AI 자동 생성 Apps Script",
