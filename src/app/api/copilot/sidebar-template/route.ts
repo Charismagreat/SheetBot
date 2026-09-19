@@ -452,6 +452,8 @@ export async function GET() {
       align-items: center;
       justify-content: center;
       gap: 5px;
+      text-decoration: none;
+      box-sizing: border-box;
       transition: all 0.2s;
     }
     .btn-phone-register:hover {
@@ -664,9 +666,10 @@ export async function GET() {
     <div class="phone-desc">
       토큰 잔액이 부족할 때, 오류 발생시 문자로 안내 받으세요
     </div>
-    <button class="btn-phone-register" onclick="openPhoneModal()" title="문자 수신/발신 기기 등록">
+    <a href="http://localhost:4004/dashboard/notifications" target="_blank" class="btn-phone-register" id="btn-phone-register-link" title="문자 수신/발신 기기 등록 (알림 센터로 이동)">
       <span>📲 문자 수신/발신 기기 등록</span>
-    </button>
+      <span style="font-size: 11px; opacity: 0.8;">↗</span>
+    </a>
   </div>
 
   <!-- [3] 안티그라비티 허브 -->
@@ -899,13 +902,7 @@ export async function GET() {
     }
 
     function openPhoneModal() {
-      if (window.google && window.google.script && window.google.script.run) {
-        try {
-          google.script.run.openPhoneRegisterModal();
-          return;
-        } catch(e) {}
-      }
-      alert('스마트폰 및 비상 알림 번호 등록은 구글 시트 상단 메뉴 [SheetBot 메뉴] 또는 앱스스크립트에서 안전하게 지원됩니다.');
+      window.open('http://localhost:4004/dashboard/notifications', '_blank');
     }
 
     var BASE_DASHBOARD_URL = 'http://localhost:4004/dashboard';
