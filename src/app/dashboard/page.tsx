@@ -92,6 +92,12 @@ export default function DashboardPage() {
           }));
         }
       }
+      if (params.get("modal") === "fde-recruit" || params.get("recruit") === "true") {
+        setIsFdeRecruitOpen(true);
+        if (params.get("apply") === "true") {
+          setIsApplyingFde(true);
+        }
+      }
       let sheetUrl = params.get("sheetUrl");
       let templateName = params.get("templateName") || "";
       let presetPrompt = params.get("presetPrompt") || "";
