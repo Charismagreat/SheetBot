@@ -934,10 +934,8 @@ export async function GET() {
     function openPhoneModal() {
       if (window.google && window.google.script && window.google.script.run) {
         try {
-          if (typeof google.script.run.openPhoneRegisterModal === 'function') {
-            google.script.run.openPhoneRegisterModal();
-            return;
-          }
+          google.script.run.openPhoneRegisterModal();
+          return;
         } catch(e) {}
       }
       alert('스마트폰 및 비상 알림 번호 등록은 구글 시트 상단 메뉴 [SheetBot 메뉴] 또는 앱스스크립트에서 안전하게 지원됩니다.');
@@ -946,10 +944,8 @@ export async function GET() {
     function openFdeRequestModal() {
       if (window.google && window.google.script && window.google.script.run) {
         try {
-          if (typeof google.script.run.openFdeRequestModal === 'function') {
-            google.script.run.openFdeRequestModal();
-            return;
-          }
+          google.script.run.openFdeRequestModal();
+          return;
         } catch(e) {}
       }
       window.open('https://sheetbot.cloud/dashboard', '_blank');
