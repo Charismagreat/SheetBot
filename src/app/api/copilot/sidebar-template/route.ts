@@ -400,6 +400,65 @@ export async function GET() {
       transform: translateX(4px);
     }
 
+    /* [2-1] 비상 SMS 및 스마트폰 연동 카드 */
+    .phone-card {
+      width: 100%;
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      border: 1px solid #cbd5e1;
+      border-radius: 9px;
+      padding: 10px 10px;
+      margin-bottom: 7px;
+      box-sizing: border-box;
+    }
+    .phone-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .phone-title {
+      font-size: 11.5px;
+      font-weight: 800;
+      color: #1e293b;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .phone-tag {
+      font-size: 9.5px;
+      padding: 1px 5px;
+      background: #e2e8f0;
+      color: #475569;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+    .phone-desc {
+      font-size: 10.5px;
+      color: #64748b;
+      line-height: 1.4;
+      margin-bottom: 7px;
+    }
+    .btn-phone-register {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid #94a3b8;
+      color: #1e293b;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 6px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: all 0.2s;
+    }
+    .btn-phone-register:hover {
+      background: #e2e8f0;
+      border-color: #64748b;
+    }
+
     /* [3] 안티그라비티 AI 스튜디오 허브 */
     .studio-card {
       width: 100%;
@@ -581,6 +640,22 @@ export async function GET() {
       <span>📖 40+ 실무 활용사례 및 가이드</span>
       <span style="font-size: 10px; opacity: 0.7;">↗</span>
     </a>
+  </div>
+
+  <!-- [2-1] 비상 SMS 및 스마트폰 연동 카드 -->
+  <div class="phone-card">
+    <div class="phone-header">
+      <div class="phone-title">
+        <span>📱 비상 SMS & 스마트폰 연동</span>
+      </div>
+      <span class="phone-tag">무료 안심</span>
+    </div>
+    <div class="phone-desc">
+      토큰 소진/실행 오류 비상 안내를 스마트폰 문자로 받고, 고객 무료 단체 문자도 함께 이용하세요.
+    </div>
+    <button class="btn-phone-register" onclick="openPhoneModal()" title="휴대폰 번호 등록 및 스마트폰 기기 연결">
+      <span>📲 전화번호 등록 / 기기 연결</span>
+    </button>
   </div>
 
   <!-- [3] 안티그라비티 AI 스튜디오 허브 -->
@@ -800,6 +875,18 @@ export async function GET() {
         } catch(e) {}
       }
       window.open('https://sheetbot.cloud/dashboard/pricing', '_blank');
+    }
+
+    function openPhoneModal() {
+      if (window.google && window.google.script && window.google.script.run) {
+        try {
+          if (typeof google.script.run.openPhoneRegisterModal === 'function') {
+            google.script.run.openPhoneRegisterModal();
+            return;
+          }
+        } catch(e) {}
+      }
+      alert('스마트폰 및 비상 알림 번호 등록은 구글 시트 상단 메뉴 [SheetBot 메뉴] 또는 앱스스크립트에서 안전하게 지원됩니다.');
     }
 
     function getBridgePromptText() {
