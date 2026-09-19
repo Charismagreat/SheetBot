@@ -978,7 +978,7 @@ export async function GET() {
       </div>
       <span class="templates-tag">원클릭 복제</span>
     </div>
-    <div class="templates-grid">
+    <div class="templates-grid" id="templates-grid">
       <a href="http://localhost:4004/wrap?tpl=delivery" target="_blank" class="template-chip" title="배송·송장 실시간 배송상태 자동조회">
         <span>📦 송장 자동조회</span>
       </a>
@@ -1030,34 +1030,34 @@ export async function GET() {
   </div>
 
   <!-- [3-2] FDE 파트너스 모집 배너 -->
-  <a href="http://localhost:4004/dashboard?modal=fde-recruit" target="_blank" class="fde-recruit-card" title="시트봇 공인 FDE 파트너 지원하기">
+  <a id="fde-recruit-card" href="http://localhost:4004/dashboard?modal=fde-recruit" target="_blank" class="fde-recruit-card" title="시트봇 공인 FDE 파트너 지원하기">
     <div class="fde-recruit-header">
-      <span class="fde-recruit-badge">👨‍💻 파트너스 1기 모집</span>
-      <span style="font-size: 9.5px; color: #34d399; font-weight: 700;">수익 창출</span>
+      <span class="fde-recruit-badge" id="fde-recruit-badge">👨‍💻 파트너스 1기 모집</span>
+      <span id="fde-recruit-tag" style="font-size: 9.5px; color: #34d399; font-weight: 700;">수익 창출</span>
     </div>
-    <div class="fde-recruit-title">
+    <div class="fde-recruit-title" id="fde-recruit-title">
       시트 제작 능력을 수익으로 전환하세요
     </div>
-    <div class="fde-recruit-desc">
+    <div class="fde-recruit-desc" id="fde-recruit-desc">
       고객 맞춤 자동화 제작 건당 5만~30만원 부수입 창출
     </div>
     <div class="fde-recruit-cta">
-      <span>🚀 공인 FDE 파트너 지원하기</span>
+      <span id="fde-recruit-btn-text">🚀 공인 FDE 파트너 지원하기</span>
       <span>↗</span>
     </div>
   </a>
 
   <!-- [3-3] 💬 카카오 오픈채팅 커뮤니티 연결 -->
-  <a href="https://invite.kakao.com/tc/DiKY7rTu0w" target="_blank" class="kakao-community-card" title="시트봇 공식 오픈채팅방에서 실시간 Q&A와 꿀팁을 공유하세요">
+  <a id="kakao-community-card" href="https://invite.kakao.com/tc/DiKY7rTu0w" target="_blank" class="kakao-community-card" title="시트봇 공식 오픈채팅방에서 실시간 Q&A와 꿀팁을 공유하세요">
     <div class="kakao-left">
       <span class="kakao-icon-box">💬</span>
       <div class="kakao-text-box">
-        <span class="kakao-title">시트봇 실시간 해결 오픈채팅</span>
-        <span class="kakao-subtitle">막힐 때 실시간 질문 & 자동화 팁 공유</span>
+        <span class="kakao-title" id="kakao-community-title">시트봇 실시간 해결 오픈채팅</span>
+        <span class="kakao-subtitle" id="kakao-community-subtitle">막힐 때 실시간 질문 & 자동화 팁 공유</span>
       </div>
     </div>
     <span class="kakao-badge">
-      <span>입장하기</span>
+      <span id="kakao-community-btn-text">입장하기</span>
       <span>↗</span>
     </span>
   </a>
@@ -1079,7 +1079,7 @@ export async function GET() {
   </details>
 
   <!-- [🌟] 시트봇 다목적 공지 & 광고 배너 (정사각형 화사한 프리미엄 광고 포맷) -->
-  <a href="https://sheetbot.cloud/wrap/guide" target="_blank" class="promo-banner-card">
+  <a id="promo-banner-card" href="https://sheetbot.cloud/wrap/guide" target="_blank" class="promo-banner-card">
     <div class="ad-badge-row">
       <span class="ad-pill">📖 1분 사용법</span>
     </div>
@@ -1120,7 +1120,7 @@ export async function GET() {
     <div class="footer-meta-row">
       <span class="footer-subtext">Google 시트 AI 업무 자동화 엔진</span>
       <span class="footer-dot">&bull;</span>
-      <span class="footer-version">v3.2 Connected</span>
+      <span class="footer-version" id="footer-version">v3.3 Connected</span>
     </div>
   </footer>
 
@@ -1384,9 +1384,89 @@ export async function GET() {
       }
     }
 
+    // 실시간 동적 프로모션/배너/템플릿 Micro-Frontend 로더 (Zero-Deploy Architecture)
+    function loadDynamicPromotions() {
+      var endpoints = [
+        'http://localhost:4004/api/copilot/promotions',
+        'https://sheetbot.cloud/api/copilot/promotions'
+      ];
+      
+      function tryFetch(idx) {
+        if (idx >= endpoints.length) return;
+        fetch(endpoints[idx], { method: 'GET', cache: 'no-store' })
+          .then(function(res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+          })
+          .then(function(data) {
+            if (!data || !data.success) return;
+
+            // 1. 템플릿 그리드 동적 갱신
+            if (data.templates && data.templates.length > 0) {
+              var gridEl = document.getElementById('templates-grid');
+              if (gridEl) {
+                var chipsHtml = '';
+                data.templates.forEach(function(t) {
+                  chipsHtml += '<a href="' + t.url + '" target="_blank" class="template-chip" title="' + (t.tooltip || t.title) + '">'
+                             + '<span>' + t.icon + ' ' + t.title + '</span>'
+                             + '</a>';
+                });
+                gridEl.innerHTML = chipsHtml;
+              }
+            }
+
+            // 2. FDE 파트너스 카드 동적 갱신
+            if (data.fdeRecruit) {
+              var fdeCard = document.getElementById('fde-recruit-card');
+              if (fdeCard && data.fdeRecruit.url) fdeCard.href = data.fdeRecruit.url;
+              var fdeBadge = document.getElementById('fde-recruit-badge');
+              if (fdeBadge && data.fdeRecruit.badge) fdeBadge.innerText = data.fdeRecruit.badge;
+              var fdeTag = document.getElementById('fde-recruit-tag');
+              if (fdeTag && data.fdeRecruit.tag) fdeTag.innerText = data.fdeRecruit.tag;
+              var fdeTitle = document.getElementById('fde-recruit-title');
+              if (fdeTitle && data.fdeRecruit.title) fdeTitle.innerText = data.fdeRecruit.title;
+              var fdeDesc = document.getElementById('fde-recruit-desc');
+              if (fdeDesc && data.fdeRecruit.desc) fdeDesc.innerText = data.fdeRecruit.desc;
+              var fdeBtn = document.getElementById('fde-recruit-btn-text');
+              if (fdeBtn && data.fdeRecruit.buttonText) fdeBtn.innerText = data.fdeRecruit.buttonText;
+            }
+
+            // 3. 카카오 오픈채팅 링크 동적 갱신
+            if (data.kakaoCommunity) {
+              var kakaoCard = document.getElementById('kakao-community-card');
+              if (kakaoCard && data.kakaoCommunity.url) kakaoCard.href = data.kakaoCommunity.url;
+              var kakaoTitle = document.getElementById('kakao-community-title');
+              if (kakaoTitle && data.kakaoCommunity.title) kakaoTitle.innerText = data.kakaoCommunity.title;
+              var kakaoSub = document.getElementById('kakao-community-subtitle');
+              if (kakaoSub && data.kakaoCommunity.subtitle) kakaoSub.innerText = data.kakaoCommunity.subtitle;
+              var kakaoBtn = document.getElementById('kakao-community-btn-text');
+              if (kakaoBtn && data.kakaoCommunity.buttonText) kakaoBtn.innerText = data.kakaoCommunity.buttonText;
+            }
+
+            // 4. 광고 배너 링크 동적 갱신
+            if (data.promoBanner) {
+              var promoCard = document.getElementById('promo-banner-card');
+              if (promoCard && data.promoBanner.url) promoCard.href = data.promoBanner.url;
+            }
+
+            // 5. 푸터 버전 동적 갱신
+            if (data.footer && data.footer.version) {
+              var verEl = document.getElementById('footer-version');
+              if (verEl) verEl.innerText = data.footer.version;
+            }
+          })
+          .catch(function() {
+            tryFetch(idx + 1);
+          });
+      }
+
+      tryFetch(0);
+    }
+
     // Google Apps Script 비동기 바인딩 감지 즉시 실행
     (function initGasBridge() {
       var attempts = 0;
+      loadDynamicPromotions();
       var interval = setInterval(function() {
         attempts++;
         if (window.google && window.google.script && window.google.script.run) {
@@ -1394,6 +1474,7 @@ export async function GET() {
           setTimeout(function() {
             refreshBalance();
             checkTunnel();
+            loadDynamicPromotions();
             try {
               if (google.script.run.getSpreadsheetUrl) {
                 google.script.run.withSuccessHandler(function(url) {
