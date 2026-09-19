@@ -701,6 +701,67 @@ export async function GET() {
       border-color: rgba(56, 189, 248, 0.35);
     }
 
+    /* [3-3] 카카오 오픈채팅 커뮤니티 버튼 */
+    .kakao-community-card {
+      width: 100%;
+      background: #fee500;
+      border: 1px solid #e5cc00;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 7px;
+      box-sizing: border-box;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #371d1e;
+      transition: all 0.15s ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+    .kakao-community-card:hover {
+      background: #fada0a;
+      border-color: #d1ba00;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    }
+    .kakao-left {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .kakao-icon-box {
+      font-size: 15px;
+      line-height: 1;
+    }
+    .kakao-text-box {
+      display: flex;
+      flex-direction: column;
+      text-align: left;
+    }
+    .kakao-title {
+      font-size: 11.5px;
+      font-weight: 800;
+      color: #191919;
+      line-height: 1.25;
+    }
+    .kakao-subtitle {
+      font-size: 9.5px;
+      color: #554422;
+      margin-top: 1px;
+    }
+    .kakao-badge {
+      font-size: 10px;
+      font-weight: 700;
+      background: rgba(0, 0, 0, 0.08);
+      padding: 3px 7px;
+      border-radius: 5px;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      color: #191919;
+    }
+
     /* [4] 접이식 고급 관리 아코디언 */
     details.advanced-box {
       width: 100%;
@@ -909,6 +970,21 @@ export async function GET() {
       <span>🚀 공인 FDE 파트너 지원하기</span>
       <span>↗</span>
     </div>
+  </a>
+
+  <!-- [3-3] 💬 카카오 오픈채팅 커뮤니티 연결 -->
+  <a href="https://open.kakao.com/o/sheetbot" target="_blank" class="kakao-community-card" title="시트봇 공식 오픈채팅방에서 실시간 Q&A와 꿀팁을 공유하세요">
+    <div class="kakao-left">
+      <span class="kakao-icon-box">💬</span>
+      <div class="kakao-text-box">
+        <span class="kakao-title">시트봇 실시간 해결 오픈채팅</span>
+        <span class="kakao-subtitle">막힐 때 실시간 질문 & 자동화 팁 공유</span>
+      </div>
+    </div>
+    <span class="kakao-badge">
+      <span>입장하기</span>
+      <span>↗</span>
+    </span>
   </a>
 
   <!-- [4] 접이식 고급 관리 아코디언 -->
