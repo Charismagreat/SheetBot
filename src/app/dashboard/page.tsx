@@ -1081,10 +1081,10 @@ ${recruitForm.introduction}
                 <button
                   onClick={() => setIsNewProjectModalOpen(true)}
                   className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
-                  data-easybot-hint="새 프로젝트 추가: 새 구글 스프레드시트 URL을 바인딩하고 AI 프롬프트로 Apps Script를 자동 생성합니다."
+                  data-easybot-hint="새 스프레드시트 생성: 새 구글 스프레드시트를 생성하거나 기존 시트를 연동하여 AI 자동화 코드를 주입합니다."
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>새 프로젝트 추가</span>
+                  <span>새 스프레드시트 생성</span>
                 </button>
               )}
             </div>
