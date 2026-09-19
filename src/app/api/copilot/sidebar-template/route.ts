@@ -990,16 +990,6 @@ export async function GET() {
     }
 
     function openFdeRequestModal() {
-      // 1. 구글 시트 Apps Script 네이티브 모달 함수가 있는 경우 중앙 모달 우선 호출
-      if (window.google && window.google.script && window.google.script.run && typeof google.script.run.openFdeRequestModal === 'function') {
-        try {
-          google.script.run.openFdeRequestModal();
-          return;
-        } catch(e) {
-          console.log('Native modal fallback:', e);
-        }
-      }
-      // 2. Apps Script 네이티브 모달 부재 시 또는 독립 환경에서는 사이드바 내장 1:1 의뢰 모달 표출 (대시보드로 이동하지 않음)
       showInSidebarFdeModal();
     }
 
@@ -1011,6 +1001,10 @@ export async function GET() {
           emailInput.value = currentEmail || 'chachogreat@gmail.com';
         }
         overlay.style.display = 'block';
+        overlay.scrollTop = 0;
+        try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch(e) {}
+      } else {
+        alert('사이드바 양식을 불러오는 중입니다. 잠시 후 다시 클릭해 주세요.');
       }
     }
 
