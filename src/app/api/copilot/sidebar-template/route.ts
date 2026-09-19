@@ -973,7 +973,7 @@ export async function GET() {
   </a>
 
   <!-- [3-3] 💬 카카오 오픈채팅 커뮤니티 연결 -->
-  <a href="https://open.kakao.com/o/sheetbot" target="_blank" class="kakao-community-card" title="시트봇 공식 오픈채팅방에서 실시간 Q&A와 꿀팁을 공유하세요">
+  <a href="https://invite.kakao.com/tc/DiKY7rTu0w" target="_blank" class="kakao-community-card" title="시트봇 공식 오픈채팅방에서 실시간 Q&A와 꿀팁을 공유하세요">
     <div class="kakao-left">
       <span class="kakao-icon-box">💬</span>
       <div class="kakao-text-box">
