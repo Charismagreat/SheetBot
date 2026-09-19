@@ -22,6 +22,9 @@ export default function WrapPage() {
   }, []);
 
   const executeWrap = async (targetUrl?: string) => {
+    if (isLoading || (typeof window !== 'undefined' && (window as any).__isWrapping)) return;
+    if (typeof window !== 'undefined') (window as any).__isWrapping = true;
+
     const inputEl = document.getElementById('sheet-url-input') as HTMLInputElement | null;
     const currentInput = inputEl ? inputEl.value : sheetUrl;
     let finalUrl = (targetUrl !== undefined ? targetUrl : currentInput).trim();
@@ -76,6 +79,7 @@ export default function WrapPage() {
     } finally {
       setIsLoading(false);
       setIsStartingNew(false);
+      if (typeof window !== 'undefined') (window as any).__isWrapping = false;
     }
   };
 
@@ -593,7 +597,15 @@ export default function WrapPage() {
     document.body.removeChild(ta);
   }
 
+  window.__isWrapping = false;
+
   window.__doWrap = function(mode) {
+    if (window.__isWrapping) {
+      console.log("[__doWrap] Already in progress, ignoring duplicate call.");
+      return;
+    }
+    window.__isWrapping = true;
+
     var input = document.getElementById("sheet-url-input");
     var currentUrl = (input ? input.value : "").trim();
     var isNew = mode === "NEW_SHEET" || !currentUrl;
@@ -651,6 +663,7 @@ export default function WrapPage() {
       window.__showNativeError(err.message || "래핑 요청에 실패했습니다.");
     })
     .finally(function() {
+      window.__isWrapping = false;
       if (btnMainText) btnMainText.innerText = "⚡ 3초 만에 래핑하기";
       if (btnNewText) btnNewText.innerText = "✨ 시트 주소 없이 새 시트로 즉시 시작";
       if (btnMain) btnMain.disabled = false;
