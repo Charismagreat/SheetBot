@@ -807,13 +807,88 @@ export async function GET() {
     }
     .btn-danger-clean:hover { background: #be123c; }
 
-    /* 푸터 */
-    .copilot-footer {
+    /* [5] 🏷️ 시트봇 공식 인증 푸터 카드 */
+    .copilot-footer-card {
+      margin-top: 10px;
+      margin-bottom: 6px;
+      padding: 10px 8px;
       text-align: center;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .footer-brand-link {
+      text-decoration: none;
+      display: inline-flex;
+      transition: transform 0.15s ease;
+    }
+    .footer-brand-link:hover {
+      transform: translateY(-1px);
+    }
+    .footer-brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 999px;
+      font-size: 11px;
+      color: #334155;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+      transition: all 0.2s ease;
+    }
+    .footer-brand-link:hover .footer-brand-badge {
+      border-color: #6366f1;
+      color: #4f46e5;
+      box-shadow: 0 2px 6px rgba(99, 102, 241, 0.15);
+    }
+    .footer-bolt {
+      color: #f59e0b;
+      font-size: 11px;
+    }
+    .footer-brand-name {
+      font-weight: 500;
+      letter-spacing: -0.2px;
+    }
+    .footer-brand-name strong {
+      font-weight: 800;
+      color: #1e293b;
+    }
+    .footer-brand-link:hover .footer-brand-name strong {
+      color: #4f46e5;
+    }
+    .footer-verified-icon {
+      font-size: 9.5px;
+      font-weight: 900;
+      color: #10b981;
+      background: rgba(16, 185, 129, 0.12);
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .footer-meta-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
       font-size: 10px;
       color: #94a3b8;
-      margin-top: 8px;
       letter-spacing: -0.2px;
+    }
+    .footer-subtext {
+      color: #94a3b8;
+    }
+    .footer-dot {
+      color: #cbd5e1;
+    }
+    .footer-version {
+      color: #64748b;
+      font-weight: 600;
     }
   </style>
 </head>
@@ -1033,9 +1108,21 @@ export async function GET() {
     </div>
   </a>
 
-  <div class="copilot-footer">
-    SheetBot Cloud Engine &bull; Auto-synced v3.2
-  </div>
+  <!-- [5] 🏷️ 시트봇 공식 인증 푸터 (Powered by SheetBot Cloud) -->
+  <footer class="copilot-footer-card">
+    <a href="https://sheetbot.cloud" target="_blank" class="footer-brand-link" title="시트봇 공식 클라우드 홈페이지 방문">
+      <div class="footer-brand-badge">
+        <span class="footer-bolt">⚡</span>
+        <span class="footer-brand-name">Powered by <strong>SheetBot</strong></span>
+        <span class="footer-verified-icon">✓</span>
+      </div>
+    </a>
+    <div class="footer-meta-row">
+      <span class="footer-subtext">Google 시트 AI 업무 자동화 엔진</span>
+      <span class="footer-dot">&bull;</span>
+      <span class="footer-version">v3.2 Connected</span>
+    </div>
+  </footer>
 
   <script>
     var currentEmail = 'chachogreat@gmail.com';
