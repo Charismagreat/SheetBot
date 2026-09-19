@@ -735,7 +735,16 @@ export async function GET() {
     <div class="fde-desc">
       복잡한 연동이나 맞춤 수식이 필요하신가요? 시트봇 전담 엔지니어에게 바로 의뢰하세요.
     </div>
-    <a href="http://localhost:4004/dashboard?modal=fde" target="_blank" class="btn-fde-request" id="btn-fde-request-link" title="시트봇 전담 엔지니어에게 1:1 맞춤 제작 의뢰">
+    <?
+      var _initialSheetUrl = '';
+      try {
+        if (typeof currentSheetUrl !== 'undefined' && currentSheetUrl) {
+          _initialSheetUrl = currentSheetUrl;
+        }
+      } catch(e) {}
+      var _fdeHref = 'http://localhost:4004/dashboard?modal=fde' + (_initialSheetUrl ? '&sheetUrl=' + encodeURIComponent(_initialSheetUrl) : '');
+    ?>
+    <a href="<?= _fdeHref ?>" target="_blank" class="btn-fde-request" id="btn-fde-request-link" onclick="handleFdeClick(event)" title="시트봇 전담 엔지니어에게 1:1 맞춤 제작 의뢰">
       <span>🛠️ 전문가에게 이 기능 의뢰하기</span>
       <span style="font-size: 11px; opacity: 0.9;">↗</span>
     </a>
@@ -946,20 +955,32 @@ export async function GET() {
     }
 
     var BASE_DASHBOARD_URL = 'http://localhost:4004/dashboard';
-
-    function openFdeRequestModal() {
-      var link = document.getElementById('btn-fde-request-link');
-      var targetUrl = (link && link.href) ? link.href : (BASE_DASHBOARD_URL + '?modal=fde');
-      window.open(targetUrl, '_blank');
-    }
+    var CURRENT_SHEET_URL = '';
+    try {
+      if (typeof currentSheetUrl !== 'undefined' && currentSheetUrl) {
+        CURRENT_SHEET_URL = currentSheetUrl;
+      }
+    } catch(e) {}
 
     function bindFdeSheetUrl(url) {
+      if (!url) return;
+      CURRENT_SHEET_URL = url;
       var link = document.getElementById('btn-fde-request-link');
       if (link) {
-        var href = BASE_DASHBOARD_URL + '?modal=fde';
-        if (url) href += '&sheetUrl=' + encodeURIComponent(url);
-        link.href = href;
+        link.href = BASE_DASHBOARD_URL + '?modal=fde&sheetUrl=' + encodeURIComponent(url);
       }
+    }
+
+    function handleFdeClick(e) {
+      var link = document.getElementById('btn-fde-request-link');
+      if (CURRENT_SHEET_URL && link) {
+        link.href = BASE_DASHBOARD_URL + '?modal=fde&sheetUrl=' + encodeURIComponent(CURRENT_SHEET_URL);
+      }
+    }
+
+    function openFdeRequestModal() {
+      var targetUrl = BASE_DASHBOARD_URL + '?modal=fde' + (CURRENT_SHEET_URL ? '&sheetUrl=' + encodeURIComponent(CURRENT_SHEET_URL) : '');
+      window.open(targetUrl, '_blank');
     }
 
     function getBridgePromptText() {
@@ -1029,6 +1050,11 @@ export async function GET() {
                 google.script.run.withSuccessHandler(function(url) {
                   if (url) bindFdeSheetUrl(url);
                 }).getSpreadsheetUrl();
+              }
+              if (google.script.run.getSpreadsheetInfo) {
+                google.script.run.withSuccessHandler(function(info) {
+                  if (info && info.url) bindFdeSheetUrl(info.url);
+                }).getSpreadsheetInfo();
               }
             } catch(e) {}
           }, 100);
