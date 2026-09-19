@@ -104,7 +104,7 @@ export default function DashboardPage() {
         } catch (e) {}
       }
 
-      if (sheetUrl) {
+      if (sheetUrl && params.get("modal") !== "fde" && params.get("fde") !== "true") {
         try {
           localStorage.removeItem("pending_sheet_url");
           localStorage.removeItem("pending_template_name");
