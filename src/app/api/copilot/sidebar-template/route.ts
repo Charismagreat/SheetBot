@@ -269,6 +269,29 @@ export async function GET() {
       background: rgba(255, 255, 255, 0.14);
       color: #ffffff;
     }
+    .btn-referral-invite {
+      width: 100%;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 7px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      margin-top: 6px;
+      transition: all 0.2s;
+      box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
+      box-sizing: border-box;
+    }
+    .btn-referral-invite:hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
 
     /* [🌟] 시트봇 다목적 공지/광고 배너 슬롯 */
     /* [🌟] 시트봇 다목적 광고/공지 배너 (정사각형 화사한 프리미엄 광고 포맷) */
@@ -653,6 +676,9 @@ export async function GET() {
       <span>📖 40+ 실무 활용사례 및 가이드</span>
       <span style="font-size: 10px; opacity: 0.7;">↗</span>
     </a>
+    <button class="btn-referral-invite" onclick="copyReferralLink()" title="동료 초대 시 초대한 사람과 동료 모두에게 10,000 토큰 즉시 선물">
+      <span>🎁 동료 초대 링크 복사 (둘 다 10,000T)</span>
+    </button>
   </div>
 
   <!-- [2-1] 비상 SMS 및 스마트폰 연동 카드 -->
@@ -903,6 +929,37 @@ export async function GET() {
 
     function openPhoneModal() {
       window.open('http://localhost:4004/dashboard/notifications', '_blank');
+    }
+
+    function copyReferralLink() {
+      var userEmail = '';
+      try {
+        if (typeof currentUserEmail !== 'undefined' && currentUserEmail) {
+          userEmail = currentUserEmail;
+        }
+      } catch(e) {}
+      if (!userEmail) {
+        var userEl = document.getElementById('token-user');
+        if (userEl && userEl.innerText && userEl.innerText.indexOf('@') !== -1) {
+          userEmail = userEl.innerText.trim();
+        }
+      }
+
+      var refCode = userEmail ? encodeURIComponent(userEmail.split('@')[0]) : 'sheetbot';
+      var inviteUrl = 'http://localhost:4004/?ref=' + refCode;
+      var shareText = '🚀 Google 스프레드시트 1초 AI 자동화 [SheetBot]\n' +
+        '초대 링크로 접속하시면 가입 즉시 10,000 토큰이 지급됩니다!\n\n' +
+        '👉 초대 링크: ' + inviteUrl;
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(shareText).then(function() {
+          alert('🎁 동료 초대 링크가 복사되었습니다!\n\n사내 메신저나 카카오톡으로 동료에게 공유하세요.\n(초대받은 동료와 추천인 모두에게 10,000 토큰이 선물됩니다)');
+        }).catch(function() {
+          prompt('아래 초대 링크를 복사하여 동료에게 공유하세요:', inviteUrl);
+        });
+      } else {
+        prompt('아래 초대 링크를 복사하여 동료에게 공유하세요:', inviteUrl);
+      }
     }
 
     var BASE_DASHBOARD_URL = 'http://localhost:4004/dashboard';
