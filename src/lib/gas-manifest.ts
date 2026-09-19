@@ -246,6 +246,24 @@ function openTokenRechargeModal() {
   SpreadsheetApp.getUi().showModalDialog(html, "💳 SheetBot 토큰 잔액 확인 및 즉시 충전");
 }
 
+/**
+ * 잔액 변동 시(사이드바 동기화 또는 AI 실행 직후) 구글 시트 상단 메뉴줄을 실시간 갱신하는 공통 함수
+ */
+function updateSheetBotMenuWithBalance(bal) {
+  try {
+    var balNum = Number(bal);
+    if (isNaN(balNum)) return;
+    try {
+      PropertiesService.getScriptProperties().setProperty("SHEETBOT_CACHED_BALANCE", String(balNum));
+    } catch (e) {}
+    if (typeof onOpen === 'function') {
+      onOpen();
+    }
+  } catch (err) {
+    Logger.log("updateSheetBotMenuWithBalance error: " + err.message);
+  }
+}
+
 function _callUserDataTool(tool, args) {
   try {
     if (typeof egdeskToolsCall === 'function') {
