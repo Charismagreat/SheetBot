@@ -1247,11 +1247,16 @@ export async function GET() {
                 statusEl.innerText = 'EGDesk SSL 터널 정상';
                 dotEl.style.background = '#10b981';
                 latEl.innerText = (res.latency || res.elapsed || 112) + ' ms';
+              } else {
+                statusEl.innerText = 'EGDesk 터널 단절';
+                dotEl.style.background = '#ef4444';
+                latEl.innerText = 'MCP 서버 확인';
               }
             })
             .withFailureHandler(function(err) {
-              statusEl.innerText = '터널 점검 완료';
-              latEl.innerText = '정상 (SSL)';
+              statusEl.innerText = 'EGDesk 터널 오류';
+              dotEl.style.background = '#ef4444';
+              latEl.innerText = 'MCP 서버 확인';
             })
             .getTunnelStatusData();
         } catch(e) {}

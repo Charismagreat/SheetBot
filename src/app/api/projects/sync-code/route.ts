@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, updateRows, callAppsScriptTool } from "@/lib/egdesk-helpers";
+import { generateStandardTokenRecharge } from "@/lib/gas-manifest";
 
 // 구글 스프레드시트 URL에서 ID 추출
 function extractSpreadsheetId(urlOrId: string): string | null {
@@ -126,7 +127,21 @@ export async function POST(request: Request) {
     const functionMatches = [...latestCode.matchAll(/function\s+([a-zA-Z0-9_$]+)\s*\(/g)];
     const functionNames = functionMatches.map((m) => m[1]);
 
-    // 7. SheetBot DB 갱신
+    // 7. SheetBot 표준 토큰 충전 모듈(TokenRecharge.gs) 최신화 및 구글 클라우드 자동 배포 (Push)
+    try {
+      await callAppsScriptTool("apps_script_write_file", {
+        projectId: gasProjectId,
+        fileName: "TokenRecharge.gs",
+        content: generateStandardTokenRecharge(),
+      });
+      await callAppsScriptTool("apps_script_push_to_google", {
+        projectId: gasProjectId,
+      });
+    } catch (pushErr: any) {
+      console.warn("[Sync-Code] TokenRecharge.gs push warning:", pushErr.message);
+    }
+
+    // 8. SheetBot DB 갱신
     const nowStr = new Date().toISOString();
     const updatePayload: Record<string, any> = {
       script_code: latestCode,
@@ -149,7 +164,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "구글 시트의 최신 코드가 SheetBot DB에 성공적으로 동기화되었습니다.",
+      message: "구글 시트의 최신 코드가 동기화되었으며, 최신 토큰 충전 모듈(TokenRecharge.gs)이 구글 시트에 안전하게 업데이트 배포되었습니다.",
       syncedAt: nowStr,
       functionNames,
       codeLength: latestCode.length,

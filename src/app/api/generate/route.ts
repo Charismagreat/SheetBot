@@ -744,10 +744,17 @@ function updateSheetBotMenuWithBalance(bal) {
 }
 
 function openTokenRechargeModal() {
-  var html = HtmlService.createHtmlOutput(
-    '<!DOCTYPE html><html><head><base target="_blank"><script>window.onload=function(){window.open("https://sheetbot.cloud/billing","_blank");google.script.host.close();};</script><style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f8fafc;color:#334155;}.btn{display:inline-block;margin-top:10px;padding:8px 16px;background:#059669;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:12px;}</style></head><body><div style="font-weight:bold;font-size:13px;margin-bottom:6px;">💳 SheetBot 토큰 충전 센터</div><div style="font-size:11px;color:#64748b;margin-bottom:10px;">새 창이 열리지 않으면 아래 버튼을 클릭하세요.</div><a href="https://sheetbot.cloud/billing" target="_blank" class="btn">토큰 충전 페이지 열기</a></body></html>'
-  ).setWidth(340).setHeight(150);
-  SpreadsheetApp.getUi().showModalDialog(html, "💳 SheetBot 토큰 충전 센터");
+  if (typeof getTokenRechargeModalHtml === 'function') {
+    var html = HtmlService.createHtmlOutput(getTokenRechargeModalHtml())
+      .setWidth(450)
+      .setHeight(670);
+    SpreadsheetApp.getUi().showModalDialog(html, "💳 SheetBot 토큰 잔액 확인 및 즉시 충전");
+  } else {
+    var html = HtmlService.createHtmlOutput(
+      '<!DOCTYPE html><html><head><base target="_blank"><script>window.onload=function(){window.open("https://sheetbot.cloud/dashboard/pricing","_blank");google.script.host.close();};</script><style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f8fafc;color:#334155;}.btn{display:inline-block;margin-top:10px;padding:8px 16px;background:#059669;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:12px;}</style></head><body><div style="font-weight:bold;font-size:13px;margin-bottom:6px;">💳 SheetBot 토큰 충전 센터</div><div style="font-size:11px;color:#64748b;margin-bottom:10px;">새 창이 열리지 않으면 아래 버튼을 클릭하세요.</div><a href="https://sheetbot.cloud/dashboard/pricing" target="_blank" class="btn">토큰 충전 페이지 열기</a></body></html>'
+    ).setWidth(340).setHeight(150);
+    SpreadsheetApp.getUi().showModalDialog(html, "💳 SheetBot 토큰 충전 센터");
+  }
 }
 
 function openSheetBotGuide() {
@@ -942,9 +949,9 @@ function getTunnelStatusData() {
       egdeskUserDataListTables();
     }
     var elapsed = new Date().getTime() - startTime;
-    return { success: true, elapsed: elapsed, serverName: "EGDesk Cloud", message: "정상 통신 준비 완료" };
+    return { success: true, elapsed: elapsed, latency: elapsed, serverName: "EGDesk Cloud", message: "정상 통신 준비 완료" };
   } catch (err) {
-    return { success: false, error: err.message || "통신 실패", elapsed: new Date().getTime() - startTime };
+    return { success: false, isTunnelError: true, error: err.message || "통신 실패", elapsed: new Date().getTime() - startTime, message: "이지데스크 MCP 서버를 확인해 주세요." };
   }
 }
 
