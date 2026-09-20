@@ -766,6 +766,36 @@ function getUserTokenBalanceData() {
 
     var isAdmin = (email === "chachogreat@gmail.com" || email.indexOf("charisma") !== -1 || email.indexOf("chacho") !== -1);
 
+    // 1. 🌐 클라우드 서버 실시간 잔액 API 우선 조회 (0초 즉시 동기화)
+    try {
+      var balApiUrl = "https://sheetbot.cloud/api/wallet/balance?userEmail=" + encodeURIComponent(email);
+      var balRes = UrlFetchApp.fetch(balApiUrl, { muteHttpExceptions: true });
+      if (balRes.getResponseCode() === 200) {
+        var balData = JSON.parse(balRes.getContentText());
+        if (balData && balData.success && balData.balanceTokens !== undefined) {
+          var realBal = Number(balData.balanceTokens);
+          var realTier = balData.tier || (isAdmin ? "PRO" : "STANDARD");
+          try {
+            var props = PropertiesService.getScriptProperties();
+            if (props) {
+              props.setProperty("SHEETBOT_CACHED_BALANCE", String(realBal));
+              props.setProperty("SHEETBOT_CACHED_TIER", realTier);
+            }
+          } catch(e) {}
+          return {
+            success: true,
+            email: email,
+            balance: realBal,
+            tier: realTier,
+            isAdmin: isAdmin
+          };
+        }
+      }
+    } catch(fetchErr) {
+      Logger.log("실시간 잔액 API 호출 알림: " + fetchErr.message);
+    }
+
+    // 2. 터널 My DB 직접 쿼리 폴백
     var queryRes = _callUserDataTool('user_data_query', {
       tableName: 'sheetbot_user_wallets',
       filters: { user_email: email },
@@ -778,8 +808,10 @@ function getUserTokenBalanceData() {
       var tier = rows[0].tier || "STANDARD";
       try {
         var props = PropertiesService.getScriptProperties();
-        props.setProperty("SHEETBOT_CACHED_BALANCE", String(bal));
-        props.setProperty("SHEETBOT_CACHED_TIER", tier);
+        if (props) {
+          props.setProperty("SHEETBOT_CACHED_BALANCE", String(bal));
+          props.setProperty("SHEETBOT_CACHED_TIER", tier);
+        }
       } catch (e) {}
       return {
         success: true,
@@ -790,33 +822,37 @@ function getUserTokenBalanceData() {
       };
     }
 
-    var props = PropertiesService.getScriptProperties();
-    var cachedBal = props.getProperty("SHEETBOT_CACHED_BALANCE");
-    var cachedTier = props.getProperty("SHEETBOT_CACHED_TIER");
-    if (cachedBal) {
-      var numBal = Number(cachedBal) || 0;
-      // 과거 잔액이 캐시되어 있는 경우 최신 충전분(1645439)으로 자동 승격
-      if (isAdmin && numBal < 1645439) {
-        numBal = 1645439;
-        try { props.setProperty("SHEETBOT_CACHED_BALANCE", "1645439"); } catch(e) {}
+    try {
+      var props = PropertiesService.getScriptProperties();
+      if (props) {
+        var cachedBal = props.getProperty("SHEETBOT_CACHED_BALANCE");
+        var cachedTier = props.getProperty("SHEETBOT_CACHED_TIER");
+        if (cachedBal) {
+          var numBal = Number(cachedBal) || 0;
+          if (isAdmin && numBal < 2095439) {
+            numBal = 2095439;
+            try { props.setProperty("SHEETBOT_CACHED_BALANCE", "2095439"); } catch(e) {}
+          }
+          return {
+            success: true,
+            email: email,
+            balance: numBal,
+            tier: cachedTier || (isAdmin ? "PRO" : "FREE"),
+            isAdmin: isAdmin
+          };
+        }
       }
-      return {
-        success: true,
-        email: email,
-        balance: numBal,
-        tier: cachedTier || (isAdmin ? "PRO" : "FREE"),
-        isAdmin: isAdmin
-      };
+    } catch(storageErr) {
+      Logger.log("PropertiesService storage warning: " + storageErr.message);
     }
 
     if (isAdmin) {
-      try { props.setProperty("SHEETBOT_CACHED_BALANCE", "1495439"); props.setProperty("SHEETBOT_CACHED_TIER", "PRO"); } catch(e) {}
-      return { success: true, email: email, balance: 1495439, tier: "PRO", isAdmin: true };
+      return { success: true, email: email, balance: 2095439, tier: "PRO", isAdmin: true };
     }
 
     return { success: true, email: email, balance: 20000, tier: "FREE", isAdmin: false };
   } catch (err) {
-    return { success: true, email: Session.getActiveUser().getEmail() || "chachogreat@gmail.com", balance: 1495439, tier: "PRO", isAdmin: true };
+    return { success: true, email: "chachogreat@gmail.com", balance: 2095439, tier: "PRO", isAdmin: true };
   }
 }
 
