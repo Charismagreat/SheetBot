@@ -15,11 +15,35 @@ import { parseBankDepositSms } from "@/lib/bank-sms-parser";
 export async function POST(request: Request) {
   try {
     await setupDatabase();
-    const body = await request.json();
-    let { depositorName, amountKrw, bankName, requestId } = body;
+    
+    // 스마트폰(MacroDroid 등)에서 줄바꿈이 포함된 비표준 JSON이 오더라도 안전하게 수용
+    let body: any = {};
+    const rawText = await request.text();
+    
+    if (rawText && rawText.trim()) {
+      try {
+        body = JSON.parse(rawText);
+      } catch {
+        try {
+          // JSON 문자열 내부의 실제 줄바꿈을 정규식으로 안전 추출
+          const smsMatch = rawText.match(/"(?:smsText|text|content|message|msg)"\s*:\s*"([\s\S]*?)"\s*}/);
+          if (smsMatch) {
+            body = { smsText: smsMatch[1] };
+          } else {
+            const sanitized = rawText.replace(/[\r\n]+/g, " ");
+            body = JSON.parse(sanitized);
+          }
+        } catch {
+          // JSON 형식이 아닌 일반 텍스트로 들어온 경우 본문 자체를 SMS 텍스트로 인식
+          body = { smsText: rawText };
+        }
+      }
+    }
+
+    let { depositorName, amountKrw, bankName, requestId } = body || {};
 
     // 스마트폰 전달 앱에서 본문 텍스트 통째로 넘어온 경우 (smsText, text, content, message 등)
-    const rawSms = body.smsText || body.text || body.content || body.message || body.msg || depositorName || "";
+    const rawSms = body?.smsText || body?.text || body?.content || body?.message || body?.msg || depositorName || "";
     if (typeof rawSms === "string" && rawSms.length > 5) {
       const parsed = parseBankDepositSms(rawSms);
       if (parsed.success) {
