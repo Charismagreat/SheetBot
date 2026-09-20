@@ -9,6 +9,7 @@ export interface ParsedDepositSms {
   bankName: string;
   amountKrw: number;
   depositCode: string;
+  depositorName?: string;
   rawText: string;
   matchedRule: string;
 }
@@ -41,7 +42,7 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
     };
   }
 
-  // 1. 카카오뱅크 패턴: [카카오뱅크] 09/17 15:10 입금 12,000원(C670) 잔액 ...
+  // 1. 카카오뱅크 패턴 1: [카카오뱅크] 09/17 15:10 입금 12,000원(C670) 잔액 ...
   const kakaoMatch = clean.match(/\[?카카오뱅크\]?[\s\S]*?입금\s*([\d,]+)원\s*\(([^)]+)\)/i);
   if (kakaoMatch) {
     return {
@@ -49,8 +50,23 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
       bankName: "카카오뱅크",
       amountKrw: parseInt(kakaoMatch[1].replace(/,/g, ""), 10),
       depositCode: kakaoMatch[2].trim(),
+      depositorName: kakaoMatch[2].trim(),
       rawText: clean,
       matchedRule: "KAKAOBANK_EXACT",
+    };
+  }
+
+  // 1-2. 카카오뱅크 패턴 2 (통신사 SMS 실물): [카카오뱅크] 성명(계좌) 날짜 입금 11,911원 입금자명 잔액 ...
+  const kakaoMatch2 = clean.match(/\[?카카오뱅크\]?[\s\S]*?입금\s*([\d,]+)원\s*([A-Za-z0-9가-힣]+)/i);
+  if (kakaoMatch2) {
+    return {
+      success: true,
+      bankName: "카카오뱅크",
+      amountKrw: parseInt(kakaoMatch2[1].replace(/,/g, ""), 10),
+      depositCode: kakaoMatch2[2].trim(),
+      depositorName: kakaoMatch2[2].trim(),
+      rawText: clean,
+      matchedRule: "KAKAOBANK_AMOUNT_NAME",
     };
   }
 
@@ -131,20 +147,43 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
   }
 
   // 7. 스마트 범용 폴백 패턴:
-  // "입금" 단어와 "XXXX원"이 있고, C670 (영문 1자리+숫자3자리) 또는 한글 1~3글자+숫자3자리 포맷 탐색
+  // "입금" 단어와 "XXXX원"이 있고, (입금자명) 또는 금액 뒤/앞의 한글 성명 및 코드 탐색
   const generalAmount = clean.match(/([\d,]+)원\s*입금|입금\s*([\d,]+)원/i);
-  const codeCandidate = clean.match(/\b([A-Z]\d{3})\b/i) || clean.match(/([가-힣]{1,4}\d{3})/);
-
-  if (generalAmount && codeCandidate) {
+  if (generalAmount) {
     const rawAmt = generalAmount[1] || generalAmount[2];
-    return {
-      success: true,
-      bankName: "시중은행 (일반)",
-      amountKrw: parseInt(rawAmt.replace(/,/g, ""), 10),
-      depositCode: codeCandidate[1].toUpperCase().trim(),
-      rawText: clean,
-      matchedRule: "GENERAL_SMART_REGEX",
-    };
+    const amountVal = parseInt(rawAmt.replace(/,/g, ""), 10);
+
+    // 입금자명 후보군 탐색:
+    // 1) 괄호 안 텍스트: (홍길동), (C670)
+    // 2) 코드 후보: 영문1자리+숫자3자리 (C670) 또는 한글1~4글자+숫자3자리
+    // 3) '입금 4,987원 홍길동' 또는 '홍길동 4,987원 입금'
+    let extractedName = "";
+    const parenMatch = clean.match(/\(([^)]+)\)/);
+    const codeMatch = clean.match(/\b([A-Za-z]\d{3})\b/);
+    const nameMatchAfter = clean.match(/(?:입금\s*[\d,]+원|[\d,]+원\s*입금)\s*([A-Za-z0-9가-힣()]+)/i);
+    const nameMatchBefore = clean.match(/([A-Za-z0-9가-힣()]+)\s*(?:[\d,]+원\s*입금|입금\s*[\d,]+원)/i);
+
+    if (codeMatch) {
+      extractedName = codeMatch[1].toUpperCase().trim();
+    } else if (parenMatch && parenMatch[1].trim().length >= 2 && !parenMatch[1].includes("잔액")) {
+      extractedName = parenMatch[1].trim();
+    } else if (nameMatchAfter && nameMatchAfter[1].trim().length >= 2 && !nameMatchAfter[1].includes("잔액")) {
+      extractedName = nameMatchAfter[1].trim();
+    } else if (nameMatchBefore && nameMatchBefore[1].trim().length >= 2 && !nameMatchBefore[1].includes("잔액")) {
+      extractedName = nameMatchBefore[1].trim();
+    }
+
+    if (amountVal > 0) {
+      return {
+        success: true,
+        bankName: "시중은행 (일반)",
+        amountKrw: amountVal,
+        depositCode: extractedName || "AUTO",
+        depositorName: extractedName || undefined,
+        rawText: clean,
+        matchedRule: extractedName ? "GENERAL_SMART_REGEX" : "GENERAL_AMOUNT_ONLY",
+      };
+    }
   }
 
   return {

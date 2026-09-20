@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-19T14:05:21.198Z
+ * Generated at: 2026-09-20T15:19:55.836Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -25,7 +25,7 @@ export const TABLES = {
   table1: {
     name: 'sheetbot_deposit_requests',
     displayName: 'SheetBot 다이렉트 송금 입금 대기 대장',
-    rowCount: 28,
+    rowCount: 30,
     columnCount: 23,
     columns: ['id', '_version', 'deposit_code', 'user_email', 'user_name', 'package_id', 'package_name', 'amount_krw', 'tokens_to_credit', 'bank_name', 'account_number', 'account_holder', 'status', 'expires_at', 'completed_at', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -68,7 +68,7 @@ export const TABLES = {
   table7: {
     name: 'sheetbot_bridge_tokens',
     displayName: 'SheetBot 브릿지 토큰 매핑 대장',
-    rowCount: 24,
+    rowCount: 36,
     columnCount: 6,
     columns: ['id', '_version', 'token', 'project_id', 'user_email', 'created_at']
   } as TableDefinition,
@@ -103,7 +103,7 @@ export const TABLES = {
   table12: {
     name: 'sheetbot_dispatch_logs',
     displayName: 'SheetBot 알림 발송 이력 대장',
-    rowCount: 10,
+    rowCount: 11,
     columnCount: 19,
     columns: ['id', '_version', 'channel', 'event_type', 'rule_name', 'recipient', 'recipient_type', 'title', 'content', 'status', 'error_message', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -124,7 +124,7 @@ export const TABLES = {
   table15: {
     name: 'sheetbot_ai_usage_logs',
     displayName: 'SheetBot AI 토큰 및 사용료 감사 대장',
-    rowCount: 37,
+    rowCount: 40,
     columnCount: 21,
     columns: ['id', '_version', 'user_email', 'user_name', 'caller', 'purpose', 'model', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'estimated_cost_usd', 'estimated_cost_krw', 'prompt_preview', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -138,7 +138,7 @@ export const TABLES = {
   table17: {
     name: 'sheetbot_projects',
     displayName: 'SheetBot 프로젝트 대장',
-    rowCount: 30,
+    rowCount: 42,
     columnCount: 25,
     columns: ['id', '_version', 'user_email', 'name', 'description', 'spreadsheet_id', 'spreadsheet_url', 'gas_project_id', 'script_id', 'script_url', 'script_code', 'manifest', 'summary', 'features', 'triggers', 'prompt', 'status', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -166,7 +166,7 @@ export const TABLES = {
   table21: {
     name: 'sheetbot_easybot_chats',
     displayName: 'SheetBot AI 대화 이력 대장',
-    rowCount: 12,
+    rowCount: 25,
     columnCount: 13,
     columns: ['id', '_version', 'user_email', 'role', 'message', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,

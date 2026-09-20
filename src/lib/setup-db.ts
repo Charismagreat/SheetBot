@@ -316,12 +316,15 @@ export async function setupDatabase(force = false): Promise<void> {
       'SheetBot 다이렉트 송금 입금 대기 대장',
       [
         { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
-        { name: 'deposit_code', type: 'TEXT', notNull: true }, // 예: '홍길동429'
+        { name: 'deposit_code', type: 'TEXT', notNull: true }, // 예: '홍길동429' 또는 'C670'
+        { name: 'depositor_name', type: 'TEXT' }, // 실제 송금자 성명 (예: '홍길동')
         { name: 'user_email', type: 'TEXT', notNull: true },
         { name: 'user_name', type: 'TEXT' },
         { name: 'package_id', type: 'TEXT', notNull: true },
         { name: 'package_name', type: 'TEXT', notNull: true },
-        { name: 'amount_krw', type: 'INTEGER', notNull: true },
+        { name: 'original_amount_krw', type: 'INTEGER' }, // 정가 (예: 5,000)
+        { name: 'discount_krw', type: 'INTEGER' }, // 1원 단위 난수 할인액 (예: 13)
+        { name: 'amount_krw', type: 'INTEGER', notNull: true }, // 실제 입금할 고유 금액 (예: 4,987)
         { name: 'tokens_to_credit', type: 'INTEGER', notNull: true },
         { name: 'bank_name', type: 'TEXT' },
         { name: 'account_number', type: 'TEXT' },

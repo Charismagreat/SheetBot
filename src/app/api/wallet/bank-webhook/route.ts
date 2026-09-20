@@ -59,18 +59,37 @@ export async function POST(request: Request) {
     const pendingRequests = (res.rows || []).filter((r: any) => !r.deleted_at);
 
     // 2. 입금자명 및 금액 매칭 탐색
-    // 입금자명에 deposit_code가 포함되어 있거나, 일치하는 경우
-    const matched: any = pendingRequests.find((req: any) => {
-      const code = (req.deposit_code || "").replace(/\s+/g, "").trim();
+    // 1순위: 금액 일치 AND (실제 입금자명 / 입금코드 / 사용자명 매칭)
+    let matched: any = pendingRequests.find((req: any) => {
       const amount = Number(req.amount_krw);
-      const isAmountMatch = amount === cleanAmount;
-      const isNameMatch =
-        cleanDepositor.includes(code) ||
-        code.includes(cleanDepositor) ||
-        cleanDepositor === (req.user_name || "").replace(/\s+/g, "");
+      if (amount !== cleanAmount) return false;
 
-      return isAmountMatch && isNameMatch;
+      const code = (req.deposit_code || "").replace(/\s+/g, "").trim().toLowerCase();
+      const depositor = (req.depositor_name || "").replace(/\s+/g, "").trim().toLowerCase();
+      const userName = (req.user_name || "").replace(/\s+/g, "").trim().toLowerCase();
+      const target = cleanDepositor.toLowerCase();
+
+      const isNameMatch =
+        (depositor && (target.includes(depositor) || depositor.includes(target))) ||
+        (code && (target.includes(code) || code.includes(target))) ||
+        (userName && (target.includes(userName) || userName.includes(target)));
+
+      return isNameMatch;
     });
+
+    // 2순위: 1원 단위 고유 단수 금액(예: 4,987원) 안전망 폴백
+    // 100원 단위가 아닌 1원 단위 특수 금액인 경우, 최근 PENDING 요청 중 해당 금액이 단 1건뿐이면 자동 승인
+    if (!matched && cleanAmount % 100 !== 0) {
+      const candidateByAmount = pendingRequests.filter(
+        (req: any) => Number(req.amount_krw) === cleanAmount
+      );
+      if (candidateByAmount.length === 1) {
+        matched = candidateByAmount[0];
+        console.log(
+          `[Bank-Webhook] 1원 단위 고유 금액(${cleanAmount}원) 단일 요청자 자동 매칭 성공: ${matched.user_email}`
+        );
+      }
+    }
 
     if (!matched) {
       return NextResponse.json({
