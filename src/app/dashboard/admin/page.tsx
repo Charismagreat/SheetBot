@@ -7,6 +7,7 @@ import Navbar from "@/components/Navbar";
 import {
   Users,
   ShieldAlert,
+  ShieldCheck,
   MessageSquare,
   Star,
   HelpCircle,
@@ -747,13 +748,47 @@ export default function AdminDashboardPage() {
             </p>
           </div>
 
-          <button
-            onClick={fetchAllData}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-slate-200 shadow-xs hover:bg-slate-100 text-xs font-bold text-slate-700 cursor-pointer transition-all"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-indigo-600" : ""}`} />
-            <span>새로고침</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Link
+              href="/dashboard/deposit-agent"
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-indigo-50 border border-indigo-200 text-xs font-extrabold text-indigo-700 hover:bg-indigo-100 transition-all shadow-2xs"
+              title="무통장 입금 자동확인기 (Android APK) 센터"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-indigo-600" />
+              <span>📱 입금확인기</span>
+            </Link>
+
+            <button
+              onClick={async () => {
+                if (!confirm("전체 데이터베이스 스키마 동기화 및 관리자 계정 승격 마이그레이션을 실행하시겠습니까?")) return;
+                try {
+                  const res = await apiFetch("/api/admin/migrate", { method: "POST" });
+                  const data = await res.json();
+                  if (data.success) {
+                    alert("🎉 DB 마이그레이션 완료!\n\n" + JSON.stringify(data.results, null, 2));
+                    fetchAllData();
+                  } else {
+                    alert("마이그레이션 실패: " + (data.error || "오류"));
+                  }
+                } catch (e: any) {
+                  alert("오류: " + e.message);
+                }
+              }}
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-extrabold text-emerald-700 hover:bg-emerald-100 transition-all shadow-2xs cursor-pointer"
+              title="전체 테이블 스키마 점검 및 관리자 승격 동기화"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <span>⚡ DB 전체 마이그레이션</span>
+            </button>
+
+            <button
+              onClick={fetchAllData}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-slate-200 shadow-xs hover:bg-slate-100 text-xs font-bold text-slate-700 cursor-pointer transition-all"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-indigo-600" : ""}`} />
+              <span>새로고침</span>
+            </button>
+          </div>
         </div>
 
         {/* 5대 주요 지표 카드 */}
