@@ -126,15 +126,33 @@ export default function DepositAgentPage() {
     }
   }, []);
 
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/auth/signin");
       return;
     }
     if (status === "authenticated") {
-      fetchPairingInfo();
-      fetchDeviceStatus();
-      fetchDepositLogs();
+      // 관리자 권한 확인
+      apiFetch("/api/admin/check")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.isAdmin) {
+            setIsAdmin(true);
+            fetchPairingInfo();
+            fetchDeviceStatus();
+            fetchDepositLogs();
+          } else {
+            setIsAdmin(false);
+            router.push("/dashboard");
+          }
+        })
+        .catch(() => {
+          setIsAdmin(false);
+          router.push("/dashboard");
+        });
+
       const interval = setInterval(() => {
         fetchDeviceStatus();
         fetchDepositLogs();
@@ -246,11 +264,12 @@ export default function DepositAgentPage() {
         {/* 상단 브레드크럼 및 헤더 */}
         <div className="mb-8">
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-2">
-            <Link href="/dashboard" className="hover:text-indigo-600 transition-colors">
-              워크스페이스
+            <Link href="/dashboard/admin" className="hover:text-rose-600 transition-colors flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-rose-600" />
+              <span>관리자 센터</span>
             </Link>
             <ChevronRight className="w-3.5 h-3.5" />
-            <span className="text-slate-800">모바일 입금확인기 (Android Agent)</span>
+            <span className="text-slate-800 font-bold">무통장 입금 자동확인기 (관리자 전용)</span>
           </div>
 
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -262,12 +281,12 @@ export default function DepositAgentPage() {
                 <div>
                   <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
                     SheetBot 무통장 입금 자동확인기
-                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold border border-emerald-200">
-                      Android v1.0
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 font-extrabold border border-rose-200">
+                      운영자 전용 v1.0
                     </span>
                   </h1>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    더 이상 복잡한 매크로 설정 없이, 전용 앱을 설치하고 모니터의 QR코드만 1회 비추면 0초 만에 연동됩니다.
+                    대표님(운영자) 스마트폰에 앱을 1대 설치하고 모니터의 QR코드만 비추면, 전국 회원이 무통장 입금할 때마다 은행 문자를 24시간 실시간 감지하여 0초 만에 자동 충전합니다.
                   </p>
                 </div>
               </div>
