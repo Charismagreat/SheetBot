@@ -1089,6 +1089,19 @@ export default function AdminDashboardPage() {
             <Sparkles className="w-4 h-4 text-amber-400" />
             <span>추천 프롬프트 관리</span>
           </button>
+
+          {/* 관리자 전용: 무통장 입금 자동확인기 바로가기 */}
+          <Link
+            href="/dashboard/deposit-agent"
+            className="px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 text-white shadow-sm ring-2 ring-emerald-400/50 hover:opacity-95"
+            title="관리자 전용 무통장 입금 자동확인기 (Android APK 다운로드 & QR 페어링)"
+          >
+            <Smartphone className="w-4 h-4 text-emerald-200" />
+            <span>📱 무통장 자동확인기 (Android APK)</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-white/20 text-[9.5px] font-extrabold">
+              실시간 연동
+            </span>
+          </Link>
         </div>
 
         {/* 0. 회원 관리 탭 내용 */}

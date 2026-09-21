@@ -707,16 +707,6 @@ ${recruitForm.introduction}
                 <span>템플릿 마켓</span>
               </Link>
 
-              <Link
-                href="/dashboard/deposit-agent"
-                className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 hover:opacity-95 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-all shadow-sm shadow-indigo-500/20"
-                data-easybot-hint="모바일 입금확인기: 안드로이드 스마트폰 전용 APK를 설치하고 QR코드를 스캔하여 24시간 실시간 무통장 입금 감지 및 자동 충전을 가동합니다."
-                title="무통장 입금 자동확인기 (Android APK)"
-              >
-                <Smartphone className="w-3.5 h-3.5 text-indigo-200" />
-                <span>모바일 입금확인기</span>
-              </Link>
-
               <button
                 onClick={() => setIsApiKeyModalOpen(true)}
                 className="px-3.5 py-1.5 bg-gradient-to-r from-violet-600 via-indigo-600 to-indigo-700 hover:opacity-95 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-all shadow-sm shadow-indigo-500/20 cursor-pointer"

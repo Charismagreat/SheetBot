@@ -295,27 +295,29 @@ export default function Navbar() {
                 <span>내 워크스페이스</span>
               </Link>
 
-              {/* 모바일 입금확인기 바로가기 */}
-              <Link
-                href="/dashboard/deposit-agent"
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-800 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-200/80 rounded-xl transition-all shadow-2xs whitespace-nowrap shrink-0"
-                data-easybot-hint="모바일 입금확인기: 안드로이드 스마트폰 전용 APK를 설치하고 QR코드를 스캔하여 24시간 실시간 무통장 입금 감지 및 자동 충전을 가동합니다."
-                title="무통장 입금 자동확인기 (Android APK)"
-              >
-                <Smartphone className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                <span>입금확인기</span>
-              </Link>
-
               {isAdmin && (
-                <Link
-                  href="/dashboard/admin"
-                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-rose-700 bg-rose-50/70 hover:bg-rose-100 border border-rose-200/60 rounded-xl transition-all whitespace-nowrap shrink-0"
-                  data-easybot-hint="관리자 센터: 1:1 고객 문의 답변, 사용 후기 검수, FAQ 편집, 세금계산서 발행을 승인합니다."
-                  title="통합 운영 관리자 센터"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                  <span className="hidden lg:inline whitespace-nowrap">관리자</span>
-                </Link>
+                <>
+                  {/* 관리자 전용: 모바일 입금확인기 바로가기 */}
+                  <Link
+                    href="/dashboard/deposit-agent"
+                    className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-800 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-200/80 rounded-xl transition-all shadow-2xs whitespace-nowrap shrink-0"
+                    data-easybot-hint="모바일 입금확인기: 안드로이드 스마트폰 전용 APK를 설치하고 QR코드를 스캔하여 24시간 실시간 무통장 입금 감지 및 자동 충전을 가동합니다."
+                    title="관리자 전용 무통장 입금 자동확인기 (Android APK)"
+                  >
+                    <Smartphone className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <span>입금확인기</span>
+                  </Link>
+
+                  <Link
+                    href="/dashboard/admin"
+                    className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-rose-700 bg-rose-50/70 hover:bg-rose-100 border border-rose-200/60 rounded-xl transition-all whitespace-nowrap shrink-0"
+                    data-easybot-hint="관리자 센터: 1:1 고객 문의 답변, 사용 후기 검수, FAQ 편집, 세금계산서 발행을 승인합니다."
+                    title="통합 운영 관리자 센터"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    <span className="hidden lg:inline whitespace-nowrap">관리자</span>
+                  </Link>
+                </>
               )}
 
               {/* 유저 프로필 카드 (컴팩트) */}
