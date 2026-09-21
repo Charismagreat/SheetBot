@@ -22,36 +22,37 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
 
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
-      - name: Grant execute permission for gradlew
+      - name: Accept Android SDK Licenses
         run: |
-          cd android-agent
-          chmod +x gradlew || true
+          yes | sdkmanager --licenses || true
 
       - name: Build Debug & Release APK
         run: |
           cd android-agent
-          if [ -f "./gradlew" ]; then
-            ./gradlew assembleRelease --stacktrace || ./gradlew assembleDebug --stacktrace
-          else
-            gradle assembleRelease --stacktrace || gradle assembleDebug --stacktrace
-          fi
+          gradle assembleDebug --stacktrace
+
+      - name: Copy APK to artifacts
+        run: |
+          mkdir -p release-apk
+          find android-agent/app/build/outputs/apk/ -name "*.apk" -exec cp {} release-apk/sheetbot-deposit-agent.apk \;
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: sheetbot-deposit-agent-apk
-          path: android-agent/app/build/outputs/apk/**/*.apk
+          path: release-apk/*.apk
           retention-days: 30
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/heads/main')
+        with:
+          tag_name: v1.0.0
+          name: "SheetBot Deposit Agent v1.0.0"
+          body: "SheetBot 무통장 입금 실시간 감지 및 자동 충전 네이티브 Android 앱"
+          files: release-apk/sheetbot-deposit-agent.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
