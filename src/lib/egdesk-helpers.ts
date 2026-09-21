@@ -23,9 +23,23 @@ export async function callAiCaller(
   prompt: string,
   options: AiCallerOptions = {}
 ): Promise<AiCallerResponse> {
-  const apiUrl =
+  let apiUrl =
     (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
     'http://localhost:8080';
+
+  if (
+    typeof process !== 'undefined' &&
+    (process.env?.VERCEL === '1' || process.env?.NODE_ENV === 'production')
+  ) {
+    if (!process.env?.NEXT_PUBLIC_EGDESK_API_URL || apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1')) {
+      apiUrl = 'https://tunneling-service.onrender.com/t/mcp-server-fxkud1';
+    }
+  }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Api-Key': 'a67ddc0f-7e2b-4997-9a0b-9667a74c89d0',
+  };
 
   const args: Record<string, any> = {
     prompt,
@@ -36,9 +50,7 @@ export async function callAiCaller(
 
   const response = await fetch(`${apiUrl}/ai-caller/tools/call`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
       tool: 'ai_caller_call',
       arguments: args,
