@@ -10,9 +10,9 @@ import {
 import { queryTable } from "../../../../egdesk-helpers";
 import { executeSmartDispatchRules } from "@/lib/smart-dispatch-rules";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const userEmail = await getCurrentUserEmail();
+    const userEmail = await getCurrentUserEmail(request);
     
     // 로그인된 회원이면 실제 DB 지갑 조회, 미로그인이면 기본 안내용 웰컴 지갑 제공
     let wallet = {
@@ -62,7 +62,7 @@ export async function GET() {
 // 토큰 패키지 결제 충전 처리
 export async function POST(request: Request) {
   try {
-    const userEmail = await getCurrentUserEmail();
+    const userEmail = await getCurrentUserEmail(request);
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }

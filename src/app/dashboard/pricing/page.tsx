@@ -3,6 +3,7 @@
 import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import {
   Coins,
   CreditCard,
@@ -97,6 +98,7 @@ export default function PricingWalletPage() {
   const [packages, setPackages] = useState<PaymentPackage[]>(DEFAULT_PACKAGES);
   const [orders, setOrders] = useState<PaymentOrder[]>([]);
   const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const { data: session } = useSession();
   const [loading, setLoading] = useState(false);
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
   const [purchaseSuccess, setPurchaseSuccess] = useState<string | null>(null);
@@ -104,7 +106,10 @@ export default function PricingWalletPage() {
 
   const fetchWallet = async () => {
     try {
-      const res = await apiFetch("/api/wallet");
+      const email = session?.user?.email;
+      const queryParam = email ? `?userEmail=${encodeURIComponent(email)}` : "";
+      const headers: Record<string, string> = email ? { "x-sheetbot-user-email": email } : {};
+      const res = await apiFetch(`/api/wallet${queryParam}`, { headers });
       const data = await res.json();
       if (data.success) {
         if (data.wallet) setWallet(data.wallet);
@@ -119,7 +124,7 @@ export default function PricingWalletPage() {
 
   useEffect(() => {
     fetchWallet();
-  }, []);
+  }, [session?.user?.email]);
 
   // 한국 표준시(KST) 포맷팅 헬퍼
   const formatKstDate = (dateStr?: string) => {

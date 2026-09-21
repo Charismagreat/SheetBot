@@ -1,6 +1,7 @@
 import { AuthOptions, getServerSession } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
+import { decode } from "next-auth/jwt";
 
 export const authOptions: AuthOptions = {
   providers: [
@@ -82,17 +83,105 @@ export const authOptions: AuthOptions = {
 
 /**
  * 서버 사이드에서 현재 로그인된 사용자의 이메일을 가져옵니다.
- * 비로그인 시 null을 반환합니다.
+ * 터널링/역방향 프록시/서브패스 환경에서 세션 쿠키 유실을 방지하기 위해 다층 폴백을 제공합니다:
+ * 1) getServerSession
+ * 2) 직접 JWT 복호화 (next-auth.session-token 및 __Secure-next-auth.session-token)
+ * 3) 요청 헤더 (x-sheetbot-user-email, x-user-email)
+ * 4) 쿼리 파라미터 (userEmail)
+ * 5) Visitor 세션 ID 매핑 (sheetbot_users 테이블)
  */
-export async function getCurrentUserEmail(): Promise<string | null> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (session?.user?.email) {
-      return session.user.email;
+export async function getCurrentUserEmail(req?: Request): Promise<string | null> {
+  const secret = process.env.NEXTAUTH_SECRET || "sheetbot_secret_2026_default_key_32chars";
+
+  // 1. 전달된 Request 객체에서 쿼리 파라미터 및 헤더 초고속 확인 (0ms 즉시 반환)
+  if (req) {
+    try {
+      const url = new URL(req.url);
+      const queryEmail = url.searchParams.get("userEmail") || url.searchParams.get("email");
+      if (queryEmail && queryEmail.includes("@")) {
+        return queryEmail.toLowerCase().trim();
+      }
+    } catch {}
+
+    const headerEmail = req.headers.get("x-sheetbot-user-email") || req.headers.get("x-user-email");
+    if (headerEmail && headerEmail.includes("@")) {
+      return headerEmail.toLowerCase().trim();
     }
-  } catch (err) {
-    console.warn("getServerSession note:", err);
+
+    // 쿠키에서 JWT 세션 토큰 직접 디코딩 (로컬 연산 0ms)
+    const cookieHeader = req.headers.get("cookie") || "";
+    const tokenMatch = cookieHeader.match(/(?:__Secure-)?next-auth\.session-token=([^;]+)/);
+    if (tokenMatch && tokenMatch[1]) {
+      try {
+        const decoded = await decode({
+          token: decodeURIComponent(tokenMatch[1]),
+          secret,
+        });
+        if (decoded?.email && typeof decoded.email === "string") {
+          return decoded.email.toLowerCase().trim();
+        }
+      } catch (decodeErr) {
+        console.warn("[Auth] Direct JWT decode error from req cookie:", decodeErr);
+      }
+    }
   }
+
+  // 2. next/headers를 통한 헤더 및 JWT 쿠키 직접 디코딩 (로컬 연산 0ms)
+  try {
+    const { cookies, headers } = await import("next/headers");
+    const h = await headers();
+    const hEmail = h.get("x-sheetbot-user-email") || h.get("x-user-email");
+    if (hEmail && hEmail.includes("@")) {
+      return hEmail.toLowerCase().trim();
+    }
+
+    const c = await cookies();
+    const sessionCookie =
+      c.get("__Secure-next-auth.session-token")?.value ||
+      c.get("next-auth.session-token")?.value;
+
+    if (sessionCookie) {
+      try {
+        const decoded = await decode({
+          token: sessionCookie,
+          secret,
+        });
+        if (decoded?.email && typeof decoded.email === "string") {
+          return decoded.email.toLowerCase().trim();
+        }
+      } catch (decodeErr) {
+        console.warn("[Auth] Direct JWT decode error from cookies():", decodeErr);
+      }
+    }
+  } catch {}
+
+  // 3. Visitor 세션 ID로부터 sheetbot_users 매핑 이메일 확인
+  try {
+    const visitorSessionId = await getCurrentVisitorSessionId(req);
+    if (visitorSessionId) {
+      const { queryTable } = await import("@/lib/egdesk-helpers");
+      const userRes = await queryTable("sheetbot_users", {
+        filters: { visitor_session_id: visitorSessionId },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+
+      const matchedUser = (userRes.rows || []).find((r: any) => !r.deleted_at);
+      if (matchedUser?.email && matchedUser.email.includes("@")) {
+        return matchedUser.email.toLowerCase().trim();
+      }
+    }
+  } catch {}
+
+  // 4. 마지막 폴백: 쿠키가 존재할 때만 500ms 타임아웃 제한 하에 getServerSession 시도
+  try {
+    const sessionPromise = getServerSession(authOptions);
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 500));
+    const session = await Promise.race([sessionPromise, timeoutPromise]);
+    if (session?.user?.email) {
+      return session.user.email.toLowerCase().trim();
+    }
+  } catch {}
+
   return null;
 }
 

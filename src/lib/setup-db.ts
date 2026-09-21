@@ -11,6 +11,7 @@ import {
 export { queryTable, insertRows };
 
 let isDbInitialized = false;
+let dbInitPromise: Promise<void> | null = null;
 
 // 공통 7종 감사 컬럼 명세
 const AUDIT_COLUMNS = [
@@ -182,8 +183,10 @@ async function migrateLegacySettingsData() {
  */
 export async function setupDatabase(force = false): Promise<void> {
   if (isDbInitialized && !force) return;
+  if (dbInitPromise && !force) return dbInitPromise;
 
-  try {
+  dbInitPromise = (async () => {
+    try {
     // 1. sheetbot_projects 테이블 생성
     await safeCreateTable(
       'SheetBot 프로젝트 대장',
@@ -652,7 +655,12 @@ export async function setupDatabase(force = false): Promise<void> {
     console.log('[Setup-DB] ✅ SheetBot Database schema initialized and verified.');
   } catch (err: any) {
     console.warn('[Setup-DB] Setup warning:', err.message);
+  } finally {
+    dbInitPromise = null;
   }
+  })();
+
+  return dbInitPromise;
 }
 
 /**

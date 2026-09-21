@@ -12,7 +12,7 @@ import { setupDatabase } from "@/lib/setup-db";
 export async function GET(req: NextRequest) {
   try {
     await setupDatabase();
-    const userEmail = await getCurrentUserEmail();
+    const userEmail = await getCurrentUserEmail(req);
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }
@@ -28,7 +28,10 @@ export async function GET(req: NextRequest) {
 
     const validRules = (res.rows || []).filter((r: any) => !r.deleted_at);
 
-    return NextResponse.json({ success: true, rules: validRules });
+    return NextResponse.json({
+      success: true,
+      rules: validRules,
+    });
   } catch (err: any) {
     console.error("[UserSmartRules] GET error:", err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
@@ -42,7 +45,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     await setupDatabase();
-    const userEmail = await getCurrentUserEmail();
+    const userEmail = await getCurrentUserEmail(req);
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }
@@ -138,7 +141,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     await setupDatabase();
-    const userEmail = await getCurrentUserEmail();
+    const userEmail = await getCurrentUserEmail(req);
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }
@@ -186,7 +189,7 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     await setupDatabase();
-    const userEmail = await getCurrentUserEmail();
+    const userEmail = await getCurrentUserEmail(req);
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }

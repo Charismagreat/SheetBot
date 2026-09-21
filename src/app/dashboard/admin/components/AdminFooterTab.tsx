@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React from "react";
 import {
   Building2,
@@ -45,7 +46,7 @@ export default function AdminFooterTab({
     setTestingSms(true);
     setTestSmsResult(null);
     try {
-      const res = await fetch("/api/wallet/test-sms-parse", {
+      const res = await apiFetch("/api/wallet/test-sms-parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ smsText: testSmsInput }),

@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from 'react';
 
 interface TemplatePreset {
@@ -83,7 +84,7 @@ export default function WrapPage() {
 
     try {
       const tplTitle = selectedTemplate ? selectedTemplate.title : '스마트 자동화 시트';
-      const res = await fetch('/api/projects/quick-wrap', {
+      const res = await apiFetch('/api/projects/quick-wrap', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -699,7 +700,7 @@ export default function WrapPage() {
       if (btnMain) btnMain.disabled = true;
     }
 
-    fetch("/api/projects/quick-wrap", {
+    apiFetch("/api/projects/quick-wrap", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

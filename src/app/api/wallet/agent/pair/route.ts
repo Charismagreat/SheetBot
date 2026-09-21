@@ -164,6 +164,7 @@ export async function POST(req: NextRequest) {
           user_email: cleanEmail,
           label,
           phone_number: phoneNumber || "",
+          device_id: deviceId,
           pairing_mode: "android_agent",
           status: "CONNECTED",
           last_connected_at: nowStr,

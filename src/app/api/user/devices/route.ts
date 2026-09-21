@@ -20,7 +20,7 @@ import { setupDatabase } from "@/lib/setup-db";
 export async function GET(req: NextRequest) {
   try {
     await setupDatabase();
-    const userEmail = await getCurrentUserEmail();
+    const userEmail = await getCurrentUserEmail(req);
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }
@@ -115,7 +115,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     await setupDatabase();
-    const userEmail = await getCurrentUserEmail();
+    const userEmail = await getCurrentUserEmail(req);
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }
@@ -215,7 +215,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     await setupDatabase();
-    const userEmail = await getCurrentUserEmail();
+    const userEmail = await getCurrentUserEmail(req);
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }
