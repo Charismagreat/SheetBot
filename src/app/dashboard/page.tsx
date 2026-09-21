@@ -334,27 +334,42 @@ ${recruitForm.introduction}
     }
   };
 
-  // 데이터 로드
+  // 데이터 로드 (1단계: 필수 핵심 데이터 즉시 로드 -> 2단계: 보조 메트릭 백그라운드 지연 로드)
   const fetchData = useCallback(async () => {
     setLoading(true);
+    const now = Date.now();
+    const userParam = session?.user?.email ? `&userEmail=${encodeURIComponent(session.user.email)}` : "";
+    const fetchHeaders: Record<string, string> = session?.user?.email
+      ? { "x-sheetbot-user-email": session.user.email }
+      : {};
+
     try {
-      const now = Date.now();
-      const userParam = session?.user?.email ? `&userEmail=${encodeURIComponent(session.user.email)}` : "";
-      const [projRes, trashedProjRes, schedRes, walletRes, usageRes, devRes, ruleRes, settingsRes] = await Promise.all([
-        apiFetch(`/api/projects?_t=${now}`).then((r) => r.json()).catch(() => ({})),
-        apiFetch(`/api/projects?includeTrashed=true&_t=${now}`).then((r) => r.json()).catch(() => ({})),
-        apiFetch(`/api/schedules?_t=${now}`).then((r) => r.json()).catch(() => ({})),
-        apiFetch(`/api/wallet?_t=${now}`).then((r) => r.json()).catch(() => ({})),
-        apiFetch(`/api/admin/ai-usage?range=month&limit=1${userParam}&_t=${now}`).then((r) => r.json()).catch(() => ({})),
-        apiFetch(`/api/user/devices?_t=${now}`).then((r) => r.json()).catch(() => ({})),
-        apiFetch(`/api/user/smart-rules?_t=${now}`).then((r) => r.json()).catch(() => ({})),
-        apiFetch(`/api/admin/settings?_t=${now}`).then((r) => r.json()).catch(() => ({})),
+      // 🚀 [1단계: 즉각 렌더링] 사용자가 바로 작업해야 하는 핵심 3종 (프로젝트, 스케줄, 토큰지갑) 초고속 로드
+      const [projRes, schedRes, walletRes] = await Promise.all([
+        apiFetch(`/api/projects?_t=${now}${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/schedules?_t=${now}${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/wallet?_t=${now}${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
       ]);
 
       if (projRes?.success) setProjects(projRes.projects || []);
-      if (trashedProjRes?.success) setTrashedProjects(trashedProjRes.projects || []);
       if (schedRes?.success) setSchedules(schedRes.schedules || []);
       if (walletRes?.success && walletRes.wallet) setWallet(walletRes.wallet);
+    } catch (err) {
+      console.error("Dashboard primary fetch error:", err);
+    } finally {
+      // 1단계 핵심 데이터 로드 즉시 화면 스켈레톤/스피너 해제! (체감 0.5초 진입)
+      setLoading(false);
+    }
+
+    // ⚡ [2단계: 백그라운드 병렬 수신] 보조 배지 및 세부 통계 (AI 사용량, 디바이스, 스마트 규칙, 설정, 휴지통)
+    void Promise.all([
+      apiFetch(`/api/admin/ai-usage?range=month&limit=1${userParam}&_t=${now}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+      apiFetch(`/api/user/devices?_t=${now}${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+      apiFetch(`/api/user/smart-rules?_t=${now}${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+      apiFetch(`/api/admin/settings?_t=${now}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+      apiFetch(`/api/projects?includeTrashed=true&_t=${now}${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+    ]).then(([usageRes, devRes, ruleRes, settingsRes, trashedProjRes]) => {
+      if (trashedProjRes?.success) setTrashedProjects(trashedProjRes.projects || []);
       if (usageRes?.success) {
         setIsAdminUser(!!usageRes.isAdmin);
         if (usageRes.summary) {
@@ -366,7 +381,6 @@ ${recruitForm.introduction}
       if (devRes?.success) setDeviceCount((devRes.devices || []).length);
       if (ruleRes?.success) setRuleCount((ruleRes.rules || []).length);
       if (settingsRes?.success && settingsRes.settings?.defaultModel) {
-        // 보기 좋은 모델 라벨 정리
         const m = settingsRes.settings.defaultModel;
         setCurrentModel(
           m === "gemini-3.8-flash" ? "Gemini 3.8 Flash" :
@@ -374,18 +388,19 @@ ${recruitForm.introduction}
           m === "gemini-2.5-flash" ? "Gemini 2.5 Flash" : m
         );
       }
-    } catch (err) {
-      console.error("Dashboard fetch error:", err);
-    } finally {
-      setLoading(false);
-    }
+    }).catch((err) => console.warn("Dashboard secondary metrics load note:", err));
   }, [session?.user?.email]);
 
   useEffect(() => {
     let isMounted = true;
 
+    // 🚀 로그인 세션이 확인되면 터널 점검 대기 없이 '즉시' 데이터 로드 시작 (0초 대시보드 진입)
+    if (status === "authenticated" || session?.user?.email) {
+      void fetchData();
+    }
+
     const checkAuth = async () => {
-      // 0. 브라우저 localStorage에 저장된 최신 visitorSessionId를 서버 DB에 무조건 즉시 동기화
+      // 0. 브라우저 localStorage에 저장된 최신 visitorSessionId를 서버 DB에 백그라운드 동기화
       try {
         const localSessionId = typeof window !== "undefined" ? localStorage.getItem("egdesk_visitor_session") : null;
         const currentEmail = session?.user?.email ? session.user.email.toLowerCase().trim() : null;
@@ -402,17 +417,14 @@ ${recruitForm.introduction}
         }
       } catch {}
 
-      // 1. 현재 브라우저에 인증된 실제 Visitor Google 계정 상태 확인
-      try {
-        const { getVisitorGoogleStatus } = await import("@/egdesk-visitor-google");
-        const visitorStatus = await getVisitorGoogleStatus();
+      // 1. 미로그인 상태일 때만 Visitor Google 계정 상태 검사 및 세션 복구 수행
+      if (status === "unauthenticated") {
+        try {
+          const { getVisitorGoogleStatus } = await import("@/egdesk-visitor-google");
+          const visitorStatus = await getVisitorGoogleStatus();
 
-        if (visitorStatus?.connected && visitorStatus?.email) {
-          const currentEmail = session?.user?.email ? session.user.email.toLowerCase().trim() : null;
-          const targetEmail = visitorStatus.email.toLowerCase().trim();
-          const localSessionId = typeof window !== "undefined" ? localStorage.getItem("egdesk_visitor_session") : null;
-
-          if (status === "unauthenticated" || (currentEmail && currentEmail !== targetEmail)) {
+          if (visitorStatus?.connected && visitorStatus?.email) {
+            const localSessionId = typeof window !== "undefined" ? localStorage.getItem("egdesk_visitor_session") : null;
             const syncRes = await apiFetch("/api/auth/google/session", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -427,17 +439,10 @@ ${recruitForm.introduction}
               return;
             }
           }
+        } catch (err) {
+          console.warn("Visitor session auto-recovery error:", err);
         }
-      } catch (err) {
-        console.warn("Visitor session auto-recovery error:", err);
-      }
 
-      if (status === "authenticated") {
-        fetchData();
-        return;
-      }
-
-      if (status === "unauthenticated") {
         // Visitor 세션조차 없을 때만 /login으로 안전하게 이동
         if (isMounted) {
           const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
@@ -453,7 +458,7 @@ ${recruitForm.introduction}
     return () => {
       isMounted = false;
     };
-  }, [status, fetchData]);
+  }, [status, session?.user?.email, fetchData]);
 
   const [syncingProjectId, setSyncingProjectId] = useState<string | null>(null);
   const [syncingCodeProjectId, setSyncingCodeProjectId] = useState<string | null>(null);

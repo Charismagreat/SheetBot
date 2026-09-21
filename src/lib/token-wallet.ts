@@ -66,27 +66,79 @@ export async function getOrCreateUserWallet(userEmail: string): Promise<UserWall
 
   const res = await queryTable("sheetbot_user_wallets", {
     filters: { user_email: email },
-    limit: 1,
+    limit: 50,
   }).catch(() => ({ rows: [] }));
 
   const validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
 
   if (validRows.length > 0) {
-    // PRO 티어 우선, 또는 잔액이 큰 지갑을 메인으로 선택
+    // 잔액이 가장 크고 유효한 지갑을 메인으로 선택 (PRO 우선)
     validRows.sort((a: any, b: any) => {
+      const balA = Number(a.balance_tokens) || 0;
+      const balB = Number(b.balance_tokens) || 0;
+      if (balB !== balA) return balB - balA;
       if (a.tier === "PRO" && b.tier !== "PRO") return -1;
       if (b.tier === "PRO" && a.tier !== "PRO") return 1;
-      return (Number(b.balance_tokens) || 0) - (Number(a.balance_tokens) || 0);
+      return String(b.id || "").localeCompare(String(a.id || ""));
     });
 
-    const row = validRows[0];
+    const mainWallet = validRows[0];
+
+    // 만약 중복 지갑이 2개 이상 존재하면 잔액을 메인 지갑으로 무손실 통합 합산 후 중복본 소프트 삭제
+    if (validRows.length > 1) {
+      let extraBalance = 0;
+      let extraPurchased = 0;
+      let extraUsed = 0;
+      const nowStr = new Date().toISOString();
+
+      for (let i = 1; i < validRows.length; i++) {
+        const dup = validRows[i];
+        extraBalance += Number(dup.balance_tokens || 0);
+        extraPurchased += Number(dup.total_purchased_tokens || 0);
+        extraUsed += Number(dup.total_used_tokens || 0);
+
+        // 중복 지갑 소프트 삭제
+        await updateRows(
+          "sheetbot_user_wallets",
+          {
+            deleted_at: nowStr,
+            deleted_by: "system_wallet_consolidation",
+            updated_at: nowStr,
+          },
+          { filters: { id: String(dup.id) } }
+        ).catch(() => {});
+      }
+
+      if (extraBalance > 0 || extraPurchased > 0) {
+        const newBal = (Number(mainWallet.balance_tokens) || 0) + extraBalance;
+        const newPurchased = (Number(mainWallet.total_purchased_tokens) || 0) + extraPurchased;
+        const newUsed = (Number(mainWallet.total_used_tokens) || 0) + extraUsed;
+
+        await updateRows(
+          "sheetbot_user_wallets",
+          {
+            balance_tokens: newBal,
+            total_purchased_tokens: newPurchased,
+            total_used_tokens: newUsed,
+            updated_at: nowStr,
+            updated_by: "system_wallet_consolidation",
+          },
+          { filters: { id: String(mainWallet.id) } }
+        ).catch(() => {});
+
+        mainWallet.balance_tokens = newBal;
+        mainWallet.total_purchased_tokens = newPurchased;
+        mainWallet.total_used_tokens = newUsed;
+      }
+    }
+
     return {
-      id: row.id,
-      userEmail: row.user_email,
-      balanceTokens: Number(row.balance_tokens || 0),
-      totalPurchasedTokens: Number(row.total_purchased_tokens || 0),
-      totalUsedTokens: Number(row.total_used_tokens || 0),
-      tier: row.tier || "FREE",
+      id: mainWallet.id,
+      userEmail: mainWallet.user_email,
+      balanceTokens: Number(mainWallet.balance_tokens || 0),
+      totalPurchasedTokens: Number(mainWallet.total_purchased_tokens || 0),
+      totalUsedTokens: Number(mainWallet.total_used_tokens || 0),
+      tier: mainWallet.tier || "FREE",
     };
   }
 

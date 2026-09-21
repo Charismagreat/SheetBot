@@ -344,21 +344,9 @@ export async function callUserDataTool(
   let response: Response;
   if (isServer) {
     // API routes: call Egdesk directly (relative URL is invalid in Node)
-    let apiUrl =
+    const apiUrl =
       (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
       EGDESK_CONFIG.apiUrl;
-
-    // 프로덕션(Vercel/클라우드) 환경 자동 감지 안전망:
-    // Vercel 서버리스 환경에서는 localhost:8080에 도달할 수 없으므로 자동으로 이지데스크 공용 터널 URL로 전환
-    if (
-      typeof process !== 'undefined' &&
-      (process.env?.VERCEL === '1' || process.env?.NODE_ENV === 'production')
-    ) {
-      if (!process.env?.NEXT_PUBLIC_EGDESK_API_URL || apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1')) {
-        apiUrl = EGDESK_CONFIG.tunnelUrl;
-      }
-    }
-
     response = await fetch(`${apiUrl}/user-data/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
