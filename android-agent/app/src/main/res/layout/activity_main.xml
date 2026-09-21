@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0F172A"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- 헤더 영역 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="20dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="SheetBot Agent"
+                android:textColor="#FFFFFF"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_badge_version"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp"
+                android:text="v1.0"
+                android:textColor="#10B981"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- 실시간 상태 카드 -->
+        <LinearLayout
+            android:id="@+id/cardStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="18dp"
+            android:background="@drawable/bg_card_unpaired"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:id="@+id/tvStatusTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚠️ 미연동 상태"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvStatusDesc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="시트봇 워크스페이스의 QR코드를 스캔하여 계정을 연동해 주세요."
+                android:textColor="#94A3B8"
+                android:textSize="12sp"
+                android:lineSpacingExtra="3dp" />
+        </LinearLayout>
+
+        <!-- 배터리 최적화 경고 버튼 -->
+        <Button
+            android:id="@+id/btnBatteryOpt"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:backgroundTint="#F59E0B"
+            android:text="🔋 백그라운드 꺼짐 방지 설정 (배터리 제한 없음)"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <!-- 로딩 프로그레스바 -->
+        <ProgressBar
+            android:id="@+id/progressBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_margin="8dp"
+            android:visibility="gone" />
+
+        <!-- 미연동 시 컨트롤 (QR 스캔 & 핀코드 입력) -->
+        <LinearLayout
+            android:id="@+id/layoutUnpairedControls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btnScanQr"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:backgroundTint="#4F46E5"
+                android:text="📷 워크스페이스 QR코드 스캔 (0초 연동)"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <Button
+                android:id="@+id/btnManualPin"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:backgroundTint="#1E293B"
+                android:text="🔢 6자리 핀코드로 직접 연동"
+                android:textColor="#CBD5E1"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <!-- 연동 완료 시 컨트롤 (가상 테스트 & 연동 해제) -->
+        <LinearLayout
+            android:id="@+id/layoutPairedControls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/btnTestDeposit"
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:backgroundTint="#059669"
+                android:text="🧪 카카오뱅크 가상 입금 테스트 (5,000원)"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <Button
+                android:id="@+id/btnUnlink"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:backgroundTint="#334155"
+                android:text="연동 해제"
+                android:textColor="#94A3B8"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- 최근 감지된 입금 내역 요약 -->
+        <LinearLayout
+            android:id="@+id/layoutLastDeposit"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#1E293B"
+            android:padding="14dp"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="최근 감지된 입금"
+                android:textColor="#38BDF8"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvLastDeposit"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="내역 없음"
+                android:textColor="#E2E8F0"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- 실시간 입금 감지 로그 창 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="실시간 감지 로그"
+            android:textColor="#64748B"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="6dp" />
+
+        <TextView
+            android:id="@+id/tvLogs"
+            android:layout_width="match_parent"
+            android:layout_height="180dp"
+            android:background="#020617"
+            android:padding="12dp"
+            android:textColor="#10B981"
+            android:textSize="10.5sp"
+            android:fontFamily="monospace"
+            android:text="대기 중... 은행 입금 문자가 오면 자동으로 웹훅 전송됩니다.\n" />
+
+    </LinearLayout>
+</ScrollView>
