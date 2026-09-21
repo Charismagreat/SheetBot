@@ -127,17 +127,20 @@
 <!-- END:apps-script-safety-rules -->
 
 <!-- BEGIN:sms-dispatch-rules -->
-## 스마트폰 SMS 문자 발송 표준 프로세스 준수 원칙
+## 스마트폰 SMS 문자 발송 및 SheetBot Agent/Agent2 연동 표준 준수 원칙
 
-1. **실제 발송 및 모의(Mock) 코드 절대 금지**:
+1. **에이전트 역할 및 명칭 분리 절대 준수 원칙 (Agent vs Agent2)**:
+   - **관리자용 (`SheetBot Agent`)**: 운영자 전용 무통장 입금 감지 및 전역 토큰 지갑 자동 충전 시스템 (`/dashboard/deposit-agent`).
+   - **이용자용 (`SheetBot Agent2`)**: 일반 회원이 자신의 구글 스프레드시트와 스마트폰을 1:1로 결합하여 0원 고객 알림 문자를 발송하고 수신 문자를 시트에 자동 기록하는 양방향 에이전트 (`/dashboard/notifications`).
+2. **실제 발송 및 모의(Mock) 코드 절대 금지**:
    - 가짜 성공("발송성공", HTTP 200 등)을 대입하는 Mock 코드를 절대 작성하지 않고, 반드시 실제 `phone_send` 또는 상용 통신사 API 통신을 수행해야 합니다.
-2. **발송 전 기기 실시간 점검(`checkActiveSmsDevice`) 및 계정 1:1 매칭 필수**:
-   - My DB(`sheetbot_user_devices`)의 터널 응답(JSON)을 안전하게 언래핑하여 로그인된 세션 이메일(`SHEETBOT_USER_EMAIL`)에 매핑된 활성 기기를 1순위로 탐색해야 합니다.
-3. **기기 미등록 시 발송 사전 차단 및 2가지 대안 안내 모달 표출**:
-   - 연동된 기기나 상용 API 키가 없을 때는 발송을 즉시 중단하고, 1번 스마트폰 연동(무제한 무료)과 2번 상용 API 설정을 안내하는 모달 다이얼로그(`showSmsDeviceNoticeModal`)를 필수로 띄워야 합니다.
-4. **일체형 점검 완료 및 발송 승인 확인창 필수 제공**:
+3. **발송 전 기기 실시간 점검(`checkActiveSmsDevice`) 및 계정 1:1 매칭 필수**:
+   - My DB(`sheetbot_user_devices`)의 터널 응답(JSON)을 안전하게 언래핑하여 로그인된 세션 이메일(`SHEETBOT_USER_EMAIL`)에 매핑된 활성 기기(`SheetBot Agent2`, status === 'CONNECTED')를 1순위로 탐색해야 합니다.
+4. **기기 미등록 시 발송 사전 차단 및 2가지 대안 안내 모달 표출**:
+   - 연동된 기기나 상용 API 키가 없을 때는 발송을 즉시 중단하고, 1번 SheetBot Agent2 스마트폰 연동(무제한 무료)과 2번 상용 API 설정을 안내하는 모달 다이얼로그(`showSmsDeviceNoticeModal`)를 필수로 띄워야 합니다.
+5. **일체형 점검 완료 및 발송 승인 확인창 필수 제공**:
    - 발송 전 기기 연결 상태, 무료 연동 여부, 발송 대상 건수를 요약 안내하는 통합 확인창을 표출하여 사용자로부터 최종 승인([확인])을 받은 후 실제 발송을 개시해야 합니다.
-5. **결과 피드백 및 SQLite 대장 동기화**:
+6. **결과 피드백 및 SQLite 대장 동기화**:
    - 발송 결과를 시트(결과메시지 열: `스마트폰(기기명) 실제 전송 완료`) 및 SQLite 발송 대장에 투명하게 기록해야 합니다.
 <!-- END:sms-dispatch-rules -->
 

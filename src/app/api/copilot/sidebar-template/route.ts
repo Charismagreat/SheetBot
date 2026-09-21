@@ -939,7 +939,7 @@ export async function GET() {
       <button class="btn-charge" onclick="openRechargeModal()" title="토큰 충전 모달 열기">
         <span>💳 즉시 충전</span>
       </button>
-      <a id="btn-workspace-link" href="http://localhost:4004/dashboard" target="_blank" class="btn-workspace" title="내 시트봇 대시보드(워크스페이스)로 이동">
+      <a id="btn-workspace-link" href="https://sheetbot.cloud/dashboard" target="_blank" class="btn-workspace" title="내 시트봇 대시보드(워크스페이스)로 이동">
         <span>💼 내 워크스페이스</span>
         <span style="font-size: 10px; opacity: 0.8;">↗</span>
       </a>
@@ -953,19 +953,26 @@ export async function GET() {
     </button>
   </div>
 
-  <!-- [2-1] 비상 SMS 및 스마트폰 연동 카드 -->
+  <!-- [2-1] 📱 SheetBot Agent2 스마트폰 연동 카드 (0원 무제한 발송 & 수신 기록) -->
   <div class="phone-card">
     <div class="phone-header">
       <div class="phone-title">
-        <span>📱 비상 SMS & 스마트폰 연동</span>
+        <span>📱 SheetBot Agent2 연동</span>
       </div>
-      <span class="phone-tag">무료 안심</span>
+      <span class="phone-tag" style="background: #ecfdf5; color: #047857; font-weight: 800; border: 1px solid #a7f3d0;">0원 무제한</span>
     </div>
     <div class="phone-desc">
-      토큰 잔액이 부족할 때, 오류 발생시 문자로 안내 받으세요
+      스마트폰 요금제로 <strong>0원 고객 문자 발송</strong> & 수신 문자 시트 자동 기록
     </div>
-    <a href="http://localhost:4004/dashboard/notifications" target="_blank" class="btn-phone-register" id="btn-phone-register-link" title="문자 수신/발신 기기 등록 (알림 센터로 이동)">
-      <span>📲 문자 수신/발신 기기 등록</span>
+    <div id="agent2-status-box" style="display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 7px; font-size: 10.5px;">
+      <span style="display: flex; align-items: center; gap: 4px; color: #475569;">
+        <span id="agent2-dot" style="width: 7px; height: 7px; border-radius: 50%; background: #94a3b8;"></span>
+        <span id="agent2-status-text">기기 상태 점검 중...</span>
+      </span>
+      <span id="agent2-device-label" style="color: #64748b; font-weight: 700; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">-</span>
+    </div>
+    <a href="https://sheetbot.cloud/dashboard/notifications" target="_blank" class="btn-phone-register" id="btn-phone-register-link" title="SheetBot Agent2 0초 QR 연동 및 기기 관리">
+      <span>📲 SheetBot Agent2 0초 QR 연동</span>
       <span style="font-size: 11px; opacity: 0.8;">↗</span>
     </a>
   </div>
@@ -979,16 +986,16 @@ export async function GET() {
       <span class="templates-tag">원클릭 복제</span>
     </div>
     <div class="templates-grid" id="templates-grid">
-      <a href="http://localhost:4004/wrap?tpl=delivery" target="_blank" class="template-chip" title="배송·송장 실시간 배송상태 자동조회">
+      <a href="https://sheetbot.cloud/wrap?tpl=delivery" target="_blank" class="template-chip" title="배송·송장 실시간 배송상태 자동조회">
         <span>📦 송장 자동조회</span>
       </a>
-      <a href="http://localhost:4004/wrap?tpl=ocr" target="_blank" class="template-chip" title="영수증·명함 스마트 AI OCR">
+      <a href="https://sheetbot.cloud/wrap?tpl=ocr" target="_blank" class="template-chip" title="영수증·명함 스마트 AI OCR">
         <span>🧾 영수증 OCR</span>
       </a>
-      <a href="http://localhost:4004/wrap?tpl=kakao" target="_blank" class="template-chip" title="카카오 알림톡/문자 자동 발송">
+      <a href="https://sheetbot.cloud/wrap?tpl=kakao" target="_blank" class="template-chip" title="카카오 알림톡/문자 자동 발송">
         <span>💬 알림톡 발송</span>
       </a>
-      <a href="http://localhost:4004/wrap?tpl=inventory" target="_blank" class="template-chip" title="실시간 재고·단가 관리 대장">
+      <a href="https://sheetbot.cloud/wrap?tpl=inventory" target="_blank" class="template-chip" title="실시간 재고·단가 관리 대장">
         <span>📊 실시간 재고</span>
       </a>
     </div>
@@ -1021,7 +1028,7 @@ export async function GET() {
           _initialSheetUrl = currentSheetUrl;
         }
       } catch(e) {}
-      var _fdeHref = 'http://localhost:4004/dashboard?modal=fde' + (_initialSheetUrl ? '&sheetUrl=' + encodeURIComponent(_initialSheetUrl) : '');
+      var _fdeHref = 'https://sheetbot.cloud/dashboard?modal=fde' + (_initialSheetUrl ? '&sheetUrl=' + encodeURIComponent(_initialSheetUrl) : '');
     ?>
     <a href="<?= _fdeHref ?>" target="_blank" class="btn-fde-request" id="btn-fde-request-link" onclick="handleFdeClick(event)" title="시트봇 전담 엔지니어에게 1:1 맞춤 제작 문의">
       <span>🛠️ 전문가에게 문의하기</span>
@@ -1030,7 +1037,7 @@ export async function GET() {
   </div>
 
   <!-- [3-2] FDE 파트너스 모집 배너 -->
-  <a id="fde-recruit-card" href="http://localhost:4004/dashboard?modal=fde-recruit" target="_blank" class="fde-recruit-card" title="시트봇 공인 FDE 파트너 지원하기">
+  <a id="fde-recruit-card" href="https://sheetbot.cloud/dashboard?modal=fde-recruit" target="_blank" class="fde-recruit-card" title="시트봇 공인 FDE 파트너 지원하기">
     <div class="fde-recruit-header">
       <span class="fde-recruit-badge" id="fde-recruit-badge">👨‍💻 파트너스 1기 모집</span>
       <span id="fde-recruit-tag" style="font-size: 9.5px; color: #34d399; font-weight: 700;">수익 창출</span>
@@ -1273,8 +1280,54 @@ export async function GET() {
       window.open('https://sheetbot.cloud/dashboard/pricing', '_blank');
     }
 
+    function openAgent2Modal() {
+      window.open('https://sheetbot.cloud/dashboard/notifications', '_blank');
+    }
     function openPhoneModal() {
-      window.open('http://localhost:4004/dashboard/notifications', '_blank');
+      openAgent2Modal();
+    }
+
+    function checkAgent2Status() {
+      var dotEl = document.getElementById('agent2-dot');
+      var statusEl = document.getElementById('agent2-status-text');
+      var labelEl = document.getElementById('agent2-device-label');
+      if (!dotEl || !statusEl) return;
+
+      var targetEmail = currentEmail || 'chachogreat@gmail.com';
+      fetch('https://sheetbot.cloud/api/user/devices?email=' + encodeURIComponent(targetEmail), { cache: 'no-store' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data && data.success && data.devices && data.devices.length > 0) {
+            var activeDev = data.devices.find(function(d) {
+              return d.status === 'CONNECTED' || d.pairingMode === 'agent2';
+            }) || data.devices[0];
+
+            if (activeDev && activeDev.status === 'CONNECTED') {
+              dotEl.style.background = '#10b981';
+              dotEl.style.boxShadow = '0 0 0 2px rgba(16, 185, 129, 0.2)';
+              statusEl.innerText = '정상 연동됨 (0원)';
+              statusEl.style.color = '#047857';
+              if (labelEl) labelEl.innerText = activeDev.label || '안드로이드';
+            } else {
+              dotEl.style.background = '#f59e0b';
+              dotEl.style.boxShadow = 'none';
+              statusEl.innerText = '페어링 대기 중';
+              statusEl.style.color = '#b45309';
+              if (labelEl) labelEl.innerText = activeDev.label || '기기 페어링';
+            }
+          } else {
+            dotEl.style.background = '#94a3b8';
+            dotEl.style.boxShadow = 'none';
+            statusEl.innerText = '기기 미등록 (0원 발송)';
+            statusEl.style.color = '#64748b';
+            if (labelEl) labelEl.innerText = 'QR 연동 필요';
+          }
+        })
+        .catch(function(e) {
+          dotEl.style.background = '#10b981';
+          statusEl.innerText = 'SheetBot Agent2 준비됨';
+          if (labelEl) labelEl.innerText = '0원 발송';
+        });
     }
 
     function copyReferralLink() {
@@ -1292,7 +1345,7 @@ export async function GET() {
       }
 
       var refCode = userEmail ? encodeURIComponent(userEmail.split('@')[0]) : 'sheetbot';
-      var inviteUrl = 'http://localhost:4004/?ref=' + refCode;
+      var inviteUrl = 'https://sheetbot.cloud/?ref=' + refCode;
       var shareText = '🚀 Google 스프레드시트 1초 AI 자동화 [SheetBot]\n' +
         '초대 링크로 접속하시면 가입 즉시 10,000 토큰이 지급됩니다!\n\n' +
         '👉 초대 링크: ' + inviteUrl;
@@ -1308,7 +1361,7 @@ export async function GET() {
       }
     }
 
-    var BASE_DASHBOARD_URL = 'http://localhost:4004/dashboard';
+    var BASE_DASHBOARD_URL = 'https://sheetbot.cloud/dashboard';
     var CURRENT_SHEET_URL = '';
     try {
       if (typeof currentSheetUrl !== 'undefined' && currentSheetUrl) {
@@ -1479,6 +1532,7 @@ export async function GET() {
           setTimeout(function() {
             refreshBalance();
             checkTunnel();
+            checkAgent2Status();
             loadDynamicPromotions();
             try {
               if (google.script.run.getSpreadsheetUrl) {
@@ -1496,6 +1550,7 @@ export async function GET() {
         } else if (attempts >= 30) {
           clearInterval(interval);
           refreshBalance();
+          checkAgent2Status();
         }
       }, 50);
     })();

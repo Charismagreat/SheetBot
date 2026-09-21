@@ -43,10 +43,28 @@ export default function NotificationsPage() {
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false);
   const [newDeviceLabel, setNewDeviceLabel] = useState("");
-  const [pairingMode, setPairingMode] = useState<"qr" | "google_account">("qr");
+  const [pairingMode, setPairingMode] = useState<"agent2" | "qr" | "google_account">("agent2");
   const [newPhoneNumber, setNewPhoneNumber] = useState("");
   const [pairingData, setPairingData] = useState<any>(null);
+  const [agent2PairData, setAgent2PairData] = useState<any>(null);
+  const [loadingAgent2Pair, setLoadingAgent2Pair] = useState(false);
   const [submittingDevice, setSubmittingDevice] = useState(false);
+
+  // SheetBot Agent2 실시간 페어링 정보 로드
+  const fetchAgent2Pairing = useCallback(async () => {
+    setLoadingAgent2Pair(true);
+    try {
+      const res = await apiFetch("/api/user/agent2/pair");
+      const data = await res.json();
+      if (data.success) {
+        setAgent2PairData(data);
+      }
+    } catch (err: any) {
+      console.error("[Notifications] Agent2 pair error:", err);
+    } finally {
+      setLoadingAgent2Pair(false);
+    }
+  }, []);
 
   // 테스트 발송 모달
   const [testModalDevice, setTestModalDevice] = useState<any>(null);
@@ -346,19 +364,19 @@ export default function NotificationsPage() {
         )}
 
         {/* 상단 헤더 카드 */}
-        <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
+        <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden border border-indigo-500/20">
           <div className="absolute right-0 top-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
           <div className="relative z-10 space-y-3">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-400/20 text-emerald-300 text-xs font-bold border border-emerald-400/30">
               <Smartphone className="w-3.5 h-3.5" />
-              <span>Google 메시지 스마트 알림 센터</span>
+              <span>SheetBot Agent2 스마트 알림 & 0원 문자 센터</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-              내 안드로이드 폰 연동 & 자연어 스마트 알림
+              SheetBot Agent2 연동 & 구글 시트 양방향 문자 자동화
             </h1>
             <p className="text-slate-300 text-xs sm:text-sm max-w-2xl leading-relaxed">
-              본인의 스마트폰을 구글 메시지로 연동하여 <strong>통신 비용 0원</strong>으로 문자를 자동 발송하세요.
-              스프레드시트에서 특정 이벤트나 조건이 발생하면, AI가 자연어 규칙을 실시간 판별하여 고객 또는 본인에게 문자를 보냅니다.
+              본인의 스마트폰에 <strong>SheetBot Agent2</strong>를 설치하고 0초 QR 연동하면,
+              <strong>통신 비용 0원</strong>으로 고객 알림 문자를 자동 발송하고 수신 문자를 시트에 실시간 자동 기록할 수 있습니다.
             </p>
           </div>
 
@@ -373,19 +391,7 @@ export default function NotificationsPage() {
               }`}
             >
               <Smartphone className="w-4 h-4" />
-              <span>내 기기 연동 ({devices.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("rules")}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
-                activeTab === "rules"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                  : "bg-white/10 text-slate-200 hover:bg-white/20"
-              }`}
-            >
-              <Zap className="w-4 h-4" />
-              <span>자연어 스마트 규칙 ({rules.length})</span>
+              <span>SheetBot Agent2 기기 ({devices.length})</span>
             </button>
 
             <button
@@ -401,6 +407,18 @@ export default function NotificationsPage() {
             </button>
 
             <button
+              onClick={() => setActiveTab("rules")}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
+                activeTab === "rules"
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                  : "bg-white/10 text-slate-200 hover:bg-white/20"
+              }`}
+            >
+              <Zap className="w-4 h-4" />
+              <span>자동 발송 규칙 & 템플릿 ({rules.length})</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab("guide")}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
                 activeTab === "guide"
@@ -409,7 +427,7 @@ export default function NotificationsPage() {
               }`}
             >
               <FileText className="w-4 h-4" />
-              <span>시트 연동 가이드</span>
+              <span>실전 활용 가이드</span>
             </button>
           </div>
         </div>
@@ -419,8 +437,8 @@ export default function NotificationsPage() {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-black text-slate-900">등록된 스마트폰 기기</h2>
-                <p className="text-xs text-slate-500">문자를 발송할 안드로이드 스마트폰(구글 메시지)을 등록하고 관리합니다.</p>
+                <h2 className="text-lg font-black text-slate-900">등록된 SheetBot Agent2 기기</h2>
+                <p className="text-xs text-slate-500">문자를 0원에 발송하고 시트로 수신할 안드로이드 스마트폰(SheetBot Agent2)을 관리합니다.</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -435,11 +453,12 @@ export default function NotificationsPage() {
                   onClick={() => {
                     setIsAddDeviceOpen(true);
                     setPairingData(null);
+                    fetchAgent2Pairing();
                   }}
                   className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>새 안드로이드 폰 연동</span>
+                  <span>새 SheetBot Agent2 연동</span>
                 </button>
               </div>
             </div>
@@ -562,9 +581,9 @@ export default function NotificationsPage() {
                   <Zap className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-extrabold text-slate-900">자연어로 새 알림 규칙 만들기</h3>
+                  <h3 className="text-sm font-extrabold text-slate-900">자연어 발송 템플릿 &amp; 자동 발송 규칙</h3>
                   <p className="text-xs text-slate-500">
-                    코딩 없이 한국어로 설명하면, AI가 발송 조건과 메시지 템플릿을 자동으로 분석해 등록합니다.
+                    발송 조건과 문자 문구를 자연어로 입력하면, AI가 치환 변수(예: &#123;&#123;고객명&#125;&#125;, &#123;&#123;주문금액&#125;&#125;)와 트리거를 자동 분석해 등록합니다.
                   </p>
                 </div>
               </div>
@@ -617,7 +636,7 @@ export default function NotificationsPage() {
             {/* 규칙 목록 */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-extrabold text-slate-900">내 활성 스마트 알림 규칙</h3>
+                <h3 className="text-sm font-extrabold text-slate-900">등록된 발송 템플릿 &amp; 규칙 목록</h3>
                 <button
                   onClick={fetchRules}
                   disabled={loadingRules}
@@ -779,68 +798,142 @@ export default function NotificationsPage() {
           </div>
         )}
 
-        {/* 탭 4: 시트 연동 가이드 */}
+        {/* 탭 4: 실전 활용 가이드 */}
         {activeTab === "guide" && (
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
-            <div className="space-y-2">
-              <h3 className="text-base font-black text-slate-900">구글 스프레드시트 ➔ SheetBot 실시간 연동 방법</h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                구글 스프레드시트 상단 메뉴의 <strong>[확장 프로그램] ➔ [Apps Script]</strong>를 열고 아래 코드를 붙여넣으세요.
-                시트에서 행이 수정될 때마다 SheetBot AI가 데이터를 검사하여 회원님이 설정한 자연어 조건에 맞으면 즉시 문자를 자동 발송합니다.
+          <div className="space-y-6">
+            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-800 text-xs font-black rounded-full border border-emerald-200">
+                <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
+                <span>SheetBot Agent2 양방향 자동화 매뉴얼</span>
+              </div>
+              <h3 className="text-xl font-black text-slate-900">
+                내 스마트폰을 24시간 0원 문자 발송 &amp; 시트 수신 서버로 활용하기
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed max-w-3xl">
+                복잡한 코드를 복사하거나 붙여넣을 필요가 없습니다. 
+                스마트폰에 <strong>SheetBot Agent2</strong> 앱을 설치하고 QR 코드를 1초 만에 스캔하면,
+                구글 스프레드시트와 스마트폰이 안전하게 1:1로 결합되어 완벽한 양방향 문자 자동화가 시작됩니다.
               </p>
             </div>
 
-            <div className="relative bg-slate-900 rounded-2xl p-4 text-slate-100 font-mono text-xs overflow-x-auto border border-slate-800">
-              <button
-                onClick={copyWebhookCode}
-                className="absolute right-3 top-3 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* 카드 1: 발신 (시트 -> 고객) */}
+              <div className="bg-white rounded-3xl p-6 sm:p-7 border border-emerald-200 shadow-sm space-y-4 relative overflow-hidden">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black text-xs">
+                    1
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-extrabold text-emerald-600 uppercase tracking-wider">Outbound • 발신</span>
+                    <h4 className="text-sm font-extrabold text-slate-900">구글 시트 ➔ 고객 알림 0원 일괄 발송</h4>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  시중 유료 알림톡/문자 서비스(건당 20~40원) 대신, 스마트폰 요금제의 <strong>무제한 무료 문자</strong>를 사용하여 시트 고객들에게 대량 문자를 자동 발송합니다.
+                </p>
+
+                <div className="space-y-2.5 pt-1 text-xs text-slate-700">
+                  <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-slate-900">A열 체크박스 선택:</strong>
+                      <div className="text-[11px] text-slate-500 mt-0.5">시트에서 문자를 보낼 고객 행의 체크박스를 선택합니다.</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-slate-900">[📱 선택 행 문자 일괄 발송] 메뉴 클릭:</strong>
+                      <div className="text-[11px] text-slate-500 mt-0.5">시트 상단 🚀 SheetBot 메뉴에서 원클릭으로 발송을 실행합니다.</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-slate-900">기기 점검 &amp; 원스톱 승인:</strong>
+                      <div className="text-[11px] text-slate-500 mt-0.5">기기 연결 상태와 대상 건수를 확인 후 승인 시 즉시 0원으로 전송됩니다.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 카드 2: 수신 (스마트폰 -> 시트) */}
+              <div className="bg-white rounded-3xl p-6 sm:p-7 border border-indigo-200 shadow-sm space-y-4 relative overflow-hidden">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs">
+                    2
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-extrabold text-indigo-600 uppercase tracking-wider">Inbound • 수신</span>
+                    <h4 className="text-sm font-extrabold text-slate-900">스마트폰 수신 문자 ➔ 구글 시트 자동 기록</h4>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  스마트폰으로 들어온 <strong>쇼핑몰 결제 문자, 법인카드 승인 SMS, 고객의 회신 답장</strong>을 실시간 감지하여 구글 시트에 1초 만에 자동 기록합니다.
+                </p>
+
+                <div className="space-y-2.5 pt-1 text-xs text-slate-700">
+                  <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-slate-900">키워드 자동 필터링:</strong>
+                      <div className="text-[11px] text-slate-500 mt-0.5">[입금완료], [결제], 은행명 등 지정한 조건의 SMS만 정확히 수집합니다.</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-slate-900">구글 시트 1행 추가 (Realtime):</strong>
+                      <div className="text-[11px] text-slate-500 mt-0.5">일시, 발신번호, 결제금액, 주문내역을 분리하여 다음 빈 행에 자동 기입합니다.</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-slate-900">스마트 후속 자동화 연계:</strong>
+                      <div className="text-[11px] text-slate-500 mt-0.5">기록과 동시에 재고 차감이나 감사 이메일 발송 등 연쇄 파이프라인이 즉시 작동합니다.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 원클릭 AI 자동 주입 안내 배너 */}
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-7 text-white border border-indigo-500/20 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold">
+                  <Sparkles className="w-4 h-4" />
+                  <span>수동 복붙 없이 0초 만에 시트에 기능 주입</span>
+                </div>
+                <h4 className="text-base font-extrabold text-white">
+                  새 시트에 문자 발송 기능을 넣고 싶으신가요?
+                </h4>
+                <p className="text-slate-300 text-xs leading-relaxed max-w-2xl">
+                  시트 상단 <strong>[🚀 SheetBot 메뉴] ➔ [🤖 SheetBot AI 코파일럿]</strong>을 열고 
+                  <em>"A열 체크박스 선택 행으로 고객에게 문자 발송하는 메뉴 만들어줘"</em>라고 말씀만 하시면, 
+                  시트봇 AI가 필요한 Apps Script 코드를 구글 클라우드에 원클릭으로 직접 주입합니다.
+                </p>
+              </div>
+
+              <a
+                href="/dashboard"
+                className="px-5 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 flex-shrink-0 active:scale-95"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copied ? "복사됨!" : "코드 복사"}</span>
-              </button>
-              <pre className="pt-6 leading-relaxed">
-{`function onEdit(e) {
-  var range = e.range;
-  var sheet = range.getSheet();
-  var row = range.getRow();
-  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  var rowValues = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
-  
-  var rowData = {};
-  for (var i = 0; i < headers.length; i++) {
-    rowData[headers[i]] = rowValues[i];
-  }
-
-  UrlFetchApp.fetch("${typeof window !== "undefined" ? window.location.origin : "https://sheetbot.io"}/api/webhooks/dispatch", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      userEmail: "${session?.user?.email || "user@example.com"}",
-      eventType: "sheet_edit",
-      sheetName: sheet.getName(),
-      rowData: rowData
-    }),
-    muteHttpExceptions: true
-  });
-}`}
-              </pre>
-            </div>
-
-            <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-200 text-emerald-900 text-xs space-y-2">
-              <h4 className="font-extrabold flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>팁: 새 프로젝트 생성 시 자동 주입</span>
-              </h4>
-              <p className="text-emerald-800 leading-relaxed">
-                SheetBot 상단의 <strong>[+ 새 프로젝트 생성]</strong>에서 스프레드시트 URL과 함께 요구사항을 입력하시면,
-                위 웹훅 발송 코드가 포함된 완벽한 Apps Script 코드가 구글 클라우드에 원클릭으로 자동 배포됩니다!
-              </p>
+                <span>내 워크스페이스 바로가기</span>
+                <ArrowRight className="w-4 h-4" />
+              </a>
             </div>
           </div>
         )}
       </main>
 
-      {/* 모달 1: 새 안드로이드 폰 연동 */}
+      {/* 모달 1: SheetBot Agent2 기기 연동 */}
       {isAddDeviceOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full border border-slate-200 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150 text-left">
@@ -849,7 +942,10 @@ export default function NotificationsPage() {
                 <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold">
                   <Smartphone className="w-4 h-4" />
                 </div>
-                <h3 className="text-base font-extrabold text-slate-900">새 안드로이드 폰 연동</h3>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">SheetBot Agent2 기기 연동</h3>
+                  <p className="text-[11px] text-slate-500">스마트폰 요금제로 0원 발송 & 수신 문자 시트 자동 기록</p>
+                </div>
               </div>
               <button
                 onClick={() => {
@@ -862,7 +958,96 @@ export default function NotificationsPage() {
               </button>
             </div>
 
-            {!pairingData ? (
+            {/* 연동 방식 선택 탭 */}
+            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setPairingMode("agent2");
+                  if (!agent2PairData) fetchAgent2Pairing();
+                }}
+                className={`py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  pairingMode === "agent2"
+                    ? "bg-white text-emerald-700 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-emerald-600" />
+                <span>SheetBot Agent2 (0초)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPairingMode("qr")}
+                className={`py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  pairingMode === "qr"
+                    ? "bg-white text-indigo-700 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <QrCode className="w-3.5 h-3.5 text-indigo-600" />
+                <span>수동 기기 등록</span>
+              </button>
+            </div>
+
+            {pairingMode === "agent2" ? (
+              <div className="space-y-4">
+                {/* 1단계: APK 다운로드 안내 */}
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">1. 스마트폰에 앱 설치</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">안드로이드 스마트폰에 SheetBot Agent2를 설치하세요.</div>
+                  </div>
+                  <a
+                    href="https://sheetbot.cloud/download/SheetBotAgent2.apk"
+                    target="_blank"
+                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 flex-shrink-0"
+                  >
+                    <span>📥 APK 받기</span>
+                  </a>
+                </div>
+
+                {/* 2단계: QR 페어링 */}
+                <div className="p-4 bg-emerald-50/70 rounded-2xl border border-emerald-200 text-center space-y-3">
+                  <div className="text-xs font-extrabold text-emerald-900">2. 앱에서 아래 QR 코드를 스캔하세요</div>
+                  {loadingAgent2Pair ? (
+                    <div className="py-12 text-center text-emerald-600">
+                      <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                      <p className="text-xs font-bold">페어링 QR코드 생성 중...</p>
+                    </div>
+                  ) : agent2PairData?.qrData ? (
+                    <div className="inline-block p-3 bg-white rounded-xl shadow-xs border border-emerald-200">
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(agent2PairData.qrData)}`}
+                        alt="Agent2 Pairing QR"
+                        className="w-40 h-40 mx-auto"
+                      />
+                      <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-center gap-1.5 text-xs font-mono font-bold text-slate-700">
+                        <span className="text-slate-400 font-sans text-[10px]">PIN:</span>
+                        <span className="text-emerald-700 font-black tracking-wider">{agent2PairData.pinCode || "SA2-123456"}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-rose-600">페어링 정보를 불러오지 못했습니다.</p>
+                  )}
+                  <p className="text-[11px] text-emerald-800 leading-relaxed max-w-sm mx-auto">
+                    앱 실행 ➔ [QR 페어링] 스캔 즉시 회원님의 구글 계정과 스마트폰이 1:1 결합되어 0원 문자 발송이 활성화됩니다.
+                  </p>
+                </div>
+
+                <div className="pt-1 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddDeviceOpen(false);
+                      fetchDevices();
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all cursor-pointer"
+                  >
+                    스캔 완료 및 닫기
+                  </button>
+                </div>
+              </div>
+            ) : !pairingData ? (
               <form onSubmit={handleCreateDevice} className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">디바이스 별칭</label>
@@ -887,36 +1072,6 @@ export default function NotificationsPage() {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-2">연동 방식 선택</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPairingMode("qr")}
-                      className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
-                        pairingMode === "qr"
-                          ? "border-emerald-600 bg-emerald-50 text-emerald-900"
-                          : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                      }`}
-                    >
-                      <QrCode className="w-5 h-5 text-emerald-600" />
-                      <span>QR코드 스캔 연동</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPairingMode("google_account")}
-                      className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
-                        pairingMode === "google_account"
-                          ? "border-indigo-600 bg-indigo-50 text-indigo-900"
-                          : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                      }`}
-                    >
-                      <Globe className="w-5 h-5 text-indigo-600" />
-                      <span>구글 계정 간편 연동</span>
-                    </button>
-                  </div>
-                </div>
-
                 <div className="pt-2 flex items-center justify-end gap-2">
                   <button
                     type="button"
@@ -936,28 +1091,18 @@ export default function NotificationsPage() {
               </form>
             ) : (
               <div className="space-y-4 text-center">
-                {pairingMode === "qr" && pairingData.qrCodeUrl ? (
-                  <div className="space-y-3">
-                    <p className="text-xs text-slate-600">
-                      스마트폰의 <strong>구글 메시지 앱 ➔ 우측 상단 프로필 ➔ [기기 페어링]</strong>에서 아래 QR 코드를 스캔하세요.
-                    </p>
-                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 inline-block">
-                      <img
-                        src={pairingData.qrCodeUrl}
-                        alt="Pairing QR"
-                        className="w-48 h-48 mx-auto rounded-lg shadow-sm"
-                      />
-                    </div>
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-600">
+                    스마트폰의 카메라 또는 기기 페어링 화면에서 아래 QR 코드를 스캔하세요.
+                  </p>
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 inline-block">
+                    <img
+                      src={pairingData.qrCodeUrl}
+                      alt="Pairing QR"
+                      className="w-44 h-44 mx-auto rounded-lg shadow-sm"
+                    />
                   </div>
-                ) : (
-                  <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-100 text-indigo-900 text-xs space-y-2">
-                    <CheckCircle2 className="w-8 h-8 text-indigo-600 mx-auto" />
-                    <p className="font-bold">구글 계정 연동 요청이 전송되었습니다.</p>
-                    <p className="text-slate-600 text-[11px]">
-                      스마트폰에서 구글 메시지 알림(기기 페어링 승인)을 확인해 주세요.
-                    </p>
-                  </div>
-                )}
+                </div>
 
                 <button
                   onClick={() => {
