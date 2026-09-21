@@ -19,6 +19,7 @@ import {
   Star,
   Menu,
   X,
+  Smartphone,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import SheetBotLogo from "@/components/SheetBotLogo";
@@ -292,6 +293,17 @@ export default function Navbar() {
               >
                 <Bot className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                 <span>내 워크스페이스</span>
+              </Link>
+
+              {/* 모바일 입금확인기 바로가기 */}
+              <Link
+                href="/dashboard/deposit-agent"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-800 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-200/80 rounded-xl transition-all shadow-2xs whitespace-nowrap shrink-0"
+                data-easybot-hint="모바일 입금확인기: 안드로이드 스마트폰 전용 APK를 설치하고 QR코드를 스캔하여 24시간 실시간 무통장 입금 감지 및 자동 충전을 가동합니다."
+                title="무통장 입금 자동확인기 (Android APK)"
+              >
+                <Smartphone className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span>입금확인기</span>
               </Link>
 
               {isAdmin && (

@@ -82,7 +82,7 @@ export async function POST(request: Request) {
     try {
       for (let attempt = 0; attempt < 5; attempt++) {
         const checkRes = await queryTable("sheetbot_deposit_requests", {
-          filters: { status: "PENDING", amount_krw: finalAmountKrw },
+          filters: { status: "PENDING", amount_krw: String(finalAmountKrw) },
           limit: 1,
         }).catch(() => ({ rows: [] }));
         if (!checkRes.rows || checkRes.rows.length === 0) break;
