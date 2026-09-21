@@ -395,7 +395,7 @@ ${recruitForm.introduction}
     let isMounted = true;
 
     // 🚀 로그인 세션이 확인되면 터널 점검 대기 없이 '즉시' 데이터 로드 시작 (0초 대시보드 진입)
-    if (status === "authenticated" || session?.user?.email) {
+    if (status === "authenticated" || (session as any)?.user?.email) {
       void fetchData();
     }
 
