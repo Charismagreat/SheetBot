@@ -35,9 +35,15 @@ export default function Navbar() {
 
   useEffect(() => {
     let isMounted = true;
-    if (!session?.user?.email) {
+    const email = session?.user?.email?.toLowerCase().trim();
+    if (!email) {
       setIsAdmin(false);
       return;
+    }
+
+    // 기본 관리자 계정 즉시 선제 활성화 (API 호출 전 깜빡임 방지)
+    if (email === "chachogreat@gmail.com" || email === "charismagreat@gmail.com") {
+      setIsAdmin(true);
     }
 
     apiFetch("/api/admin/check")
@@ -48,7 +54,9 @@ export default function Navbar() {
         }
       })
       .catch(() => {
-        if (isMounted) setIsAdmin(false);
+        if (isMounted && !(email === "chachogreat@gmail.com" || email === "charismagreat@gmail.com")) {
+          setIsAdmin(false);
+        }
       });
 
     return () => {

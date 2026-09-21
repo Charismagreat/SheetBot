@@ -696,6 +696,31 @@ ${recruitForm.introduction}
             </div>
 
             <div className="flex items-center gap-2">
+              {(session?.user?.email?.toLowerCase().trim() === "chachogreat@gmail.com" ||
+                session?.user?.email?.toLowerCase().trim() === "charismagreat@gmail.com") && (
+                <>
+                  <Link
+                    href="/dashboard/deposit-agent"
+                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-black rounded-xl flex items-center gap-1.5 transition-all shadow-2xs"
+                    title="무통장 입금 자동확인기 (Android APK)"
+                    data-easybot-hint="무통장 자동확인기: 안드로이드 APK 다운로드 및 24시간 실시간 입금 감지 QR 페어링 센터로 이동합니다."
+                  >
+                    <Smartphone className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>입금확인기</span>
+                  </Link>
+
+                  <Link
+                    href="/dashboard/admin"
+                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-black rounded-xl flex items-center gap-1.5 transition-all shadow-2xs"
+                    title="통합 운영 관리자 센터"
+                    data-easybot-hint="관리자 센터: 전체 회원 관리, 무통장 승인, 1:1 고객 문의, 시스템 통계를 관리합니다."
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-rose-600" />
+                    <span>관리자 센터</span>
+                  </Link>
+                </>
+              )}
+
               <Link
                 href="/marketplace"
                 target="_blank"
