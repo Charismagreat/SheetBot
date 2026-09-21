@@ -276,18 +276,18 @@ ${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
      - 나라장터 신규 입찰공고 실시간 모니터링: egdeskToolsCall('bidnotice', 'bidnotice_lookup', { title: '키워드', openOnly: true })
    - 🔍 [기업 심층 웹 리서치]:
      - 기업 홈페이지 분석 및 사업 영역 요약: egdeskToolsCall('company-research', 'companyresearch_run', { domain: '회사도메인', companyName: '회사명' })
-   - 📱 [SMS 문자 발송 구현 표준 원칙 - 가짜 성공 Mock 코드 절대 금지]:
-     - ⚠️ 절대 금지: 실제 통신 없이 단순히 '발송성공'이나 'HTTP 200' 문자열을 대입하는 모의(Mock) 코드를 작성하지 마십시오!
-     - [1번 기본 엔진 - SheetBot 구글 메시지 스마트폰 연동]:
-         * 발송 전 checkActiveSmsDevice()를 호출하여 회원의 등록된 활성 기기(status === 'CONNECTED' 또는 'paired')가 있는지 실시간 점검하세요. (My DB sheetbot_user_devices 조회 시 result.content[0].text JSON을 안전하게 파싱하여 user_email 일치 기기를 1순위 매칭)
-         * 점검 결과(연결된 기기명, 무료 연동 여부, 발송 대상 건수)를 명시한 [점검 완료 및 발송 확인] 알림창을 띄워 사용자 승인을 받은 후 실제 문자를 발송하세요.
-         * 활성 기기가 있으면 egdeskToolsCall('phone', 'phone_send', { deviceId: device.device_id, phoneNumber: phone, message: content })를 호출하여 실제 문자를 발송하세요.
-     - [기기 미등록 시 세련된 안내 모달 표출 - showSmsDeviceNoticeModal()]:
-       * 등록된 기기가 없으면 발송을 중단하고 다음 2가지 대안을 담은 HTML 모달 다이얼로그(380px)를 띄우세요:
-         1. 📱 기본: 스마트폰(구글 메시지) 연동 (무제한 무료 발송) -> [스마트폰 기기 연동 바로가기 ↗] (https://sheetbot.cloud/dashboard/settings)
-         2. 💳 대안: 상용 유료 문자 API (알리고, 쿨SMS 등) Key 등록 안내
-     - [2번 대안 - 상용 문자 API (알리고/쿨SMS) 지원]:
-       * PropertiesService.getScriptProperties()에 'SMS_API_KEY'가 설정되어 있는 경우, 해당 상용 통신사 API 규격으로 전송하는 폴백을 함께 지원하세요.
+    - 📱 [SMS 문자 발송 구현 표준 원칙 - SheetBot Agent2 연동]:
+      - ⚠️ 절대 금지: 실제 통신 없이 단순히 '발송성공'이나 'HTTP 200' 문자열을 대입하는 모의(Mock) 코드를 작성하지 마십시오!
+      - [1번 기본 엔진 - SheetBot Agent2 스마트폰 연동 (0원 무제한 발송 & 양방향 수신)]:
+          * 발송 전 checkActiveSmsDevice()를 호출하여 회원의 등록된 활성 기기(status === 'CONNECTED')가 있는지 실시간 점검하세요. (My DB sheetbot_user_devices 조회 시 result.content[0].text JSON을 안전하게 파싱하여 user_email 일치 기기를 1순위 매칭)
+          * 점검 결과(연결된 기기명, 무료 연동 여부, 발송 대상 건수)를 명시한 [점검 완료 및 발송 확인] 알림창을 띄워 사용자 승인을 받은 후 실제 문자를 발송하세요.
+          * 활성 기기가 있으면 egdeskToolsCall('phone', 'phone_send', { deviceId: device.device_id, phoneNumber: phone, message: content })를 호출하여 실제 문자를 발송하세요.
+      - [기기 미등록 시 세련된 안내 모달 표출 - showSmsDeviceNoticeModal()]:
+        * 등록된 기기가 없으면 발송을 중단하고 다음 2가지 대안을 담은 HTML 모달 다이얼로그(380px)를 띄우세요:
+          1. 📱 기본: SheetBot Agent2 스마트폰 연동 (0원 무제한 발송) -> [SheetBot Agent2 기기 연동 바로가기 ↗] (https://sheetbot.cloud/dashboard/notifications)
+          2. 💳 대안: 상용 유료 문자 API (알리고, 쿨SMS 등) Key 등록 안내
+      - [2번 대안 - 상용 문자 API (알리고/쿨SMS) 지원]:
+        * PropertiesService.getScriptProperties()에 'SMS_API_KEY'가 설정되어 있는 경우, 해당 상용 통신사 API 규격으로 전송하는 폴백을 함께 지원하세요.
 4. 📋 시트 및 데이터 조작 (실제 컬럼 1:1 매핑 및 동적 행 삽입 절대 준수):
    - 특정 시트명이 언급된 경우, getSheetByName()으로 참조하고 시트가 없으면 insertSheet()로 헤더 행과 함께 자동 생성하세요.
    - 단, 시트에 이미 존재하는 헤더(1행)가 있을 경우, 헤더를 임의로 변경하거나 덮어쓰지 말고 실제 시트 1행의 컬럼 순서 및 개수에 1:1로 정확히 맞추어 rowsToInsert 2차원 배열을 구성하세요.
@@ -824,6 +824,14 @@ function getAiCopilotSidebarHtml() {
           '<span id="tunnelText" class="text-amber-600 font-extrabold">점검 중...</span>' +
         '</div>' +
         '<div id="tunnelDetail" class="text-[10px] text-slate-400 mt-1">EGDesk Cloud 터널 통신 준비 완료</div>' +
+      '</div>' +
+      '<div class="p-3 bg-white rounded-xl border border-slate-200 shadow-sm space-y-2">' +
+        '<div class="flex items-center justify-between">' +
+          '<span class="text-[11px] font-bold text-slate-700">📱 SheetBot Agent2 연동</span>' +
+          '<span class="px-1.5 py-0.5 text-[9px] font-extrabold rounded bg-emerald-50 text-emerald-700 border border-emerald-200">0원 무제한</span>' +
+        '</div>' +
+        '<p class="text-[10px] text-slate-500 leading-snug">스마트폰 요금제로 0원 고객 문자 발송 & 수신 문자 시트 자동 기록</p>' +
+        '<a href="https://sheetbot.cloud/dashboard/notifications" target="_blank" class="block w-full py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg text-center no-underline">📲 SheetBot Agent2 0초 QR 연동 ↗</a>' +
       '</div>' +
       '<div class="p-3 bg-white rounded-xl border border-slate-200 shadow-sm space-y-2.5">' +
         '<div class="text-[11px] font-bold text-slate-700">🚀 안티그라비티(Antigravity) AI 확장</div>' +

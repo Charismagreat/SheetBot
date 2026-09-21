@@ -85,7 +85,7 @@ export default function GuidePage() {
     {
       step: "05",
       title: "스마트 알림(내 폰 문자 0원) & 클라우드 터널 실시간 관제",
-      desc: "시트봇 대시보드의 [스마트 알림 센터]에서 본인의 안드로이드 스마트폰(구글 메시지)을 1회 QR 연동해 두면, 추가 통신 비용 0원(무료)으로 시트의 고객들에게 실제 문자를 자동 또는 선택 일괄 발송할 수 있습니다. 상용 통신사 API Key 폴백도 함께 지원되며, [⚡ 터널 연결 상태 점검]으로 통신 상태를 상시 진단할 수 있습니다.",
+      desc: "시트봇 대시보드의 [스마트 알림 센터]에서 본인의 안드로이드 스마트폰(SheetBot Agent2)을 1회 QR 연동해 두면, 추가 통신 비용 0원(무료)으로 시트의 고객들에게 실제 문자를 자동 또는 선택 일괄 발송하고 수신 문자를 시트에 기록할 수 있습니다. 상용 통신사 API Key 폴백도 함께 지원되며, [⚡ 터널 연결 상태 점검]으로 통신 상태를 상시 진단할 수 있습니다.",
       tip: "내 워크스페이스 [당월 AI 사용량] 요약 카드에서 모든 AI 호출 목적과 토큰 소비 내역을 실시간 감사 로그로 확인할 수 있습니다.",
       badge: "스마트 운영",
     },
@@ -95,11 +95,11 @@ export default function GuidePage() {
   const examples = [
     {
       id: "ex_sms_batch_dispatch",
-      title: "A열 체크박스 선택 행 스마트폰(구글 메시지) 문자 일괄 발송 & 사전 장치 점검",
+      title: "A열 체크박스 선택 행 스마트폰(SheetBot Agent2) 문자 일괄 발송 & 사전 장치 점검",
       tag: "스마트폰 문자 일괄 발송 (NEW)",
       icon: Smartphone,
       color: "border-emerald-200 bg-emerald-50/60 text-emerald-800",
-      prompt: "구글 시트 상단 [🚀 SheetBot 메뉴] ➔ [📱 [발송] 선택 행 문자 일괄 발송]을 누르면 A열 체크박스가 선택된 대상자들에게 실제 문자를 일괄 발송해줘. 발송 직전에 내 스마트폰(구글 메시지) 장치 연결 상태를 실시간 점검하여 '점검 완료 및 발송 확인' 알림창을 띄우고, 승인 시 통신비 0원으로 실제 문자를 전송한 뒤 결과메시지 열에 '스마트폰(기기명) 실제 전송 완료'로 기록해줘.",
+      prompt: "구글 시트 상단 [🚀 SheetBot 메뉴] ➔ [📱 [발송] 선택 행 문자 일괄 발송]을 누르면 A열 체크박스가 선택된 대상자들에게 실제 문자를 일괄 발송해줘. 발송 직전에 내 스마트폰(SheetBot Agent2) 장치 연결 상태를 실시간 점검하여 '점검 완료 및 발송 확인' 알림창을 띄우고, 승인 시 통신비 0원으로 실제 문자를 전송한 뒤 결과메시지 열에 '스마트폰(기기명) 실제 전송 완료'로 기록해줘.",
     },
     {
       id: "ex_gmail_batch_dispatch",
@@ -160,10 +160,10 @@ export default function GuidePage() {
     {
       id: "ex2",
       title: "결제완료 시 고객 휴대폰 감사 문자 자동 발송",
-      tag: "구글 메시지 스마트 알림 (SMS)",
+      tag: "SheetBot Agent2 0원 문자 알림 (SMS)",
       icon: Smartphone,
       color: "border-emerald-200 bg-emerald-50/60 text-emerald-800",
-      prompt: "주문관리 시트의 D열(상태)이 '결제완료'로 수정되면, 해당 행의 고객명과 연락처를 읽어서 내 폰(구글메시지)으로 고객에게 '[SheetBot] {{고객명}}님, 결제가 정상 완료되었습니다.' 문자를 자동 발송해줘.",
+      prompt: "주문관리 시트의 D열(상태)이 '결제완료'로 수정되면, 해당 행의 고객명과 연락처를 읽어서 내 스마트폰(SheetBot Agent2)으로 고객에게 '[SheetBot] {{고객명}}님, 결제가 정상 완료되었습니다.' 문자를 자동 발송해줘.",
     },
     {
       id: "ex3",
@@ -359,11 +359,11 @@ export default function GuidePage() {
                 <span>신규 기능: 통신 비용 0원 문자 자동화</span>
               </div>
               <h2 className="text-xl sm:text-2xl font-black text-slate-900 break-keep">
-                내 안드로이드 폰을 Google 메시지로 연동하는 방법
+                내 안드로이드 폰을 SheetBot Agent2로 연동하는 방법
               </h2>
               <p className="text-xs text-slate-600 max-w-2xl leading-relaxed break-keep">
-                시중의 알림톡/문자 대행 서비스(건당 15~40원) 대신, 내가 사용하는 안드로이드 스마트폰(요금제 기본 제공 무제한 문자)을 
-                게이트웨이로 연동하여 구글 시트 이벤트 발생 시 무료로 문자를 자동 발송할 수 있습니다.
+                시중의 알림톡/문자 대행 서비스(건당 15~40원) 대신, 내가 사용하는 안드로이드 스마트폰(요금제 기본 제공 무제한 문자)에 
+                SheetBot Agent2를 설치해 연동하여 구글 시트 이벤트 발생 시 0원으로 문자를 자동 발송하고 수신 문자를 기록할 수 있습니다.
               </p>
             </div>
 
@@ -381,9 +381,9 @@ export default function GuidePage() {
               <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
                 1
               </div>
-              <h4 className="font-extrabold text-xs text-slate-900">10초 QR코드 스캔 페어링</h4>
+              <h4 className="font-extrabold text-xs text-slate-900">0초 QR코드 스캔 페어링</h4>
               <p className="text-[11px] text-slate-500 leading-relaxed">
-                스마트폰의 <strong>구글 메시지 앱 ➔ 우측 상단 프로필 ➔ [기기 페어링]</strong>을 누르고, 화면의 QR코드를 스캔하면 즉시 연동됩니다.
+                스마트폰의 <strong>SheetBot Agent2 앱 ➔ [QR 페어링]</strong>을 누르고, 화면의 QR코드를 비추면 0초 만에 즉시 연동됩니다.
               </p>
             </div>
 
