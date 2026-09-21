@@ -265,29 +265,31 @@ export default function Navbar() {
 
         {/* 우측 네비게이션 제어 영역 */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 whitespace-nowrap">
-          {/* AI 도움말 컴팩트 토글 버튼 */}
-          <button
-            onClick={toggleAiHelp}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border whitespace-nowrap shrink-0 cursor-pointer ${
-              aiHelpEnabled
-                ? "bg-indigo-50 text-indigo-700 border-indigo-200 shadow-2xs"
-                : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200/80"
-            }`}
-            data-easybot-hint="AI 도움말 토글: 화면 주요 요소에 마우스를 올렸을 때 실시간 설명 팝업을 띄울지 켜고 끕니다."
-            title="AI 도움말 켜기/끄기"
-          >
-            <Sparkles
-              className={`w-3.5 h-3.5 ${aiHelpEnabled ? "text-amber-500 animate-spin" : "text-slate-400"}`}
-            />
-            <span className="hidden sm:inline whitespace-nowrap">AI 도움말</span>
-            <span
-              className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-extrabold whitespace-nowrap ${
-                aiHelpEnabled ? "bg-indigo-600 text-white" : "bg-slate-300 text-slate-600"
+          {/* AI 도움말 컴팩트 토글 버튼 (관리자 전용 노출) */}
+          {isAdmin && (
+            <button
+              onClick={toggleAiHelp}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border whitespace-nowrap shrink-0 cursor-pointer ${
+                aiHelpEnabled
+                  ? "bg-indigo-50 text-indigo-700 border-indigo-200 shadow-2xs"
+                  : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200/80"
               }`}
+              data-easybot-hint="AI 도움말 토글: 화면 주요 요소에 마우스를 올렸을 때 실시간 설명 팝업을 띄울지 켜고 끕니다."
+              title="AI 도움말 켜기/끄기 (관리자 전용)"
             >
-              {aiHelpEnabled ? "ON" : "OFF"}
-            </span>
-          </button>
+              <Sparkles
+                className={`w-3.5 h-3.5 ${aiHelpEnabled ? "text-amber-500 animate-spin" : "text-slate-400"}`}
+              />
+              <span className="hidden sm:inline whitespace-nowrap">AI 도움말</span>
+              <span
+                className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-extrabold whitespace-nowrap ${
+                  aiHelpEnabled ? "bg-indigo-600 text-white" : "bg-slate-300 text-slate-600"
+                }`}
+              >
+                {aiHelpEnabled ? "ON" : "OFF"}
+              </span>
+            </button>
+          )}
 
           {status === "loading" ? (
             <div className="w-20 h-8 bg-slate-100 animate-pulse rounded-xl" />

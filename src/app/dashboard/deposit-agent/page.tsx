@@ -14,17 +14,13 @@ import {
   RefreshCw,
   Copy,
   Check,
-  ArrowRight,
   Zap,
-  BatteryCharging,
-  Radio,
   Clock,
   Sparkles,
-  ExternalLink,
   ChevronRight,
-  FileCode,
-  Send,
-  HelpCircle,
+  Inbox,
+  Radio,
+  ArrowRight,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { apiFetch } from "@/lib/api";
@@ -53,7 +49,6 @@ export default function DepositAgentPage() {
   const [pairingData, setPairingData] = useState<any>(null);
   const [loadingPairing, setLoadingPairing] = useState(true);
   const [copiedPin, setCopiedPin] = useState(false);
-  const [copiedWebhook, setCopiedWebhook] = useState(false);
 
   // 등록된 디바이스 상태
   const [device, setDevice] = useState<any>(null);
@@ -177,7 +172,7 @@ export default function DepositAgentPage() {
       const data = await res.json();
       if (data.success) {
         setTestResult(data);
-        showToast("success", "가상 카카오뱅크 입금 테스트가 성공적으로 전송되었습니다!");
+        showToast("success", "가상 입금 테스트가 성공적으로 전송되었습니다!");
         fetchDepositLogs();
       } else {
         showToast("error", data.error || "테스트 전송에 실패했습니다.");
@@ -198,44 +193,6 @@ export default function DepositAgentPage() {
     showToast("success", "6자리 핀코드가 클립보드에 복사되었습니다.");
   };
 
-  // 웹훅 주소 복사
-  const handleCopyWebhook = () => {
-    const url = "https://sheetbot.cloud/api/wallet/bank-webhook";
-    navigator.clipboard.writeText(url);
-    setCopiedWebhook(true);
-    setTimeout(() => setCopiedWebhook(false), 2000);
-    showToast("success", "웹훅 주소가 복사되었습니다.");
-  };
-
-  // MacroDroid 원클릭 프리셋 JSON 다운로드
-  const handleDownloadMacroPreset = () => {
-    const userEmail = session?.user?.email || "chachogreat@gmail.com";
-    const preset = {
-      name: "SheetBot_자동입금감지_웹훅",
-      version: 1,
-      targetUrl: "https://sheetbot.cloud/api/wallet/bank-webhook",
-      userEmail: userEmail,
-      trigger: "SMS_RECEIVED",
-      senderFilter: "1599-3333",
-      contentKeyword: "입금",
-      httpMethod: "POST",
-      httpHeader: { "Content-Type": "application/json" },
-      httpBody: JSON.stringify({
-        sender: "[sms_number]",
-        smsText: "[sms_message]",
-        userEmail: userEmail,
-      }),
-    };
-    const blob = new Blob([JSON.stringify(preset, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `SheetBot_Deposit_Webhook_${userEmail.split("@")[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast("success", "MacroDroid용 설정 파일이 다운로드되었습니다.");
-  };
-
   const qrImageUrl = pairingData?.qrData
     ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=8&data=${encodeURIComponent(
         pairingData.qrData
@@ -243,19 +200,23 @@ export default function DepositAgentPage() {
     : "";
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50/70 text-slate-800">
       <Navbar />
 
       {/* 토스트 알림 */}
       {toast && (
         <div
-          className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-lg border text-sm font-bold flex items-center gap-2 animate-in fade-in slide-in-from-bottom-3 ${
+          className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-xl border text-xs font-bold flex items-center gap-2.5 animate-in fade-in slide-in-from-bottom-3 ${
             toast.type === "success"
-              ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-              : "bg-rose-50 border-rose-200 text-rose-800"
+              ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+              : "bg-rose-50 border-rose-200 text-rose-900"
           }`}
         >
-          {toast.type === "success" ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <AlertTriangle className="w-5 h-5 text-rose-600" />}
+          {toast.type === "success" ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          ) : (
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+          )}
           <span>{toast.message}</span>
         </div>
       )}
@@ -263,36 +224,34 @@ export default function DepositAgentPage() {
       <main className="max-w-6xl mx-auto px-4 py-8">
         {/* 상단 브레드크럼 및 헤더 */}
         <div className="mb-8">
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-2">
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-2.5">
             <Link href="/dashboard/admin" className="hover:text-rose-600 transition-colors flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5 text-rose-600" />
               <span>관리자 센터</span>
             </Link>
-            <ChevronRight className="w-3.5 h-3.5" />
-            <span className="text-slate-800 font-bold">무통장 입금 자동확인기 (관리자 전용)</span>
+            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-slate-800 font-bold">무통장 입금 자동확인기</span>
           </div>
 
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md">
-                  <Smartphone className="w-5 h-5" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                    SheetBot 무통장 입금 자동확인기
-                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 font-extrabold border border-rose-200">
-                      운영자 전용 v1.0
-                    </span>
-                  </h1>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    대표님(운영자) 스마트폰에 앱을 1대 설치하고 모니터의 QR코드만 비추면, 전국 회원이 무통장 입금할 때마다 은행 문자를 24시간 실시간 감지하여 0초 만에 자동 충전합니다.
-                  </p>
-                </div>
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0">
+                <Smartphone className="w-6 h-6" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+                  무통장 입금 자동확인기 SheetBot Agent
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200/80">
+                    전용 앱 v1.0
+                  </span>
+                </h1>
+                <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                  스마트폰(1대 또는 이중화용 복수 기기)에 앱을 설치하고 화면의 QR만 비추면, 회원 입금 시 은행 알림 문자를 24시간 실시간 감지하여 0초 만에 토큰을 자동 충전합니다.
+                </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 self-start md:self-auto">
               <button
                 onClick={() => {
                   fetchPairingInfo();
@@ -300,188 +259,232 @@ export default function DepositAgentPage() {
                   fetchDepositLogs();
                   showToast("success", "실시간 상태를 동기화했습니다.");
                 }}
-                className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer hover:border-slate-300"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
+                <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
                 새로고침
               </button>
-              <a
-                href="/downloads/sheetbot-deposit-agent.apk"
-                download
-                className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black rounded-xl shadow-sm flex items-center gap-2 transition-all cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-                APK 다운로드 (v1.0)
-              </a>
             </div>
           </div>
         </div>
 
-        {/* 1단계: 실시간 연동 상태 & 다운로드 배너 그리드 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* 카드 1: 연동 기기 실시간 상태 */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between">
+        {/* 1단계: 사용자 온보딩 흐름에 맞춘 상단 3단 위젯 카드 (1.설치 -> 2.연결 -> 3.상태&테스트) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8 items-stretch">
+          {/* [Step 1] 카드: 스마트폰에 SheetBot Agent 앱 설치 */}
+          <div className="bg-white rounded-2xl border border-indigo-200/90 p-5 shadow-xs flex flex-col justify-between hover:border-indigo-300 transition-all relative overflow-hidden">
+            <div className="absolute -top-10 -right-10 w-28 h-28 bg-indigo-50 rounded-full blur-2xl pointer-events-none"></div>
+
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">내 스마트폰 연동 상태</span>
-                {device && device.status === "CONNECTED" ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    실시간 감지 중
+              <div className="flex items-center justify-between pb-3.5 mb-3.5 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-indigo-600 text-white flex items-center justify-center text-[11px] font-black shrink-0 shadow-xs">
+                    1
                   </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-800 border border-amber-200">
-                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                    연동 대기 중
-                  </span>
-                )}
-              </div>
-
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2.5 mb-4">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-500 font-semibold">연동 기기</span>
-                  <span className="font-extrabold text-slate-800">{device?.label || "스마트폰 (연결 대기)"}</span>
+                  <h3 className="text-sm font-black text-slate-900 tracking-tight">
+                    스마트폰에 SheetBot Agent 설치
+                  </h3>
                 </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-500 font-semibold">최근 생존 신호</span>
-                  <span className="font-mono text-slate-700 font-bold">
-                    {device?.lastConnectedAt || device?.last_connected_at ? formatDateTime(device.lastConnectedAt || device.last_connected_at) : "미연결"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-500 font-semibold">지원 은행 프리셋</span>
-                  <span className="font-bold text-indigo-600">카카오뱅크, 토스, 국민, 신한 등</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <button
-                onClick={handleTestSms}
-                disabled={testingSms}
-                className="w-full py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-extrabold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-              >
-                <Zap className="w-3.5 h-3.5 text-indigo-600" />
-                {testingSms ? "가상 입금 테스트 전송 중..." : "🧪 가상 카카오뱅크 입금 테스트 (5,000원)"}
-              </button>
-              {testResult && (
-                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-800">
-                  <b>✅ 테스트 완료:</b> 웹훅 수신 성공 (상태코드: 200)
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* 카드 2: 0초 연동 QR코드 & 6자리 핀코드 */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col items-center text-center">
-            <div className="w-full flex items-center justify-between mb-2">
-              <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">내 전용 연동 QR코드</span>
-              <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                0초 페어링
-              </span>
-            </div>
-
-            <div className="p-2.5 bg-white border border-slate-200 rounded-2xl shadow-inner mb-3">
-              {loadingPairing ? (
-                <div className="w-[180px] h-[180px] flex items-center justify-center text-xs text-slate-400">
-                  <RefreshCw className="w-6 h-6 animate-spin text-slate-400" />
-                </div>
-              ) : qrImageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={qrImageUrl}
-                  alt="SheetBot Pairing QR"
-                  className="w-[180px] h-[180px] rounded-lg object-contain"
-                />
-              ) : (
-                <div className="w-[180px] h-[180px] flex items-center justify-center text-xs text-slate-400">
-                  QR 생성 불가
-                </div>
-              )}
-            </div>
-
-            <div className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex items-center justify-between">
-              <div className="text-left">
-                <div className="text-[10px] text-slate-400 font-semibold">수동 입력 6자리 핀코드</div>
-                <div className="text-base font-black font-mono text-slate-800 tracking-wider">
-                  {pairingData?.pinCode || "SB-••••••"}
-                </div>
-              </div>
-              <button
-                onClick={handleCopyPin}
-                className="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-xs flex items-center gap-1 transition-all cursor-pointer"
-              >
-                {copiedPin ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                {copiedPin ? "복사됨" : "복사"}
-              </button>
-            </div>
-          </div>
-
-          {/* 카드 3: 초간단 3단계 시작 가이드 */}
-          <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 rounded-2xl p-5 text-white shadow-md flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-black uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  초간단 3단계 설치법
-                </span>
-                <span className="text-[10px] bg-indigo-800/60 text-indigo-200 px-2 py-0.5 rounded-full font-bold">
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full font-bold border border-indigo-100 shrink-0">
                   1분 소요
                 </span>
               </div>
 
               <div className="space-y-3 mb-4">
                 <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-black shrink-0">
+                  <div className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[11px] font-black shrink-0 mt-0.5 shadow-2xs">
                     1
                   </div>
                   <div>
-                    <div className="text-xs font-extrabold text-white">APK 다운로드 및 설치 허용</div>
-                    <div className="text-[11px] text-slate-300 leading-snug">
-                      스마트폰에서 APK를 다운로드한 후 &apos;출처를 알 수 없는 앱 설치&apos;를 1회 승인합니다.
+                    <div className="text-xs font-extrabold text-slate-800">APK 다운로드 및 설치 허용</div>
+                    <div className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                      하단 버튼을 눌러 APK를 다운로드하고 스마트폰 설치를 승인합니다.
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-black shrink-0">
+                  <div className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[11px] font-black shrink-0 mt-0.5 shadow-2xs">
                     2
                   </div>
                   <div>
-                    <div className="text-xs font-extrabold text-white">SMS 권한 & 배터리 최적화 해제</div>
-                    <div className="text-[11px] text-slate-300 leading-snug">
-                      앱을 켜고 화면에 나타나는 &apos;SMS 읽기 허용&apos;과 &apos;배터리 제한 없음&apos;을 허용합니다.
+                    <div className="text-xs font-extrabold text-slate-800">SMS 읽기 권한 허용</div>
+                    <div className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                      앱 실행 시 화면에 나타나는 은행 SMS 읽기 권한을 허용합니다.
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-black shrink-0">
+                  <div className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[11px] font-black shrink-0 mt-0.5 shadow-2xs">
                     3
                   </div>
                   <div>
-                    <div className="text-xs font-extrabold text-white">왼쪽 QR코드 찰칵 비추기</div>
-                    <div className="text-[11px] text-slate-300 leading-snug">
-                      앱의 [QR 스캔] 버튼을 누르고 화면의 QR을 비추면 즉시 24시간 자동 감지가 시작됩니다!
+                    <div className="text-xs font-extrabold text-slate-800">배터리 최적화 해제</div>
+                    <div className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                      24시간 무중단 자동 감지를 위해 &apos;배터리 제한 없음&apos;을 설정합니다.
                     </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <a
-              href="/downloads/sheetbot-deposit-agent.apk"
-              download
-              className="w-full py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
-            >
-              <Download className="w-4 h-4" />
-              스마트폰에 APK 직접 다운로드
-            </a>
+            <div className="pt-3 border-t border-slate-100">
+              <a
+                href="/downloads/sheetbot-deposit-agent.apk"
+                download
+                className="w-full h-11 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs font-black rounded-xl shadow-sm shadow-indigo-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                스마트폰에 APK 직접 다운로드
+              </a>
+            </div>
+          </div>
+
+          {/* [Step 2] 카드: QR 스캔으로 관리자 계정 연결 */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-all">
+            <div>
+              <div className="flex items-center justify-between pb-3.5 mb-3.5 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-indigo-600 text-white flex items-center justify-center text-[11px] font-black shrink-0 shadow-xs">
+                    2
+                  </span>
+                  <h3 className="text-sm font-black text-slate-900 tracking-tight">
+                    QR 스캔으로 계정 연결
+                  </h3>
+                </div>
+                <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100 shrink-0">
+                  0초 페어링
+                </span>
+              </div>
+
+              <div className="flex flex-col items-center justify-center py-1">
+                <div className="p-2 bg-white border border-slate-200 rounded-2xl shadow-inner">
+                  {loadingPairing ? (
+                    <div className="w-[144px] h-[144px] flex items-center justify-center text-xs text-slate-400">
+                      <RefreshCw className="w-6 h-6 animate-spin text-slate-400" />
+                    </div>
+                  ) : qrImageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={qrImageUrl}
+                      alt="SheetBot Pairing QR"
+                      className="w-[144px] h-[144px] rounded-lg object-contain"
+                    />
+                  ) : (
+                    <div className="w-[144px] h-[144px] flex items-center justify-center text-xs text-slate-400">
+                      QR 생성 불가
+                    </div>
+                  )}
+                </div>
+                <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100/90 text-slate-600 rounded-full text-[11px] font-medium">
+                  <span><b>SheetBot Agent</b> 앱 실행 후 <b>[QR 스캔]</b>으로 화면을 비추세요</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100">
+              <div className="bg-slate-50/80 px-3.5 h-11 rounded-xl border border-slate-100 flex items-center justify-between">
+                <div className="text-left flex items-center gap-2">
+                  <span className="text-[10px] text-slate-400 font-semibold whitespace-nowrap">수동 핀코드</span>
+                  <span className="text-sm font-black font-mono text-slate-800 tracking-wider">
+                    {pairingData?.pinCode || "SB-••••••"}
+                  </span>
+                </div>
+                <button
+                  onClick={handleCopyPin}
+                  className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-xs flex items-center gap-1 transition-all cursor-pointer"
+                >
+                  {copiedPin ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedPin ? "복사됨" : "복사"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* [Step 3] 카드: 실시간 감지 상태 및 작동 테스트 */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-all">
+            <div>
+              <div className="flex items-center justify-between pb-3.5 mb-3.5 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-indigo-600 text-white flex items-center justify-center text-[11px] font-black shrink-0 shadow-xs">
+                    3
+                  </span>
+                  <h3 className="text-sm font-black text-slate-900 tracking-tight">
+                    실시간 감지 상태 및 테스트
+                  </h3>
+                </div>
+                {device && (device.status === "CONNECTED" || device.status === "ACTIVE") ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    24H 감지 중
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                    연동 대기
+                  </span>
+                )}
+              </div>
+
+              <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-100 space-y-2.5 mb-4">
+                <div className="flex items-center justify-between text-xs gap-2">
+                  <span className="text-slate-500 font-medium shrink-0 whitespace-nowrap">연동 기기</span>
+                  <span className="font-extrabold text-slate-800 text-right truncate">{device?.label || "확인기 전용 스마트폰"}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs gap-2">
+                  <span className="text-slate-500 font-medium shrink-0 whitespace-nowrap">최근 생존 신호</span>
+                  <span className="font-mono text-slate-700 font-bold text-right">
+                    {device?.lastConnectedAt || device?.last_connected_at ? formatDateTime(device.lastConnectedAt || device.last_connected_at) : "연결 대기 중"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs gap-2">
+                  <span className="text-slate-500 font-medium shrink-0 whitespace-nowrap">자동 감지 대상</span>
+                  <span className="font-bold text-indigo-600 text-right whitespace-nowrap">국내 전 금융사 (시중·인터넷·우체국)</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-3 border-t border-slate-100">
+              <button
+                onClick={handleTestSms}
+                disabled={testingSms}
+                className="w-full h-11 bg-indigo-50 hover:bg-indigo-100/80 text-indigo-700 border border-indigo-200/90 text-xs font-extrabold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-2xs"
+              >
+                <Zap className="w-3.5 h-3.5 text-indigo-600 fill-indigo-600" />
+                {testingSms ? "가상 입금 테스트 전송 중..." : "🧪 가상 입금 테스트 (5,000원 모의 감지)"}
+              </button>
+              {testResult && (
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200/80 rounded-xl text-[11px] text-emerald-800 font-medium flex items-center gap-1.5 animate-in fade-in">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span><b>가상 입금 완료:</b> 웹훅 수신 및 대장 등록 성공</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* 2단계: 최근 실시간 입금 감지 대장 */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden mb-8">
+        {/* 💡 2대 이상 다중 기기 무중단 이중화(Fail-over) 안내 배너 */}
+        <div className="mb-8 p-4 bg-gradient-to-r from-indigo-50/90 via-slate-50 to-emerald-50/70 rounded-2xl border border-indigo-100/90 shadow-xs flex items-start gap-3.5">
+          <div className="p-2 rounded-xl bg-indigo-100/80 text-indigo-700 shrink-0 mt-0.5">
+            <ShieldCheck className="w-4 h-4" />
+          </div>
+          <div className="flex-1">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
+              <h3 className="text-xs font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <span>💡 2대 이상의 스마트폰으로 24시간 무중단 이중화(Fail-over) 운영이 가능합니다</span>
+                <span className="text-[10px] px-2 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-extrabold border border-emerald-200">
+                  중복 충전 100% 자동 방지
+                </span>
+              </h3>
+            </div>
+            <p className="text-[11.5px] text-slate-600 leading-relaxed break-keep">
+              동일한 은행 입금 알림 문자를 수신하는 업무용 스마트폰이 여러 대라면, 모든 기기에 <b>SheetBot Agent</b>를 설치하고 위 <b>[2번 QR코드]</b>를 각각 스캔해 두세요. 어느 한 기기의 배터리가 방전되거나 전원이 꺼져도 다른 기기가 즉시 감지하여 365일 24시간 결제 누락을 원천 차단합니다.
+            </p>
+          </div>
+        </div>
+
+        {/* 2단계: 실시간 입금 감지 대장 (Empty State 고도화) */}
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
           <div className="p-5 border-b border-slate-100 flex items-center justify-between">
             <div>
               <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
@@ -493,7 +496,7 @@ export default function DepositAgentPage() {
             </div>
             <button
               onClick={fetchDepositLogs}
-              className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"
+              className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors rounded-lg hover:bg-slate-100 cursor-pointer"
               title="새로고침"
             >
               <RefreshCw className="w-4 h-4" />
@@ -502,27 +505,36 @@ export default function DepositAgentPage() {
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold">
+              <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-extrabold">
                 <tr>
-                  <th className="py-3 px-4">입금 번호 / 식별코드</th>
-                  <th className="py-3 px-4">입금자명</th>
-                  <th className="py-3 px-4 text-right">입금 금액</th>
-                  <th className="py-3 px-4 text-right">적립 토큰</th>
-                  <th className="py-3 px-4 text-center">처리 상태</th>
-                  <th className="py-3 px-4">감지 및 완료 일시</th>
+                  <th className="py-3.5 px-4">입금 번호 / 식별코드</th>
+                  <th className="py-3.5 px-4">입금자명</th>
+                  <th className="py-3.5 px-4 text-right">입금 금액</th>
+                  <th className="py-3.5 px-4 text-right">적립 토큰</th>
+                  <th className="py-3.5 px-4 text-center">처리 상태</th>
+                  <th className="py-3.5 px-4">감지 및 완료 일시</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {loadingLogs ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-400">
+                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                      <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-slate-300" />
                       입금 감지 내역을 불러오는 중...
                     </td>
                   </tr>
                 ) : depositLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-400">
-                      아직 감지된 무통장 입금 내역이 없습니다.
+                    <td colSpan={6} className="py-12 text-center">
+                      <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                          <Inbox className="w-6 h-6" />
+                        </div>
+                        <div className="text-sm font-bold text-slate-800">아직 감지된 무통장 입금 내역이 없습니다</div>
+                        <p className="text-xs text-slate-400 mt-1.5 leading-relaxed break-keep">
+                          회원이 무통장 입금하거나 상단의 <b>[가상 입금 테스트]</b> 버튼을 누르면 실시간으로 이곳에 자동 기록됩니다.
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 ) : (
@@ -542,13 +554,13 @@ export default function DepositAgentPage() {
                       </td>
                       <td className="py-3.5 px-4 text-center">
                         {log.status === "COMPLETED" || log.status === "APPROVED" ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                            <CheckCircle2 className="w-3 h-3" />
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                             충전 완료
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
-                            <Clock className="w-3 h-3" />
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200">
+                            <Clock className="w-3 h-3 text-amber-600" />
                             입금 대기
                           </span>
                         )}
@@ -561,43 +573,6 @@ export default function DepositAgentPage() {
                 )}
               </tbody>
             </table>
-          </div>
-        </div>
-
-        {/* 3단계: 보조 옵션 - MacroDroid 원클릭 프리셋 다운로드 */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 shrink-0">
-              <FileCode className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                MacroDroid 앱을 계속 사용하고 싶으신가요?
-                <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-bold">
-                  원클릭 프리셋
-                </span>
-              </h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                사용자의 웹훅 주소와 JSON 규격이 이미 완벽히 입력된 설정 파일을 다운로드받아 MacroDroid에서 &apos;가져오기&apos;만 하시면 됩니다.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={handleCopyWebhook}
-              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              {copiedWebhook ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-              웹훅 URL 복사
-            </button>
-            <button
-              onClick={handleDownloadMacroPreset}
-              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              설정 파일 (.json) 다운로드
-            </button>
           </div>
         </div>
       </main>
