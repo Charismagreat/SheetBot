@@ -767,8 +767,13 @@ function openSheetBotGuide() {
 function showAiCopilotSidebar() {
   var htmlOutput;
   try {
-    var res = UrlFetchApp.fetch("https://sheetbot.cloud/api/copilot/sidebar-template", {
-      muteHttpExceptions: true
+    var cb = new Date().getTime();
+    var res = UrlFetchApp.fetch("https://sheetbot.cloud/api/copilot/sidebar-template?_cb=" + cb, {
+      muteHttpExceptions: true,
+      headers: {
+        "Cache-Control": "no-cache, no-store, max-age=0",
+        "Pragma": "no-cache"
+      }
     });
     if (res.getResponseCode() === 200) {
       htmlOutput = HtmlService.createHtmlOutput(res.getContentText());
