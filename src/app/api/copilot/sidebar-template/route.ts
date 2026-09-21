@@ -971,7 +971,7 @@ export async function GET() {
       </span>
       <span id="agent2-device-label" style="color: #64748b; font-weight: 700; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">-</span>
     </div>
-    <a href="https://sheetbot.cloud/dashboard/notifications" target="_blank" class="btn-phone-register" id="btn-phone-register-link" title="SheetBot Agent2 0초 QR 연동 및 기기 관리">
+    <a href="https://sheetbot.cloud/dashboard/notifications" target="_blank" onclick="handleAgent2Click(event)" class="btn-phone-register" id="btn-phone-register-link" title="SheetBot Agent2 0초 QR 연동 및 기기 관리">
       <span>📲 SheetBot Agent2 0초 QR 연동</span>
       <span style="font-size: 11px; opacity: 0.8;">↗</span>
     </a>
@@ -1280,8 +1280,25 @@ export async function GET() {
       window.open('https://sheetbot.cloud/dashboard/pricing', '_blank');
     }
 
+    function handleAgent2Click(e) {
+      if (window.google && window.google.script && window.google.script.run) {
+        try {
+          if (e && e.preventDefault) e.preventDefault();
+          google.script.run
+            .withFailureHandler(function(err) {
+              console.warn("Native modal failed, opening dashboard:", err);
+              window.open('https://sheetbot.cloud/dashboard/notifications', '_blank');
+            })
+            .openPhoneRegisterModal();
+          return false;
+        } catch(err) {
+          console.warn("Failed to invoke openPhoneRegisterModal:", err);
+        }
+      }
+    }
+
     function openAgent2Modal() {
-      window.open('https://sheetbot.cloud/dashboard/notifications', '_blank');
+      handleAgent2Click();
     }
     function openPhoneModal() {
       openAgent2Modal();
