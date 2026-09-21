@@ -70,69 +70,52 @@ export function sanitizeGasScriptCode(scriptCode: string): string {
   if (!/function\s+openPhoneRegisterModal\s*\(/.test(code)) {
     code += `\n\nfunction openPhoneRegisterModal() {
   var html = HtmlService.createHtmlOutput(getPhoneRegisterModalHtml())
-    .setWidth(440)
-    .setHeight(480);
-  SpreadsheetApp.getUi().showModalDialog(html, "📱 SheetBot 비상 SMS 및 스마트폰 연동");
+    .setWidth(450)
+    .setHeight(560);
+  SpreadsheetApp.getUi().showModalDialog(html, "📱 SheetBot Agent2 0초 QR 스마트폰 연동");
 }
 
 function getPhoneRegisterModalHtml() {
+  var userEmail = "";
+  try {
+    userEmail = Session.getActiveUser().getEmail() || "";
+  } catch (e) {}
+  if (!userEmail) userEmail = "user@example.com";
+
   return '<!DOCTYPE html><html><head><meta charset="utf-8">' +
     '<style>' +
-    'body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin:0;padding:20px;background:#f8fafc;color:#1e293b;}' +
-    '.header{font-size:16px;font-weight:800;color:#0f172a;margin-bottom:8px;display:flex;align-items:center;gap:6px;}' +
-    '.desc{font-size:11.5px;color:#64748b;line-height:1.5;margin-bottom:14px;}' +
-    '.info-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin-bottom:16px;font-size:11px;line-height:1.55;color:#1e40af;}' +
-    '.info-box b{color:#1d4ed8;}' +
-    '.field{margin-bottom:12px;}' +
-    'label{display:block;font-size:11px;font-weight:700;color:#334155;margin-bottom:5px;}' +
-    'input{width:100%;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;box-sizing:border-box;background:#ffffff;outline:none;transition:border 0.2s;}' +
-    'input:focus{border-color:#4f46e5;box-shadow:0 0 0 2px rgba(79,70,229,0.15);}' +
-    '.btn-submit{width:100%;padding:11px;background:linear-gradient(135deg,#4f46e5 0%,#4338ca 100%);color:white;border:none;border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer;transition:filter 0.2s;margin-top:6px;}' +
-    '.btn-submit:hover{filter:brightness(1.08);}' +
-    '.status-msg{margin-top:10px;font-size:11px;padding:8px;border-radius:6px;display:none;text-align:center;}' +
+    'body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin:0;padding:18px;background:#f8fafc;color:#1e293b;text-align:center;}' +
+    '.header{font-size:16px;font-weight:900;color:#0f172a;margin-bottom:4px;display:flex;align-items:center;justify-content:center;gap:6px;}' +
+    '.desc{font-size:11.5px;color:#64748b;line-height:1.45;margin-bottom:12px;}' +
+    '.apk-box{background:#f1f5f9;border:1px solid #cbd5e1;border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;text-align:left;}' +
+    '.apk-title{font-size:11.5px;font-weight:800;color:#0f172a;}' +
+    '.apk-desc{font-size:10.5px;color:#64748b;margin-top:2px;}' +
+    '.apk-btn{background:#0f172a;color:#ffffff;padding:6px 12px;border-radius:7px;font-size:11px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:4px;}' +
+    '.qr-box{background:#ecfdf5;border:1.5px solid #a7f3d0;border-radius:12px;padding:14px;margin-bottom:12px;}' +
+    '.qr-title{font-size:12px;font-weight:800;color:#065f46;margin-bottom:8px;}' +
+    '.qr-img-wrap{background:#ffffff;padding:8px;border-radius:10px;display:inline-block;box-shadow:0 1px 4px rgba(0,0,0,0.06);border:1px solid #d1fae5;}' +
+    '.qr-img{width:160px;height:160px;display:block;margin:0 auto;}' +
+    '.pin-badge{margin-top:8px;font-size:11.5px;font-weight:800;color:#047857;font-family:monospace;background:#ffffff;padding:4px 10px;border-radius:6px;display:inline-block;border:1px solid #a7f3d0;}' +
+    '.qr-desc{font-size:10.5px;color:#065f46;margin-top:8px;line-height:1.4;}' +
+    '.btn-dashboard{display:block;width:100%;padding:10px;background:#ffffff;color:#334155;border:1px solid #cbd5e1;border-radius:8px;font-size:11.5px;font-weight:700;text-decoration:none;box-sizing:border-box;transition:background 0.15s;}' +
+    '.btn-dashboard:hover{background:#f1f5f9;}' +
     '</style></head><body>' +
-    '<div class="header"><span>📱</span><span>비상 연락처 및 스마트폰 연동</span></div>' +
-    '<div class="desc">토큰 소진 및 시트 정지 비상 알림을 실시간 문자로 수신하고, 무료 문자 발송을 연동하세요.</div>' +
-    '<div class="info-box">' +
-    '<b>• 비상 알림 수신:</b> 아이폰(iOS), 안드로이드 기종 무관 100% 실시간 문자 수신<br>' +
-    '<b>• 고객 무료 발송:</b> 안드로이드폰 연동 시 내 요금제로 고객 주문 알림 100% 무료 발송' +
+    '<div class="header"><span>📱</span><span>SheetBot Agent2 기기 연동</span></div>' +
+    '<div class="desc">스마트폰 요금제로 <strong>0원 고객 문자 발송</strong> & 수신 문자 시트 자동 기록</div>' +
+    '<div class="apk-box">' +
+    '  <div><div class="apk-title">1. 스마트폰에 앱 설치</div><div class="apk-desc">안드로이드 스마트폰에 Agent2 앱 설치</div></div>' +
+    '  <a href="https://sheetbot.cloud/download/SheetBotAgent2.apk" target="_blank" class="apk-btn">📥 APK 받기</a>' +
     '</div>' +
-    '<div class="field">' +
-    '<label>휴대폰 번호</label>' +
-    '<input type="tel" id="phoneNumberInput" placeholder="예: 010-1234-5678" />' +
+    '<div class="qr-box">' +
+    '  <div class="qr-title">2. 앱 실행 후 아래 QR 코드를 비추세요</div>' +
+    '  <div class="qr-img-wrap">' +
+    '    <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent('{"app":"SheetBotAgent2","userEmail":"' + userEmail + '"}') + '" class="qr-img" alt="QR" />' +
+    '  </div>' +
+    '  <div><span class="pin-badge">계정: ' + userEmail + '</span></div>' +
+    '  <div class="qr-desc">스캔 즉시 스마트폰과 구글 시트가 1:1 결합되어 0원 문자 발송이 시작됩니다.</div>' +
     '</div>' +
-    '<div class="field">' +
-    '<label>기기 이름 (라벨)</label>' +
-    '<input type="text" id="phoneLabelInput" placeholder="예: 내 아이폰, 내 갤럭시, 사무실 공기계" value="내 스마트폰" />' +
-    '</div>' +
-    '<button class="btn-submit" id="btnSave" onclick="submitPhone()">💾 등록 완료 및 비상 알림 활성화</button>' +
-    '<div id="statusBox" class="status-msg"></div>' +
-    '<script>' +
-    'function submitPhone(){' +
-    'var p=document.getElementById("phoneNumberInput").value.trim();' +
-    'var l=document.getElementById("phoneLabelInput").value.trim();' +
-    'var s=document.getElementById("statusBox");' +
-    'var b=document.getElementById("btnSave");' +
-    'if(!p||p.length<10){alert("올바른 휴대폰 번호를 입력해주세요.");return;}' +
-    'b.disabled=true;b.innerText="등록 처리 중...";' +
-    's.style.display="block";s.style.background="#f1f5f9";s.style.color="#475569";s.innerText="연락처를 저장하는 중입니다...";' +
-    'google.script.run' +
-    '.withSuccessHandler(function(res){' +
-    '  b.disabled=false;b.innerText="💾 등록 완료 및 비상 알림 활성화";' +
-    '  if(res&&res.success){' +
-    '    s.style.background="#dcfce7";s.style.color="#15803d";s.innerHTML="<b>✅ 등록 성공!</b> " + res.message;' +
-    '    setTimeout(function(){ google.script.host.close(); }, 1500);' +
-    '  }else{' +
-    '    s.style.background="#fee2e2";s.style.color="#dc2626";s.innerText="❌ 등록 실패: " + (res.error||"오류 발생");' +
-    '  }' +
-    '})' +
-    '.withFailureHandler(function(err){' +
-    '  b.disabled=false;b.innerText="💾 등록 완료 및 비상 알림 활성화";' +
-    '  s.style.background="#fee2e2";s.style.color="#dc2626";s.innerText="❌ 통신 실패: " + err.message;' +
-    '})' +
-    '.saveUserPhoneNumber(p,l);' +
-    '}' +
-    '</script></body></html>';
+    '<a href="https://sheetbot.cloud/dashboard/notifications" target="_blank" class="btn-dashboard">🌐 웹 대시보드 스마트 알림 센터 열기 ↗</a>' +
+    '</body></html>';
 }
 
 function saveUserPhoneNumber(phone, label) {
