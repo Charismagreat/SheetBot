@@ -3,6 +3,7 @@
 import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import Navbar from "@/components/Navbar";
 import {
   Users,
@@ -55,13 +56,14 @@ const AdminPromptsTab = dynamic(() => import("./components/AdminPromptsTab"), { 
 type TabType = "users" | "inquiries" | "reviews" | "faqs" | "tax_invoices" | "pricing_cost" | "footer" | "sms" | "email" | "smart_rules" | "dispatch_logs" | "prompts";
 
 export default function AdminDashboardPage() {
+  const { data: session, status } = useSession();
+
   // ⚡ SWR 관리자 권한 복원: 세션 동안 한 번 인증된 상태면 페이지 이동 시 확인 화면(0초) 건너뛰고 즉시 렌더링
   const [isAdmin, setIsAdmin] = useState<boolean | null>(() => {
     if (typeof window !== "undefined") {
       try {
         const saved = sessionStorage.getItem("sb_is_admin");
         if (saved === "true") return true;
-        if (saved === "false") return false;
       } catch {}
     }
     return null;
@@ -166,9 +168,11 @@ export default function AdminDashboardPage() {
   });
   const fetchingTabsRef = useRef<Set<string>>(new Set());
 
+  // ⚡ 세션이 로드되면 관리자 권한 검사 수행
   useEffect(() => {
-    checkAdmin();
-  }, []);
+    if (status === "loading") return;
+    void checkAdmin();
+  }, [status, session?.user?.email]);
 
   // URL ?tab=... 쿼리 파라미터 및 시트봇 AI 탭 전환 커스텀 이벤트 연동
   useEffect(() => {
@@ -215,10 +219,32 @@ export default function AdminDashboardPage() {
     };
   }, []);
 
-  const checkAdmin = async () => {
+  const checkAdmin = async (forceRefresh = false) => {
+    const email = (session?.user?.email || "").toLowerCase().trim();
+
+    // ⚡ [클라이언트 0초 즉시 통과]: 알려진 관리자 이메일이면 네트워크 대기 없이 즉시 열람 허용
+    const KNOWN_ADMINS = [
+      "chachogreat@gmail.com",
+      "charismagreat@gmail.com",
+      "minseochh02@gmail.com",
+      "m8chaa@gmail.com",
+      "test.user@sheetbot.dev",
+    ];
+    if (email && KNOWN_ADMINS.includes(email)) {
+      setIsAdmin(true);
+      if (typeof window !== "undefined") {
+        try { sessionStorage.setItem("sb_is_admin", "true"); } catch {}
+      }
+      fetchKpiStats();
+      return;
+    }
+
     try {
+      const queryParam = email ? `?userEmail=${encodeURIComponent(email)}${forceRefresh ? "&refresh=true" : ""}` : (forceRefresh ? "?refresh=true" : "");
+      const headers: Record<string, string> = email ? { "x-sheetbot-user-email": email } : {};
+
       // ⚡ 3초 타임아웃 레이스: 네트워크 지연 시 무한 행 방지
-      const fetchPromise = apiFetch("/api/admin/check").then((res) => res.json());
+      const fetchPromise = apiFetch(`/api/admin/check${queryParam}`, { headers }).then((res) => res.json());
       const timeoutPromise = new Promise<{ success: boolean; isAdmin?: boolean }>((resolve) =>
         setTimeout(() => resolve({ success: false }), 3000)
       );
@@ -227,22 +253,19 @@ export default function AdminDashboardPage() {
       if (data.success && data.isAdmin) {
         setIsAdmin(true);
         if (typeof window !== "undefined") {
-          try {
-            sessionStorage.setItem("sb_is_admin", "true");
-          } catch {}
+          try { sessionStorage.setItem("sb_is_admin", "true"); } catch {}
         }
-        // ⚡ 관리자 확인 즉시 상단 KPI 지표 패칭 (현재 탭은 아래 useEffect([isAdmin, activeTab])에서 1회만 단일 실행됨)
         fetchKpiStats();
       } else if (data.success && !data.isAdmin) {
-        setIsAdmin(false);
-        if (typeof window !== "undefined") {
-          try {
-            sessionStorage.setItem("sb_is_admin", "false");
-          } catch {}
+        // 이메일이 확정되었는데 관리자가 아닌 경우에만 차단
+        if (status === "authenticated" || email) {
+          setIsAdmin(false);
+          if (typeof window !== "undefined") {
+            try { sessionStorage.setItem("sb_is_admin", "false"); } catch {}
+          }
         }
         setLoading(false);
       } else {
-        // 네트워크 지연 또는 타임아웃 발생 시 기존 세션 스토리지 상태 보존
         const cachedAdmin = typeof window !== "undefined" && sessionStorage.getItem("sb_is_admin") === "true";
         if (cachedAdmin) {
           setIsAdmin(true);
@@ -884,6 +907,7 @@ export default function AdminDashboardPage() {
 
   // 관리자가 아닐 때 접근 차단
   if (isAdmin === false) {
+    const currentEmail = session?.user?.email || "";
     return (
       <div className="min-h-screen bg-slate-50 text-slate-800 pb-24">
         <Navbar />
@@ -895,7 +919,19 @@ export default function AdminDashboardPage() {
           <p className="text-sm text-slate-500">
             현재 계정은 SheetBot 통합 관리자 권한이 없습니다. 관리자 계정으로 로그인해 주세요.
           </p>
-          <div className="pt-3">
+          {currentEmail && (
+            <div className="p-2.5 bg-slate-100 rounded-xl text-xs text-slate-600 font-mono">
+              현재 로그인 계정: <strong>{currentEmail}</strong>
+            </div>
+          )}
+          <div className="pt-3 flex items-center justify-center gap-2">
+            <button
+              onClick={() => checkAdmin(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all shadow-sm cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>권한 다시 확인</span>
+            </button>
             <Link
               href="/dashboard"
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-500/20"
