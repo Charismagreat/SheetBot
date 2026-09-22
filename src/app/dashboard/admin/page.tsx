@@ -55,7 +55,17 @@ const AdminPromptsTab = dynamic(() => import("./components/AdminPromptsTab"), { 
 type TabType = "users" | "inquiries" | "reviews" | "faqs" | "tax_invoices" | "pricing_cost" | "footer" | "sms" | "email" | "smart_rules" | "dispatch_logs" | "prompts";
 
 export default function AdminDashboardPage() {
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  // ⚡ SWR 관리자 권한 복원: 세션 동안 한 번 인증된 상태면 페이지 이동 시 확인 화면(0초) 건너뛰고 즉시 렌더링
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem("sb_is_admin");
+        if (saved === "true") return true;
+        if (saved === "false") return false;
+      } catch {}
+    }
+    return null;
+  });
   const [activeTab, setActiveTab] = useState<TabType>("users");
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -206,21 +216,51 @@ export default function AdminDashboardPage() {
   }, []);
 
   const checkAdmin = async () => {
-    setLoading(true);
     try {
-      const res = await apiFetch("/api/admin/check");
-      const data = await res.json();
+      // ⚡ 3초 타임아웃 레이스: 네트워크 지연 시 무한 행 방지
+      const fetchPromise = apiFetch("/api/admin/check").then((res) => res.json());
+      const timeoutPromise = new Promise<{ success: boolean; isAdmin?: boolean }>((resolve) =>
+        setTimeout(() => resolve({ success: false }), 3000)
+      );
+      const data = await Promise.race([fetchPromise, timeoutPromise]);
+
       if (data.success && data.isAdmin) {
         setIsAdmin(true);
-        // ⚡ 관리자 확인 즉시 상단 KPI 지표(0.05s) 패칭 (현재 탭은 아래 useEffect([isAdmin, activeTab])에서 1회만 단일 실행됨)
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem("sb_is_admin", "true");
+          } catch {}
+        }
+        // ⚡ 관리자 확인 즉시 상단 KPI 지표 패칭 (현재 탭은 아래 useEffect([isAdmin, activeTab])에서 1회만 단일 실행됨)
+        fetchKpiStats();
+      } else if (data.success && !data.isAdmin) {
+        setIsAdmin(false);
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem("sb_is_admin", "false");
+          } catch {}
+        }
+        setLoading(false);
+      } else {
+        // 네트워크 지연 또는 타임아웃 발생 시 기존 세션 스토리지 상태 보존
+        const cachedAdmin = typeof window !== "undefined" && sessionStorage.getItem("sb_is_admin") === "true";
+        if (cachedAdmin) {
+          setIsAdmin(true);
+          fetchKpiStats();
+        } else {
+          setIsAdmin(false);
+          setLoading(false);
+        }
+      }
+    } catch {
+      const cachedAdmin = typeof window !== "undefined" && sessionStorage.getItem("sb_is_admin") === "true";
+      if (cachedAdmin) {
+        setIsAdmin(true);
         fetchKpiStats();
       } else {
         setIsAdmin(false);
         setLoading(false);
       }
-    } catch {
-      setIsAdmin(false);
-      setLoading(false);
     }
   };
 

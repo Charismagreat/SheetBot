@@ -265,48 +265,51 @@ export async function isCurrentUserAdmin(emailToCheck?: string | null): Promise<
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // 0. 영구 기본 관리자 목록 (chachogreat@gmail.com 등)
+    // 0. 영구 기본 관리자 목록 (chachogreat@gmail.com 등) 및 환경변수 ADMIN_EMAIL 최우선 대조 (DB 조회 0ms 생략)
     const DEFAULT_ADMIN_EMAILS = ["chachogreat@gmail.com", "charismagreat@gmail.com"];
-    if (DEFAULT_ADMIN_EMAILS.includes(normalizedEmail)) {
-      return true;
-    }
-
-    // 1. sheetbot_users 테이블에서 role === 'ADMIN' 여부 확인
-    const { queryTable } = await import("@/lib/egdesk-helpers");
-    const userRes = await queryTable("sheetbot_users", {
-      filters: { email: normalizedEmail },
-      limit: 1,
-    }).catch(() => ({ rows: [] }));
-
-    if (userRes.rows && userRes.rows.length > 0) {
-      const user = userRes.rows[0];
-      if (user.role === "ADMIN") return true;
-    }
-
-    // 2. 관리자 설정(sheetbot_sms_settings, sheetbot_smtp_settings)의 adminPhone / adminEmail 대조
-    const settingsRes = await queryTable("sheetbot_settings", {
-      limit: 10,
-    }).catch(() => ({ rows: [] }));
-
-    for (const r of settingsRes.rows || []) {
-      if (r.key === "sheetbot_smtp_settings" && r.value) {
-        try {
-          const parsed = JSON.parse(r.value);
-          if (parsed.adminEmail && parsed.adminEmail.toLowerCase().trim() === normalizedEmail) return true;
-          if (parsed.user && parsed.user.toLowerCase().trim() === normalizedEmail) return true;
-        } catch {}
-      }
-    }
-
-    // 3. 환경변수 ADMIN_EMAIL 대조 (쉼표 구분 복수 이메일 지원)
     const envAdminEmail = process.env.ADMIN_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL || "";
-    const adminList = envAdminEmail
-      .split(",")
-      .map((e) => e.toLowerCase().trim())
-      .filter(Boolean);
+    const adminList = [
+      ...DEFAULT_ADMIN_EMAILS,
+      ...envAdminEmail.split(",").map((e) => e.toLowerCase().trim()).filter(Boolean),
+    ];
     if (adminList.includes(normalizedEmail)) {
       return true;
     }
+
+    // 1. sheetbot_users 및 sheetbot_settings DB 확인 (1.5초 타임아웃 안전망 적용하여 무한 행 차단)
+    const dbCheckPromise = (async () => {
+      const { queryTable } = await import("@/lib/egdesk-helpers");
+
+      // 유저 테이블 role === 'ADMIN' 확인
+      const userRes = await queryTable("sheetbot_users", {
+        filters: { email: normalizedEmail },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+
+      if (userRes.rows && userRes.rows.length > 0) {
+        const user = userRes.rows[0];
+        if (user.role === "ADMIN") return true;
+      }
+
+      // 관리자 설정(sheetbot_smtp_settings) 대조
+      const settingsRes = await queryTable("sheetbot_settings", {
+        limit: 10,
+      }).catch(() => ({ rows: [] }));
+
+      for (const r of settingsRes.rows || []) {
+        if (r.key === "sheetbot_smtp_settings" && r.value) {
+          try {
+            const parsed = JSON.parse(r.value);
+            if (parsed.adminEmail && parsed.adminEmail.toLowerCase().trim() === normalizedEmail) return true;
+            if (parsed.user && parsed.user.toLowerCase().trim() === normalizedEmail) return true;
+          } catch {}
+        }
+      }
+      return false;
+    })();
+
+    const timeoutPromise = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1500));
+    return await Promise.race([dbCheckPromise, timeoutPromise]);
   } catch (err) {
     console.warn("isCurrentUserAdmin check warning:", err);
   }
