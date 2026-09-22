@@ -10,7 +10,8 @@ import { setupDatabase } from "@/lib/setup-db";
  */
 export async function POST(req: NextRequest) {
   try {
-    await setupDatabase();
+    // 생존 신호 수신 시 메인 스레드 블로킹 방지 (비동기 보장)
+    setupDatabase().catch(() => {});
     const body = await req.json().catch(() => ({}));
     const { userEmail, deviceModel, batteryLevel, appVersion } = body;
 

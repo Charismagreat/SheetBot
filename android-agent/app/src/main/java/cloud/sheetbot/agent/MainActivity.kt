@@ -25,6 +25,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -210,8 +211,20 @@ class MainActivity : AppCompatActivity() {
     private fun performPairing(email: String, token: String? = null, pinCode: String? = null) {
         binding.progressBar.visibility = View.VISIBLE
         activityScope.launch {
-            val result = ApiClient.pairDevice(email, token, pinCode)
+            // 8초 초과 시 지연 안내 및 자동 취소 안전망
+            val result = withTimeoutOrNull(8000L) {
+                ApiClient.pairDevice(email, token, pinCode)
+            }
             binding.progressBar.visibility = View.GONE
+
+            if (result == null) {
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("통신 시간 초과")
+                    .setMessage("서버 응답이 8초 이상 지연되었습니다.\n네트워크 연결을 확인하신 후 다시 시도해 주세요.")
+                    .setPositiveButton("확인", null)
+                    .show()
+                return@launch
+            }
 
             if (result.success) {
                 prefs.userEmail = email
@@ -243,22 +256,39 @@ class MainActivity : AppCompatActivity() {
         binding.progressBar.visibility = View.VISIBLE
         activityScope.launch {
             val now = SimpleDateFormat("MM/dd HH:mm", Locale.KOREA).format(Date())
-            val simulatedSms = "[Web발신]\n[카카오뱅크] 성명(계좌)\n$now 입금 5,000원\n차호석\n잔액 2,055,439원"
+            val simulatedSms = "[Web발신]\n[카카오뱅크] 입금알림\n$now 입금 5,000원\n테스트입금\n잔액 2,055,439원"
 
-            val result = ApiClient.sendBankWebhook(
-                webhookUrl = prefs.webhookUrl,
-                sender = "1599-3333",
-                smsText = simulatedSms,
-                userEmail = email
-            )
+            val result = withTimeoutOrNull(8000L) {
+                ApiClient.sendBankWebhook(
+                    webhookUrl = prefs.webhookUrl,
+                    sender = "1599-3333",
+                    smsText = simulatedSms,
+                    userEmail = email
+                )
+            }
             binding.progressBar.visibility = View.GONE
+
+            if (result == null) {
+                addLogItem("1599-3333 (테스트)", simulatedSms, false)
+                Toast.makeText(this@MainActivity, "⚠️ 가상 입금 테스트 시간 초과 (8초)\n서버와의 연결 상태를 확인해 주세요.", Toast.LENGTH_LONG).show()
+                return@launch
+            }
 
             addLogItem("1599-3333 (테스트)", simulatedSms, result.success)
 
             if (result.success) {
-                Toast.makeText(this@MainActivity, "✅ 가상 입금 테스트 성공! (토큰 적립 완료)", Toast.LENGTH_LONG).show()
+                val toastText = if (result.message.contains("토큰이 즉시 충전되었습니다")) {
+                    "🎉 가상 입금 매칭 성공! (토큰 충전 완료)"
+                } else {
+                    "🎉 가상 입금 테스트 성공!\n스마트폰 ↔ 서버 웹훅 통신 및 SMS 분석 완벽 확인"
+                }
+                Toast.makeText(this@MainActivity, toastText, Toast.LENGTH_LONG).show()
             } else {
-                Toast.makeText(this@MainActivity, "❌ 테스트 실패: ${result.message}", Toast.LENGTH_LONG).show()
+                if (result.message.contains("대기 세션") || result.message.contains("입금 대기")) {
+                    Toast.makeText(this@MainActivity, "✅ 통신 성공: 입금 문자 전송 완료!\n(웹에 신청된 대기건이 없어 토큰 지급만 생략됨)", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(this@MainActivity, "⚠️ 테스트 안내: ${result.message}", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
