@@ -10,6 +10,8 @@ import {
 import { queryTable } from "../../../../egdesk-helpers";
 import { executeSmartDispatchRules } from "@/lib/smart-dispatch-rules";
 
+import { cachedQueryTable } from "@/lib/server-cache";
+
 export async function GET(request: Request) {
   try {
     const userEmail = await getCurrentUserEmail(request);
@@ -26,16 +28,20 @@ export async function GET(request: Request) {
     if (userEmail) {
       const cleanEmail = userEmail.toLowerCase().trim();
 
-      // ⚡ 지갑 잔액 조회와 결제 내역 조회를 완전 병렬(Promise.all) 실행하여 응답 지연 50% 이상 단축
+      // ⚡ 지갑 잔액 조회와 결제 내역 조회를 완전 병렬(Promise.all) + 인메모리 캐시(15s) 실행
       const ordersTimeout = new Promise<{ rows: any[] }>((resolve) =>
-        setTimeout(() => resolve({ rows: [] }), 2000)
+        setTimeout(() => resolve({ rows: [] }), 1500)
       );
-      const ordersFetch = queryTable("sheetbot_payment_orders", {
-        filters: { user_email: cleanEmail },
-        orderBy: "id",
-        orderDirection: "DESC",
-        limit: 10,
-      }).catch(() => ({ rows: [] }));
+      const ordersFetch = cachedQueryTable(
+        "sheetbot_payment_orders",
+        {
+          filters: { user_email: cleanEmail },
+          orderBy: "id",
+          orderDirection: "DESC",
+          limit: 10,
+        },
+        15
+      ).catch(() => ({ rows: [] }));
 
       const [userWallet, ordersRes] = await Promise.all([
         getOrCreateUserWallet(cleanEmail),
