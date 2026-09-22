@@ -59,20 +59,48 @@ export async function GET(req: NextRequest) {
       console.warn("[UserDevices] live devices fetch warning:", err);
     }
 
-    // 3. DB 정보와 실시간 상태 병합
+    // 3. 마지막 하트비트 경과 시간 계산 헬퍼 (초 단위)
+    const getSecondsSinceLastHeartbeat = (dateStr?: string | null): number => {
+      if (!dateStr) return 999999;
+      try {
+        const normalized = dateStr.includes("T")
+          ? dateStr
+          : dateStr.replace(" ", "T") + (dateStr.endsWith("Z") ? "" : "Z");
+        const lastTime = new Date(normalized).getTime();
+        if (isNaN(lastTime)) {
+          const fallback = new Date(dateStr).getTime();
+          return isNaN(fallback) ? 999999 : Math.floor((Date.now() - fallback) / 1000);
+        }
+        return Math.floor((Date.now() - lastTime) / 1000);
+      } catch {
+        return 999999;
+      }
+    };
+
+    const HEARTBEAT_TIMEOUT_SECONDS = 120; // 2분(120초) 이상 통신 없으면 오프라인 간주
+    const nowIso = new Date().toISOString();
+
+    // 4. DB 정보와 실시간 상태 병합 및 상태 판정
     const mergedDevices = userDevices.map((d: any) => {
       const live = liveDeviceMap[d.device_id || d.id] || {};
-      const isConnected =
-        Boolean(live.connected) ||
-        live.status === "connected" ||
-        live.status === "paired" ||
-        Boolean(live.last_paired_at);
+      const isAndroidAgent = d.pairing_mode === "android_agent";
 
-      const computedStatus = isConnected
-        ? "CONNECTED"
-        : d.status === "CONNECTED"
-        ? "CONNECTED"
-        : (d.status || "DISCONNECTED");
+      let computedStatus: "CONNECTED" | "DISCONNECTED" = "DISCONNECTED";
+
+      if (isAndroidAgent) {
+        // 스마트폰 앱(SheetBot Agent): 마지막 생존 신호 수신 일시 기준 타임아웃 검사
+        const lastSignal = d.last_connected_at || d.updated_at;
+        const secondsAgo = getSecondsSinceLastHeartbeat(lastSignal);
+        computedStatus = secondsAgo <= HEARTBEAT_TIMEOUT_SECONDS ? "CONNECTED" : "DISCONNECTED";
+      } else {
+        // 구글 메시지 웹/Phone MCP 기기
+        const isMcpConnected =
+          Boolean(live.connected) ||
+          live.status === "connected" ||
+          live.status === "paired" ||
+          Boolean(live.last_paired_at);
+        computedStatus = isMcpConnected ? "CONNECTED" : "DISCONNECTED";
+      }
 
       return {
         id: d.id,
@@ -89,15 +117,25 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // 페어링 성공한 기기는 DB 상태도 CONNECTED로 동기화
-    for (const d of userDevices) {
-      const live = liveDeviceMap[d.device_id || d.id];
-      if (live && (live.status === "paired" || live.status === "connected") && d.status !== "CONNECTED") {
+    // 5. DB 상태 양방향 자동 동기화 (오프라인 감지 시 DB를 DISCONNECTED로 즉시 자동 갱신)
+    for (const merged of mergedDevices) {
+      const dbRecord = userDevices.find((r: any) => r.id === merged.id);
+      if (!dbRecord) continue;
+
+      if (merged.status === "DISCONNECTED" && dbRecord.status === "CONNECTED") {
+        // 앱이 꺼졌거나 통신이 두절되어 오프라인으로 판정된 경우 -> DB 즉시 DISCONNECTED 전환
         void updateRows(
           "sheetbot_user_devices",
-          { status: "CONNECTED", last_connected_at: new Date().toISOString() },
-          { filters: { id: d.id, user_email: cleanEmail } }
-        ).catch(() => {});
+          { status: "DISCONNECTED", updated_at: nowIso },
+          { filters: { id: merged.id, user_email: cleanEmail } }
+        ).catch((err) => console.warn("[UserDevices] Auto-offline sync warning:", err.message));
+      } else if (merged.status === "CONNECTED" && dbRecord.status !== "CONNECTED") {
+        // 생존 신호가 정상 도착하여 온라인 상태인 경우 -> DB CONNECTED로 동기화
+        void updateRows(
+          "sheetbot_user_devices",
+          { status: "CONNECTED", updated_at: nowIso },
+          { filters: { id: merged.id, user_email: cleanEmail } }
+        ).catch((err) => console.warn("[UserDevices] Auto-online sync warning:", err.message));
       }
     }
 
