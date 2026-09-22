@@ -3,11 +3,9 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getCurrentUserEmail, isCurrentUserAdmin } from "@/lib/auth";
 import { queryTable } from "@/lib/egdesk-helpers";
-import { setupDatabase } from "@/lib/setup-db";
 
 export async function GET() {
   try {
-    await setupDatabase();
     const adminEmail = await getCurrentUserEmail();
     if (!adminEmail || !(await isCurrentUserAdmin(adminEmail))) {
       return NextResponse.json({ success: false, error: "관리자 권한이 필요합니다." }, { status: 403 });

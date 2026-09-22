@@ -3,12 +3,10 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, insertRows, updateRows, listPhoneDevices } from "@/lib/egdesk-helpers";
-import { setupDatabase } from "@/lib/setup-db";
 import { DEFAULT_SMS_SETTINGS, AdminSmsSettings } from "@/lib/admin-sms";
 
 export async function GET(req: NextRequest) {
   try {
-    await setupDatabase();
     const adminEmail = await getCurrentUserEmail();
     if (!adminEmail) {
       return NextResponse.json({ success: false, error: "관리자 인증이 필요합니다." }, { status: 401 });
@@ -45,8 +43,8 @@ export async function GET(req: NextRequest) {
           devices = JSON.parse(devRes);
         } catch {}
       }
-    } catch (err: any) {
-      console.warn("[AdminSMS] Failed to list phone devices via MCP:", err.message);
+    } catch (e) {
+      console.warn("[AdminSMS] listPhoneDevices error:", e);
     }
 
     return NextResponse.json({
@@ -61,7 +59,6 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await setupDatabase();
     const adminEmail = await getCurrentUserEmail();
     if (!adminEmail) {
       return NextResponse.json({ success: false, error: "관리자 인증이 필요합니다." }, { status: 401 });

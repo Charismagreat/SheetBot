@@ -2,11 +2,9 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getCurrentUserEmail, isCurrentUserAdmin } from "@/lib/auth";
-import { setupDatabase } from "@/lib/setup-db";
 
 export async function GET() {
   try {
-    await setupDatabase();
     const email = await getCurrentUserEmail();
     if (!email) {
       return NextResponse.json({
