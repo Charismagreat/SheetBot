@@ -12,7 +12,6 @@ import crypto from "crypto";
  */
 export async function GET(req: NextRequest) {
   try {
-    await setupDatabase();
     const userEmail = await getCurrentUserEmail();
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
@@ -158,9 +157,17 @@ export async function POST(req: NextRequest) {
         { filters: { id: existingId } }
       );
     } else {
+      // 숫자 기본키(INTEGER id) 규격 준수를 위한 최신 id 자동 채번
+      const latestDev = await queryTable("sheetbot_user_devices", {
+        limit: 1,
+        orderBy: "id",
+        orderDirection: "DESC",
+      }).catch(() => ({ rows: [] }));
+      const nextId = (Number(latestDev.rows?.[0]?.id) || 0) + 1;
+
       await insertRows("sheetbot_user_devices", [
         {
-          id: deviceId,
+          id: nextId,
           user_email: cleanEmail,
           label,
           phone_number: phoneNumber || "",

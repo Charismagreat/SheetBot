@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-21T14:58:55.855Z
+ * Generated at: 2026-09-22T02:33:41.435Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -27,56 +27,56 @@ export const TABLES = {
     displayName: 'user_data_queue_jobs',
     description: 'Imported from user_database_export_2026-09-21.sql',
     rowCount: 0,
-    columnCount: 16,
-    columns: ['id', 'name', 'action_type', 'action_payload', 'status', 'priority', 'attempts', 'max_attempts', 'run_after', 'started_at', 'completed_at', 'last_error', 'result_message', 'idempotency_key', 'created_at', 'updated_at']
+    columnCount: 17,
+    columns: ['id', '_version', 'name', 'action_type', 'action_payload', 'status', 'priority', 'attempts', 'max_attempts', 'run_after', 'started_at', 'completed_at', 'last_error', 'result_message', 'idempotency_key', 'created_at', 'updated_at']
   } as TableDefinition,
   table2: {
     name: 'user_data_queue_runs',
     displayName: 'user_data_queue_runs',
     description: 'Imported from user_database_export_2026-09-21.sql',
     rowCount: 0,
-    columnCount: 10,
-    columns: ['id', 'job_id', 'attempt', 'status', 'started_at', 'completed_at', 'duration_ms', 'result_message', 'error_message', 'created_at']
+    columnCount: 11,
+    columns: ['id', '_version', 'job_id', 'attempt', 'status', 'started_at', 'completed_at', 'duration_ms', 'result_message', 'error_message', 'created_at']
   } as TableDefinition,
   table3: {
     name: '_migration_state',
     displayName: '_migration_state',
     description: 'Imported from user_database_export_2026-09-21.sql',
     rowCount: 1,
-    columnCount: 2,
-    columns: ['name', 'applied_at']
+    columnCount: 3,
+    columns: ['name', '_version', 'applied_at']
   } as TableDefinition,
   table4: {
     name: '_mesh_deletions',
     displayName: '_mesh_deletions',
     description: 'Imported from user_database_export_2026-09-21.sql',
     rowCount: 0,
-    columnCount: 4,
-    columns: ['seq', 'table_name', 'row_id', 'deleted_at']
+    columnCount: 5,
+    columns: ['seq', '_version', 'table_name', 'row_id', 'deleted_at']
   } as TableDefinition,
   table5: {
     name: 'sheet_table_links',
     displayName: 'sheet_table_links',
     description: 'Imported from user_database_export_2026-09-21.sql',
     rowCount: 0,
-    columnCount: 12,
-    columns: ['id', 'user_table_id', 'spreadsheet_id', 'spreadsheet_url', 'data_tab_name', 'header_row', 'sync_mode', 'periodic_interval_ms', 'last_pulled_at', 'last_pushed_at', 'created_at', 'updated_at']
+    columnCount: 13,
+    columns: ['id', '_version', 'user_table_id', 'spreadsheet_id', 'spreadsheet_url', 'data_tab_name', 'header_row', 'sync_mode', 'periodic_interval_ms', 'last_pulled_at', 'last_pushed_at', 'created_at', 'updated_at']
   } as TableDefinition,
   table6: {
     name: 'sheet_sync_configs',
     displayName: 'sheet_sync_configs',
     description: 'Imported from user_database_export_2026-09-21.sql',
     rowCount: 0,
-    columnCount: 19,
-    columns: ['id', 'source_table', 'target_sheet_id', 'target_tab_name', 'date_column', 'window_days', 'fallback_mode', 'fallback_condition', 'enabled', 'trigger_mode', 'interval_ms', 'last_run_at', 'last_run_status', 'last_run_error', 'last_row_count', 'schedule_owner_device_id', 'schedule_version', 'created_at', 'updated_at']
+    columnCount: 20,
+    columns: ['id', '_version', 'source_table', 'target_sheet_id', 'target_tab_name', 'date_column', 'window_days', 'fallback_mode', 'fallback_condition', 'enabled', 'trigger_mode', 'interval_ms', 'last_run_at', 'last_run_status', 'last_run_error', 'last_row_count', 'schedule_owner_device_id', 'schedule_version', 'created_at', 'updated_at']
   } as TableDefinition,
   table7: {
     name: 'user_data_files',
     displayName: 'user_data_files',
     description: 'Imported from user_database_export_2026-09-21.sql',
     rowCount: 0,
-    columnCount: 15,
-    columns: ['id', 'table_id', 'row_id', 'column_name', 'filename', 'mime_type', 'size_bytes', 'storage_type', 'file_data', 'file_path', 'is_compressed', 'compression_type', 'original_size', 'created_at', 'updated_at']
+    columnCount: 16,
+    columns: ['id', '_version', 'table_id', 'row_id', 'column_name', 'filename', 'mime_type', 'size_bytes', 'storage_type', 'file_data', 'file_path', 'is_compressed', 'compression_type', 'original_size', 'created_at', 'updated_at']
   } as TableDefinition,
   table8: {
     name: 'sheetbot_deposit_requests',

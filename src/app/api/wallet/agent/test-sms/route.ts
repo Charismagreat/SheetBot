@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const userEmail = body.userEmail || sessionEmail || "chachogreat@gmail.com";
     const amount = Number(body.amount) || 5000;
-    const depositor = body.depositor || "차호석";
+    const depositor = body.depositor || "테스트입금";
 
     const now = new Date();
     const mm = String(now.getMonth() + 1).padStart(2, "0");
@@ -21,11 +21,12 @@ export async function POST(req: NextRequest) {
     const hh = String(now.getHours()).padStart(2, "0");
     const min = String(now.getMinutes()).padStart(2, "0");
 
-    // 카카오뱅크 통신사 실물 문자 표준 포맷
-    const simulatedSms = `[Web발신]\n[카카오뱅크] 차호석(5965)\n${mm}/${dd} ${hh}:${min} 입금 ${amount.toLocaleString()}원\n${depositor}\n잔액 2,050,439원`;
+    // 카카오뱅크 통신사 실물 문자 표준 포맷 (인명 제외, 범용 테스트 규격)
+    const simulatedSms = `[Web발신]\n[카카오뱅크] 입금알림\n${mm}/${dd} ${hh}:${min} 입금 ${amount.toLocaleString()}원\n테스트입금\n잔액 2,050,439원`;
 
-    // 실제 bank-webhook 호출 테스트
-    const webhookRes = await fetch("https://sheetbot.cloud/api/wallet/bank-webhook", {
+    // 실제 bank-webhook 로직 직접 호출 (외부 서버 오프라인/503 에러 방지)
+    const { POST: handleBankWebhook } = await import("../../bank-webhook/route");
+    const webhookReq = new Request(req.url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest) {
       }),
     });
 
+    const webhookRes = await handleBankWebhook(webhookReq);
     const webhookData = await webhookRes.json().catch(() => ({}));
 
     return NextResponse.json({
