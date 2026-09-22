@@ -420,14 +420,19 @@ export default function DepositAgentPage() {
                   </h3>
                 </div>
                 {device && (device.status === "CONNECTED" || device.status === "ACTIVE") ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0" title="스마트폰 에이전트와 실시간 정상 통신 중">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                     24H 감지 중
+                  </span>
+                ) : device ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-rose-50 text-rose-700 border border-rose-200 shrink-0" title="스마트폰 앱이 꺼졌거나 배터리 절전 상태입니다. 앱을 실행해 주세요.">
+                    <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                    연결 두절 (앱 확인 필요)
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
                     <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                    연동 대기
+                    기기 연동 대기
                   </span>
                 )}
               </div>
