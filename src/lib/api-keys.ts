@@ -25,7 +25,6 @@ export function generateSecureApiKey(): string {
  * 회원의 활성 API 키를 조회하거나, 없으면 신규 발급하여 반환합니다.
  */
 export async function getOrCreateUserApiKey(userEmail: string): Promise<UserApiKey> {
-  await setupDatabase();
   const email = userEmail.toLowerCase().trim();
 
   // 기존 활성 키 조회 (최신순)
