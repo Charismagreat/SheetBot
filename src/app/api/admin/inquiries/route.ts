@@ -3,11 +3,9 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, updateRows } from "@/lib/egdesk-helpers";
-import { setupDatabase } from "@/lib/setup-db";
 
 export async function GET(req: NextRequest) {
   try {
-    await setupDatabase();
     const userEmail = await getCurrentUserEmail();
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "관리자 인증이 필요합니다." }, { status: 401 });
@@ -124,7 +122,6 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await setupDatabase();
     const userEmail = await getCurrentUserEmail();
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "관리자 인증이 필요합니다." }, { status: 401 });
@@ -180,7 +177,6 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    await setupDatabase();
     const userEmail = await getCurrentUserEmail();
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "관리자 인증이 필요합니다." }, { status: 401 });

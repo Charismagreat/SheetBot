@@ -3,12 +3,10 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail, getCurrentVisitorSessionId } from "@/lib/auth";
 import { queryTable, insertRows, updateRows } from "@/lib/egdesk-helpers";
-import { setupDatabase } from "@/lib/setup-db";
 import { DEFAULT_FOOTER, FooterInfo } from "@/lib/default-footer";
 
 export async function GET(req: NextRequest) {
   try {
-    await setupDatabase();
     let adminEmail = await getCurrentUserEmail();
     if (!adminEmail) {
       const visitorId = await getCurrentVisitorSessionId(req);
@@ -43,7 +41,6 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await setupDatabase();
     let adminEmail = await getCurrentUserEmail();
     if (!adminEmail) {
       const visitorId = await getCurrentVisitorSessionId(req);

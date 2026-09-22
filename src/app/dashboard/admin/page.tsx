@@ -1,7 +1,7 @@
 "use client";
 
 import { apiFetch } from '@/lib/api';
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import {
@@ -129,6 +129,7 @@ export default function AdminDashboardPage() {
     mfgInquiriesCount: number;
   } | null>(null);
   const [loadedTabs, setLoadedTabs] = useState<Record<string, boolean>>({});
+  const fetchingTabsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     checkAdmin();
@@ -186,9 +187,8 @@ export default function AdminDashboardPage() {
       const data = await res.json();
       if (data.success && data.isAdmin) {
         setIsAdmin(true);
-        // ⚡ 관리자 확인 즉시 상단 KPI 지표(0.05s)와 현재 탭 데이터만 즉시 패칭
+        // ⚡ 관리자 확인 즉시 상단 KPI 지표(0.05s) 패칭 (현재 탭은 아래 useEffect([isAdmin, activeTab])에서 1회만 단일 실행됨)
         fetchKpiStats();
-        fetchTabData(activeTab, true);
       } else {
         setIsAdmin(false);
         setLoading(false);
@@ -225,10 +225,12 @@ export default function AdminDashboardPage() {
     }
   }, [isAdmin, activeTab, logChannelFilter, logStatusFilter]);
 
-  // ⚡ 온디맨드 탭 데이터 로더
+  // ⚡ 온디맨드 탭 데이터 로더 (중복 요청 원천 차단)
   const fetchTabData = async (tab: TabType, force = false) => {
     if (!force && loadedTabs[tab]) return;
+    if (fetchingTabsRef.current.has(tab)) return;
 
+    fetchingTabsRef.current.add(tab);
     setLoading(true);
     try {
       switch (tab) {
@@ -262,11 +264,15 @@ export default function AdminDashboardPage() {
         case "dispatch_logs":
           await fetchDispatchLogs();
           break;
+        case "pricing_cost":
+        case "prompts":
+          break;
         default:
           break;
       }
       setLoadedTabs((prev) => ({ ...prev, [tab]: true }));
     } finally {
+      fetchingTabsRef.current.delete(tab);
       setLoading(false);
     }
   };
@@ -1231,115 +1237,122 @@ export default function AdminDashboardPage() {
           </Link>
         </div>
 
-        {/* 0. 회원 관리 탭 내용 */}
-        {activeTab === "users" && (
-          <AdminUsersTab users={users} onRefresh={fetchUsers} />
-        )}
+        {/* 탭 로딩 중일 때 부드러운 스켈레톤 Fallback 표출 */}
+        {!loadedTabs[activeTab] ? (
+          <TabLoadingFallback />
+        ) : (
+          <>
+            {/* 0. 회원 관리 탭 내용 */}
+            {activeTab === "users" && (
+              <AdminUsersTab users={users} onRefresh={() => fetchTabData("users", true)} />
+            )}
 
-        {/* 1. 1:1 고객 문의 내역 탭 */}
-        {activeTab === "inquiries" && (
-          <AdminInquiriesTab inquiries={inquiries} onRefresh={fetchInquiries} />
-        )}
+            {/* 1. 1:1 고객 문의 내역 탭 */}
+            {activeTab === "inquiries" && (
+              <AdminInquiriesTab inquiries={inquiries} onRefresh={() => fetchTabData("inquiries", true)} />
+            )}
 
-        {/* 2. 사용 후기 관리 탭 */}
-        {activeTab === "reviews" && (
-          <AdminReviewsTab reviews={reviews} onRefresh={fetchReviews} />
-        )}
+            {/* 2. 사용 후기 관리 탭 */}
+            {activeTab === "reviews" && (
+              <AdminReviewsTab reviews={reviews} onRefresh={() => fetchTabData("reviews", true)} />
+            )}
 
-        {/* 3. FAQ 항목 편집 탭 */}
-        {activeTab === "faqs" && (
-          <AdminFaqsTab faqs={faqs} onRefresh={fetchFaqs} />
-        )}
+            {/* 3. FAQ 항목 편집 탭 */}
+            {activeTab === "faqs" && (
+              <AdminFaqsTab faqs={faqs} onRefresh={() => fetchTabData("faqs", true)} />
+            )}
 
-        {/* 4. 세금계산서/현금영수증 발행 탭 */}
-        {activeTab === "tax_invoices" && (
-          <AdminTaxInvoicesTab taxInvoices={taxInvoices} onRefresh={fetchTaxInvoices} />
-        )}
+            {/* 4. 세금계산서/현금영수증 발행 탭 */}
+            {activeTab === "tax_invoices" && (
+              <AdminTaxInvoicesTab taxInvoices={taxInvoices} onRefresh={() => fetchTabData("tax_invoices", true)} />
+            )}
 
-        {/* 5. AI 실제 원가 및 마진율 관제 탭 */}
-        {activeTab === "pricing_cost" && (
-          <AdminPricingCostTab />
-        )}
+            {/* 5. AI 실제 원가 및 마진율 관제 탭 */}
+            {activeTab === "pricing_cost" && (
+              <AdminPricingCostTab />
+            )}
 
-        {/* 6. 푸터 / 회사정보 & SNS 설정 탭 */}
-        {activeTab === "footer" && (
-          <AdminFooterTab
-            footerForm={footerForm}
-            onFooterFormChange={setFooterForm}
-            saving={savingFooter}
-            onSave={handleSaveFooter}
-          />
-        )}
+            {/* 6. 푸터 / 회사정보 & SNS 설정 탭 */}
+            {activeTab === "footer" && (
+              <AdminFooterTab
+                footerForm={footerForm}
+                onFooterFormChange={setFooterForm}
+                saving={savingFooter}
+                onSave={handleSaveFooter}
+              />
+            )}
 
-        {/* 6. 구글메시지 SMS 알림 설정 탭 */}
-        {activeTab === "sms" && (
-          <AdminSmsTab
-            smsSettings={smsSettings}
-            onSettingsChange={setSmsSettings}
-            phoneDevices={phoneDevices}
-            saving={savingSms}
-            sendingTest={sendingTestSms}
-            onSave={handleSaveSmsSettings}
-            onSendTest={handleSendTestSms}
-            onRefreshDevices={fetchPhoneDevices}
-            checkingDevice={checkingDevice}
-            deviceCheckResult={deviceCheckResult}
-            onCheckDevice={handleCheckDevice}
-            onAddDevice={handleAddDevice}
-            onDeleteDevice={handleDeleteDevice}
-            onConnectDevice={handleConnectDevice}
-          />
-        )}
+            {/* 6. 구글메시지 SMS 알림 설정 탭 */}
+            {activeTab === "sms" && (
+              <AdminSmsTab
+                smsSettings={smsSettings}
+                onSettingsChange={setSmsSettings}
+                phoneDevices={phoneDevices}
+                saving={savingSms}
+                sendingTest={sendingTestSms}
+                onSave={handleSaveSmsSettings}
+                onSendTest={handleSendTestSms}
+                onRefreshDevices={fetchPhoneDevices}
+                checkingDevice={checkingDevice}
+                deviceCheckResult={deviceCheckResult}
+                onCheckDevice={handleCheckDevice}
+                onAddDevice={handleAddDevice}
+                onDeleteDevice={handleDeleteDevice}
+                onConnectDevice={handleConnectDevice}
+              />
+            )}
 
-        {/* 7. 발송 메일 SMTP 설정 탭 */}
-        {activeTab === "email" && (
-          <AdminEmailTab
-            smtpSettings={smtpSettings}
-            onSettingsChange={setSmtpSettings}
-            saving={savingSmtp}
-            showPass={showSmtpPass}
-            onToggleShowPass={() => setShowSmtpPass(!showSmtpPass)}
-            testEmailInput={testEmailInput}
-            onTestEmailInputChange={setTestEmailInput}
-            sendingTest={sendingTestEmail}
-            onSave={handleSaveSmtpSettings}
-            onSendTest={handleSendTestEmail}
-          />
-        )}
+            {/* 7. 발송 메일 SMTP 설정 탭 */}
+            {activeTab === "email" && (
+              <AdminEmailTab
+                smtpSettings={smtpSettings}
+                onSettingsChange={setSmtpSettings}
+                saving={savingSmtp}
+                showPass={showSmtpPass}
+                onToggleShowPass={() => setShowSmtpPass(!showSmtpPass)}
+                testEmailInput={testEmailInput}
+                onTestEmailInputChange={setTestEmailInput}
+                sendingTest={sendingTestEmail}
+                onSave={handleSaveSmtpSettings}
+                onSendTest={handleSendTestEmail}
+              />
+            )}
 
-        {/* 8. AI 자연어 스마트 발송 규칙 탭 */}
-        {activeTab === "smart_rules" && (
-          <AdminSmartRulesTab
-            rules={smartRules}
-            promptInput={rulePromptInput}
-            onPromptInputChange={setRulePromptInput}
-            parsing={parsingRule}
-            onSubmitPrompt={handleCreateRuleFromPrompt}
-            onToggleRule={handleToggleRule}
-            onDeleteRule={handleDeleteRule}
-          />
-        )}
+            {/* 8. AI 자연어 스마트 발송 규칙 탭 */}
+            {activeTab === "smart_rules" && (
+              <AdminSmartRulesTab
+                rules={smartRules}
+                promptInput={rulePromptInput}
+                onPromptInputChange={setRulePromptInput}
+                parsing={parsingRule}
+                onSubmitPrompt={handleCreateRuleFromPrompt}
+                onToggleRule={handleToggleRule}
+                onDeleteRule={handleDeleteRule}
+              />
+            )}
 
-        {/* 8. 알림 발송 이력 대장 탭 내용 */}
-        {activeTab === "dispatch_logs" && (
-          <AdminDispatchLogsTab
-            logs={dispatchLogs}
-            stats={dispatchStats}
-            channelFilter={logChannelFilter}
-            onChannelFilterChange={setLogChannelFilter}
-            statusFilter={logStatusFilter}
-            onStatusFilterChange={setLogStatusFilter}
-            searchInput={logSearchInput}
-            onSearchInputChange={setLogSearchInput}
-            loading={loadingLogs}
-            onRefresh={fetchDispatchLogs}
-            onDeleteLog={handleDeleteLog}
-          />
-        )}
+            {/* 8. 알림 발송 이력 대장 탭 내용 */}
+            {activeTab === "dispatch_logs" && (
+              <AdminDispatchLogsTab
+                logs={dispatchLogs}
+                stats={dispatchStats}
+                channelFilter={logChannelFilter}
+                onChannelFilterChange={setLogChannelFilter}
+                statusFilter={logStatusFilter}
+                onStatusFilterChange={setLogStatusFilter}
+                searchInput={logSearchInput}
+                onSearchInputChange={setLogSearchInput}
+                loading={loadingLogs}
+                onRefresh={fetchDispatchLogs}
+                onDeleteLog={handleDeleteLog}
+              />
+            )}
 
-        {/* 9. 추천 프롬프트 갤러리 관리 탭 */}
-        {activeTab === "prompts" && (
-          <AdminPromptsTab />
+            {/* 9. 추천 프롬프트 갤러리 관리 탭 */}
+            {activeTab === "prompts" && (
+              <AdminPromptsTab />
+            )}
+          </>
         )}
       </main>
 

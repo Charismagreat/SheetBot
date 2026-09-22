@@ -3,11 +3,9 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail, isCurrentUserAdmin } from "@/lib/auth";
 import { queryTable, insertRows, updateRows } from "@/lib/egdesk-helpers";
-import { setupDatabase } from "@/lib/setup-db";
 
 export async function GET(req: NextRequest) {
   try {
-    await setupDatabase();
     const adminEmail = await getCurrentUserEmail();
     if (!adminEmail || !(await isCurrentUserAdmin(adminEmail))) {
       return NextResponse.json({ success: false, error: "관리자 권한이 필요합니다." }, { status: 403 });
@@ -148,9 +146,15 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 신규 유저가 있으면 비동기 삽입
+    // 신규 유저가 있으면 백그라운드 비동기 삽입 (응답 지연 방지)
     if (usersToInsert.length > 0) {
-      await insertRows("sheetbot_users", usersToInsert).catch(() => {});
+      Promise.resolve().then(async () => {
+        try {
+          await insertRows("sheetbot_users", usersToInsert);
+        } catch (insertErr) {
+          console.warn("[Admin-Users-API] Background sync insert note:", insertErr);
+        }
+      });
     }
 
     // 가입일 최신순 정렬
@@ -165,7 +169,6 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    await setupDatabase();
     const adminEmail = await getCurrentUserEmail();
     if (!adminEmail || !(await isCurrentUserAdmin(adminEmail))) {
       return NextResponse.json({ success: false, error: "관리자 권한이 필요합니다." }, { status: 403 });

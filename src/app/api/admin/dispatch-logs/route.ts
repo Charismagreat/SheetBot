@@ -3,14 +3,12 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { getDispatchLogs, softDeleteDispatchLog } from "@/lib/dispatch-logger";
-import { setupDatabase } from "@/lib/setup-db";
 
 /**
  * 발송 이력 목록 및 집계 통계 조회
  */
 export async function GET(req: NextRequest) {
   try {
-    await setupDatabase();
     const adminEmail = await getCurrentUserEmail();
     if (!adminEmail) {
       return NextResponse.json({ success: false, error: "관리자 로그인이 필요합니다." }, { status: 401 });
@@ -59,7 +57,6 @@ export async function GET(req: NextRequest) {
  */
 export async function DELETE(req: NextRequest) {
   try {
-    await setupDatabase();
     const adminEmail = await getCurrentUserEmail();
     if (!adminEmail) {
       return NextResponse.json({ success: false, error: "관리자 로그인이 필요합니다." }, { status: 401 });
