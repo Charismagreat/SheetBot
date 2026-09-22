@@ -224,11 +224,8 @@ export default function AdminDashboardPage() {
 
     // ⚡ [클라이언트 0초 즉시 통과]: 알려진 관리자 이메일이면 네트워크 대기 없이 즉시 열람 허용
     const KNOWN_ADMINS = [
-      "chachogreat@gmail.com",
       "charismagreat@gmail.com",
-      "minseochh02@gmail.com",
-      "m8chaa@gmail.com",
-      "test.user@sheetbot.dev",
+      "chachogreat@gmail.com",
     ];
     if (email && KNOWN_ADMINS.includes(email)) {
       setIsAdmin(true);
