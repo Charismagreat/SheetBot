@@ -1,6 +1,7 @@
 import { queryTable, insertRows, updateRows } from "./egdesk-helpers";
 import { setupDatabase } from "./setup-db";
 import { getOrCreateUserApiKey } from "./api-keys";
+import { fetchWithCache, invalidateServerCache } from "./server-cache";
 
 export interface UserWallet {
   id: string;
@@ -59,130 +60,142 @@ export const TOKEN_PACKAGES: PaymentPackage[] = [
 
 /**
  * 회원의 토큰 지갑을 조회하거나, 없으면 신규 가입 웰컴 토큰을 지급하여 생성합니다.
+ * (10초 인메모리 캐시 & In-flight Deduplication 적용으로 0ms 즉각 반환)
  */
 export async function getOrCreateUserWallet(userEmail: string): Promise<UserWallet> {
   const email = userEmail.toLowerCase().trim();
 
-  // ⚡ 2.5초 타임아웃 레이스로 무한 대기 차단
-  const timeoutPromise = new Promise<{ rows: any[] }>((resolve) =>
-    setTimeout(() => resolve({ rows: [] }), 2500)
-  );
+  return fetchWithCache(
+    `user_wallet_${email}`,
+    async () => {
+      // ⚡ 2초 타임아웃 레이스로 무한 대기 차단
+      const timeoutPromise = new Promise<{ rows: any[] }>((resolve) =>
+        setTimeout(() => resolve({ rows: [] }), 2000)
+      );
 
-  const fetchPromise = queryTable("sheetbot_user_wallets", {
-    filters: { user_email: email },
-    limit: 50,
-  }).catch(() => ({ rows: [] }));
+      const fetchPromise = queryTable("sheetbot_user_wallets", {
+        filters: { user_email: email },
+        limit: 10,
+      }).catch(() => ({ rows: [] }));
 
-  const res = await Promise.race([fetchPromise, timeoutPromise]);
+      const res = await Promise.race([fetchPromise, timeoutPromise]);
+      const validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
 
-  const validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
+      if (validRows.length > 0) {
+        // 잔액이 가장 크고 유효한 지갑을 메인으로 선택 (PRO 우선)
+        validRows.sort((a: any, b: any) => {
+          const balA = Number(a.balance_tokens) || 0;
+          const balB = Number(b.balance_tokens) || 0;
+          if (balB !== balA) return balB - balA;
+          if (a.tier === "PRO" && b.tier !== "PRO") return -1;
+          if (b.tier === "PRO" && a.tier !== "PRO") return 1;
+          return String(b.id || "").localeCompare(String(a.id || ""));
+        });
 
-  if (validRows.length > 0) {
-    // 잔액이 가장 크고 유효한 지갑을 메인으로 선택 (PRO 우선)
-    validRows.sort((a: any, b: any) => {
-      const balA = Number(a.balance_tokens) || 0;
-      const balB = Number(b.balance_tokens) || 0;
-      if (balB !== balA) return balB - balA;
-      if (a.tier === "PRO" && b.tier !== "PRO") return -1;
-      if (b.tier === "PRO" && a.tier !== "PRO") return 1;
-      return String(b.id || "").localeCompare(String(a.id || ""));
-    });
+        const mainWallet = validRows[0];
 
-    const mainWallet = validRows[0];
+        // ⚡ 중복 지갑 정리는 사용자 응답을 블로킹하지 않고 백그라운드 비동기 처리
+        if (validRows.length > 1) {
+          void (async () => {
+            try {
+              let extraBalance = 0;
+              let extraPurchased = 0;
+              let extraUsed = 0;
+              const nowStr = new Date().toISOString();
 
-    // 만약 중복 지갑이 2개 이상 존재하면 잔액을 메인 지갑으로 무손실 통합 합산 후 중복본 소프트 삭제
-    if (validRows.length > 1) {
-      let extraBalance = 0;
-      let extraPurchased = 0;
-      let extraUsed = 0;
-      const nowStr = new Date().toISOString();
+              for (let i = 1; i < validRows.length; i++) {
+                const dup = validRows[i];
+                extraBalance += Number(dup.balance_tokens || 0);
+                extraPurchased += Number(dup.total_purchased_tokens || 0);
+                extraUsed += Number(dup.total_used_tokens || 0);
 
-      for (let i = 1; i < validRows.length; i++) {
-        const dup = validRows[i];
-        extraBalance += Number(dup.balance_tokens || 0);
-        extraPurchased += Number(dup.total_purchased_tokens || 0);
-        extraUsed += Number(dup.total_used_tokens || 0);
+                await updateRows(
+                  "sheetbot_user_wallets",
+                  {
+                    deleted_at: nowStr,
+                    deleted_by: "system_wallet_consolidation",
+                    updated_at: nowStr,
+                  },
+                  { filters: { id: String(dup.id) } }
+                ).catch(() => {});
+              }
 
-        // 중복 지갑 소프트 삭제
-        await updateRows(
-          "sheetbot_user_wallets",
-          {
-            deleted_at: nowStr,
-            deleted_by: "system_wallet_consolidation",
-            updated_at: nowStr,
-          },
-          { filters: { id: String(dup.id) } }
-        ).catch(() => {});
+              if (extraBalance > 0 || extraPurchased > 0) {
+                const newBal = (Number(mainWallet.balance_tokens) || 0) + extraBalance;
+                const newPurchased = (Number(mainWallet.total_purchased_tokens) || 0) + extraPurchased;
+                const newUsed = (Number(mainWallet.total_used_tokens) || 0) + extraUsed;
+
+                await updateRows(
+                  "sheetbot_user_wallets",
+                  {
+                    balance_tokens: newBal,
+                    total_purchased_tokens: newPurchased,
+                    total_used_tokens: newUsed,
+                    updated_at: nowStr,
+                    updated_by: "system_wallet_consolidation",
+                  },
+                  { filters: { id: String(mainWallet.id) } }
+                ).catch(() => {});
+              }
+            } catch (consolidationErr) {
+              console.warn("[Wallet] Background consolidation note:", consolidationErr);
+            }
+          })();
+        }
+
+        return {
+          id: mainWallet.id,
+          userEmail: mainWallet.user_email,
+          balanceTokens: Number(mainWallet.balance_tokens || 0),
+          totalPurchasedTokens: Number(mainWallet.total_purchased_tokens || 0),
+          totalUsedTokens: Number(mainWallet.total_used_tokens || 0),
+          tier: mainWallet.tier || "FREE",
+        };
       }
 
-      if (extraBalance > 0 || extraPurchased > 0) {
-        const newBal = (Number(mainWallet.balance_tokens) || 0) + extraBalance;
-        const newPurchased = (Number(mainWallet.total_purchased_tokens) || 0) + extraPurchased;
-        const newUsed = (Number(mainWallet.total_used_tokens) || 0) + extraUsed;
+      // 신규 지갑 생성 (웰컴 무료 토큰 지급)
+      const now = new Date().toISOString();
+      const walletId = `wallet_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const newRow = {
+        id: walletId,
+        uuid: crypto.randomUUID(),
+        user_email: email,
+        balance_tokens: INITIAL_WELCOME_TOKENS,
+        total_purchased_tokens: 0,
+        total_used_tokens: 0,
+        tier: "FREE",
+        created_at: now,
+        updated_at: now,
+        updated_by: "system_welcome",
+        deleted_at: null,
+        deleted_by: null,
+        restored_at: null,
+        restored_by: null,
+      };
 
-        await updateRows(
-          "sheetbot_user_wallets",
-          {
-            balance_tokens: newBal,
-            total_purchased_tokens: newPurchased,
-            total_used_tokens: newUsed,
-            updated_at: nowStr,
-            updated_by: "system_wallet_consolidation",
-          },
-          { filters: { id: String(mainWallet.id) } }
-        ).catch(() => {});
+      // 신규 지갑 DB 저장 (2초 타임아웃 레이스)
+      const insertTimeout = new Promise((resolve) => setTimeout(resolve, 2000));
+      await Promise.race([
+        insertRows("sheetbot_user_wallets", [newRow]).catch(() => {}),
+        insertTimeout,
+      ]);
 
-        mainWallet.balance_tokens = newBal;
-        mainWallet.total_purchased_tokens = newPurchased;
-        mainWallet.total_used_tokens = newUsed;
-      }
-    }
+      // 회원가입 시 개인 API 키 자동 발급은 백그라운드 비동기로 위임하여 응답 지연 방지
+      void getOrCreateUserApiKey(email).catch((err) =>
+        console.warn("[Token-Wallet] Auto-provision API key warning:", err.message)
+      );
 
-    return {
-      id: mainWallet.id,
-      userEmail: mainWallet.user_email,
-      balanceTokens: Number(mainWallet.balance_tokens || 0),
-      totalPurchasedTokens: Number(mainWallet.total_purchased_tokens || 0),
-      totalUsedTokens: Number(mainWallet.total_used_tokens || 0),
-      tier: mainWallet.tier || "FREE",
-    };
-  }
-
-  // 신규 지갑 생성 (웰컴 무료 토큰 지급)
-  const now = new Date().toISOString();
-  const walletId = `wallet_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-  const newRow = {
-    id: walletId,
-    uuid: crypto.randomUUID(),
-    user_email: email,
-    balance_tokens: INITIAL_WELCOME_TOKENS,
-    total_purchased_tokens: 0,
-    total_used_tokens: 0,
-    tier: "FREE",
-    created_at: now,
-    updated_at: now,
-    updated_by: "system_welcome",
-    deleted_at: null,
-    deleted_by: null,
-    restored_at: null,
-    restored_by: null,
-  };
-
-  await insertRows("sheetbot_user_wallets", [newRow]);
-
-  // 회원가입 시 개인 API 키도 자동 발급 연계
-  await getOrCreateUserApiKey(email).catch((err) =>
-    console.warn("[Token-Wallet] Auto-provision API key warning:", err.message)
+      return {
+        id: walletId,
+        userEmail: email,
+        balanceTokens: INITIAL_WELCOME_TOKENS,
+        totalPurchasedTokens: 0,
+        totalUsedTokens: 0,
+        tier: "FREE",
+      };
+    },
+    10 // 10초 TTL
   );
-
-  return {
-    id: walletId,
-    userEmail: email,
-    balanceTokens: INITIAL_WELCOME_TOKENS,
-    totalPurchasedTokens: 0,
-    totalUsedTokens: 0,
-    tier: "FREE",
-  };
 }
 
 /**
