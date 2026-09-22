@@ -31,6 +31,20 @@ import {
   ArrowRight
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
+import dynamic from "next/dynamic";
+
+const NotificationsRulesTab = dynamic(
+  () => import("@/components/notifications/NotificationsRulesTab"),
+  { ssr: false }
+);
+const NotificationsLogsTab = dynamic(
+  () => import("@/components/notifications/NotificationsLogsTab"),
+  { ssr: false }
+);
+const NotificationsGuideTab = dynamic(
+  () => import("@/components/notifications/NotificationsGuideTab"),
+  { ssr: false }
+);
 
 export default function NotificationsPage() {
   const { data: session, status } = useSession();
@@ -573,364 +587,31 @@ export default function NotificationsPage() {
 
         {/* 탭 2: 자연어 스마트 알림 규칙 */}
         {activeTab === "rules" && (
-          <div className="space-y-6">
-            {/* 자연어 규칙 생성 폼 */}
-            <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">
-                  <Zap className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-extrabold text-slate-900">자연어 발송 템플릿 &amp; 자동 발송 규칙</h3>
-                  <p className="text-xs text-slate-500">
-                    발송 조건과 문자 문구를 자연어로 입력하면, AI가 치환 변수(예: &#123;&#123;고객명&#125;&#125;, &#123;&#123;주문금액&#125;&#125;)와 트리거를 자동 분석해 등록합니다.
-                  </p>
-                </div>
-              </div>
-
-              <form onSubmit={handleCreateRule} className="space-y-3">
-                <div className="relative">
-                  <textarea
-                    value={promptInput}
-                    onChange={(e) => setPromptInput(e.target.value)}
-                    placeholder="예: D열의 주문상태가 '결제완료'로 바뀌면 고객 연락처로 감사 문자를 보내줘"
-                    rows={3}
-                    className="w-full p-4 rounded-2xl border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none text-xs sm:text-sm resize-none"
-                  />
-                  <button
-                    type="submit"
-                    disabled={creatingRule || !promptInput.trim()}
-                    className="absolute right-3 bottom-3.5 px-4 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    {creatingRule ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>AI 분석 및 등록 중...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                        <span>규칙 생성</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {/* 예시 프롬프트 칩 */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="text-[11px] text-slate-400 font-bold mr-1">추천 예시:</span>
-                  {SAMPLE_PROMPTS.map((p, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setPromptInput(p)}
-                      className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] transition-colors cursor-pointer"
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              </form>
-            </div>
-
-            {/* 규칙 목록 */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-extrabold text-slate-900">등록된 발송 템플릿 &amp; 규칙 목록</h3>
-                <button
-                  onClick={fetchRules}
-                  disabled={loadingRules}
-                  className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 transition-all cursor-pointer"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${loadingRules ? "animate-spin" : ""}`} />
-                </button>
-              </div>
-
-              {loadingRules ? (
-                <div className="bg-white rounded-2xl p-8 text-center border border-slate-200">
-                  <RefreshCw className="w-5 h-5 animate-spin text-indigo-600 mx-auto mb-2" />
-                  <p className="text-xs text-slate-500 font-bold">규칙을 불러오는 중...</p>
-                </div>
-              ) : rules.length === 0 ? (
-                <div className="bg-white rounded-2xl p-8 text-center border border-slate-200 text-slate-500 text-xs">
-                  등록된 스마트 알림 규칙이 없습니다. 위 입력창에서 자연어로 새 규칙을 생성해 보세요!
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {rules.map((rule) => (
-                    <div
-                      key={rule.id}
-                      className={`bg-white rounded-2xl p-5 border transition-all flex flex-col justify-between space-y-3 ${
-                        rule.is_active === 1 ? "border-slate-200 shadow-sm" : "border-slate-200 opacity-60 bg-slate-50/50"
-                      }`}
-                    >
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-black border border-indigo-100">
-                            {rule.trigger_event === "row_added" ? "새 행 추가" : "시트 셀 수정"}
-                          </span>
-                          <button
-                            onClick={() => handleToggleRule(rule)}
-                            className="flex items-center gap-1 text-xs font-extrabold cursor-pointer"
-                          >
-                            {rule.is_active === 1 ? (
-                              <span className="text-emerald-600 flex items-center gap-1">
-                                <ToggleRight className="w-5 h-5" /> 활성
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 flex items-center gap-1">
-                                <ToggleLeft className="w-5 h-5" /> 꺼짐
-                              </span>
-                            )}
-                          </button>
-                        </div>
-
-                        <h4 className="font-black text-sm text-slate-900">{rule.name}</h4>
-                        <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                          {rule.prompt}
-                        </p>
-
-                        <div className="text-[11px] text-slate-500 space-y-1 pt-1">
-                          <div>
-                            <strong>수신 대상:</strong>{" "}
-                            {rule.target_recipient === "self"
-                              ? "회원 본인 휴대폰"
-                              : `시트의 '${rule.recipient_column || "연락처"}' 열 고객 번호`}
-                          </div>
-                          <div className="truncate">
-                            <strong>메시지 내용:</strong> {rule.message_template}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-end pt-2 border-t border-slate-100">
-                        <button
-                          onClick={() => handleDeleteRule(rule)}
-                          className="text-slate-400 hover:text-rose-600 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>삭제</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <NotificationsRulesTab
+            rules={rules}
+            loadingRules={loadingRules}
+            promptInput={promptInput}
+            setPromptInput={setPromptInput}
+            creatingRule={creatingRule}
+            onCreateRule={handleCreateRule}
+            onToggleRule={handleToggleRule}
+            onDeleteRule={handleDeleteRule}
+            onRefresh={fetchRules}
+            samplePrompts={SAMPLE_PROMPTS}
+          />
         )}
 
         {/* 탭 3: 알림 발송 이력 */}
         {activeTab === "logs" && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900">최근 문자 발송 이력</h3>
-                <p className="text-xs text-slate-500">회원님의 폰을 통해 발송된 알림 문자의 성공 및 실패 기록입니다.</p>
-              </div>
-              <button
-                onClick={fetchLogs}
-                disabled={loadingLogs}
-                className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 transition-all cursor-pointer"
-              >
-                <RefreshCw className={`w-4 h-4 ${loadingLogs ? "animate-spin" : ""}`} />
-              </button>
-            </div>
-
-            {loadingLogs ? (
-              <div className="bg-white rounded-2xl p-8 text-center border border-slate-200">
-                <RefreshCw className="w-5 h-5 animate-spin text-amber-600 mx-auto mb-2" />
-                <p className="text-xs text-slate-500 font-bold">발송 기록을 조회하는 중...</p>
-              </div>
-            ) : logs.length === 0 ? (
-              <div className="bg-white rounded-2xl p-8 text-center border border-slate-200 text-slate-500 text-xs">
-                아직 발송된 알림 이력이 없습니다.
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 text-slate-500 font-extrabold border-b border-slate-200">
-                        <th className="p-3.5">발송 일시</th>
-                        <th className="p-3.5">규칙 / 이벤트</th>
-                        <th className="p-3.5">수신 번호</th>
-                        <th className="p-3.5">발송 내용</th>
-                        <th className="p-3.5">상태</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {logs.map((log) => (
-                        <tr key={log.id} className="hover:bg-slate-50/50">
-                          <td className="p-3.5 text-slate-500 whitespace-nowrap">
-                            {log.created_at ? log.created_at.replace("T", " ").slice(0, 19) : "-"}
-                          </td>
-                          <td className="p-3.5 font-bold text-slate-800 whitespace-nowrap">
-                            {log.rule_name || "스마트 알림"}
-                          </td>
-                          <td className="p-3.5 text-indigo-600 font-mono font-bold whitespace-nowrap">
-                            {log.recipient}
-                          </td>
-                          <td className="p-3.5 text-slate-700 max-w-xs truncate" title={log.content}>
-                            {log.content}
-                          </td>
-                          <td className="p-3.5 whitespace-nowrap">
-                            {log.status === "SUCCESS" ? (
-                              <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-black border border-emerald-200 text-[10px]">
-                                발송 성공
-                              </span>
-                            ) : (
-                              <span
-                                className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 font-black border border-rose-200 text-[10px]"
-                                title={log.error_message}
-                              >
-                                실패: {log.error_message || "오류"}
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
+          <NotificationsLogsTab
+            logs={logs}
+            loadingLogs={loadingLogs}
+            onRefresh={fetchLogs}
+          />
         )}
 
         {/* 탭 4: 실전 활용 가이드 */}
-        {activeTab === "guide" && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-3">
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-800 text-xs font-black rounded-full border border-emerald-200">
-                <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
-                <span>SheetBot Agent2 양방향 자동화 매뉴얼</span>
-              </div>
-              <h3 className="text-xl font-black text-slate-900">
-                내 스마트폰을 24시간 0원 문자 발송 &amp; 시트 수신 서버로 활용하기
-              </h3>
-              <p className="text-xs text-slate-600 leading-relaxed max-w-3xl">
-                복잡한 코드를 복사하거나 붙여넣을 필요가 없습니다. 
-                스마트폰에 <strong>SheetBot Agent2</strong> 앱을 설치하고 QR 코드를 1초 만에 스캔하면,
-                구글 스프레드시트와 스마트폰이 안전하게 1:1로 결합되어 완벽한 양방향 문자 자동화가 시작됩니다.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* 카드 1: 발신 (시트 -> 고객) */}
-              <div className="bg-white rounded-3xl p-6 sm:p-7 border border-emerald-200 shadow-sm space-y-4 relative overflow-hidden">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black text-xs">
-                    1
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-extrabold text-emerald-600 uppercase tracking-wider">Outbound • 발신</span>
-                    <h4 className="text-sm font-extrabold text-slate-900">구글 시트 ➔ 고객 알림 0원 일괄 발송</h4>
-                  </div>
-                </div>
-
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  시중 유료 알림톡/문자 서비스(건당 20~40원) 대신, 스마트폰 요금제의 <strong>무제한 무료 문자</strong>를 사용하여 시트 고객들에게 대량 문자를 자동 발송합니다.
-                </p>
-
-                <div className="space-y-2.5 pt-1 text-xs text-slate-700">
-                  <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <strong className="text-slate-900">A열 체크박스 선택:</strong>
-                      <div className="text-[11px] text-slate-500 mt-0.5">시트에서 문자를 보낼 고객 행의 체크박스를 선택합니다.</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <strong className="text-slate-900">[📱 선택 행 문자 일괄 발송] 메뉴 클릭:</strong>
-                      <div className="text-[11px] text-slate-500 mt-0.5">시트 상단 🚀 SheetBot 메뉴에서 원클릭으로 발송을 실행합니다.</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <strong className="text-slate-900">기기 점검 &amp; 원스톱 승인:</strong>
-                      <div className="text-[11px] text-slate-500 mt-0.5">기기 연결 상태와 대상 건수를 확인 후 승인 시 즉시 0원으로 전송됩니다.</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 카드 2: 수신 (스마트폰 -> 시트) */}
-              <div className="bg-white rounded-3xl p-6 sm:p-7 border border-indigo-200 shadow-sm space-y-4 relative overflow-hidden">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs">
-                    2
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-extrabold text-indigo-600 uppercase tracking-wider">Inbound • 수신</span>
-                    <h4 className="text-sm font-extrabold text-slate-900">스마트폰 수신 문자 ➔ 구글 시트 자동 기록</h4>
-                  </div>
-                </div>
-
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  스마트폰으로 들어온 <strong>쇼핑몰 결제 문자, 법인카드 승인 SMS, 고객의 회신 답장</strong>을 실시간 감지하여 구글 시트에 1초 만에 자동 기록합니다.
-                </p>
-
-                <div className="space-y-2.5 pt-1 text-xs text-slate-700">
-                  <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                    <CheckCircle2 className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <strong className="text-slate-900">키워드 자동 필터링:</strong>
-                      <div className="text-[11px] text-slate-500 mt-0.5">[입금완료], [결제], 은행명 등 지정한 조건의 SMS만 정확히 수집합니다.</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                    <CheckCircle2 className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <strong className="text-slate-900">구글 시트 1행 추가 (Realtime):</strong>
-                      <div className="text-[11px] text-slate-500 mt-0.5">일시, 발신번호, 결제금액, 주문내역을 분리하여 다음 빈 행에 자동 기입합니다.</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                    <CheckCircle2 className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <strong className="text-slate-900">스마트 후속 자동화 연계:</strong>
-                      <div className="text-[11px] text-slate-500 mt-0.5">기록과 동시에 재고 차감이나 감사 이메일 발송 등 연쇄 파이프라인이 즉시 작동합니다.</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 원클릭 AI 자동 주입 안내 배너 */}
-            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-7 text-white border border-indigo-500/20 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold">
-                  <Sparkles className="w-4 h-4" />
-                  <span>수동 복붙 없이 0초 만에 시트에 기능 주입</span>
-                </div>
-                <h4 className="text-base font-extrabold text-white">
-                  새 시트에 문자 발송 기능을 넣고 싶으신가요?
-                </h4>
-                <p className="text-slate-300 text-xs leading-relaxed max-w-2xl">
-                  시트 상단 <strong>[🚀 SheetBot 메뉴] ➔ [🤖 SheetBot AI 코파일럿]</strong>을 열고 
-                  <em>"A열 체크박스 선택 행으로 고객에게 문자 발송하는 메뉴 만들어줘"</em>라고 말씀만 하시면, 
-                  시트봇 AI가 필요한 Apps Script 코드를 구글 클라우드에 원클릭으로 직접 주입합니다.
-                </p>
-              </div>
-
-              <a
-                href="/dashboard"
-                className="px-5 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 flex-shrink-0 active:scale-95"
-              >
-                <span>내 워크스페이스 바로가기</span>
-                <ArrowRight className="w-4 h-4" />
-              </a>
-            </div>
-          </div>
-        )}
+        {activeTab === "guide" && <NotificationsGuideTab />}
       </main>
 
       {/* 모달 1: SheetBot Agent2 기기 연동 */}

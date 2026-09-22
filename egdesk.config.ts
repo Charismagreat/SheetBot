@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-22T03:12:49.998Z
+ * Generated at: 2026-09-22T04:14:03.204Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -215,7 +215,7 @@ export const TABLES = {
   table27: {
     name: 'sheetbot_user_devices',
     displayName: 'SheetBot 회원 SMS 디바이스 대장',
-    rowCount: 4,
+    rowCount: 0,
     columnCount: 18,
     columns: ['id', '_version', 'user_email', 'label', 'phone_number', 'device_id', 'pairing_mode', 'google_profile_name', 'status', 'last_connected_at', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
