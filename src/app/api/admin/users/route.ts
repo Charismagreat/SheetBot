@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     const validPayments = (paymentsRes.rows || []).filter((r: any) => !r.deleted_at);
     const validInquiries = (inquiriesRes.rows || []).filter((r: any) => !r.deleted_at);
 
-    // 2. 전체 고유 이메일 목록 수집
+    // 2. 전체 고유 이메일 목록 수집 및 Map 사전 구축 (O(N) 성능 최적화)
     const emailSet = new Set<string>();
     emailSet.add(adminEmail.toLowerCase().trim());
     validWallets.forEach((w: any) => { if (w.user_email) emailSet.add(w.user_email.toLowerCase().trim()); });
@@ -36,18 +36,53 @@ export async function GET(req: NextRequest) {
     validProjects.forEach((p: any) => { if (p.user_email) emailSet.add(p.user_email.toLowerCase().trim()); });
     validPayments.forEach((m: any) => { if (m.user_email) emailSet.add(m.user_email.toLowerCase().trim()); });
 
+    const userMetaMap = new Map<string, any>();
+    validUsers.forEach((u: any) => {
+      if (u.email) userMetaMap.set(u.email.toLowerCase().trim(), u);
+    });
+
+    const walletMap = new Map<string, any>();
+    validWallets.forEach((w: any) => {
+      if (w.user_email) walletMap.set(w.user_email.toLowerCase().trim(), w);
+    });
+
+    const projectsMap = new Map<string, any[]>();
+    validProjects.forEach((p: any) => {
+      const e = p.user_email?.toLowerCase().trim();
+      if (e) {
+        if (!projectsMap.has(e)) projectsMap.set(e, []);
+        projectsMap.get(e)!.push(p);
+      }
+    });
+
+    const paymentsMap = new Map<string, any[]>();
+    validPayments.forEach((m: any) => {
+      const e = m.user_email?.toLowerCase().trim();
+      if (e && m.status === "PAID") {
+        if (!paymentsMap.has(e)) paymentsMap.set(e, []);
+        paymentsMap.get(e)!.push(m);
+      }
+    });
+
+    const inquiriesMap = new Map<string, any[]>();
+    validInquiries.forEach((i: any) => {
+      const e = i.user_email?.toLowerCase().trim();
+      if (e) {
+        if (!inquiriesMap.has(e)) inquiriesMap.set(e, []);
+        inquiriesMap.get(e)!.push(i);
+      }
+    });
+
     // 3. 각 회원별 통계 데이터 결합
     const userList: any[] = [];
     const usersToInsert: any[] = [];
 
     for (const email of Array.from(emailSet)) {
-      const userMeta = validUsers.find((u: any) => u.email?.toLowerCase().trim() === email);
-      const wallet = validWallets.find((w: any) => w.user_email?.toLowerCase().trim() === email);
-      const userProjects = validProjects.filter((p: any) => p.user_email?.toLowerCase().trim() === email);
-      const userPayments = validPayments.filter(
-        (m: any) => m.user_email?.toLowerCase().trim() === email && m.status === "PAID"
-      );
-      const userInquiries = validInquiries.filter((i: any) => i.user_email?.toLowerCase().trim() === email);
+      const userMeta = userMetaMap.get(email);
+      const wallet = walletMap.get(email);
+      const userProjects = projectsMap.get(email) || [];
+      const userPayments = paymentsMap.get(email) || [];
+      const userInquiries = inquiriesMap.get(email) || [];
 
       const totalSpentKrw = userPayments.reduce((sum: number, cur: any) => sum + (Number(cur.amount_krw) || 0), 0);
       const balanceTokens = wallet ? Number(wallet.balance_tokens || 0) : 20000;
