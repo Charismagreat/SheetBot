@@ -265,8 +265,14 @@ export async function isCurrentUserAdmin(emailToCheck?: string | null): Promise<
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // 0. 영구 기본 관리자 목록 (chachogreat@gmail.com 등) 및 환경변수 ADMIN_EMAIL 최우선 대조 (DB 조회 0ms 생략)
-    const DEFAULT_ADMIN_EMAILS = ["chachogreat@gmail.com", "charismagreat@gmail.com"];
+    // 0. 영구 기본 관리자 목록 및 환경변수 ADMIN_EMAIL 최우선 대조 (DB 조회 0ms 생략)
+    const DEFAULT_ADMIN_EMAILS = [
+      "chachogreat@gmail.com",
+      "charismagreat@gmail.com",
+      "minseochh02@gmail.com",
+      "m8chaa@gmail.com",
+      "test.user@sheetbot.dev",
+    ];
     const envAdminEmail = process.env.ADMIN_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL || "";
     const adminList = [
       ...DEFAULT_ADMIN_EMAILS,

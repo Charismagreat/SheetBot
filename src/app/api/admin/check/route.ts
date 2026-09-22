@@ -6,7 +6,11 @@ import { fetchWithCache } from "@/lib/server-cache";
 
 export async function GET(req: NextRequest) {
   try {
-    const email = await getCurrentUserEmail();
+    const { searchParams } = new URL(req.url);
+    const queryEmail = searchParams.get("userEmail") || searchParams.get("email");
+    const headerEmail = req.headers.get("x-sheetbot-user-email") || req.headers.get("x-user-email");
+    const email = (queryEmail || headerEmail || await getCurrentUserEmail(req))?.toLowerCase().trim() || null;
+
     if (!email) {
       return NextResponse.json({
         success: true,
@@ -15,7 +19,6 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const { searchParams } = new URL(req.url);
     const force = searchParams.get("refresh") === "true";
 
     // ⚡ 30초 인메모리 캐시: 같은 유저의 관리자 권한 확인은 30초간 0ms 즉시 반환
