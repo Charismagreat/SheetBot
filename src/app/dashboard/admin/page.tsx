@@ -60,7 +60,15 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState<boolean>(true);
 
   // 데이터 상태
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem("sb_admin_users");
+        return saved ? JSON.parse(saved) : [];
+      } catch {}
+    }
+    return [];
+  });
   const [inquiries, setInquiries] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [faqs, setFaqs] = useState<any[]>([]);
@@ -111,7 +119,7 @@ export default function AdminDashboardPage() {
   const [logSearchInput, setLogSearchInput] = useState<string>("");
   const [loadingLogs, setLoadingLogs] = useState<boolean>(false);
 
-  // ⚡ 성능 최적화: 상단 KPI 전용 경량 통계 상태 및 탭 캐시
+  // ⚡ 성능 최적화: SWR(Stale-While-Revalidate) - 세션 스토리지에서 이전 통계 즉각 복원 (0초 렌더링)
   const [kpiStats, setKpiStats] = useState<{
     totalUsersCount: number;
     proUsersCount: number;
@@ -127,8 +135,25 @@ export default function AdminDashboardPage() {
     tierACount: number;
     voucherMatchedCount: number;
     mfgInquiriesCount: number;
-  } | null>(null);
-  const [loadedTabs, setLoadedTabs] = useState<Record<string, boolean>>({});
+  } | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem("sb_admin_kpi");
+        return saved ? JSON.parse(saved) : null;
+      } catch {}
+    }
+    return null;
+  });
+  const [loadedTabs, setLoadedTabs] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    if (typeof window !== "undefined") {
+      try {
+        const hasSaved = !!sessionStorage.getItem("sb_admin_users");
+        if (hasSaved) initial.users = true;
+      } catch {}
+    }
+    return initial;
+  });
   const fetchingTabsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -199,13 +224,19 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // ⚡ 상단 KPI 지표 초고속 로드 (10개 API를 대기하지 않고 0.05초 만에 헤더 렌더링)
-  const fetchKpiStats = async () => {
+  // ⚡ 상단 KPI 지표 초고속 로드 (SWR 세션 스토리지 실시간 동기화)
+  const fetchKpiStats = async (force = false) => {
     try {
-      const res = await apiFetch("/api/admin/stats");
+      const url = force ? "/api/admin/stats?refresh=true" : "/api/admin/stats";
+      const res = await apiFetch(url);
       const data = await res.json();
       if (data.success && data.stats) {
         setKpiStats(data.stats);
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem("sb_admin_kpi", JSON.stringify(data.stats));
+          } catch {}
+        }
       }
     } catch (e) {
       console.warn("Failed to fetch admin kpi stats", e);
@@ -235,7 +266,7 @@ export default function AdminDashboardPage() {
     try {
       switch (tab) {
         case "users":
-          await fetchUsers();
+          await fetchUsers(force);
           break;
         case "inquiries":
           await fetchInquiries();
@@ -282,7 +313,7 @@ export default function AdminDashboardPage() {
     setLoading(true);
     try {
       await Promise.all([
-        fetchKpiStats(),
+        fetchKpiStats(true),
         fetchTabData(activeTab, true),
       ]);
     } finally {
@@ -290,11 +321,19 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (force = false) => {
     try {
-      const res = await apiFetch("/api/admin/users");
+      const url = force ? "/api/admin/users?refresh=true" : "/api/admin/users";
+      const res = await apiFetch(url);
       const data = await res.json();
-      if (data.success) setUsers(data.users || []);
+      if (data.success) {
+        setUsers(data.users || []);
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem("sb_admin_users", JSON.stringify(data.users || []));
+          } catch {}
+        }
+      }
     } catch (e) {
       console.warn("Failed to fetch admin users", e);
     }
