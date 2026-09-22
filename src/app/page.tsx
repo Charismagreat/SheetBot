@@ -33,9 +33,6 @@ import { TEMPLATE_SHORTCUTS, KILLER_WEBAPPS } from "@/lib/data/landing";
 
 const DynamicKillerWebAppsSection = nextDynamic(() => import('@/components/landing/KillerWebappsSection'), { ssr: false });
 const DynamicHowItWorksSection = nextDynamic(() => import('@/components/landing/HowItWorksSection'), { ssr: false });
-const DynamicComparisonSection = nextDynamic(() => import('@/components/landing/ComparisonSection'), { ssr: false });
-const DynamicErpPipelineSection = nextDynamic(() => import('@/components/landing/ErpPipelineSection'), { ssr: false });
-const DynamicPainPointsSection = nextDynamic(() => import('@/components/landing/PainPointsSection'), { ssr: false });
 
 export default function LandingPage() {
   const { data: session } = useSession();

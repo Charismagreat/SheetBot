@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
@@ -85,14 +86,58 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
-      // 기존에 잔류하는 세션이 있다면 먼저 완전히 폐기(Revoke)하여 세션 누수 방지
-      await signOutVisitorGoogle().catch(() => {});
-      await startVisitorGoogleLogin({
+      // 기존 잔류 세션 폐기는 비동기 300ms 타임아웃 제한으로 블로킹 방지
+      await Promise.race([
+        signOutVisitorGoogle().catch(() => {}),
+        new Promise((resolve) => setTimeout(resolve, 300)),
+      ]);
+
+      // 1차 시도: EGDesk Visitor Google 로그인 (최대 4초 타임아웃 레이스)
+      const visitorLoginPromise = startVisitorGoogleLogin({
         next: getTargetRedirectUrl(),
         forceConsent: true,
         scopes: SHEETBOT_WORKSPACE_SCOPES,
       });
+
+      const timeoutPromise = new Promise<{ timeout: boolean }>((resolve) =>
+        setTimeout(() => resolve({ timeout: true }), 4000)
+      );
+
+      const raceResult = await Promise.race([visitorLoginPromise, timeoutPromise]);
+
+      if (raceResult && (raceResult as any).timeout) {
+        console.warn("Visitor Google login timed out, falling back to direct login-start API...");
+        // 2차 시도 폴백: 자체 /api/auth/google/login-start 엔드포인트 직접 호출
+        const fallbackRes = await apiFetch("/api/auth/google/login-start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ forceConsent: true }),
+        }).then((r) => r.json()).catch(() => null);
+
+        if (fallbackRes?.authUrl) {
+          window.location.href = fallbackRes.authUrl;
+          return;
+        }
+        setIsLoading(false);
+        alert("Google 로그인 응답 시간이 초과되었습니다. 다시 한 번 버튼을 눌러주세요.");
+        return;
+      }
     } catch (err: any) {
+      console.error("Login attempt error:", err);
+      // 2차 시도 폴백: 에러 발생 시 자체 엔드포인트로 복구 시도
+      try {
+        const fallbackRes = await apiFetch("/api/auth/google/login-start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ forceConsent: true }),
+        }).then((r) => r.json()).catch(() => null);
+
+        if (fallbackRes?.authUrl) {
+          window.location.href = fallbackRes.authUrl;
+          return;
+        }
+      } catch {}
+
       setIsLoading(false);
       alert("Google 로그인 시작 중 오류가 발생했습니다: " + (err?.message || "네트워크 오류"));
     }
@@ -102,13 +147,12 @@ export default function LoginPage() {
   const handleSwitchGoogleAccount = async () => {
     setIsLoading(true);
     try {
-      await signOutVisitorGoogle().catch(() => {});
+      await Promise.race([
+        signOutVisitorGoogle().catch(() => {}),
+        new Promise((resolve) => setTimeout(resolve, 300)),
+      ]);
       setVisitorEmail(null);
-      await startVisitorGoogleLogin({
-        next: getTargetRedirectUrl(),
-        forceConsent: true,
-        scopes: SHEETBOT_WORKSPACE_SCOPES,
-      });
+      await handleGoogleLogin();
     } catch (err: any) {
       setIsLoading(false);
       alert("Google 계정 전환 중 오류가 발생했습니다: " + (err?.message || "네트워크 오류"));
