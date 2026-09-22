@@ -1,7 +1,9 @@
+"use client";
+
 import React from "react";
 import { Layers, Terminal, Workflow } from "lucide-react";
 
-export function HowItWorksSection() {
+export default function HowItWorksSection() {
   return (
     <div id="how-it-works" className="w-full space-y-6 pt-4">
       <div className="space-y-2 text-center">

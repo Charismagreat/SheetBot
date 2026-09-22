@@ -63,7 +63,6 @@ function mapRowToSchedule(row: any): SheetBotSchedule {
  */
 export async function GET(request: Request) {
   try {
-    await setupDatabase();
     const userEmail = await getCurrentUserEmail(request);
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
@@ -79,12 +78,19 @@ export async function GET(request: Request) {
       filters.project_id = filterProjectId;
     }
 
-    const res = await queryTable("sheetbot_schedules", {
+    // ⚡ 2.5초 타임아웃 레이스로 무한 행(Hang) 원천 차단
+    const timeoutPromise = new Promise<{ rows: any[] }>((resolve) =>
+      setTimeout(() => resolve({ rows: [] }), 2500)
+    );
+
+    const fetchPromise = queryTable("sheetbot_schedules", {
       filters,
       orderBy: "id",
       orderDirection: "DESC",
       limit: 200,
     }).catch(() => ({ rows: [] }));
+
+    const res = await Promise.race([fetchPromise, timeoutPromise]);
 
     const rawRows = res.rows || [];
     const activeSchedules = rawRows

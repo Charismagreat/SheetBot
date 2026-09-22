@@ -1,19 +1,14 @@
 "use client";
 
 import React from "react";
-import { 
-  Sparkles, 
-  ArrowRight, 
-  CheckCircle2, 
-  XCircle,
-} from "lucide-react";
-import { KILLER_WEBAPPS } from "@/constants/landing";
+import { Sparkles, ArrowRight, XCircle, CheckCircle2 } from "lucide-react";
+import { KILLER_WEBAPPS } from "@/lib/data/landing";
 
-interface KillerWebappsSectionProps {
-  onSelectKillerWebApp: (app: typeof KILLER_WEBAPPS[0]) => void;
+interface KillerWebAppsSectionProps {
+  handleSelectKillerWebApp: (app: typeof KILLER_WEBAPPS[0]) => void;
 }
 
-export function KillerWebappsSection({ onSelectKillerWebApp }: KillerWebappsSectionProps) {
+export default function KillerWebAppsSection({ handleSelectKillerWebApp }: KillerWebAppsSectionProps) {
   return (
     <div id="killer-webapps" className="w-full space-y-8 pt-6">
       <div className="space-y-3 text-center">
@@ -38,11 +33,9 @@ export function KillerWebappsSection({ onSelectKillerWebApp }: KillerWebappsSect
               key={idx}
               className="bg-white rounded-3xl border-2 border-slate-200/90 hover:border-emerald-500 hover:shadow-xl transition-all duration-300 p-6 flex flex-col justify-between space-y-5 group relative overflow-hidden h-full"
             >
-              {/* 상단 액센트 그라디언트 바 */}
               <div className={`absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r ${app.color}`} />
 
               <div className="space-y-4 flex-1 flex flex-col">
-                {/* 순위 & 뱃지 */}
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-black px-3 py-1 bg-slate-900 text-white rounded-xl shadow-xs">
                     {app.rank}
@@ -52,7 +45,6 @@ export function KillerWebappsSection({ onSelectKillerWebApp }: KillerWebappsSect
                   </span>
                 </div>
 
-                {/* 아이콘 & 타이틀 */}
                 <div className="flex items-start gap-3 pt-1">
                   <div className={`p-3 rounded-2xl bg-gradient-to-br ${app.color} text-white shadow-md group-hover:scale-110 transition-transform shrink-0`}>
                     <IconComp className="w-6 h-6" />
@@ -69,7 +61,6 @@ export function KillerWebappsSection({ onSelectKillerWebApp }: KillerWebappsSect
                   </div>
                 </div>
 
-                {/* Pain vs SheetBot Solution 대비 */}
                 <div className="space-y-2 text-xs min-h-[7rem] flex flex-col justify-between">
                   <div className="p-2.5 bg-rose-50/70 border border-rose-100 rounded-xl text-rose-700 flex items-start gap-2 flex-1">
                     <XCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
@@ -81,7 +72,6 @@ export function KillerWebappsSection({ onSelectKillerWebApp }: KillerWebappsSect
                   </div>
                 </div>
 
-                {/* 시트 컬럼 태그 목록 */}
                 <div className="space-y-1.5 pt-1 min-h-[3.25rem]">
                   <div className="text-[10px] font-bold text-slate-400">필요한 구글 시트 컬럼:</div>
                   <div className="flex flex-wrap gap-1">
@@ -97,10 +87,9 @@ export function KillerWebappsSection({ onSelectKillerWebApp }: KillerWebappsSect
                 </div>
               </div>
 
-              {/* 하단 생성 버튼 (칼각 정렬) */}
               <button
                 type="button"
-                onClick={() => onSelectKillerWebApp(app)}
+                onClick={() => handleSelectKillerWebApp(app)}
                 className="w-full py-3 px-4 bg-slate-900 hover:bg-emerald-600 text-white font-extrabold text-xs rounded-2xl shadow-xs transition-all flex items-center justify-center gap-2 group-hover:shadow-md cursor-pointer active:scale-95 mt-auto"
               >
                 <span>🚀 1초 만에 이 웹앱 래핑하기</span>
