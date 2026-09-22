@@ -61,13 +61,19 @@ export const TOKEN_PACKAGES: PaymentPackage[] = [
  * 회원의 토큰 지갑을 조회하거나, 없으면 신규 가입 웰컴 토큰을 지급하여 생성합니다.
  */
 export async function getOrCreateUserWallet(userEmail: string): Promise<UserWallet> {
-  await setupDatabase();
   const email = userEmail.toLowerCase().trim();
 
-  const res = await queryTable("sheetbot_user_wallets", {
+  // ⚡ 2.5초 타임아웃 레이스로 무한 대기 차단
+  const timeoutPromise = new Promise<{ rows: any[] }>((resolve) =>
+    setTimeout(() => resolve({ rows: [] }), 2500)
+  );
+
+  const fetchPromise = queryTable("sheetbot_user_wallets", {
     filters: { user_email: email },
     limit: 50,
   }).catch(() => ({ rows: [] }));
+
+  const res = await Promise.race([fetchPromise, timeoutPromise]);
 
   const validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
 

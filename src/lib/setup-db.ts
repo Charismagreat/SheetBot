@@ -190,7 +190,11 @@ export async function setupDatabase(force = false): Promise<void> {
       // ⚡ [초고속 스킵 가드]: 메인 테이블이 이미 존재하면 무거운 22개 테이블 검사 및 마이그레이션을 즉시 건너뜀 (콜드 스타트 30초 -> 0.01초 단축)
       if (!force) {
         try {
-          const quickCheck = await queryTable('sheetbot_projects', { limit: 1 });
+          const timeoutPromise = new Promise<any>((resolve) =>
+            setTimeout(() => resolve({ rows: [] }), 2000)
+          );
+          const checkPromise = queryTable('sheetbot_projects', { limit: 1 }).catch(() => ({ rows: [] }));
+          const quickCheck = await Promise.race([checkPromise, timeoutPromise]);
           if (quickCheck && Array.isArray(quickCheck.rows)) {
             isDbInitialized = true;
             return;

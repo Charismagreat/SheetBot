@@ -27,14 +27,18 @@ export async function GET(request: Request) {
       const userWallet = await getOrCreateUserWallet(userEmail);
       wallet = userWallet;
 
-      // 최근 충전 결제 내역 조회 (최근 10건)
-      const ordersRes = await queryTable("sheetbot_payment_orders", {
+      // 최근 충전 결제 내역 조회 (최근 10건, 2초 타임아웃 가드)
+      const ordersTimeout = new Promise<{ rows: any[] }>((resolve) =>
+        setTimeout(() => resolve({ rows: [] }), 2000)
+      );
+      const ordersFetch = queryTable("sheetbot_payment_orders", {
         filters: { user_email: userEmail.toLowerCase().trim() },
         orderBy: "id",
         orderDirection: "DESC",
         limit: 10,
       }).catch(() => ({ rows: [] }));
 
+      const ordersRes = await Promise.race([ordersFetch, ordersTimeout]);
       validOrders = (ordersRes.rows || []).filter((r: any) => !r.deleted_at);
     }
 

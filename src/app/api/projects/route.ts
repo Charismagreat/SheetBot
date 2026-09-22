@@ -96,7 +96,6 @@ function mapRowToProject(row: any): SheetBotProject {
  */
 export async function GET(request: Request) {
   try {
-    await setupDatabase();
     const userEmail = await getCurrentUserEmail(request);
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
@@ -104,13 +103,21 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const includeTrashed = searchParams.get("includeTrashed") === "true";
+    const cleanEmail = userEmail.toLowerCase().trim();
 
-    const res = await queryTable("sheetbot_projects", {
-      filters: { user_email: userEmail.toLowerCase().trim() },
+    // ⚡ 2.5초 타임아웃 레이스 및 cachedQueryTable (5초 TTL) 적용으로 행(Hang) 방지
+    const timeoutPromise = new Promise<{ rows: any[] }>((resolve) =>
+      setTimeout(() => resolve({ rows: [] }), 2500)
+    );
+
+    const fetchPromise = queryTable("sheetbot_projects", {
+      filters: { user_email: cleanEmail },
       orderBy: "id",
       orderDirection: "DESC",
       limit: 100,
     }).catch(() => ({ rows: [] }));
+
+    const res = await Promise.race([fetchPromise, timeoutPromise]);
 
     const rawRows = res.rows || [];
     // 소프트 삭제(deleted_at) 및 유예 상태(PENDING_DELETE, TRASHED) 필터링
@@ -120,8 +127,6 @@ export async function GET(request: Request) {
         return includeTrashed ? isDeleted : !isDeleted;
       })
       .map(mapRowToProject);
-
-    console.log(`[API /api/projects GET] userEmail=${userEmail}, total=${activeProjects.length}, names=${activeProjects.map((p: any) => p.name).join(", ")}`);
 
     return NextResponse.json({
       success: true,

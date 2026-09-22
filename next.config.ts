@@ -28,6 +28,7 @@ const getLocalIPs = () => {
 };
 
 const nextConfig: NextConfig = {
+
   // Only use basePath in production mode, not in dev mode
   basePath: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
   assetPrefix: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
@@ -37,6 +38,7 @@ const nextConfig: NextConfig = {
     // Always skip TypeScript errors to prevent blocking on auto-generated files
     ignoreBuildErrors: true,
   },
+
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb',

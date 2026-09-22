@@ -47,11 +47,35 @@ export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
-  const [projects, setProjects] = useState<any[]>([]);
+  // ⚡ SWR 캐시로 이전 방문 데이터 즉시 복원 (0초 렌더링)
+  const [projects, setProjects] = useState<any[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem("sheetbot_cache_projects");
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return [];
+  });
   const [trashedProjects, setTrashedProjects] = useState<any[]>([]);
   const [showTrashed, setShowTrashed] = useState(false);
-  const [schedules, setSchedules] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [schedules, setSchedules] = useState<any[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem("sheetbot_cache_schedules");
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return [];
+  });
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        if (sessionStorage.getItem("sheetbot_cache_projects")) return false;
+      } catch {}
+    }
+    return true;
+  });
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [urlSheetParam, setUrlSheetParam] = useState<string>("");
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
@@ -147,13 +171,21 @@ export default function DashboardPage() {
     }
   }, [status]);
 
-  // 요약 카드용 실시간 계정 자원 상태
+  // 요약 카드용 실시간 계정 자원 상태 (SWR 캐시 복원)
   const [wallet, setWallet] = useState<{
     balanceTokens: number;
     totalPurchasedTokens?: number;
     totalUsedTokens?: number;
     tier: string;
-  } | null>(null);
+  } | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem("sheetbot_cache_wallet");
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return null;
+  });
   const [usageCostKrw, setUsageCostKrw] = useState<number>(0);
   const [usageTokens, setUsageTokens] = useState<number>(0);
   const [usageCalls, setUsageCalls] = useState<number>(0);
@@ -189,24 +221,41 @@ export default function DashboardPage() {
 
   // 데이터 로드 (1단계: 필수 핵심 데이터 즉시 로드 -> 2단계: 보조 메트릭 백그라운드 지연 로드)
   const fetchData = useCallback(async () => {
-    setLoading(true);
-    const now = Date.now();
+    // SWR 캐시가 없는 경우에만 로딩 스피너 표출
+    if (!projects.length && !wallet) {
+      setLoading(true);
+    }
     const userParam = session?.user?.email ? `&userEmail=${encodeURIComponent(session.user.email)}` : "";
     const fetchHeaders: Record<string, string> = session?.user?.email
       ? { "x-sheetbot-user-email": session.user.email }
       : {};
 
     try {
-      // 🚀 [1단계: 즉각 렌더링] 사용자가 바로 작업해야 하는 핵심 3종 (프로젝트, 스케줄, 토큰지갑) 초고속 로드
-      const [projRes, schedRes, walletRes] = await Promise.all([
-        apiFetch(`/api/projects?_t=${now}${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-        apiFetch(`/api/schedules?_t=${now}${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-        apiFetch(`/api/wallet?_t=${now}${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+      // 🚀 [1단계: 즉각 렌더링] 3초 타임아웃 레이스로 무한 행(Hang) 원천 차단
+      const timeoutGuard = new Promise<any>((resolve) =>
+        setTimeout(() => resolve([{ success: false }, { success: false }, { success: false }]), 3000)
+      );
+
+      const fetchPromise = Promise.all([
+        apiFetch(`/api/projects?${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/schedules?${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/wallet?${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
       ]);
 
-      if (projRes?.success) setProjects(projRes.projects || []);
-      if (schedRes?.success) setSchedules(schedRes.schedules || []);
-      if (walletRes?.success && walletRes.wallet) setWallet(walletRes.wallet);
+      const [projRes, schedRes, walletRes] = await Promise.race([fetchPromise, timeoutGuard]);
+
+      if (projRes?.success && Array.isArray(projRes.projects)) {
+        setProjects(projRes.projects);
+        try { sessionStorage.setItem("sheetbot_cache_projects", JSON.stringify(projRes.projects)); } catch {}
+      }
+      if (schedRes?.success && Array.isArray(schedRes.schedules)) {
+        setSchedules(schedRes.schedules);
+        try { sessionStorage.setItem("sheetbot_cache_schedules", JSON.stringify(schedRes.schedules)); } catch {}
+      }
+      if (walletRes?.success && walletRes.wallet) {
+        setWallet(walletRes.wallet);
+        try { sessionStorage.setItem("sheetbot_cache_wallet", JSON.stringify(walletRes.wallet)); } catch {}
+      }
     } catch (err) {
       console.error("Dashboard primary fetch error:", err);
     } finally {
@@ -216,11 +265,11 @@ export default function DashboardPage() {
 
     // ⚡ [2단계: 백그라운드 병렬 수신] 보조 배지 및 세부 통계 (AI 사용량, 디바이스, 스마트 규칙, 설정, 휴지통)
     void Promise.all([
-      apiFetch(`/api/admin/ai-usage?range=month&limit=1${userParam}&_t=${now}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-      apiFetch(`/api/user/devices?_t=${now}${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-      apiFetch(`/api/user/smart-rules?_t=${now}${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-      apiFetch(`/api/admin/settings?_t=${now}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-      apiFetch(`/api/projects?includeTrashed=true&_t=${now}${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+      apiFetch(`/api/admin/ai-usage?range=month&limit=1${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+      apiFetch(`/api/user/devices?${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+      apiFetch(`/api/user/smart-rules?${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+      apiFetch(`/api/admin/settings`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+      apiFetch(`/api/projects?includeTrashed=true${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
     ]).then(([usageRes, devRes, ruleRes, settingsRes, trashedProjRes]) => {
       if (trashedProjRes?.success) setTrashedProjects(trashedProjRes.projects || []);
       if (usageRes?.success) {
