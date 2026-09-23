@@ -105,8 +105,22 @@ export default function DepositAgentPage() {
           const tB = new Date(b.lastConnectedAt || b.last_connected_at || b.updated_at || b.created_at || 0).getTime();
           return tB - tA;
         });
-        setDevices(agentDevices);
-        setDevice(agentDevices[0] || null);
+
+        // 💡 동일 기기 모델명 중복 제거 (가장 최근에 통신한 레코드 1대만 보존)
+        const uniqueDevices: any[] = [];
+        const seenLabels = new Set<string>();
+        for (const dev of agentDevices) {
+          const key = (dev.label || dev.deviceModel || "").trim().toLowerCase();
+          if (key && !seenLabels.has(key)) {
+            seenLabels.add(key);
+            uniqueDevices.push(dev);
+          } else if (!key) {
+            uniqueDevices.push(dev);
+          }
+        }
+
+        setDevices(uniqueDevices);
+        setDevice(uniqueDevices[0] || null);
       }
     } catch (err: any) {
       console.error("Fetch device error:", err);

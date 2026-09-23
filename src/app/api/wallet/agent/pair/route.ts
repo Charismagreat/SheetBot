@@ -140,27 +140,33 @@ export async function POST(req: NextRequest) {
     const deviceId = `agent_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const label = deviceModel ? `스마트폰 (${deviceModel})` : "SheetBot 안드로이드 전용 에이전트";
 
-    // 기존 등록된 동일 이메일의 AGENT 기기 업데이트 또는 신규 등록
-    const existing = await queryTable("sheetbot_user_devices", {
+    // 기존 등록된 동일 기기 모델이 있는지 우선 탐색 (동일 기기 중복 등록 방지)
+    const allExisting = await queryTable("sheetbot_user_devices", {
       filters: { user_email: cleanEmail, pairing_mode: "android_agent" },
-      limit: 1,
+      orderBy: "id",
+      orderDirection: "DESC",
+      limit: 20,
     }).catch(() => ({ rows: [] }));
 
-    if (existing.rows && existing.rows.length > 0) {
-      const existingId = existing.rows[0].id;
+    const matchingDev = (allExisting.rows || []).find(
+      (r: any) => !r.deleted_at && deviceModel && r.label && r.label.includes(deviceModel)
+    );
+
+    if (matchingDev) {
+      // 동일 기기 모델이 이미 있으면 해당 기기 상태 갱신
       await updateRows(
         "sheetbot_user_devices",
         {
           label,
           status: "CONNECTED",
-          phone_number: phoneNumber || existing.rows[0].phone_number || "",
+          phone_number: phoneNumber || matchingDev.phone_number || "",
           last_connected_at: nowStr,
           updated_at: nowStr,
         },
-        { filters: { id: existingId } }
+        { filters: { id: matchingDev.id } }
       );
     } else {
-      // 숫자 기본키(INTEGER id) 규격 준수를 위한 최신 id 자동 채번
+      // 새로운 스마트폰 모델이면 신규 등록 (이중화 기기 추가)
       const latestDev = await queryTable("sheetbot_user_devices", {
         limit: 1,
         orderBy: "id",
