@@ -33,15 +33,34 @@ jobs:
         run: |
           yes | sdkmanager --licenses || true
 
-      - name: Build Debug APK
+      - name: Ensure Permanent Keystore Exists
+        run: |
+          mkdir -p android-agent/keystore
+          if [ ! -f android-agent/keystore/sheetbot-agent.jks ]; then
+            echo "Generating permanent keystore..."
+            keytool -genkeypair -v \
+              -keystore android-agent/keystore/sheetbot-agent.jks \
+              -alias sheetbot_agent \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storetype JKS \
+              -storepass sheetbot_agent_key_2026 \
+              -keypass sheetbot_agent_key_2026 \
+              -dname "CN=SheetBot Agent, OU=SheetBot, O=SheetBot Cloud, L=Seoul, ST=Seoul, C=KR"
+          fi
+
+      - name: Build Release APK
         run: |
           cd android-agent
-          gradle assembleDebug --stacktrace
+          gradle assembleRelease --stacktrace
 
-      - name: Copy APK to artifacts
+      - name: Copy APK to artifacts and public
         run: |
           mkdir -p release-apk
-          find android-agent/app/build/outputs/apk/ -name "*.apk" -exec cp {} release-apk/sheetbot-deposit-agent.apk \;
+          find android-agent/app/build/outputs/apk/release/ -name "*.apk" -exec cp {} release-apk/sheetbot-deposit-agent.apk \;
+          mkdir -p public/downloads
+          cp release-apk/sheetbot-deposit-agent.apk public/downloads/sheetbot-deposit-agent.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -50,13 +69,23 @@ jobs:
           path: release-apk/*.apk
           retention-days: 30
 
+      - name: Commit and Push Keystore and APK back to Main
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add android-agent/keystore/sheetbot-agent.jks public/downloads/sheetbot-deposit-agent.apk
+          if ! git diff --staged --quiet; then
+            git commit -m "build(agent): bundle permanent keystore and release apk v1.0.1 [skip ci]"
+            git push origin main
+          fi
+
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v1.0.0
-          name: "SheetBot Deposit Agent v1.0.0"
-          body: "SheetBot 무통장 입금 실시간 감지 및 자동 충전 네이티브 Android 앱"
+          tag_name: v1.0.1
+          name: "SheetBot Deposit Agent v1.0.1"
+          body: "SheetBot 무통장 입금 실시간 감지 및 자동 충전 네이티브 Android 앱 (영구 고정 서명 키 적용 및 무삭제 자동 업데이트 지원)"
           files: release-apk/sheetbot-deposit-agent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
