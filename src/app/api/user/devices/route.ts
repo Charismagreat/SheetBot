@@ -88,10 +88,15 @@ export async function GET(req: NextRequest) {
       let computedStatus: "CONNECTED" | "DISCONNECTED" = "DISCONNECTED";
 
       if (isAndroidAgent) {
-        // 스마트폰 앱(SheetBot Agent): 마지막 생존 신호 수신 일시 기준 타임아웃 검사
-        const lastSignal = d.last_connected_at || d.updated_at;
-        const secondsAgo = getSecondsSinceLastHeartbeat(lastSignal);
-        computedStatus = secondsAgo <= HEARTBEAT_TIMEOUT_SECONDS ? "CONNECTED" : "DISCONNECTED";
+        // 스마트폰 앱(SheetBot Agent): DB 상태가 명시적으로 DISCONNECTED이면 즉시 해제 판정
+        if (d.status === "DISCONNECTED") {
+          computedStatus = "DISCONNECTED";
+        } else {
+          // 마지막 생존 신호 수신 일시 기준 타임아웃 검사
+          const lastSignal = d.last_connected_at || d.updated_at;
+          const secondsAgo = getSecondsSinceLastHeartbeat(lastSignal);
+          computedStatus = secondsAgo <= HEARTBEAT_TIMEOUT_SECONDS ? "CONNECTED" : "DISCONNECTED";
+        }
       } else {
         // 구글 메시지 웹/Phone MCP 기기
         const isMcpConnected =
