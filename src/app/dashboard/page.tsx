@@ -225,22 +225,54 @@ export default function DashboardPage() {
     if (!projects.length && !wallet) {
       setLoading(true);
     }
-    const userParam = session?.user?.email ? `&userEmail=${encodeURIComponent(session.user.email)}` : "";
-    const fetchHeaders: Record<string, string> = session?.user?.email
-      ? { "x-sheetbot-user-email": session.user.email }
-      : {};
+
+    // 다층 신분증 식별: NextAuth 세션 이메일 1순위, 브라우저 localStorage 캐시 2순위
+    let effectiveEmail = session?.user?.email ? session.user.email.toLowerCase().trim() : "";
+    if (!effectiveEmail && typeof window !== "undefined") {
+      try {
+        effectiveEmail = (localStorage.getItem("sheetbot_user_email") || "").toLowerCase().trim();
+      } catch {}
+    }
+
+    const localSessionId = typeof window !== "undefined" ? localStorage.getItem("egdesk_visitor_session") : null;
+
+    const userParam = effectiveEmail ? `&userEmail=${encodeURIComponent(effectiveEmail)}` : "";
+    const fetchHeaders: Record<string, string> = {};
+    if (effectiveEmail) {
+      fetchHeaders["x-sheetbot-user-email"] = effectiveEmail;
+    }
+    if (localSessionId) {
+      fetchHeaders["x-visitor-session-id"] = localSessionId;
+      fetchHeaders["Authorization"] = `Bearer ${localSessionId}`;
+    }
 
     try {
-      // 🚀 [1단계: 즉각 렌더링] 3초 타임아웃 레이스로 무한 행(Hang) 원천 차단
-      const timeoutGuard = new Promise<any>((resolve) =>
-        setTimeout(() => resolve([{ success: false }, { success: false }, { success: false }]), 3000)
-      );
-
       const fetchPromise = Promise.all([
         apiFetch(`/api/projects?${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
         apiFetch(`/api/schedules?${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
         apiFetch(`/api/wallet?${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
       ]);
+
+      // ⚡ 비동기 보장: 타임아웃과 상관없이 실제 응답이 도착하는 즉시 상태 갱신
+      fetchPromise.then(([projRes, schedRes, walletRes]) => {
+        if (projRes?.success && Array.isArray(projRes.projects)) {
+          setProjects(projRes.projects);
+          try { sessionStorage.setItem("sheetbot_cache_projects", JSON.stringify(projRes.projects)); } catch {}
+        }
+        if (schedRes?.success && Array.isArray(schedRes.schedules)) {
+          setSchedules(schedRes.schedules);
+          try { sessionStorage.setItem("sheetbot_cache_schedules", JSON.stringify(schedRes.schedules)); } catch {}
+        }
+        if (walletRes?.success && walletRes.wallet) {
+          setWallet(walletRes.wallet);
+          try { sessionStorage.setItem("sheetbot_cache_wallet", JSON.stringify(walletRes.wallet)); } catch {}
+        }
+      }).catch((err) => console.warn("Dashboard async primary update note:", err));
+
+      // 🚀 [1단계: 즉각 렌더링] 6초 타임아웃 가드로 스피너 해제
+      const timeoutGuard = new Promise<any>((resolve) =>
+        setTimeout(() => resolve([{ success: false }, { success: false }, { success: false }]), 6000)
+      );
 
       const [projRes, schedRes, walletRes] = await Promise.race([fetchPromise, timeoutGuard]);
 
@@ -259,7 +291,7 @@ export default function DashboardPage() {
     } catch (err) {
       console.error("Dashboard primary fetch error:", err);
     } finally {
-      // 1단계 핵심 데이터 로드 즉시 화면 스켈레톤/스피너 해제! (체감 0.5초 진입)
+      // 1단계 핵심 데이터 로드 즉시 화면 스켈레톤/스피너 해제!
       setLoading(false);
     }
 
@@ -296,16 +328,21 @@ export default function DashboardPage() {
   useEffect(() => {
     let isMounted = true;
 
-    // 🚀 로그인 세션이 확인되면 터널 점검 대기 없이 '즉시' 데이터 로드 시작 (0초 대시보드 진입)
-    if (status === "authenticated" || (session as any)?.user?.email) {
-      void fetchData();
-    }
+    // 🚀 세션 확인 또는 로컬스토리지 토큰이 있으면 터널 점검 대기 없이 '즉시' 데이터 로드 시작
+    void fetchData();
 
     const checkAuth = async () => {
+      const localSessionId = typeof window !== "undefined" ? localStorage.getItem("egdesk_visitor_session") : null;
+      let currentEmail = session?.user?.email ? session.user.email.toLowerCase().trim() : null;
+
+      if (currentEmail) {
+        try { localStorage.setItem("sheetbot_user_email", currentEmail); } catch {}
+      } else if (typeof window !== "undefined") {
+        currentEmail = localStorage.getItem("sheetbot_user_email");
+      }
+
       // 0. 브라우저 localStorage에 저장된 최신 visitorSessionId를 서버 DB에 백그라운드 동기화
       try {
-        const localSessionId = typeof window !== "undefined" ? localStorage.getItem("egdesk_visitor_session") : null;
-        const currentEmail = session?.user?.email ? session.user.email.toLowerCase().trim() : null;
         if (localSessionId && currentEmail) {
           void apiFetch("/api/auth/google/session", {
             method: "POST",
@@ -319,25 +356,27 @@ export default function DashboardPage() {
         }
       } catch {}
 
-      // 1. 미로그인 상태일 때만 Visitor Google 계정 상태 검사 및 세션 복구 수행
-      if (status === "unauthenticated") {
+      // 1. 미로그인 상태이거나 세션 이메일이 없는 경우 Visitor Google 계정 상태 검사 및 세션 복구 수행
+      if (status === "unauthenticated" || !session?.user?.email) {
         try {
           const { getVisitorGoogleStatus } = await import("@/egdesk-visitor-google");
           const visitorStatus = await getVisitorGoogleStatus();
 
           if (visitorStatus?.connected && visitorStatus?.email) {
-            const localSessionId = typeof window !== "undefined" ? localStorage.getItem("egdesk_visitor_session") : null;
+            const vEmail = visitorStatus.email.toLowerCase().trim();
+            try { localStorage.setItem("sheetbot_user_email", vEmail); } catch {}
+
             const syncRes = await apiFetch("/api/auth/google/session", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                email: visitorStatus.email,
+                email: vEmail,
                 name: visitorStatus.email.split("@")[0],
                 visitorSessionId: localSessionId || undefined,
               }),
             });
             if (syncRes.ok) {
-              window.location.reload();
+              void fetchData();
               return;
             }
           }
@@ -346,7 +385,7 @@ export default function DashboardPage() {
         }
 
         // Visitor 세션조차 없을 때만 /login으로 안전하게 이동
-        if (isMounted) {
+        if (isMounted && !localSessionId) {
           const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
           const match = currentPath.match(/^(\/t\/[^\/]+\/p\/[^\/]+)/);
           const prefix = match ? match[1] : "";
