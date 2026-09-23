@@ -22,9 +22,11 @@ export async function POST(req: NextRequest) {
     const cleanEmail = String(userEmail).toLowerCase().trim();
     const nowStr = new Date().toISOString().replace("T", " ").slice(0, 19);
 
-    // 해당 유저의 android_agent 기기 레코드 탐색 및 갱신
+    // 해당 유저의 android_agent 최신 기기 레코드 탐색 및 갱신
     const devRes = await queryTable("sheetbot_user_devices", {
       filters: { user_email: cleanEmail, pairing_mode: "android_agent" },
+      orderBy: "id",
+      orderDirection: "DESC",
       limit: 1,
     }).catch(() => ({ rows: [] }));
 

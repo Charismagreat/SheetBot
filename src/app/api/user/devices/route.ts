@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
       }
     };
 
-    const HEARTBEAT_TIMEOUT_SECONDS = 120; // 2분(120초) 이상 통신 없으면 오프라인 간주
+    const HEARTBEAT_TIMEOUT_SECONDS = 1800; // 30분(1800초) 이내 통신 시 정상 연결로 유지 (스마트폰 절전 및 주기 고려)
     const nowIso = new Date().toISOString();
 
     // 4. DB 정보와 실시간 상태 병합 및 상태 판정
