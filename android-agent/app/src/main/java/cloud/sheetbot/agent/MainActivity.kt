@@ -131,6 +131,12 @@ class MainActivity : AppCompatActivity() {
                 .setTitle("연동 해제")
                 .setMessage("시트봇 계정 연동을 해제하시겠습니까?\n해제 시 더 이상 입금 문자가 감지되지 않습니다.")
                 .setPositiveButton("해제") { _, _ ->
+                    val emailToUnlink = prefs.userEmail
+                    if (!emailToUnlink.isNullOrBlank()) {
+                        activityScope.launch {
+                            ApiClient.unlinkDevice(emailToUnlink, "${Build.MANUFACTURER} ${Build.MODEL}")
+                        }
+                    }
                     prefs.clear()
                     KeepAliveService.stop(this)
                     updateUiState()

@@ -194,6 +194,35 @@ object ApiClient {
         }
         false
     }
+
+    /**
+     * 기기 연동 해제 신호 전송 (1차 실패 시 2차 폴백)
+     */
+    suspend fun unlinkDevice(
+        userEmail: String,
+        deviceModel: String? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            val endpoint = "$host/api/wallet/agent/unlink"
+            try {
+                val json = JSONObject().apply {
+                    put("userEmail", userEmail)
+                    put("deviceModel", deviceModel ?: "${Build.MANUFACTURER} ${Build.MODEL}")
+                }
+                val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+                val request = Request.Builder().url(endpoint).post(body).build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    Log.i(TAG, "✅ [연동 해제 성공] 호스트: $host")
+                    return@withContext true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "연동 해제 신호 전송 실패 ($host): ${e.message}")
+            }
+        }
+        false
+    }
 }
 
 data class PairResult(
