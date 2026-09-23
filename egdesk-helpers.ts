@@ -1801,6 +1801,27 @@ export async function runBrowserRecording(
   });
 }
 
+/** Indexed actions for a saved recording (use upToActionIndex with playBrowserRecordingUpTo) */
+export async function listBrowserRecordingActions(testFile: string) {
+  return callBrowserRecordingTool('browser_recording_list_actions', { testFile });
+}
+
+/**
+ * Replay through upToActionIndex, keep Chrome open as a live session, then
+ * inspect/click/fill and saveBrowserRecordingSession to write a new recording.
+ */
+export async function playBrowserRecordingUpTo(
+  testFile: string,
+  upToActionIndex: number,
+  options: BrowserRecordingRunOptions = {}
+) {
+  return callBrowserRecordingTool('browser_recording_play_up_to', {
+    testFile,
+    upToActionIndex,
+    ...options,
+  });
+}
+
 /** List Playwright scheduler entries for browser recorder tests */
 export async function listBrowserRecordingSchedules() {
   return callBrowserRecordingTool('browser_recording_list_schedules', {});
