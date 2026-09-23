@@ -22,6 +22,7 @@ import {
   Radio,
   ArrowRight,
   Share2,
+  Trash2,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { apiFetch } from "@/lib/api";
@@ -128,6 +129,30 @@ export default function DepositAgentPage() {
       setLoadingDevice(false);
     }
   }, []);
+
+  const [deletingDeviceId, setDeletingDeviceId] = useState<string | number | null>(null);
+
+  // 기기 연동 해제 및 삭제
+  const handleUnlinkDevice = async (devId: string | number, devLabel: string) => {
+    if (!window.confirm(`'${devLabel || "선택한 스마트폰"}' 기기의 연동을 해제하시겠습니까?\n해제 후 다시 사용하시려면 QR 코드를 새로 스캔해야 합니다.`)) {
+      return;
+    }
+    setDeletingDeviceId(devId);
+    try {
+      const res = await apiFetch(`/api/user/devices?id=${devId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        showToast("success", "기기 연동이 성공적으로 해제되었습니다.");
+        await fetchDeviceStatus();
+      } else {
+        showToast("error", data.error || "기기 연동 해제에 실패했습니다.");
+      }
+    } catch (e: any) {
+      showToast("error", "오류가 발생했습니다: " + e.message);
+    } finally {
+      setDeletingDeviceId(null);
+    }
+  };
 
   // 3. 최근 입금 대장 조회
   const fetchDepositLogs = useCallback(async () => {
@@ -551,6 +576,7 @@ export default function DepositAgentPage() {
                 <div className="space-y-2 mb-3 max-h-[175px] overflow-y-auto pr-1">
                   {devices.map((d: any, idx: number) => {
                     const isLive = d.status === "CONNECTED" || d.status === "ACTIVE";
+                    const isDisconnected = d.status === "DISCONNECTED";
                     const lastSignal = d.lastConnectedAt || d.last_connected_at;
                     return (
                       <div
@@ -558,29 +584,48 @@ export default function DepositAgentPage() {
                         className={`p-2.5 rounded-xl border transition-all ${
                           isLive
                             ? "bg-emerald-50/35 border-emerald-200/90 shadow-2xs"
-                            : "bg-slate-50/70 border-slate-200/80 opacity-75"
+                            : isDisconnected
+                            ? "bg-slate-50/70 border-slate-200/80 opacity-70"
+                            : "bg-rose-50/40 border-rose-200/80 opacity-75"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-1 mb-1">
                           <div className="flex items-center gap-1.5 min-w-0">
                             <span
                               className={`w-2 h-2 rounded-full shrink-0 ${
-                                isLive ? "bg-emerald-500 animate-pulse" : "bg-rose-400"
+                                isLive
+                                  ? "bg-emerald-500 animate-pulse"
+                                  : isDisconnected
+                                  ? "bg-slate-400"
+                                  : "bg-rose-400"
                               }`}
                             />
                             <span className="text-xs font-black text-slate-800 truncate" title={d.label}>
                               {d.label || `스마트폰 #${idx + 1}`}
                             </span>
                           </div>
-                          <span
-                            className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-md shrink-0 border ${
-                              isLive
-                                ? "bg-emerald-100 text-emerald-800 border-emerald-300/80"
-                                : "bg-rose-100 text-rose-700 border-rose-200"
-                            }`}
-                          >
-                            {isLive ? "정상 감지" : "통신 지연"}
-                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span
+                              className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-md border ${
+                                isLive
+                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300/80"
+                                  : isDisconnected
+                                  ? "bg-slate-100 text-slate-600 border-slate-300"
+                                  : "bg-rose-100 text-rose-700 border-rose-200"
+                              }`}
+                            >
+                              {isLive ? "정상 감지" : isDisconnected ? "연결 해제됨" : "통신 지연"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleUnlinkDevice(d.id, d.label)}
+                              disabled={deletingDeviceId === d.id}
+                              title="기기 연동 해제"
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors disabled:opacity-50 cursor-pointer"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                         <div className="flex items-center justify-between text-[11px] text-slate-500">
                           <span>최근 생존 신호</span>
