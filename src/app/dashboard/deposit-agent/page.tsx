@@ -21,6 +21,7 @@ import {
   Inbox,
   Radio,
   ArrowRight,
+  Share2,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { apiFetch } from "@/lib/api";
@@ -49,6 +50,7 @@ export default function DepositAgentPage() {
   const [pairingData, setPairingData] = useState<any>(null);
   const [loadingPairing, setLoadingPairing] = useState(true);
   const [copiedPin, setCopiedPin] = useState(false);
+  const [copiedDownloadUrl, setCopiedDownloadUrl] = useState(false);
 
   // 등록된 디바이스 상태
   const [device, setDevice] = useState<any>(null);
@@ -193,6 +195,46 @@ export default function DepositAgentPage() {
     setCopiedPin(true);
     setTimeout(() => setCopiedPin(false), 2000);
     showToast("success", `6자리 핀코드(${activePinCode})가 클립보드에 복사되었습니다.`);
+  };
+
+  // APK 다운로드 절대 주소 계산 (터널 및 상용 도메인 자동 적응)
+  const getDownloadUrl = () => {
+    if (typeof window === "undefined") return "https://sheetbot.cloud/downloads/sheetbot-deposit-agent.apk";
+    const pathname = window.location.pathname;
+    const basePath = pathname.replace(/\/dashboard\/deposit-agent.*$/, "");
+    return `${window.location.origin}${basePath}/downloads/sheetbot-deposit-agent.apk`;
+  };
+
+  // APK 다운로드 링크 클립보드 복사
+  const handleCopyDownloadUrl = async () => {
+    try {
+      const url = getDownloadUrl();
+      await navigator.clipboard.writeText(url);
+      setCopiedDownloadUrl(true);
+      setTimeout(() => setCopiedDownloadUrl(false), 2000);
+      showToast("success", "APK 다운로드 주소가 복사되었습니다. 스마트폰 카카오톡이나 메시지로 전송하세요.");
+    } catch {
+      showToast("error", "다운로드 주소 복사에 실패했습니다.");
+    }
+  };
+
+  // APK 다운로드 링크 공유하기 (Web Share API 지원)
+  const handleShareDownloadUrl = async () => {
+    const url = getDownloadUrl();
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({
+          title: "SheetBot 무통장 입금 자동확인기 APK",
+          text: "스마트폰에 SheetBot 입금확인기 앱을 설치하세요.",
+          url,
+        });
+        return;
+      } catch {
+        // 취소 시 무시
+      }
+    } else {
+      handleCopyDownloadUrl();
+    }
   };
 
   const userEmail = session?.user?.email || "chachogreat@gmail.com";
@@ -340,7 +382,7 @@ export default function DepositAgentPage() {
               </div>
             </div>
 
-            <div className="pt-3 border-t border-slate-100">
+            <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
               <a
                 href="/downloads/sheetbot-deposit-agent.apk"
                 download
@@ -349,6 +391,37 @@ export default function DepositAgentPage() {
                 <Download className="w-4 h-4" />
                 스마트폰에 APK 직접 다운로드
               </a>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleCopyDownloadUrl}
+                  className="flex-1 h-9 bg-slate-100 hover:bg-slate-200/80 text-slate-700 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-slate-200"
+                  title="다운로드 웹 주소를 클립보드에 복사합니다"
+                >
+                  {copiedDownloadUrl ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="text-emerald-700 font-extrabold">주소 복사됨!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-slate-500" />
+                      <span>다운로드 주소 복사</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleShareDownloadUrl}
+                  className="h-9 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-indigo-200"
+                  title="카카오톡, 문자 등으로 다운로드 링크 공유하기"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>공유</span>
+                </button>
+              </div>
             </div>
           </div>
 
