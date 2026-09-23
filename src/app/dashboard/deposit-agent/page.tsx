@@ -52,8 +52,9 @@ export default function DepositAgentPage() {
   const [copiedPin, setCopiedPin] = useState(false);
   const [copiedDownloadUrl, setCopiedDownloadUrl] = useState(false);
 
-  // 등록된 디바이스 상태
+  // 등록된 디바이스 상태 (단일 대표 및 전체 목록)
   const [device, setDevice] = useState<any>(null);
+  const [devices, setDevices] = useState<any[]>([]);
   const [loadingDevice, setLoadingDevice] = useState(true);
 
   // 최근 입금 대장 상태
@@ -104,6 +105,7 @@ export default function DepositAgentPage() {
           const tB = new Date(b.lastConnectedAt || b.last_connected_at || b.updated_at || b.created_at || 0).getTime();
           return tB - tA;
         });
+        setDevices(agentDevices);
         setDevice(agentDevices[0] || null);
       }
     } catch (err: any) {
@@ -497,16 +499,24 @@ export default function DepositAgentPage() {
                     3
                   </span>
                   <h3 className="text-sm font-black text-slate-900 tracking-tight">
-                    실시간 감지 상태 및 테스트
+                    실시간 감지 상태 {devices.length > 0 && `(${devices.length}대)`}
                   </h3>
                 </div>
-                {device && (device.status === "CONNECTED" || device.status === "ACTIVE") ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0" title="스마트폰 에이전트와 실시간 정상 통신 중">
+                {devices.some((d) => d.status === "CONNECTED" || d.status === "ACTIVE") ? (
+                  <span
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0"
+                    title="등록된 스마트폰이 실시간으로 입금 SMS를 감지하고 있습니다."
+                  >
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    24H 감지 중
+                    {devices.filter((d) => d.status === "CONNECTED" || d.status === "ACTIVE").length >= 2
+                      ? `🟢 ${devices.filter((d) => d.status === "CONNECTED" || d.status === "ACTIVE").length}대 이중화 감지 중`
+                      : "24H 감지 중"}
                   </span>
-                ) : device ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-rose-50 text-rose-700 border border-rose-200 shrink-0" title="스마트폰 앱이 꺼졌거나 배터리 절전 상태입니다. 앱을 실행해 주세요.">
+                ) : devices.length > 0 ? (
+                  <span
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-rose-50 text-rose-700 border border-rose-200 shrink-0"
+                    title="스마트폰 앱이 꺼졌거나 배터리 절전 상태입니다. 앱을 실행해 주세요."
+                  >
                     <span className="w-2 h-2 rounded-full bg-rose-500"></span>
                     연결 두절 (앱 확인 필요)
                   </span>
@@ -518,21 +528,61 @@ export default function DepositAgentPage() {
                 )}
               </div>
 
-              <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-100 space-y-2.5 mb-4">
-                <div className="flex items-center justify-between text-xs gap-2">
-                  <span className="text-slate-500 font-medium shrink-0 whitespace-nowrap">연동 기기</span>
-                  <span className="font-extrabold text-slate-800 text-right truncate">{device?.label || "확인기 전용 스마트폰"}</span>
+              {/* 연동된 모든 스마트폰 기기 목록 */}
+              {devices.length === 0 ? (
+                <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-100 text-center py-6 text-xs text-slate-400 mb-4">
+                  아직 연동된 스마트폰이 없습니다.
                 </div>
-                <div className="flex items-center justify-between text-xs gap-2">
-                  <span className="text-slate-500 font-medium shrink-0 whitespace-nowrap">최근 생존 신호</span>
-                  <span className="font-mono text-slate-700 font-bold text-right">
-                    {device?.lastConnectedAt || device?.last_connected_at ? formatDateTime(device.lastConnectedAt || device.last_connected_at) : "연결 대기 중"}
-                  </span>
+              ) : (
+                <div className="space-y-2 mb-3 max-h-[175px] overflow-y-auto pr-1">
+                  {devices.map((d: any, idx: number) => {
+                    const isLive = d.status === "CONNECTED" || d.status === "ACTIVE";
+                    const lastSignal = d.lastConnectedAt || d.last_connected_at;
+                    return (
+                      <div
+                        key={d.id || idx}
+                        className={`p-2.5 rounded-xl border transition-all ${
+                          isLive
+                            ? "bg-emerald-50/35 border-emerald-200/90 shadow-2xs"
+                            : "bg-slate-50/70 border-slate-200/80 opacity-75"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span
+                              className={`w-2 h-2 rounded-full shrink-0 ${
+                                isLive ? "bg-emerald-500 animate-pulse" : "bg-rose-400"
+                              }`}
+                            />
+                            <span className="text-xs font-black text-slate-800 truncate" title={d.label}>
+                              {d.label || `스마트폰 #${idx + 1}`}
+                            </span>
+                          </div>
+                          <span
+                            className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-md shrink-0 border ${
+                              isLive
+                                ? "bg-emerald-100 text-emerald-800 border-emerald-300/80"
+                                : "bg-rose-100 text-rose-700 border-rose-200"
+                            }`}
+                          >
+                            {isLive ? "정상 감지" : "통신 지연"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] text-slate-500">
+                          <span>최근 생존 신호</span>
+                          <span className="font-mono font-bold text-slate-700">
+                            {lastSignal ? formatDateTime(lastSignal) : "연결 대기 중"}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="flex items-center justify-between text-xs gap-2">
-                  <span className="text-slate-500 font-medium shrink-0 whitespace-nowrap">자동 감지 대상</span>
-                  <span className="font-bold text-indigo-600 text-right whitespace-nowrap">국내 전 금융사 (시중·인터넷·우체국)</span>
-                </div>
+              )}
+
+              <div className="px-3 py-2 bg-slate-50/80 rounded-xl border border-slate-100 flex items-center justify-between text-[11px] mb-4">
+                <span className="text-slate-500 font-medium">자동 감지 대상</span>
+                <span className="font-extrabold text-indigo-600">국내 전 금융사 (시중·인터넷·우체국)</span>
               </div>
             </div>
 
