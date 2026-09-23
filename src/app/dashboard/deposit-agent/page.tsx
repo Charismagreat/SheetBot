@@ -95,10 +95,16 @@ export default function DepositAgentPage() {
       const res = await apiFetch("/api/user/devices");
       const data = await res.json();
       if (data.success && data.devices) {
-        const agentDev = data.devices.find(
+        const agentDevices = data.devices.filter(
           (d: any) => d.pairingMode === "android_agent" || d.pairing_mode === "android_agent"
         );
-        setDevice(agentDev || null);
+        // 가장 최근 통신한 기기 우선 정렬 (lastConnectedAt 기준 내림차순)
+        agentDevices.sort((a: any, b: any) => {
+          const tA = new Date(a.lastConnectedAt || a.last_connected_at || a.updated_at || a.created_at || 0).getTime();
+          const tB = new Date(b.lastConnectedAt || b.last_connected_at || b.updated_at || b.created_at || 0).getTime();
+          return tB - tA;
+        });
+        setDevice(agentDevices[0] || null);
       }
     } catch (err: any) {
       console.error("Fetch device error:", err);

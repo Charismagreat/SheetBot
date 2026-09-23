@@ -70,6 +70,34 @@ export async function POST(request: Request) {
       rawSms.includes("가상입금") ||
       (cleanAmount === 5000 && (rawSms.includes("2,05") || rawSms.includes("테스트") || rawSms.includes("카카오뱅크")));
 
+    // ⚡ [생존 신호 동기화]: 웹훅이 전달되었다는 것은 스마트폰이 정상 동작 중임을 의미하므로 기기 last_connected_at 비동기 갱신
+    const senderEmail = body?.userEmail ? String(body.userEmail).toLowerCase().trim() : null;
+    const deviceModel = body?.deviceModel ? String(body.deviceModel).trim() : null;
+    if (senderEmail) {
+      const nowStr = new Date().toISOString().replace("T", " ").slice(0, 19);
+      (async () => {
+        try {
+          const devRes = await queryTable("sheetbot_user_devices", {
+            filters: { user_email: senderEmail, pairing_mode: "android_agent" },
+            orderBy: "id",
+            orderDirection: "DESC",
+            limit: 1,
+          });
+          if (devRes.rows && devRes.rows.length > 0) {
+            const updates: Record<string, any> = {
+              status: "CONNECTED",
+              last_connected_at: nowStr,
+              updated_at: nowStr,
+            };
+            if (deviceModel) updates.label = `스마트폰 (${deviceModel})`;
+            await updateRows("sheetbot_user_devices", updates, {
+              filters: { id: devRes.rows[0].id },
+            });
+          }
+        } catch {}
+      })().catch(() => {});
+    }
+
     if (isSimulatedTest && !requestId) {
       return NextResponse.json({
         success: true,
