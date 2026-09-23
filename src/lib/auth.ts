@@ -155,11 +155,12 @@ export async function getCurrentUserEmail(req?: Request): Promise<string | null>
     }
   } catch {}
 
-  // 3. Visitor 세션 ID로부터 sheetbot_users 매핑 이메일 확인
+  // 3. Visitor 세션 ID로부터 sheetbot_users 및 API 키 매핑 이메일 확인
   try {
     const visitorSessionId = await getCurrentVisitorSessionId(req);
     if (visitorSessionId) {
       const { queryTable } = await import("@/lib/egdesk-helpers");
+      // 3-1. sheetbot_users 테이블 매핑 확인
       const userRes = await queryTable("sheetbot_users", {
         filters: { visitor_session_id: visitorSessionId },
         limit: 1,
@@ -168,6 +169,17 @@ export async function getCurrentUserEmail(req?: Request): Promise<string | null>
       const matchedUser = (userRes.rows || []).find((r: any) => !r.deleted_at);
       if (matchedUser?.email && matchedUser.email.includes("@")) {
         return matchedUser.email.toLowerCase().trim();
+      }
+
+      // 3-2. sheetbot_user_api_keys 테이블 매핑 확인
+      const keyRes = await queryTable("sheetbot_user_api_keys", {
+        filters: { visitor_session_id: visitorSessionId },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+
+      const matchedKey = (keyRes.rows || []).find((r: any) => !r.deleted_at && r.status === "ACTIVE");
+      if (matchedKey?.user_email && matchedKey.user_email.includes("@")) {
+        return matchedKey.user_email.toLowerCase().trim();
       }
     }
   } catch {}
