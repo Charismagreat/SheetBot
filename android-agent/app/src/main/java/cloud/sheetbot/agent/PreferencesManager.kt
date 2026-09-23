@@ -15,9 +15,17 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("webhook_url", "https://sheetbot.cloud/api/wallet/bank-webhook") ?: "https://sheetbot.cloud/api/wallet/bank-webhook"
         set(value) = prefs.edit().putString("webhook_url", value).apply()
 
+    var fallbackWebhookUrl: String
+        get() = prefs.getString("fallback_webhook_url", "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/bank-webhook") ?: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/bank-webhook"
+        set(value) = prefs.edit().putString("fallback_webhook_url", value).apply()
+
     var heartbeatUrl: String
         get() = prefs.getString("heartbeat_url", "https://sheetbot.cloud/api/wallet/agent/heartbeat") ?: "https://sheetbot.cloud/api/wallet/agent/heartbeat"
         set(value) = prefs.edit().putString("heartbeat_url", value).apply()
+
+    var fallbackHeartbeatUrl: String
+        get() = prefs.getString("fallback_heartbeat_url", "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/agent/heartbeat") ?: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/agent/heartbeat"
+        set(value) = prefs.edit().putString("fallback_heartbeat_url", value).apply()
 
     var deviceToken: String?
         get() = prefs.getString("device_token", null)

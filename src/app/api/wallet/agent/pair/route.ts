@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     const pinHash = crypto.createHash("md5").update(`${cleanEmail}-${token}`).digest("hex");
     const pinCode = "SB-" + (parseInt(pinHash.slice(0, 6), 16) % 900000 + 100000);
 
-    // QR코드에 인코딩될 JSON 데이터
+    // QR코드에 인코딩될 JSON 데이터 (1차 메인 & 2차 터널 폴백 URL 이중화)
     const qrPayload = {
       app: "SheetBotDepositAgent",
       version: "1.0",
@@ -40,7 +40,9 @@ export async function GET(req: NextRequest) {
       token,
       pinCode,
       webhookUrl: "https://sheetbot.cloud/api/wallet/bank-webhook",
+      fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/bank-webhook",
       heartbeatUrl: "https://sheetbot.cloud/api/wallet/agent/heartbeat",
+      fallbackHeartbeatUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/agent/heartbeat",
       createdAt: new Date().toISOString(),
     };
 
@@ -51,6 +53,7 @@ export async function GET(req: NextRequest) {
       pinCode,
       qrData: JSON.stringify(qrPayload),
       webhookUrl: qrPayload.webhookUrl,
+      fallbackWebhookUrl: qrPayload.fallbackWebhookUrl,
     });
   } catch (err: any) {
     console.error("[Agent-Pair] GET error:", err);
@@ -189,7 +192,9 @@ export async function POST(req: NextRequest) {
       userEmail: cleanEmail,
       deviceToken,
       webhookUrl: "https://sheetbot.cloud/api/wallet/bank-webhook",
+      fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/bank-webhook",
       heartbeatUrl: "https://sheetbot.cloud/api/wallet/agent/heartbeat",
+      fallbackHeartbeatUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/agent/heartbeat",
       testSmsUrl: "https://sheetbot.cloud/api/wallet/agent/test-sms",
       serverTime: nowStr,
     });

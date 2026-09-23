@@ -82,6 +82,7 @@ class SmsReceiver : BroadcastReceiver() {
                 try {
                     val result = ApiClient.sendBankWebhook(
                         webhookUrl = prefs.webhookUrl,
+                        fallbackWebhookUrl = prefs.fallbackWebhookUrl,
                         sender = sender,
                         smsText = fullBody,
                         userEmail = userEmail

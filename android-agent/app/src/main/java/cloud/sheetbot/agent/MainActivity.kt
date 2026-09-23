@@ -175,6 +175,15 @@ class MainActivity : AppCompatActivity() {
             val email = json.optString("userEmail")
             val token = json.optString("token")
             val pinCode = json.optString("pinCode")
+            val webhookUrl = json.optString("webhookUrl")
+            val fallbackWebhookUrl = json.optString("fallbackWebhookUrl")
+            val heartbeatUrl = json.optString("heartbeatUrl")
+            val fallbackHeartbeatUrl = json.optString("fallbackHeartbeatUrl")
+
+            if (webhookUrl.isNotBlank()) prefs.webhookUrl = webhookUrl
+            if (fallbackWebhookUrl.isNotBlank()) prefs.fallbackWebhookUrl = fallbackWebhookUrl
+            if (heartbeatUrl.isNotBlank()) prefs.heartbeatUrl = heartbeatUrl
+            if (fallbackHeartbeatUrl.isNotBlank()) prefs.fallbackHeartbeatUrl = fallbackHeartbeatUrl
 
             if (email.isBlank()) {
                 Toast.makeText(this, "유효한 SheetBot QR코드가 아닙니다.", Toast.LENGTH_LONG).show()
@@ -230,7 +239,9 @@ class MainActivity : AppCompatActivity() {
                 prefs.userEmail = email
                 prefs.isPaired = true
                 if (!result.webhookUrl.isNullOrBlank()) prefs.webhookUrl = result.webhookUrl
+                if (!result.fallbackWebhookUrl.isNullOrBlank()) prefs.fallbackWebhookUrl = result.fallbackWebhookUrl
                 if (!result.heartbeatUrl.isNullOrBlank()) prefs.heartbeatUrl = result.heartbeatUrl
+                if (!result.fallbackHeartbeatUrl.isNullOrBlank()) prefs.fallbackHeartbeatUrl = result.fallbackHeartbeatUrl
                 if (!result.deviceToken.isNullOrBlank()) prefs.deviceToken = result.deviceToken
 
                 KeepAliveService.start(this@MainActivity)
@@ -238,7 +249,7 @@ class MainActivity : AppCompatActivity() {
 
                 AlertDialog.Builder(this@MainActivity)
                     .setTitle("🎉 연동 성공!")
-                    .setMessage("${email} 계정과의 0초 연동이 완료되었습니다.\n이제 스마트폰으로 입금 문자가 오면 즉시 시트봇 토큰이 자동 충전됩니다.")
+                    .setMessage("${email} 계정과의 0초 연동이 완료되었습니다.\n(메인 및 터널 2단계 자동 폴백 활성화)\n이제 스마트폰으로 입금 문자가 오면 즉시 시트봇 토큰이 자동 충전됩니다.")
                     .setPositiveButton("확인", null)
                     .show()
             } else {
@@ -261,6 +272,7 @@ class MainActivity : AppCompatActivity() {
             val result = withTimeoutOrNull(8000L) {
                 ApiClient.sendBankWebhook(
                     webhookUrl = prefs.webhookUrl,
+                    fallbackWebhookUrl = prefs.fallbackWebhookUrl,
                     sender = "1599-3333",
                     smsText = simulatedSms,
                     userEmail = email

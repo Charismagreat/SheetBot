@@ -124,20 +124,98 @@ export function resolveVisitorAppPath(path: string): string {
   return base + normalized;
 }
 
-/** MCP root for the public tunnel, e.g. https://tunneling-service.onrender.com/t/{id} */
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
+function isPrivateLanHostname(hostname: string): boolean {
+  const match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!match) return false;
+  const a = Number(match[1]);
+  const b = Number(match[2]);
+  if (a === 10) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  return false;
+}
+
+function isDevSiteHostname(hostname: string): boolean {
+  return isLoopbackHostname(hostname) || isPrivateLanHostname(hostname);
+}
+
+function isLocalEgdeskUrl(value: string): boolean {
+  try {
+    return isLoopbackHostname(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isTunnelMcpRoot(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return (
+      parsed.hostname === 'tunneling-service.onrender.com' ||
+      parsed.hostname.endsWith('.egdesk.cloud') ||
+      /\/t\/[^/]+/.test(parsed.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * MCP root used as the Google/Supabase OAuth bounce.
+ * Published hosts must never silently fall back to http://localhost:8080.
+ */
 export function resolveEgdeskPublicUrl(): string {
-  const configured =
+  const configured = (
     (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-    'http://localhost:8080';
-  if (typeof window === 'undefined') return configured;
+    ''
+  ).replace(/\/$/, '');
+  const tunnelUrl = (
+    (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_TUNNEL_URL) ||
+    ''
+  ).replace(/\/$/, '');
+  const preferred = configured || tunnelUrl;
+
+  if (typeof window === 'undefined') {
+    return preferred || 'http://localhost:8080';
+  }
+
+  const hostname = window.location.hostname;
   const parts = window.location.pathname.split('/').filter(Boolean);
-  const onTunnelGateway =
-    window.location.hostname === 'tunneling-service.onrender.com' ||
-    window.location.hostname.endsWith('.egdesk.cloud');
-  if (onTunnelGateway && parts[0] === 't' && parts[1]) {
+  const onTunnelPath = parts[0] === 't' && Boolean(parts[1]);
+  const onKnownGateway =
+    hostname === 'tunneling-service.onrender.com' || hostname.endsWith('.egdesk.cloud');
+
+  if (onTunnelPath && (onKnownGateway || !isLoopbackHostname(hostname))) {
     return window.location.origin + '/t/' + parts[1];
   }
-  return configured;
+
+  if (isDevSiteHostname(hostname)) {
+    if (isPrivateLanHostname(hostname) && preferred && isTunnelMcpRoot(preferred)) {
+      return preferred;
+    }
+    if (isLoopbackHostname(hostname)) {
+      return preferred || 'http://localhost:8080';
+    }
+    if (preferred && !isLocalEgdeskUrl(preferred)) {
+      return preferred;
+    }
+    throw new Error(
+      'Visitor Google login from a LAN IP requires NEXT_PUBLIC_EGDESK_API_URL to be the tunnel MCP root (https://…/t/{id}).',
+    );
+  }
+
+  if (preferred && !isLocalEgdeskUrl(preferred)) {
+    return preferred;
+  }
+
+  console.error(
+    '[egdesk-visitor-google] NEXT_PUBLIC_EGDESK_API_URL is missing or points at localhost on a published host. Using window.location.origin for the OAuth bounce.',
+  );
+  return window.location.origin;
 }
 
 async function callVisitorAuth(tool: string, args: Record<string, unknown> = {}) {
@@ -186,8 +264,14 @@ export async function startVisitorGoogleLogin(options: {
   );
   const returnTo = new URL(resolveVisitorAppPath('/auth/callback'), window.location.origin);
   returnTo.searchParams.set('next', next);
-  // Localhost → EGDesk :54321. Tunnel site → {gateway}/t/{id}/visitor-auth/callback.
+  // Localhost → allowlisted http://localhost:54321/auth/callback.
+  // Tunnel / custom domain → {MCP root}/visitor-auth/callback/{pendingId}.
   const egdeskPublicUrl = resolveEgdeskPublicUrl();
+  if (isLocalEgdeskUrl(egdeskPublicUrl) && !isDevSiteHostname(window.location.hostname)) {
+    throw new Error(
+      'Visitor Google login cannot use a localhost EGDesk URL from a published site. Set NEXT_PUBLIC_EGDESK_API_URL to the tunnel MCP root (https://…/t/{id}).',
+    );
+  }
   const scopes = resolveVisitorLoginScopes(options.scopes);
 
   const result = await callVisitorAuth('start', {

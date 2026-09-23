@@ -202,7 +202,9 @@ export default function DepositAgentPage() {
     userEmail,
     pinCode: "SB-777777",
     webhookUrl: "https://sheetbot.cloud/api/wallet/bank-webhook",
+    fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/bank-webhook",
     heartbeatUrl: "https://sheetbot.cloud/api/wallet/agent/heartbeat",
+    fallbackHeartbeatUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/agent/heartbeat",
   });
 
   const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=8&data=${encodeURIComponent(

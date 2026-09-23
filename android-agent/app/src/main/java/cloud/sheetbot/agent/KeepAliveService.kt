@@ -73,7 +73,7 @@ class KeepAliveService : Service() {
             while (isActive) {
                 val email = prefs.userEmail
                 if (!email.isNullOrBlank()) {
-                    ApiClient.sendHeartbeat(prefs.heartbeatUrl, email)
+                    ApiClient.sendHeartbeat(prefs.heartbeatUrl, prefs.fallbackHeartbeatUrl, email)
                 }
                 // 15분마다 생존 신호 전송
                 delay(15 * 60 * 1000L)

@@ -27,15 +27,28 @@ export default function VisitorAuthCallbackPage() {
       setMessage('Missing login code. Close this page and try Sign in with Google again.');
       return;
     }
+    let finished = false;
+    const timer = window.setTimeout(() => {
+      if (finished) return;
+      finished = true;
+      setMessage('Sign-in timed out. Close this page and try Sign in with Google again.');
+    }, 20000);
     void exchangeVisitorAuthCode(code)
       .then(() => {
+        if (finished) return;
+        finished = true;
+        window.clearTimeout(timer);
         const dest = resolveVisitorAppPath(next.startsWith('/') ? next : '/');
         window.location.replace(dest);
       })
       .catch((err: unknown) => {
+        if (finished) return;
+        finished = true;
+        window.clearTimeout(timer);
         const text = err instanceof Error ? err.message : String(err);
         setMessage('Sign-in failed: ' + text);
       });
+    return () => window.clearTimeout(timer);
   }, []);
 
   return (
