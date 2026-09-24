@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getCurrentUserEmail, isCurrentUserAdmin } from "@/lib/auth";
@@ -25,8 +26,8 @@ export async function GET(req: NextRequest) {
 
     const stream = new ReadableStream({
       start(controller) {
-        // 1. 프록시/리버스프록시(NGINX) 버퍼 즉시 플러시용 프리앰블 코멘트 및 최초 연결 성공 메시지 전송
-        const preamble = `: ${" ".repeat(2048)}\n\n`;
+        // 1. 프록시/리버스프록시(NGINX 4k/8k 버퍼) 즉시 플러시용 8KB 프리앰블 및 최초 연결 성공 메시지 전송
+        const preamble = `: ${" ".repeat(8192)}\n\n`;
         const welcomeData = `data: ${JSON.stringify({
           type: "CONNECTED",
           message: "⚡ 실시간 입금 감시 스트림이 정상 연결되었습니다.",
