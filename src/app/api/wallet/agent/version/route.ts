@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 4,
-      latestVersionName: "1.2.0",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/v1.2.0/sheetbot-deposit-agent.apk",
+      latestVersionCode: 5,
+      latestVersionName: "1.3.0",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/v1.3.0/sheetbot-deposit-agent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/sheetbot-deposit-agent.apk",
-      releaseNotes: "시트봇 에이전트 M v1.2.0\n• 미발송 영수증 대기열(Outbox Queue) 자동 회신 기능 탑재\n• 백그라운드 3분 주기 미발송 영수증 자동 발송\n• [미발송 영수증 즉시 발송] 수동 동기화 지원",
+      releaseNotes: "시트봇 에이전트 M v1.3.0 (Phase 2)\n• 주요 7대 금융사(카카오뱅크/토스/국민/신한/우리/하나/기업 등) 무료 앱 푸시 실시간 감지\n• 은행 유료 SMS 없이 0원 입금 자동 확인\n• 알림 접근 권한 원클릭 가이드 & 가상 푸시 테스트 탑재",
     },
     {
       headers: {

@@ -35,7 +35,7 @@
                 android:background="@drawable/bg_badge_version"
                 android:paddingHorizontal="10dp"
                 android:paddingVertical="4dp"
-                android:text="v1.2"
+                android:text="v1.3"
                 android:textColor="#10B981"
                 android:textSize="12sp"
                 android:textStyle="bold" />
@@ -70,6 +70,18 @@
                 android:textSize="12sp"
                 android:lineSpacingExtra="3dp" />
         </LinearLayout>
+
+        <!-- 금융사 앱 푸시 감지 권한 허용 안내 버튼 (Phase 2) -->
+        <Button
+            android:id="@+id/btnNotificationPermission"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:backgroundTint="#8B5CF6"
+            android:text="🔔 금융사 앱 푸시 감지 권한 허용 (0원 통지)"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:visibility="gone" />
 
         <!-- 배터리 최적화 경고 버튼 -->
         <Button
@@ -135,7 +147,18 @@
                 android:layout_width="match_parent"
                 android:layout_height="50dp"
                 android:backgroundTint="#059669"
-                android:text="🧪 카카오뱅크 가상 입금 테스트 (5,000원)"
+                android:text="🧪 카카오뱅크 가상 입금 SMS 테스트 (5,000원)"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <Button
+                android:id="@+id/btnTestPushDeposit"
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:backgroundTint="#2563EB"
+                android:text="🧪 토스/카카오뱅크 가상 앱 푸시 테스트"
                 android:textColor="#FFFFFF"
                 android:textSize="13sp"
                 android:textStyle="bold"
@@ -151,7 +174,7 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- Phase 1: 스마트 편의 제어 패널 (TTS 음성 & 영수증 SMS & 원클릭 업데이트) -->
+        <!-- Phase 1 & 2: 스마트 편의 제어 패널 (TTS 음성 & 영수증 SMS & 앱푸시 감지 & 원클릭 업데이트) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -197,7 +220,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="12dp">
+                android:layout_marginBottom="8dp">
 
                 <TextView
                     android:layout_width="0dp"
@@ -210,6 +233,29 @@
 
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/switchReceiptSms"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="🔔 금융사 앱 무료 푸시 실시간 감지"
+                    android:textColor="#E2E8F0"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchPushDetection"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:checked="true" />

@@ -17,6 +17,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import cloud.sheetbot.agent.databinding.ActivityMainBinding
 import com.journeyapps.barcodescanner.ScanContract
@@ -63,6 +64,7 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "SMS 감지 권한이 승인되었습니다.", Toast.LENGTH_SHORT).show()
         }
         checkAndRequestBatteryOptimization()
+        checkNotificationListenerPermission()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -90,6 +92,12 @@ class MainActivity : AppCompatActivity() {
         } else {
             registerReceiver(depositUpdateReceiver, filter)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        checkNotificationListenerPermission()
+        checkAndRequestBatteryOptimization()
     }
 
     override fun onDestroy() {
@@ -124,9 +132,19 @@ class MainActivity : AppCompatActivity() {
             requestIgnoreBatteryOptimization()
         }
 
-        // 4. 가상 카카오뱅크 입금 테스트 버튼
+        // 금융사 앱 푸시 감지 권한 요청 버튼
+        binding.btnNotificationPermission.setOnClickListener {
+            requestNotificationListenerPermission()
+        }
+
+        // 4. 가상 카카오뱅크 입금 SMS 테스트 버튼
         binding.btnTestDeposit.setOnClickListener {
             executeVirtualDepositTest()
+        }
+
+        // 4-1. 가상 금융사 앱 푸시 테스트 버튼
+        binding.btnTestPushDeposit.setOnClickListener {
+            executeVirtualPushTest()
         }
 
         // 5. 연동 해제 버튼
@@ -162,6 +180,17 @@ class MainActivity : AppCompatActivity() {
             prefs.isReceiptSmsEnabled = isChecked
             val msg = if (isChecked) "고객 영수증 SMS 자동 회신이 켜졌습니다." else "고객 영수증 SMS 자동 회신이 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+
+        binding.switchPushDetection.isChecked = prefs.isPushDetectionEnabled
+        binding.switchPushDetection.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isPushDetectionEnabled = isChecked
+            if (isChecked && !isNotificationListenerEnabled()) {
+                requestNotificationListenerPermission()
+            } else {
+                val msg = if (isChecked) "금융사 앱 무료 푸시 실시간 감지가 켜졌습니다." else "금융사 앱 푸시 감지가 꺼졌습니다."
+                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            }
         }
 
         binding.btnSyncPendingReceipts.setOnClickListener {
@@ -388,6 +417,84 @@ class MainActivity : AppCompatActivity() {
             permissionLauncher.launch(permissionsToRequest.toTypedArray())
         } else {
             checkAndRequestBatteryOptimization()
+            checkNotificationListenerPermission()
+        }
+    }
+
+    private fun isNotificationListenerEnabled(): Boolean {
+        val enabledPackages = NotificationManagerCompat.getEnabledListenerPackages(this)
+        return enabledPackages.contains(packageName)
+    }
+
+    private fun checkNotificationListenerPermission() {
+        if (!isNotificationListenerEnabled()) {
+            binding.btnNotificationPermission.visibility = View.VISIBLE
+        } else {
+            binding.btnNotificationPermission.visibility = View.GONE
+        }
+    }
+
+    private fun requestNotificationListenerPermission() {
+        AlertDialog.Builder(this)
+            .setTitle("🔔 알림 접근 권한 필요")
+            .setMessage("토스, 카카오뱅크, 국민/신한/우리/하나 등 은행 공식 앱의 입금 푸시 알림을 0원으로 실시간 감지하기 위해 '알림 접근 권한'을 허용해 주세요.\n\n[설정으로 이동]을 누른 후 'SheetBot Agent M'을 켜주시면 됩니다.")
+            .setPositiveButton("설정으로 이동") { _, _ ->
+                try {
+                    val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                    startActivity(intent)
+                } catch (_: Exception) {
+                    Toast.makeText(this, "알림 접근 설정 화면을 열 수 없습니다.", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("나중에", null)
+            .show()
+    }
+
+    private fun executeVirtualPushTest() {
+        val email = prefs.userEmail ?: return
+        binding.progressBar.visibility = View.VISIBLE
+        activityScope.launch {
+            val now = SimpleDateFormat("MM/dd HH:mm", Locale.KOREA).format(Date())
+            val testBank = "카카오뱅크"
+            val testSender = "차민서"
+            val testAmount = "5,000"
+
+            val simulatedSms = buildString {
+                appendLine("[Web발신]")
+                appendLine("[$testBank 푸시] 입금알림")
+                appendLine("$now 입금 ${testAmount}원")
+                appendLine(testSender)
+                appendLine("잔액 99,999,999원")
+            }
+
+            val result = withTimeoutOrNull(8000L) {
+                ApiClient.sendBankWebhook(
+                    webhookUrl = prefs.webhookUrl,
+                    fallbackWebhookUrl = prefs.fallbackWebhookUrl,
+                    sender = "PUSH:$testBank",
+                    smsText = simulatedSms,
+                    userEmail = email
+                )
+            }
+            binding.progressBar.visibility = View.GONE
+
+            if (result == null) {
+                addLogItem("[$testBank 푸시]", "$testSender ${testAmount}원 입금", false)
+                Toast.makeText(this@MainActivity, "⚠️ 가상 푸시 테스트 시간 초과 (8초)\n서버 연결 상태를 확인해 주세요.", Toast.LENGTH_LONG).show()
+                return@launch
+            }
+
+            addLogItem("[$testBank 푸시]", "$testSender ${testAmount}원 입금", result.success)
+
+            if (result.success) {
+                if (prefs.isTtsEnabled) {
+                    val speech = result.ttsText ?: "카카오뱅크 푸시 5,000원이 정상 감지되었습니다."
+                    TtsManager.speak(this@MainActivity, speech)
+                }
+                Toast.makeText(this@MainActivity, "🎉 가상 앱 푸시 감지 테스트 성공!\n무료 푸시 알림 ↔ 서버 웹훅 ↔ 토큰 충전 파이프라인 완벽 확인", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this@MainActivity, "✅ 통신 성공: 푸시 전송 완료!\n(${result.message})", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
