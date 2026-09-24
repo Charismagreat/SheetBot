@@ -59,51 +59,6 @@ class SmsReceiver : BroadcastReceiver() {
 
             Log.d(TAG, "SMS 수신 감지: $sender / ${fullBody.take(40)}...")
 
-            val isUserMode = prefs.agentMode == "USER"
-
-            if (isUserMode) {
-                // 🟢 [이용자 모드 - SheetBot Agent]
-                // 일반 고객 문의/회신 문자를 회원의 시트봇 서버 및 구글 시트로 동기화
-                Log.i(TAG, "📱 [이용자 모드] 고객 수신 문자 감지: $sender -> 시트봇 서버 동기화 시작")
-
-                val pendingResult = goAsync()
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        val isSynced = ApiClient.sendInboundSms(
-                            userEmail = userEmail,
-                            sender = sender,
-                            message = fullBody
-                        )
-
-                        showInboundSmsNotification(context, sender, fullBody, isSynced)
-
-                        if (isSynced) {
-                            Log.i(TAG, "✅ [고객 문자 동기화 완료] 발신: $sender")
-                            if (prefs.isTtsEnabled) {
-                                TtsManager.speak(context, "새로운 고객 문자가 수신되어 구글 시트에 기록되었습니다.")
-                            }
-                        } else {
-                            Log.w(TAG, "⚠️ [고객 문자 동기화 실패] 발신: $sender")
-                        }
-
-                        // UI 로그 갱신용 브로드캐스트
-                        val updateIntent = Intent(ACTION_DEPOSIT_DETECTED).apply {
-                            putExtra("smsBody", fullBody)
-                            putExtra("sender", sender)
-                            putExtra("success", isSynced)
-                            setPackage(context.packageName)
-                        }
-                        context.sendBroadcast(updateIntent)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "이용자 모드 SMS 동기화 중 오류", e)
-                    } finally {
-                        pendingResult.finish()
-                    }
-                }
-                return
-            }
-
-            // 🔴 [관리자 모드 - SheetBot Agent M]
             // 1. 은행 발신번호 또는 본문 은행 키워드 확인
             val cleanSender = sender.replace("-", "").trim()
             val isBankSender = BANK_NUMBERS.any { it.replace("-", "") == cleanSender }
@@ -210,38 +165,6 @@ class SmsReceiver : BroadcastReceiver() {
             .setContentText(snippet)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setSmallIcon(android.R.drawable.ic_input_add)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setAutoCancel(true)
-            .build()
-
-        manager.notify((System.currentTimeMillis() % 100000).toInt(), notification)
-    }
-
-    private fun showInboundSmsNotification(context: Context, sender: String, body: String, isSuccess: Boolean) {
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val channelId = "sheetbot_user_sms_channel"
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                "SheetBot 고객 문자 수신 알림",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "고객 문의 문자가 수신되어 구글 시트로 동기화되었을 때 알립니다."
-                enableVibration(true)
-            }
-            manager.createNotificationChannel(channel)
-        }
-
-        val statusText = if (isSuccess) "시트 동기화 완료" else "동기화 재시도 대기"
-        val title = "💬 [고객 문자] $sender ($statusText)"
-        val snippet = body.replace("\n", " ").take(80)
-
-        val notification = NotificationCompat.Builder(context, channelId)
-            .setContentTitle(title)
-            .setContentText(snippet)
-            .setStyle(NotificationCompat.BigTextStyle().bigText("발신: $sender\n\n$body"))
-            .setSmallIcon(android.R.drawable.sym_action_chat)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .build()
