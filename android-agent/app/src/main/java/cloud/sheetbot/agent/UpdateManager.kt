@@ -35,28 +35,54 @@ object UpdateManager {
 
     fun checkForUpdates(activity: Activity, showToastIfLatest: Boolean = false) {
         CoroutineScope(Dispatchers.IO).launch {
-            val versionInfo = ApiClient.fetchLatestVersion()
+            val currentPackageInfo = try {
+                activity.packageManager.getPackageInfo(activity.packageName, 0)
+            } catch (_: Exception) {
+                null
+            }
             val currentVersionCode = try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    activity.packageManager.getPackageInfo(activity.packageName, 0).longVersionCode.toInt()
+                    currentPackageInfo?.longVersionCode?.toInt() ?: 1
                 } else {
                     @Suppress("DEPRECATION")
-                    activity.packageManager.getPackageInfo(activity.packageName, 0).versionCode
+                    currentPackageInfo?.versionCode ?: 1
                 }
             } catch (_: Exception) {
                 1
             }
+            val currentVersionName = currentPackageInfo?.versionName ?: "1.0.0"
 
             withContext(Dispatchers.Main) {
                 if (activity.isFinishing || activity.isDestroyed) return@withContext
 
-                if (versionInfo != null && versionInfo.latestVersionCode > currentVersionCode) {
+                val hasUpdate = versionInfo != null && (
+                    versionInfo.latestVersionCode > currentVersionCode ||
+                    isNewerVersion(versionInfo.latestVersionName, currentVersionName)
+                )
+
+                if (hasUpdate && versionInfo != null) {
                     showUpdateDialog(activity, versionInfo)
                 } else if (showToastIfLatest) {
-                    Toast.makeText(activity, "현재 최신 버전(v${versionInfo?.latestVersionName ?: "1.0"})을 사용 중입니다.", Toast.LENGTH_SHORT).show()
+                    val ver = versionInfo?.latestVersionName ?: currentVersionName
+                    Toast.makeText(activity, "현재 최신 버전(v${ver})을 사용 중입니다.", Toast.LENGTH_SHORT).show()
                 }
             }
         }
+    }
+
+    private fun isNewerVersion(remote: String, local: String): Boolean {
+        try {
+            val rParts = remote.split(".").mapNotNull { it.toIntOrNull() }
+            val lParts = local.split(".").mapNotNull { it.toIntOrNull() }
+            val maxLen = maxOf(rParts.size, lParts.size)
+            for (i in 0 until maxLen) {
+                val r = rParts.getOrElse(i) { 0 }
+                val l = lParts.getOrElse(i) { 0 }
+                if (r > l) return true
+                if (r < l) return false
+            }
+        } catch (_: Exception) {}
+        return false
     }
 
     private fun showUpdateDialog(activity: Activity, info: VersionInfo) {
