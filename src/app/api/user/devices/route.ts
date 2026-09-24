@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
     // 4. DB 정보와 실시간 상태 병합 및 상태 판정
     const mergedDevices = userDevices.map((d: any) => {
       const live = liveDeviceMap[d.device_id || d.id] || {};
-      const isAndroidAgent = d.pairing_mode === "android_agent";
+      const isAndroidAgent = d.pairing_mode === "android_agent" || d.pairing_mode === "agent2";
 
       let computedStatus: "CONNECTED" | "DISCONNECTED" = "DISCONNECTED";
 
