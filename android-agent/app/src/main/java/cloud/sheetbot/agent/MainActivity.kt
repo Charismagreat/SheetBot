@@ -119,7 +119,6 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         aodJob?.cancel()
         serverMonitorJob?.cancel()
-        TtsManager.shutdown()
         try {
             unregisterReceiver(depositUpdateReceiver)
         } catch (_: Exception) {}

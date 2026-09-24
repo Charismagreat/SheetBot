@@ -142,9 +142,9 @@ class KeepAliveService : Service() {
         // 4. 헤드업 비상 노티피케이션 발행 (잠금화면에서도 볼 수 있도록)
         showEmergencyNotification()
 
-        // 5. TTS 음성 경보 (설정 ON 시)
+        // 5. 알람 볼륨 강제 출력 & 비상 사이렌 선행 TTS 경보 (설정 ON 시)
         if (prefs.isTtsEnabled) {
-            TtsManager.speak(this, "주의! 시트봇 서버 연결이 두절되었습니다. 입금 자동 처리가 중단되니 서버 상태를 확인하세요.")
+            TtsManager.speakAlarm(this, "주의! 시트봇 서버 연결이 두절되었습니다. 입금 자동 처리가 중단되니 서버 상태를 확인하세요.")
         }
     }
 
@@ -157,7 +157,7 @@ class KeepAliveService : Service() {
                         PowerManager.ON_AFTER_RELEASE,
                 "SheetBot:EmergencyWakeLock"
             )
-            wl.acquire(10000L) // 10초간 화면 점등 유지
+            wl.acquire(15000L) // 15초간 화면 점등 유지
         } catch (e: Exception) {
             Log.w(TAG, "WakeLock 획득 실패: ${e.message}")
         }

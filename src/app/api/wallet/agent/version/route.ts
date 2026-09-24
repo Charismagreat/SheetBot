@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 7,
-      latestVersionName: "1.5.0",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/v1.5.0/sheetbot-deposit-agent.apk",
+      latestVersionCode: 8,
+      latestVersionName: "1.5.1",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/v1.5.1/sheetbot-deposit-agent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/sheetbot-deposit-agent.apk",
-      releaseNotes: "시트봇 에이전트 M v1.5.0 (Phase 4)\n• 서버 다운 실시간 감지 & 거짓 정상(False Positive) 완전 차단\n• 스마트폰 잠금/화면 꺼짐 상태에서도 화면 강제 점등(WakeLock) & 전면 비상 경보 팝업\n• 2분 서버 통신 두절 시 TTS 음성 비상 경보 발동\n• 서버 다운 중 수신된 입금 SMS/푸시 오프라인 안전 대기열(Local Queue) 무손실 보관 및 복구 시 자동 일괄 전송(Drain)\n• 가상 입금 테스트 버튼 영구 삭제 및 실시간 서버 통신 관제 콕핏 탑재",
+      releaseNotes: "시트봇 에이전트 M v1.5.1 (긴급 알람 사운드 강화)\n• 화면 꺼짐 & 잠금 상태에서도 TTS 음성 100% 강제 출력 보장\n• 미디어 볼륨 대신 알람 볼륨(USAGE_ALARM) 강제 적용 (무음/진동 모드 뚫고 발화)\n• TTS 발화 직전 비상 사이렌 비프 1초 선행 재생으로 오디오 하드웨어 즉각 점등\n• 백그라운드 절전 슬립 방지용 Partial WakeLock 동시 획득",
     },
     {
       headers: {
