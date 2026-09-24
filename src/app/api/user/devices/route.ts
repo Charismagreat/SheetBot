@@ -107,6 +107,14 @@ export async function GET(req: NextRequest) {
         computedStatus = isMcpConnected ? "CONNECTED" : "DISCONNECTED";
       }
 
+      const rawLast = live.lastConnectedAt || live.last_paired_at || d.last_connected_at || d.created_at;
+      const normalizedLast = rawLast && !rawLast.includes("Z") && !rawLast.includes("+")
+        ? rawLast.replace(" ", "T") + "Z"
+        : rawLast;
+
+      const batteryVal = isAndroidAgent ? (d.battery_level ?? null) : (live.batteryLevel || live.battery || null);
+      const isChargingVal = isAndroidAgent ? (d.is_charging === 1) : !!live.isCharging;
+
       return {
         id: d.id,
         deviceId: d.device_id || d.id,
@@ -114,10 +122,13 @@ export async function GET(req: NextRequest) {
         phoneNumber: d.phone_number || live.phoneNumber || live.linked_phone || "",
         pairingMode: d.pairing_mode || "qr",
         status: computedStatus,
-        battery: live.batteryLevel || live.battery || null,
-        isCharging: !!live.isCharging,
+        battery: batteryVal,
+        battery_level: batteryVal,
+        isCharging: isChargingVal,
+        is_charging: isChargingVal ? 1 : 0,
         networkType: live.networkType || "Wi-Fi",
-        lastConnectedAt: live.lastConnectedAt || live.last_paired_at || d.last_connected_at || d.created_at,
+        lastConnectedAt: normalizedLast,
+        last_connected_at: normalizedLast,
         createdAt: d.created_at,
       };
     });

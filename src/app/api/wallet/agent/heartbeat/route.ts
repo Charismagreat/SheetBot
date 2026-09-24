@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanEmail = String(userEmail).toLowerCase().trim();
-    const nowStr = new Date().toISOString().replace("T", " ").slice(0, 19);
+    const nowIso = new Date().toISOString();
 
     // 해당 유저의 android_agent 최신 기기 레코드 탐색 및 갱신
     const devRes = await queryTable("sheetbot_user_devices", {
@@ -34,14 +34,14 @@ export async function POST(req: NextRequest) {
       const dev = devRes.rows[0];
       const updates: Record<string, any> = {
         status: "CONNECTED",
-        last_connected_at: nowStr,
-        updated_at: nowStr,
+        last_connected_at: nowIso,
+        updated_at: nowIso,
       };
       // 💡 기기가 살아있어 신호를 보내왔는데 소프트 삭제되어 있었다면 자동 복원
       if (dev.deleted_at) {
         updates.deleted_at = null;
         updates.deleted_by = null;
-        updates.restored_at = nowStr;
+        updates.restored_at = nowIso,
         updates.restored_by = "agent_heartbeat";
       }
       if (deviceModel) updates.label = `스마트폰 (${deviceModel})`;
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       status: "CONNECTED",
-      serverTime: nowStr,
+      serverTime: nowIso,
       pendingDepositsCount: pendingCount,
       message: "정상 통신 중입니다.",
     });
