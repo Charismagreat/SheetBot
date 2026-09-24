@@ -51,6 +51,10 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_receipt_sms_enabled", true)
         set(value) = prefs.edit().putBoolean("is_receipt_sms_enabled", value).apply()
 
+    var isPushDetectionEnabled: Boolean
+        get() = prefs.getBoolean("is_push_detection_enabled", true)
+        set(value) = prefs.edit().putBoolean("is_push_detection_enabled", value).apply()
+
     fun clear() {
         prefs.edit().clear().apply()
     }

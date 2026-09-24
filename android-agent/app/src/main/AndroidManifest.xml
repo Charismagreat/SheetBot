@@ -56,6 +56,17 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- 금융사 앱 무료 푸시 알림 실시간 감지 서비스 (Phase 2) -->
+        <service
+            android:name=".BankNotificationListener"
+            android:label="SheetBot 금융 푸시 감지기"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <!-- SMS 수신 브로드캐스트 리시버 -->
         <receiver
             android:name=".SmsReceiver"
