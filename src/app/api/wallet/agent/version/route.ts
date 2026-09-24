@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 11,
-      latestVersionName: "1.6.0",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/v1.6.0/sheetbot-deposit-agent.apk",
+      latestVersionCode: 9,
+      latestVersionName: "1.5.2",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/v1.5.2/sheetbot-deposit-agent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/sheetbot-deposit-agent.apk",
-      releaseNotes: "시트봇 에이전트 v1.6.0 (유니버설 에이전트 통합 & 0원 양방향 SMS 지원)\n• 단일 유니버설 APK: 이용자용 SheetBot Agent 및 관리자용 SheetBot Agent M 자동 전환\n• 이용자 모드: 고객 수신 SMS 시트봇 및 구글 시트 실시간 동기화\n• 0원 문자 발송 및 1:1 페어링 완벽 지원",
+      releaseNotes: "시트봇 에이전트 M v1.5.2 (글로벌 GitHub API 직통 업데이트 보장)\n• sheetbot.cloud 서버가 꺼져 있어도 GitHub Releases API로 최신 버전 직통 감지\n• 서버 다운/점검 중에도 0초 만에 인앱 원클릭 덮어쓰기 업데이트 100% 보장\n• 버전 문자열 정밀 비교 알고리즘 탑재",
     },
     {
       headers: {

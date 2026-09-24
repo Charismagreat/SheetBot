@@ -76,6 +76,10 @@ const nextConfig: any = {
         destination: `${egdeskApiUrl}/user-data/tools/call`,
       },
       {
+        source: "/download/:filename*",
+        destination: "/downloads/:filename*",
+      },
+      {
         source: "/__sheets_proxy/:path*",
         destination: `${egdeskApiUrl}/sheets/tools/call`,
       },

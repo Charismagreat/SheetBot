@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="#450A0A"
+    android:padding="24dp">
+
+    <!-- 경고 헤더 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🚨"
+        android:textSize="64sp"
+        android:layout_marginBottom="12dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="서버 연결 두절 비상 경보"
+        android:textColor="#FEE2E2"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:id="@+id/tvEmergencyTime"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="감지 시각: 2026-09-24 20:45:00"
+        android:textColor="#FCA5A5"
+        android:textSize="13sp"
+        android:layout_marginBottom="24dp" />
+
+    <!-- 안내 카드 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#7F1D1D"
+        android:padding="18dp"
+        android:layout_marginBottom="24dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⚠️ sheetbot.cloud 서버가 응답하지 않습니다."
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="2분 이상 서버 헬스체크 응답이 없습니다.\n\n• 스마트폰이 수신하는 입금 SMS/푸시는 안전하게 로컬 대기열에 임시 보관 중입니다.\n• 서버가 재가동되면 누락 없이 자동 전송됩니다.\n• 즉시 관리자 PC에서 서버 가동 상태를 확인해 주세요."
+            android:textColor="#FECACA"
+            android:textSize="13sp"
+            android:lineSpacingExtra="4dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#991B1B"
+            android:layout_marginVertical="12dp" />
+
+        <TextView
+            android:id="@+id/tvEmergencyPendingCount"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📥 오프라인 안전 대기열: 0건 보관 중"
+            android:textColor="#FDE047"
+            android:textSize="13.5sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- 제어 버튼들 -->
+    <Button
+        android:id="@+id/btnEmergencyRetry"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:backgroundTint="#DC2626"
+        android:text="🔄 서버 연결 지금 재점검"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="10dp" />
+
+    <Button
+        android:id="@+id/btnEmergencyDismiss"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:backgroundTint="#1F2937"
+        android:text="🔕 비상 경보 소리 끄기"
+        android:textColor="#E5E7EB"
+        android:textSize="14sp"
+        android:layout_marginBottom="8dp" />
+
+    <Button
+        android:id="@+id/btnEmergencyGoMain"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:backgroundTint="#374151"
+        android:text="📱 메인 화면 열기"
+        android:textColor="#9CA3AF"
+        android:textSize="13sp" />
+
+</LinearLayout>

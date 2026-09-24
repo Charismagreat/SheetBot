@@ -1,11 +1,11 @@
-name: Build SheetBot Android Agent APK
+name: Build SheetBot User Agent APK
 
 on:
   push:
     branches: [ main ]
     paths:
-      - 'android-agent/**'
-      - '.github/workflows/build-agent-apk.yml'
+      - 'android-user-agent/**'
+      - '.github/workflows/build-user-agent-apk.yml'
   workflow_dispatch:
 
 jobs:
@@ -35,11 +35,13 @@ jobs:
 
       - name: Ensure Permanent Keystore Exists
         run: |
-          mkdir -p android-agent/keystore
-          if [ ! -f android-agent/keystore/sheetbot-agent.jks ]; then
+          mkdir -p android-user-agent/keystore
+          if [ -f android-agent/keystore/sheetbot-agent.jks ]; then
+            cp android-agent/keystore/sheetbot-agent.jks android-user-agent/keystore/sheetbot-agent.jks
+          elif [ ! -f android-user-agent/keystore/sheetbot-agent.jks ]; then
             echo "Generating permanent keystore..."
             keytool -genkeypair -v \
-              -keystore android-agent/keystore/sheetbot-agent.jks \
+              -keystore android-user-agent/keystore/sheetbot-agent.jks \
               -alias sheetbot_agent \
               -keyalg RSA \
               -keysize 2048 \
@@ -47,25 +49,26 @@ jobs:
               -storetype JKS \
               -storepass sheetbot_agent_key_2026 \
               -keypass sheetbot_agent_key_2026 \
-              -dname "CN=SheetBot Agent, OU=SheetBot, O=SheetBot Cloud, L=Seoul, ST=Seoul, C=KR"
+              -dname "CN=SheetBot User Agent, OU=SheetBot, O=SheetBot Cloud, L=Seoul, ST=Seoul, C=KR"
           fi
 
       - name: Build Release APK
         run: |
-          cd android-agent
+          cd android-user-agent
           gradle assembleRelease --stacktrace
 
       - name: Copy APK to artifacts and public
         run: |
           mkdir -p release-apk
-          find android-agent/app/build/outputs/apk/release/ -name "*.apk" -exec cp {} release-apk/sheetbot-deposit-agent.apk \;
+          find android-user-agent/app/build/outputs/apk/release/ -name "*.apk" -exec cp {} release-apk/SheetBotAgent.apk \;
           mkdir -p public/downloads
-          cp release-apk/sheetbot-deposit-agent.apk public/downloads/sheetbot-deposit-agent.apk
+          cp release-apk/SheetBotAgent.apk public/downloads/SheetBotAgent.apk
+          cp release-apk/SheetBotAgent.apk public/downloads/SheetBotAgent2.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sheetbot-deposit-agent-apk
+          name: sheetbot-user-agent-apk
           path: release-apk/*.apk
           retention-days: 30
 
@@ -73,9 +76,9 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add android-agent/keystore/sheetbot-agent.jks public/downloads/sheetbot-deposit-agent.apk
+          git add android-user-agent/keystore/sheetbot-agent.jks public/downloads/SheetBotAgent.apk public/downloads/SheetBotAgent2.apk
           if ! git diff --staged --quiet; then
-            git commit -m "build(agent): bundle release apk v1.5.2"
+            git commit -m "build(user-agent): bundle release apk v1.0.0"
             git push origin main
           fi
 
@@ -83,9 +86,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v1.5.2
-          name: "SheetBot Agent M v1.5.2"
-          body: "시트봇 에이전트 M (SheetBot Agent M) v1.5.2 (글로벌 GitHub API 직통 업데이트 보장)\n• sheetbot.cloud 서버가 꺼져 있어도 GitHub Releases API로 최신 버전 직통 감지\n• 서버 다운/점검 중에도 0초 만에 인앱 원클릭 덮어쓰기 업데이트 100% 보장\n• 버전 문자열 정밀 비교 알고리즘 탑재"
-          files: release-apk/sheetbot-deposit-agent.apk
+          tag_name: user-v1.0.0
+          name: "SheetBot Agent (이용자용) v1.0.0"
+          body: "시트봇 에이전트 (SheetBot Agent 이용자용) v1.0.0 출시\n• 일반 이용자 전용 구글 시트 1:1 결합 스마트폰 에이전트\n• 고객 문의 SMS 감지 및 구글 시트 실시간 자동 기록\n• 구글 시트에서 0원 문자 일괄 발송\n• 24시간 실시간 무중단 백그라운드 동기화"
+          files: release-apk/SheetBotAgent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

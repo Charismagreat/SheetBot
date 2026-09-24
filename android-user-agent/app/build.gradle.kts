@@ -4,15 +4,15 @@ plugins {
 }
 
 android {
-    namespace = "cloud.sheetbot.agent"
+    namespace = "cloud.sheetbot.agent.user"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "cloud.sheetbot.agent"
+        applicationId = "cloud.sheetbot.agent.user"
         minSdk = 24
         targetSdk = 34
-        versionCode = 9
-        versionName = "1.5.2"
+        versionCode = 1
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

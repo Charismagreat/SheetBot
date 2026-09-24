@@ -1,4 +1,4 @@
-package cloud.sheetbot.agent
+package cloud.sheetbot.agent.user
 
 import android.os.Build
 import android.util.Log
@@ -40,8 +40,8 @@ object ApiClient {
         var lastError = "페어링 요청 실패"
 
         for ((index, host) in hosts.withIndex()) {
-            val endpoint = "$host/api/wallet/agent/pair"
-            Log.i(TAG, "[페어링 시도 ${index + 1}/${hosts.size}] 엔드포인트: $endpoint")
+            val endpoint = "$host/api/user/agent2/pair"
+            Log.i(TAG, "[이용자 페어링 시도 ${index + 1}/${hosts.size}] 엔드포인트: $endpoint")
 
             try {
                 val json = JSONObject().apply {
@@ -67,12 +67,12 @@ object ApiClient {
                     return@withContext PairResult(
                         success = true,
                         userEmail = resJson.optString("userEmail", userEmail),
-                        deviceToken = resJson.optString("deviceToken", ""),
-                        webhookUrl = resJson.optString("webhookUrl", "$PRIMARY_HOST/api/wallet/bank-webhook"),
-                        fallbackWebhookUrl = resJson.optString("fallbackWebhookUrl", "$FALLBACK_HOST/api/wallet/bank-webhook"),
-                        heartbeatUrl = resJson.optString("heartbeatUrl", "$PRIMARY_HOST/api/wallet/agent/heartbeat"),
-                        fallbackHeartbeatUrl = resJson.optString("fallbackHeartbeatUrl", "$FALLBACK_HOST/api/wallet/agent/heartbeat"),
-                        message = resJson.optString("message", "연동 성공")
+                        deviceToken = resJson.optString("deviceId", resJson.optString("deviceToken", "")),
+                        webhookUrl = resJson.optString("webhookUrl", "$PRIMARY_HOST/api/user/agent2/inbound-sms"),
+                        fallbackWebhookUrl = resJson.optString("fallbackWebhookUrl", "$FALLBACK_HOST/api/user/agent2/inbound-sms"),
+                        heartbeatUrl = resJson.optString("heartbeatUrl", "$PRIMARY_HOST/api/user/agent2/heartbeat"),
+                        fallbackHeartbeatUrl = resJson.optString("fallbackHeartbeatUrl", "$FALLBACK_HOST/api/user/agent2/heartbeat"),
+                        message = resJson.optString("message", "구글 시트 연동 성공")
                     )
                 } else {
                     val errMsg = resJson.optString("error", "HTTP ${response.code}")
@@ -234,6 +234,40 @@ object ApiClient {
     }
 
     /**
+     * 이용자 스마트폰에 수신된 고객 SMS를 시트봇 서버 대장으로 전송
+     */
+    suspend fun sendInboundSms(
+        userEmail: String,
+        sender: String,
+        message: String,
+        deviceId: String? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("sender", sender)
+            put("message", message)
+            put("deviceId", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL} (SheetBot Agent)")
+        }
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/agent2/inbound-sms"
+            try {
+                val request = Request.Builder().url(endpoint).post(body).build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    Log.i(TAG, "✅ [고객 문자 수신 동기화 성공] 호스트: $host ($sender)")
+                    return@withContext true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "수신 문자 동기화 실패 ($host): ${e.message}")
+            }
+        }
+        false
+    }
+
+    /**
      * 기기 연동 해제 신호 전송 (1차 실패 시 2차 폴백)
      */
     suspend fun unlinkDevice(
@@ -268,7 +302,7 @@ object ApiClient {
     suspend fun fetchLatestVersion(): VersionInfo? = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         for (host in hosts) {
-            val endpoint = "$host/api/wallet/agent/version"
+            val endpoint = "$host/api/user/agent2/version"
             try {
                 val request = Request.Builder().url(endpoint).get().build()
                 val response = client.newCall(request).execute()
