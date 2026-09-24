@@ -20,11 +20,7 @@ export async function GET(req: NextRequest) {
     const sessionEmail = await getCurrentUserEmail(req);
     const userEmail = (queryEmail && queryEmail.includes("@")) ? queryEmail.toLowerCase().trim() : sessionEmail;
 
-    if (!userEmail && process.env.NODE_ENV === "production") {
-      return new Response("Unauthorized", { status: 401 });
-    }
-
-    const effectiveEmail = userEmail || "anonymous@sheetbot.local";
+    const effectiveEmail = userEmail || "guest@sheetbot.local";
 
     const stream = new ReadableStream({
       start(controller) {

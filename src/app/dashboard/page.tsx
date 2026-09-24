@@ -714,79 +714,45 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {(session?.user?.email?.toLowerCase().trim() === "chachogreat@gmail.com" ||
-                session?.user?.email?.toLowerCase().trim() === "charismagreat@gmail.com") && (
-                <>
-                  <Link
-                    href="/dashboard/deposit-agent"
-                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-black rounded-xl flex items-center gap-1.5 transition-all shadow-2xs"
-                    title="무통장 입금 자동확인기 (Android APK)"
-                    data-easybot-hint="무통장 자동확인기: 안드로이드 APK 다운로드 및 24시간 실시간 입금 감지 QR 페어링 센터로 이동합니다."
-                  >
-                    <Smartphone className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>입금확인기</span>
-                  </Link>
+            <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
+              {/* 실시간 DB 왓처 동기화 뱃지 */}
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-bold whitespace-nowrap shadow-2xs">
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isRealtimeLive ? "bg-emerald-500 animate-pulse ring-4 ring-emerald-500/20" : "bg-slate-300"}`} />
+                <span className={isRealtimeLive ? "text-emerald-700 font-extrabold" : "text-slate-400"}>
+                  {isRealtimeLive ? "⚡ DB 왓처 실시간 동기화" : "스트림 연결 중..."}
+                </span>
+              </div>
 
-                  <Link
-                    href="/dashboard/admin"
-                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-black rounded-xl flex items-center gap-1.5 transition-all shadow-2xs"
-                    title="통합 운영 관리자 센터"
-                    data-easybot-hint="관리자 센터: 전체 회원 관리, 무통장 승인, 1:1 고객 문의, 시스템 통계를 관리합니다."
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5 text-rose-600" />
-                    <span>관리자 센터</span>
-                  </Link>
-                </>
-              )}
-
-              <Link
-                href="/marketplace"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-teal-700 hover:opacity-95 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-all shadow-sm shadow-emerald-500/20"
-                data-easybot-hint="템플릿 마켓: 검증된 4대 핵심 구글 시트 자동화 템플릿(문자 발송, 이메일 발송, 명함 OCR, 통화 녹음 AI)을 내 구글 드라이브로 1-클릭 복제합니다."
+              {/* 새로고침 버튼 */}
+              <button
+                onClick={fetchData}
+                disabled={loading}
+                className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shadow-2xs"
+                data-easybot-hint="새로고침: 최신 프로젝트 목록 및 스케줄 실행 상태를 My DB에서 다시 동기화합니다."
               >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-200" />
-                <span>템플릿 마켓</span>
-              </Link>
+                <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${loading ? "animate-spin text-emerald-600" : ""}`} />
+                <span>새로고침</span>
+              </button>
 
+              {/* 에이전트 API 키 */}
               <button
                 onClick={() => setIsApiKeyModalOpen(true)}
-                className="px-3.5 py-1.5 bg-gradient-to-r from-violet-600 via-indigo-600 to-indigo-700 hover:opacity-95 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-all shadow-sm shadow-indigo-500/20 cursor-pointer"
+                className="px-3.5 py-1.5 bg-gradient-to-r from-violet-600 via-indigo-600 to-indigo-700 hover:opacity-95 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-all shadow-sm shadow-indigo-500/20 cursor-pointer whitespace-nowrap"
                 data-easybot-hint="에이전트 API 키: 안티그라비티 등 외부 AI 에이전트가 내 시트에 자동 접근할 수 있는 개인 API 키를 조회하고 관리합니다."
               >
-                <KeyRound className="w-3.5 h-3.5 text-violet-200" />
+                <KeyRound className="w-3.5 h-3.5 text-violet-200 shrink-0" />
                 <span>에이전트 API 키</span>
               </button>
 
+              {/* 회원 탈퇴 */}
               <button
                 onClick={() => setIsWithdrawModalOpen(true)}
-                className="px-2.5 py-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 text-xs font-semibold rounded-xl flex items-center gap-1 transition-all cursor-pointer border border-transparent hover:border-rose-200"
+                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer border border-transparent hover:border-rose-200 shrink-0"
                 title="회원 탈퇴 및 서비스 즉각 차단"
                 data-easybot-hint="회원 탈퇴: 계정을 탈퇴하고 모든 API 키, 연동 주소, 스케줄을 즉시 100% 영구 차단합니다."
               >
                 <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden xl:inline">회원 탈퇴</span>
               </button>
-
-              <button
-                onClick={fetchData}
-                disabled={loading}
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer w-max"
-                data-easybot-hint="새로고침: 최신 프로젝트 목록 및 스케줄 실행 상태를 My DB에서 다시 동기화합니다."
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-emerald-600" : ""}`} />
-                <span>새로고침</span>
-              </button>
-
-              {/* 실시간 DB 왓처 동기화 뱃지 */}
-              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200/80 rounded-xl text-[11px] font-bold">
-                <span className={`w-2 h-2 rounded-full ${isRealtimeLive ? "bg-emerald-500 animate-pulse" : "bg-slate-300"}`} />
-                <span className={isRealtimeLive ? "text-emerald-700" : "text-slate-400"}>
-                  {isRealtimeLive ? "⚡ DB 왓처 실시간 동기화" : "스트림 연결 중"}
-                </span>
-              </div>
             </div>
           </div>
 
