@@ -167,7 +167,9 @@ object ApiClient {
     suspend fun sendHeartbeat(
         heartbeatUrl: String,
         fallbackHeartbeatUrl: String? = null,
-        userEmail: String
+        userEmail: String,
+        batteryLevel: Int? = null,
+        isCharging: Boolean? = null
     ): Boolean = withContext(Dispatchers.IO) {
         val targets = buildList {
             add(heartbeatUrl)
@@ -183,7 +185,9 @@ object ApiClient {
                 val json = JSONObject().apply {
                     put("userEmail", userEmail)
                     put("deviceModel", "${Build.MANUFACTURER} ${Build.MODEL}")
-                    put("appVersion", "1.0.0")
+                    put("appVersion", "1.4.0")
+                    if (batteryLevel != null) put("batteryLevel", batteryLevel)
+                    if (isCharging != null) put("isCharging", isCharging)
                 }
 
                 val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)

@@ -70,18 +70,60 @@ class KeepAliveService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private var consecutiveHeartbeatFailures = 0
+
     private fun startHeartbeatLoop() {
         heartbeatJob?.cancel()
         heartbeatJob = serviceScope.launch {
             while (isActive) {
                 val email = prefs.userEmail
                 if (!email.isNullOrBlank()) {
-                    ApiClient.sendHeartbeat(prefs.heartbeatUrl, prefs.fallbackHeartbeatUrl, email)
+                    val battery = BatteryUtil.getBatteryStatus(this@KeepAliveService)
+                    val isSuccess = ApiClient.sendHeartbeat(
+                        prefs.heartbeatUrl,
+                        prefs.fallbackHeartbeatUrl,
+                        email,
+                        batteryLevel = battery.level,
+                        isCharging = battery.isCharging
+                    )
+
+                    if (isSuccess) {
+                        if (consecutiveHeartbeatFailures >= 3) {
+                            showWatchdogNotification("🟢 서버 통신 복구 완료", "SheetBot 서버 및 터널과의 연결이 정상화되었습니다.", false)
+                        }
+                        consecutiveHeartbeatFailures = 0
+                    } else {
+                        consecutiveHeartbeatFailures++
+                        Log.w(TAG, "서버 헬스체크 실패 (${consecutiveHeartbeatFailures}회 연속)")
+                        if (consecutiveHeartbeatFailures == 3) {
+                            showWatchdogNotification(
+                                "🚨 SheetBot 서버 통신 두절",
+                                "서버 또는 터널 연결이 3회 연속 실패했습니다. 네트워크 상태를 확인하세요.",
+                                true
+                            )
+                            if (prefs.isTtsEnabled) {
+                                TtsManager.speak(this@KeepAliveService, "주의! 시트봇 서버 연결이 두절되었습니다.")
+                            }
+                        }
+                    }
                 }
-                // 15분마다 생존 신호 전송
-                delay(15 * 60 * 1000L)
+                // 5분마다 생존 신호 및 배터리 상태 전송
+                delay(5 * 60 * 1000L)
             }
         }
+    }
+
+    private fun showWatchdogNotification(title: String, message: String, isWarning: Boolean) {
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val noti = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setSmallIcon(if (isWarning) android.R.drawable.ic_dialog_alert else android.R.drawable.ic_dialog_info)
+            .setPriority(if (isWarning) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_LOW)
+            .setAutoCancel(true)
+            .build()
+        manager.notify(9003, noti)
     }
 
     private fun startReceiptQueueLoop() {

@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     // 생존 신호 수신 시 메인 스레드 블로킹 방지 (비동기 보장)
     setupDatabase().catch(() => {});
     const body = await req.json().catch(() => ({}));
-    const { userEmail, deviceModel, batteryLevel, appVersion } = body;
+    const { userEmail, deviceModel, batteryLevel, isCharging, appVersion } = body;
 
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "userEmail이 필요합니다." }, { status: 400 });
@@ -38,6 +38,8 @@ export async function POST(req: NextRequest) {
         updated_at: nowStr,
       };
       if (deviceModel) updates.label = `스마트폰 (${deviceModel})`;
+      if (batteryLevel !== undefined && batteryLevel !== null) updates.battery_level = Number(batteryLevel);
+      if (isCharging !== undefined && isCharging !== null) updates.is_charging = isCharging ? 1 : 0;
 
       await updateRows("sheetbot_user_devices", updates, {
         filters: { id: dev.id },

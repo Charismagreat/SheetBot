@@ -627,8 +627,18 @@ export default function DepositAgentPage() {
                             </button>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between text-[11px] text-slate-500">
-                          <span>최근 생존 신호</span>
+                        <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-400">배터리</span>
+                            {d.battery_level !== undefined && d.battery_level !== null ? (
+                              <span className="font-mono font-bold text-slate-700 inline-flex items-center gap-0.5 px-1.5 py-0.2 bg-slate-100 rounded text-[10px]">
+                                {d.is_charging ? <span className="text-amber-500 font-black text-[11px]">⚡</span> : null}
+                                {d.battery_level}%
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-[10px]">100%</span>
+                            )}
+                          </div>
                           <span className="font-mono font-bold text-slate-700">
                             {lastSignal ? formatDateTime(lastSignal) : "연결 대기 중"}
                           </span>

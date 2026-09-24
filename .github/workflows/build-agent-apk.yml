@@ -75,7 +75,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add android-agent/keystore/sheetbot-agent.jks public/downloads/sheetbot-deposit-agent.apk
           if ! git diff --staged --quiet; then
-            git commit -m "build(agent): bundle release apk v1.3.0"
+            git commit -m "build(agent): bundle release apk v1.4.0"
             git push origin main
           fi
 
@@ -83,9 +83,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v1.3.0
-          name: "SheetBot Agent M v1.3.0 (Phase 2)"
-          body: "시트봇 에이전트 M (SheetBot Agent M) v1.3.0 (Phase 2)\n• 주요 7대 금융사(카카오뱅크/토스/국민/신한/우리/하나/기업/농협 등) 무료 앱 푸시 실시간 감지 탑재\n• 은행 유료 SMS 부가서비스 없이 0원 자동 입금 확인\n• 알림 접근 권한 원클릭 가이드 & 가상 푸시 테스트 탑재\n• 인앱 원클릭 무삭제 덮어쓰기 업데이트 지원"
+          tag_name: v1.4.0
+          name: "SheetBot Agent M v1.4.0 (Phase 3)"
+          body: "시트봇 에이전트 M (SheetBot Agent M) v1.4.0 (Phase 3)\n• 무인 24/7 공기계 생명선 & 장애 관제 시스템 구축\n• 전원 충전기 분리/연결 감지 & 배터리 방전 비상 경보\n• 대시보드 실시간 배터리 잔량(%) 및 충전 상태(⚡) 시각화\n• 3회 연속 실패 시 와치독 비상 알림 & 자동 복구\n• OLED 번인 & 발열 방지 AOD 블랙 스크린 모드 (더블 탭 복귀)\n• 인앱 원클릭 무삭제 덮어쓰기 업데이트 지원"
           files: release-apk/sheetbot-deposit-agent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
