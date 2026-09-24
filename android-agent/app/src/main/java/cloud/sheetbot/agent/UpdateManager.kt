@@ -27,8 +27,10 @@ object UpdateManager {
     private const val TAG = "UpdateManager"
 
     private val downloadClient = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
         .build()
 
     fun checkForUpdates(activity: Activity, showToastIfLatest: Boolean = false) {
@@ -110,6 +112,9 @@ object UpdateManager {
 
             var downloadSuccess = false
             val apkFile = File(activity.cacheDir, "sheetbot_agent_m_update.apk")
+            if (apkFile.exists()) {
+                apkFile.delete()
+            }
 
             for (url in targetUrls) {
                 try {
@@ -123,7 +128,7 @@ object UpdateManager {
                         var downloadedBytes = 0L
 
                         body.byteStream().use { input ->
-                            FileOutputStream(apkFile).use { output ->
+                            FileOutputStream(apkFile, false).use { output ->
                                 val buffer = ByteArray(8 * 1024)
                                 var bytesRead: Int
                                 while (input.read(buffer).also { bytesRead = it } != -1) {
@@ -139,12 +144,19 @@ object UpdateManager {
                                 output.flush()
                             }
                         }
-                        downloadSuccess = true
-                        Log.i(TAG, "✅ APK 다운로드 완료: ${apkFile.length()} bytes")
-                        break
+
+                        if (apkFile.exists() && apkFile.length() > 2 * 1024 * 1024) {
+                            downloadSuccess = true
+                            Log.i(TAG, "✅ APK 다운로드 완료 및 검증 성공: ${apkFile.length()} bytes")
+                            break
+                        } else {
+                            Log.w(TAG, "⚠️ APK 파일 크기 이상 (${apkFile.length()} bytes). 다음 URL 시도...")
+                            if (apkFile.exists()) apkFile.delete()
+                        }
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "다운로드 실패 ($url): ${e.message}")
+                    if (apkFile.exists()) apkFile.delete()
                 }
             }
 

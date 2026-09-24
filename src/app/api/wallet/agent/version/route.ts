@@ -12,8 +12,8 @@ export async function GET() {
       success: true,
       latestVersionCode: 4,
       latestVersionName: "1.2.0",
-      apkUrl: "https://sheetbot.cloud/downloads/sheetbot-deposit-agent.apk",
-      fallbackApkUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/downloads/sheetbot-deposit-agent.apk",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/v1.2.0/sheetbot-deposit-agent.apk",
+      fallbackApkUrl: "https://sheetbot.cloud/downloads/sheetbot-deposit-agent.apk",
       releaseNotes: "시트봇 에이전트 M v1.2.0\n• 미발송 영수증 대기열(Outbox Queue) 자동 회신 기능 탑재\n• 백그라운드 3분 주기 미발송 영수증 자동 발송\n• [미발송 영수증 즉시 발송] 수동 동기화 지원",
     },
     {
