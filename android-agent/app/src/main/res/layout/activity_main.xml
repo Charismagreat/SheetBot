@@ -39,7 +39,7 @@
                 android:background="@drawable/bg_badge_version"
                 android:paddingHorizontal="10dp"
                 android:paddingVertical="4dp"
-                android:text="v1.4"
+                android:text="v1.5"
                 android:textColor="#10B981"
                 android:textSize="12sp"
                 android:textStyle="bold" />
@@ -53,7 +53,7 @@
             android:orientation="vertical"
             android:padding="18dp"
             android:background="@drawable/bg_card_unpaired"
-            android:layout_marginBottom="16dp">
+            android:layout_marginBottom="14dp">
 
             <TextView
                 android:id="@+id/tvStatusTitle"
@@ -73,6 +73,53 @@
                 android:textColor="#94A3B8"
                 android:textSize="12sp"
                 android:lineSpacingExtra="3dp" />
+        </LinearLayout>
+
+        <!-- 실시간 서버 통신 & 오프라인 대기열 관제 패널 (연동 시 상시 노출) -->
+        <LinearLayout
+            android:id="@+id/layoutServerMonitor"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#1E293B"
+            android:padding="14dp"
+            android:layout_marginBottom="14dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
+
+                <TextView
+                    android:id="@+id/tvServerStatus"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="🌐 서버 통신: 🟢 정상 가동 (sheetbot.cloud)"
+                    android:textColor="#E2E8F0"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btnRefreshServerStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:backgroundTint="#334155"
+                    android:text="🔄 재점검"
+                    android:textColor="#38BDF8"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvPendingDepositQueue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="📥 오프라인 안전 대기열: 0건 보관 중"
+                android:textColor="#94A3B8"
+                android:textSize="12sp" />
         </LinearLayout>
 
         <!-- 금융사 앱 푸시 감지 권한 허용 안내 버튼 (Phase 2) -->
@@ -137,7 +184,7 @@
                 android:textSize="13sp" />
         </LinearLayout>
 
-        <!-- 연동 완료 시 컨트롤 (가상 테스트 & 연동 해제) -->
+        <!-- 연동 완료 시 컨트롤 (대기열 수동 동기화 & 연동 해제) -->
         <LinearLayout
             android:id="@+id/layoutPairedControls"
             android:layout_width="match_parent"
@@ -147,25 +194,13 @@
             android:visibility="gone">
 
             <Button
-                android:id="@+id/btnTestDeposit"
+                android:id="@+id/btnSyncPendingDeposits"
                 android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:backgroundTint="#059669"
-                android:text="🧪 카카오뱅크 가상 입금 SMS 테스트 (5,000원)"
-                android:textColor="#FFFFFF"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp" />
-
-            <Button
-                android:id="@+id/btnTestPushDeposit"
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:backgroundTint="#2563EB"
-                android:text="🧪 토스/카카오뱅크 가상 앱 푸시 테스트"
-                android:textColor="#FFFFFF"
-                android:textSize="13sp"
-                android:textStyle="bold"
+                android:layout_height="46dp"
+                android:backgroundTint="#1E293B"
+                android:text="📥 오프라인 대기열 서버 즉시 전송"
+                android:textColor="#38BDF8"
+                android:textSize="12.5sp"
                 android:layout_marginBottom="8dp" />
 
             <Button

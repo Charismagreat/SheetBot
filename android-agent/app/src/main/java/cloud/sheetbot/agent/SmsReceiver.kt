@@ -89,28 +89,36 @@ class SmsReceiver : BroadcastReceiver() {
                         userEmail = userEmail
                     )
 
-                    Log.i(TAG, "웹훅 전송 결과: 성공=${result.success}, 상태코드=${result.statusCode}")
+                    if (result.success) {
+                        Log.i(TAG, "웹훅 전송 성공: 상태코드=${result.statusCode}")
+                        // 4. 로컬 상태 저장 및 알림
+                        val logSummary = "${sender}: ${fullBody.replace("\n", " ").take(60)}"
+                        prefs.lastDetectedDeposit = logSummary
 
-                    // 4. 로컬 상태 저장 및 알림
-                    val logSummary = "${sender}: ${fullBody.replace("\n", " ").take(60)}"
-                    prefs.lastDetectedDeposit = logSummary
+                        showDepositNotification(context, fullBody, true)
 
-                    showDepositNotification(context, fullBody, result.success)
-
-                    // 5. 0원 영수증 SMS 자동 회신 (설정 ON && 서버에서 대상 번호/문구 회신 시)
-                    if (prefs.isReceiptSmsEnabled && !result.replySmsPhone.isNullOrBlank() && !result.replySmsText.isNullOrBlank()) {
-                        val isSent = SmsSenderUtil.sendSms(context, result.replySmsPhone, result.replySmsText)
-                        if (isSent) {
-                            Log.i(TAG, "📲 [영수증 SMS 즉시 발송 성공] 수신: ${result.replySmsPhone}")
-                        } else {
-                            Log.w(TAG, "⚠️ [영수증 SMS 즉시 발송 실패] 수신: ${result.replySmsPhone} - 백그라운드 큐에서 재시도됩니다.")
+                        // 5. 0원 영수증 SMS 자동 회신 (설정 ON && 서버에서 대상 번호/문구 회신 시)
+                        if (prefs.isReceiptSmsEnabled && !result.replySmsPhone.isNullOrBlank() && !result.replySmsText.isNullOrBlank()) {
+                            val isSent = SmsSenderUtil.sendSms(context, result.replySmsPhone, result.replySmsText)
+                            if (isSent) {
+                                Log.i(TAG, "📲 [영수증 SMS 즉시 발송 성공] 수신: ${result.replySmsPhone}")
+                            } else {
+                                Log.w(TAG, "⚠️ [영수증 SMS 즉시 발송 실패] 수신: ${result.replySmsPhone} - 백그라운드 큐에서 재시도됩니다.")
+                            }
                         }
-                    }
 
-                    // 6. 실시간 TTS 음성 안내 (설정 ON 시)
-                    if (prefs.isTtsEnabled) {
-                        val voiceMsg = result.ttsText ?: "입금이 감지되어 충전이 완료되었습니다."
-                        TtsManager.speak(context, voiceMsg)
+                        // 6. 실시간 TTS 음성 안내 (설정 ON 시)
+                        if (prefs.isTtsEnabled) {
+                            val voiceMsg = result.ttsText ?: "입금이 감지되어 충전이 완료되었습니다."
+                            TtsManager.speak(context, voiceMsg)
+                        }
+                    } else {
+                        Log.w(TAG, "⚠️ 웹훅 전송 실패 -> 오프라인 대기열에 안전 보관: 상태코드=${result.statusCode}")
+                        DepositQueueManager.enqueueDeposit(context, sender, fullBody, userEmail, "sms")
+                        showDepositNotification(context, fullBody, false)
+                        if (prefs.isTtsEnabled) {
+                            TtsManager.speak(context, "서버 연결 불안정으로 입금 내역이 오프라인 대기열에 저장되었습니다.")
+                        }
                     }
 
                     // UI 갱신용 브로드캐스트 발송
@@ -122,7 +130,9 @@ class SmsReceiver : BroadcastReceiver() {
                     }
                     context.sendBroadcast(updateIntent)
                 } catch (e: Exception) {
-                    Log.e(TAG, "웹훅 전송 중 예외 발생", e)
+                    Log.e(TAG, "웹훅 전송 중 예외 발생 -> 오프라인 대기열에 안전 보관", e)
+                    DepositQueueManager.enqueueDeposit(context, sender, fullBody, userEmail, "sms")
+                    showDepositNotification(context, fullBody, false)
                 } finally {
                     pendingResult.finish()
                 }
@@ -147,7 +157,7 @@ class SmsReceiver : BroadcastReceiver() {
             manager.createNotificationChannel(channel)
         }
 
-        val title = if (isSuccess) "🔔 [입금감지] 무통장 입금 자동 확인 완료!" else "⚠️ [입금감지] 웹훅 전송 실패"
+        val title = if (isSuccess) "🔔 [입금감지] 무통장 입금 자동 확인 완료!" else "⚠️ [오프라인 보관] 서버 점검 중 (대기열 안전 저장)"
         val snippet = body.replace("\n", " ").take(80)
 
         val notification = NotificationCompat.Builder(context, DEPOSIT_CHANNEL_ID)
