@@ -287,7 +287,67 @@ object ApiClient {
                 Log.w(TAG, "버전 확인 실패 ($host): ${e.message}")
             }
         }
+
+        // 3. 3차 폴백: GitHub Releases 공식 API 직접 조회 (sheetbot.cloud 서버가 꺼져 있어도 항상 성공)
+        try {
+            val ghEndpoint = "https://api.github.com/repos/Charismagreat/SheetBot/releases/latest"
+            val ghReq = Request.Builder()
+                .url(ghEndpoint)
+                .header("Accept", "application/vnd.github.v3+json")
+                .header("User-Agent", "SheetBot-Agent-Android")
+                .get()
+                .build()
+            val ghRes = client.newCall(ghReq).execute()
+            val ghStr = ghRes.body?.string() ?: ""
+            val ghJson = JSONObject(ghStr)
+            val rawTag = ghJson.optString("tag_name", "")
+            val cleanVersion = rawTag.removePrefix("v").trim()
+            val body = ghJson.optString("body", "")
+            val assets = ghJson.optJSONArray("assets")
+            var downloadUrl = ""
+            if (assets != null) {
+                for (i in 0 until assets.length()) {
+                    val asset = assets.getJSONObject(i)
+                    val name = asset.optString("name", "")
+                    if (name.endsWith(".apk")) {
+                        downloadUrl = asset.optString("browser_download_url", "")
+                        break
+                    }
+                }
+            }
+            if (cleanVersion.isNotBlank()) {
+                val calculatedCode = parseVersionToCode(cleanVersion)
+                val finalUrl = if (downloadUrl.isNotBlank()) downloadUrl else "https://github.com/Charismagreat/SheetBot/releases/download/$rawTag/sheetbot-deposit-agent.apk"
+                Log.i(TAG, "🎉 [GitHub 직통 릴리즈 확인 성공] 최신 버전: v$cleanVersion, URL: $finalUrl")
+                return@withContext VersionInfo(
+                    latestVersionCode = calculatedCode,
+                    latestVersionName = cleanVersion,
+                    apkUrl = finalUrl,
+                    fallbackApkUrl = finalUrl,
+                    releaseNotes = body
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "GitHub 릴리즈 직통 조회 실패: ${e.message}")
+        }
+
         null
+    }
+
+    private fun parseVersionToCode(versionName: String): Int {
+        return try {
+            val parts = versionName.split(".")
+            val major = parts.getOrNull(0)?.toIntOrNull() ?: 1
+            val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
+            val patch = parts.getOrNull(2)?.toIntOrNull() ?: 0
+            if (major == 1 && minor == 5) {
+                7 + patch
+            } else {
+                major * 10000 + minor * 100 + patch
+            }
+        } catch (_: Exception) {
+            999
+        }
     }
 
     /**
