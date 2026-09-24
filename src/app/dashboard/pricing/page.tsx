@@ -1,7 +1,7 @@
 "use client";
 
-import { apiFetch } from '@/lib/api';
-import React, { useState, useEffect } from "react";
+import { apiFetch, getEgdeskBasePath } from '@/lib/api';
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import {
@@ -66,7 +66,9 @@ export default function PricingWalletPage() {
   const [purchaseSuccess, setPurchaseSuccess] = useState<string | null>(null);
   const [selectedMethod, setSelectedMethod] = useState("간편결제 (카카오/네이버/토스)");
 
-  const fetchWallet = async () => {
+  const [isRealtimeLive, setIsRealtimeLive] = useState(false);
+
+  const fetchWallet = useCallback(async () => {
     try {
       const email = session?.user?.email;
       const queryParam = email ? `?userEmail=${encodeURIComponent(email)}` : "";
@@ -82,11 +84,84 @@ export default function PricingWalletPage() {
     } catch (err) {
       console.error("지갑 정보 조회 실패:", err);
     }
-  };
+  }, [session?.user?.email]);
 
   useEffect(() => {
     fetchWallet();
-  }, [session?.user?.email]);
+  }, [fetchWallet]);
+
+  // ⚡ [0초 실시간 감시] 이지데스크 DB 왓처 실시간 스트림 연동 (토큰 잔액 및 충전 내역)
+  useEffect(() => {
+    if (!session?.user?.email) return;
+
+    let eventSource: EventSource | null = null;
+    let reconnectTimer: any = null;
+
+    const connectStream = () => {
+      if (eventSource) {
+        try {
+          eventSource.close();
+        } catch {}
+      }
+
+      const email = session?.user?.email || "";
+      const basePath = getEgdeskBasePath();
+      const streamUrl = `${basePath}/api/realtime/stream?topic=wallet&userEmail=${encodeURIComponent(email)}`;
+
+      try {
+        eventSource = new EventSource(streamUrl);
+
+        eventSource.onopen = () => {
+          setIsRealtimeLive(true);
+        };
+
+        eventSource.onmessage = (event) => {
+          setIsRealtimeLive(true);
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.type === "CONNECTED" || payload.type === "UPSTREAM_STATUS") {
+              setIsRealtimeLive(true);
+              return;
+            }
+            if (payload.type === "DATA_CHANGED") {
+              if (
+                payload.tableName === "sheetbot_users" ||
+                payload.tableName === "sheetbot_deposit_requests" ||
+                payload.tableName === "sheetbot_orders"
+              ) {
+                fetchWallet();
+              }
+            }
+          } catch {}
+        };
+
+        eventSource.onerror = () => {
+          setIsRealtimeLive(false);
+          if (eventSource) {
+            try {
+              eventSource.close();
+            } catch {}
+          }
+          clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(connectStream, 3000);
+        };
+      } catch {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connectStream, 5000);
+      }
+    };
+
+    connectStream();
+
+    return () => {
+      if (eventSource) {
+        try {
+          eventSource.close();
+        } catch {}
+      }
+      clearTimeout(reconnectTimer);
+    };
+  }, [session?.user?.email, fetchWallet]);
 
   // 한국 표준시(KST) 포맷팅 헬퍼
   const formatKstDate = (dateStr?: string) => {
@@ -162,6 +237,14 @@ export default function PricingWalletPage() {
                 </h1>
                 <span className="px-2 py-0.5 text-[10px] font-extrabold bg-amber-100 text-amber-800 rounded-full border border-amber-200">
                   선불형 종량제 지갑
+                </span>
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-extrabold rounded-full border ${
+                  isRealtimeLive
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                    : "bg-slate-100 text-slate-500 border-slate-200"
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${isRealtimeLive ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
+                  <span>{isRealtimeLive ? "⚡ DB 왓처 0초 실시간" : "스트림 연결 중"}</span>
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
