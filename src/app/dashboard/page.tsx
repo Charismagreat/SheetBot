@@ -39,7 +39,6 @@ const EditProjectPromptModal = nextDynamic(() => import("@/components/EditProjec
 const ScheduleManager = nextDynamic(() => import("@/components/ScheduleManager"));
 const FeedbackModal = nextDynamic(() => import("@/components/FeedbackModal"));
 const ApiKeyModal = nextDynamic(() => import("@/components/ApiKeyModal"));
-const WithdrawModal = nextDynamic(() => import("@/components/WithdrawModal"));
 const FdeRequestModal = nextDynamic(() => import("@/components/dashboard/FdeRequestModal"), { ssr: false });
 const FdeRecruitModal = nextDynamic(() => import("@/components/dashboard/FdeRecruitModal"), { ssr: false });
 
@@ -79,7 +78,6 @@ export default function DashboardPage() {
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [urlSheetParam, setUrlSheetParam] = useState<string>("");
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
-  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<any | null>(null);
   const [alertMessage, setAlertMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [copyingBridgeProjectId, setCopyingBridgeProjectId] = useState<string | null>(null);
@@ -1546,13 +1544,6 @@ export default function DashboardPage() {
       <ApiKeyModal
         isOpen={isApiKeyModalOpen}
         onClose={() => setIsApiKeyModalOpen(false)}
-      />
-
-      {/* 회원 탈퇴 (전역 킬스위치) 모달 */}
-      <WithdrawModal
-        isOpen={isWithdrawModalOpen}
-        onClose={() => setIsWithdrawModalOpen(false)}
-        userEmail={session?.user?.email || ""}
       />
     </div>
   );
