@@ -863,7 +863,7 @@ function _getDynamicBankConfig() {
   return DEPOSIT_BANK_CONFIG;
 }
 
-function requestDirectDepositSession(packageId, depositorName) {
+function requestDirectDepositSession(packageId, depositorName, phoneNumber) {
   try {
     var email = Session.getActiveUser().getEmail() || "chachogreat@gmail.com";
     email = email.toLowerCase().trim();
@@ -873,6 +873,7 @@ function requestDirectDepositSession(packageId, depositorName) {
     if (!cleanDepositor || cleanDepositor.length < 2) {
       return { success: false, error: "실제 송금하실 분의 성함(입금자명)을 2글자 이상 입력해 주세요." };
     }
+    var cleanPhone = (phoneNumber || "").replace(/[^0-9-]/g, "").trim();
 
     // 1. 📲 서버 다이렉트 입금 세션 생성 API 우선 호출 (My DB 안전 적재 및 충돌 방지 100% 보장)
     try {
@@ -882,7 +883,8 @@ function requestDirectDepositSession(packageId, depositorName) {
         payload: JSON.stringify({
           packageId: packageId,
           depositorName: cleanDepositor,
-          userEmail: email
+          userEmail: email,
+          phoneNumber: cleanPhone
         }),
         muteHttpExceptions: true
       });
@@ -968,6 +970,7 @@ function requestDirectDepositSession(packageId, depositorName) {
         bank_name: activeBank.bankName,
         account_number: activeBank.accountNumber,
         account_holder: activeBank.holder,
+        phone_number: cleanPhone || null,
         status: "PENDING",
         created_at: Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM-dd HH:mm:ss")
       }]
@@ -1308,23 +1311,33 @@ function getTokenRechargeModalHtml() {
         '</div>' +
       '</div>' +
 
-      '<!-- 2. 입금인명 필수 입력 안전 게이트 (Gate) -->' +
-      '<div class="bg-gradient-to-r from-indigo-50 via-indigo-50/60 to-purple-50 border-2 border-indigo-200 rounded-2xl p-3.5 space-y-2 shadow-2xs">' +
+      '<!-- 2. 입금인명 및 영수증 번호 입력 게이트 (Gate) -->' +
+      '<div class="bg-gradient-to-r from-indigo-50 via-indigo-50/60 to-purple-50 border-2 border-indigo-200 rounded-2xl p-3.5 space-y-2.5 shadow-2xs">' +
         '<div class="flex items-center justify-between">' +
-          '<label for="depositorNameInput" class="text-xs font-black text-indigo-950 flex items-center gap-1.5">' +
+          '<label class="text-xs font-black text-indigo-950 flex items-center gap-1.5">' +
             '<span>👤</span>' +
-            '<span>2. 송금자 성함 입력 (입금자명 필수)</span>' +
+            '<span>2. 송금자 정보 및 영수증 알림</span>' +
           '</label>' +
           '<span id="gateBadge" class="text-[9px] font-extrabold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-300">🔒 계좌 잠김</span>' +
         '</div>' +
-        '<div class="flex gap-1.5">' +
-          '<input type="text" id="depositorNameInput" placeholder="은행 송금 시 보낼 실명 (예: 홍길동)" class="flex-1 bg-white border-2 border-indigo-300 rounded-xl px-3 py-2 text-xs font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs placeholder:text-slate-400" />' +
-          '<button type="button" id="btnUnlockAccount" onclick="confirmDepositorAndRequest()" class="px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-xl text-xs font-black transition-all shadow-xs shrink-0 cursor-pointer active:scale-95 flex items-center gap-1">' +
+        '<div class="space-y-1.5">' +
+          '<div>' +
+            '<label for="depositorNameInput" class="text-[9.5px] font-bold text-slate-600 block mb-0.5">송금자 실명 <span class="text-rose-500 font-extrabold">*필수</span></label>' +
+            '<input type="text" id="depositorNameInput" placeholder="은행 송금 시 보낼 실명 (예: 홍길동)" class="w-full bg-white border-2 border-indigo-300 rounded-xl px-3 py-2 text-xs font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs placeholder:text-slate-400" />' +
+          '</div>' +
+          '<div>' +
+            '<label for="receiptPhoneInput" class="text-[9.5px] font-bold text-slate-600 flex items-center justify-between mb-0.5">' +
+              '<span>영수증 수신 번호 <span class="text-indigo-600 font-medium">(선택)</span></span>' +
+              '<span class="text-[8.5px] text-emerald-600 font-extrabold">⚡ 입금 즉시 0원 영수증 SMS 자동 발송</span>' +
+            '</label>' +
+            '<input type="tel" id="receiptPhoneInput" placeholder="010-0000-0000 (미입력 시 SMS 발송 생략)" class="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs placeholder:text-slate-400" />' +
+          '</div>' +
+          '<button type="button" id="btnUnlockAccount" onclick="confirmDepositorAndRequest()" class="w-full py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer active:scale-95 flex items-center justify-center gap-1">' +
             '<span>계좌 확인 🔓</span>' +
           '</button>' +
         '</div>' +
         '<div class="text-[10px] text-indigo-900/90 font-medium">' +
-          '※ 실제 송금하실 성함을 입력하시면 <b>1원 단위 전용 할인 금액</b>과 <b>입금 계좌</b>가 열립니다.' +
+          '※ 성함을 입력하시면 <b>1원 단위 전용 할인 금액</b>과 <b>입금 계좌</b>가 열리며, 번호 입력 시 <b>무료 충전 영수증</b>이 문자로 전송됩니다.' +
         '</div>' +
       '</div>' +
 
@@ -1367,6 +1380,7 @@ function getTokenRechargeModalHtml() {
                 '<span class="text-sm">⚠️</span>' +
                 '<span>보내시는 분(입금자명):</span>' +
                 '<span id="confirmedDepositorName" class="text-indigo-900 bg-white border border-indigo-200 px-2 py-0.5 rounded font-black text-xs">--</span>' +
+                '<span id="confirmedPhoneBadge" class="hidden text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-1.5 py-0.2 rounded font-bold text-[9px]">📱 영수증: --</span>' +
               '</div>' +
               '<button type="button" onclick="changeDepositor()" class="text-[10px] text-slate-600 hover:text-indigo-600 underline font-bold cursor-pointer">✏️ 성함 수정</button>' +
             '</div>' +
@@ -1426,7 +1440,7 @@ function getTokenRechargeModalHtml() {
     '</div>' +
 
     '<script>' +
-      'var curRequestId = ""; var curDepositCode = ""; var curDepositorName = ""; var curAmount = 12000; var curSelectedPkg = "pkg_standard"; var pollTimer = null;' +
+      'var curRequestId = ""; var curDepositCode = ""; var curDepositorName = ""; var curPhone = ""; var curAmount = 12000; var curSelectedPkg = "pkg_standard"; var pollTimer = null;' +
       'var PKG_META = { pkg_starter: { price: 5000, priceStr: "5,000", tokens: 50000 }, pkg_standard: { price: 12000, priceStr: "12,000", tokens: 150000 }, pkg_pro: { price: 30000, priceStr: "30,000", tokens: 450000 } };' +
       'function init() {' +
         'google.script.run.withSuccessHandler(function(res){' +
@@ -1439,6 +1453,10 @@ function getTokenRechargeModalHtml() {
               'var guess = res.email.split("@")[0].replace(/[^a-zA-Z0-9가-힣]/g, "");' +
               'var input = document.getElementById("depositorNameInput");' +
               'if (input && !input.value && guess) input.placeholder = "예: " + guess + " (은행 송금자 성함)";' +
+            '}' +
+            'if (res.phoneNumber) {' +
+              'var pInput = document.getElementById("receiptPhoneInput");' +
+              'if (pInput && !pInput.value) pInput.value = res.phoneNumber;' +
             '}' +
           '}' +
         '}).getUserTokenBalanceData();' +
@@ -1459,7 +1477,7 @@ function getTokenRechargeModalHtml() {
           '}' +
         '});' +
         'if (curDepositorName) {' +
-          'requestSession(pkgId, curDepositorName);' +
+          'requestSession(pkgId, curDepositorName, curPhone);' +
         '}' +
       '}' +
 
@@ -1472,10 +1490,13 @@ function getTokenRechargeModalHtml() {
           'return;' +
         '}' +
         'curDepositorName = val;' +
-        'requestSession(curSelectedPkg, curDepositorName);' +
+        'var pInput = document.getElementById("receiptPhoneInput");' +
+        'curPhone = (pInput ? pInput.value : "").replace(/[^0-9-]/g, "").trim();' +
+        'requestSession(curSelectedPkg, curDepositorName, curPhone);' +
       '}' +
 
-      'function requestSession(pkgId, depositorName) {' +
+      'function requestSession(pkgId, depositorName, phoneNumber) {' +
+        'phoneNumber = phoneNumber !== undefined ? phoneNumber : (curPhone || "");' +
         'var unlockBtn = document.getElementById("btnUnlockAccount");' +
         'if (unlockBtn) unlockBtn.innerText = "발급 중...";' +
         'google.script.run.withSuccessHandler(function(data){' +
@@ -1493,6 +1514,15 @@ function getTokenRechargeModalHtml() {
             'var gateBadge = document.getElementById("gateBadge");' +
             'if (gateBadge) { gateBadge.innerText = "🔓 계좌 열림"; gateBadge.className = "text-[9px] font-extrabold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full border border-emerald-300"; }' +
             'document.getElementById("confirmedDepositorName").innerText = data.depositorName;' +
+            'var phoneBadge = document.getElementById("confirmedPhoneBadge");' +
+            'if (phoneBadge) {' +
+              'if (curPhone) {' +
+                'phoneBadge.innerText = "📱 영수증: " + curPhone;' +
+                'phoneBadge.classList.remove("hidden");' +
+              '} else {' +
+                'phoneBadge.classList.add("hidden");' +
+              '}' +
+            '}' +
             'document.getElementById("originalPriceTxt").innerText = Number(origPrice).toLocaleString();' +
             'document.getElementById("discountBadge").innerText = "-" + disc + "원 즉시할인";' +
             'document.getElementById("amountBadge").innerText = Number(finPrice).toLocaleString();' +
@@ -1511,7 +1541,7 @@ function getTokenRechargeModalHtml() {
         '}).withFailureHandler(function(err){' +
           'if (unlockBtn) unlockBtn.innerHTML = "<span>계좌 확인 🔓</span>";' +
           'alert("오류: " + err.message);' +
-        '}).requestDirectDepositSession(pkgId, depositorName);' +
+        '}).requestDirectDepositSession(pkgId, depositorName, phoneNumber);' +
       '}' +
 
       'function changeDepositor() {' +

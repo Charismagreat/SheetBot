@@ -76,23 +76,33 @@ export async function GET() {
       </div>
     </div>
 
-    <!-- 2. 입금인명 필수 입력 안전 게이트 (Gate) -->
-    <div class="bg-gradient-to-r from-indigo-50 via-indigo-50/60 to-purple-50 border-2 border-indigo-200 rounded-xl p-2.5 space-y-1.5 shadow-2xs">
+    <!-- 2. 입금인명 및 영수증 번호 입력 게이트 (Gate) -->
+    <div class="bg-gradient-to-r from-indigo-50 via-indigo-50/60 to-purple-50 border-2 border-indigo-200 rounded-xl p-2.5 space-y-2 shadow-2xs">
       <div class="flex items-center justify-between">
-        <label for="depositorNameInput" class="text-[11px] font-black text-indigo-950 flex items-center gap-1">
+        <label class="text-[11px] font-black text-indigo-950 flex items-center gap-1">
           <span>👤</span>
-          <span>2. 송금자 성함 입력 (입금자명 필수)</span>
+          <span>2. 송금자 정보 및 영수증 알림</span>
         </label>
         <span id="gateBadge" class="text-[9px] font-extrabold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-300">🔒 계좌 잠김</span>
       </div>
-      <div class="flex gap-1.5">
-        <input type="text" id="depositorNameInput" placeholder="은행 송금 시 보낼 실명 (예: 홍길동)" class="flex-1 bg-white border-2 border-indigo-300 rounded-lg px-2.5 py-1.5 text-xs font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs placeholder:text-slate-400" />
-        <button type="button" id="btnUnlockAccount" onclick="confirmDepositorAndRequest()" class="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-lg text-xs font-black transition-all shadow-xs shrink-0 cursor-pointer active:scale-95 flex items-center gap-1">
+      <div class="space-y-1.5">
+        <div>
+          <label for="depositorNameInput" class="text-[9.5px] font-bold text-slate-600 block mb-0.5">송금자 실명 <span class="text-rose-500 font-extrabold">*필수</span></label>
+          <input type="text" id="depositorNameInput" placeholder="은행 송금 시 보낼 실명 (예: 홍길동)" class="w-full bg-white border-2 border-indigo-300 rounded-lg px-2.5 py-1.5 text-xs font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs placeholder:text-slate-400" />
+        </div>
+        <div>
+          <label for="receiptPhoneInput" class="text-[9.5px] font-bold text-slate-600 flex items-center justify-between mb-0.5">
+            <span>영수증 수신 번호 <span class="text-indigo-600 font-medium">(선택)</span></span>
+            <span class="text-[8.5px] text-emerald-600 font-extrabold">⚡ 입금 즉시 0원 영수증 SMS 자동 발송</span>
+          </label>
+          <input type="tel" id="receiptPhoneInput" placeholder="010-0000-0000 (미입력 시 SMS 발송 생략)" class="w-full bg-white border border-indigo-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs placeholder:text-slate-400" />
+        </div>
+        <button type="button" id="btnUnlockAccount" onclick="confirmDepositorAndRequest()" class="w-full py-1.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-lg text-xs font-black transition-all shadow-xs shrink-0 cursor-pointer active:scale-95 flex items-center justify-center gap-1">
           <span>계좌 확인 🔓</span>
         </button>
       </div>
-      <div class="text-[9.5px] text-indigo-900/90 font-medium leading-tight">
-        ※ 실제 송금하실 성함을 입력하시면 <b>1원 단위 전용 할인 금액</b>과 <b>입금 계좌</b>가 열립니다.
+      <div class="text-[9px] text-indigo-900/90 font-medium leading-tight">
+        ※ 성함을 입력하시면 <b>1원 단위 전용 할인 금액</b>과 <b>입금 계좌</b>가 열리며, 번호 입력 시 <b>무료 충전 영수증</b>이 문자로 전송됩니다.
       </div>
     </div>
 
@@ -131,10 +141,11 @@ export async function GET() {
 
         <div class="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border border-amber-300 rounded-xl p-2 space-y-1 shadow-2xs">
           <div class="flex items-center justify-between">
-            <div class="flex items-center gap-1 text-[11px] font-black text-amber-950">
+            <div class="flex items-center gap-1.5 text-[11px] font-black text-amber-950 flex-wrap">
               <span>⚠️</span>
               <span>입금자명:</span>
               <span id="confirmedDepositorName" class="text-indigo-900 bg-white border border-indigo-200 px-1.5 py-0.2 rounded font-black text-xs">--</span>
+              <span id="confirmedPhoneBadge" class="hidden text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-1.5 py-0.2 rounded font-bold text-[9px]">📱 영수증: --</span>
             </div>
             <button type="button" onclick="changeDepositor()" class="text-[9.5px] text-slate-600 hover:text-indigo-600 underline font-bold cursor-pointer">✏️ 수정</button>
           </div>
@@ -195,7 +206,7 @@ export async function GET() {
   </div>
 
   <script>
-    var curRequestId = ""; var curDepositCode = ""; var curDepositorName = ""; var curAmount = 12000; var curSelectedPkg = "pkg_standard"; var pollTimer = null;
+    var curRequestId = ""; var curDepositCode = ""; var curDepositorName = ""; var curPhone = ""; var curAmount = 12000; var curSelectedPkg = "pkg_standard"; var pollTimer = null;
     var PKG_META = { pkg_starter: { price: 5000, priceStr: "5,000", tokens: 50000 }, pkg_standard: { price: 12000, priceStr: "12,000", tokens: 150000 }, pkg_pro: { price: 30000, priceStr: "30,000", tokens: 450000 } };
     function init() {
       if (window.google && window.google.script && window.google.script.run) {
@@ -209,6 +220,10 @@ export async function GET() {
               var guess = res.email.split("@")[0].replace(/[^a-zA-Z0-9가-힣]/g, "");
               var input = document.getElementById("depositorNameInput");
               if (input && !input.value && guess) input.placeholder = "예: " + guess + " (은행 송금자 성함)";
+            }
+            if (res.phoneNumber) {
+              var pInput = document.getElementById("receiptPhoneInput");
+              if (pInput && !pInput.value) pInput.value = res.phoneNumber;
             }
           }
         }).getUserTokenBalanceData();
@@ -230,7 +245,7 @@ export async function GET() {
         }
       });
       if (curDepositorName) {
-        requestSession(pkgId, curDepositorName);
+        requestSession(pkgId, curDepositorName, curPhone);
       }
     }
 
@@ -243,10 +258,13 @@ export async function GET() {
         return;
       }
       curDepositorName = val;
-      requestSession(curSelectedPkg, curDepositorName);
+      var pInput = document.getElementById("receiptPhoneInput");
+      curPhone = (pInput ? pInput.value : "").replace(/[^0-9-]/g, "").trim();
+      requestSession(curSelectedPkg, curDepositorName, curPhone);
     }
 
-    function requestSession(pkgId, depositorName) {
+    function requestSession(pkgId, depositorName, phoneNumber) {
+      phoneNumber = phoneNumber !== undefined ? phoneNumber : (curPhone || "");
       var unlockBtn = document.getElementById("btnUnlockAccount");
       if (unlockBtn) unlockBtn.innerText = "발급 중...";
       if (window.google && window.google.script && window.google.script.run) {
@@ -269,6 +287,15 @@ export async function GET() {
             var gateBadge = document.getElementById("gateBadge");
             if (gateBadge) { gateBadge.innerText = "🔓 계좌 열림"; gateBadge.className = "text-[9px] font-extrabold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full border border-emerald-300"; }
             document.getElementById("confirmedDepositorName").innerText = data.depositorName;
+            var phoneBadge = document.getElementById("confirmedPhoneBadge");
+            if (phoneBadge) {
+              if (curPhone) {
+                phoneBadge.innerText = "📱 영수증: " + curPhone;
+                phoneBadge.classList.remove("hidden");
+              } else {
+                phoneBadge.classList.add("hidden");
+              }
+            }
             document.getElementById("originalPriceTxt").innerText = Number(origPrice).toLocaleString();
             document.getElementById("discountBadge").innerText = "-" + disc + "원 즉시할인";
             document.getElementById("amountBadge").innerText = Number(finPrice).toLocaleString();
@@ -295,7 +322,7 @@ export async function GET() {
         }).withFailureHandler(function(err){
           if (unlockBtn) unlockBtn.innerHTML = "<span>계좌 확인 🔓</span>";
           alert("⚠️ [EGDesk 터널 통신 오류]\\n\\n이지데스크 MCP 서버를 확인해 주세요.\\n(" + err.message + ")");
-        }).requestDirectDepositSession(pkgId, depositorName);
+        }).requestDirectDepositSession(pkgId, depositorName, phoneNumber);
       }
     }
 

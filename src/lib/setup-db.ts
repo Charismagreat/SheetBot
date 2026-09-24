@@ -349,6 +349,7 @@ export async function setupDatabase(force = false): Promise<void> {
         { name: 'bank_name', type: 'TEXT' },
         { name: 'account_number', type: 'TEXT' },
         { name: 'account_holder', type: 'TEXT' },
+        { name: 'phone_number', type: 'TEXT' }, // 영수증 문자 수신 휴대폰 번호
         { name: 'status', type: 'TEXT', notNull: true }, // 'PENDING', 'COMPLETED', 'EXPIRED'
         { name: 'expires_at', type: 'TEXT' },
         { name: 'completed_at', type: 'TEXT' },
