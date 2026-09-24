@@ -263,13 +263,19 @@ export default function DepositAgentPage() {
       // ⚡ [0초 실시간 감시] SSE(Server-Sent Events) 실시간 스트림 연결
       let eventSource: EventSource | null = null;
       try {
-        eventSource = new EventSource("/api/wallet/agent/stream");
+        const email = session?.user?.email;
+        const streamUrl = email
+          ? `/api/wallet/agent/stream?userEmail=${encodeURIComponent(email)}`
+          : "/api/wallet/agent/stream";
+
+        eventSource = new EventSource(streamUrl);
 
         eventSource.onopen = () => {
           setIsRealtimeLive(true);
         };
 
         eventSource.onmessage = (event) => {
+          setIsRealtimeLive(true);
           try {
             const payload = JSON.parse(event.data);
             if (payload.type === "CONNECTED") {
@@ -292,7 +298,8 @@ export default function DepositAgentPage() {
           } catch {}
         };
 
-        eventSource.onerror = () => {
+        eventSource.onerror = (err) => {
+          console.warn("[Deposit-Agent] SSE connection warning:", err);
           setIsRealtimeLive(false);
         };
       } catch (e) {
@@ -312,7 +319,7 @@ export default function DepositAgentPage() {
         }
       };
     }
-  }, [status, router, fetchPairingInfo, fetchDeviceStatus, fetchDepositLogs]);
+  }, [status, session, router, fetchPairingInfo, fetchDeviceStatus, fetchDepositLogs]);
 
   // 가상 카카오뱅크 입금 테스트 실행
   const handleTestSms = async () => {
@@ -453,9 +460,6 @@ export default function DepositAgentPage() {
                     전용 앱 v1.4.0
                   </span>
                 </h1>
-                <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                  스마트폰(1대 또는 이중화용 복수 기기)에 시트봇 에이전트 M 앱을 설치하고 화면의 QR만 비추면, 회원 입금 시 은행 알림 문자를 24시간 실시간 감지하여 0초 만에 토큰을 자동 충전합니다.
-                </p>
               </div>
             </div>
 
