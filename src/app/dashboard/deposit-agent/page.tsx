@@ -265,6 +265,10 @@ export default function DepositAgentPage() {
       try {
         eventSource = new EventSource("/api/wallet/agent/stream");
 
+        eventSource.onopen = () => {
+          setIsRealtimeLive(true);
+        };
+
         eventSource.onmessage = (event) => {
           try {
             const payload = JSON.parse(event.data);
@@ -975,8 +979,18 @@ export default function DepositAgentPage() {
 
                     return (
                       <tr key={log.id} className={`transition-colors ${isHold ? "bg-amber-50/30 hover:bg-amber-50/50" : isDelayed ? "bg-purple-50/30 hover:bg-purple-50/50" : "hover:bg-slate-50/80"}`}>
-                        <td className="py-3.5 px-4 font-mono font-semibold text-slate-800">
-                          <div>{log.deposit_code || log.depositCode || log.id}</div>
+                        <td className="py-3.5 px-4 font-mono">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-slate-900">#{log.id}</span>
+                            {(log.deposit_code || log.depositCode) && (
+                              <span
+                                className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[11px] font-semibold border border-slate-200"
+                                title="입금 식별코드"
+                              >
+                                {log.deposit_code || log.depositCode}
+                              </span>
+                            )}
+                          </div>
                           {log.hold_reason && (
                             <div className="text-[10.5px] text-amber-700 font-sans mt-0.5 max-w-[220px] truncate" title={log.hold_reason}>
                               ⚠️ {log.hold_reason}
@@ -984,8 +998,12 @@ export default function DepositAgentPage() {
                           )}
                         </td>
                         <td className="py-3.5 px-4">
-                          <div className="font-bold text-slate-900">{log.depositor_name || log.depositorName || "-"}</div>
-                          <div className="text-[10.5px] text-slate-400 truncate max-w-[150px]">{log.user_email || log.userEmail || "-"}</div>
+                          <div className="font-bold text-slate-900">
+                            {log.depositor_name || log.user_name || log.userName || log.depositorName || "입금자"}
+                          </div>
+                          <div className="text-[10.5px] text-slate-400 truncate max-w-[150px]" title={log.user_email || log.userEmail}>
+                            {log.user_email || log.userEmail || "-"}
+                          </div>
                         </td>
                         <td className="py-3.5 px-4 text-right font-mono">
                           <div className="font-extrabold text-slate-900">{requestedAmount.toLocaleString()}원</div>

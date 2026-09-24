@@ -272,7 +272,12 @@ export async function GET(request: Request) {
       orderDirection: "DESC",
     }).catch(() => ({ rows: [] }));
 
-    const requests = (listRes.rows || []).filter((r: any) => !r.deleted_at);
+    const requests = (listRes.rows || [])
+      .filter((r: any) => !r.deleted_at)
+      .map((r: any) => ({
+        ...r,
+        depositor_name: r.depositor_name || r.user_name || r.user_email?.split("@")[0] || "입금자",
+      }));
 
     return NextResponse.json(
       {
