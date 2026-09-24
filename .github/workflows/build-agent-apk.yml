@@ -75,7 +75,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add android-agent/keystore/sheetbot-agent.jks public/downloads/sheetbot-deposit-agent.apk
           if ! git diff --staged --quiet; then
-            git commit -m "build(agent): bundle release apk v1.1.0 [skip ci]"
+            git commit -m "build(agent): bundle release apk v1.2.0 [skip ci]"
             git push origin main
           fi
 
@@ -83,9 +83,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v1.1.0
-          name: "SheetBot Agent M v1.1.0"
-          body: "시트봇 에이전트 M (SheetBot Agent M) v1.1.0\n• 입금 확인 시 고객에게 0원 영수증 SMS 자동 회신\n• 실시간 한국어 TTS 음성 안내 탑재\n• 인앱 원클릭 무삭제 덮어쓰기 업데이트 탑재"
+          tag_name: v1.2.0
+          name: "SheetBot Agent M v1.2.0"
+          body: "시트봇 에이전트 M (SheetBot Agent M) v1.2.0\n• 미발송 영수증 대기열(Outbox Queue) 자동 회신 기능 탑재\n• 백그라운드 3분 주기 미발송 영수증 자동 발송\n• [미발송 영수증 즉시 발송] 수동 동기화 지원"
           files: release-apk/sheetbot-deposit-agent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

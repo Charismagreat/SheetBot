@@ -259,6 +259,66 @@ object ApiClient {
         }
         null
     }
+
+    /**
+     * 서버의 미발송 영수증 대기열(Outbox Queue) 조회
+     */
+    suspend fun fetchPendingReceipts(userEmail: String?): List<PendingReceipt> = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            val endpoint = "$host/api/wallet/agent/pending-receipts"
+            try {
+                val request = Request.Builder().url(endpoint).get().build()
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val array = resJson.optJSONArray("pendingReceipts") ?: continue
+                    val list = mutableListOf<PendingReceipt>()
+                    for (i in 0 until array.length()) {
+                        val item = array.getJSONObject(i)
+                        list.add(
+                            PendingReceipt(
+                                id = item.optLong("id", 0L),
+                                recipientPhone = item.optString("recipientPhone", ""),
+                                depositorName = item.optString("depositorName", ""),
+                                amountKrw = item.optInt("amountKrw", 0),
+                                tokensToCredit = item.optInt("tokensToCredit", 0),
+                                message = item.optString("message", "")
+                            )
+                        )
+                    }
+                    return@withContext list
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "미발송 영수증 대기열 조회 실패 ($host): ${e.message}")
+            }
+        }
+        emptyList()
+    }
+
+    /**
+     * 영수증 SMS 발송 완료 상태를 서버에 보고
+     */
+    suspend fun markReceiptSent(id: Long, success: Boolean = true): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            val endpoint = "$host/api/wallet/agent/pending-receipts"
+            try {
+                val json = JSONObject().apply {
+                    put("id", id)
+                    put("success", success)
+                }
+                val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+                val request = Request.Builder().url(endpoint).post(body).build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) return@withContext true
+            } catch (e: Exception) {
+                Log.w(TAG, "영수증 발송 완료 마킹 실패 ($host): ${e.message}")
+            }
+        }
+        false
+    }
 }
 
 data class PairResult(
@@ -288,4 +348,13 @@ data class VersionInfo(
     val apkUrl: String,
     val fallbackApkUrl: String,
     val releaseNotes: String
+)
+
+data class PendingReceipt(
+    val id: Long,
+    val recipientPhone: String,
+    val depositorName: String,
+    val amountKrw: Int,
+    val tokensToCredit: Int,
+    val message: String
 )

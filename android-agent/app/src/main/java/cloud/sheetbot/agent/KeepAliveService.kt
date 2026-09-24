@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 class KeepAliveService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Default + Job())
     private var heartbeatJob: Job? = null
+    private var receiptQueueJob: Job? = null
     private lateinit var prefs: PreferencesManager
 
     companion object {
@@ -49,7 +50,8 @@ class KeepAliveService : Service() {
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
         startHeartbeatLoop()
-        Log.i(TAG, "KeepAliveService created and foregrounded.")
+        startReceiptQueueLoop()
+        Log.i(TAG, "KeepAliveService created and foregrounded with Receipt Queue monitoring.")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -62,6 +64,7 @@ class KeepAliveService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         heartbeatJob?.cancel()
+        receiptQueueJob?.cancel()
         Log.w(TAG, "KeepAliveService destroyed.")
     }
 
@@ -77,6 +80,26 @@ class KeepAliveService : Service() {
                 }
                 // 15분마다 생존 신호 전송
                 delay(15 * 60 * 1000L)
+            }
+        }
+    }
+
+    private fun startReceiptQueueLoop() {
+        receiptQueueJob?.cancel()
+        receiptQueueJob = serviceScope.launch {
+            // 앱/서비스 기동 5초 후 1차 즉시 확인
+            delay(5000L)
+            while (isActive) {
+                try {
+                    val count = SmsSenderUtil.processPendingReceipts(this@KeepAliveService)
+                    if (count > 0) {
+                        Log.i(TAG, "🎯 [백그라운드 큐 발송] 미발송 영수증 ${count}건 자동 회신 완료")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "영수증 대기열 자동 발송 중 오류: ${e.message}")
+                }
+                // 3분(180초)마다 대기열 폴링
+                delay(3 * 60 * 1000L)
             }
         }
     }

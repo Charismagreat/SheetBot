@@ -164,6 +164,25 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
 
+        binding.btnSyncPendingReceipts.setOnClickListener {
+            binding.progressBar.visibility = View.VISIBLE
+            activityScope.launch {
+                try {
+                    val count = SmsSenderUtil.processPendingReceipts(this@MainActivity)
+                    binding.progressBar.visibility = View.GONE
+                    if (count > 0) {
+                        Toast.makeText(this@MainActivity, "🎉 미발송 영수증 ${count}건이 정상 발송되었습니다!", Toast.LENGTH_LONG).show()
+                        addLogItem("대기열 발송", "미발송 영수증 ${count}건 고객 휴대폰으로 전송 완료", true)
+                    } else {
+                        Toast.makeText(this@MainActivity, "현재 발송 대기 중인 영수증이 없습니다.", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    binding.progressBar.visibility = View.GONE
+                    Toast.makeText(this@MainActivity, "동기화 중 오류: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
         binding.btnCheckUpdate.setOnClickListener {
             UpdateManager.checkForUpdates(this, showToastIfLatest = true)
         }
