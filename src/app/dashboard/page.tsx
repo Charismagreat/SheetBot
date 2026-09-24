@@ -1064,7 +1064,7 @@ export default function DashboardPage() {
                   data-easybot-hint="새 구글 시트 생성: 새 구글 스프레드시트를 생성하거나 기존 시트를 연동하여 AI 자동화 코드를 주입합니다."
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>+ 새 구글 시트 생성</span>
+                  <span>새 구글 시트 생성</span>
                 </button>
               )}
             </div>
