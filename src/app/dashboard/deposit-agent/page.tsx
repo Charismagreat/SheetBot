@@ -343,7 +343,7 @@ export default function DepositAgentPage() {
                 <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
                   무통장 입금 자동확인기 시트봇 에이전트 M
                   <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200/80">
-                    전용 앱 v1.0.1
+                    전용 앱 v1.4.0
                   </span>
                 </h1>
                 <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
