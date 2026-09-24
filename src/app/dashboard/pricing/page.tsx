@@ -37,6 +37,10 @@ import {
   DEFAULT_PACKAGES 
 } from "@/lib/data/pricing";
 
+const DirectDepositModal = dynamic(
+  () => import("@/components/pricing/DirectDepositModal"),
+  { ssr: false }
+);
 const PaymentSimulatorModal = dynamic(
   () => import("@/components/pricing/PaymentSimulatorModal"),
   { ssr: false }
@@ -203,8 +207,9 @@ export default function PricingWalletPage() {
     return method.length > 12 ? method.substring(0, 12) + "…" : method;
   };
 
-  // PG 결제 시뮬레이터 모달 상태
+  // 결제 모달 상태 (기본: 구글 시트와 동일한 다이렉트 무통장 모달 / 옵션 보존: PG 시뮬레이터)
   const [activeModalPackage, setActiveModalPackage] = useState<PaymentPackage | null>(null);
+  const [usePgSimulator, setUsePgSimulator] = useState(false);
 
   // 영수증 모달 & 세금계산서 신청 모달 상태
   const [receiptOrder, setReceiptOrder] = useState<PaymentOrder | null>(null);
@@ -544,12 +549,35 @@ export default function PricingWalletPage() {
         </div>
       </div>
 
-      {/* 💳 실제 PG 결제창 시뮬레이터 모달 */}
-      {activeModalPackage && (
+      {/* 🚀 토큰 충전 모달: 구글 시트와 100% 동일한 다이렉트 무통장 입금 감지 모달 (기본) */}
+      {activeModalPackage && !usePgSimulator && (
+        <DirectDepositModal
+          pkg={activeModalPackage}
+          userEmail={session?.user?.email || ""}
+          userTier={wallet.tier}
+          userBalance={wallet.balanceTokens}
+          onClose={() => {
+            setActiveModalPackage(null);
+            setUsePgSimulator(false);
+          }}
+          onSuccess={(msg) => {
+            fetchWallet();
+            setPurchaseSuccess(msg);
+            setTimeout(() => setPurchaseSuccess(null), 5000);
+          }}
+          onSwitchToPgModal={() => setUsePgSimulator(true)}
+        />
+      )}
+
+      {/* 💳 실제 PG 결제창 시뮬레이터 모달 (보존: 추후 결제사 계약 체결 시 옵션 사용) */}
+      {activeModalPackage && usePgSimulator && (
         <PaymentSimulatorModal
           pkg={activeModalPackage}
           selectedMethod={selectedMethod}
-          onClose={() => setActiveModalPackage(null)}
+          onClose={() => {
+            setActiveModalPackage(null);
+            setUsePgSimulator(false);
+          }}
           onSuccess={(msg) => {
             fetchWallet();
             setPurchaseSuccess(msg);
