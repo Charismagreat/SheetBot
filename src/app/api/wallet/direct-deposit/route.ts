@@ -52,7 +52,8 @@ export async function POST(request: Request) {
   try {
     await setupDatabase();
     const body = await request.json();
-    const { userEmail, userName, packageId, depositorName } = body;
+    const { userEmail, userName, packageId, depositorName, phoneNumber } = body;
+    const cleanPhone = (phoneNumber || "").replace(/[^0-9-]/g, "").trim();
 
     if (!userEmail) {
       return NextResponse.json(
@@ -127,6 +128,7 @@ export async function POST(request: Request) {
         bank_name: bankInfo.bankName,
         account_number: bankInfo.accountNumber,
         account_holder: bankInfo.accountHolder || DEFAULT_BANK_INFO.accountHolder,
+        phone_number: cleanPhone || null,
         status: "PENDING",
         expires_at: expiresAt,
         completed_at: null,
@@ -141,6 +143,7 @@ export async function POST(request: Request) {
       requestId,
       depositCode,
       depositorName: cleanDepositorName,
+      phoneNumber: cleanPhone || null,
       originalAmountKrw: pkg.priceKrw,
       originalPriceKrw: pkg.priceKrw,
       discountKrw,
