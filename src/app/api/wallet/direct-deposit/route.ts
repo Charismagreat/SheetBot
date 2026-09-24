@@ -101,7 +101,8 @@ export async function POST(request: Request) {
     const randomSuffix = Math.floor(100 + Math.random() * 900);
     const depositCode = initialChar + randomSuffix;
 
-    const requestId = "dep_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
+    const numericId = Date.now();
+    const requestId = String(numericId);
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 30 * 60 * 1000).toISOString();
 
@@ -112,9 +113,10 @@ export async function POST(request: Request) {
     const qrPayload = tossUrl || (bankInfo.bankName + " " + bankInfo.accountNumber + " " + finalAmountKrw + "원 (입금자: " + cleanDepositorName + ")");
     const qrImageUrl = "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=" + encodeURIComponent(qrPayload);
 
-    await insertRows("sheetbot_deposit_requests", [
+    const insertResult = await insertRows("sheetbot_deposit_requests", [
       {
-        id: requestId,
+        id: numericId,
+        uuid: "dep_" + numericId,
         deposit_code: depositCode,
         depositor_name: cleanDepositorName,
         user_email: email,
@@ -135,6 +137,11 @@ export async function POST(request: Request) {
         created_at: now.toISOString(),
       },
     ]);
+
+    if (insertResult && insertResult.inserted === 0 && Array.isArray(insertResult.errors) && insertResult.errors.length > 0) {
+      console.error("[Direct-Deposit] insertRows failed:", insertResult.errors);
+      throw new Error("입금 대기 세션 등록 오류: " + insertResult.errors.join(", "));
+    }
 
     const wallet = await getOrCreateUserWallet(email);
 
@@ -185,10 +192,16 @@ export async function GET(request: Request) {
     }
 
     const filters: Record<string, any> = {};
-    if (requestId) filters.id = requestId;
+    if (requestId) {
+      if (/^\d+$/.test(requestId)) {
+        filters.id = requestId;
+      } else {
+        filters.uuid = requestId;
+      }
+    }
     if (userEmail) filters.user_email = userEmail.toLowerCase().trim();
 
-    const res = await queryTable("sheetbot_deposit_requests", {
+    let res = await queryTable("sheetbot_deposit_requests", {
       filters,
       limit: 1,
       orderBy: "id",
@@ -196,6 +209,19 @@ export async function GET(request: Request) {
     }).catch(() => ({ rows: [] }));
 
     let reqRow: any = (res.rows || [])[0];
+    if (!reqRow && requestId) {
+      // 2차 폴백: id 또는 uuid 교차 검색
+      const fallbackFilters: Record<string, any> = /^\d+$/.test(requestId)
+        ? { uuid: "dep_" + requestId }
+        : { id: requestId.replace(/^dep_/, "") };
+      if (userEmail) fallbackFilters.user_email = userEmail.toLowerCase().trim();
+      const fbRes = await queryTable("sheetbot_deposit_requests", {
+        filters: fallbackFilters,
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+      reqRow = (fbRes.rows || [])[0];
+    }
+
     if (!reqRow) {
       return NextResponse.json({ success: false, error: "입금 요청 세션을 찾을 수 없습니다." }, { status: 404 });
     }

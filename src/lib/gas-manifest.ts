@@ -940,8 +940,8 @@ function requestDirectDepositSession(packageId, depositorName, phoneNumber) {
     var randomNum = Math.floor(100 + Math.random() * 900);
     var cleanChars = cleanDepositor.replace(/[^a-zA-Z0-9가-힣]/g, '');
     var initialChar = cleanChars ? cleanChars.charAt(0).toUpperCase() : 'C';
-    var depositCode = initialChar + randomNum;
-    var requestId = "dep_" + new Date().getTime() + "_" + Math.random().toString(36).substring(2, 6);
+    var numericId = new Date().getTime();
+    var requestId = String(numericId);
 
     try {
       var userProps = PropertiesService.getUserProperties();
@@ -956,7 +956,8 @@ function requestDirectDepositSession(packageId, depositorName, phoneNumber) {
     var insertRes = _callUserDataTool('user_data_insert_rows', {
       tableName: 'sheetbot_deposit_requests',
       rows: [{
-        id: requestId,
+        id: numericId,
+        uuid: "dep_" + numericId,
         deposit_code: depositCode,
         depositor_name: cleanDepositor,
         user_email: email,
