@@ -99,22 +99,11 @@ class SmsReceiver : BroadcastReceiver() {
 
                     // 5. 0원 영수증 SMS 자동 회신 (설정 ON && 서버에서 대상 번호/문구 회신 시)
                     if (prefs.isReceiptSmsEnabled && !result.replySmsPhone.isNullOrBlank() && !result.replySmsText.isNullOrBlank()) {
-                        try {
-                            val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                context.getSystemService(SmsManager::class.java)
-                            } else {
-                                @Suppress("DEPRECATION")
-                                SmsManager.getDefault()
-                            }
-                            val parts = smsManager.divideMessage(result.replySmsText)
-                            if (parts.size > 1) {
-                                smsManager.sendMultipartTextMessage(result.replySmsPhone, null, parts, null, null)
-                            } else {
-                                smsManager.sendTextMessage(result.replySmsPhone, null, result.replySmsText, null, null)
-                            }
-                            Log.i(TAG, "📲 [영수증 SMS 발송 성공] 수신: ${result.replySmsPhone}")
-                        } catch (smsErr: Exception) {
-                            Log.w(TAG, "영수증 SMS 발송 실패: ${smsErr.message}")
+                        val isSent = SmsSenderUtil.sendSms(context, result.replySmsPhone, result.replySmsText)
+                        if (isSent) {
+                            Log.i(TAG, "📲 [영수증 SMS 즉시 발송 성공] 수신: ${result.replySmsPhone}")
+                        } else {
+                            Log.w(TAG, "⚠️ [영수증 SMS 즉시 발송 실패] 수신: ${result.replySmsPhone} - 백그라운드 큐에서 재시도됩니다.")
                         }
                     }
 

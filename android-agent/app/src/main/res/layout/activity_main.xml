@@ -35,7 +35,7 @@
                 android:background="@drawable/bg_badge_version"
                 android:paddingHorizontal="10dp"
                 android:paddingVertical="4dp"
-                android:text="v1.0"
+                android:text="v1.2"
                 android:textColor="#10B981"
                 android:textSize="12sp"
                 android:textStyle="bold" />
@@ -214,6 +214,17 @@
                     android:layout_height="wrap_content"
                     android:checked="true" />
             </LinearLayout>
+
+            <Button
+                android:id="@+id/btnSyncPendingReceipts"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:backgroundTint="#0284C7"
+                android:text="📤 미발송 영수증 즉시 발송"
+                android:textColor="#FFFFFF"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
 
             <Button
                 android:id="@+id/btnCheckUpdate"
