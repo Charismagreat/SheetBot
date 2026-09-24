@@ -22,13 +22,14 @@ export async function GET(req: NextRequest) {
 
     const stream = new ReadableStream({
       start(controller) {
-        // 1. 최초 연결 성공 메시지 전송
+        // 1. 프록시/리버스프록시(NGINX) 버퍼 즉시 플러시용 프리앰블 코멘트 및 최초 연결 성공 메시지 전송
+        const preamble = `: ${" ".repeat(2048)}\n\n`;
         const welcomeData = `data: ${JSON.stringify({
           type: "CONNECTED",
           message: "⚡ 실시간 입금 감시 스트림이 정상 연결되었습니다.",
           timestamp: new Date().toISOString(),
         })}\n\n`;
-        controller.enqueue(encoder.encode(welcomeData));
+        controller.enqueue(encoder.encode(preamble + welcomeData));
 
         // 2. 이벤트 리스너 등록
         const onEvent = (payload: DepositEventPayload) => {
