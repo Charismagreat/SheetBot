@@ -1018,13 +1018,13 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 2. 연동된 Apps Script 프로젝트 목록 */}
+        {/* 2. 연동된 내 자동화 프로젝트 목록 */}
         <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2">
             <div className="flex items-center gap-3">
               <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
                 <FileCode className="w-4 h-4 text-emerald-600" />
-                <span>Apps Script 프로젝트</span>
+                <span>내 자동화 프로젝트</span>
               </h4>
 
               {/* 활성 vs 휴지통(14일 유예) 탭 스위처 */}
@@ -1056,51 +1056,15 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              <Link
-                href="/marketplace"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3 py-1.5 bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 text-amber-900 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all border border-amber-200/80 cursor-pointer shadow-2xs active:scale-95 whitespace-nowrap"
-                data-easybot-hint="템플릿 마켓: 검증된 시트 사본을 즉시 복제합니다."
-              >
-                <Copy className="w-3.5 h-3.5 text-amber-600" />
-                <span>🛍️ 템플릿 마켓</span>
-              </Link>
-
-
-              <button
-                type="button"
-                onClick={() => setIsFdeModalOpen(true)}
-                className="px-3 py-1.5 bg-gradient-to-r from-indigo-50 to-purple-50 hover:from-indigo-100 hover:to-purple-100 text-indigo-900 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all border border-indigo-200/80 cursor-pointer shadow-2xs active:scale-95 whitespace-nowrap"
-                data-easybot-hint="전문가(FDE)에게 의뢰: 복잡한 수식이나 프로세스를 SheetBot 전담 엔지니어에게 1:1 맞춤 제작으로 의뢰합니다."
-              >
-                <Briefcase className="w-3.5 h-3.5 text-indigo-600" />
-                <span>👔 전문가(FDE)에게 의뢰</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setIsApplyingFde(false);
-                  setIsFdeRecruitOpen(true);
-                }}
-                className="px-2.5 py-1.5 bg-gradient-to-r from-purple-50 to-pink-50 hover:from-purple-100 hover:to-pink-100 text-purple-900 text-xs font-bold rounded-xl flex items-center gap-1 transition-all border border-purple-200/80 cursor-pointer shadow-2xs active:scale-95 whitespace-nowrap"
-                data-easybot-hint="FDE 파트너 모집: SheetBot 공인 FDE로 활동하여 시트 자동화 외주를 수주하고 고수익을 창출할 개발자를 모십니다."
-                title="FDE 1기 파트너 모집 안내"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                <span>🤝 FDE 파트너 모집</span>
-              </button>
-
+            <div className="flex items-center gap-2">
               {!showTrashed && (
                 <button
                   onClick={() => setIsNewProjectModalOpen(true)}
                   className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
-                  data-easybot-hint="새 스프레드시트 생성: 새 구글 스프레드시트를 생성하거나 기존 시트를 연동하여 AI 자동화 코드를 주입합니다."
+                  data-easybot-hint="새 구글 시트 생성: 새 구글 스프레드시트를 생성하거나 기존 시트를 연동하여 AI 자동화 코드를 주입합니다."
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>새 스프레드시트 생성</span>
+                  <span>+ 새 구글 시트 생성</span>
                 </button>
               )}
             </div>
@@ -1437,14 +1401,28 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsFdeModalOpen(true)}
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1 transition-all shadow-2xs shrink-0 whitespace-nowrap cursor-pointer active:scale-95"
-            >
-              <span>FDE 1:1 맞춤 의뢰</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsApplyingFde(false);
+                  setIsFdeRecruitOpen(true);
+                }}
+                className="px-2 py-1 text-purple-700 hover:text-purple-900 text-xs font-bold hover:underline cursor-pointer whitespace-nowrap"
+                title="시트 자동화 외주 수주 및 개발자 파트너 등록 안내"
+              >
+                <span>FDE 파트너 지원 &gt;</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsFdeModalOpen(true)}
+                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1 transition-all shadow-2xs shrink-0 whitespace-nowrap cursor-pointer active:scale-95"
+              >
+                <span>FDE 1:1 맞춤 의뢰</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
 
