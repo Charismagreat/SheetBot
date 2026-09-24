@@ -11,10 +11,13 @@ import { depositEventBus, DepositEventPayload } from "@/lib/deposit-events";
  */
 export async function GET(req: NextRequest) {
   try {
-    const userEmail = await getCurrentUserEmail(req);
+    const url = new URL(req.url);
+    const queryEmail = url.searchParams.get("userEmail") || url.searchParams.get("email");
+    const userEmail = (queryEmail && queryEmail.includes("@")) ? queryEmail.toLowerCase().trim() : (await getCurrentUserEmail(req));
     const isAdmin = await isCurrentUserAdmin(userEmail);
 
     if (!userEmail || !isAdmin) {
+      console.warn(`[Deposit-SSE] Unauthorized stream attempt: email=${userEmail}, isAdmin=${isAdmin}`);
       return new Response("Unauthorized", { status: 401 });
     }
 
