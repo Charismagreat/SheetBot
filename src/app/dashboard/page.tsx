@@ -1,6 +1,6 @@
 "use client";
 
-import { apiFetch } from '@/lib/api';
+import { apiFetch, getEgdeskBasePath } from '@/lib/api';
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
@@ -401,6 +401,82 @@ export default function DashboardPage() {
     };
   }, [status, session?.user?.email, fetchData]);
 
+  // ⚡ [0초 실시간 감시] 이지데스크 DB 왓처 실시간 스트림 연동 (프로젝트/스케줄/토큰)
+  const [isRealtimeLive, setIsRealtimeLive] = useState(false);
+
+  useEffect(() => {
+    if (status !== "authenticated" && !session?.user?.email) return;
+
+    let eventSource: EventSource | null = null;
+    let reconnectTimer: any = null;
+
+    const connectStream = () => {
+      if (eventSource) {
+        try {
+          eventSource.close();
+        } catch {}
+      }
+
+      const email = session?.user?.email || "";
+      const basePath = getEgdeskBasePath();
+      const streamUrl = `${basePath}/api/realtime/stream?topic=all&userEmail=${encodeURIComponent(email)}`;
+
+      try {
+        eventSource = new EventSource(streamUrl);
+
+        eventSource.onopen = () => {
+          setIsRealtimeLive(true);
+        };
+
+        eventSource.onmessage = (event) => {
+          setIsRealtimeLive(true);
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.type === "CONNECTED" || payload.type === "UPSTREAM_STATUS") {
+              setIsRealtimeLive(true);
+              return;
+            }
+            if (payload.type === "DATA_CHANGED") {
+              if (
+                payload.tableName === "sheetbot_projects" ||
+                payload.tableName === "sheetbot_schedules" ||
+                payload.tableName === "sheetbot_users" ||
+                payload.tableName === "sheetbot_deposit_requests"
+              ) {
+                fetchData();
+              }
+            }
+          } catch {}
+        };
+
+        eventSource.onerror = () => {
+          setIsRealtimeLive(false);
+          if (eventSource) {
+            try {
+              eventSource.close();
+            } catch {}
+          }
+          clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(connectStream, 3000);
+        };
+      } catch {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connectStream, 5000);
+      }
+    };
+
+    connectStream();
+
+    return () => {
+      if (eventSource) {
+        try {
+          eventSource.close();
+        } catch {}
+      }
+      clearTimeout(reconnectTimer);
+    };
+  }, [status, session?.user?.email, fetchData]);
+
   const [syncingProjectId, setSyncingProjectId] = useState<string | null>(null);
   const [syncingCodeProjectId, setSyncingCodeProjectId] = useState<string | null>(null);
 
@@ -706,6 +782,14 @@ export default function DashboardPage() {
                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-emerald-600" : ""}`} />
                 <span>새로고침</span>
               </button>
+
+              {/* 실시간 DB 왓처 동기화 뱃지 */}
+              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200/80 rounded-xl text-[11px] font-bold">
+                <span className={`w-2 h-2 rounded-full ${isRealtimeLive ? "bg-emerald-500 animate-pulse" : "bg-slate-300"}`} />
+                <span className={isRealtimeLive ? "text-emerald-700" : "text-slate-400"}>
+                  {isRealtimeLive ? "⚡ DB 왓처 실시간 동기화" : "스트림 연결 중"}
+                </span>
+              </div>
             </div>
           </div>
 

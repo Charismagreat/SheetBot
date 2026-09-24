@@ -1,6 +1,6 @@
 "use client";
 
-import { apiFetch } from '@/lib/api';
+import { apiFetch, getEgdeskBasePath } from '@/lib/api';
 import React, { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -162,6 +162,81 @@ export default function NotificationsPage() {
       fetchLogs();
     }
   }, [status, router, fetchDevices, fetchRules, fetchLogs]);
+
+  // ⚡ [0초 실시간 감시] 이지데스크 DB 왓처 실시간 스트림 연동 (SMS 및 기기 변경 자동 감지)
+  const [isRealtimeLive, setIsRealtimeLive] = useState(false);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+
+    let eventSource: EventSource | null = null;
+    let reconnectTimer: any = null;
+
+    const connectStream = () => {
+      if (eventSource) {
+        try {
+          eventSource.close();
+        } catch {}
+      }
+
+      const email = session?.user?.email || "";
+      const basePath = getEgdeskBasePath();
+      const streamUrl = `${basePath}/api/realtime/stream?topic=sms&userEmail=${encodeURIComponent(email)}`;
+
+      try {
+        eventSource = new EventSource(streamUrl);
+
+        eventSource.onopen = () => {
+          setIsRealtimeLive(true);
+        };
+
+        eventSource.onmessage = (event) => {
+          setIsRealtimeLive(true);
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.type === "CONNECTED" || payload.type === "UPSTREAM_STATUS") {
+              setIsRealtimeLive(true);
+              return;
+            }
+            if (payload.type === "DATA_CHANGED") {
+              if (payload.tableName === "sheetbot_sms_logs") {
+                fetchLogs();
+              } else if (payload.tableName === "sheetbot_user_devices") {
+                fetchDevices();
+              } else if (payload.tableName === "sheetbot_smart_rules") {
+                fetchRules();
+              }
+            }
+          } catch {}
+        };
+
+        eventSource.onerror = () => {
+          setIsRealtimeLive(false);
+          if (eventSource) {
+            try {
+              eventSource.close();
+            } catch {}
+          }
+          clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(connectStream, 3000);
+        };
+      } catch {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connectStream, 5000);
+      }
+    };
+
+    connectStream();
+
+    return () => {
+      if (eventSource) {
+        try {
+          eventSource.close();
+        } catch {}
+      }
+      clearTimeout(reconnectTimer);
+    };
+  }, [status, session?.user?.email, fetchLogs, fetchDevices, fetchRules]);
 
   // 새 기기 등록
   const handleCreateDevice = async (e: React.FormEvent) => {
@@ -443,6 +518,14 @@ export default function NotificationsPage() {
               <FileText className="w-4 h-4" />
               <span>실전 활용 가이드</span>
             </button>
+
+            {/* 실시간 DB 왓처 연결 뱃지 */}
+            <div className="ml-auto hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-bold transition-all bg-white/5 border-white/10">
+              <span className={`w-2 h-2 rounded-full ${isRealtimeLive ? "bg-emerald-400 animate-pulse" : "bg-slate-400"}`} />
+              <span className={isRealtimeLive ? "text-emerald-300" : "text-slate-400"}>
+                {isRealtimeLive ? "⚡ DB 왓처 0초 실시간 감시 중" : "스트림 연결 중..."}
+              </span>
+            </div>
           </div>
         </div>
 
