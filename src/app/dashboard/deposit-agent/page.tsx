@@ -73,6 +73,7 @@ export default function DepositAgentPage() {
   const [loadingLogs, setLoadingLogs] = useState(true);
   const [selectedTab, setSelectedTab] = useState<"ALL" | "COMPLETED" | "HOLD" | "DELAYED">("ALL");
   const [processingId, setProcessingId] = useState<string | number | null>(null);
+  const [isRealtimeLive, setIsRealtimeLive] = useState(false);
 
   // Phase 4: 관리자 수동 승인 및 취소 핸들러
   const handleApproveDeposit = async (reqId: string | number, actualAmount?: number) => {
@@ -259,11 +260,53 @@ export default function DepositAgentPage() {
           router.push("/dashboard");
         });
 
+      // ⚡ [0초 실시간 감시] SSE(Server-Sent Events) 실시간 스트림 연결
+      let eventSource: EventSource | null = null;
+      try {
+        eventSource = new EventSource("/api/wallet/agent/stream");
+
+        eventSource.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.type === "CONNECTED") {
+              setIsRealtimeLive(true);
+              return;
+            }
+            if (payload.type === "deposit_received") {
+              fetchDepositLogs();
+              const name = payload.data?.depositorName || "회원";
+              const amt = Number(payload.data?.amountKrw || 0).toLocaleString();
+              showToast("success", `🎉 ${name}님 ${amt}원 입금 확인 및 토큰 충전 완료!`);
+            } else if (payload.type === "deposit_hold") {
+              fetchDepositLogs();
+              showToast("error", "⚠️ 금액 불일치 또는 동명이인 충돌 입금이 감지되었습니다.");
+            } else if (payload.type === "deposit_delayed" || payload.type === "deposit_action") {
+              fetchDepositLogs();
+            } else if (payload.type === "device_heartbeat") {
+              fetchDeviceStatus();
+            }
+          } catch {}
+        };
+
+        eventSource.onerror = () => {
+          setIsRealtimeLive(false);
+        };
+      } catch (e) {
+        console.warn("[Deposit-Agent] SSE connection error:", e);
+      }
+
+      // 안전 백업용 타이머 (SSE 일시 단절 대비, 기존 15초 -> 60초로 최적화)
       const interval = setInterval(() => {
         fetchDeviceStatus();
         fetchDepositLogs();
-      }, 15000);
-      return () => clearInterval(interval);
+      }, 60000);
+
+      return () => {
+        clearInterval(interval);
+        if (eventSource) {
+          eventSource.close();
+        }
+      };
     }
   }, [status, router, fetchPairingInfo, fetchDeviceStatus, fetchDepositLogs]);
 
@@ -413,6 +456,18 @@ export default function DepositAgentPage() {
             </div>
 
             <div className="flex items-center gap-2 self-start md:self-auto">
+              <span
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                  isRealtimeLive
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs"
+                    : "bg-slate-100 text-slate-500 border-slate-200"
+                }`}
+                title={isRealtimeLive ? "서버와 실시간 SSE 스트림으로 연결되어 입금 및 기기 상태가 0초 만에 즉시 반영됩니다." : "서버와 실시간 스트림 연결 중입니다."}
+              >
+                <span className={`w-2 h-2 rounded-full ${isRealtimeLive ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`}></span>
+                {isRealtimeLive ? "⚡ 0초 실시간 감시" : "스트림 연결 중"}
+              </span>
+
               <button
                 onClick={() => {
                   fetchPairingInfo();

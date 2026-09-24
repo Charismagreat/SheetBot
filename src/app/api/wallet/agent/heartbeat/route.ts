@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { queryTable, updateRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { emitDepositEvent } from "@/lib/deposit-events";
 
 /**
  * POST /api/wallet/agent/heartbeat
@@ -50,6 +51,14 @@ export async function POST(req: NextRequest) {
 
       await updateRows("sheetbot_user_devices", updates, {
         filters: { id: dev.id },
+      });
+
+      emitDepositEvent("device_heartbeat", {
+        userEmail: cleanEmail,
+        batteryLevel,
+        isCharging,
+        deviceModel,
+        updatedAt: nowIso,
       });
     }
 
