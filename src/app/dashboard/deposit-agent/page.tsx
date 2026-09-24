@@ -68,9 +68,59 @@ export default function DepositAgentPage() {
   const [devices, setDevices] = useState<any[]>([]);
   const [loadingDevice, setLoadingDevice] = useState(true);
 
-  // 최근 입금 대장 상태
+  // 최근 입금 대장 상태 및 Phase 4 스마트 예외 필터
   const [depositLogs, setDepositLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
+  const [selectedTab, setSelectedTab] = useState<"ALL" | "COMPLETED" | "HOLD" | "DELAYED">("ALL");
+  const [processingId, setProcessingId] = useState<string | number | null>(null);
+
+  // Phase 4: 관리자 수동 승인 및 취소 핸들러
+  const handleApproveDeposit = async (reqId: string | number, actualAmount?: number) => {
+    if (!window.confirm("해당 건의 입금을 수동 승인하여 회원 토큰을 즉시 지급하시겠습니까?")) return;
+    setProcessingId(reqId);
+    try {
+      const res = await apiFetch("/api/wallet/direct-deposit/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: reqId, action: "APPROVE", customAmount: actualAmount }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("success", data.message || "토큰이 성공적으로 지급되었습니다.");
+        await fetchDepositLogs();
+      } else {
+        showToast("error", data.error || "승인 처리에 실패했습니다.");
+      }
+    } catch (e: any) {
+      showToast("error", "오류 발생: " + e.message);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleRejectDeposit = async (reqId: string | number) => {
+    const reason = window.prompt("입금 취소/환불 사유를 입력해 주세요:", "고객 요청에 의한 입금 취소 및 반환 완료");
+    if (reason === null) return;
+    setProcessingId(reqId);
+    try {
+      const res = await apiFetch("/api/wallet/direct-deposit/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: reqId, action: "REJECT", reason }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("success", "입금건이 취소 처리되었습니다.");
+        await fetchDepositLogs();
+      } else {
+        showToast("error", data.error || "취소 처리에 실패했습니다.");
+      }
+    } catch (e: any) {
+      showToast("error", "오류 발생: " + e.message);
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
   // 가상 테스트 상태
   const [testingSms, setTestingSms] = useState(false);
@@ -168,7 +218,7 @@ export default function DepositAgentPage() {
   const fetchDepositLogs = useCallback(async () => {
     setLoadingLogs(true);
     try {
-      const res = await apiFetch("/api/wallet/direct-deposit?limit=10");
+      const res = await apiFetch("/api/wallet/direct-deposit?limit=50");
       const data = await res.json();
       if (data.success && data.requests) {
         setDepositLogs(data.requests);
@@ -717,7 +767,7 @@ export default function DepositAgentPage() {
           </div>
         </div>
 
-        {/* 2단계: 실시간 입금 감지 대장 (Empty State 고도화) */}
+        {/* 2단계: 실시간 입금 감지 대장 (Empty State & Phase 4 스마트 예외 제어 센터) */}
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
           <div className="p-5 border-b border-slate-100 flex items-center justify-between">
             <div>
@@ -725,7 +775,7 @@ export default function DepositAgentPage() {
                 실시간 무통장 입금 감지 및 토큰 적립 내역
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                스마트폰 앱이 은행 SMS를 감지하여 서버와 매칭한 실시간 대장입니다.
+                스마트폰 앱이 은행 SMS/푸시를 감지하여 서버와 매칭한 실시간 안전 결제 대장입니다.
               </p>
             </div>
             <button
@@ -737,74 +787,234 @@ export default function DepositAgentPage() {
             </button>
           </div>
 
+          {/* Phase 4: 스마트 예외 대장 탭 필터 바 */}
+          {(() => {
+            const holdCount = depositLogs.filter((l) => l.status === "ON_HOLD" || l.status === "COLLISION_HOLD").length;
+            const delayedCount = depositLogs.filter((l) => l.status === "DELAYED_MATCH").length;
+            const completedCount = depositLogs.filter((l) => l.status === "COMPLETED" || l.status === "APPROVED").length;
+
+            return (
+              <div className="px-5 py-2.5 bg-slate-50/70 border-b border-slate-200/80 flex items-center gap-2 overflow-x-auto text-xs">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTab("ALL")}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    selectedTab === "ALL"
+                      ? "bg-slate-900 text-white shadow-xs"
+                      : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                  }`}
+                >
+                  전체 ({depositLogs.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTab("COMPLETED")}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                    selectedTab === "COMPLETED"
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                  }`}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>정상 충전 ({completedCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTab("HOLD")}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    selectedTab === "HOLD"
+                      ? "bg-amber-600 text-white shadow-xs"
+                      : holdCount > 0
+                      ? "bg-amber-50 text-amber-800 border border-amber-300 font-extrabold animate-pulse"
+                      : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                  }`}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                  <span>⚠️ 금액불일치/보류 ({holdCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTab("DELAYED")}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    selectedTab === "DELAYED"
+                      ? "bg-purple-600 text-white shadow-xs"
+                      : delayedCount > 0
+                      ? "bg-purple-50 text-purple-800 border border-purple-300 font-extrabold"
+                      : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5 text-purple-500" />
+                  <span>⏰ 지연 입금 ({delayedCount})</span>
+                </button>
+              </div>
+            );
+          })()}
+
+          {/* 입금 대장 테이블 */}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-extrabold">
                 <tr>
                   <th className="py-3.5 px-4">입금 번호 / 식별코드</th>
-                  <th className="py-3.5 px-4">입금자명</th>
-                  <th className="py-3.5 px-4 text-right">입금 금액</th>
+                  <th className="py-3.5 px-4">입금자명 / 계정</th>
+                  <th className="py-3.5 px-4 text-right">신청 / 실입금액</th>
                   <th className="py-3.5 px-4 text-right">적립 토큰</th>
                   <th className="py-3.5 px-4 text-center">처리 상태</th>
                   <th className="py-3.5 px-4">감지 및 완료 일시</th>
+                  <th className="py-3.5 px-4 text-center">관리 / 제어</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {loadingLogs ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                    <td colSpan={7} className="py-12 text-center text-slate-400">
                       <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-slate-300" />
                       입금 감지 내역을 불러오는 중...
                     </td>
                   </tr>
-                ) : depositLogs.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-12 text-center">
-                      <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
-                        <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
-                          <Inbox className="w-6 h-6" />
-                        </div>
-                        <div className="text-sm font-bold text-slate-800">아직 감지된 무통장 입금 내역이 없습니다</div>
-                        <p className="text-xs text-slate-400 mt-1.5 leading-relaxed break-keep">
-                          회원이 무통장 입금하거나 상단의 <b>[가상 입금 테스트]</b> 버튼을 누르면 실시간으로 이곳에 자동 기록됩니다.
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  depositLogs.map((log) => (
-                    <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3.5 px-4 font-mono font-semibold text-slate-800">
-                        {log.deposit_code || log.depositCode || log.id}
-                      </td>
-                      <td className="py-3.5 px-4 font-bold text-slate-900">
-                        {log.depositor_name || log.depositorName || "-"}
-                      </td>
-                      <td className="py-3.5 px-4 text-right font-extrabold text-slate-900 font-mono">
-                        {Number(log.amount_krw || log.amountKrw || 0).toLocaleString()}원
-                      </td>
-                      <td className="py-3.5 px-4 text-right font-black text-indigo-600 font-mono">
-                        +{Number(log.tokens_to_credit || log.tokensToCredit || 50000).toLocaleString()} T
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        {log.status === "COMPLETED" || log.status === "APPROVED" ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            충전 완료
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200">
-                            <Clock className="w-3 h-3 text-amber-600" />
-                            입금 대기
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 font-mono text-slate-500">
-                        {formatDateTime(log.completed_at || log.created_at)}
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ) : (() => {
+                  const filtered = depositLogs.filter((l) => {
+                    if (selectedTab === "COMPLETED") return l.status === "COMPLETED" || l.status === "APPROVED";
+                    if (selectedTab === "HOLD") return l.status === "ON_HOLD" || l.status === "COLLISION_HOLD";
+                    if (selectedTab === "DELAYED") return l.status === "DELAYED_MATCH";
+                    return true;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={7} className="py-12 text-center">
+                          <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
+                            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                              <Inbox className="w-6 h-6" />
+                            </div>
+                            <div className="text-sm font-bold text-slate-800">
+                              {selectedTab === "HOLD"
+                                ? "현재 보류 중인 불일치 입금건이 없습니다."
+                                : selectedTab === "DELAYED"
+                                ? "현재 대기 중인 지연 입금건이 없습니다."
+                                : "감지된 무통장 입금 내역이 없습니다."}
+                            </div>
+                            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed break-keep">
+                              {selectedTab === "ALL" && "회원이 무통장 입금하거나 상단의 [가상 입금 테스트] 버튼을 누르면 실시간으로 이곳에 자동 기록됩니다."}
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return filtered.map((log) => {
+                    const isCompleted = log.status === "COMPLETED" || log.status === "APPROVED";
+                    const isHold = log.status === "ON_HOLD";
+                    const isCollision = log.status === "COLLISION_HOLD";
+                    const isDelayed = log.status === "DELAYED_MATCH";
+                    const isPending = log.status === "PENDING";
+                    const isCancelled = log.status === "CANCELLED";
+                    const isExpired = log.status === "EXPIRED";
+
+                    const requestedAmount = Number(log.amount_krw || log.amountKrw || 0);
+                    const actualAmount = Number(log.actual_amount_krw || log.actualAmountKrw || requestedAmount);
+                    const isActionable = isHold || isCollision || isDelayed;
+
+                    return (
+                      <tr key={log.id} className={`transition-colors ${isHold ? "bg-amber-50/30 hover:bg-amber-50/50" : isDelayed ? "bg-purple-50/30 hover:bg-purple-50/50" : "hover:bg-slate-50/80"}`}>
+                        <td className="py-3.5 px-4 font-mono font-semibold text-slate-800">
+                          <div>{log.deposit_code || log.depositCode || log.id}</div>
+                          {log.hold_reason && (
+                            <div className="text-[10.5px] text-amber-700 font-sans mt-0.5 max-w-[220px] truncate" title={log.hold_reason}>
+                              ⚠️ {log.hold_reason}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-slate-900">{log.depositor_name || log.depositorName || "-"}</div>
+                          <div className="text-[10.5px] text-slate-400 truncate max-w-[150px]">{log.user_email || log.userEmail || "-"}</div>
+                        </td>
+                        <td className="py-3.5 px-4 text-right font-mono">
+                          <div className="font-extrabold text-slate-900">{requestedAmount.toLocaleString()}원</div>
+                          {actualAmount !== requestedAmount && actualAmount > 0 && (
+                            <div className="text-[10.5px] font-bold text-rose-600">
+                              실입금: {actualAmount.toLocaleString()}원
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-right font-black text-indigo-600 font-mono">
+                          +{Number(log.tokens_to_credit || log.tokensToCredit || 0).toLocaleString()} T
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          {isCompleted ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              충전 완료
+                            </span>
+                          ) : isHold ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-50 text-amber-700 border border-amber-300">
+                              <AlertTriangle className="w-3 h-3 text-amber-600" />
+                              금액 불일치 보류
+                            </span>
+                          ) : isCollision ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-orange-50 text-orange-700 border border-orange-300">
+                              <AlertTriangle className="w-3 h-3 text-orange-600" />
+                              동명이인 충돌 보류
+                            </span>
+                          ) : isDelayed ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-purple-50 text-purple-700 border border-purple-300">
+                              <Clock className="w-3 h-3 text-purple-600" />
+                              지연 입금 구제 대기
+                            </span>
+                          ) : isPending ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-sky-50 text-sky-700 border border-sky-200">
+                              <Clock className="w-3 h-3 text-sky-600" />
+                              입금 대기
+                            </span>
+                          ) : isCancelled ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-slate-100 text-slate-500 border border-slate-200">
+                              취소 / 환불됨
+                            </span>
+                          ) : isExpired ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-slate-100 text-slate-400 border border-slate-200">
+                              기한 만료
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-slate-100 text-slate-600 border border-slate-200">
+                              {log.status}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-slate-500">
+                          {formatDateTime(log.completed_at || log.created_at)}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          {isActionable ? (
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                disabled={processingId === log.id}
+                                onClick={() => handleApproveDeposit(log.id, actualAmount > 0 ? actualAmount : requestedAmount)}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold rounded-lg shadow-2xs transition-all disabled:opacity-50 cursor-pointer"
+                                title="실입금액에 맞춰 토큰을 즉시 승인 지급합니다"
+                              >
+                                {processingId === log.id ? "처리 중..." : "⚡ 승인"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={processingId === log.id}
+                                onClick={() => handleRejectDeposit(log.id)}
+                                className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold rounded-lg transition-all disabled:opacity-50 cursor-pointer"
+                                title="입금 취소 및 환불 처리"
+                              >
+                                취소
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-400">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           </div>
