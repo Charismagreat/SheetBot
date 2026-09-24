@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 6,
-      latestVersionName: "1.4.0",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/v1.4.0/sheetbot-deposit-agent.apk",
+      latestVersionCode: 7,
+      latestVersionName: "1.5.0",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/v1.5.0/sheetbot-deposit-agent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/sheetbot-deposit-agent.apk",
-      releaseNotes: "시트봇 에이전트 M v1.4.0 (Phase 3)\n• 전원 충전기 분리/연결 감지 & 배터리 방전 비상 경보\n• 대시보드 실시간 배터리 잔량(%) 및 충전 상태(⚡) 시각화\n• 3회 연속 실패 시 와치독 비상 알림 & 자동 복구\n• OLED 번인 & 발열 방지 AOD 블랙 스크린 모드 탑재",
+      releaseNotes: "시트봇 에이전트 M v1.5.0 (Phase 4)\n• 서버 다운 실시간 감지 & 거짓 정상(False Positive) 완전 차단\n• 스마트폰 잠금/화면 꺼짐 상태에서도 화면 강제 점등(WakeLock) & 전면 비상 경보 팝업\n• 2분 서버 통신 두절 시 TTS 음성 비상 경보 발동\n• 서버 다운 중 수신된 입금 SMS/푸시 오프라인 안전 대기열(Local Queue) 무손실 보관 및 복구 시 자동 일괄 전송(Drain)\n• 가상 입금 테스트 버튼 영구 삭제 및 실시간 서버 통신 관제 콕핏 탑재",
     },
     {
       headers: {

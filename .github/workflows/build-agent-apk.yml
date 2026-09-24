@@ -75,7 +75,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add android-agent/keystore/sheetbot-agent.jks public/downloads/sheetbot-deposit-agent.apk
           if ! git diff --staged --quiet; then
-            git commit -m "build(agent): bundle release apk v1.4.0"
+            git commit -m "build(agent): bundle release apk v1.5.0"
             git push origin main
           fi
 
@@ -83,9 +83,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v1.4.0
-          name: "SheetBot Agent M v1.4.0 (Phase 3)"
-          body: "시트봇 에이전트 M (SheetBot Agent M) v1.4.0 (Phase 3)\n• 무인 24/7 공기계 생명선 & 장애 관제 시스템 구축\n• 전원 충전기 분리/연결 감지 & 배터리 방전 비상 경보\n• 대시보드 실시간 배터리 잔량(%) 및 충전 상태(⚡) 시각화\n• 3회 연속 실패 시 와치독 비상 알림 & 자동 복구\n• OLED 번인 & 발열 방지 AOD 블랙 스크린 모드 (더블 탭 복귀)\n• 인앱 원클릭 무삭제 덮어쓰기 업데이트 지원"
+          tag_name: v1.5.0
+          name: "SheetBot Agent M v1.5.0 (Phase 4)"
+          body: "시트봇 에이전트 M (SheetBot Agent M) v1.5.0 (Phase 4)\n• 서버 다운 실시간 감지 & 거짓 정상(False Positive) 완전 차단\n• 스마트폰 잠금/화면 꺼짐 상태에서도 화면 강제 점등(WakeLock) & 전면 비상 경보 팝업\n• 2분 서버 통신 두절 시 TTS 음성 비상 경보 발동\n• 서버 다운 중 수신된 입금 SMS/푸시 오프라인 안전 대기열(Local Queue) 무손실 보관 및 복구 시 자동 일괄 전송(Drain)\n• 가상 입금 테스트 버튼 영구 삭제 및 실시간 서버 통신 관제 콕핏 탑재"
           files: release-apk/sheetbot-deposit-agent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

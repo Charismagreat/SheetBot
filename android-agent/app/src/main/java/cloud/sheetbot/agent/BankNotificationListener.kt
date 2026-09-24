@@ -100,26 +100,40 @@ class BankNotificationListener : NotificationListenerService() {
                         userEmail = userEmail
                     )
 
-                    Log.i(TAG, "[$bankName 푸시 웹훅 전송 결과] 성공=${result.success}, 상태=${result.statusCode}")
+                    if (result.success) {
+                        Log.i(TAG, "[$bankName 푸시 웹훅 전송 성공] 상태=${result.statusCode}")
+                        // 6. 로컬 상태 기록
+                        val logSummary = "[$bankName 푸시] ${text.take(60)}"
+                        prefs.lastDetectedDeposit = logSummary
 
-                    // 6. 로컬 상태 기록
-                    val logSummary = "[$bankName 푸시] ${text.take(60)}"
-                    prefs.lastDetectedDeposit = logSummary
+                        showNotification(title, text, true, bankName)
 
-                    showNotification(title, text, result.success, bankName)
-
-                    // 7. 0원 영수증 SMS 자동 회신
-                    if (prefs.isReceiptSmsEnabled && !result.replySmsPhone.isNullOrBlank() && !result.replySmsText.isNullOrBlank()) {
-                        val isSent = SmsSenderUtil.sendSms(this@BankNotificationListener, result.replySmsPhone, result.replySmsText)
-                        if (isSent) {
-                            Log.i(TAG, "📲 [푸시 연계 영수증 SMS 발송 성공] 수신: ${result.replySmsPhone}")
+                        // 7. 0원 영수증 SMS 자동 회신
+                        if (prefs.isReceiptSmsEnabled && !result.replySmsPhone.isNullOrBlank() && !result.replySmsText.isNullOrBlank()) {
+                            val isSent = SmsSenderUtil.sendSms(this@BankNotificationListener, result.replySmsPhone, result.replySmsText)
+                            if (isSent) {
+                                Log.i(TAG, "📲 [푸시 연계 영수증 SMS 발송 성공] 수신: ${result.replySmsPhone}")
+                            }
                         }
-                    }
 
-                    // 8. TTS 음성 안내
-                    if (prefs.isTtsEnabled) {
-                        val voiceMsg = result.ttsText ?: "$bankName 입금이 감지되어 충전이 완료되었습니다."
-                        TtsManager.speak(this@BankNotificationListener, voiceMsg)
+                        // 8. TTS 음성 안내
+                        if (prefs.isTtsEnabled) {
+                            val voiceMsg = result.ttsText ?: "$bankName 입금이 감지되어 충전이 완료되었습니다."
+                            TtsManager.speak(this@BankNotificationListener, voiceMsg)
+                        }
+                    } else {
+                        Log.w(TAG, "⚠️ [$bankName 푸시 웹훅 전송 실패] 오프라인 대기열에 저장: 상태=${result.statusCode}")
+                        DepositQueueManager.enqueueDeposit(
+                            this@BankNotificationListener,
+                            "PUSH:$bankName",
+                            simulatedSms,
+                            userEmail,
+                            "push"
+                        )
+                        showNotification(title, text, false, bankName)
+                        if (prefs.isTtsEnabled) {
+                            TtsManager.speak(this@BankNotificationListener, "서버 연결 불안정으로 $bankName 입금 내역이 오프라인 대기열에 저장되었습니다.")
+                        }
                     }
 
                     // 9. UI 화면 갱신 브로드캐스트
@@ -131,7 +145,15 @@ class BankNotificationListener : NotificationListenerService() {
                     }
                     sendBroadcast(updateIntent)
                 } catch (e: Exception) {
-                    Log.e(TAG, "푸시 웹훅 처리 중 예외 발생", e)
+                    Log.e(TAG, "푸시 웹훅 처리 중 예외 발생 -> 오프라인 대기열 저장", e)
+                    DepositQueueManager.enqueueDeposit(
+                        this@BankNotificationListener,
+                        "PUSH:$bankName",
+                        simulatedSms,
+                        userEmail,
+                        "push"
+                    )
+                    showNotification(title, text, false, bankName)
                 }
             }
         } catch (e: Exception) {
@@ -154,7 +176,7 @@ class BankNotificationListener : NotificationListenerService() {
             manager.createNotificationChannel(channel)
         }
 
-        val notiTitle = if (isSuccess) "🔔 [$bankName 푸시감지] 무통장 입금 자동 충전 완료!" else "⚠️ [$bankName 푸시감지] 충전 처리 실패"
+        val notiTitle = if (isSuccess) "🔔 [$bankName 푸시감지] 무통장 입금 자동 충전 완료!" else "⚠️ [$bankName 푸시감지] 오프라인 대기열 안전 보관"
 
         val notification = NotificationCompat.Builder(this, PUSH_CHANNEL_ID)
             .setContentTitle(notiTitle)

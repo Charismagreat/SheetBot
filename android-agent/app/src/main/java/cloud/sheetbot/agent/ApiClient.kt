@@ -162,6 +162,32 @@ object ApiClient {
     }
 
     /**
+     * 서버 생존 상태(Ping) 및 지연 시간(ms) 실시간 확인
+     */
+    suspend fun pingServer(): PingResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            val endpoint = "$host/api/wallet/agent/version"
+            try {
+                val request = Request.Builder().url(endpoint).get().build()
+                val startTime = System.currentTimeMillis()
+                val response = client.newCall(request).execute()
+                val elapsed = System.currentTimeMillis() - startTime
+                if (response.isSuccessful) {
+                    return@withContext PingResult(
+                        isOnline = true,
+                        latencyMs = elapsed,
+                        connectedHost = host
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "서버 핑 확인 실패 ($host): ${e.message}")
+            }
+        }
+        PingResult(isOnline = false, error = "서버 및 터널 응답 없음")
+    }
+
+    /**
      * 백그라운드 생존 신호(Heartbeat) 전송 (1차 실패 시 2차 폴백)
      */
     suspend fun sendHeartbeat(
@@ -185,7 +211,7 @@ object ApiClient {
                 val json = JSONObject().apply {
                     put("userEmail", userEmail)
                     put("deviceModel", "${Build.MANUFACTURER} ${Build.MODEL}")
-                    put("appVersion", "1.4.0")
+                    put("appVersion", "1.5.0")
                     if (batteryLevel != null) put("batteryLevel", batteryLevel)
                     if (isCharging != null) put("isCharging", isCharging)
                 }
@@ -362,3 +388,11 @@ data class PendingReceipt(
     val tokensToCredit: Int,
     val message: String
 )
+
+data class PingResult(
+    val isOnline: Boolean,
+    val latencyMs: Long = 0,
+    val connectedHost: String = "",
+    val error: String? = null
+)
+

@@ -33,7 +33,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -44,6 +43,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var prefs: PreferencesManager
     private val activityScope = CoroutineScope(Dispatchers.Main)
     private var aodJob: Job? = null
+    private var serverMonitorJob: Job? = null
     private lateinit var aodGestureDetector: GestureDetector
 
     // 입금 감지 시 실시간 화면 갱신 리시버
@@ -107,11 +107,18 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         checkNotificationListenerPermission()
         checkAndRequestBatteryOptimization()
+        startServerMonitorLoop()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        serverMonitorJob?.cancel()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         aodJob?.cancel()
+        serverMonitorJob?.cancel()
         TtsManager.shutdown()
         try {
             unregisterReceiver(depositUpdateReceiver)
@@ -147,17 +154,33 @@ class MainActivity : AppCompatActivity() {
             requestNotificationListenerPermission()
         }
 
-        // 4. 가상 카카오뱅크 입금 SMS 테스트 버튼
-        binding.btnTestDeposit.setOnClickListener {
-            executeVirtualDepositTest()
+        // 4. 실시간 서버 통신 상태 재점검 버튼
+        binding.btnRefreshServerStatus.setOnClickListener {
+            checkServerAndQueueStatus(showToast = true)
         }
 
-        // 4-1. 가상 금융사 앱 푸시 테스트 버튼
-        binding.btnTestPushDeposit.setOnClickListener {
-            executeVirtualPushTest()
+        // 5. 오프라인 대기열 서버 즉시 전송 버튼
+        binding.btnSyncPendingDeposits.setOnClickListener {
+            binding.progressBar.visibility = View.VISIBLE
+            activityScope.launch {
+                val drained = DepositQueueManager.drainQueue(this@MainActivity)
+                binding.progressBar.visibility = View.GONE
+                if (drained > 0) {
+                    Toast.makeText(this@MainActivity, "🎉 오프라인 대기열 ${drained}건이 서버로 안전하게 전송되었습니다!", Toast.LENGTH_LONG).show()
+                    addLogItem("대기열 전송", "미전송 입금 ${drained}건 서버 동기화 완료", true)
+                } else {
+                    val count = DepositQueueManager.getPendingCount(this@MainActivity)
+                    if (count == 0) {
+                        Toast.makeText(this@MainActivity, "현재 전송 대기 중인 입금 내역이 없습니다.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, "⚠️ 서버가 응답하지 않아 전송에 실패했습니다. (대기 ${count}건 유지)", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                checkServerAndQueueStatus(false)
+            }
         }
 
-        // 5. 연동 해제 버튼
+        // 6. 연동 해제 버튼
         binding.btnUnlink.setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle("연동 해제")
@@ -178,7 +201,7 @@ class MainActivity : AppCompatActivity() {
                 .show()
         }
 
-        // 4. 스마트 편의 스위치 & 업데이트 버튼
+        // 7. 스마트 편의 스위치 & 업데이트 버튼
         binding.switchTts.isChecked = prefs.isTtsEnabled
         binding.switchTts.setOnCheckedChangeListener { _, isChecked ->
             prefs.isTtsEnabled = isChecked
@@ -211,7 +234,7 @@ class MainActivity : AppCompatActivity() {
                     binding.progressBar.visibility = View.GONE
                     if (count > 0) {
                         Toast.makeText(this@MainActivity, "🎉 미발송 영수증 ${count}건이 정상 발송되었습니다!", Toast.LENGTH_LONG).show()
-                        addLogItem("대기열 발송", "미발송 영수증 ${count}건 고객 휴대폰으로 전송 완료", true)
+                        addLogItem("영수증 발송", "미발송 영수증 ${count}건 고객 휴대폰으로 전송 완료", true)
                     } else {
                         Toast.makeText(this@MainActivity, "현재 발송 대기 중인 영수증이 없습니다.", Toast.LENGTH_SHORT).show()
                     }
@@ -226,7 +249,7 @@ class MainActivity : AppCompatActivity() {
             UpdateManager.checkForUpdates(this, showToastIfLatest = true)
         }
 
-        // 6. AOD 올웨이즈 블랙 모드 진입 및 더블 탭 제스처
+        // 8. AOD 올웨이즈 블랙 모드 진입 및 더블 탭 제스처
         aodGestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 exitAodMode()
@@ -270,7 +293,6 @@ class MainActivity : AppCompatActivity() {
         aodJob = activityScope.launch {
             while (isActive) {
                 binding.tvAodClock.text = timeFormat.format(Date())
-                // 번인 방지: 1분마다 ±30px 범위에서 무작위 픽셀 이동 (Pixel Shift)
                 val shiftX = Random.nextInt(-30, 31).toFloat()
                 val shiftY = Random.nextInt(-30, 31).toFloat()
                 binding.containerAodContent.translationX = shiftX
@@ -280,59 +302,116 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun startServerMonitorLoop() {
+        serverMonitorJob?.cancel()
+        if (!prefs.isPaired) return
+
+        serverMonitorJob = activityScope.launch {
+            while (isActive) {
+                checkServerAndQueueStatus(showToast = false)
+                delay(30000L) // 30초마다 갱신
+            }
+        }
+    }
+
+    private fun checkServerAndQueueStatus(showToast: Boolean = false) {
+        if (!prefs.isPaired) return
+
+        activityScope.launch {
+            val ping = withContext(Dispatchers.IO) { ApiClient.pingServer() }
+            val pendingCount = DepositQueueManager.getPendingCount(this@MainActivity)
+            val email = prefs.userEmail ?: ""
+
+            binding.tvPendingDepositQueue.text = if (pendingCount > 0) {
+                "📥 오프라인 안전 대기열: ${pendingCount}건 보관 중 (서버 복구 시 자동 전송)"
+            } else {
+                "📥 오프라인 안전 대기열: 0건 보관 중 (안전)"
+            }
+
+            if (ping.isOnline) {
+                binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
+                binding.tvStatusTitle.text = "🟢 실시간 입금 감지 중"
+                binding.tvStatusDesc.text = "계정: $email\n24시간 백그라운드에서 은행 입금 문자를 감지합니다."
+                binding.tvServerStatus.text = "🌐 서버 통신: 🟢 정상 (${ping.latencyMs}ms)"
+
+                // 서버가 복구되었고 대기열이 있다면 자동 배출(Drain) 시도
+                if (pendingCount > 0) {
+                    val drained = DepositQueueManager.drainQueue(this@MainActivity)
+                    if (drained > 0) {
+                        Toast.makeText(this@MainActivity, "🎉 오프라인 대기열 ${drained}건이 자동 전송되었습니다!", Toast.LENGTH_SHORT).show()
+                        addLogItem("대기열 자동전송", "${drained}건 전송 완료", true)
+                        checkServerAndQueueStatus(false)
+                    }
+                }
+
+                if (showToast) {
+                    Toast.makeText(this@MainActivity, "✅ sheetbot.cloud 서버 통신 정상 (${ping.latencyMs}ms)", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                // 서버 연결 두절 상태 표시
+                binding.cardStatus.setBackgroundColor(0xFF7F1D1D.toInt())
+                binding.tvStatusTitle.text = "🚨 서버 연결 두절 (서버 점검 필요)"
+                binding.tvStatusDesc.text = "sheetbot.cloud 서버가 응답하지 않습니다.\n입금 데이터는 스마트폰 대기열(${pendingCount}건)에 임시 보관 중입니다."
+                binding.tvServerStatus.text = "🌐 서버 통신: 🔴 응답 없음 (연결 두절)"
+
+                if (showToast) {
+                    Toast.makeText(this@MainActivity, "⚠️ 서버 연결이 두절되었습니다. PC 서버 상태를 점검하세요.", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
     private fun updateUiState() {
         val isPaired = prefs.isPaired
         val email = prefs.userEmail
 
         if (isPaired && !email.isNullOrBlank()) {
-            binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
-            binding.tvStatusTitle.text = "🟢 실시간 입금 감지 중"
-            binding.tvStatusDesc.text = "계정: $email\n24시간 백그라운드에서 은행 입금 문자를 감지합니다."
             binding.layoutPairedControls.visibility = View.VISIBLE
+            binding.layoutServerMonitor.visibility = View.VISIBLE
             binding.layoutUnpairedControls.visibility = View.GONE
+            checkServerAndQueueStatus(showToast = false)
         } else {
             binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
             binding.tvStatusTitle.text = "⚠️ 미연동 상태"
             binding.tvStatusDesc.text = "시트봇 워크스페이스의 QR코드를 스캔하여 계정을 연동해 주세요."
             binding.layoutPairedControls.visibility = View.GONE
+            binding.layoutServerMonitor.visibility = View.GONE
             binding.layoutUnpairedControls.visibility = View.VISIBLE
-        }
-
-        val lastDeposit = prefs.lastDetectedDeposit
-        if (!lastDeposit.isNullOrBlank()) {
-            binding.tvLastDeposit.text = lastDeposit
-            binding.layoutLastDeposit.visibility = View.VISIBLE
-        } else {
-            binding.layoutLastDeposit.visibility = View.GONE
         }
     }
 
     private fun handleQrScanResult(contents: String) {
-        try {
-            val json = JSONObject(contents)
-            val app = json.optString("app")
-            val email = json.optString("userEmail")
-            val token = json.optString("token")
-            val pinCode = json.optString("pinCode")
-            val webhookUrl = json.optString("webhookUrl")
-            val fallbackWebhookUrl = json.optString("fallbackWebhookUrl")
-            val heartbeatUrl = json.optString("heartbeatUrl")
-            val fallbackHeartbeatUrl = json.optString("fallbackHeartbeatUrl")
-
-            if (webhookUrl.isNotBlank()) prefs.webhookUrl = webhookUrl
-            if (fallbackWebhookUrl.isNotBlank()) prefs.fallbackWebhookUrl = fallbackWebhookUrl
-            if (heartbeatUrl.isNotBlank()) prefs.heartbeatUrl = heartbeatUrl
-            if (fallbackHeartbeatUrl.isNotBlank()) prefs.fallbackHeartbeatUrl = fallbackHeartbeatUrl
-
-            if (email.isBlank()) {
-                Toast.makeText(this, "유효한 SheetBot QR코드가 아닙니다.", Toast.LENGTH_LONG).show()
-                return
-            }
-
-            performPairing(email, token, pinCode)
-        } catch (e: Exception) {
-            Toast.makeText(this, "QR코드 파싱 실패: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+        val parsed = parseQrContents(contents)
+        if (parsed != null) {
+            val (email, token) = parsed
+            performPairing(email, token = token)
+        } else {
+            AlertDialog.Builder(this)
+                .setTitle("잘못된 QR코드")
+                .setMessage("시트봇 워크스페이스 전용 QR코드가 아닙니다.\n화면의 QR코드를 다시 확인해 주세요.")
+                .setPositiveButton("확인", null)
+                .show()
         }
+    }
+
+    private fun parseQrContents(contents: String): Pair<String, String?>? {
+        val uri = Uri.parse(contents)
+        val scheme = uri.scheme
+        val host = uri.host
+
+        if (scheme == "sheetbot" && host == "pair") {
+            val email = uri.getQueryParameter("email") ?: return null
+            val token = uri.getQueryParameter("token")
+            return Pair(email, token)
+        }
+
+        if (contents.contains("sheetbot.cloud") || contents.contains("/pair")) {
+            val email = uri.getQueryParameter("email")
+            val token = uri.getQueryParameter("token")
+            if (!email.isNullOrBlank()) return Pair(email, token)
+        }
+
+        return null
     }
 
     private fun showManualPinDialog() {
@@ -359,7 +438,6 @@ class MainActivity : AppCompatActivity() {
     private fun performPairing(email: String, token: String? = null, pinCode: String? = null) {
         binding.progressBar.visibility = View.VISIBLE
         activityScope.launch {
-            // 8초 초과 시 지연 안내 및 자동 취소 안전망
             val result = withTimeoutOrNull(8000L) {
                 ApiClient.pairDevice(email, token, pinCode)
             }
@@ -397,53 +475,6 @@ class MainActivity : AppCompatActivity() {
                     .setMessage(result.error ?: "서버와의 통신에 실패했습니다.")
                     .setPositiveButton("확인", null)
                     .show()
-            }
-        }
-    }
-
-    private fun executeVirtualDepositTest() {
-        val email = prefs.userEmail ?: return
-        binding.progressBar.visibility = View.VISIBLE
-        activityScope.launch {
-            val now = SimpleDateFormat("MM/dd HH:mm", Locale.KOREA).format(Date())
-            val simulatedSms = "[Web발신]\n[카카오뱅크] 입금알림\n$now 입금 5,000원\n테스트입금\n잔액 2,055,439원"
-
-            val result = withTimeoutOrNull(8000L) {
-                ApiClient.sendBankWebhook(
-                    webhookUrl = prefs.webhookUrl,
-                    fallbackWebhookUrl = prefs.fallbackWebhookUrl,
-                    sender = "1599-3333",
-                    smsText = simulatedSms,
-                    userEmail = email
-                )
-            }
-            binding.progressBar.visibility = View.GONE
-
-            if (result == null) {
-                addLogItem("1599-3333 (테스트)", simulatedSms, false)
-                Toast.makeText(this@MainActivity, "⚠️ 가상 입금 테스트 시간 초과 (8초)\n서버와의 연결 상태를 확인해 주세요.", Toast.LENGTH_LONG).show()
-                return@launch
-            }
-
-            addLogItem("1599-3333 (테스트)", simulatedSms, result.success)
-
-            if (result.success) {
-                if (prefs.isTtsEnabled) {
-                    val speech = result.ttsText ?: "가상 입금 5,000원이 정상 감지되었습니다."
-                    TtsManager.speak(this@MainActivity, speech)
-                }
-                val toastText = if (result.message.contains("토큰이 즉시 충전되었습니다")) {
-                    "🎉 가상 입금 매칭 성공! (토큰 충전 완료)"
-                } else {
-                    "🎉 가상 입금 테스트 성공!\n스마트폰 ↔ 서버 웹훅 통신 및 SMS 분석 완벽 확인"
-                }
-                Toast.makeText(this@MainActivity, toastText, Toast.LENGTH_LONG).show()
-            } else {
-                if (result.message.contains("대기 세션") || result.message.contains("입금 대기")) {
-                    Toast.makeText(this@MainActivity, "✅ 통신 성공: 입금 문자 전송 완료!\n(웹에 신청된 대기건이 없어 토큰 지급만 생략됨)", Toast.LENGTH_LONG).show()
-                } else {
-                    Toast.makeText(this@MainActivity, "⚠️ 테스트 안내: ${result.message}", Toast.LENGTH_LONG).show()
-                }
             }
         }
     }
@@ -511,54 +542,6 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("나중에", null)
             .show()
-    }
-
-    private fun executeVirtualPushTest() {
-        val email = prefs.userEmail ?: return
-        binding.progressBar.visibility = View.VISIBLE
-        activityScope.launch {
-            val now = SimpleDateFormat("MM/dd HH:mm", Locale.KOREA).format(Date())
-            val testBank = "카카오뱅크"
-            val testSender = "차민서"
-            val testAmount = "5,000"
-
-            val simulatedSms = buildString {
-                appendLine("[Web발신]")
-                appendLine("[$testBank 푸시] 입금알림")
-                appendLine("$now 입금 ${testAmount}원")
-                appendLine(testSender)
-                appendLine("잔액 99,999,999원")
-            }
-
-            val result = withTimeoutOrNull(8000L) {
-                ApiClient.sendBankWebhook(
-                    webhookUrl = prefs.webhookUrl,
-                    fallbackWebhookUrl = prefs.fallbackWebhookUrl,
-                    sender = "PUSH:$testBank",
-                    smsText = simulatedSms,
-                    userEmail = email
-                )
-            }
-            binding.progressBar.visibility = View.GONE
-
-            if (result == null) {
-                addLogItem("[$testBank 푸시]", "$testSender ${testAmount}원 입금", false)
-                Toast.makeText(this@MainActivity, "⚠️ 가상 푸시 테스트 시간 초과 (8초)\n서버 연결 상태를 확인해 주세요.", Toast.LENGTH_LONG).show()
-                return@launch
-            }
-
-            addLogItem("[$testBank 푸시]", "$testSender ${testAmount}원 입금", result.success)
-
-            if (result.success) {
-                if (prefs.isTtsEnabled) {
-                    val speech = result.ttsText ?: "카카오뱅크 푸시 5,000원이 정상 감지되었습니다."
-                    TtsManager.speak(this@MainActivity, speech)
-                }
-                Toast.makeText(this@MainActivity, "🎉 가상 앱 푸시 감지 테스트 성공!\n무료 푸시 알림 ↔ 서버 웹훅 ↔ 토큰 충전 파이프라인 완벽 확인", Toast.LENGTH_LONG).show()
-            } else {
-                Toast.makeText(this@MainActivity, "✅ 통신 성공: 푸시 전송 완료!\n(${result.message})", Toast.LENGTH_LONG).show()
-            }
-        }
     }
 
     private fun checkAndRequestBatteryOptimization() {
