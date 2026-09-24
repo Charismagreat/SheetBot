@@ -20,9 +20,11 @@ import {
   Menu,
   X,
   Smartphone,
+  Trash2,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import SheetBotLogo from "@/components/SheetBotLogo";
+import WithdrawModal from "@/components/WithdrawModal";
 
 export default function Navbar() {
   const { data: session, status } = useSession();
@@ -31,6 +33,7 @@ export default function Navbar() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [supportDropdownOpen, setSupportDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -392,6 +395,15 @@ export default function Navbar() {
                 >
                   <LogOut className="w-4 h-4" />
                 </button>
+
+                <button
+                  onClick={() => setIsWithdrawModalOpen(true)}
+                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer shrink-0"
+                  title="계정 삭제 (영구 파기)"
+                  data-easybot-hint="계정 삭제: 모든 API 키, 연동 주소, 스케줄을 즉시 100% 영구 삭제 및 차단합니다."
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
           ) : (
@@ -501,6 +513,13 @@ export default function Navbar() {
           </div>
         </div>
       )}
+
+      {/* ⚠️ 계정 영구 삭제 모달 */}
+      <WithdrawModal
+        isOpen={isWithdrawModalOpen}
+        onClose={() => setIsWithdrawModalOpen(false)}
+        userEmail={session?.user?.email || ""}
+      />
     </header>
   );
 }

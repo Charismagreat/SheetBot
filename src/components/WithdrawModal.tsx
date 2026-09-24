@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { AlertTriangle, X, ShieldAlert, LogOut, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, X, ShieldAlert, Trash2, CheckCircle2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { signOut } from "next-auth/react";
 
@@ -19,16 +19,16 @@ export default function WithdrawModal({ isOpen, onClose, userEmail }: WithdrawMo
 
   if (!isOpen) return null;
 
-  const handleWithdraw = async (e: React.FormEvent) => {
+  const handleDeleteAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agreed) {
-      alert("탈퇴 안내 및 차단 사항 확인에 동의해 주세요.");
+      alert("계정 삭제 안내 및 데이터 영구 파기 사항 확인에 동의해 주세요.");
       return;
     }
 
     if (
       !window.confirm(
-        "정말로 SheetBot 회원 탈퇴를 진행하시겠습니까?\n모든 API 키, 브릿지 주소, 자동화 스케줄이 T=0초에 즉각 영구 차단됩니다."
+        "정말로 SheetBot 계정을 영구 삭제하시겠습니까?\n모든 API 키, 브릿지 주소, 자동화 스케줄이 T=0초에 즉각 영구 삭제 및 차단됩니다."
       )
     ) {
       return;
@@ -39,7 +39,7 @@ export default function WithdrawModal({ isOpen, onClose, userEmail }: WithdrawMo
       const res = await apiFetch("/api/user/withdraw", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: reason.trim() || "사용자 직접 탈퇴" }),
+        body: JSON.stringify({ reason: reason.trim() || "사용자 직접 계정 삭제" }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -52,10 +52,10 @@ export default function WithdrawModal({ isOpen, onClose, userEmail }: WithdrawMo
           window.location.href = "/";
         }, 2500);
       } else {
-        alert(data.error || "탈퇴 처리 중 오류가 발생했습니다.");
+        alert(data.error || "계정 삭제 처리 중 오류가 발생했습니다.");
       }
     } catch (err: any) {
-      alert("탈퇴 요청 통신 오류: " + err.message);
+      alert("계정 삭제 요청 통신 오류: " + err.message);
     } finally {
       setSubmitting(false);
     }
@@ -64,18 +64,18 @@ export default function WithdrawModal({ isOpen, onClose, userEmail }: WithdrawMo
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
       <div
-        className="bg-white rounded-3xl shadow-2xl border border-rose-100 max-w-md w-full overflow-hidden flex flex-col animate-in zoom-in-95 duration-150"
+        className="bg-white rounded-3xl shadow-2xl border border-rose-100 max-w-md w-full overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 text-left"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 상단 헤더 */}
         <div className="px-6 pt-6 pb-4 flex items-start justify-between border-b border-rose-100 bg-rose-50/50">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-              <ShieldAlert className="w-5 h-5" />
+              <Trash2 className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-black text-slate-900 tracking-tight">회원 탈퇴 (전역 킬스위치)</h3>
-              <p className="text-xs text-rose-600 font-semibold mt-0.5">서비스 즉각 차단 및 자원 영구 회수</p>
+              <h3 className="text-lg font-black text-slate-900 tracking-tight">계정 삭제 (영구 파기)</h3>
+              <p className="text-xs text-rose-600 font-semibold mt-0.5">모든 연동 데이터 및 스케줄 영구 파기</p>
             </div>
           </div>
           {!complete && (
@@ -95,20 +95,20 @@ export default function WithdrawModal({ isOpen, onClose, userEmail }: WithdrawMo
               <CheckCircle2 className="w-8 h-8 stroke-[2.5]" />
             </div>
             <div className="space-y-1">
-              <h4 className="text-lg font-black text-slate-800">탈퇴가 정상 처리되었습니다</h4>
+              <h4 className="text-lg font-black text-slate-800">계정이 안전하게 삭제되었습니다</h4>
               <p className="text-xs text-slate-500 leading-relaxed">
-                모든 API 키와 외부 연동 주소가 즉각 영구 차단되었습니다.<br />
+                모든 개인 API 키와 구글 시트 연동 주소가 즉각 영구 삭제되었습니다.<br />
                 그동안 SheetBot을 이용해 주셔서 진심으로 감사드립니다.
               </p>
             </div>
           </div>
         ) : (
-          <form onSubmit={handleWithdraw} className="p-6 space-y-5">
+          <form onSubmit={handleDeleteAccount} className="p-6 space-y-5">
             {/* 주의 안내 경고문 */}
             <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 space-y-2 text-xs text-rose-900">
               <div className="font-extrabold flex items-center gap-1.5 text-rose-800 text-sm">
                 <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                <span>탈퇴 시 즉각 적용되는 차단 정책</span>
+                <span>계정 삭제 시 즉각 적용되는 정책</span>
               </div>
               <ul className="space-y-1.5 text-[11px] text-rose-700 pl-5 list-disc leading-relaxed">
                 <li>
@@ -118,26 +118,26 @@ export default function WithdrawModal({ isOpen, onClose, userEmail }: WithdrawMo
                   안티그라비티/Cursor 등 외부 AI 및 구글 시트에 연결된 <strong>모든 브릿지 주소와 스케줄이 100% 즉시 차단(HTTP 410)</strong>됩니다.
                 </li>
                 <li>
-                  추후 재가입하더라도 <strong>과거의 기존 API 키는 보안상 재활성화되지 않으며</strong>, 반드시 새 키를 신규 발급받아야 합니다.
+                  추후 동일한 구글 계정으로 재접속하더라도 <strong>과거의 기존 API 키는 보안상 재활성화되지 않으며</strong>, 새 키를 발급받아야 합니다.
                 </li>
               </ul>
             </div>
 
             {/* 계정 정보 확인 */}
             <div className="space-y-1.5 text-xs">
-              <label className="font-bold text-slate-700">탈퇴 대상 계정</label>
+              <label className="font-bold text-slate-700">삭제 대상 계정</label>
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 font-mono text-slate-800 text-xs">
                 {userEmail}
               </div>
             </div>
 
-            {/* 탈퇴 사유 입력 */}
+            {/* 계정 삭제 사유 입력 */}
             <div className="space-y-1.5 text-xs">
-              <label className="font-bold text-slate-700">탈퇴 사유 (선택)</label>
+              <label className="font-bold text-slate-700">삭제 사유 (선택)</label>
               <textarea
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="서비스 이용 중 불편했던 점이나 탈퇴 사유를 남겨주시면 품질 개선에 반영하겠습니다."
+                placeholder="서비스 이용 중 불편하셨던 점이나 계정 삭제 사유를 남겨주시면 품질 개선에 적극 반영하겠습니다."
                 className="w-full h-20 p-3 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-hidden resize-none"
               />
             </div>
@@ -151,7 +151,7 @@ export default function WithdrawModal({ isOpen, onClose, userEmail }: WithdrawMo
                 className="mt-0.5 w-4 h-4 rounded text-rose-600 border-slate-300 focus:ring-rose-500 cursor-pointer"
               />
               <span className="text-[11px] font-bold text-slate-700 leading-snug">
-                위 내용을 모두 확인하였으며, 즉시 모든 외부 연동 서비스 및 API 키가 영구 차단되는 것에 동의합니다.
+                위 내용을 모두 확인하였으며, 모든 연동 데이터 및 API 키가 영구 삭제되는 것에 동의합니다.
               </span>
             </label>
 
@@ -174,8 +174,8 @@ export default function WithdrawModal({ isOpen, onClose, userEmail }: WithdrawMo
                     : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
                 }`}
               >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>{submitting ? "탈퇴 및 차단 처리 중..." : "회원 탈퇴 및 서비스 차단"}</span>
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{submitting ? "계정 삭제 처리 중..." : "계정 영구 삭제"}</span>
               </button>
             </div>
           </form>

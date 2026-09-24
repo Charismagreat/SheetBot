@@ -743,16 +743,6 @@ export default function DashboardPage() {
                 <KeyRound className="w-3.5 h-3.5 text-violet-200 shrink-0" />
                 <span>에이전트 API 키</span>
               </button>
-
-              {/* 회원 탈퇴 */}
-              <button
-                onClick={() => setIsWithdrawModalOpen(true)}
-                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer border border-transparent hover:border-rose-200 shrink-0"
-                title="회원 탈퇴 및 서비스 즉각 차단"
-                data-easybot-hint="회원 탈퇴: 계정을 탈퇴하고 모든 API 키, 연동 주소, 스케줄을 즉시 100% 영구 차단합니다."
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
             </div>
           </div>
 
