@@ -39,6 +39,8 @@ export const authOptions: AuthOptions = {
   session: {
     strategy: "jwt",
   },
+  // 터널 및 다양한 로컬 포트 접속 시 호스트 신뢰
+  ...(process.env.NODE_ENV !== "production" ? { trustHost: true } : {}),
   callbacks: {
     async redirect({ url, baseUrl }) {
       // 상대 경로일 경우 원본 경로 유지 (NextAuth 기본 fallback으로 localhost:3000이 붙는 것을 방지)

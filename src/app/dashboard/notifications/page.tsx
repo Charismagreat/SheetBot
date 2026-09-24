@@ -615,8 +615,12 @@ export default function NotificationsPage() {
                           {dev.status === "CONNECTED" ? "연결됨 (정상)" : dev.status === "PAIRING" ? "페어링 대기" : "연결 끊김"}
                         </span>
 
-                        <span className="text-[10px] text-slate-400">
-                          {dev.pairingMode === "google_account" ? "구글 계정 연동" : "QR코드 페어링"}
+                        <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                          {dev.pairingMode === "agent2"
+                            ? "📱 시트봇 에이전트 앱"
+                            : dev.pairingMode === "google_account"
+                            ? "구글 계정 연동"
+                            : "구글 메시지 QR"}
                         </span>
                       </div>
 
