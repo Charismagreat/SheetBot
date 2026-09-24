@@ -529,7 +529,7 @@ export default function DepositAgentPage() {
               <span>관리자 센터</span>
             </Link>
             <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-slate-800 font-bold">무통장 입금 자동확인기</span>
+            <span className="text-slate-800 font-bold">SheetBot Agent M</span>
           </div>
 
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -539,45 +539,39 @@ export default function DepositAgentPage() {
               </div>
               <div>
                 <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
-                  무통장 입금 자동확인기 시트봇 에이전트 M
+                  시트봇 에이전트 M (SheetBot Agent M)
                   <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200/80">
                     전용 앱 v1.4.0
                   </span>
                 </h1>
+                <p className="text-xs text-slate-500 font-medium mt-1">
+                  24시간 스마트폰 실시간 무통장 입금 감지 및 전역 토큰 지갑 자동 충전 시스템
+                </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2 self-start md:self-auto">
+              {/* 실시간 DB 왓처 동기화 뱃지 (클릭 시 수동 즉시 동기화 통합) */}
               <button
                 type="button"
                 onClick={() => {
                   setIsRealtimeLive(true);
                   fetchDeviceStatus(true);
                   fetchDepositLogs(true);
-                  showToast("success", "⚡ 실시간 감시 스트림 상태를 동기화했습니다.");
+                  showToast("success", "⚡ 실시간 감시 상태를 최신으로 동기화했습니다.");
                 }}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer group shadow-2xs ${
                   isRealtimeLive
-                    ? "bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs hover:bg-emerald-100/70"
+                    ? "bg-slate-50 text-emerald-800 border-slate-200 hover:bg-slate-100"
                     : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
                 }`}
-                title="실시간 0초 입금 감시 상태 (클릭 시 즉시 재동기화)"
+                title="실시간 0초 감시 중 (클릭 시 즉시 수동 동기화)"
               >
-                <span className={`w-2 h-2 rounded-full ${isRealtimeLive ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`}></span>
-                {isRealtimeLive ? "⚡ 0초 실시간 감시" : "스트림 연결 중"}
-              </button>
-
-              <button
-                onClick={() => {
-                  fetchPairingInfo();
-                  fetchDeviceStatus();
-                  fetchDepositLogs();
-                  showToast("success", "실시간 상태를 동기화했습니다.");
-                }}
-                className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer hover:border-slate-300"
-              >
-                <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
-                새로고침
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isRealtimeLive ? "bg-emerald-500 animate-pulse ring-4 ring-emerald-500/20" : "bg-slate-400"}`} />
+                <span className={isRealtimeLive ? "text-emerald-700 font-extrabold" : "text-slate-500"}>
+                  {isRealtimeLive ? "⚡ DB 왓처 실시간 동기화" : "스트림 연결 중..."}
+                </span>
+                <RefreshCw className="w-3 h-3 text-slate-400 group-hover:text-emerald-600 transition-colors shrink-0" />
               </button>
             </div>
           </div>
@@ -592,11 +586,11 @@ export default function DepositAgentPage() {
             <div>
               <div className="flex items-center justify-between pb-3.5 mb-3.5 border-b border-slate-100">
                 <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-md bg-indigo-600 text-white flex items-center justify-center text-[11px] font-black shrink-0 shadow-xs">
-                    1
+                  <span className="px-2 py-0.5 rounded-md bg-indigo-600 text-white text-[10px] font-black shrink-0 shadow-xs tracking-wider">
+                    STEP 1
                   </span>
                   <h3 className="text-sm font-black text-slate-900 tracking-tight">
-                    스마트폰에 시트봇 에이전트 M 설치
+                    스마트폰에 전용 앱 설치
                   </h3>
                 </div>
                 <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full font-bold border border-indigo-100 shrink-0">
@@ -691,8 +685,8 @@ export default function DepositAgentPage() {
             <div>
               <div className="flex items-center justify-between pb-3.5 mb-3.5 border-b border-slate-100">
                 <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-md bg-indigo-600 text-white flex items-center justify-center text-[11px] font-black shrink-0 shadow-xs">
-                    2
+                  <span className="px-2 py-0.5 rounded-md bg-indigo-600 text-white text-[10px] font-black shrink-0 shadow-xs tracking-wider">
+                    STEP 2
                   </span>
                   <h3 className="text-sm font-black text-slate-900 tracking-tight">
                     QR 스캔으로 계정 연결
@@ -748,35 +742,19 @@ export default function DepositAgentPage() {
             <div>
               <div className="flex items-center justify-between pb-3.5 mb-3.5 border-b border-slate-100">
                 <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-md bg-indigo-600 text-white flex items-center justify-center text-[11px] font-black shrink-0 shadow-xs">
-                    3
+                  <span className="px-2 py-0.5 rounded-md bg-indigo-600 text-white text-[10px] font-black shrink-0 shadow-xs tracking-wider">
+                    STEP 3
                   </span>
                   <h3 className="text-sm font-black text-slate-900 tracking-tight">
-                    실시간 감지 상태 {devices.length > 0 && `(${devices.length}대)`}
+                    연동된 에이전트 기기 {devices.length > 0 && `(${devices.length}대)`}
                   </h3>
                 </div>
-                {devices.some((d) => d.status === "CONNECTED" || d.status === "ACTIVE") ? (
+                {devices.filter((d) => d.status === "CONNECTED" || d.status === "ACTIVE").length >= 2 && (
                   <span
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0"
-                    title="등록된 스마트폰이 실시간으로 입금 SMS를 감지하고 있습니다."
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0"
+                    title="2대 이상의 기기가 무중단 이중화 감지 중입니다."
                   >
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    {devices.filter((d) => d.status === "CONNECTED" || d.status === "ACTIVE").length >= 2
-                      ? `🟢 ${devices.filter((d) => d.status === "CONNECTED" || d.status === "ACTIVE").length}대 이중화 감지 중`
-                      : "24H 감지 중"}
-                  </span>
-                ) : devices.length > 0 ? (
-                  <span
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-rose-50 text-rose-700 border border-rose-200 shrink-0"
-                    title="스마트폰 앱이 꺼졌거나 배터리 절전 상태입니다. 앱을 실행해 주세요."
-                  >
-                    <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                    연결 두절 (앱 확인 필요)
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
-                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                    기기 연동 대기
+                    <span>이중화 가동 중</span>
                   </span>
                 )}
               </div>
@@ -828,7 +806,7 @@ export default function DepositAgentPage() {
                                   : "bg-rose-100 text-rose-700 border-rose-200"
                               }`}
                             >
-                              {isLive ? "정상 감지" : isDisconnected ? "연결 해제됨" : "통신 지연"}
+                              {isLive ? "🟢 정상 가동 (24H)" : isDisconnected ? "연결 해제됨" : "통신 지연"}
                             </span>
                             <button
                               type="button"
@@ -876,27 +854,10 @@ export default function DepositAgentPage() {
                 </div>
               )}
 
-              <div className="px-3 py-2 bg-slate-50/80 rounded-xl border border-slate-100 flex items-center justify-between text-[11px] mb-4">
+              <div className="px-3 py-2 bg-slate-50/80 rounded-xl border border-slate-100 flex items-center justify-between text-[11px]">
                 <span className="text-slate-500 font-medium">자동 감지 대상</span>
                 <span className="font-extrabold text-indigo-600">국내 전 금융사 (시중·인터넷·우체국)</span>
               </div>
-            </div>
-
-            <div className="space-y-2 pt-3 border-t border-slate-100">
-              <button
-                onClick={handleTestSms}
-                disabled={testingSms}
-                className="w-full h-11 bg-indigo-50 hover:bg-indigo-100/80 text-indigo-700 border border-indigo-200/90 text-xs font-extrabold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-2xs"
-              >
-                <Zap className="w-3.5 h-3.5 text-indigo-600 fill-indigo-600" />
-                {testingSms ? "가상 입금 테스트 전송 중..." : "🧪 가상 입금 테스트 (5,000원 모의 감지)"}
-              </button>
-              {testResult && (
-                <div className="p-2.5 bg-emerald-50 border border-emerald-200/80 rounded-xl text-[11px] text-emerald-800 font-medium flex items-center gap-1.5 animate-in fade-in">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span><b>가상 입금 완료:</b> 웹훅 수신 및 대장 등록 성공</span>
-                </div>
-              )}
             </div>
           </div>
         </div>

@@ -592,7 +592,7 @@ export default function Navbar() {
                   onClick={async () => {
                     setMobileMenuOpen(false);
                     try {
-                      await fetch(`/api/auth/force-logout`, { method: "POST" }).catch(() => {});
+                      await apiFetch(`/api/auth/force-logout`, { method: "POST" }).catch(() => {});
                       await signOut({ redirect: false }).catch(() => {});
                     } catch {}
                     window.location.href = "/";
