@@ -713,23 +713,19 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
-              {/* 실시간 DB 왓처 동기화 뱃지 */}
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-bold whitespace-nowrap shadow-2xs">
+              {/* 실시간 DB 왓처 동기화 뱃지 (클릭 시 수동 즉시 동기화 통합) */}
+              <button
+                onClick={fetchData}
+                disabled={loading}
+                className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100/90 active:bg-slate-200/70 border border-slate-200/90 rounded-xl text-xs font-bold whitespace-nowrap shadow-2xs transition-all cursor-pointer group"
+                title="실시간 감시 중 (클릭 시 즉시 수동 동기화)"
+                data-easybot-hint="DB 왓처 실시간 동기화: 백엔드 DB 변경을 0초 만에 감지하여 자동 반영합니다. 클릭 시 즉시 수동 동기화를 실행할 수 있습니다."
+              >
                 <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isRealtimeLive ? "bg-emerald-500 animate-pulse ring-4 ring-emerald-500/20" : "bg-slate-300"}`} />
                 <span className={isRealtimeLive ? "text-emerald-700 font-extrabold" : "text-slate-400"}>
                   {isRealtimeLive ? "⚡ DB 왓처 실시간 동기화" : "스트림 연결 중..."}
                 </span>
-              </div>
-
-              {/* 새로고침 버튼 */}
-              <button
-                onClick={fetchData}
-                disabled={loading}
-                className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shadow-2xs"
-                data-easybot-hint="새로고침: 최신 프로젝트 목록 및 스케줄 실행 상태를 My DB에서 다시 동기화합니다."
-              >
-                <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${loading ? "animate-spin text-emerald-600" : ""}`} />
-                <span>새로고침</span>
+                <RefreshCw className={`w-3 h-3 text-slate-400 group-hover:text-emerald-600 transition-colors shrink-0 ${loading ? "animate-spin text-emerald-600" : ""}`} />
               </button>
 
               {/* 에이전트 API 키 */}
