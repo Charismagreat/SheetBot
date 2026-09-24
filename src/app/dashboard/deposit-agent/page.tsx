@@ -28,7 +28,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getEgdeskBasePath } from "@/lib/api";
 
 function formatDateTime(dateStr?: string | null): string {
   if (!dateStr) return "-";
@@ -280,7 +280,8 @@ export default function DepositAgentPage() {
         }
 
         const email = session?.user?.email || "chachogreat@gmail.com";
-        const streamUrl = `/api/wallet/agent/stream?userEmail=${encodeURIComponent(email)}`;
+        const basePath = getEgdeskBasePath();
+        const streamUrl = `${basePath}/api/wallet/agent/stream?userEmail=${encodeURIComponent(email)}`;
 
         try {
           eventSource = new EventSource(streamUrl);
@@ -293,15 +294,17 @@ export default function DepositAgentPage() {
             setIsRealtimeLive(true);
             try {
               const payload = JSON.parse(event.data);
-              if (payload.type === "CONNECTED") {
+              if (payload.type === "CONNECTED" || payload.type === "UPSTREAM_STATUS") {
                 setIsRealtimeLive(true);
                 return;
               }
-              if (payload.type === "deposit_received") {
+              if (payload.type === "deposit_received" || payload.tableName === "sheetbot_deposit_requests") {
                 fetchDepositLogs(true);
-                const name = payload.data?.depositorName || "회원";
-                const amt = Number(payload.data?.amountKrw || 0).toLocaleString();
-                showToast("success", `🎉 ${name}님 ${amt}원 입금 확인 및 토큰 충전 완료!`);
+                if (payload.data?.depositorName) {
+                  const name = payload.data.depositorName;
+                  const amt = Number(payload.data?.amountKrw || 0).toLocaleString();
+                  showToast("success", `🎉 ${name}님 ${amt}원 입금 확인 및 토큰 충전 완료!`);
+                }
               } else if (payload.type === "deposit_hold") {
                 fetchDepositLogs(true);
                 showToast("error", "⚠️ 금액 불일치 또는 동명이인 충돌 입금이 감지되었습니다.");
