@@ -1342,10 +1342,10 @@ export default function AdminDashboardPage() {
           <Link
             href="/dashboard/deposit-agent"
             className="px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-            title="관리자 전용 입금확인기 (SheetBot Agent APK 다운로드 & QR 페어링)"
+            title="관리자 전용 입금확인기 (시트봇 에이전트 M APK 다운로드 & QR 페어링)"
           >
             <Smartphone className="w-4 h-4 text-indigo-600" />
-            <span>입금확인기(SheetBot Agent APK)</span>
+            <span>시트봇 에이전트 M (관리자용)</span>
           </Link>
         </div>
 

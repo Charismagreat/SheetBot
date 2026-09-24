@@ -341,13 +341,13 @@ export default function DepositAgentPage() {
               </div>
               <div>
                 <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
-                  무통장 입금 자동확인기 SheetBot Agent
+                  무통장 입금 자동확인기 시트봇 에이전트 M
                   <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200/80">
-                    전용 앱 v1.0
+                    전용 앱 v1.0.1
                   </span>
                 </h1>
                 <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                  스마트폰(1대 또는 이중화용 복수 기기)에 앱을 설치하고 화면의 QR만 비추면, 회원 입금 시 은행 알림 문자를 24시간 실시간 감지하여 0초 만에 토큰을 자동 충전합니다.
+                  스마트폰(1대 또는 이중화용 복수 기기)에 시트봇 에이전트 M 앱을 설치하고 화면의 QR만 비추면, 회원 입금 시 은행 알림 문자를 24시간 실시간 감지하여 0초 만에 토큰을 자동 충전합니다.
                 </p>
               </div>
             </div>
@@ -371,7 +371,7 @@ export default function DepositAgentPage() {
 
         {/* 1단계: 사용자 온보딩 흐름에 맞춘 상단 3단 위젯 카드 (1.설치 -> 2.연결 -> 3.상태&테스트) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8 items-stretch">
-          {/* [Step 1] 카드: 스마트폰에 SheetBot Agent 앱 설치 */}
+          {/* [Step 1] 카드: 스마트폰에 SheetBot Agent M 앱 설치 */}
           <div className="bg-white rounded-2xl border border-indigo-200/90 p-5 shadow-xs flex flex-col justify-between hover:border-indigo-300 transition-all relative overflow-hidden">
             <div className="absolute -top-10 -right-10 w-28 h-28 bg-indigo-50 rounded-full blur-2xl pointer-events-none"></div>
 
@@ -382,7 +382,7 @@ export default function DepositAgentPage() {
                     1
                   </span>
                   <h3 className="text-sm font-black text-slate-900 tracking-tight">
-                    스마트폰에 SheetBot Agent 설치
+                    스마트폰에 시트봇 에이전트 M 설치
                   </h3>
                 </div>
                 <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full font-bold border border-indigo-100 shrink-0">
@@ -505,7 +505,7 @@ export default function DepositAgentPage() {
                   )}
                 </div>
                 <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100/90 text-slate-600 rounded-full text-[11px] font-medium">
-                  <span><b>SheetBot Agent</b> 앱 실행 후 <b>[QR 스캔]</b>으로 화면을 비추세요</span>
+                  <span><b>시트봇 에이전트 M</b> 앱 실행 후 <b>[QR 스캔]</b>으로 화면을 비추세요</span>
                 </div>
               </div>
             </div>
@@ -679,7 +679,7 @@ export default function DepositAgentPage() {
               </h3>
             </div>
             <p className="text-[11.5px] text-slate-600 leading-relaxed break-keep">
-              동일한 은행 입금 알림 문자를 수신하는 업무용 스마트폰이 여러 대라면, 모든 기기에 <b>SheetBot Agent</b>를 설치하고 위 <b>[2번 QR코드]</b>를 각각 스캔해 두세요. 어느 한 기기의 배터리가 방전되거나 전원이 꺼져도 다른 기기가 즉시 감지하여 365일 24시간 결제 누락을 원천 차단합니다.
+              동일한 은행 입금 알림 문자를 수신하는 업무용 스마트폰이 여러 대라면, 모든 기기에 <b>시트봇 에이전트 M</b>을 설치하고 위 <b>[2번 QR코드]</b>를 각각 스캔해 두세요. 어느 한 기기의 배터리가 방전되거나 전원이 꺼져도 다른 기기가 즉시 감지하여 365일 24시간 결제 누락을 원천 차단합니다.
             </p>
           </div>
         </div>

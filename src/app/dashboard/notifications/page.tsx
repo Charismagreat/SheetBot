@@ -383,13 +383,13 @@ export default function NotificationsPage() {
           <div className="relative z-10 space-y-3">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-400/20 text-emerald-300 text-xs font-bold border border-emerald-400/30">
               <Smartphone className="w-3.5 h-3.5" />
-              <span>SheetBot Agent2 스마트 알림 & 0원 문자 센터</span>
+              <span>시트봇 에이전트 스마트 알림 & 0원 문자 센터</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-              SheetBot Agent2 연동 & 구글 시트 양방향 문자 자동화
+              시트봇 에이전트(SheetBot Agent) 연동 & 구글 시트 양방향 문자 자동화
             </h1>
             <p className="text-slate-300 text-xs sm:text-sm max-w-2xl leading-relaxed">
-              본인의 스마트폰에 <strong>SheetBot Agent2</strong>를 설치하고 0초 QR 연동하면,
+              본인의 스마트폰에 <strong>시트봇 에이전트(SheetBot Agent)</strong>를 설치하고 0초 QR 연동하면,
               <strong>통신 비용 0원</strong>으로 고객 알림 문자를 자동 발송하고 수신 문자를 시트에 실시간 자동 기록할 수 있습니다.
             </p>
           </div>
@@ -405,7 +405,7 @@ export default function NotificationsPage() {
               }`}
             >
               <Smartphone className="w-4 h-4" />
-              <span>SheetBot Agent2 기기 ({devices.length})</span>
+              <span>시트봇 에이전트 기기 ({devices.length})</span>
             </button>
 
             <button
@@ -451,8 +451,8 @@ export default function NotificationsPage() {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-black text-slate-900">등록된 SheetBot Agent2 기기</h2>
-                <p className="text-xs text-slate-500">문자를 0원에 발송하고 시트로 수신할 안드로이드 스마트폰(SheetBot Agent2)을 관리합니다.</p>
+                <h2 className="text-lg font-black text-slate-900">등록된 시트봇 에이전트 기기</h2>
+                <p className="text-xs text-slate-500">문자를 0원에 발송하고 시트로 수신할 안드로이드 스마트폰(시트봇 에이전트)을 관리합니다.</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -472,7 +472,7 @@ export default function NotificationsPage() {
                   className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>새 SheetBot Agent2 연동</span>
+                  <span>새 시트봇 에이전트 연동</span>
                 </button>
               </div>
             </div>
@@ -624,7 +624,7 @@ export default function NotificationsPage() {
                   <Smartphone className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold text-slate-900">SheetBot Agent2 기기 연동</h3>
+                  <h3 className="text-base font-extrabold text-slate-900">시트봇 에이전트 기기 연동</h3>
                   <p className="text-[11px] text-slate-500">스마트폰 요금제로 0원 발송 & 수신 문자 시트 자동 기록</p>
                 </div>
               </div>
@@ -654,7 +654,7 @@ export default function NotificationsPage() {
                 }`}
               >
                 <Zap className="w-3.5 h-3.5 text-emerald-600" />
-                <span>SheetBot Agent2 (0초)</span>
+                <span>시트봇 에이전트 (0초)</span>
               </button>
               <button
                 type="button"
@@ -676,7 +676,7 @@ export default function NotificationsPage() {
                 <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-3">
                   <div>
                     <div className="text-xs font-bold text-slate-800">1. 스마트폰에 앱 설치</div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">안드로이드 스마트폰에 SheetBot Agent2를 설치하세요.</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">안드로이드 스마트폰에 시트봇 에이전트(SheetBot Agent)를 설치하세요.</div>
                   </div>
                   <a
                     href="https://sheetbot.cloud/download/SheetBotAgent2.apk"
