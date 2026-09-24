@@ -35,6 +35,7 @@ object UpdateManager {
 
     fun checkForUpdates(activity: Activity, showToastIfLatest: Boolean = false) {
         CoroutineScope(Dispatchers.IO).launch {
+            val versionInfo = ApiClient.fetchLatestVersion()
             val currentPackageInfo = try {
                 activity.packageManager.getPackageInfo(activity.packageName, 0)
             } catch (_: Exception) {
