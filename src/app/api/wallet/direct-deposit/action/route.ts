@@ -6,6 +6,7 @@ import { queryTable, updateRows } from "@/lib/egdesk-helpers";
 import { creditTokens } from "@/lib/token-wallet";
 import { setupDatabase } from "@/lib/setup-db";
 import { executeSmartDispatchRules } from "@/lib/smart-dispatch-rules";
+import { emitDepositEvent } from "@/lib/deposit-events";
 
 /**
  * POST /api/wallet/direct-deposit/action
@@ -82,6 +83,13 @@ export async function POST(req: NextRequest) {
         amount: finalAmount,
       }).catch(() => {});
 
+      emitDepositEvent("deposit_action", {
+        id: requestRow.id,
+        action: "APPROVE",
+        userEmail: requestRow.user_email,
+        amount: finalAmount,
+      });
+
       return NextResponse.json({
         success: true,
         message: `${requestRow.user_email}님께 ${finalTokens.toLocaleString()} 토큰이 성공적으로 지급되었습니다!`,
@@ -102,6 +110,12 @@ export async function POST(req: NextRequest) {
         },
         { filters: { id: requestRow.id } }
       );
+
+      emitDepositEvent("deposit_action", {
+        id: requestRow.id,
+        action: "REJECT",
+        userEmail: requestRow.user_email,
+      });
 
       return NextResponse.json({
         success: true,

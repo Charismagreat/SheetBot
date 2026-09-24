@@ -7,6 +7,7 @@ import { creditTokens } from "@/lib/token-wallet";
 import { executeSmartDispatchRules } from "@/lib/smart-dispatch-rules";
 import { setupDatabase } from "@/lib/setup-db";
 import { parseBankDepositSms } from "@/lib/bank-sms-parser";
+import { emitDepositEvent } from "@/lib/deposit-events";
 
 /**
  * POST /api/wallet/bank-webhook
@@ -224,6 +225,11 @@ export async function POST(request: Request) {
             { filters: { id: cand.id } }
           );
         }
+        emitDepositEvent("deposit_hold", {
+          collision: true,
+          amount: cleanAmount,
+          count: matchedCandidates.length,
+        });
         return NextResponse.json({
           success: true,
           matched: false,
@@ -276,6 +282,13 @@ export async function POST(request: Request) {
 
         const ttsText = `${mismatchReq.depositor_name || "회원"}님 금액 불일치 입금이 감지되어 보류 처리되었습니다.`;
 
+        emitDepositEvent("deposit_hold", {
+          requestId: mismatchReq.id,
+          userEmail: mismatchReq.user_email,
+          requestedAmount,
+          actualAmount: cleanAmount,
+        });
+
         return NextResponse.json({
           success: true,
           matched: false,
@@ -327,6 +340,12 @@ export async function POST(request: Request) {
           : null;
 
         const ttsText = `${delayedReq.depositor_name || "회원"}님 지연 입금이 감지되어 승인 대기열에 등록되었습니다.`;
+
+        emitDepositEvent("deposit_delayed", {
+          requestId: delayedReq.id,
+          userEmail: delayedReq.user_email,
+          actualAmount: cleanAmount,
+        });
 
         return NextResponse.json({
           success: true,
@@ -398,6 +417,14 @@ export async function POST(request: Request) {
       },
       { filters: { id: matched.id } }
     );
+
+    emitDepositEvent("deposit_received", {
+      requestId: matched.id,
+      userEmail: matched.user_email,
+      amountKrw: cleanAmount,
+      tokens: matched.tokens_to_credit,
+      depositorName: matched.depositor_name || cleanDepositor,
+    });
 
     // 5. 관리자 및 고객 알림 발송 (문자/이메일)
     executeSmartDispatchRules("payment", {
