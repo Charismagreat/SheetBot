@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.Log
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
@@ -23,6 +24,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import cloud.sheetbot.agent.databinding.ActivityMainBinding
+import org.json.JSONObject
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.CoroutineScope
@@ -39,6 +41,10 @@ import java.util.Locale
 import kotlin.random.Random
 
 class MainActivity : AppCompatActivity() {
+    companion object {
+        private const val TAG = "MainActivity"
+    }
+
     private lateinit var binding: ActivityMainBinding
     private lateinit var prefs: PreferencesManager
     private val activityScope = CoroutineScope(Dispatchers.Main)
@@ -313,6 +319,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    data class QrPairData(
+        val email: String,
+        val token: String? = null,
+        val pinCode: String? = null,
+        val isUserMode: Boolean = true,
+        val webhookUrl: String? = null,
+        val heartbeatUrl: String? = null
+    )
+
     private fun checkServerAndQueueStatus(showToast: Boolean = false) {
         if (!prefs.isPaired) return
 
@@ -320,21 +335,34 @@ class MainActivity : AppCompatActivity() {
             val ping = withContext(Dispatchers.IO) { ApiClient.pingServer() }
             val pendingCount = DepositQueueManager.getPendingCount(this@MainActivity)
             val email = prefs.userEmail ?: ""
+            val isUserMode = prefs.agentMode == "USER"
 
-            binding.tvPendingDepositQueue.text = if (pendingCount > 0) {
-                "📥 오프라인 안전 대기열: ${pendingCount}건 보관 중 (서버 복구 시 자동 전송)"
+            // 상단 헤더 타이틀 다이내믹 반영
+            binding.tvHeaderTitle.text = if (isUserMode) "SheetBot Agent" else "SheetBot Agent M"
+
+            if (isUserMode) {
+                binding.tvPendingDepositQueue.text = "📱 0원 양방향 SMS & 구글 시트 비서 활성 상태"
             } else {
-                "📥 오프라인 안전 대기열: 0건 보관 중 (안전)"
+                binding.tvPendingDepositQueue.text = if (pendingCount > 0) {
+                    "📥 오프라인 안전 대기열: ${pendingCount}건 보관 중 (서버 복구 시 자동 전송)"
+                } else {
+                    "📥 오프라인 안전 대기열: 0건 보관 중 (안전)"
+                }
             }
 
             if (ping.isOnline) {
                 binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
-                binding.tvStatusTitle.text = "🟢 실시간 입금 감지 중"
-                binding.tvStatusDesc.text = "계정: $email\n24시간 백그라운드에서 은행 입금 문자를 감지합니다."
+                if (isUserMode) {
+                    binding.tvStatusTitle.text = "🟢 시트봇 에이전트 가동 중"
+                    binding.tvStatusDesc.text = "계정: $email\n0원 양방향 SMS & 구글 시트 1:1 연동 중"
+                } else {
+                    binding.tvStatusTitle.text = "🟢 실시간 입금 감지 중"
+                    binding.tvStatusDesc.text = "계정: $email\n24시간 백그라운드에서 은행 입금 문자를 감지합니다."
+                }
                 binding.tvServerStatus.text = "🌐 서버 통신: 🟢 정상 (${ping.latencyMs}ms)"
 
-                // 서버가 복구되었고 대기열이 있다면 자동 배출(Drain) 시도
-                if (pendingCount > 0) {
+                // 관리자 모드이고 대기열이 있다면 자동 배출(Drain) 시도
+                if (!isUserMode && pendingCount > 0) {
                     val drained = DepositQueueManager.drainQueue(this@MainActivity)
                     if (drained > 0) {
                         Toast.makeText(this@MainActivity, "🎉 오프라인 대기열 ${drained}건이 자동 전송되었습니다!", Toast.LENGTH_SHORT).show()
@@ -350,7 +378,11 @@ class MainActivity : AppCompatActivity() {
                 // 서버 연결 두절 상태 표시
                 binding.cardStatus.setBackgroundColor(0xFF7F1D1D.toInt())
                 binding.tvStatusTitle.text = "🚨 서버 연결 두절 (서버 점검 필요)"
-                binding.tvStatusDesc.text = "sheetbot.cloud 서버가 응답하지 않습니다.\n입금 데이터는 스마트폰 대기열(${pendingCount}건)에 임시 보관 중입니다."
+                if (isUserMode) {
+                    binding.tvStatusDesc.text = "sheetbot.cloud 서버가 응답하지 않습니다.\n네트워크 연결 또는 PC 서버 상태를 점검해 주세요."
+                } else {
+                    binding.tvStatusDesc.text = "sheetbot.cloud 서버가 응답하지 않습니다.\n입금 데이터는 스마트폰 대기열(${pendingCount}건)에 임시 보관 중입니다."
+                }
                 binding.tvServerStatus.text = "🌐 서버 통신: 🔴 응답 없음 (연결 두절)"
 
                 if (showToast) {
@@ -363,6 +395,9 @@ class MainActivity : AppCompatActivity() {
     private fun updateUiState() {
         val isPaired = prefs.isPaired
         val email = prefs.userEmail
+        val isUserMode = prefs.agentMode == "USER"
+
+        binding.tvHeaderTitle.text = if (isUserMode) "SheetBot Agent" else "SheetBot Agent M"
 
         if (isPaired && !email.isNullOrBlank()) {
             binding.layoutPairedControls.visibility = View.VISIBLE
@@ -372,7 +407,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
             binding.tvStatusTitle.text = "⚠️ 미연동 상태"
-            binding.tvStatusDesc.text = "시트봇 워크스페이스의 QR코드를 스캔하여 계정을 연동해 주세요."
+            binding.tvStatusDesc.text = "시트봇 알림 센터 또는 워크스페이스의 QR코드를 스캔하여 계정을 연동해 주세요."
             binding.layoutPairedControls.visibility = View.GONE
             binding.layoutServerMonitor.visibility = View.GONE
             binding.layoutUnpairedControls.visibility = View.VISIBLE
@@ -380,35 +415,77 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleQrScanResult(contents: String) {
-        val parsed = parseQrContents(contents)
-        if (parsed != null) {
-            val (email, token) = parsed
-            performPairing(email, token = token)
+        val pairData = parseQrContents(contents)
+        if (pairData != null) {
+            performPairing(
+                email = pairData.email,
+                token = pairData.token,
+                pinCode = pairData.pinCode,
+                isUserMode = pairData.isUserMode,
+                customWebhookUrl = pairData.webhookUrl,
+                customHeartbeatUrl = pairData.heartbeatUrl
+            )
         } else {
             AlertDialog.Builder(this)
                 .setTitle("잘못된 QR코드")
-                .setMessage("시트봇 워크스페이스 전용 QR코드가 아닙니다.\n화면의 QR코드를 다시 확인해 주세요.")
+                .setMessage("시트봇 전용 연동 QR코드가 아닙니다.\n화면의 QR코드를 다시 확인해 주세요.")
                 .setPositiveButton("확인", null)
                 .show()
         }
     }
 
-    private fun parseQrContents(contents: String): Pair<String, String?>? {
-        val uri = Uri.parse(contents)
-        val scheme = uri.scheme
-        val host = uri.host
+    private fun parseQrContents(contents: String): QrPairData? {
+        val trimmed = contents.trim()
 
-        if (scheme == "sheetbot" && host == "pair") {
-            val email = uri.getQueryParameter("email") ?: return null
-            val token = uri.getQueryParameter("token")
-            return Pair(email, token)
+        // 1. JSON 형태의 QR코드 (이용자용 SheetBot Agent2 규격)
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            try {
+                val json = JSONObject(trimmed)
+                val app = json.optString("app", "")
+                val email = json.optString("userEmail", json.optString("email", ""))
+                val token = json.optString("token").takeIf { it.isNotBlank() }
+                val pinCode = json.optString("pinCode").takeIf { it.isNotBlank() }
+                val webhookUrl = json.optString("webhookUrl").takeIf { it.isNotBlank() }
+                val heartbeatUrl = json.optString("heartbeatUrl").takeIf { it.isNotBlank() }
+
+                if (email.isNotBlank()) {
+                    val isUserMode = app.contains("Agent2", ignoreCase = true) || !app.equals("SheetBotAgentM", ignoreCase = true)
+                    return QrPairData(
+                        email = email,
+                        token = token,
+                        pinCode = pinCode,
+                        isUserMode = isUserMode,
+                        webhookUrl = webhookUrl,
+                        heartbeatUrl = heartbeatUrl
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "QR JSON 파싱 오류: ${e.message}")
+            }
         }
 
-        if (contents.contains("sheetbot.cloud") || contents.contains("/pair")) {
-            val email = uri.getQueryParameter("email")
-            val token = uri.getQueryParameter("token")
-            if (!email.isNullOrBlank()) return Pair(email, token)
-        }
+        // 2. URI 형태 (관리자용 또는 웹 링크)
+        try {
+            val uri = Uri.parse(trimmed)
+            val scheme = uri.scheme
+            val host = uri.host
+
+            if (scheme == "sheetbot" && host == "pair") {
+                val email = uri.getQueryParameter("email") ?: return null
+                val token = uri.getQueryParameter("token")
+                val isUserMode = uri.getQueryParameter("mode") != "admin"
+                return QrPairData(email = email, token = token, isUserMode = isUserMode)
+            }
+
+            if (trimmed.contains("sheetbot.cloud") || trimmed.contains("/pair")) {
+                val email = uri.getQueryParameter("email")
+                val token = uri.getQueryParameter("token")
+                if (!email.isNullOrBlank()) {
+                    val isUserMode = uri.getQueryParameter("mode") != "admin"
+                    return QrPairData(email = email, token = token, isUserMode = isUserMode)
+                }
+            }
+        } catch (_: Exception) {}
 
         return null
     }
@@ -428,17 +505,26 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "이메일과 핀코드를 모두 입력해 주세요.", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-                performPairing(email, pinCode = pin)
+                // 핀코드 접두사에 따라 모드 자동 판정 (AM-으로 시작하면 관리자 모드, 그 외 기본 이용자 모드)
+                val isUserMode = !pin.startsWith("AM-", ignoreCase = true)
+                performPairing(email, pinCode = pin, isUserMode = isUserMode)
             }
             .setNegativeButton("취소", null)
             .show()
     }
 
-    private fun performPairing(email: String, token: String? = null, pinCode: String? = null) {
+    private fun performPairing(
+        email: String,
+        token: String? = null,
+        pinCode: String? = null,
+        isUserMode: Boolean = true,
+        customWebhookUrl: String? = null,
+        customHeartbeatUrl: String? = null
+    ) {
         binding.progressBar.visibility = View.VISIBLE
         activityScope.launch {
             val result = withTimeoutOrNull(8000L) {
-                ApiClient.pairDevice(email, token, pinCode)
+                ApiClient.pairDevice(email, token, pinCode, isUserMode)
             }
             binding.progressBar.visibility = View.GONE
 
@@ -454,18 +540,31 @@ class MainActivity : AppCompatActivity() {
             if (result.success) {
                 prefs.userEmail = email
                 prefs.isPaired = true
-                if (!result.webhookUrl.isNullOrBlank()) prefs.webhookUrl = result.webhookUrl
+                prefs.agentMode = if (isUserMode) "USER" else "ADMIN"
+                if (!pinCode.isNullOrBlank()) prefs.pinCode = pinCode
+
+                val finalWebhook = customWebhookUrl ?: result.webhookUrl
+                val finalHeartbeat = customHeartbeatUrl ?: result.heartbeatUrl
+
+                if (!finalWebhook.isNullOrBlank()) prefs.webhookUrl = finalWebhook
                 if (!result.fallbackWebhookUrl.isNullOrBlank()) prefs.fallbackWebhookUrl = result.fallbackWebhookUrl
-                if (!result.heartbeatUrl.isNullOrBlank()) prefs.heartbeatUrl = result.heartbeatUrl
+                if (!finalHeartbeat.isNullOrBlank()) prefs.heartbeatUrl = finalHeartbeat
                 if (!result.fallbackHeartbeatUrl.isNullOrBlank()) prefs.fallbackHeartbeatUrl = result.fallbackHeartbeatUrl
                 if (!result.deviceToken.isNullOrBlank()) prefs.deviceToken = result.deviceToken
 
                 KeepAliveService.start(this@MainActivity)
                 updateUiState()
 
+                val modeTitle = if (isUserMode) "SheetBot Agent (이용자용)" else "SheetBot Agent M (관리자용)"
+                val modeDesc = if (isUserMode) {
+                    "${email} 계정과의 1:1 구글 시트 비서 연동이 완료되었습니다.\n\n• 스마트폰으로 수신된 고객 문자가 구글 시트에 실시간 기록됩니다.\n• 구글 시트에서 통신비 0원으로 문자 일괄 발송이 가능합니다."
+                } else {
+                    "${email} 계정과의 0초 연동이 완료되었습니다.\n(메인 및 터널 2단계 자동 폴백 활성화)\n이제 스마트폰으로 입금 문자가 오면 즉시 시트봇 토큰이 자동 충전됩니다."
+                }
+
                 AlertDialog.Builder(this@MainActivity)
-                    .setTitle("🎉 연동 성공!")
-                    .setMessage("${email} 계정과의 0초 연동이 완료되었습니다.\n(메인 및 터널 2단계 자동 폴백 활성화)\n이제 스마트폰으로 입금 문자가 오면 즉시 시트봇 토큰이 자동 충전됩니다.")
+                    .setTitle("🎉 $modeTitle 연동 성공!")
+                    .setMessage(modeDesc)
                     .setPositiveButton("확인", null)
                     .show()
             } else {

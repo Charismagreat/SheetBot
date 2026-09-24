@@ -29,19 +29,22 @@ object ApiClient {
 
     /**
      * QR코드 또는 핀코드로 시트봇 서버에 기기 페어링 요청
-     * 1차: sheetbot.cloud -> 실패 시 2차: tunneling-service/p/SheetBot 자동 폴백
+     * isUserMode == true (기본값): 일반 이용자 구글 시트 비서 (/api/user/agent2/pair)
+     * isUserMode == false: 관리자 전용 무통장 입금확인기 Agent M (/api/wallet/agent/pair)
      */
     suspend fun pairDevice(
         userEmail: String,
         token: String? = null,
-        pinCode: String? = null
+        pinCode: String? = null,
+        isUserMode: Boolean = true
     ): PairResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         var lastError = "페어링 요청 실패"
+        val endpointPath = if (isUserMode) "/api/user/agent2/pair" else "/api/wallet/agent/pair"
 
         for ((index, host) in hosts.withIndex()) {
-            val endpoint = "$host/api/wallet/agent/pair"
-            Log.i(TAG, "[페어링 시도 ${index + 1}/${hosts.size}] 엔드포인트: $endpoint")
+            val endpoint = "$host$endpointPath"
+            Log.i(TAG, "[페어링 시도 ${index + 1}/${hosts.size}] 모드=${if (isUserMode) "USER" else "ADMIN"} 엔드포인트: $endpoint")
 
             try {
                 val json = JSONObject().apply {
@@ -49,7 +52,7 @@ object ApiClient {
                     if (!token.isNullOrBlank()) put("token", token)
                     if (!pinCode.isNullOrBlank()) put("pinCode", pinCode)
                     put("deviceModel", "${Build.MANUFACTURER} ${Build.MODEL}")
-                    put("appVersion", "1.0.0")
+                    put("appVersion", "1.5.2")
                 }
 
                 val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
@@ -63,15 +66,20 @@ object ApiClient {
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
 
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
-                    Log.i(TAG, "🎉 [페어링 성공] 호스트: $host")
+                    Log.i(TAG, "🎉 [페어링 성공] 호스트: $host, 모드=${if (isUserMode) "USER" else "ADMIN"}")
+                    val defaultWebhook = if (isUserMode) "$PRIMARY_HOST/api/webhooks/dispatch" else "$PRIMARY_HOST/api/wallet/bank-webhook"
+                    val defaultFallbackWebhook = if (isUserMode) "$FALLBACK_HOST/api/webhooks/dispatch" else "$FALLBACK_HOST/api/wallet/bank-webhook"
+                    val defaultHeartbeat = if (isUserMode) "$PRIMARY_HOST/api/user/agent2/heartbeat" else "$PRIMARY_HOST/api/wallet/agent/heartbeat"
+                    val defaultFallbackHeartbeat = if (isUserMode) "$FALLBACK_HOST/api/user/agent2/heartbeat" else "$FALLBACK_HOST/api/wallet/agent/heartbeat"
+
                     return@withContext PairResult(
                         success = true,
                         userEmail = resJson.optString("userEmail", userEmail),
                         deviceToken = resJson.optString("deviceToken", ""),
-                        webhookUrl = resJson.optString("webhookUrl", "$PRIMARY_HOST/api/wallet/bank-webhook"),
-                        fallbackWebhookUrl = resJson.optString("fallbackWebhookUrl", "$FALLBACK_HOST/api/wallet/bank-webhook"),
-                        heartbeatUrl = resJson.optString("heartbeatUrl", "$PRIMARY_HOST/api/wallet/agent/heartbeat"),
-                        fallbackHeartbeatUrl = resJson.optString("fallbackHeartbeatUrl", "$FALLBACK_HOST/api/wallet/agent/heartbeat"),
+                        webhookUrl = resJson.optString("webhookUrl", defaultWebhook),
+                        fallbackWebhookUrl = resJson.optString("fallbackWebhookUrl", defaultFallbackWebhook),
+                        heartbeatUrl = resJson.optString("heartbeatUrl", defaultHeartbeat),
+                        fallbackHeartbeatUrl = resJson.optString("fallbackHeartbeatUrl", defaultFallbackHeartbeat),
                         message = resJson.optString("message", "연동 성공")
                     )
                 } else {
@@ -211,7 +219,7 @@ object ApiClient {
                 val json = JSONObject().apply {
                     put("userEmail", userEmail)
                     put("deviceModel", "${Build.MANUFACTURER} ${Build.MODEL}")
-                    put("appVersion", "1.5.0")
+                    put("appVersion", "1.6.0")
                     if (batteryLevel != null) put("batteryLevel", batteryLevel)
                     if (isCharging != null) put("isCharging", isCharging)
                 }
@@ -228,6 +236,40 @@ object ApiClient {
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Heartbeat 실패 ($targetUrl): ${e.message}")
+            }
+        }
+        false
+    }
+
+    /**
+     * 이용자 스마트폰에 수신된 고객 SMS를 시트봇 서버 대장으로 전송
+     */
+    suspend fun sendInboundSms(
+        userEmail: String,
+        sender: String,
+        message: String,
+        deviceId: String? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("sender", sender)
+            put("message", message)
+            put("deviceId", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL} (SheetBot Agent)")
+        }
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/agent2/inbound-sms"
+            try {
+                val request = Request.Builder().url(endpoint).post(body).build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    Log.i(TAG, "✅ [고객 문자 수신 동기화 성공] 호스트: $host ($sender)")
+                    return@withContext true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "수신 문자 동기화 실패 ($host): ${e.message}")
             }
         }
         false

@@ -55,6 +55,17 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_push_detection_enabled", true)
         set(value) = prefs.edit().putBoolean("is_push_detection_enabled", value).apply()
 
+    /**
+     * 에이전트 동작 모드: "USER" (이용자용 구글시트 비서) 또는 "ADMIN" (운영자용 입금확인기 Agent M)
+     */
+    var agentMode: String
+        get() = prefs.getString("agent_mode", "USER") ?: "USER"
+        set(value) = prefs.edit().putString("agent_mode", value).apply()
+
+    var pinCode: String?
+        get() = prefs.getString("pin_code", null)
+        set(value) = prefs.edit().putString("pin_code", value).apply()
+
     fun clear() {
         prefs.edit().clear().apply()
     }
