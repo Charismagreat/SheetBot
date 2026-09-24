@@ -134,10 +134,18 @@ object ApiClient {
 
                 if (response.isSuccessful && resJson.optBoolean("success", true)) {
                     Log.i(TAG, "✅ [웹훅 전송 성공] 대상: $targetUrl")
+                    val replySmsObj = resJson.optJSONObject("replySms")
+                    val replyPhone = replySmsObj?.optString("recipientPhone")?.takeIf { it.isNotBlank() }
+                    val replyText = replySmsObj?.optString("message")?.takeIf { it.isNotBlank() }
+                    val ttsText = resJson.optString("ttsText").takeIf { it.isNotBlank() }
+
                     return@withContext WebhookResult(
                         statusCode = response.code,
                         success = true,
-                        message = resJson.optString("message", "전송 완료 (HTTP ${response.code})")
+                        message = resJson.optString("message", "전송 완료 (HTTP ${response.code})"),
+                        replySmsPhone = replyPhone,
+                        replySmsText = replyText,
+                        ttsText = ttsText
                     )
                 } else {
                     val msg = resJson.optString("message", "HTTP ${response.code}")
@@ -223,6 +231,34 @@ object ApiClient {
         }
         false
     }
+
+    /**
+     * 최신 앱 버전 및 원클릭 업데이트 정보 확인
+     */
+    suspend fun fetchLatestVersion(): VersionInfo? = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            val endpoint = "$host/api/wallet/agent/version"
+            try {
+                val request = Request.Builder().url(endpoint).get().build()
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext VersionInfo(
+                        latestVersionCode = resJson.optInt("latestVersionCode", 1),
+                        latestVersionName = resJson.optString("latestVersionName", "1.0.0"),
+                        apkUrl = resJson.optString("apkUrl", ""),
+                        fallbackApkUrl = resJson.optString("fallbackApkUrl", ""),
+                        releaseNotes = resJson.optString("releaseNotes", "")
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "버전 확인 실패 ($host): ${e.message}")
+            }
+        }
+        null
+    }
 }
 
 data class PairResult(
@@ -240,5 +276,16 @@ data class PairResult(
 data class WebhookResult(
     val statusCode: Int,
     val success: Boolean,
-    val message: String
+    val message: String,
+    val replySmsPhone: String? = null,
+    val replySmsText: String? = null,
+    val ttsText: String? = null
+)
+
+data class VersionInfo(
+    val latestVersionCode: Int,
+    val latestVersionName: String,
+    val apkUrl: String,
+    val fallbackApkUrl: String,
+    val releaseNotes: String
 )

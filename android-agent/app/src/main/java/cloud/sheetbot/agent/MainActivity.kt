@@ -72,6 +72,9 @@ class MainActivity : AppCompatActivity() {
 
         prefs = PreferencesManager(this)
 
+        TtsManager.init(this)
+        UpdateManager.checkForUpdates(this, showToastIfLatest = false)
+
         setupListeners()
         updateUiState()
         checkPermissions()
@@ -91,6 +94,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        TtsManager.shutdown()
         try {
             unregisterReceiver(depositUpdateReceiver)
         } catch (_: Exception) {}
@@ -144,6 +148,24 @@ class MainActivity : AppCompatActivity() {
                 }
                 .setNegativeButton("취소", null)
                 .show()
+        }
+
+        // 4. 스마트 편의 스위치 & 업데이트 버튼
+        binding.switchTts.isChecked = prefs.isTtsEnabled
+        binding.switchTts.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isTtsEnabled = isChecked
+            if (isChecked) TtsManager.speak(this, "실시간 음성 안내가 활성화되었습니다.")
+        }
+
+        binding.switchReceiptSms.isChecked = prefs.isReceiptSmsEnabled
+        binding.switchReceiptSms.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isReceiptSmsEnabled = isChecked
+            val msg = if (isChecked) "고객 영수증 SMS 자동 회신이 켜졌습니다." else "고객 영수증 SMS 자동 회신이 꺼졌습니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnCheckUpdate.setOnClickListener {
+            UpdateManager.checkForUpdates(this, showToastIfLatest = true)
         }
     }
 
@@ -295,6 +317,10 @@ class MainActivity : AppCompatActivity() {
             addLogItem("1599-3333 (테스트)", simulatedSms, result.success)
 
             if (result.success) {
+                if (prefs.isTtsEnabled) {
+                    val speech = result.ttsText ?: "가상 입금 5,000원이 정상 감지되었습니다."
+                    TtsManager.speak(this@MainActivity, speech)
+                }
                 val toastText = if (result.message.contains("토큰이 즉시 충전되었습니다")) {
                     "🎉 가상 입금 매칭 성공! (토큰 충전 완료)"
                 } else {
@@ -326,6 +352,9 @@ class MainActivity : AppCompatActivity() {
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
             permissionsToRequest.add(Manifest.permission.READ_SMS)
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(Manifest.permission.SEND_SMS)
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             permissionsToRequest.add(Manifest.permission.CAMERA)
