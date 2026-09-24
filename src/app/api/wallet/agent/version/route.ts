@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 5,
-      latestVersionName: "1.3.0",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/v1.3.0/sheetbot-deposit-agent.apk",
+      latestVersionCode: 6,
+      latestVersionName: "1.4.0",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/v1.4.0/sheetbot-deposit-agent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/sheetbot-deposit-agent.apk",
-      releaseNotes: "시트봇 에이전트 M v1.3.0 (Phase 2)\n• 주요 7대 금융사(카카오뱅크/토스/국민/신한/우리/하나/기업 등) 무료 앱 푸시 실시간 감지\n• 은행 유료 SMS 없이 0원 입금 자동 확인\n• 알림 접근 권한 원클릭 가이드 & 가상 푸시 테스트 탑재",
+      releaseNotes: "시트봇 에이전트 M v1.4.0 (Phase 3)\n• 전원 충전기 분리/연결 감지 & 배터리 방전 비상 경보\n• 대시보드 실시간 배터리 잔량(%) 및 충전 상태(⚡) 시각화\n• 3회 연속 실패 시 와치독 비상 알림 & 자동 복구\n• OLED 번인 & 발열 방지 AOD 블랙 스크린 모드 탑재",
     },
     {
       headers: {

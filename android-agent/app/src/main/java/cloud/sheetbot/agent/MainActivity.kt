@@ -11,7 +11,10 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
+import android.view.WindowManager
 import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,6 +27,9 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -31,11 +37,14 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.random.Random
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var prefs: PreferencesManager
     private val activityScope = CoroutineScope(Dispatchers.Main)
+    private var aodJob: Job? = null
+    private lateinit var aodGestureDetector: GestureDetector
 
     // 입금 감지 시 실시간 화면 갱신 리시버
     private val depositUpdateReceiver = object : BroadcastReceiver() {
@@ -102,6 +111,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        aodJob?.cancel()
         TtsManager.shutdown()
         try {
             unregisterReceiver(depositUpdateReceiver)
@@ -214,6 +224,59 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnCheckUpdate.setOnClickListener {
             UpdateManager.checkForUpdates(this, showToastIfLatest = true)
+        }
+
+        // 6. AOD 올웨이즈 블랙 모드 진입 및 더블 탭 제스처
+        aodGestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                exitAodMode()
+                return true
+            }
+        })
+
+        binding.layoutAod.setOnTouchListener { _, event ->
+            aodGestureDetector.onTouchEvent(event)
+            true
+        }
+
+        binding.btnEnterAod.setOnClickListener {
+            enterAodMode()
+        }
+    }
+
+    private fun enterAodMode() {
+        binding.layoutAod.visibility = View.VISIBLE
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        val lp = window.attributes
+        lp.screenBrightness = 0.01f
+        window.attributes = lp
+        startAodClockLoop()
+        Toast.makeText(this, "AOD 블랙 모드가 시작되었습니다.\n화면을 두 번 탭하면 복귀합니다.", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun exitAodMode() {
+        aodJob?.cancel()
+        aodJob = null
+        binding.layoutAod.visibility = View.GONE
+        val lp = window.attributes
+        lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        window.attributes = lp
+        Toast.makeText(this, "AOD 모드가 해제되었습니다.", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun startAodClockLoop() {
+        aodJob?.cancel()
+        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+        aodJob = activityScope.launch {
+            while (isActive) {
+                binding.tvAodClock.text = timeFormat.format(Date())
+                // 번인 방지: 1분마다 ±30px 범위에서 무작위 픽셀 이동 (Pixel Shift)
+                val shiftX = Random.nextInt(-30, 31).toFloat()
+                val shiftY = Random.nextInt(-30, 31).toFloat()
+                binding.containerAodContent.translationX = shiftX
+                binding.containerAodContent.translationY = shiftY
+                delay(60000L)
+            }
         }
     }
 

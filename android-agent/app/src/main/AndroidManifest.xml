@@ -88,6 +88,18 @@
             </intent-filter>
         </receiver>
 
+        <!-- 충전기 연결/분리 및 배터리 방전 경보 리시버 (Phase 3) -->
+        <receiver
+            android:name=".PowerStatusReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.ACTION_POWER_CONNECTED" />
+                <action android:name="android.intent.action.ACTION_POWER_DISCONNECTED" />
+                <action android:name="android.intent.action.BATTERY_LOW" />
+            </intent-filter>
+        </receiver>
+
         <!-- 인앱 원클릭 무삭제 덮어쓰기 업데이트용 FileProvider -->
         <provider
             android:name="androidx.core.content.FileProvider"

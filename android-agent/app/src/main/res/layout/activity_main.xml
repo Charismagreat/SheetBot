@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0F172A"
-    android:fillViewport="true">
+    android:background="#0F172A">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -35,7 +39,7 @@
                 android:background="@drawable/bg_badge_version"
                 android:paddingHorizontal="10dp"
                 android:paddingVertical="4dp"
-                android:text="v1.3"
+                android:text="v1.4"
                 android:textColor="#10B981"
                 android:textSize="12sp"
                 android:textStyle="bold" />
@@ -281,6 +285,17 @@
                 android:textColor="#FFFFFF"
                 android:textSize="11.5sp"
                 android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btnEnterAod"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:backgroundTint="#0F172A"
+                android:text="🌙 올웨이즈 블랙 모드 (화면 번인 방지)"
+                android:textColor="#94A3B8"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                android:layout_marginTop="8dp" />
         </LinearLayout>
 
         <!-- 최근 감지된 입금 내역 요약 -->
@@ -334,4 +349,59 @@
             android:text="대기 중... 은행 입금 문자가 오면 자동으로 웹훅 전송됩니다.\n" />
 
     </LinearLayout>
-</ScrollView>
+    </ScrollView>
+
+    <!-- Phase 3: AOD 올웨이즈 블랙 모드 오버레이 (OLED 번인 & 발열 방지) -->
+    <FrameLayout
+        android:id="@+id/layoutAod"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/containerAodContent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <!-- 실시간 감지 상태 점 (초록 점) -->
+            <View
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/bg_badge_version"
+                android:backgroundTint="#10B981"
+                android:layout_marginBottom="12dp" />
+
+            <TextView
+                android:id="@+id/tvAodClock"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="12:00"
+                android:textColor="#334155"
+                android:textSize="36sp"
+                android:fontFamily="sans-serif-thin"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="SheetBot 24H 입금 감지 중"
+                android:textColor="#1E293B"
+                android:textSize="11sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="화면을 두 번 탭하면 복귀합니다"
+                android:textColor="#1E293B"
+                android:textSize="10sp" />
+        </LinearLayout>
+    </FrameLayout>
+</FrameLayout>
