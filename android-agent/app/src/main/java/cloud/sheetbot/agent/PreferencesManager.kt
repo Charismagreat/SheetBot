@@ -43,6 +43,14 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("last_detected_deposit", null)
         set(value) = prefs.edit().putString("last_detected_deposit", value).apply()
 
+    var isTtsEnabled: Boolean
+        get() = prefs.getBoolean("is_tts_enabled", true)
+        set(value) = prefs.edit().putBoolean("is_tts_enabled", value).apply()
+
+    var isReceiptSmsEnabled: Boolean
+        get() = prefs.getBoolean("is_receipt_sms_enabled", true)
+        set(value) = prefs.edit().putBoolean("is_receipt_sms_enabled", value).apply()
+
     fun clear() {
         prefs.edit().clear().apply()
     }

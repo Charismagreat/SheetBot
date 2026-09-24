@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.provider.Telephony
+import android.telephony.SmsManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
@@ -95,6 +96,33 @@ class SmsReceiver : BroadcastReceiver() {
                     prefs.lastDetectedDeposit = logSummary
 
                     showDepositNotification(context, fullBody, result.success)
+
+                    // 5. 0원 영수증 SMS 자동 회신 (설정 ON && 서버에서 대상 번호/문구 회신 시)
+                    if (prefs.isReceiptSmsEnabled && !result.replySmsPhone.isNullOrBlank() && !result.replySmsText.isNullOrBlank()) {
+                        try {
+                            val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                context.getSystemService(SmsManager::class.java)
+                            } else {
+                                @Suppress("DEPRECATION")
+                                SmsManager.getDefault()
+                            }
+                            val parts = smsManager.divideMessage(result.replySmsText)
+                            if (parts.size > 1) {
+                                smsManager.sendMultipartTextMessage(result.replySmsPhone, null, parts, null, null)
+                            } else {
+                                smsManager.sendTextMessage(result.replySmsPhone, null, result.replySmsText, null, null)
+                            }
+                            Log.i(TAG, "📲 [영수증 SMS 발송 성공] 수신: ${result.replySmsPhone}")
+                        } catch (smsErr: Exception) {
+                            Log.w(TAG, "영수증 SMS 발송 실패: ${smsErr.message}")
+                        }
+                    }
+
+                    // 6. 실시간 TTS 음성 안내 (설정 ON 시)
+                    if (prefs.isTtsEnabled) {
+                        val voiceMsg = result.ttsText ?: "입금이 감지되어 충전이 완료되었습니다."
+                        TtsManager.speak(context, voiceMsg)
+                    }
 
                     // UI 갱신용 브로드캐스트 발송
                     val updateIntent = Intent(ACTION_DEPOSIT_DETECTED).apply {

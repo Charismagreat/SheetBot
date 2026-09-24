@@ -108,6 +108,7 @@ export async function POST(request: Request) {
         depositorName: "테스트",
         amountKrw: cleanAmount,
         bankName: bankName || "카카오뱅크",
+        ttsText: `가상 입금 ${cleanAmount.toLocaleString()}원이 정상 감지되었습니다.`,
       });
     }
 
@@ -229,6 +230,30 @@ export async function POST(request: Request) {
       amount: matched.amount_krw,
     }).catch((err) => console.warn("[Bank-Webhook] Dispatch error:", err));
 
+    // 6. 고객 0원 영수증 SMS 및 실시간 TTS 음성 안내 페이로드 생성
+    let recipientPhone = matched.phone_number || "";
+    if (!recipientPhone) {
+      try {
+        const uDev = await queryTable("sheetbot_user_devices", {
+          filters: { user_email: matched.user_email },
+          limit: 3,
+        });
+        const foundWithPhone = (uDev.rows || []).find((d: any) => d.phone_number && !d.deleted_at);
+        if (foundWithPhone) {
+          recipientPhone = foundWithPhone.phone_number;
+        }
+      } catch {}
+    }
+
+    const replySms = recipientPhone
+      ? {
+          recipientPhone,
+          message: `[SheetBot] ${matched.depositor_name || matched.user_name || "회원"}님, ${Number(matched.amount_krw).toLocaleString()}원 입금이 확인되어 ${Number(matched.tokens_to_credit).toLocaleString()} 토큰이 정상 충전되었습니다. 감사합니다.`,
+        }
+      : null;
+
+    const ttsText = `${matched.depositor_name || "회원"}님 ${Number(matched.amount_krw).toLocaleString()}원 입금, ${Number(matched.tokens_to_credit).toLocaleString()} 토큰 자동 충전 완료되었습니다.`;
+
     return NextResponse.json({
       success: true,
       message: matched.user_email + "님께 " + matched.tokens_to_credit.toLocaleString() + " 토큰이 즉시 충전되었습니다!",
@@ -236,6 +261,8 @@ export async function POST(request: Request) {
       userEmail: matched.user_email,
       creditedTokens: matched.tokens_to_credit,
       newBalance: creditRes.newBalance,
+      replySms,
+      ttsText,
     });
   } catch (err: any) {
     console.error("[Bank-Webhook-API] POST error:", err);
