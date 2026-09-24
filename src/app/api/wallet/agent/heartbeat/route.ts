@@ -37,6 +37,13 @@ export async function POST(req: NextRequest) {
         last_connected_at: nowStr,
         updated_at: nowStr,
       };
+      // 💡 기기가 살아있어 신호를 보내왔는데 소프트 삭제되어 있었다면 자동 복원
+      if (dev.deleted_at) {
+        updates.deleted_at = null;
+        updates.deleted_by = null;
+        updates.restored_at = nowStr;
+        updates.restored_by = "agent_heartbeat";
+      }
       if (deviceModel) updates.label = `스마트폰 (${deviceModel})`;
       if (batteryLevel !== undefined && batteryLevel !== null) updates.battery_level = Number(batteryLevel);
       if (isCharging !== undefined && isCharging !== null) updates.is_charging = isCharging ? 1 : 0;
