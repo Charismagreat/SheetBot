@@ -511,6 +511,45 @@ export default function Navbar() {
               <span>1:1 문의하기</span>
             </Link>
           </div>
+
+          {session?.user && (
+            <div className="space-y-2 border-t border-slate-100 pt-3">
+              <div className="flex items-center justify-between px-2">
+                <div className="text-xs font-bold text-slate-800 truncate">
+                  {session.user.name || session.user.email}
+                </div>
+                <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  Google 인증됨
+                </span>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={async () => {
+                    setMobileMenuOpen(false);
+                    try {
+                      await fetch(`/api/auth/force-logout`, { method: "POST" }).catch(() => {});
+                      await signOut({ redirect: false }).catch(() => {});
+                    } catch {}
+                    window.location.href = "/";
+                  }}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition-colors"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>로그아웃</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setIsWithdrawModalOpen(true);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 text-xs font-bold hover:bg-rose-100 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>계정 삭제</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

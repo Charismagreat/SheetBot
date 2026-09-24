@@ -8,7 +8,7 @@ import { revokeAllUserApiKeys } from "@/lib/api-keys";
 
 /**
  * POST /api/user/withdraw
- * 회원 탈퇴 요청 처리 및 T=0초 전역 킬스위치(Global Kill-Switch) 파이프라인
+ * 계정 영구 삭제(Account Deletion) 요청 처리 및 T=0초 전역 킬스위치(Global Kill-Switch) 파이프라인
  * 
  * 1. sheetbot_users: 상태를 WITHDRAWN으로 변경하고 소프트 삭제
  * 2. sheetbot_user_api_keys: 해당 계정의 모든 활성 API 키 즉시 REVOKED 영구 폐기
@@ -38,9 +38,9 @@ export async function POST(request: Request) {
       body = await request.json();
     } catch {}
 
-    const withdrawReason = body.reason || "사용자 자발적 회원 탈퇴";
+    const withdrawReason = body.reason || "사용자 직접 계정 영구 삭제";
 
-    // 1. sheetbot_users 탈퇴 처리 (Primary Key id 기반 정확한 업데이트)
+    // 1. sheetbot_users 계정 삭제 처리 (Primary Key id 기반 정확한 업데이트)
     const userRes = await queryTable("sheetbot_users", {
       filters: { email },
       limit: 1,
@@ -124,12 +124,12 @@ export async function POST(request: Request) {
       ).catch(() => null);
     }
 
-    console.log(`[Withdraw API] ✅ User ${email} successfully withdrawn. All services and ${revokedKeyCount} API keys revoked.`);
+    console.log(`[Withdraw API] ✅ User ${email} successfully deleted account. All services and ${revokedKeyCount} API keys revoked.`);
 
     // 6. 세션 쿠키 파기 헤더와 함께 응답 반환
     const response = NextResponse.json({
       success: true,
-      message: "회원 탈퇴가 완료되었습니다. 모든 연동 주소와 API 키가 안전하게 차단되었습니다.",
+      message: "계정 삭제가 완료되었습니다. 모든 연동 주소와 API 키가 안전하게 영구 차단되었습니다.",
       revokedKeyCount,
       projectCount: (projectsRes.rows || []).length,
     });
