@@ -124,7 +124,13 @@ export async function POST(request: Request) {
 
     // 1. PENDING 상태인 입금 요청 대장 조회
     const filters: Record<string, any> = { status: "PENDING" };
-    if (requestId) filters.id = requestId;
+    if (requestId) {
+      if (/^\d+$/.test(requestId)) {
+        filters.id = requestId;
+      } else {
+        filters.uuid = requestId;
+      }
+    }
 
     const res = await queryTable("sheetbot_deposit_requests", {
       filters,
@@ -198,6 +204,7 @@ export async function POST(request: Request) {
         message: `ℹ️ [문자 감지 성공] ${bankName || "은행"} ${cleanAmount.toLocaleString()}원 (${cleanDepositor}) 입금을 수신했습니다. 단, 웹에 등록된 대기 세션과 일치하지 않아 대기 상태로 유지됩니다.`,
         depositorName: cleanDepositor,
         amountKrw: cleanAmount,
+        ttsText: `${cleanDepositor}님 ${cleanAmount.toLocaleString()}원 입금이 확인되었으나, 대기 중인 신청건과 일치하지 않습니다.`,
       });
     }
 
