@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 import { queryTable, updateRows } from "../../../../../egdesk-helpers";
 import { creditTokens } from "@/lib/token-wallet";
 import { executeSmartDispatchRules } from "@/lib/smart-dispatch-rules";
@@ -122,6 +123,30 @@ export async function POST(request: Request) {
     // 실제 입금 매칭 시 필요한 DB 초기화는 백그라운드 병렬 보장
     setupDatabase().catch(() => {});
 
+    // ⚡ [Phase 4: 중복 입금 락 (Deduplication Lock)]
+    // 10분 단위 윈도우 키 생성 -> 이중화 공기계 동시 수신 또는 재전송 시 중복 토큰 충전 100% 원천 차단
+    const timeWindow = new Date().toISOString().slice(0, 15);
+    const txHash = crypto
+      .createHash("md5")
+      .update(`${bankName || "은행"}_${cleanAmount}_${cleanDepositor}_${timeWindow}`)
+      .digest("hex");
+
+    const dupCheck = await queryTable("sheetbot_deposit_requests", {
+      filters: { tx_hash: txHash, status: "COMPLETED" },
+      limit: 1,
+    }).catch(() => ({ rows: [] }));
+
+    if (dupCheck.rows && dupCheck.rows.length > 0) {
+      console.log(`[Bank-Webhook] 🛡️ 중복 입금 차단 (이중화 기기 동시 수신 방어): txHash=${txHash}`);
+      return NextResponse.json({
+        success: true,
+        matched: false,
+        duplicate: true,
+        message: `ℹ️ [중복 입금 감지] 이미 정상 처리 완료된 입금 건입니다 (${bankName || "은행"} ${cleanAmount.toLocaleString()}원 ${cleanDepositor}).`,
+        ttsText: `이미 처리된 중복 입금건입니다.`,
+      });
+    }
+
     // 1. PENDING 상태인 입금 요청 대장 조회
     const filters: Record<string, any> = { status: "PENDING" };
     if (requestId) {
@@ -141,36 +166,178 @@ export async function POST(request: Request) {
 
     const pendingRequests = (res.rows || []).filter((r: any) => !r.deleted_at);
 
-    // 2. 입금자명 및 금액 매칭 탐색
-    // 1순위: 금액 일치 AND (실제 입금자명 / 입금코드 / 사용자명 매칭)
-    let matched: any = pendingRequests.find((req: any) => {
-      const amount = Number(req.amount_krw);
-      if (amount !== cleanAmount) return false;
+    // ⚡ [Phase 4: 30분 초과 PENDING 세션 자동 타임아웃 (EXPIRED)]
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    for (const p of pendingRequests) {
+      if (p.created_at && p.created_at < thirtyMinutesAgo) {
+        void updateRows(
+          "sheetbot_deposit_requests",
+          { status: "EXPIRED", updated_at: new Date().toISOString() },
+          { filters: { id: p.id } }
+        ).catch(() => {});
+      }
+    }
+    const activePending = pendingRequests.filter((p: any) => !p.created_at || p.created_at >= thirtyMinutesAgo);
 
+    // 입금자명/코드 매칭 판별 헬퍼
+    const isNameOrCodeMatch = (req: any) => {
       const code = (req.deposit_code || "").replace(/\s+/g, "").trim().toLowerCase();
       const depositor = (req.depositor_name || "").replace(/\s+/g, "").trim().toLowerCase();
       const userName = (req.user_name || "").replace(/\s+/g, "").trim().toLowerCase();
       const target = cleanDepositor.toLowerCase();
 
-      const isNameMatch =
+      return (
         (depositor && (target.includes(depositor) || depositor.includes(target))) ||
         (code && (target.includes(code) || code.includes(target))) ||
-        (userName && (target.includes(userName) || userName.includes(target)));
+        (userName && (target.includes(userName) || userName.includes(target)))
+      );
+    };
 
-      return isNameMatch;
+    // 2. 입금자명 및 금액 매칭 탐색
+    // (1) 완전 일치 후보군 탐색
+    const matchedCandidates = activePending.filter((req: any) => {
+      return Number(req.amount_krw) === cleanAmount && isNameOrCodeMatch(req);
     });
 
-    // 2순위: 1원 단위 고유 단수 금액(예: 4,987원) 안전망 폴백
-    // 100원 단위가 아닌 1원 단위 특수 금액인 경우, 최근 PENDING 요청 중 해당 금액이 단 1건뿐이면 자동 승인
+    let matched: any = null;
+
+    if (matchedCandidates.length > 1) {
+      // ⚡ [Phase 4: 동명이인/동일금액 충돌 (Collision Prevention)]
+      const codeExactMatch = matchedCandidates.find((req: any) => {
+        const code = (req.deposit_code || "").replace(/\s+/g, "").trim().toLowerCase();
+        return code && cleanDepositor.toLowerCase().includes(code);
+      });
+
+      if (codeExactMatch) {
+        matched = codeExactMatch;
+      } else {
+        console.warn(`[Bank-Webhook] ⚠️ 동명이인/동액 충돌 감지 (${matchedCandidates.length}건) -> COLLISION_HOLD 전환`);
+        for (const cand of matchedCandidates) {
+          await updateRows(
+            "sheetbot_deposit_requests",
+            {
+              status: "COLLISION_HOLD",
+              actual_amount_krw: cleanAmount,
+              hold_reason: `동일 금액(${cleanAmount.toLocaleString()}원) 동시 신청 ${matchedCandidates.length}건 충돌`,
+              updated_at: new Date().toISOString(),
+            },
+            { filters: { id: cand.id } }
+          );
+        }
+        return NextResponse.json({
+          success: true,
+          matched: false,
+          collision: true,
+          message: `⚠️ [동명이인/동액 충돌 감지] 동일한 금액(${cleanAmount.toLocaleString()}원)의 입금 대기건이 ${matchedCandidates.length}건 존재하여 오충전 방지를 위해 관리자 확인 대기열로 이동되었습니다.`,
+          ttsText: `동일 금액 동시 입금 충돌이 감지되어 관리자 확인 대기열로 이동되었습니다.`,
+        });
+      }
+    } else if (matchedCandidates.length === 1) {
+      matched = matchedCandidates[0];
+    }
+
+    // (2) 1원 단위 고유 단수 금액 안전망 폴백
     if (!matched && cleanAmount % 100 !== 0) {
-      const candidateByAmount = pendingRequests.filter(
+      const candidateByAmount = activePending.filter(
         (req: any) => Number(req.amount_krw) === cleanAmount
       );
       if (candidateByAmount.length === 1) {
         matched = candidateByAmount[0];
-        console.log(
-          `[Bank-Webhook] 1원 단위 고유 금액(${cleanAmount}원) 단일 요청자 자동 매칭 성공: ${matched.user_email}`
+        console.log(`[Bank-Webhook] 1원 단위 고유 금액(${cleanAmount}원) 단일 요청자 자동 매칭: ${matched.user_email}`);
+      }
+    }
+
+    // (3) ⚡ [Phase 4: 금액 불일치(과소/과대 입금) 스마트 탐색 & ON_HOLD 보류]
+    if (!matched) {
+      const mismatchReq = activePending.find((req: any) => isNameOrCodeMatch(req));
+      if (mismatchReq) {
+        const requestedAmount = Number(mismatchReq.amount_krw);
+        const reason = `신청 금액(${requestedAmount.toLocaleString()}원)과 실제 입금액(${cleanAmount.toLocaleString()}원) 불일치`;
+        console.warn(`[Bank-Webhook] ⚠️ 금액 불일치 감지: ${mismatchReq.user_email} (신청: ${requestedAmount}, 입금: ${cleanAmount})`);
+
+        await updateRows(
+          "sheetbot_deposit_requests",
+          {
+            status: "ON_HOLD",
+            actual_amount_krw: cleanAmount,
+            hold_reason: reason,
+            updated_at: new Date().toISOString(),
+          },
+          { filters: { id: mismatchReq.id } }
         );
+
+        let recipientPhone = mismatchReq.phone_number || "";
+        const replySms = recipientPhone
+          ? {
+              recipientPhone,
+              message: `[SheetBot] ${mismatchReq.depositor_name || "회원"}님, 신청 금액(${requestedAmount.toLocaleString()}원)과 실제 입금액(${cleanAmount.toLocaleString()}원)이 일치하지 않아 충전이 보류되었습니다. 관리자 확인 후 신속히 처리해 드리겠습니다.`,
+            }
+          : null;
+
+        const ttsText = `${mismatchReq.depositor_name || "회원"}님 금액 불일치 입금이 감지되어 보류 처리되었습니다.`;
+
+        return NextResponse.json({
+          success: true,
+          matched: false,
+          onHold: true,
+          message: `⚠️ [금액 불일치 감지] 신청 금액(${requestedAmount.toLocaleString()}원)과 실제 입금액(${cleanAmount.toLocaleString()}원)이 일치하지 않아 안전을 위해 입금이 보류되었습니다.`,
+          requestId: mismatchReq.id,
+          userEmail: mismatchReq.user_email,
+          requestedAmount,
+          actualAmount: cleanAmount,
+          replySms,
+          ttsText,
+        });
+      }
+    }
+
+    // (4) ⚡ [Phase 4: 만료(EXPIRED) 세션 지연 입금 구제 (Delayed Deposit Recovery)]
+    if (!matched) {
+      const expiredRes = await queryTable("sheetbot_deposit_requests", {
+        filters: { status: "EXPIRED" },
+        limit: 20,
+        orderBy: "id",
+        orderDirection: "DESC",
+      }).catch(() => ({ rows: [] }));
+
+      const expiredRequests = (expiredRes.rows || []).filter((r: any) => !r.deleted_at);
+      const delayedReq = expiredRequests.find((req: any) => {
+        return Number(req.amount_krw) === cleanAmount && isNameOrCodeMatch(req);
+      });
+
+      if (delayedReq) {
+        console.log(`[Bank-Webhook] ⏰ 만료 후 지연 입금 구제: ${delayedReq.user_email} (${cleanAmount}원)`);
+        await updateRows(
+          "sheetbot_deposit_requests",
+          {
+            status: "DELAYED_MATCH",
+            actual_amount_krw: cleanAmount,
+            hold_reason: "신청 기한(30분) 만료 후 뒤늦게 입금됨",
+            updated_at: new Date().toISOString(),
+          },
+          { filters: { id: delayedReq.id } }
+        );
+
+        let recipientPhone = delayedReq.phone_number || "";
+        const replySms = recipientPhone
+          ? {
+              recipientPhone,
+              message: `[SheetBot] ${delayedReq.depositor_name || "회원"}님, 신청 만료 후 지연 입금(${cleanAmount.toLocaleString()}원)이 확인되었습니다. 관리자 승인 대기열에 등록되었으며 확인 즉시 충전됩니다.`,
+            }
+          : null;
+
+        const ttsText = `${delayedReq.depositor_name || "회원"}님 지연 입금이 감지되어 승인 대기열에 등록되었습니다.`;
+
+        return NextResponse.json({
+          success: true,
+          matched: false,
+          delayedMatch: true,
+          message: `⏰ [지연 입금 구제 감지] 신청 만료 후 입금된 건(${cleanAmount.toLocaleString()}원)이 확인되어 관리자 수동 승인 대기열에 안전하게 등록되었습니다.`,
+          requestId: delayedReq.id,
+          userEmail: delayedReq.user_email,
+          replySms,
+          ttsText,
+        });
       }
     }
 
@@ -197,7 +364,7 @@ export async function POST(request: Request) {
         });
       }
 
-      // 2. 실제 은행 문자이지만 웹에 대기 세션이 없는 경우 (웹훅 수신 자체는 성공 처리)
+      // 2. 실제 은행 문자이지만 웹에 대기 세션이 없는 경우
       return NextResponse.json({
         success: true,
         matched: false,
@@ -218,12 +385,14 @@ export async function POST(request: Request) {
       "다이렉트 송금 (0원 수수료 / " + (bankName || "은행") + ")"
     );
 
-    // 4. 요청 세션 상태를 COMPLETED로 업데이트
+    // 4. 요청 세션 상태를 COMPLETED로 업데이트 (tx_hash 및 actual_amount_krw 기록)
     await updateRows(
       "sheetbot_deposit_requests",
       {
         status: "COMPLETED",
         completed_at: now,
+        tx_hash: txHash,
+        actual_amount_krw: cleanAmount,
         updated_at: now,
         updated_by: "system_bank_webhook",
       },

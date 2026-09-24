@@ -352,13 +352,26 @@ export async function setupDatabase(force = false): Promise<void> {
         { name: 'phone_number', type: 'TEXT' }, // 영수증 문자 수신 휴대폰 번호
         { name: 'receipt_sent', type: 'INTEGER' }, // 영수증 문자 발송 완료 여부 (0: 미발송, 1: 발송완료)
         { name: 'receipt_sent_at', type: 'TEXT' }, // 영수증 문자 발송 완료 일시
-        { name: 'status', type: 'TEXT', notNull: true }, // 'PENDING', 'COMPLETED', 'EXPIRED'
+        { name: 'status', type: 'TEXT', notNull: true }, // 'PENDING', 'COMPLETED', 'EXPIRED', 'ON_HOLD', 'COLLISION_HOLD', 'DELAYED_MATCH'
+        { name: 'actual_amount_krw', type: 'INTEGER' }, // 실제 입금된 금액 (금액 불일치 시)
+        { name: 'hold_reason', type: 'TEXT' }, // 입금 보류 사유
+        { name: 'tx_hash', type: 'TEXT' }, // 중복 입금 방지용 고유 거래 해시
         { name: 'expires_at', type: 'TEXT' },
         { name: 'completed_at', type: 'TEXT' },
         { name: 'created_at', type: 'TEXT' },
       ],
       { tableName: 'sheetbot_deposit_requests' }
     );
+
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_deposit_requests ADD COLUMN actual_amount_krw INTEGER;`);
+    } catch {}
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_deposit_requests ADD COLUMN hold_reason TEXT;`);
+    } catch {}
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_deposit_requests ADD COLUMN tx_hash TEXT;`);
+    } catch {}
 
     // 7. sheetbot_tax_invoices 테이블 생성 (세금계산서 및 현금영수증 발행 요청 대장)
     await safeCreateTable(

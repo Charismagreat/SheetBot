@@ -183,80 +183,102 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const requestId = searchParams.get("requestId");
     const userEmail = searchParams.get("userEmail");
+    const statusParam = searchParams.get("status");
+    const limitParam = Number(searchParams.get("limit")) || 50;
 
-    if (!requestId && !userEmail) {
-      return NextResponse.json(
-        { success: false, error: "requestId 또는 userEmail이 필요합니다." },
-        { status: 400 }
-      );
-    }
-
-    const filters: Record<string, any> = {};
+    // 1. 단건 상세 조회 모드 (requestId가 있는 경우)
     if (requestId) {
+      const filters: Record<string, any> = {};
       if (/^\d+$/.test(requestId)) {
         filters.id = requestId;
       } else {
         filters.uuid = requestId;
       }
-    }
-    if (userEmail) filters.user_email = userEmail.toLowerCase().trim();
+      if (userEmail) filters.user_email = userEmail.toLowerCase().trim();
 
-    let res = await queryTable("sheetbot_deposit_requests", {
-      filters,
-      limit: 1,
+      let res = await queryTable("sheetbot_deposit_requests", {
+        filters,
+        limit: 1,
+        orderBy: "id",
+        orderDirection: "DESC",
+      }).catch(() => ({ rows: [] }));
+
+      let reqRow: any = (res.rows || [])[0];
+      if (!reqRow) {
+        const fallbackFilters: Record<string, any> = /^\d+$/.test(requestId)
+          ? { uuid: "dep_" + requestId }
+          : { id: requestId.replace(/^dep_/, "") };
+        if (userEmail) fallbackFilters.user_email = userEmail.toLowerCase().trim();
+        const fbRes = await queryTable("sheetbot_deposit_requests", {
+          filters: fallbackFilters,
+          limit: 1,
+        }).catch(() => ({ rows: [] }));
+        reqRow = (fbRes.rows || [])[0];
+      }
+
+      if (!reqRow) {
+        return NextResponse.json({ success: false, error: "입금 요청 세션을 찾을 수 없습니다." }, { status: 404 });
+      }
+
+      if (reqRow.status === "PENDING") {
+        try {
+          const syncResult = await syncAndMatchBankDepositFromPhone(reqRow.id);
+          if (syncResult.matched) {
+            const refreshed = await queryTable("sheetbot_deposit_requests", {
+              filters: { id: reqRow.id },
+              limit: 1,
+            }).catch(() => ({ rows: [] }));
+            if (refreshed.rows && refreshed.rows[0]) {
+              reqRow = refreshed.rows[0];
+            }
+          }
+        } catch (syncErr: any) {
+          console.warn("[Direct-Deposit-GET] Phone SMS sync warning:", syncErr.message);
+        }
+      }
+
+      const wallet = await getOrCreateUserWallet(reqRow.user_email);
+
+      return NextResponse.json(
+        {
+          success: true,
+          requestId: reqRow.id,
+          status: reqRow.status,
+          depositCode: reqRow.deposit_code,
+          amountKrw: reqRow.amount_krw,
+          actualAmountKrw: reqRow.actual_amount_krw,
+          holdReason: reqRow.hold_reason,
+          tokensToCredit: reqRow.tokens_to_credit,
+          completedAt: reqRow.completed_at,
+          currentBalance: wallet.balanceTokens,
+        },
+        {
+          headers: {
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+          },
+        }
+      );
+    }
+
+    // 2. 대시보드/관리자 목록 조회 모드
+    const listFilters: Record<string, any> = {};
+    if (userEmail) listFilters.user_email = userEmail.toLowerCase().trim();
+    if (statusParam && statusParam !== "ALL") listFilters.status = statusParam;
+
+    const listRes = await queryTable("sheetbot_deposit_requests", {
+      filters: listFilters,
+      limit: limitParam,
       orderBy: "id",
       orderDirection: "DESC",
     }).catch(() => ({ rows: [] }));
 
-    let reqRow: any = (res.rows || [])[0];
-    if (!reqRow && requestId) {
-      // 2차 폴백: id 또는 uuid 교차 검색
-      const fallbackFilters: Record<string, any> = /^\d+$/.test(requestId)
-        ? { uuid: "dep_" + requestId }
-        : { id: requestId.replace(/^dep_/, "") };
-      if (userEmail) fallbackFilters.user_email = userEmail.toLowerCase().trim();
-      const fbRes = await queryTable("sheetbot_deposit_requests", {
-        filters: fallbackFilters,
-        limit: 1,
-      }).catch(() => ({ rows: [] }));
-      reqRow = (fbRes.rows || [])[0];
-    }
-
-    if (!reqRow) {
-      return NextResponse.json({ success: false, error: "입금 요청 세션을 찾을 수 없습니다." }, { status: 404 });
-    }
-
-    // 📲 구글 메시지 2중 안전망: 아직 PENDING 상태인 경우 스마트폰(구글 메시지)에서 최신 입금 SMS 즉시 동기화 검사
-    if (reqRow.status === "PENDING") {
-      try {
-        const syncResult = await syncAndMatchBankDepositFromPhone(reqRow.id);
-        if (syncResult.matched) {
-          // 상태 최신 갱신
-          const refreshed = await queryTable("sheetbot_deposit_requests", {
-            filters: { id: reqRow.id },
-            limit: 1,
-          }).catch(() => ({ rows: [] }));
-          if (refreshed.rows && refreshed.rows[0]) {
-            reqRow = refreshed.rows[0];
-          }
-        }
-      } catch (syncErr: any) {
-        console.warn("[Direct-Deposit-GET] Phone SMS sync warning:", syncErr.message);
-      }
-    }
-
-    const wallet = await getOrCreateUserWallet(reqRow.user_email);
+    const requests = (listRes.rows || []).filter((r: any) => !r.deleted_at);
 
     return NextResponse.json(
       {
         success: true,
-        requestId: reqRow.id,
-        status: reqRow.status,
-        depositCode: reqRow.deposit_code,
-        amountKrw: reqRow.amount_krw,
-        tokensToCredit: reqRow.tokens_to_credit,
-        completedAt: reqRow.completed_at,
-        currentBalance: wallet.balanceTokens,
+        requests,
+        total: requests.length,
       },
       {
         headers: {
