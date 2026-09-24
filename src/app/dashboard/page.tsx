@@ -702,12 +702,8 @@ export default function DashboardPage() {
                 <Bot className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="font-extrabold text-slate-800 text-base flex items-center gap-2">
-                  <span>{session?.user?.name || "구글 회원"}님의 자동화 워크스페이스</span>
-                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-md flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3" />
-                    <span>회원 전용 보관</span>
-                  </span>
+                <h2 className="font-extrabold text-slate-800 text-base">
+                  {session?.user?.name || "구글 회원"}님의 자동화 워크스페이스
                 </h2>
               </div>
             </div>
