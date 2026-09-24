@@ -151,9 +151,9 @@ export default function DepositAgentPage() {
     }
   }, []);
 
-  // 2. 등록된 에이전트 기기 상태 로드
-  const fetchDeviceStatus = useCallback(async () => {
-    setLoadingDevice(true);
+  // 2. 등록된 에이전트 기기 상태 로드 (silent 모드 지원으로 백그라운드 갱신 시 깜빡임 방지)
+  const fetchDeviceStatus = useCallback(async (silent = false) => {
+    if (!silent) setLoadingDevice(true);
     try {
       const res = await apiFetch("/api/user/devices");
       const data = await res.json();
@@ -187,7 +187,7 @@ export default function DepositAgentPage() {
     } catch (err: any) {
       console.error("Fetch device error:", err);
     } finally {
-      setLoadingDevice(false);
+      if (!silent) setLoadingDevice(false);
     }
   }, []);
 
@@ -215,9 +215,9 @@ export default function DepositAgentPage() {
     }
   };
 
-  // 3. 최근 입금 대장 조회
-  const fetchDepositLogs = useCallback(async () => {
-    setLoadingLogs(true);
+  // 3. 최근 입금 대장 조회 (silent 모드 지원으로 백그라운드 갱신 시 테이블 깜빡임 방지)
+  const fetchDepositLogs = useCallback(async (silent = false) => {
+    if (!silent) setLoadingLogs(true);
     try {
       const res = await apiFetch("/api/wallet/direct-deposit?limit=50");
       const data = await res.json();
@@ -227,7 +227,7 @@ export default function DepositAgentPage() {
     } catch (err: any) {
       console.error("Fetch logs error:", err);
     } finally {
-      setLoadingLogs(false);
+      if (!silent) setLoadingLogs(false);
     }
   }, []);
 
@@ -273,17 +273,17 @@ export default function DepositAgentPage() {
               return;
             }
             if (payload.type === "deposit_received") {
-              fetchDepositLogs();
+              fetchDepositLogs(true);
               const name = payload.data?.depositorName || "회원";
               const amt = Number(payload.data?.amountKrw || 0).toLocaleString();
               showToast("success", `🎉 ${name}님 ${amt}원 입금 확인 및 토큰 충전 완료!`);
             } else if (payload.type === "deposit_hold") {
-              fetchDepositLogs();
+              fetchDepositLogs(true);
               showToast("error", "⚠️ 금액 불일치 또는 동명이인 충돌 입금이 감지되었습니다.");
             } else if (payload.type === "deposit_delayed" || payload.type === "deposit_action") {
-              fetchDepositLogs();
+              fetchDepositLogs(true);
             } else if (payload.type === "device_heartbeat") {
-              fetchDeviceStatus();
+              fetchDeviceStatus(true);
             }
           } catch {}
         };
@@ -295,10 +295,10 @@ export default function DepositAgentPage() {
         console.warn("[Deposit-Agent] SSE connection error:", e);
       }
 
-      // 안전 백업용 타이머 (SSE 일시 단절 대비, 기존 15초 -> 60초로 최적화)
+      // 안전 백업용 타이머 (SSE 일시 단절 대비, 백그라운드 무점멸 갱신)
       const interval = setInterval(() => {
-        fetchDeviceStatus();
-        fetchDepositLogs();
+        fetchDeviceStatus(true);
+        fetchDepositLogs(true);
       }, 60000);
 
       return () => {
@@ -834,11 +834,12 @@ export default function DepositAgentPage() {
               </p>
             </div>
             <button
-              onClick={fetchDepositLogs}
-              className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors rounded-lg hover:bg-slate-100 cursor-pointer"
+              onClick={() => fetchDepositLogs(false)}
+              disabled={loadingLogs}
+              className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors rounded-lg hover:bg-slate-100 cursor-pointer disabled:opacity-50"
               title="새로고침"
             >
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className={`w-4 h-4 ${loadingLogs ? "animate-spin text-indigo-600" : ""}`} />
             </button>
           </div>
 
@@ -920,7 +921,7 @@ export default function DepositAgentPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {loadingLogs ? (
+                {loadingLogs && depositLogs.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-slate-400">
                       <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-slate-300" />
