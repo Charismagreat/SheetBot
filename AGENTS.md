@@ -1,6 +1,24 @@
 # Project Agent Rules
 
 
+<!-- BEGIN:db-watcher-first-rules -->
+## 이지데스크 DB 왓처(DB Watcher) 최우선 사용 및 실시간 동기화 표준 원칙 (절대 원칙)
+
+1. **DB 왓처 최우선 사용 원칙 (Zero-Polling / Realtime-First)**:
+   - 이 프로젝트뿐만 아니라 향후 착수하는 **모든 신규 프로젝트 및 기능 개발 시, 데이터 동기화 방식으로 주기적 폴링(`setInterval`)을 지양하고 반드시 이지데스크의 DB 왓처(DB Watcher / `/user-data/sse` 또는 `onUserDataChanged`)를 1순위로 최우선 적용**합니다.
+   - 화면 새로고침(F5) 없이 0초 만에 데이터와 상태가 동기화되는 실시간 반응형 사용자 경험(UX)을 기본 탑재합니다.
+2. **사전 실측 검증 후 단계적 적용 (Verification Before Integration)**:
+   - 신규 환경이나 테이블에 DB 왓처를 연동할 때는 반드시 독립 스크립트로 SSE 엔드포인트 수신 규격 및 지연 시간(0.05초)을 사전 실측 검증한 후 프로덕션 코드에 주입합니다.
+   - 가설 기반의 임의 구현이나 외부 인프라 핑계를 절대 대지 않고 정확한 프로토콜 명세에 입각하여 개발합니다.
+3. **단일 공유 업스트림 허브 및 6대 아키텍처 준수**:
+   - 다중 클라이언트 접속 시 연결 과부하를 방지하기 위해 서버 프로세스 내 **단 1개의 공유 업스트림 SSE 연결(Single Shared Upstream Hub)**을 유지하고 클라이언트에 팬아웃합니다.
+   - Node.js 런타임, `force-dynamic`, `X-Accel-Buffering: no`, `Cache-Control: no-cache, no-transform` 헤더 적용으로 프록시/Nginx 버퍼링을 원천 차단합니다.
+   - 15초 주기 하트비트(`: ping\n\n`)로 유휴 강제 종료를 방지하고, 클라이언트 `abort` 시 즉시 자원을 회수합니다.
+   - 300ms 디바운싱을 통해 대량 삽입/배치 작업 시 이벤트 폭풍을 차단합니다.
+4. **보안 격리 (Cache Invalidation 패턴)**:
+   - 스트림으로 민감한 데이터 본문을 직접 노출하지 않고 "테이블 변경 알림" 신호만 전달하며, 브라우저는 자신의 로그인 세션 권한으로 본인 데이터만 안전하게 Re-fetch하여 멀티테넌시 데이터 격리를 100% 보장합니다.
+<!-- END:db-watcher-first-rules -->
+
 <!-- BEGIN:database-audit-rules -->
 ## 데이터베이스 테이블 설계 및 소프트 삭제(Soft Delete) 준수 원칙
 
