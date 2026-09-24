@@ -157,7 +157,7 @@ export default function SheetBotLogo({
   className = "",
   showText = true,
   textClassName = "",
-  subText = "Google Apps Script AI 자동화",
+  subText = "구글 시트 AI 자동화",
   badgeText = "SaaS",
 }: SheetBotLogoProps) {
   return (

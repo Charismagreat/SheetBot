@@ -273,32 +273,6 @@ export default function Navbar() {
 
         {/* 우측 네비게이션 제어 영역 */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 whitespace-nowrap">
-          {/* AI 도움말 컴팩트 토글 버튼 (관리자 전용 노출) */}
-          {isAdmin && (
-            <button
-              onClick={toggleAiHelp}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border whitespace-nowrap shrink-0 cursor-pointer ${
-                aiHelpEnabled
-                  ? "bg-indigo-50 text-indigo-700 border-indigo-200 shadow-2xs"
-                  : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200/80"
-              }`}
-              data-easybot-hint="AI 도움말 토글: 화면 주요 요소에 마우스를 올렸을 때 실시간 설명 팝업을 띄울지 켜고 끕니다."
-              title="AI 도움말 켜기/끄기 (관리자 전용)"
-            >
-              <Sparkles
-                className={`w-3.5 h-3.5 ${aiHelpEnabled ? "text-amber-500 animate-spin" : "text-slate-400"}`}
-              />
-              <span className="hidden sm:inline whitespace-nowrap">AI 도움말</span>
-              <span
-                className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-extrabold whitespace-nowrap ${
-                  aiHelpEnabled ? "bg-indigo-600 text-white" : "bg-slate-300 text-slate-600"
-                }`}
-              >
-                {aiHelpEnabled ? "ON" : "OFF"}
-              </span>
-            </button>
-          )}
-
           {status === "loading" ? (
             <div className="w-20 h-8 bg-slate-100 animate-pulse rounded-xl" />
           ) : session?.user ? (
@@ -315,15 +289,16 @@ export default function Navbar() {
 
               {isAdmin && (
                 <>
-                  {/* 관리자 전용: 모바일 입금확인기 바로가기 */}
+                  {/* 관리자 전용: SheetBot Agent M (무통장 입금 자동감지 시스템) 바로가기 */}
                   <Link
                     href="/dashboard/deposit-agent"
                     className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-800 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-200/80 rounded-xl transition-all shadow-2xs whitespace-nowrap shrink-0"
-                    data-easybot-hint="모바일 입금확인기: 안드로이드 스마트폰 전용 APK를 설치하고 QR코드를 스캔하여 24시간 실시간 무통장 입금 감지 및 자동 충전을 가동합니다."
-                    title="관리자 전용 무통장 입금 자동확인기 (Android APK)"
+                    data-easybot-hint="SheetBot Agent M: 안드로이드 스마트폰 전용 APK를 연동하여 24시간 실시간 무통장 입금 감지 및 전역 토큰 지갑 자동 충전을 가동합니다."
+                    title="관리자 전용 무통장 입금 자동 감지 시스템 (SheetBot Agent M)"
                   >
                     <Smartphone className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span>입금확인기</span>
+                    <span className="hidden md:inline">SheetBot Agent M</span>
+                    <span className="md:hidden">Agent M</span>
                   </Link>
 
                   <Link
@@ -415,6 +390,34 @@ export default function Navbar() {
 
                     {/* 액션 메뉴 */}
                     <div className="p-1 space-y-0.5">
+                      {/* 관리자 전용: AI 컨텍스트 도움말 토글 */}
+                      {isAdmin && (
+                        <div className="pb-1 mb-1 border-b border-slate-100">
+                          <button
+                            type="button"
+                            onClick={toggleAiHelp}
+                            className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700 hover:bg-indigo-50/80 rounded-xl transition-colors cursor-pointer text-left"
+                            title="화면 주요 요소에 마우스를 올렸을 때 실시간 설명 팝업을 띄울지 켜고 끕니다."
+                          >
+                            <div className="flex items-center gap-2">
+                              <Sparkles
+                                className={`w-3.5 h-3.5 ${aiHelpEnabled ? "text-indigo-600 animate-spin" : "text-slate-400"}`}
+                              />
+                              <span>AI 도움말 힌트</span>
+                            </div>
+                            <span
+                              className={`text-[9.5px] px-2 py-0.5 rounded-full font-black tracking-tight ${
+                                aiHelpEnabled
+                                  ? "bg-indigo-600 text-white shadow-2xs"
+                                  : "bg-slate-200 text-slate-600"
+                              }`}
+                            >
+                              {aiHelpEnabled ? "ON" : "OFF"}
+                            </span>
+                          </button>
+                        </div>
+                      )}
+
                       <button
                         type="button"
                         onClick={async () => {
