@@ -8,14 +8,14 @@ export default function NotificationsGuideTab() {
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-3">
         <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-800 text-xs font-black rounded-full border border-emerald-200">
           <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
-          <span>SheetBot Agent2 양방향 자동화 매뉴얼</span>
+          <span>시트봇 에이전트(SheetBot Agent) 양방향 자동화 매뉴얼</span>
         </div>
         <h3 className="text-xl font-black text-slate-900">
           내 스마트폰을 24시간 0원 문자 발송 &amp; 시트 수신 서버로 활용하기
         </h3>
         <p className="text-xs text-slate-600 leading-relaxed max-w-3xl">
           복잡한 코드를 복사하거나 붙여넣을 필요가 없습니다. 
-          스마트폰에 <strong>SheetBot Agent2</strong> 앱을 설치하고 QR 코드를 1초 만에 스캔하면,
+          스마트폰에 <strong>시트봇 에이전트(SheetBot Agent)</strong> 앱을 설치하고 QR 코드를 1초 만에 스캔하면,
           구글 스프레드시트와 스마트폰이 안전하게 1:1로 결합되어 완벽한 양방향 문자 자동화가 시작됩니다.
         </p>
       </div>
