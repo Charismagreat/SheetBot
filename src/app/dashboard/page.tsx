@@ -405,7 +405,7 @@ export default function DashboardPage() {
   const [isRealtimeLive, setIsRealtimeLive] = useState(false);
 
   useEffect(() => {
-    if (status !== "authenticated" && !session?.user?.email) return;
+    if (status !== "authenticated") return;
 
     let eventSource: EventSource | null = null;
     let reconnectTimer: any = null;
@@ -711,9 +711,6 @@ export default function DashboardPage() {
                     <span>회원 전용 보관</span>
                   </span>
                 </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  계정: <span className="font-mono text-slate-600">{session?.user?.email || ""}</span> (이지데스크 백엔드 클라우드와 안전하게 동기화됨)
-                </p>
               </div>
             </div>
 
