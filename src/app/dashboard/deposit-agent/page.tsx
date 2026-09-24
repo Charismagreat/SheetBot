@@ -30,8 +30,18 @@ import { apiFetch } from "@/lib/api";
 function formatDateTime(dateStr?: string | null): string {
   if (!dateStr) return "-";
   try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return String(dateStr).replace("T", " ").slice(0, 16);
+    const raw = String(dateStr).trim();
+    // 타임존(Z 또는 +)이 없으면 UTC 기준 문자열로 보정하여 사용자 로컬 한국 시각(KST)으로 자동 변환
+    const normalized = raw.includes("Z") || raw.includes("+")
+      ? raw
+      : raw.replace(" ", "T") + "Z";
+    const d = new Date(normalized);
+    if (isNaN(d.getTime())) return raw.replace("T", " ").slice(0, 16);
+
+    const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (diffSec >= 0 && diffSec < 60) return "방금 전";
+    if (diffSec >= 60 && diffSec < 3600) return `${Math.floor(diffSec / 60)}분 전`;
+
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     const dd = String(d.getDate()).padStart(2, "0");
@@ -630,14 +640,27 @@ export default function DepositAgentPage() {
                         <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
                           <div className="flex items-center gap-1.5">
                             <span className="text-slate-400">배터리</span>
-                            {d.battery_level !== undefined && d.battery_level !== null ? (
-                              <span className="font-mono font-bold text-slate-700 inline-flex items-center gap-0.5 px-1.5 py-0.2 bg-slate-100 rounded text-[10px]">
-                                {d.is_charging ? <span className="text-amber-500 font-black text-[11px]">⚡</span> : null}
-                                {d.battery_level}%
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 text-[10px]">100%</span>
-                            )}
+                            {(() => {
+                              const bVal = d.battery_level !== undefined && d.battery_level !== null
+                                ? Number(d.battery_level)
+                                : d.battery !== undefined && d.battery !== null
+                                ? Number(d.battery)
+                                : null;
+                              const isCharging = !!(d.is_charging || d.isCharging);
+                              if (bVal === null) return <span className="text-slate-400 text-[10px]">-</span>;
+                              return (
+                                <span className={`font-mono font-bold inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] border ${
+                                  bVal <= 20
+                                    ? "bg-rose-50 text-rose-700 border-rose-200"
+                                    : bVal <= 50
+                                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                                    : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                }`}>
+                                  {isCharging ? <span className="text-amber-500 font-black text-[11px]">⚡</span> : null}
+                                  {bVal}%
+                                </span>
+                              );
+                            })()}
                           </div>
                           <span className="font-mono font-bold text-slate-700">
                             {lastSignal ? formatDateTime(lastSignal) : "연결 대기 중"}
