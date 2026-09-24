@@ -32,9 +32,11 @@ export default function Navbar() {
   const [aiHelpEnabled, setAiHelpEnabled] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [supportDropdownOpen, setSupportDropdownOpen] = useState(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const profileDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -90,6 +92,9 @@ export default function Navbar() {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setSupportDropdownOpen(false);
+      }
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target as Node)) {
+        setProfileDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -333,77 +338,134 @@ export default function Navbar() {
                 </>
               )}
 
-              {/* 유저 프로필 카드 (컴팩트) */}
-              <div
-                className="flex items-center gap-2 pl-2 border-l border-slate-200 shrink-0 whitespace-nowrap"
-                data-easybot-hint="회원 세션: 로그인된 구글 계정 정보입니다."
-              >
-                {session.user.image ? (
-                  <Image
-                    src={session.user.image}
-                    alt={session.user.name || "User"}
-                    width={30}
-                    height={30}
-                    unoptimized
-                    className="rounded-full border border-slate-200 object-cover shadow-2xs shrink-0"
-                    referrerPolicy="no-referrer"
-                    title={session.user.email || ""}
-                  />
-                ) : (
-                  <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs border border-emerald-200 shrink-0">
-                    <User className="w-3.5 h-3.5" />
-                  </div>
-                )}
+              {/* 유저 프로필 카드 & 드롭다운 메뉴 */}
+              <div className="relative shrink-0 pl-1 border-l border-slate-200" ref={profileDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                  className="flex items-center gap-1.5 p-1 rounded-2xl hover:bg-slate-100/80 active:bg-slate-200/60 transition-all border border-transparent hover:border-slate-200/80 cursor-pointer whitespace-nowrap"
+                  title="내 계정 정보 및 설정 (클릭 시 메뉴 열기)"
+                  data-easybot-hint="회원 세션: 로그인된 구글 계정 정보입니다. 클릭하면 로그아웃 및 계정 삭제 메뉴가 표시됩니다."
+                >
+                  {session.user.image ? (
+                    <Image
+                      src={session.user.image}
+                      alt={session.user.name || "User"}
+                      width={28}
+                      height={28}
+                      unoptimized
+                      className="rounded-full border border-slate-200 object-cover shadow-2xs shrink-0"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs border border-emerald-200 shrink-0">
+                      <User className="w-3.5 h-3.5" />
+                    </div>
+                  )}
 
-                <div className="hidden xl:block text-left whitespace-nowrap">
-                  <div className="text-xs font-bold text-slate-800 leading-tight flex items-center gap-1">
-                    <span className="truncate max-w-[90px]">{session.user.name || "구글 회원"}</span>
+                  <div className="hidden xl:flex items-center gap-1 text-left whitespace-nowrap">
+                    <span className="text-xs font-bold text-slate-800 truncate max-w-[85px]">
+                      {session.user.name || "구글 회원"}
+                    </span>
                     <ShieldCheck className="w-3 h-3 text-emerald-500 shrink-0" />
                   </div>
-                </div>
 
-                <button
-                  onClick={async () => {
-                    const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
-                    const match = currentPath.match(/^(\/t\/[^\/]+\/p\/[^\/]+)/);
-                    const prefix = match ? match[1] : "";
-
-                    try {
-                      await fetch(`${prefix}/api/auth/force-logout`, { method: "POST" }).catch(() => {});
-                    } catch {}
-
-                    try {
-                      await signOut({ redirect: false }).catch(() => {});
-                    } catch {}
-
-                    try {
-                      const sessionCookies = ["next-auth.session-token", "__Secure-next-auth.session-token"];
-                      sessionCookies.forEach((name) => {
-                        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;`;
-                        if (prefix) {
-                          document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${prefix};`;
-                          document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${prefix}/;`;
-                        }
-                      });
-                    } catch {}
-
-                    window.location.href = `${prefix}/`;
-                  }}
-                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer shrink-0"
-                  title="로그아웃"
-                  data-easybot-hint="로그아웃: 현재 구글 계정 세션을 종료합니다."
-                >
-                  <LogOut className="w-4 h-4" />
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 shrink-0 ${
+                      profileDropdownOpen ? "rotate-180 text-slate-700" : ""
+                    }`}
+                  />
                 </button>
 
-                <button
-                  onClick={() => setIsWithdrawModalOpen(true)}
-                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer shrink-0"
-                  title="계정 삭제 (영구 파기)"
-                  data-easybot-hint="계정 삭제: 모든 API 키, 연동 주소, 스케줄을 즉시 100% 영구 삭제 및 차단합니다."
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {/* 프로필 팝오버 드롭다운 메뉴 */}
+                {profileDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200/90 py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    {/* 계정 정보 헤더 */}
+                    <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/50">
+                      <div className="flex items-center gap-2.5">
+                        {session.user.image ? (
+                          <Image
+                            src={session.user.image}
+                            alt=""
+                            width={32}
+                            height={32}
+                            unoptimized
+                            className="rounded-full border border-slate-200 object-cover shrink-0"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs shrink-0">
+                            <User className="w-4 h-4" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold text-slate-900 truncate">
+                            {session.user.name || "구글 회원"}
+                          </div>
+                          <div className="text-[11px] text-slate-500 truncate" title={session.user.email || ""}>
+                            {session.user.email}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-lg w-fit">
+                        <ShieldCheck className="w-3 h-3 text-emerald-500 shrink-0" />
+                        <span>Google Workspace 보안 세션</span>
+                      </div>
+                    </div>
+
+                    {/* 액션 메뉴 */}
+                    <div className="p-1 space-y-0.5">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setProfileDropdownOpen(false);
+                          const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+                          const match = currentPath.match(/^(\/t\/[^\/]+\/p\/[^\/]+)/);
+                          const prefix = match ? match[1] : "";
+
+                          try {
+                            await fetch(`${prefix}/api/auth/force-logout`, { method: "POST" }).catch(() => {});
+                          } catch {}
+
+                          try {
+                            await signOut({ redirect: false }).catch(() => {});
+                          } catch {}
+
+                          try {
+                            const sessionCookies = ["next-auth.session-token", "__Secure-next-auth.session-token"];
+                            sessionCookies.forEach((name) => {
+                              document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;`;
+                              if (prefix) {
+                                document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${prefix};`;
+                                document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${prefix}/;`;
+                              }
+                            });
+                          } catch {}
+
+                          window.location.href = `${prefix}/`;
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer text-left"
+                      >
+                        <LogOut className="w-4 h-4 text-slate-500 shrink-0" />
+                        <span>로그아웃</span>
+                      </button>
+
+                      <div className="border-t border-slate-100 my-1" />
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProfileDropdownOpen(false);
+                          setIsWithdrawModalOpen(true);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer text-left group"
+                      >
+                        <Trash2 className="w-4 h-4 text-rose-500 group-hover:text-rose-600 shrink-0" />
+                        <span>계정 삭제 (영구 파기)</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
