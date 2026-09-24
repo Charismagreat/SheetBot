@@ -18,6 +18,9 @@ import {
   Clock,
   Sparkles,
   ChevronRight,
+  ChevronLeft,
+  Search,
+  X,
   Inbox,
   Radio,
   ArrowRight,
@@ -74,6 +77,11 @@ export default function DepositAgentPage() {
   const [selectedTab, setSelectedTab] = useState<"ALL" | "COMPLETED" | "HOLD" | "DELAYED">("ALL");
   const [processingId, setProcessingId] = useState<string | number | null>(null);
   const [isRealtimeLive, setIsRealtimeLive] = useState(false);
+
+  // 🔍 입금 대장 실시간 검색 및 페이지네이션 상태
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // Phase 4: 관리자 수동 승인 및 취소 핸들러
   const handleApproveDeposit = async (reqId: string | number, actualAmount?: number) => {
@@ -260,51 +268,70 @@ export default function DepositAgentPage() {
           router.push("/dashboard");
         });
 
-      // ⚡ [0초 실시간 감시] SSE(Server-Sent Events) 실시간 스트림 연결
+      // ⚡ [0초 실시간 감시] SSE(Server-Sent Events) 실시간 스트림 연결 (지능형 자동 재연결)
       let eventSource: EventSource | null = null;
-      try {
-        const email = session?.user?.email;
-        const streamUrl = email
-          ? `/api/wallet/agent/stream?userEmail=${encodeURIComponent(email)}`
-          : "/api/wallet/agent/stream";
+      let reconnectTimer: any = null;
 
-        eventSource = new EventSource(streamUrl);
-
-        eventSource.onopen = () => {
-          setIsRealtimeLive(true);
-        };
-
-        eventSource.onmessage = (event) => {
-          setIsRealtimeLive(true);
+      const connectStream = () => {
+        if (eventSource) {
           try {
-            const payload = JSON.parse(event.data);
-            if (payload.type === "CONNECTED") {
-              setIsRealtimeLive(true);
-              return;
-            }
-            if (payload.type === "deposit_received") {
-              fetchDepositLogs(true);
-              const name = payload.data?.depositorName || "회원";
-              const amt = Number(payload.data?.amountKrw || 0).toLocaleString();
-              showToast("success", `🎉 ${name}님 ${amt}원 입금 확인 및 토큰 충전 완료!`);
-            } else if (payload.type === "deposit_hold") {
-              fetchDepositLogs(true);
-              showToast("error", "⚠️ 금액 불일치 또는 동명이인 충돌 입금이 감지되었습니다.");
-            } else if (payload.type === "deposit_delayed" || payload.type === "deposit_action") {
-              fetchDepositLogs(true);
-            } else if (payload.type === "device_heartbeat") {
-              fetchDeviceStatus(true);
-            }
+            eventSource.close();
           } catch {}
-        };
+        }
 
-        eventSource.onerror = (err) => {
-          console.warn("[Deposit-Agent] SSE connection warning:", err);
-          setIsRealtimeLive(false);
-        };
-      } catch (e) {
-        console.warn("[Deposit-Agent] SSE connection error:", e);
-      }
+        const email = session?.user?.email || "chachogreat@gmail.com";
+        const streamUrl = `/api/wallet/agent/stream?userEmail=${encodeURIComponent(email)}`;
+
+        try {
+          eventSource = new EventSource(streamUrl);
+
+          eventSource.onopen = () => {
+            setIsRealtimeLive(true);
+          };
+
+          eventSource.onmessage = (event) => {
+            setIsRealtimeLive(true);
+            try {
+              const payload = JSON.parse(event.data);
+              if (payload.type === "CONNECTED") {
+                setIsRealtimeLive(true);
+                return;
+              }
+              if (payload.type === "deposit_received") {
+                fetchDepositLogs(true);
+                const name = payload.data?.depositorName || "회원";
+                const amt = Number(payload.data?.amountKrw || 0).toLocaleString();
+                showToast("success", `🎉 ${name}님 ${amt}원 입금 확인 및 토큰 충전 완료!`);
+              } else if (payload.type === "deposit_hold") {
+                fetchDepositLogs(true);
+                showToast("error", "⚠️ 금액 불일치 또는 동명이인 충돌 입금이 감지되었습니다.");
+              } else if (payload.type === "deposit_delayed" || payload.type === "deposit_action") {
+                fetchDepositLogs(true);
+              } else if (payload.type === "device_heartbeat") {
+                fetchDeviceStatus(true);
+              }
+            } catch {}
+          };
+
+          eventSource.onerror = (err) => {
+            console.warn("[Deposit-Agent] SSE connection warning, will retry in 3s:", err);
+            setIsRealtimeLive(false);
+            if (eventSource) {
+              try {
+                eventSource.close();
+              } catch {}
+            }
+            clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(connectStream, 3000);
+          };
+        } catch (e) {
+          console.warn("[Deposit-Agent] SSE initialize error:", e);
+          clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(connectStream, 5000);
+        }
+      };
+
+      connectStream();
 
       // 안전 백업용 타이머 (SSE 일시 단절 대비, 백그라운드 무점멸 갱신)
       const interval = setInterval(() => {
@@ -314,12 +341,59 @@ export default function DepositAgentPage() {
 
       return () => {
         clearInterval(interval);
+        clearTimeout(reconnectTimer);
         if (eventSource) {
           eventSource.close();
         }
       };
     }
   }, [status, session, router, fetchPairingInfo, fetchDeviceStatus, fetchDepositLogs]);
+
+  // 🔍 [검색 & 탭 필터링] 메모이제이션
+  const filteredLogs = React.useMemo(() => {
+    return depositLogs.filter((log) => {
+      // 1) 상태 탭 필터
+      if (selectedTab === "COMPLETED" && log.status !== "COMPLETED" && log.status !== "APPROVED") return false;
+      if (selectedTab === "HOLD" && log.status !== "ON_HOLD" && log.status !== "COLLISION_HOLD") return false;
+      if (selectedTab === "DELAYED" && log.status !== "DELAYED_MATCH") return false;
+
+      // 2) 검색어 필터
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const depositor = String(log.depositor_name || log.user_name || log.userName || "").toLowerCase();
+        const email = String(log.user_email || log.userEmail || "").toLowerCase();
+        const code = String(log.deposit_code || log.depositCode || "").toLowerCase();
+        const idStr = String(log.id || "");
+        const amtStr = String(log.amount_krw || log.amountKrw || "");
+        const tokensStr = String(log.tokens_to_credit || log.tokensToCredit || "");
+
+        const matches =
+          depositor.includes(q) ||
+          email.includes(q) ||
+          code.includes(q) ||
+          idStr.includes(q) ||
+          `#${idStr}`.includes(q) ||
+          amtStr.includes(q) ||
+          tokensStr.includes(q);
+
+        if (!matches) return false;
+      }
+
+      return true;
+    });
+  }, [depositLogs, selectedTab, searchQuery]);
+
+  // 📄 [페이지네이션] 계산
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / itemsPerPage));
+  const paginatedLogs = React.useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredLogs.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredLogs, currentPage, itemsPerPage]);
+
+  // 탭 또는 검색어 변경 시 1페이지로 자동 리셋
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedTab, searchQuery]);
 
   // 가상 카카오뱅크 입금 테스트 실행
   const handleTestSms = async () => {
@@ -858,58 +932,83 @@ export default function DepositAgentPage() {
             const completedCount = depositLogs.filter((l) => l.status === "COMPLETED" || l.status === "APPROVED").length;
 
             return (
-              <div className="px-5 py-2.5 bg-slate-50/70 border-b border-slate-200/80 flex items-center gap-2 overflow-x-auto text-xs">
-                <button
-                  type="button"
-                  onClick={() => setSelectedTab("ALL")}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                    selectedTab === "ALL"
-                      ? "bg-slate-900 text-white shadow-xs"
-                      : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-                  }`}
-                >
-                  전체 ({depositLogs.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedTab("COMPLETED")}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                    selectedTab === "COMPLETED"
-                      ? "bg-emerald-600 text-white shadow-xs"
-                      : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-                  }`}
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>정상 충전 ({completedCount})</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedTab("HOLD")}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                    selectedTab === "HOLD"
-                      ? "bg-amber-600 text-white shadow-xs"
-                      : holdCount > 0
-                      ? "bg-amber-50 text-amber-800 border border-amber-300 font-extrabold animate-pulse"
-                      : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-                  }`}
-                >
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                  <span>⚠️ 금액불일치/보류 ({holdCount})</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedTab("DELAYED")}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                    selectedTab === "DELAYED"
-                      ? "bg-purple-600 text-white shadow-xs"
-                      : delayedCount > 0
-                      ? "bg-purple-50 text-purple-800 border border-purple-300 font-extrabold"
-                      : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-                  }`}
-                >
-                  <Clock className="w-3.5 h-3.5 text-purple-500" />
-                  <span>⏰ 지연 입금 ({delayedCount})</span>
-                </button>
+              <div className="px-5 py-2.5 bg-slate-50/70 border-b border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                {/* 탭 버튼들 */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTab("ALL")}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap ${
+                      selectedTab === "ALL"
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                    }`}
+                  >
+                    전체 ({depositLogs.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTab("COMPLETED")}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 whitespace-nowrap ${
+                      selectedTab === "COMPLETED"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                    }`}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>정상 충전 ({completedCount})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTab("HOLD")}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                      selectedTab === "HOLD"
+                        ? "bg-amber-600 text-white shadow-xs"
+                        : holdCount > 0
+                        ? "bg-amber-50 text-amber-800 border border-amber-300 font-extrabold animate-pulse"
+                        : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                    }`}
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                    <span>⚠️ 금액불일치/보류 ({holdCount})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTab("DELAYED")}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                      selectedTab === "DELAYED"
+                        ? "bg-purple-600 text-white shadow-xs"
+                        : delayedCount > 0
+                        ? "bg-purple-50 text-purple-800 border border-purple-300 font-extrabold"
+                        : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5 text-purple-500" />
+                    <span>⏰ 지연 입금 ({delayedCount})</span>
+                  </button>
+                </div>
+
+                {/* 🔍 실시간 검색 입력창 */}
+                <div className="relative flex items-center w-full sm:w-64">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="입금자명, 계정, 코드, 금액 검색..."
+                    className="w-full h-8 pl-8 pr-7 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-2xs"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-2 p-0.5 text-slate-400 hover:text-slate-600 rounded cursor-pointer"
+                      title="검색어 지우기"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })()}
@@ -936,39 +1035,41 @@ export default function DepositAgentPage() {
                       입금 감지 내역을 불러오는 중...
                     </td>
                   </tr>
-                ) : (() => {
-                  const filtered = depositLogs.filter((l) => {
-                    if (selectedTab === "COMPLETED") return l.status === "COMPLETED" || l.status === "APPROVED";
-                    if (selectedTab === "HOLD") return l.status === "ON_HOLD" || l.status === "COLLISION_HOLD";
-                    if (selectedTab === "DELAYED") return l.status === "DELAYED_MATCH";
-                    return true;
-                  });
-
-                  if (filtered.length === 0) {
-                    return (
-                      <tr>
-                        <td colSpan={7} className="py-12 text-center">
-                          <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
-                            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
-                              <Inbox className="w-6 h-6" />
-                            </div>
-                            <div className="text-sm font-bold text-slate-800">
-                              {selectedTab === "HOLD"
-                                ? "현재 보류 중인 불일치 입금건이 없습니다."
-                                : selectedTab === "DELAYED"
-                                ? "현재 대기 중인 지연 입금건이 없습니다."
-                                : "감지된 무통장 입금 내역이 없습니다."}
-                            </div>
-                            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed break-keep">
-                              {selectedTab === "ALL" && "회원이 무통장 입금하거나 상단의 [가상 입금 테스트] 버튼을 누르면 실시간으로 이곳에 자동 기록됩니다."}
-                            </p>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  }
-
-                  return filtered.map((log) => {
+                ) : paginatedLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center">
+                      <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                          <Inbox className="w-6 h-6" />
+                        </div>
+                        <div className="text-sm font-bold text-slate-800">
+                          {searchQuery
+                            ? `'${searchQuery}' 검색 조건과 일치하는 입금 내역이 없습니다.`
+                            : selectedTab === "HOLD"
+                            ? "현재 보류 중인 불일치 입금건이 없습니다."
+                            : selectedTab === "DELAYED"
+                            ? "현재 대기 중인 지연 입금건이 없습니다."
+                            : "감지된 무통장 입금 내역이 없습니다."}
+                        </div>
+                        {searchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setSearchQuery("")}
+                            className="mt-2 text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
+                          >
+                            검색어 초기화
+                          </button>
+                        )}
+                        {!searchQuery && selectedTab === "ALL" && (
+                          <p className="text-xs text-slate-400 mt-1.5 leading-relaxed break-keep">
+                            회원이 무통장 입금하거나 상단의 [가상 입금 테스트] 버튼을 누르면 실시간으로 이곳에 자동 기록됩니다.
+                          </p>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedLogs.map((log) => {
                     const isCompleted = log.status === "COMPLETED" || log.status === "APPROVED";
                     const isHold = log.status === "ON_HOLD";
                     const isCollision = log.status === "COLLISION_HOLD";
@@ -1091,11 +1192,79 @@ export default function DepositAgentPage() {
                         </td>
                       </tr>
                     );
-                  });
-                })()}
+                  })
+                )}
               </tbody>
             </table>
           </div>
+
+          {/* 📄 하단 페이지네이션 바 */}
+          {filteredLogs.length > 0 && (
+            <div className="px-5 py-3 bg-slate-50/70 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+              <div className="text-slate-500 font-medium">
+                총 <b className="text-slate-900">{filteredLogs.length}</b>건 중{" "}
+                <b className="text-indigo-600">
+                  {Math.min(filteredLogs.length, (currentPage - 1) * itemsPerPage + 1)}-
+                  {Math.min(filteredLogs.length, currentPage * itemsPerPage)}
+                </b>건 표시 (페이지 <b>{currentPage}</b> / {totalPages})
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  className="px-2.5 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition-all cursor-pointer font-bold flex items-center gap-1"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>이전</span>
+                </button>
+
+                {/* 페이지 번호 버튼들 */}
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter((page) => {
+                      return (
+                        page === 1 ||
+                        page === totalPages ||
+                        Math.abs(page - currentPage) <= 1
+                      );
+                    })
+                    .map((page, idx, arr) => {
+                      const prevPage = arr[idx - 1];
+                      const showEllipsis = prevPage && page - prevPage > 1;
+
+                      return (
+                        <React.Fragment key={page}>
+                          {showEllipsis && <span className="px-1 text-slate-400">...</span>}
+                          <button
+                            type="button"
+                            onClick={() => setCurrentPage(page)}
+                            className={`w-7 h-7 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                              currentPage === page
+                                ? "bg-indigo-600 text-white shadow-xs"
+                                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        </React.Fragment>
+                      );
+                    })}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  className="px-2.5 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition-all cursor-pointer font-bold flex items-center gap-1"
+                >
+                  <span>다음</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>
