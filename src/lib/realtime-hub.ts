@@ -35,8 +35,8 @@ interface StreamClient {
 // 테이블과 토픽 간의 매핑 관계
 const TABLE_TOPIC_MAP: Record<string, RealtimeTopic[]> = {
   sheetbot_deposit_requests: ['deposit', 'all'],
-  sheetbot_sms_logs: ['sms', 'all'],
-  sheetbot_user_devices: ['sms', 'all'],
+  sheetbot_sms_logs: ['sms', 'deposit', 'all'],
+  sheetbot_user_devices: ['sms', 'deposit', 'all'],
   sheetbot_smart_rules: ['sms', 'all'],
   sheetbot_schedules: ['schedules', 'all'],
   sheetbot_projects: ['projects', 'all'],
