@@ -310,7 +310,7 @@ export default function DepositAgentPage() {
                 showToast("error", "⚠️ 금액 불일치 또는 동명이인 충돌 입금이 감지되었습니다.");
               } else if (payload.type === "deposit_delayed" || payload.type === "deposit_action") {
                 fetchDepositLogs(true);
-              } else if (payload.type === "device_heartbeat") {
+              } else if (payload.type === "device_heartbeat" || payload.tableName === "sheetbot_user_devices") {
                 fetchDeviceStatus(true);
               }
             } catch {}
