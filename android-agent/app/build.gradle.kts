@@ -11,8 +11,8 @@ android {
         applicationId = "cloud.sheetbot.agent"
         minSdk = 24
         targetSdk = 34
-        versionCode = 9
-        versionName = "1.5.2"
+        versionCode = 11
+        versionName = "1.6.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

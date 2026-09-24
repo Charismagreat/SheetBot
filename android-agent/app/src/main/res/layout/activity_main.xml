@@ -25,21 +25,23 @@
             android:layout_marginBottom="20dp">
 
             <TextView
+                android:id="@+id/tvHeaderTitle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="SheetBot Agent M"
+                android:text="SheetBot Agent"
                 android:textColor="#FFFFFF"
                 android:textSize="22sp"
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/tvHeaderVersion"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_badge_version"
                 android:paddingHorizontal="10dp"
                 android:paddingVertical="4dp"
-                android:text="v1.5"
+                android:text="v1.6"
                 android:textColor="#10B981"
                 android:textSize="12sp"
                 android:textStyle="bold" />
