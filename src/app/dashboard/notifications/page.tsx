@@ -266,10 +266,10 @@ export default function NotificationsPage() {
 
       const email = session?.user?.email || (typeof window !== "undefined" ? localStorage.getItem("sheetbot_user_email") || "" : "");
       const basePath = getEgdeskBasePath();
-      const streamUrl = `${basePath}/api/realtime/stream?topic=all${email ? `&userEmail=${encodeURIComponent(email)}` : ""}`;
+      const streamUrl = `${basePath}/api/realtime/stream?topic=all&userEmail=${encodeURIComponent(email)}`;
 
       try {
-        eventSource = new EventSource(streamUrl, { withCredentials: true });
+        eventSource = new EventSource(streamUrl);
 
         eventSource.onopen = () => {
           setIsRealtimeLive(true);
