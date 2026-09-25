@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
 import Image from "next/image";
 import {
   Bot,
@@ -23,53 +22,22 @@ import {
   Smartphone,
   Trash2,
 } from "lucide-react";
-import { apiFetch } from "@/lib/api";
 import SheetBotLogo from "@/components/SheetBotLogo";
 import WithdrawModal from "@/components/WithdrawModal";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function Navbar() {
   const pathname = usePathname();
-  const { data: session, status } = useSession();
+  const { user, isLoggedIn, isLoading, isAdmin, logout } = useAuth();
+
   // 기본값: 꺼짐(false)
   const [aiHelpEnabled, setAiHelpEnabled] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [supportDropdownOpen, setSupportDropdownOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    const email = session?.user?.email?.toLowerCase().trim();
-    if (!email) {
-      setIsAdmin(false);
-      return;
-    }
-
-    // 기본 관리자 계정 즉시 선제 활성화 (API 호출 전 깜빡임 방지)
-    if (email === "chachogreat@gmail.com" || email === "charismagreat@gmail.com") {
-      setIsAdmin(true);
-    }
-
-    apiFetch("/api/admin/check")
-      .then((res) => res.json())
-      .then((data) => {
-        if (isMounted && data.success) {
-          setIsAdmin(Boolean(data.isAdmin));
-        }
-      })
-      .catch(() => {
-        if (isMounted && !(email === "chachogreat@gmail.com" || email === "charismagreat@gmail.com")) {
-          setIsAdmin(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [session?.user?.email]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -219,7 +187,7 @@ export default function Navbar() {
                       </div>
                       <div>
                         <div className="text-xs font-black">사용 가이드</div>
-                        <div className="text-[10.5px] text-slate-400 font-normal">3분 만에 마스터하는 5단계</div>
+                        <div className="text-[10.5px] text-slate-400 font-normal">시트봇 100% 활용 노하우</div>
                       </div>
                     </Link>
 
@@ -233,7 +201,7 @@ export default function Navbar() {
                       </div>
                       <div>
                         <div className="text-xs font-black">자주 묻는 질문 (FAQ)</div>
-                        <div className="text-[10.5px] text-slate-400 font-normal">사용법, 요금 및 보안 정책</div>
+                        <div className="text-[10.5px] text-slate-400 font-normal">비용, 보안, 자동화 한계</div>
                       </div>
                     </Link>
 
@@ -275,9 +243,9 @@ export default function Navbar() {
 
         {/* 우측 네비게이션 제어 영역 */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 whitespace-nowrap">
-          {status === "loading" ? (
+          {isLoading ? (
             <div className="w-20 h-8 bg-slate-100 animate-pulse rounded-xl" />
-          ) : session?.user ? (
+          ) : isLoggedIn && user ? (
             <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 whitespace-nowrap">
               {/* 내 워크스페이스 바로가기 */}
               <Link
@@ -291,7 +259,7 @@ export default function Navbar() {
 
               {isAdmin && (
                 <>
-                  {/* 관리자 전용: SheetBot Agent M (무통장 입금 자동감지 시스템) 바로가기 (단, 이용자용 에이전트 전용 화면인 /dashboard/notifications 에서는 숨김 처리) */}
+                  {/* 관리자 전용: SheetBot Agent M (무통장 입금 자동감지 시스템) 바로가기 */}
                   {pathname !== "/dashboard/notifications" && (
                     <Link
                       href="/dashboard/deposit-agent"
@@ -326,10 +294,10 @@ export default function Navbar() {
                   title="내 계정 정보 및 설정 (클릭 시 메뉴 열기)"
                   data-easybot-hint="회원 세션: 로그인된 구글 계정 정보입니다. 클릭하면 로그아웃 및 계정 삭제 메뉴가 표시됩니다."
                 >
-                  {session.user.image ? (
+                  {user.image ? (
                     <Image
-                      src={session.user.image}
-                      alt={session.user.name || "User"}
+                      src={user.image}
+                      alt={user.name || "User"}
                       width={28}
                       height={28}
                       unoptimized
@@ -344,7 +312,7 @@ export default function Navbar() {
 
                   <div className="hidden xl:flex items-center gap-1 text-left whitespace-nowrap">
                     <span className="text-xs font-bold text-slate-800 truncate max-w-[85px]">
-                      {session.user.name || "구글 회원"}
+                      {user.name || "구글 회원"}
                     </span>
                     <ShieldCheck className="w-3 h-3 text-emerald-500 shrink-0" />
                   </div>
@@ -362,9 +330,9 @@ export default function Navbar() {
                     {/* 계정 정보 헤더 */}
                     <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/50">
                       <div className="flex items-center gap-2.5">
-                        {session.user.image ? (
+                        {user.image ? (
                           <Image
-                            src={session.user.image}
+                            src={user.image}
                             alt=""
                             width={32}
                             height={32}
@@ -379,10 +347,10 @@ export default function Navbar() {
                         )}
                         <div className="min-w-0 flex-1">
                           <div className="text-xs font-bold text-slate-900 truncate">
-                            {session.user.name || "구글 회원"}
+                            {user.name || "구글 회원"}
                           </div>
-                          <div className="text-[11px] text-slate-500 truncate" title={session.user.email || ""}>
-                            {session.user.email}
+                          <div className="text-[11px] text-slate-500 truncate" title={user.email || ""}>
+                            {user.email}
                           </div>
                         </div>
                       </div>
@@ -426,30 +394,7 @@ export default function Navbar() {
                         type="button"
                         onClick={async () => {
                           setProfileDropdownOpen(false);
-                          const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
-                          const match = currentPath.match(/^(\/t\/[^\/]+\/p\/[^\/]+)/);
-                          const prefix = match ? match[1] : "";
-
-                          try {
-                            await fetch(`${prefix}/api/auth/force-logout`, { method: "POST" }).catch(() => {});
-                          } catch {}
-
-                          try {
-                            await signOut({ redirect: false }).catch(() => {});
-                          } catch {}
-
-                          try {
-                            const sessionCookies = ["next-auth.session-token", "__Secure-next-auth.session-token"];
-                            sessionCookies.forEach((name) => {
-                              document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;`;
-                              if (prefix) {
-                                document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${prefix};`;
-                                document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${prefix}/;`;
-                              }
-                            });
-                          } catch {}
-
-                          window.location.href = `${prefix}/`;
+                          await logout();
                         }}
                         className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer text-left"
                       >
@@ -581,11 +526,11 @@ export default function Navbar() {
             </Link>
           </div>
 
-          {session?.user && (
+          {isLoggedIn && user && (
             <div className="space-y-2 border-t border-slate-100 pt-3">
               <div className="flex items-center justify-between px-2">
                 <div className="text-xs font-bold text-slate-800 truncate">
-                  {session.user.name || session.user.email}
+                  {user.name || user.email}
                 </div>
                 <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                   Google 인증됨
@@ -595,11 +540,7 @@ export default function Navbar() {
                 <button
                   onClick={async () => {
                     setMobileMenuOpen(false);
-                    try {
-                      await apiFetch(`/api/auth/force-logout`, { method: "POST" }).catch(() => {});
-                      await signOut({ redirect: false }).catch(() => {});
-                    } catch {}
-                    window.location.href = "/";
+                    await logout();
                   }}
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition-colors"
                 >
@@ -626,7 +567,7 @@ export default function Navbar() {
       <WithdrawModal
         isOpen={isWithdrawModalOpen}
         onClose={() => setIsWithdrawModalOpen(false)}
-        userEmail={session?.user?.email || ""}
+        userEmail={user?.email || ""}
       />
     </header>
   );
