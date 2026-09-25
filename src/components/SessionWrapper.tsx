@@ -3,6 +3,7 @@
 import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from "react";
 import { SessionProvider } from "next-auth/react";
+import { AuthAdminProvider } from "@/contexts/AuthAdminContext";
 
 function getInitialBasePath() {
   if (typeof window !== "undefined") {
@@ -76,7 +77,9 @@ export default function SessionWrapper({ children }: { children: React.ReactNode
       refetchOnWindowFocus={false}
       refetchWhenOffline={false}
     >
-      {children}
+      <AuthAdminProvider>
+        {children}
+      </AuthAdminProvider>
     </SessionProvider>
   );
 }
