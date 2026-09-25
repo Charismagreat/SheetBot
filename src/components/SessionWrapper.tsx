@@ -29,16 +29,25 @@ export default function SessionWrapper({ children }: { children: React.ReactNode
     }
   }, [basePath]);
 
-  // 플러그인이 발급한 이지데스크 Visitor 세션을 확인하여 NextAuth 세션과 자동 동기화
+  // 플러그인이 발급한 이지데스크 Visitor 세션을 확인하여 NextAuth 세션과 자동 동기화 (탭당 1회 한정)
   useEffect(() => {
     let isMounted = true;
 
     const syncVisitorSession = async () => {
       try {
+        if (typeof window === "undefined") return;
+        // 이미 이번 브라우저 탭 세션에서 동기화가 완료되었거나 세션 토큰 쿠키가 있으면 중복 호출 방지
+        const alreadySynced = sessionStorage.getItem("sheetbot_session_synced");
+        const hasSessionCookie = document.cookie.includes("next-auth.session-token");
+        if (alreadySynced || hasSessionCookie) {
+          return;
+        }
+
         const { getVisitorGoogleStatus } = await import("@/egdesk-visitor-google");
         const status = await getVisitorGoogleStatus();
 
-        if (status?.connected && status?.email) {
+        if (status?.connected && status?.email && isMounted) {
+          sessionStorage.setItem("sheetbot_session_synced", "true");
           // 백그라운드에서 NextAuth 세션 쿠키 발급 및 회원 동기화
           await apiFetch("/api/auth/google/session", {
             method: "POST",
