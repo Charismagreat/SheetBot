@@ -59,7 +59,6 @@ const nextConfig: any = {
       ]
     }
   },
-  reactStrictMode: true,
   async rewrites() {
     const egdeskApiUrl =
       process.env.NEXT_PUBLIC_EGDESK_API_URL ||

@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { apiFetch, getEgdeskBasePath } from "@/lib/api";
+import { onUserDataChanged, queryTable } from "@/lib/egdesk-helpers";
 
 function formatDateTime(dateStr?: string | null): string {
   if (!dateStr) return "-";
@@ -268,93 +269,21 @@ export default function DepositAgentPage() {
           router.push("/dashboard");
         });
 
-      // ⚡ [0초 실시간 감시] SSE(Server-Sent Events) 실시간 스트림 연결 (지능형 자동 재연결)
-      let eventSource: EventSource | null = null;
-      let reconnectTimer: any = null;
-
-      const connectStream = () => {
-        if (eventSource) {
-          try {
-            eventSource.close();
-          } catch {}
-        }
-
-        const email = session?.user?.email || "chachogreat@gmail.com";
-        const basePath = getEgdeskBasePath();
-        const streamUrl = `${basePath}/api/wallet/agent/stream?userEmail=${encodeURIComponent(email)}`;
-
-        try {
-          eventSource = new EventSource(streamUrl);
-
-          eventSource.onopen = () => {
-            setIsRealtimeLive(true);
-          };
-
-          eventSource.onmessage = (event) => {
-            setIsRealtimeLive(true);
-            try {
-              const payload = JSON.parse(event.data);
-              if (payload.type === "CONNECTED" || payload.type === "UPSTREAM_STATUS") {
-                setIsRealtimeLive(true);
-                return;
-              }
-              if (payload.type === "deposit_received" || payload.tableName === "sheetbot_deposit_requests") {
-                fetchDepositLogs(true);
-                if (payload.data?.depositorName) {
-                  const name = payload.data.depositorName;
-                  const amt = Number(payload.data?.amountKrw || 0).toLocaleString();
-                  showToast("success", `🎉 ${name}님 ${amt}원 입금 확인 및 토큰 충전 완료!`);
-                }
-              } else if (payload.type === "deposit_hold") {
-                fetchDepositLogs(true);
-                showToast("error", "⚠️ 금액 불일치 또는 동명이인 충돌 입금이 감지되었습니다.");
-              } else if (payload.type === "deposit_delayed" || payload.type === "deposit_action") {
-                fetchDepositLogs(true);
-              } else if (payload.type === "device_heartbeat" || payload.tableName === "sheetbot_user_devices") {
-                fetchDeviceStatus(true);
-              }
-            } catch {}
-          };
-
-          eventSource.onerror = (err) => {
-            console.warn("[Deposit-Agent] SSE connection warning, will retry in 3s:", err);
-            setIsRealtimeLive(false);
-            if (eventSource) {
-              try {
-                eventSource.close();
-              } catch {}
-            }
-            clearTimeout(reconnectTimer);
-            reconnectTimer = setTimeout(connectStream, 3000);
-          };
-        } catch (e) {
-          console.warn("[Deposit-Agent] SSE initialize error:", e);
-          clearTimeout(reconnectTimer);
-          reconnectTimer = setTimeout(connectStream, 5000);
-        }
-      };
-
-      connectStream();
-
-      // 💡 [실시간 연결 100% 보장]: 프록시(Nginx 등)의 버퍼링으로 SSE 이벤트 전달이 지연되더라도
-      // 관리자 세션 및 API 통신이 정상 확인되면 실시간 감시 라이브 뱃지를 1.5초 내에 초록색으로 활성화
-      const liveCheckTimer = setTimeout(() => {
+      // ⚡ [0초 실시간 감시] 이지데스크 공식 onUserDataChanged 연동 (입금 요청 및 에이전트 기기 실시간 감시)
+      const unsub = onUserDataChanged((event) => {
         setIsRealtimeLive(true);
-      }, 1500);
+        if (!event.tableName || event.tableName === "sheetbot_deposit_requests") {
+          fetchDepositLogs(true);
+        }
+        if (!event.tableName || event.tableName === "sheetbot_user_devices") {
+          fetchDeviceStatus(true);
+        }
+      });
 
-      // 안전 백업용 타이머 (SSE 일시 단절 대비, 백그라운드 무점멸 갱신)
-      const interval = setInterval(() => {
-        fetchDeviceStatus(true);
-        fetchDepositLogs(true);
-      }, 60000);
+      setIsRealtimeLive(true);
 
       return () => {
-        clearInterval(interval);
-        clearTimeout(reconnectTimer);
-        clearTimeout(liveCheckTimer);
-        if (eventSource) {
-          eventSource.close();
-        }
+        unsub();
       };
     }
   }, [status, session, router, fetchPairingInfo, fetchDeviceStatus, fetchDepositLogs]);
