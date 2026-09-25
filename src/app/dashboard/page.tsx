@@ -1,7 +1,7 @@
 "use client";
 
 import { apiFetch, getEgdeskBasePath } from '@/lib/api';
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -112,15 +112,7 @@ export default function DashboardPage() {
     isExisting: false,
   });
 
-  // ⚡ 서브 대시보드(알림 센터, 요금제 등) 0초 즉시 이동을 위한 선제 프리페치(Prefetch)
-  useEffect(() => {
-    try {
-      router.prefetch("/dashboard/notifications");
-      router.prefetch("/dashboard/pricing");
-      router.prefetch("/dashboard/ai-usage");
-      router.prefetch("/dashboard/settings");
-    } catch {}
-  }, [router]);
+  // ⚡ 브라우저 동시 소켓(최대 6개) 보존을 위해 초기 마운트 시 무차별 prefetch를 차단하고 사용자가 클릭/호버할 때만 로드하도록 최적화
 
   // 랜딩페이지에서 ?sheetUrl=... 또는 localStorage로 유입된 경우 1초 래핑 즉시 실행 및 전용 모달 오픈
   useEffect(() => {
@@ -345,7 +337,15 @@ export default function DashboardPage() {
         );
       }
     }).catch((err) => console.warn("Dashboard secondary metrics load note:", err));
-  }, [session?.user?.email]);
+  }, [user?.email, session?.user?.email]);
+
+  // ⚡ 세션 이메일이 확정(비동기 로드 완료)되는 즉시 0초 만에 본인 계정 데이터로 자동 재동기화
+  const activeUserEmail = user?.email || session?.user?.email || "";
+  useEffect(() => {
+    if (activeUserEmail) {
+      void fetchData();
+    }
+  }, [activeUserEmail, fetchData]);
 
   useEffect(() => {
     let isMounted = true;
@@ -425,6 +425,10 @@ export default function DashboardPage() {
 
   // ⚡ [0초 실시간 감시] 이지데스크 DB 왓처 실시간 스트림 연동 (프로젝트/스케줄/토큰)
   const [isRealtimeLive, setIsRealtimeLive] = useState(false);
+  const fetchDataRef = useRef(fetchData);
+  useEffect(() => {
+    fetchDataRef.current = fetchData;
+  }, [fetchData]);
 
   useEffect(() => {
     let effectiveEmail = user?.email || session?.user?.email || "";
@@ -471,7 +475,7 @@ export default function DashboardPage() {
                 payload.tableName === "sheetbot_users" ||
                 payload.tableName === "sheetbot_deposit_requests"
               ) {
-                fetchData();
+                fetchDataRef.current();
               }
             }
           } catch {}
@@ -503,7 +507,7 @@ export default function DashboardPage() {
       }
       clearTimeout(reconnectTimer);
     };
-  }, [user?.email, session?.user?.email, fetchData]);
+  }, [user?.email, session?.user?.email]);
 
   const [syncingProjectId, setSyncingProjectId] = useState<string | null>(null);
   const [syncingCodeProjectId, setSyncingCodeProjectId] = useState<string | null>(null);
