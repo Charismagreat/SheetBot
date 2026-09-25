@@ -13,42 +13,12 @@ import { realtimeHub, RealtimeTopic } from "@/lib/realtime-hub";
  * - topic: 'all' | 'sms' | 'schedules' | 'projects' | 'wallet' | 'deposit' (기본값: 'all')
  */
 export async function GET(req: NextRequest) {
-  try {
-    const url = new URL(req.url);
-    const queryTopic = (url.searchParams.get("topic") || "all") as RealtimeTopic;
-    const queryEmail = url.searchParams.get("userEmail") || url.searchParams.get("email");
-    let userEmail: string | null = (queryEmail && queryEmail.includes("@")) ? queryEmail.toLowerCase().trim() : null;
-
-    // queryEmail이 없을 때만 세션 쿠키/헤더 확인 (불필요한 I/O 블로킹 방지)
-    if (!userEmail) {
-      userEmail = await getCurrentUserEmail(req).catch(() => null);
-    }
-
-    const effectiveEmail = userEmail || "guest@sheetbot.local";
-
-    const stream = new ReadableStream({
-      start(controller) {
-        realtimeHub.registerClient(controller, req.signal, {
-          userEmail: effectiveEmail,
-          topic: queryTopic,
-        });
-      },
-    });
-
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream; charset=utf-8",
-        "Cache-Control": "no-cache, no-transform, no-store, must-revalidate",
-        Connection: "keep-alive",
-        "X-Accel-Buffering": "no", // NGINX 및 리버스 프록시 버퍼링 차단
-        "X-No-Compression": "1", // 프록시 압축 버퍼링 차단
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, OPTIONS",
-        "Access-Control-Allow-Headers": "*",
-      },
-    });
-  } catch (err: any) {
-    console.error("[Realtime-SSE] GET error:", err);
-    return new Response("Internal Server Error", { status: 500 });
-  }
+  // 공식 이지데스크 onUserDataChanged 브라우저 직접 SSE로 전면 대체됨.
+  // 레거시 클라이언트의 소켓 잠식 방지를 위해 즉시 연결 종료 응답을 반환합니다.
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+    },
+  });
 }
