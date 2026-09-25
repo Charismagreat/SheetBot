@@ -232,19 +232,27 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // 데이터 로드 (1단계: 필수 핵심 데이터 즉시 로드 -> 2단계: 보조 메트릭 백그라운드 지연 로드)
-  const fetchData = useCallback(async () => {
-    // SWR 캐시가 없는 경우에만 로딩 스피너 표출
-    if (!projects.length && !wallet) {
-      setLoading(true);
-    }
+  // 동시 중복 패칭 방지 가드 및 이메일 추적 Ref
+  const isFetchingRef = useRef(false);
+  const lastFetchedEmailRef = useRef<string>("");
 
+  // 데이터 로드 (1단계: 필수 핵심 데이터 즉시 로드 -> 2단계: 800ms 후 보조 메트릭 백그라운드 분산 로드)
+  const fetchData = useCallback(async (force = false) => {
     // 다층 신분증 식별: useAuth user?.email 1순위, NextAuth 세션 2순위, 브라우저 localStorage 캐시 3순위
     let effectiveEmail = user?.email || (session?.user?.email ? session.user.email.toLowerCase().trim() : "");
     if (!effectiveEmail && typeof window !== "undefined") {
       try {
         effectiveEmail = (localStorage.getItem("sheetbot_user_email") || "").toLowerCase().trim();
       } catch {}
+    }
+
+    // 이미 요청이 진행 중이거나, 강제 갱신이 아니면서 이미 동일 이메일로 패칭 완료된 경우 중복 호출 차단
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
+    // SWR 캐시가 없는 경우에만 로딩 스피너 표출
+    if (!projects.length && !wallet) {
+      setLoading(true);
     }
 
     const localSessionId = typeof window !== "undefined" ? localStorage.getItem("egdesk_visitor_session") : null;
@@ -261,34 +269,19 @@ export default function DashboardPage() {
     }
 
     try {
-      const fetchPromise = Promise.all([
-        apiFetch(`/api/projects${queryStr}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-        apiFetch(`/api/schedules${queryStr}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-        apiFetch(`/api/wallet${queryStr}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+      // ⚡ [1단계: 즉각 렌더링] 프로젝트, 스케줄, 지갑 3종만 5초 타임아웃 AbortSignal과 함께 요청
+      const controller1 = new AbortController();
+      const timeout1 = setTimeout(() => controller1.abort(), 5000);
+
+      const [projRes, schedRes, walletRes] = await Promise.all([
+        apiFetch(`/api/projects${queryStr}`, { headers: fetchHeaders, signal: controller1.signal })
+          .then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/schedules${queryStr}`, { headers: fetchHeaders, signal: controller1.signal })
+          .then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/wallet${queryStr}`, { headers: fetchHeaders, signal: controller1.signal })
+          .then((r) => r.json()).catch(() => ({})),
       ]);
-
-      // ⚡ 비동기 보장: 타임아웃과 상관없이 실제 응답이 도착하는 즉시 상태 갱신
-      fetchPromise.then(([projRes, schedRes, walletRes]) => {
-        if (projRes?.success && Array.isArray(projRes.projects)) {
-          setProjects(projRes.projects);
-          try { sessionStorage.setItem("sheetbot_cache_projects", JSON.stringify(projRes.projects)); } catch {}
-        }
-        if (schedRes?.success && Array.isArray(schedRes.schedules)) {
-          setSchedules(schedRes.schedules);
-          try { sessionStorage.setItem("sheetbot_cache_schedules", JSON.stringify(schedRes.schedules)); } catch {}
-        }
-        if (walletRes?.success && walletRes.wallet) {
-          setWallet(walletRes.wallet);
-          try { sessionStorage.setItem("sheetbot_cache_wallet", JSON.stringify(walletRes.wallet)); } catch {}
-        }
-      }).catch((err) => console.warn("Dashboard async primary update note:", err));
-
-      // 🚀 [1단계: 즉각 렌더링] 6초 타임아웃 가드로 스피너 해제
-      const timeoutGuard = new Promise<any>((resolve) =>
-        setTimeout(() => resolve([{ success: false }, { success: false }, { success: false }]), 6000)
-      );
-
-      const [projRes, schedRes, walletRes] = await Promise.race([fetchPromise, timeoutGuard]);
+      clearTimeout(timeout1);
 
       if (projRes?.success && Array.isArray(projRes.projects)) {
         setProjects(projRes.projects);
@@ -302,55 +295,77 @@ export default function DashboardPage() {
         setWallet(walletRes.wallet);
         try { sessionStorage.setItem("sheetbot_cache_wallet", JSON.stringify(walletRes.wallet)); } catch {}
       }
+
+      if (effectiveEmail) {
+        lastFetchedEmailRef.current = effectiveEmail;
+      }
     } catch (err) {
-      console.error("Dashboard primary fetch error:", err);
+      console.warn("Dashboard primary fetch warning:", err);
     } finally {
-      // 1단계 핵심 데이터 로드 즉시 화면 스켈레톤/스피너 해제!
+      // 1단계 핵심 데이터 로드 완료 즉시 화면 스켈레톤/스피너 즉각 해제!
       setLoading(false);
+      isFetchingRef.current = false;
     }
 
-    // ⚡ [2단계: 백그라운드 병렬 수신] 보조 배지 및 세부 통계 (AI 사용량, 디바이스, 스마트 규칙, 설정, 휴지통)
-    void Promise.all([
-      apiFetch(`/api/admin/ai-usage?range=month&limit=1${userParam ? `&${userParam}` : ""}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-      apiFetch(`/api/user/devices${queryStr}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-      apiFetch(`/api/user/smart-rules${queryStr}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-      apiFetch(`/api/admin/settings`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-      apiFetch(`/api/projects?includeTrashed=true${userParam ? `&${userParam}` : ""}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-    ]).then(([usageRes, devRes, ruleRes, settingsRes, trashedProjRes]) => {
-      if (trashedProjRes?.success) setTrashedProjects(trashedProjRes.projects || []);
-      if (usageRes?.success) {
-        setIsAdminUser(!!usageRes.isAdmin);
-        if (usageRes.summary) {
-          setUsageCostKrw(usageRes.summary.totalCostKrw ?? usageRes.summary.costKrw ?? 0);
-          setUsageTokens(usageRes.summary.totalTokens ?? 0);
-          setUsageCalls(usageRes.summary.totalCalls ?? 0);
+    // ⚡ [2단계: 브라우저 소켓 안정화 후 800ms 지연 분산 수신]
+    // 1단계 TCP 소켓이 완전히 정리된 후 보조 메트릭을 순차/분산 요청하여 브라우저 소켓 잠식(pending 110초) 원천 차단
+    setTimeout(async () => {
+      try {
+        const controller2 = new AbortController();
+        const timeout2 = setTimeout(() => controller2.abort(), 4000);
+
+        // A. 가벼운 설정/기기/규칙 먼저 수신
+        const [devRes, ruleRes, settingsRes] = await Promise.all([
+          apiFetch(`/api/user/devices${queryStr}`, { headers: fetchHeaders, signal: controller2.signal }).then((r) => r.json()).catch(() => ({})),
+          apiFetch(`/api/user/smart-rules${queryStr}`, { headers: fetchHeaders, signal: controller2.signal }).then((r) => r.json()).catch(() => ({})),
+          apiFetch(`/api/admin/settings`, { headers: fetchHeaders, signal: controller2.signal }).then((r) => r.json()).catch(() => ({})),
+        ]);
+
+        if (devRes?.success) setDeviceCount((devRes.devices || []).length);
+        if (ruleRes?.success) setRuleCount((ruleRes.rules || []).length);
+        if (settingsRes?.success && settingsRes.settings?.defaultModel) {
+          const m = settingsRes.settings.defaultModel;
+          setCurrentModel(
+            m === "gemini-3.8-flash" ? "Gemini 3.8 Flash" :
+            m === "gemini-3.5-flash" ? "Gemini 3.5 Flash" :
+            m === "gemini-2.5-flash" ? "Gemini 2.5 Flash" : m
+          );
         }
+
+        // B. AI 사용량 및 휴지통 프로젝트 수신
+        const [usageRes, trashedProjRes] = await Promise.all([
+          apiFetch(`/api/admin/ai-usage?range=month&limit=1${userParam ? `&${userParam}` : ""}`, { headers: fetchHeaders, signal: controller2.signal }).then((r) => r.json()).catch(() => ({})),
+          apiFetch(`/api/projects?includeTrashed=true${userParam ? `&${userParam}` : ""}`, { headers: fetchHeaders, signal: controller2.signal }).then((r) => r.json()).catch(() => ({})),
+        ]);
+        clearTimeout(timeout2);
+
+        if (trashedProjRes?.success) setTrashedProjects(trashedProjRes.projects || []);
+        if (usageRes?.success) {
+          setIsAdminUser(!!usageRes.isAdmin);
+          if (usageRes.summary) {
+            setUsageCostKrw(usageRes.summary.totalCostKrw ?? usageRes.summary.costKrw ?? 0);
+            setUsageTokens(usageRes.summary.totalTokens ?? 0);
+            setUsageCalls(usageRes.summary.totalCalls ?? 0);
+          }
+        }
+      } catch (err) {
+        console.warn("Dashboard secondary metrics load note:", err);
       }
-      if (devRes?.success) setDeviceCount((devRes.devices || []).length);
-      if (ruleRes?.success) setRuleCount((ruleRes.rules || []).length);
-      if (settingsRes?.success && settingsRes.settings?.defaultModel) {
-        const m = settingsRes.settings.defaultModel;
-        setCurrentModel(
-          m === "gemini-3.8-flash" ? "Gemini 3.8 Flash" :
-          m === "gemini-3.5-flash" ? "Gemini 3.5 Flash" :
-          m === "gemini-2.5-flash" ? "Gemini 2.5 Flash" : m
-        );
-      }
-    }).catch((err) => console.warn("Dashboard secondary metrics load note:", err));
+    }, 800);
   }, [user?.email, session?.user?.email]);
 
-  // ⚡ 세션 이메일이 확정(비동기 로드 완료)되는 즉시 0초 만에 본인 계정 데이터로 자동 재동기화
+  // ⚡ 세션 이메일이 확정되거나 변경될 때만 1회 자동 재동기화 (중복 폭풍 방지)
   const activeUserEmail = user?.email || session?.user?.email || "";
   useEffect(() => {
-    if (activeUserEmail) {
-      void fetchData();
+    if (activeUserEmail && lastFetchedEmailRef.current !== activeUserEmail) {
+      void fetchData(true);
     }
   }, [activeUserEmail, fetchData]);
 
   useEffect(() => {
     let isMounted = true;
 
-    // 🚀 세션 확인 또는 로컬스토리지 토큰이 있으면 터널 점검 대기 없이 '즉시' 데이터 로드 시작
+    // 🚀 마운트 시 초기 데이터 로드 (이미 진행 중이거나 로드된 경우 isFetchingRef에서 보호)
     void fetchData();
 
     const checkAuth = async () => {
@@ -398,7 +413,7 @@ export default function DashboardPage() {
               }),
             });
             if (syncRes.ok) {
-              void fetchData();
+              void fetchData(true);
               return;
             }
           }
@@ -421,7 +436,7 @@ export default function DashboardPage() {
     return () => {
       isMounted = false;
     };
-  }, [status, session?.user?.email, fetchData]);
+  }, [status]);
 
   // ⚡ [0초 실시간 감시] 이지데스크 DB 왓처 실시간 스트림 연동 (프로젝트/스케줄/토큰)
   const [isRealtimeLive, setIsRealtimeLive] = useState(false);

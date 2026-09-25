@@ -27,9 +27,14 @@ export interface PurposeStat {
   percentage: number;
 }
 
+let isDbReady = false;
+
 export async function GET(request: Request) {
   try {
-    await setupDatabase();
+    if (!isDbReady) {
+      await setupDatabase().catch(() => {});
+      isDbReady = true;
+    }
 
     const { searchParams } = new URL(request.url);
     const range = searchParams.get("range") || "all"; // 'today', 'week', 'month', 'all'

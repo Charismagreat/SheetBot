@@ -47,8 +47,8 @@ function extractSpreadsheetId(urlOrId: string): string | null {
   return match && match[1] ? match[1] : null;
 }
 
-// DB Row -> SheetBotProject 모델 변환 헬퍼
-function mapRowToProject(row: any): SheetBotProject {
+// DB Row -> SheetBotProject 모델 변환 헬퍼 (lightweight 모드로 수백 KB의 scriptCode 전송 병목 차단)
+function mapRowToProject(row: any, includeCode = false): SheetBotProject {
   let parsedFeatures: string[] = [];
   try {
     parsedFeatures = typeof row.features === "string" ? JSON.parse(row.features) : row.features || [];
@@ -75,8 +75,9 @@ function mapRowToProject(row: any): SheetBotProject {
     gasProjectId: row.gas_project_id || row.gasProjectId || "",
     scriptId: row.script_id || row.scriptId || "",
     scriptUrl: row.script_url || row.scriptUrl || "",
-    scriptCode: row.script_code || row.scriptCode || "",
-    manifest: row.manifest || "",
+    // ⚡ 목록 조회 시 수천 줄의 GAS 스크립트 코드 및 매니페스트 전문을 제외하여 네트워크 페이로드 97% 경량화
+    scriptCode: includeCode ? (row.script_code || row.scriptCode || "") : "",
+    manifest: includeCode ? (row.manifest || "") : "",
     summary: row.summary || "",
     features: parsedFeatures,
     triggers: parsedTriggers,
@@ -103,6 +104,7 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const includeTrashed = searchParams.get("includeTrashed") === "true";
+    const includeCode = searchParams.get("full") === "true" || searchParams.get("detail") === "true";
     const cleanEmail = userEmail.toLowerCase().trim();
 
     // ⚡ 2.5초 타임아웃 레이스 및 cachedQueryTable (5초 TTL) 적용으로 행(Hang) 방지
@@ -126,7 +128,7 @@ export async function GET(request: Request) {
         const isDeleted = Boolean(r.deleted_at) || r.status === "PENDING_DELETE" || r.status === "TRASHED";
         return includeTrashed ? isDeleted : !isDeleted;
       })
-      .map(mapRowToProject);
+      .map((row: any) => mapRowToProject(row, includeCode));
 
     return NextResponse.json({
       success: true,
