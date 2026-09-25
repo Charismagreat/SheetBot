@@ -583,13 +583,11 @@ export default function EasyBot() {
           }, 1400);
         }
 
-        // 🚨 [실시간 감시 종합 폴러] 40초 주기로 4대 긴급 이벤트 감시
-        // - 시나리오 1: VIP 고액 리드 인입
-        // - 시나리오 3: 24시간 방치 방지 골든타임 임박 미답변 경보
-        // - 시나리오 4: 0원 문자 스마트폰 연결 이상 감지
-        // - 시나리오 5: 전자세금계산서 신규 신청 즉시 감지
+        // 🚨 [실시간 감시 종합 폴러] 120초 주기로 완화 및 타임아웃 가드 적용하여 터널 소켓 잠식 방지
+        let isPollingBusy = false;
         const pollAdminEvents = async () => {
-          if (!isSubscribed || (typeof document !== "undefined" && document.hidden)) return;
+          if (!isSubscribed || isPollingBusy || (typeof document !== "undefined" && document.hidden)) return;
+          isPollingBusy = true;
           try {
             const params = new URLSearchParams({
               lastKnownEntId: String(lastKnownEntIdRef.current || 0),
@@ -598,7 +596,10 @@ export default function EasyBot() {
               suppressDevice: suppressedDeviceRef.current ? "1" : "0",
             });
 
-            const pollRes = await apiFetch(`/api/admin/monitor/poll?${params.toString()}`);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const pollRes = await apiFetch(`/api/admin/monitor/poll?${params.toString()}`, { signal: controller.signal });
+            clearTimeout(timeoutId);
             const pollJson = await pollRes.json();
             if (!isSubscribed || !pollJson.success) return;
 
@@ -652,12 +653,14 @@ export default function EasyBot() {
             }
           } catch (e) {
             // 폴링 예외 시 조용히 유지
+          } finally {
+            isPollingBusy = false;
           }
         };
 
-        // 첫 진입 시 기준점 동기화 1회 즉시 실행 후 40초 주기 반복
-        setTimeout(pollAdminEvents, 3000);
-        pollTimer = setInterval(pollAdminEvents, 40000);
+        // 첫 진입 시 기준점 동기화 1회 8초 지연 후 실행, 이후 120초 주기 완화 (소켓 보호)
+        setTimeout(pollAdminEvents, 8000);
+        pollTimer = setInterval(pollAdminEvents, 120000);
       } catch (err) {
         // 일반 유저인 경우 무시
       }

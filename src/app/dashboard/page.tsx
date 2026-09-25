@@ -277,40 +277,49 @@ export default function DashboardPage() {
     }
 
     try {
-      // ⚡ [1단계: 즉각 렌더링] 프로젝트, 스케줄, 지갑 3종만 12초 안전 타임아웃 AbortSignal과 함께 요청
-      const controller1 = new AbortController();
-      const timeout1 = setTimeout(() => controller1.abort(), 12000);
+      // ⚡ [1단계 핵심: 프로젝트 목록 독립 즉시 로드]
+      // 다른 API의 지연이나 실패에 영향을 받지 않고 프로젝트 3건을 1초 만에 화면에 즉시 렌더링
+      apiFetch(`/api/projects${queryStr}`, { headers: fetchHeaders })
+        .then((r) => r.json())
+        .then((projRes) => {
+          if (projRes?.success && Array.isArray(projRes.projects)) {
+            setProjects(projRes.projects);
+            try { sessionStorage.setItem("sheetbot_cache_projects", JSON.stringify(projRes.projects)); } catch {}
+          }
+        })
+        .catch((err) => console.warn("Projects load warning:", err))
+        .finally(() => {
+          setLoading(false);
+          isFetchingRef.current = false;
+        });
 
-      const [projRes, schedRes, walletRes] = await Promise.all([
-        apiFetch(`/api/projects${queryStr}`, { headers: fetchHeaders, signal: controller1.signal })
-          .then((r) => r.json()).catch(() => ({})),
-        apiFetch(`/api/schedules${queryStr}`, { headers: fetchHeaders, signal: controller1.signal })
-          .then((r) => r.json()).catch(() => ({})),
-        apiFetch(`/api/wallet${queryStr}`, { headers: fetchHeaders, signal: controller1.signal })
-          .then((r) => r.json()).catch(() => ({})),
-      ]);
-      clearTimeout(timeout1);
+      // ⚡ [지갑 잔액 독립 로드]
+      apiFetch(`/api/wallet${queryStr}`, { headers: fetchHeaders })
+        .then((r) => r.json())
+        .then((walletRes) => {
+          if (walletRes?.success && walletRes.wallet) {
+            setWallet(walletRes.wallet);
+            try { sessionStorage.setItem("sheetbot_cache_wallet", JSON.stringify(walletRes.wallet)); } catch {}
+          }
+        })
+        .catch((err) => console.warn("Wallet load warning:", err));
 
-      if (projRes?.success && Array.isArray(projRes.projects)) {
-        setProjects(projRes.projects);
-        try { sessionStorage.setItem("sheetbot_cache_projects", JSON.stringify(projRes.projects)); } catch {}
-      }
-      if (schedRes?.success && Array.isArray(schedRes.schedules)) {
-        setSchedules(schedRes.schedules);
-        try { sessionStorage.setItem("sheetbot_cache_schedules", JSON.stringify(schedRes.schedules)); } catch {}
-      }
-      if (walletRes?.success && walletRes.wallet) {
-        setWallet(walletRes.wallet);
-        try { sessionStorage.setItem("sheetbot_cache_wallet", JSON.stringify(walletRes.wallet)); } catch {}
-      }
+      // ⚡ [스케줄 독립 로드]
+      apiFetch(`/api/schedules${queryStr}`, { headers: fetchHeaders })
+        .then((r) => r.json())
+        .then((schedRes) => {
+          if (schedRes?.success && Array.isArray(schedRes.schedules)) {
+            setSchedules(schedRes.schedules);
+            try { sessionStorage.setItem("sheetbot_cache_schedules", JSON.stringify(schedRes.schedules)); } catch {}
+          }
+        })
+        .catch((err) => console.warn("Schedules load warning:", err));
 
       if (effectiveEmail) {
         lastFetchedEmailRef.current = effectiveEmail;
       }
     } catch (err) {
       console.warn("Dashboard primary fetch warning:", err);
-    } finally {
-      // 1단계 핵심 데이터 로드 완료 즉시 화면 스켈레톤/스피너 즉각 해제!
       setLoading(false);
       isFetchingRef.current = false;
     }
