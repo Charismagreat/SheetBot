@@ -48,12 +48,23 @@ export default function DashboardPage() {
   const { user, isLoggedIn } = useAuth();
   const router = useRouter();
 
-  // ⚡ SWR 캐시로 이전 방문 데이터 즉시 복원 (0초 렌더링)
+  // ⚡ SWR 캐시로 이전 방문 데이터 즉시 복원 (현재 로그인 회원 데이터와 일치할 때만 복원)
   const [projects, setProjects] = useState<any[]>(() => {
     if (typeof window !== "undefined") {
       try {
+        const currentEmail = (localStorage.getItem("sheetbot_user_email") || "").toLowerCase().trim();
         const saved = sessionStorage.getItem("sheetbot_cache_projects");
-        if (saved) return JSON.parse(saved);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            // 다른 회원의 캐시가 섞여있으면 즉시 폐기
+            if (currentEmail && parsed.some((p: any) => p.userEmail && p.userEmail.toLowerCase().trim() !== currentEmail)) {
+              sessionStorage.removeItem("sheetbot_cache_projects");
+              return [];
+            }
+            return parsed;
+          }
+        }
       } catch {}
     }
     return [];
@@ -246,7 +257,8 @@ export default function DashboardPage() {
 
     const localSessionId = typeof window !== "undefined" ? localStorage.getItem("egdesk_visitor_session") : null;
 
-    const userParam = effectiveEmail ? `&userEmail=${encodeURIComponent(effectiveEmail)}` : "";
+    const userParam = effectiveEmail ? `userEmail=${encodeURIComponent(effectiveEmail)}` : "";
+    const queryStr = userParam ? `?${userParam}` : "";
     const fetchHeaders: Record<string, string> = {};
     if (effectiveEmail) {
       fetchHeaders["x-sheetbot-user-email"] = effectiveEmail;
@@ -258,9 +270,9 @@ export default function DashboardPage() {
 
     try {
       const fetchPromise = Promise.all([
-        apiFetch(`/api/projects?${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-        apiFetch(`/api/schedules?${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-        apiFetch(`/api/wallet?${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/projects${queryStr}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/schedules${queryStr}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+        apiFetch(`/api/wallet${queryStr}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
       ]);
 
       // ⚡ 비동기 보장: 타임아웃과 상관없이 실제 응답이 도착하는 즉시 상태 갱신
@@ -307,11 +319,11 @@ export default function DashboardPage() {
 
     // ⚡ [2단계: 백그라운드 병렬 수신] 보조 배지 및 세부 통계 (AI 사용량, 디바이스, 스마트 규칙, 설정, 휴지통)
     void Promise.all([
-      apiFetch(`/api/admin/ai-usage?range=month&limit=1${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-      apiFetch(`/api/user/devices?${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-      apiFetch(`/api/user/smart-rules?${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+      apiFetch(`/api/admin/ai-usage?range=month&limit=1${userParam ? `&${userParam}` : ""}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+      apiFetch(`/api/user/devices${queryStr}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+      apiFetch(`/api/user/smart-rules${queryStr}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
       apiFetch(`/api/admin/settings`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
-      apiFetch(`/api/projects?includeTrashed=true${userParam}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
+      apiFetch(`/api/projects?includeTrashed=true${userParam ? `&${userParam}` : ""}`, { headers: fetchHeaders }).then((r) => r.json()).catch(() => ({})),
     ]).then(([usageRes, devRes, ruleRes, settingsRes, trashedProjRes]) => {
       if (trashedProjRes?.success) setTrashedProjects(trashedProjRes.projects || []);
       if (usageRes?.success) {

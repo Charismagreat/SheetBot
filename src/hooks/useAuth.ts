@@ -225,41 +225,44 @@ export function useAuth(): UseAuthReturn {
       console.warn("[useAuth] signOut note:", e);
     }
 
-    // 3) 백엔드 강제 로그아웃 API 호출
+    // 3) 백엔드 강제 로그아웃 API 호출 (서버 쿠키 파기)
     try {
       await apiFetch("/api/auth/force-logout", { method: "POST" });
     } catch {}
 
-    // 4) 브라우저 로컬 저장소 및 캐시 정리
+    // 4) 브라우저 로컬 저장소 및 캐시 완전 정리
     if (typeof window !== "undefined") {
-      localStorage.removeItem("sheetbot_user_email");
-      localStorage.removeItem("sheetbot_user_name");
-      localStorage.removeItem("sheetbot_user_image");
-      localStorage.removeItem("egdesk_visitor_session");
-      sessionStorage.removeItem("sheetbot_cache_projects");
-      sessionStorage.removeItem("sheetbot_cache_wallet");
-      sessionStorage.removeItem("sheetbot_cache_schedules");
+      try {
+        localStorage.removeItem("sheetbot_user_email");
+        localStorage.removeItem("sheetbot_user_name");
+        localStorage.removeItem("sheetbot_user_image");
+        localStorage.removeItem("egdesk_visitor_session");
+        sessionStorage.clear();
+      } catch {}
 
       // 5) 모든 인증 관련 쿠키 만료 처리
       const cookiesToClear = [
         "next-auth.session-token",
         "__Secure-next-auth.session-token",
         "egdesk_visitor_session",
+        "next-auth.callback-url",
+        "__Secure-next-auth.callback-url",
       ];
       const basePath = getEgdeskBasePath();
+      const paths = ["/", basePath, `${basePath}/`, "/api/auth"].filter(Boolean);
+
       cookiesToClear.forEach((name) => {
-        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;`;
-        if (basePath) {
-          document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${basePath};`;
-          document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${basePath}/;`;
-        }
+        paths.forEach((p) => {
+          document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${p};`;
+        });
       });
 
       // 전역 이벤트 알림
       window.dispatchEvent(new CustomEvent("sheetbot-auth-change"));
 
-      // 홈으로 안전 이동
-      window.location.href = `${basePath}/`;
+      // 홈으로 완전히 새로고침하며 강제 이동
+      const dest = basePath ? `${basePath}/` : "/";
+      window.location.replace(dest);
     }
   }, []);
 

@@ -1,36 +1,42 @@
 import { NextResponse } from "next/server";
 
-export async function POST() {
+export async function POST(req: Request) {
   const response = NextResponse.json({ ok: true, message: "Logged out successfully" });
 
-  const expireCookie = (name: string) => {
-    response.cookies.set(name, "", {
-      path: "/",
-      expires: new Date(0),
-      maxAge: 0,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-    });
-  };
+  const cookieNames = [
+    "next-auth.session-token",
+    "__Secure-next-auth.session-token",
+    "egdesk_visitor_session",
+    "next-auth.callback-url",
+    "__Secure-next-auth.callback-url",
+  ];
 
-  // NextAuth 세션 토큰만 안전하게 파기 (CSRF 토큰은 보존하여 재로그인 시 충돌 방지)
-  response.cookies.set("next-auth.session-token", "", {
-    path: "/",
-    expires: new Date(0),
-    maxAge: 0,
-    httpOnly: true,
-    sameSite: "lax",
-    secure: false,
-  });
-  response.cookies.set("__Secure-next-auth.session-token", "", {
-    path: "/",
-    expires: new Date(0),
-    maxAge: 0,
-    httpOnly: true,
-    sameSite: "lax",
-    secure: true,
-  });
+  // 가능한 모든 path에 대해 쿠키 파기 헤더 주입
+  const paths = ["/", "/t/mcp-server-fxkud1/p/SheetBot", "/api/auth"];
+
+  for (const name of cookieNames) {
+    for (const p of paths) {
+      // 1. 일반 쿠키 만료
+      response.cookies.set(name, "", {
+        path: p,
+        expires: new Date(0),
+        maxAge: 0,
+        httpOnly: true,
+        sameSite: "lax",
+        secure: false,
+      });
+      // 2. Secure 쿠키 만료 (HTTPS)
+      response.cookies.set(name, "", {
+        path: p,
+        expires: new Date(0),
+        maxAge: 0,
+        httpOnly: true,
+        sameSite: "lax",
+        secure: true,
+      });
+    }
+  }
 
   return response;
 }
+
