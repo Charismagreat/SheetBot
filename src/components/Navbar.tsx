@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import Image from "next/image";
 import {
@@ -27,6 +28,7 @@ import SheetBotLogo from "@/components/SheetBotLogo";
 import WithdrawModal from "@/components/WithdrawModal";
 
 export default function Navbar() {
+  const pathname = usePathname();
   const { data: session, status } = useSession();
   // 기본값: 꺼짐(false)
   const [aiHelpEnabled, setAiHelpEnabled] = useState(false);
@@ -289,17 +291,19 @@ export default function Navbar() {
 
               {isAdmin && (
                 <>
-                  {/* 관리자 전용: SheetBot Agent M (무통장 입금 자동감지 시스템) 바로가기 */}
-                  <Link
-                    href="/dashboard/deposit-agent"
-                    className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-800 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-200/80 rounded-xl transition-all shadow-2xs whitespace-nowrap shrink-0"
-                    data-easybot-hint="SheetBot Agent M: 안드로이드 스마트폰 전용 APK를 연동하여 24시간 실시간 무통장 입금 감지 및 전역 토큰 지갑 자동 충전을 가동합니다."
-                    title="관리자 전용 무통장 입금 자동 감지 시스템 (SheetBot Agent M)"
-                  >
-                    <Smartphone className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span className="hidden md:inline">SheetBot Agent M</span>
-                    <span className="md:hidden">Agent M</span>
-                  </Link>
+                  {/* 관리자 전용: SheetBot Agent M (무통장 입금 자동감지 시스템) 바로가기 (단, 이용자용 에이전트 전용 화면인 /dashboard/notifications 에서는 숨김 처리) */}
+                  {pathname !== "/dashboard/notifications" && (
+                    <Link
+                      href="/dashboard/deposit-agent"
+                      className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-800 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-200/80 rounded-xl transition-all shadow-2xs whitespace-nowrap shrink-0"
+                      data-easybot-hint="SheetBot Agent M: 안드로이드 스마트폰 전용 APK를 연동하여 24시간 실시간 무통장 입금 감지 및 전역 토큰 지갑 자동 충전을 가동합니다."
+                      title="관리자 전용 무통장 입금 자동 감지 시스템 (SheetBot Agent M)"
+                    >
+                      <Smartphone className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span className="hidden md:inline">SheetBot Agent M</span>
+                      <span className="md:hidden">Agent M</span>
+                    </Link>
+                  )}
 
                   <Link
                     href="/dashboard/admin"

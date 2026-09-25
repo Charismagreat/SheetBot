@@ -28,7 +28,8 @@ import {
   FileText,
   ShieldCheck,
   Radio,
-  ArrowRight
+  ArrowRight,
+  Download
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import dynamic from "next/dynamic";
@@ -160,8 +161,9 @@ export default function NotificationsPage() {
       fetchDevices();
       fetchRules();
       fetchLogs();
+      fetchAgent2Pairing();
     }
-  }, [status, router, fetchDevices, fetchRules, fetchLogs]);
+  }, [status, router, fetchDevices, fetchRules, fetchLogs, fetchAgent2Pairing]);
 
   // ⚡ [0초 실시간 감시] 이지데스크 DB 왓처 실시간 스트림 연동 (SMS 및 기기 변경 자동 감지)
   const [isRealtimeLive, setIsRealtimeLive] = useState(false);
@@ -567,23 +569,146 @@ export default function NotificationsPage() {
                 <p className="text-xs font-bold text-slate-500">디바이스 정보를 불러오는 중...</p>
               </div>
             ) : devices.length === 0 ? (
-              <div className="bg-white rounded-3xl p-12 text-center border border-slate-200/80 space-y-4">
-                <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-inner">
-                  <Smartphone className="w-7 h-7" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-extrabold text-slate-800">등록된 디바이스가 없습니다</h3>
-                  <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                    사용 중인 안드로이드 스마트폰을 등록하면, 구글 스프레드시트의 자동화 알림 문자가 회원님의 폰을 통해 무료로 발송됩니다.
+              <div className="bg-white rounded-3xl p-6 sm:p-10 border border-slate-200/80 shadow-sm space-y-8">
+                {/* 헤더 안내 */}
+                <div className="text-center max-w-xl mx-auto space-y-2">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200">
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span>시트봇 에이전트 (이용자 전용) 3단계 초간편 빠른 연동</span>
+                  </div>
+                  <h3 className="text-xl font-black text-slate-900">
+                    스마트폰을 연동하여 0원 고객 알림 문자를 시작하세요
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+                    회원님의 스마트폰에 시트봇 에이전트 앱을 설치하고 아래 QR코드를 스캔하면, 구글 스프레드시트의 주문·입금·예약 알림 문자가 통신비 0원으로 즉시 자동 발송됩니다.
                   </p>
                 </div>
-                <button
-                  onClick={() => setIsAddDeviceOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-md"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>지금 스마트폰 연동하기</span>
-                </button>
+
+                {/* 3단계 가이드 그리드 */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto items-stretch">
+                  {/* 1단계: 이용자용 APK 다운로드 */}
+                  <div className="bg-slate-50/70 rounded-2xl p-5 border border-slate-200 flex flex-col justify-between text-left space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white text-xs font-black flex items-center justify-center shrink-0">
+                          1
+                        </span>
+                        <h4 className="text-sm font-black text-slate-800">이용자용 앱 다운로드</h4>
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        안드로이드 스마트폰에 <strong>시트봇 에이전트</strong> 전용 APK를 다운로드하여 설치합니다.
+                      </p>
+                    </div>
+                    <div className="pt-2">
+                      <a
+                        href="/downloads/SheetBotAgent.apk"
+                        download="SheetBotAgent.apk"
+                        className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>시트봇 에이전트 APK 받기</span>
+                      </a>
+                      <p className="text-[10px] text-slate-400 text-center mt-1.5 font-medium">
+                        버전 1.0.0 (약 5.2MB, 안드로이드 전용)
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 2단계: 실시간 QR 페어링 코드 */}
+                  <div className="bg-emerald-50/50 rounded-2xl p-5 border border-emerald-200 flex flex-col items-center justify-between text-center space-y-3">
+                    <div className="w-full text-left flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white text-xs font-black flex items-center justify-center shrink-0">
+                          2
+                        </span>
+                        <h4 className="text-sm font-black text-emerald-950">페어링 QR 코드</h4>
+                      </div>
+                      <button
+                        onClick={fetchAgent2Pairing}
+                        disabled={loadingAgent2Pair}
+                        className="p-1 text-slate-400 hover:text-emerald-700 transition-colors cursor-pointer"
+                        title="QR 새로고침"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${loadingAgent2Pair ? "animate-spin" : ""}`} />
+                      </button>
+                    </div>
+
+                    <div className="py-1">
+                      {loadingAgent2Pair ? (
+                        <div className="w-36 h-36 flex flex-col items-center justify-center text-emerald-600 bg-white rounded-xl border border-emerald-200 mx-auto">
+                          <RefreshCw className="w-6 h-6 animate-spin mb-1" />
+                          <span className="text-[10px] font-bold">생성 중...</span>
+                        </div>
+                      ) : agent2PairData?.qrData ? (
+                        <div className="p-2 bg-white rounded-xl shadow-xs border border-emerald-200 inline-block">
+                          <img
+                            src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                              agent2PairData.qrData
+                            )}`}
+                            alt="SheetBot Agent Pairing QR"
+                            className="w-32 h-32 mx-auto"
+                          />
+                          <div className="mt-1 pt-1 border-t border-slate-100 text-center">
+                            <span className="text-[10px] text-slate-400 mr-1 font-bold">PIN:</span>
+                            <span className="text-xs font-mono font-black text-emerald-700 tracking-wider">
+                              {agent2PairData.pinCode || "SA2-123456"}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={fetchAgent2Pairing}
+                          className="px-3 py-2 bg-white border border-rose-200 text-rose-600 text-xs font-bold rounded-xl cursor-pointer"
+                        >
+                          QR코드 생성하기
+                        </button>
+                      )}
+                    </div>
+
+                    <p className="text-[10.5px] text-emerald-800 leading-snug font-medium">
+                      화면의 QR 코드는 로그인된 회원님 계정과 1:1로 암호화 연결됩니다.
+                    </p>
+                  </div>
+
+                  {/* 3단계: 앱 실행 및 0초 연결 */}
+                  <div className="bg-slate-50/70 rounded-2xl p-5 border border-slate-200 flex flex-col justify-between text-left space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white text-xs font-black flex items-center justify-center shrink-0">
+                          3
+                        </span>
+                        <h4 className="text-sm font-black text-slate-800">앱에서 [QR 페어링] 스캔</h4>
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        스마트폰에서 <strong>시트봇 에이전트</strong> 앱을 실행한 후 <strong>[QR 페어링]</strong>을 눌러 위 QR 코드를 비추면 <strong>0초 만에 실시간으로 연동이 완료</strong>됩니다.
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-white rounded-xl border border-slate-200 text-[11px] text-slate-600 space-y-1">
+                      <div className="flex items-center gap-1.5 font-bold text-emerald-700">
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>DB 왓처 0초 실시간 감지</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">
+                        스캔 즉시 화면이 자동으로 새로고침 없이 기기 연결 상태로 전환됩니다.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 하단 보조 액션 */}
+                <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-center gap-4 text-xs">
+                  <span className="text-slate-400">카메라 스캔이 어렵거나 수동 등록을 원하시나요?</span>
+                  <button
+                    onClick={() => {
+                      setIsAddDeviceOpen(true);
+                      setPairingMode("qr");
+                    }}
+                    className="font-bold text-slate-700 hover:text-emerald-700 underline cursor-pointer"
+                  >
+                    수동 기기 등록 팝업 열기
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -766,10 +891,11 @@ export default function NotificationsPage() {
                     <div className="text-[11px] text-slate-500 mt-0.5">안드로이드 스마트폰에 시트봇 에이전트(SheetBot Agent)를 설치하세요.</div>
                   </div>
                   <a
-                    href="https://sheetbot.cloud/download/SheetBotAgent2.apk"
-                    target="_blank"
-                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 flex-shrink-0"
+                    href="/downloads/SheetBotAgent.apk"
+                    download="SheetBotAgent.apk"
+                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 flex-shrink-0 cursor-pointer"
                   >
+                    <Download className="w-3.5 h-3.5" />
                     <span>📥 APK 받기</span>
                   </a>
                 </div>
