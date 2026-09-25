@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { apiFetch, getEgdeskBasePath } from "@/lib/api";
-import { onUserDataChanged, queryTable } from "@/lib/egdesk-helpers";
+import { onUserDataChanged } from "@/lib/egdesk-helpers";
 
 function formatDateTime(dateStr?: string | null): string {
   if (!dateStr) return "-";
@@ -61,20 +61,31 @@ export default function DepositAgentPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
+  // ⚡ SWR 캐시 복원: 브라우저 세션 스토리지에서 이전 입금 에이전트 번들 즉시 복원 (0초 렌더링)
+  const [cachedBundle] = useState<any>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem("sb_deposit_agent_bundle");
+        return saved ? JSON.parse(saved) : null;
+      } catch {}
+    }
+    return null;
+  });
+
   // 페어링 상태
-  const [pairingData, setPairingData] = useState<any>(null);
-  const [loadingPairing, setLoadingPairing] = useState(true);
+  const [pairingData, setPairingData] = useState<any>(() => cachedBundle?.pairing || null);
+  const [loadingPairing, setLoadingPairing] = useState(!cachedBundle);
   const [copiedPin, setCopiedPin] = useState(false);
   const [copiedDownloadUrl, setCopiedDownloadUrl] = useState(false);
 
   // 등록된 디바이스 상태 (단일 대표 및 전체 목록)
-  const [device, setDevice] = useState<any>(null);
-  const [devices, setDevices] = useState<any[]>([]);
-  const [loadingDevice, setLoadingDevice] = useState(true);
+  const [device, setDevice] = useState<any>(() => cachedBundle?.device || null);
+  const [devices, setDevices] = useState<any[]>(() => cachedBundle?.devices || []);
+  const [loadingDevice, setLoadingDevice] = useState(!cachedBundle);
 
   // 최근 입금 대장 상태 및 Phase 4 스마트 예외 필터
-  const [depositLogs, setDepositLogs] = useState<any[]>([]);
-  const [loadingLogs, setLoadingLogs] = useState(true);
+  const [depositLogs, setDepositLogs] = useState<any[]>(() => cachedBundle?.deposits || []);
+  const [loadingLogs, setLoadingLogs] = useState(!cachedBundle);
   const [selectedTab, setSelectedTab] = useState<"ALL" | "COMPLETED" | "HOLD" | "DELAYED">("ALL");
   const [processingId, setProcessingId] = useState<string | number | null>(null);
   const [isRealtimeLive, setIsRealtimeLive] = useState(false);
@@ -144,129 +155,67 @@ export default function DepositAgentPage() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // 1. 페어링 정보(QR & 핀코드) 클라이언트 즉시 생성 (서버 왕복 지연 0초)
-  const fetchPairingInfo = useCallback(async () => {
-    setLoadingPairing(true);
-    try {
-      const email = session?.user?.email || "chachogreat@gmail.com";
-      const cleanEmail = email.toLowerCase().trim();
-      const todayStr = new Date().toISOString().slice(0, 10);
-      let token = "sb_dep_" + Math.random().toString(36).substring(2, 10);
-      let pinNum = 777777;
-
-      if (typeof window !== "undefined" && window.crypto && window.crypto.subtle) {
-        try {
-          const enc = new TextEncoder();
-          const keyData = enc.encode("sheetbot-agent-secret-key-2026");
-          const msgData = enc.encode(`${cleanEmail}-${todayStr}`);
-          const cryptoKey = await window.crypto.subtle.importKey(
-            "raw",
-            keyData,
-            { name: "HMAC", hash: "SHA-256" },
-            false,
-            ["sign"]
-          );
-          const signature = await window.crypto.subtle.sign("HMAC", cryptoKey, msgData);
-          const hashArray = Array.from(new Uint8Array(signature));
-          token = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
-          const pinSum = hashArray.slice(0, 4).reduce((acc, b) => (acc << 8) + b, 0);
-          pinNum = (Math.abs(pinSum) % 900000) + 100000;
-        } catch {
-          pinNum = 777777;
-        }
-      }
-
-      const pinCode = `SB-${pinNum}`;
-      const qrUri = `sheetbot://pair?email=${encodeURIComponent(cleanEmail)}&token=${encodeURIComponent(token)}&pin=${encodeURIComponent(pinCode)}`;
-
-      setPairingData({
-        success: true,
-        userEmail: cleanEmail,
-        token,
-        pinCode,
-        qrData: qrUri,
-        webhookUrl: "https://sheetbot.cloud/api/wallet/bank-webhook",
-        fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/bank-webhook",
-      });
-    } catch (err: any) {
-      console.error("Fetch pairing error:", err);
-    } finally {
-      setLoadingPairing(false);
-    }
-  }, [session?.user?.email]);
-
   const isFetchingRef = useRef<boolean>(false);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
-  // 2 & 3. ⚡ [단일 통합 데이터 로더] 기기 상태 및 입금 대장을 단 1회의 병렬 처리로 수집
-  const fetchDepositAgentData = useCallback(async (silent = false) => {
+  // ⚡ [단일 통합 번들 로더] /api/wallet/agent/bootstrap 단 1회 호출로 페어링 정보, 기기 상태, 입금 대장을 병합 수신
+  const fetchDepositAgentBootstrap = useCallback(async (silent = false, forceRefresh = false) => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     if (!silent) {
       setLoadingDevice(true);
       setLoadingLogs(true);
+      setLoadingPairing(true);
     }
     try {
-      const [devicesRes, depositsRes] = await Promise.all([
-        queryTable<any>("sheetbot_user_devices", {
-          limit: 50,
-          orderBy: "id",
-          orderDirection: "DESC",
-        }).catch(() => ({ rows: [] })),
-        queryTable<any>("sheetbot_deposit_requests", {
-          limit: 50,
-          orderBy: "id",
-          orderDirection: "DESC",
-        }).catch(() => ({ rows: [] })),
-      ]);
+      const url = `/api/wallet/agent/bootstrap${forceRefresh ? "?refresh=true" : ""}`;
+      const res = await apiFetch(url);
+      const data = await res.json();
 
-      // 1. 기기 목록 가공
-      const rawRows = (devicesRes.rows || []).filter((r: any) => !r.deleted_at);
-      const agentDevices = rawRows.filter(
-        (r: any) => r.pairing_mode === "android_agent" || r.pairingMode === "android_agent"
-      );
-
-      agentDevices.sort((a: any, b: any) => {
-        const tA = new Date(a.last_connected_at || a.lastConnectedAt || a.updated_at || a.created_at || 0).getTime();
-        const tB = new Date(b.last_connected_at || b.lastConnectedAt || b.updated_at || b.created_at || 0).getTime();
-        return tB - tA;
-      });
-
-      const uniqueDevices: any[] = [];
-      const seenLabels = new Set<string>();
-      for (const dev of agentDevices) {
-        const key = (dev.label || dev.device_id || "").trim().toLowerCase();
-        if (key && !seenLabels.has(key)) {
-          seenLabels.add(key);
-          uniqueDevices.push(dev);
-        } else if (!key) {
-          uniqueDevices.push(dev);
+      if (data.success) {
+        if (data.pairing) setPairingData(data.pairing);
+        if (data.devices) setDevices(data.devices);
+        if (data.device) setDevice(data.device);
+        if (data.deposits) setDepositLogs(data.deposits);
+        if (typeof data.isAdmin === "boolean") {
+          setIsAdmin(data.isAdmin);
+          if (data.isAdmin && typeof window !== "undefined") {
+            try { sessionStorage.setItem("sb_is_admin", "true"); } catch {}
+          }
         }
+
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem("sb_deposit_agent_bundle", JSON.stringify(data));
+          } catch {}
+        }
+      } else if (data.error === "관리자 권한이 필요합니다." || res.status === 403) {
+        setIsAdmin(false);
+        router.push("/dashboard");
       }
-
-      setDevices(uniqueDevices);
-      setDevice(uniqueDevices[0] || null);
-
-      // 2. 최근 입금 대장 가공
-      const validRows = (depositsRes.rows || []).filter((r: any) => !r.deleted_at);
-      setDepositLogs(validRows);
     } catch (err: any) {
-      console.error("Fetch deposit agent data error:", err);
+      console.error("Fetch deposit agent bootstrap error:", err);
     } finally {
       isFetchingRef.current = false;
       if (!silent) {
         setLoadingDevice(false);
         setLoadingLogs(false);
+        setLoadingPairing(false);
       }
     }
-  }, []);
+  }, [router]);
+
+  const fetchDepositAgentData = useCallback(async (silent = false) => {
+    return fetchDepositAgentBootstrap(silent, true);
+  }, [fetchDepositAgentBootstrap]);
 
   const fetchDeviceStatus = useCallback(async (silent = false) => {
-    return fetchDepositAgentData(silent);
-  }, [fetchDepositAgentData]);
+    return fetchDepositAgentBootstrap(silent, true);
+  }, [fetchDepositAgentBootstrap]);
 
   const fetchDepositLogs = useCallback(async (silent = false) => {
-    return fetchDepositAgentData(silent);
-  }, [fetchDepositAgentData]);
+    return fetchDepositAgentBootstrap(silent, true);
+  }, [fetchDepositAgentBootstrap]);
 
   const [deletingDeviceId, setDeletingDeviceId] = useState<string | number | null>(null);
 
@@ -281,7 +230,7 @@ export default function DepositAgentPage() {
       const data = await res.json();
       if (data.success) {
         showToast("success", "기기 연동이 성공적으로 해제되었습니다.");
-        await fetchDepositAgentData(true);
+        await fetchDepositAgentBootstrap(true, true);
       } else {
         showToast("error", data.error || "기기 연동 해제에 실패했습니다.");
       }
@@ -291,8 +240,6 @@ export default function DepositAgentPage() {
       setDeletingDeviceId(null);
     }
   };
-
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -310,33 +257,16 @@ export default function DepositAgentPage() {
         if (typeof window !== "undefined") {
           try { sessionStorage.setItem("sb_is_admin", "true"); } catch {}
         }
-      } else {
-        apiFetch("/api/admin/check")
-          .then((res) => res.json())
-          .then((data) => {
-            if (data.success && data.isAdmin) {
-              setIsAdmin(true);
-              try { sessionStorage.setItem("sb_is_admin", "true"); } catch {}
-            } else {
-              setIsAdmin(false);
-              router.push("/dashboard");
-            }
-          })
-          .catch(() => {
-            setIsAdmin(false);
-            router.push("/dashboard");
-          });
       }
 
-      // 페이지 진입 즉시 페어링 정보(QR/핀코드) 및 단일 통합 데이터 로드
-      fetchPairingInfo();
-      fetchDepositAgentData();
+      // ⚡ 페이지 진입 즉시 단 1회의 통합 번들 로더 실행
+      fetchDepositAgentBootstrap();
 
       // ⚡ [0초 실시간 감시] 이지데스크 공식 onUserDataChanged 연동 (입금 요청 및 에이전트 기기 실시간 감시)
       const unsub = onUserDataChanged((event) => {
         setIsRealtimeLive(true);
         if (!event.tableName || event.tableName === "sheetbot_deposit_requests" || event.tableName === "sheetbot_user_devices") {
-          fetchDepositAgentData(true);
+          fetchDepositAgentBootstrap(true, true);
         }
       });
 
@@ -346,7 +276,7 @@ export default function DepositAgentPage() {
         unsub();
       };
     }
-  }, [status, session, router, fetchPairingInfo, fetchDepositAgentData]);
+  }, [status, session, router, fetchDepositAgentBootstrap]);
 
   // 🔍 [검색 & 탭 필터링] 메모이제이션
   const filteredLogs = React.useMemo(() => {
