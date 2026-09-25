@@ -111,18 +111,21 @@ export function useAuth(): UseAuthReturn {
           }
         }
 
-        // NextAuth 세션이 비어있는 경우 백그라운드 무소음 발급 (호환성 유지, 중복 동시 발급 방지)
-        if (!session?.user?.email && !isGlobalSigningIn) {
+        // NextAuth 세션 쿠키가 없고 동기화가 필요한 경우에만 백그라운드 1회 초고속 발급
+        const hasSessionCookie =
+          typeof document !== "undefined" &&
+          document.cookie.includes("next-auth.session-token");
+
+        if (!session?.user?.email && !hasSessionCookie && !isGlobalSigningIn) {
           isGlobalSigningIn = true;
           try {
-            await signIn("google-login", {
-              redirect: false,
-              email,
-              name,
-              image,
+            await apiFetch("/api/auth/google/session", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email, name, image }),
             });
           } catch (e) {
-            console.warn("[useAuth] Silent NextAuth sign-in note:", e);
+            console.warn("[useAuth] Silent session cookie issue note:", e);
           } finally {
             setTimeout(() => {
               isGlobalSigningIn = false;
