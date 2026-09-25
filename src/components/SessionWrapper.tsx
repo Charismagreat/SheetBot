@@ -61,5 +61,13 @@ export default function SessionWrapper({ children }: { children: React.ReactNode
     };
   }, []);
 
-  return <SessionProvider basePath={basePath}>{children}</SessionProvider>;
+  return (
+    <SessionProvider
+      basePath={basePath}
+      refetchOnWindowFocus={false}
+      refetchWhenOffline={false}
+    >
+      {children}
+    </SessionProvider>
+  );
 }

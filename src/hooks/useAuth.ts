@@ -30,6 +30,8 @@ const DEFAULT_ADMIN_EMAILS = [
   "chachogreat@gmail.com",
 ];
 
+let isGlobalSigningIn = false;
+
 export function useAuth(): UseAuthReturn {
   const { data: session, status: nextAuthStatus } = useSession();
 
@@ -109,8 +111,9 @@ export function useAuth(): UseAuthReturn {
           }
         }
 
-        // NextAuth 세션이 비어있는 경우 백그라운드 무소음 발급 (호환성 유지)
-        if (!session?.user?.email) {
+        // NextAuth 세션이 비어있는 경우 백그라운드 무소음 발급 (호환성 유지, 중복 동시 발급 방지)
+        if (!session?.user?.email && !isGlobalSigningIn) {
+          isGlobalSigningIn = true;
           try {
             await signIn("google-login", {
               redirect: false,
@@ -120,6 +123,10 @@ export function useAuth(): UseAuthReturn {
             });
           } catch (e) {
             console.warn("[useAuth] Silent NextAuth sign-in note:", e);
+          } finally {
+            setTimeout(() => {
+              isGlobalSigningIn = false;
+            }, 3000);
           }
         }
 
