@@ -53,17 +53,12 @@ export default function NotificationsPage() {
 
   const [activeTab, setActiveTab] = useState<"devices" | "rules" | "logs" | "guide">("devices");
 
-  // 디바이스 상태
+  // 디바이스 상태 (시트봇 에이전트 전용)
   const [devices, setDevices] = useState<any[]>([]);
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false);
-  const [newDeviceLabel, setNewDeviceLabel] = useState("");
-  const [pairingMode, setPairingMode] = useState<"agent2" | "qr" | "google_account">("agent2");
-  const [newPhoneNumber, setNewPhoneNumber] = useState("");
-  const [pairingData, setPairingData] = useState<any>(null);
   const [agent2PairData, setAgent2PairData] = useState<any>(null);
   const [loadingAgent2Pair, setLoadingAgent2Pair] = useState(false);
-  const [submittingDevice, setSubmittingDevice] = useState(false);
 
   // SheetBot Agent2 실시간 페어링 정보 로드
   const fetchAgent2Pairing = useCallback(async () => {
@@ -250,39 +245,6 @@ export default function NotificationsPage() {
     };
   }, [status, session?.user?.email, fetchLogs, fetchDevices, fetchRules]);
 
-  // 새 기기 등록
-  const handleCreateDevice = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newDeviceLabel.trim()) {
-      showAlert("error", "디바이스 별칭(예: 내 스마트폰)을 입력해 주세요.");
-      return;
-    }
-
-    setSubmittingDevice(true);
-    try {
-      const res = await apiFetch("/api/user/devices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          label: newDeviceLabel.trim(),
-          pairingMode,
-          phoneNumber: newPhoneNumber.trim(),
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        showAlert("success", data.message || "디바이스가 등록되었습니다.");
-        setPairingData(data.pairingData || null);
-        fetchDevices();
-      } else {
-        showAlert("error", data.error || "디바이스 등록에 실패했습니다.");
-      }
-    } catch (err: any) {
-      showAlert("error", err.message || "통신 오류가 발생했습니다.");
-    } finally {
-      setSubmittingDevice(false);
-    }
-  };
 
   // 기기 삭제
   const handleDeleteDevice = async (dev: any) => {
@@ -561,7 +523,6 @@ export default function NotificationsPage() {
                 <button
                   onClick={() => {
                     setIsAddDeviceOpen(true);
-                    setPairingData(null);
                     fetchAgent2Pairing();
                   }}
                   className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
@@ -706,157 +667,91 @@ export default function NotificationsPage() {
                   </div>
                 </div>
 
-                {/* 하단 보조 액션 */}
-                <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-center gap-4 text-xs">
-                  <span className="text-slate-400">카메라 스캔이 어렵거나 수동 등록을 원하시나요?</span>
-                  <button
-                    onClick={() => {
-                      setIsAddDeviceOpen(true);
-                      setPairingMode("qr");
-                    }}
-                    className="font-bold text-slate-700 hover:text-emerald-700 underline cursor-pointer"
-                  >
-                    수동 기기 등록 팝업 열기
-                  </button>
+                {/* 하단 보조 안내 */}
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-center gap-2 text-xs text-slate-400">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>스마트폰 시트봇 에이전트 앱으로 위 QR 코드를 비추면 통신비 0원 자동화가 즉시 활성화됩니다.</span>
                 </div>
               </div>
             ) : (
-              <div className="space-y-5">
-                {/* 🌟 구버전 기기 잔존 또는 최신 앱 미연동 시 전환 권장 안내 배너 */}
-                {!devices.some((d) => d.pairingMode === "agent2" && d.status === "CONNECTED") && (
-                  <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-indigo-950 rounded-2xl p-4 sm:p-5 text-white border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-black border border-emerald-500/40">
-                          ⚡ 최신 시트봇 에이전트 전환 권장
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {devices.map((dev) => (
+                  <div
+                    key={dev.id}
+                    className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-black border flex items-center gap-1 ${
+                            dev.status === "CONNECTED"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : dev.status === "PAIRING"
+                              ? "bg-amber-50 text-amber-700 border-amber-200"
+                              : "bg-slate-100 text-slate-500 border-slate-200"
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              dev.status === "CONNECTED"
+                                ? "bg-emerald-500 animate-pulse"
+                                : dev.status === "PAIRING"
+                                ? "bg-amber-500"
+                                : "bg-slate-400"
+                            }`}
+                          />
+                          {dev.status === "CONNECTED" ? "연결됨 (정상)" : dev.status === "PAIRING" ? "페어링 대기" : "연결 끊김"}
                         </span>
-                        <span className="text-xs font-bold text-slate-300">통신비 0원 무제한 양방향 문자</span>
+
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          📱 시트봇 에이전트 앱
+                        </span>
                       </div>
-                      <p className="text-xs text-slate-300 leading-relaxed">
-                        현재 등록된 기기는 구버전(구글 메시지 QR) 방식이거나 오프라인 상태입니다. <br className="hidden sm:inline" />
-                        스마트폰에 <strong>시트봇 에이전트(SheetBot Agent)</strong> 앱을 설치하고 0초 QR 연동하면 안정적인 0원 발송이 가능합니다.
-                      </p>
+
+                      <div>
+                        <h3 className="font-extrabold text-sm text-slate-900 truncate">{dev.label}</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {dev.phoneNumber ? dev.phoneNumber : "0원 문자 발송 준비 완료"}
+                        </p>
+                      </div>
+
+                      {/* 배터리 / 네트워크 뱃지 */}
+                      <div className="flex items-center gap-2 text-[11px] text-slate-600 pt-1">
+                        <div className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
+                          <Battery className="w-3.5 h-3.5 text-slate-500" />
+                          <span>{dev.battery !== null ? `${dev.battery}%` : "배터리 양호"}</span>
+                        </div>
+                        <div className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
+                          <Wifi className="w-3.5 h-3.5 text-indigo-500" />
+                          <span>{dev.networkType || "Wi-Fi"}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <a
-                        href="/downloads/SheetBotAgent.apk"
-                        download="SheetBotAgent.apk"
-                        className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>APK 다운로드</span>
-                      </a>
+
+                    <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
                       <button
                         onClick={() => {
-                          setIsAddDeviceOpen(true);
-                          setPairingMode("agent2");
-                          if (!agent2PairData) fetchAgent2Pairing();
+                          setTestModalDevice(dev);
+                          setTestRecipient(dev.phoneNumber || "");
+                          setTestMessage(`[SheetBot] ${dev.label} 기기에서 발송된 테스트 문자입니다.`);
                         }}
-                        className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-1.5 border border-white/20 cursor-pointer"
+                        className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-all cursor-pointer"
                       >
-                        <QrCode className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>0초 QR 페어링</span>
+                        <Send className="w-3.5 h-3.5" />
+                        <span>테스트 발송</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteDevice(dev)}
+                        className="px-2.5 py-2 rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200/60 hover:border-rose-200 transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
+                        title="연동 해제 (기기 삭제)"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span className="text-[11px]">해제</span>
                       </button>
                     </div>
                   </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {devices.map((dev) => (
-                    <div
-                      key={dev.id}
-                      className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4"
-                    >
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-black border flex items-center gap-1 ${
-                              dev.status === "CONNECTED"
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                : dev.status === "PAIRING"
-                                ? "bg-amber-50 text-amber-700 border-amber-200"
-                                : "bg-slate-100 text-slate-500 border-slate-200"
-                            }`}
-                          >
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full ${
-                                dev.status === "CONNECTED"
-                                  ? "bg-emerald-500 animate-pulse"
-                                  : dev.status === "PAIRING"
-                                  ? "bg-amber-500"
-                                  : "bg-slate-400"
-                              }`}
-                            />
-                            {dev.status === "CONNECTED" ? "연결됨 (정상)" : dev.status === "PAIRING" ? "페어링 대기" : "연결 끊김"}
-                          </span>
-
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                              dev.pairingMode === "agent2"
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                : "bg-amber-50 text-amber-800 border border-amber-200"
-                            }`}
-                          >
-                            {dev.pairingMode === "agent2"
-                              ? "📱 시트봇 에이전트 앱"
-                              : dev.pairingMode === "google_account"
-                              ? "구글 계정 연동"
-                              : "구글 메시지 QR (구버전)"}
-                          </span>
-                        </div>
-
-                        <div>
-                          <h3 className="font-extrabold text-sm text-slate-900 truncate">{dev.label}</h3>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            {dev.phoneNumber ? dev.phoneNumber : "발신 번호 등록됨"}
-                          </p>
-                        </div>
-
-                        {/* 구버전 방식 알림 뱃지 */}
-                        {dev.pairingMode !== "agent2" && (
-                          <div className="p-2 bg-amber-50/70 border border-amber-200/80 rounded-xl text-[10.5px] text-amber-800 leading-snug">
-                            ⚠️ <strong>구버전 연동 방식</strong>입니다. 0원 무제한 발송을 위해 우측 상단 [새 시트봇 에이전트 연동]으로 앱을 연결해 주세요.
-                          </div>
-                        )}
-
-                        {/* 배터리 / 네트워크 뱃지 */}
-                        <div className="flex items-center gap-2 text-[11px] text-slate-600 pt-1">
-                          <div className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
-                            <Battery className="w-3.5 h-3.5 text-slate-500" />
-                            <span>{dev.battery !== null ? `${dev.battery}%` : "배터리 양호"}</span>
-                          </div>
-                          <div className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
-                            <Wifi className="w-3.5 h-3.5 text-indigo-500" />
-                            <span>{dev.networkType || "Wi-Fi"}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
-                        <button
-                          onClick={() => {
-                            setTestModalDevice(dev);
-                            setTestRecipient(dev.phoneNumber || "");
-                            setTestMessage(`[SheetBot] ${dev.label} 기기에서 발송된 테스트 문자입니다.`);
-                          }}
-                          className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-all cursor-pointer"
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                          <span>테스트 발송</span>
-                        </button>
-
-                        <button
-                          onClick={() => handleDeleteDevice(dev)}
-                          className="px-2.5 py-2 rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200/60 hover:border-rose-200 transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
-                          title="연동 해제 (기기 삭제)"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span className="text-[11px]">해제</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                ))}
               </div>
             )}
           </div>
@@ -906,174 +801,72 @@ export default function NotificationsPage() {
                 </div>
               </div>
               <button
-                onClick={() => {
-                  setIsAddDeviceOpen(false);
-                  setPairingData(null);
-                }}
+                onClick={() => setIsAddDeviceOpen(false)}
                 className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            {/* 연동 방식 선택 탭 */}
-            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
-              <button
-                type="button"
-                onClick={() => {
-                  setPairingMode("agent2");
-                  if (!agent2PairData) fetchAgent2Pairing();
-                }}
-                className={`py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  pairingMode === "agent2"
-                    ? "bg-white text-emerald-700 shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <Zap className="w-3.5 h-3.5 text-emerald-600" />
-                <span>시트봇 에이전트 (0초)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPairingMode("qr")}
-                className={`py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  pairingMode === "qr"
-                    ? "bg-white text-indigo-700 shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <QrCode className="w-3.5 h-3.5 text-indigo-600" />
-                <span>수동 기기 등록</span>
-              </button>
-            </div>
-
-            {pairingMode === "agent2" ? (
-              <div className="space-y-4">
-                {/* 1단계: APK 다운로드 안내 */}
-                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-xs font-bold text-slate-800">1. 스마트폰에 앱 설치</div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">안드로이드 스마트폰에 시트봇 에이전트(SheetBot Agent)를 설치하세요.</div>
-                  </div>
-                  <a
-                    href="/downloads/SheetBotAgent.apk"
-                    download="SheetBotAgent.apk"
-                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 flex-shrink-0 cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>📥 APK 받기</span>
-                  </a>
+            {/* 시트봇 에이전트 2단계 연동 화면 */}
+            <div className="space-y-4">
+              {/* 1단계: APK 다운로드 안내 */}
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-bold text-slate-800">1. 스마트폰에 앱 설치</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">안드로이드 스마트폰에 시트봇 에이전트(SheetBot Agent)를 설치하세요.</div>
                 </div>
-
-                {/* 2단계: QR 페어링 */}
-                <div className="p-4 bg-emerald-50/70 rounded-2xl border border-emerald-200 text-center space-y-3">
-                  <div className="text-xs font-extrabold text-emerald-900">2. 앱에서 아래 QR 코드를 스캔하세요</div>
-                  {loadingAgent2Pair ? (
-                    <div className="py-12 text-center text-emerald-600">
-                      <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
-                      <p className="text-xs font-bold">페어링 QR코드 생성 중...</p>
-                    </div>
-                  ) : agent2PairData?.qrData ? (
-                    <div className="inline-block p-3 bg-white rounded-xl shadow-xs border border-emerald-200">
-                      <img
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(agent2PairData.qrData)}`}
-                        alt="Agent2 Pairing QR"
-                        className="w-40 h-40 mx-auto"
-                      />
-                      <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-center gap-1.5 text-xs font-mono font-bold text-slate-700">
-                        <span className="text-slate-400 font-sans text-[10px]">PIN:</span>
-                        <span className="text-emerald-700 font-black tracking-wider">{agent2PairData.pinCode || "SA2-123456"}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-rose-600">페어링 정보를 불러오지 못했습니다.</p>
-                  )}
-                  <p className="text-[11px] text-emerald-800 leading-relaxed max-w-sm mx-auto">
-                    앱 실행 ➔ [QR 페어링] 스캔 즉시 회원님의 구글 계정과 스마트폰이 1:1 결합되어 0원 문자 발송이 활성화됩니다.
-                  </p>
-                </div>
-
-                <div className="pt-1 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAddDeviceOpen(false);
-                      fetchDevices();
-                    }}
-                    className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all cursor-pointer"
-                  >
-                    스캔 완료 및 닫기
-                  </button>
-                </div>
+                <a
+                  href="/downloads/SheetBotAgent.apk"
+                  download="SheetBotAgent.apk"
+                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 flex-shrink-0 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>📥 APK 받기</span>
+                </a>
               </div>
-            ) : !pairingData ? (
-              <form onSubmit={handleCreateDevice} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">디바이스 별칭</label>
-                  <input
-                    type="text"
-                    value={newDeviceLabel}
-                    onChange={(e) => setNewDeviceLabel(e.target.value)}
-                    placeholder="예: 내 갤럭시 S24, 업무용 폰"
-                    required
-                    className="w-full p-3 rounded-xl border border-slate-300 text-xs outline-none focus:border-emerald-600"
-                  />
-                </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">발신 전화번호 (선택)</label>
-                  <input
-                    type="tel"
-                    value={newPhoneNumber}
-                    onChange={(e) => setNewPhoneNumber(e.target.value)}
-                    placeholder="예: 010-1234-5678"
-                    className="w-full p-3 rounded-xl border border-slate-300 text-xs outline-none focus:border-emerald-600"
-                  />
-                </div>
-
-                <div className="pt-2 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsAddDeviceOpen(false)}
-                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50 cursor-pointer"
-                  >
-                    취소
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submittingDevice}
-                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    {submittingDevice ? "연동 준비 중..." : "페어링 시작 ➔"}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div className="space-y-4 text-center">
-                <div className="space-y-3">
-                  <p className="text-xs text-slate-600">
-                    스마트폰의 카메라 또는 기기 페어링 화면에서 아래 QR 코드를 스캔하세요.
-                  </p>
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 inline-block">
-                    <img
-                      src={pairingData.qrCodeUrl}
-                      alt="Pairing QR"
-                      className="w-44 h-44 mx-auto rounded-lg shadow-sm"
-                    />
+              {/* 2단계: QR 페어링 */}
+              <div className="p-4 bg-emerald-50/70 rounded-2xl border border-emerald-200 text-center space-y-3">
+                <div className="text-xs font-extrabold text-emerald-900">2. 앱에서 아래 QR 코드를 스캔하세요</div>
+                {loadingAgent2Pair ? (
+                  <div className="py-12 text-center text-emerald-600">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                    <p className="text-xs font-bold">페어링 QR코드 생성 중...</p>
                   </div>
-                </div>
+                ) : agent2PairData?.qrData ? (
+                  <div className="inline-block p-3 bg-white rounded-xl shadow-xs border border-emerald-200">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(agent2PairData.qrData)}`}
+                      alt="Agent2 Pairing QR"
+                      className="w-40 h-40 mx-auto"
+                    />
+                    <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-center gap-1.5 text-xs font-mono font-bold text-slate-700">
+                      <span className="text-slate-400 font-sans text-[10px]">PIN:</span>
+                      <span className="text-emerald-700 font-black tracking-wider">{agent2PairData.pinCode || "SA2-123456"}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-rose-600">페어링 정보를 불러오지 못했습니다.</p>
+                )}
+                <p className="text-[11px] text-emerald-800 leading-relaxed max-w-sm mx-auto">
+                  앱 실행 ➔ [QR 페어링] 스캔 즉시 회원님의 구글 계정과 스마트폰이 1:1 결합되어 0원 문자 발송이 활성화됩니다.
+                </p>
+              </div>
 
+              <div className="pt-1 flex items-center justify-end gap-2">
                 <button
+                  type="button"
                   onClick={() => {
                     setIsAddDeviceOpen(false);
                     fetchDevices();
                   }}
-                  className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
+                  className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all cursor-pointer"
                 >
-                  완료 및 닫기
+                  스캔 완료 및 닫기
                 </button>
               </div>
-            )}
+            </div>
           </div>
         </div>
       )}
