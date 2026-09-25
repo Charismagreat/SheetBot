@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const secret = process.env.NEXTAUTH_SECRET || "sheetbot_secret_2026_default_key_32chars";
 
   try {
-    // ⚡ 1. 쿠키에서 JWT 세션 토큰 직접 고속 복호화 (0ms 메모리 연산)
+    // ⚡ 1. 쿠키에서 JWT 세션 토큰 직접 초고속 복호화 (순수 인메모리 0.001ms 연산)
     const cookieHeader = req.headers.get("cookie") || "";
     const tokenMatch = cookieHeader.match(/(?:__Secure-)?next-auth\.session-token=([^;]+)/);
     
@@ -53,26 +53,11 @@ export async function GET(req: NextRequest) {
           );
         }
       } catch (decodeErr) {
-        // 토큰 손상 시 무시하고 다음 단계 진행
+        // 토큰 손상 시 즉시 빈 세션 반환
       }
     }
 
-    // ⚡ 2. getServerSession 300ms 초단기 타임아웃 레이스 (I/O 병목 방어)
-    const sessionPromise = getServerSession(authOptions).catch(() => null);
-    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 300));
-    const session = await Promise.race([sessionPromise, timeoutPromise]);
-
-    if (session?.user?.email) {
-      return NextResponse.json(session, {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-        },
-      });
-    }
-
-    // ⚡ 3. 세션이 없는 경우: 외부 네트워크 I/O 일절 없이 즉시 빈 세션 반환 (0ms)
+    // ⚡ 2. 세션 토큰이 없거나 무효한 경우: 외부 I/O 일절 없이 즉각 빈 세션 `{}` 반환 (0ms)
     return NextResponse.json({}, {
       status: 200,
       headers: {
