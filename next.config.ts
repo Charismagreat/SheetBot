@@ -68,6 +68,30 @@ const nextConfig: any = {
         destination: "/:path*",
       },
       {
+        source: "/__visitor_auth_proxy/:path*",
+        destination: `${egdeskApiUrl}/visitor-auth/tools/call`,
+      },
+      {
+        source: "/__visitor_auth_proxy",
+        destination: `${egdeskApiUrl}/visitor-auth/tools/call`,
+      },
+      {
+        source: "/__visitor_google_proxy/:path*",
+        destination: `${egdeskApiUrl}/visitor-google/tools/call`,
+      },
+      {
+        source: "/__visitor_google_proxy",
+        destination: `${egdeskApiUrl}/visitor-google/tools/call`,
+      },
+      {
+        source: "/__ai_caller_proxy/:path*",
+        destination: `${egdeskApiUrl}/ai-caller/tools/call`,
+      },
+      {
+        source: "/__ai_caller_proxy",
+        destination: `${egdeskApiUrl}/ai-caller/tools/call`,
+      },
+      {
         source: "/__apps_script_proxy/:path*",
         destination: `${egdeskApiUrl}/apps-script/tools/call`,
       },
