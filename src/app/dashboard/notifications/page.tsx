@@ -140,25 +140,17 @@ export default function NotificationsPage() {
         }
       }
 
-      const pinCode = `SA2-${pinNum}`;
-      const qrPayload = {
-        app: "SheetBotAgent2",
-        version: "1.0",
-        userEmail: cleanEmail,
-        token,
-        pinCode,
-        webhookUrl: "https://sheetbot.cloud/api/webhooks/dispatch",
-        heartbeatUrl: "https://sheetbot.cloud/api/user/agent2/heartbeat",
-        createdAt: new Date().toISOString(),
-      };
+      const pinCode = `SB-${pinNum}`;
+      const qrUri = `sheetbot://pair?email=${encodeURIComponent(cleanEmail)}&token=${encodeURIComponent(token)}&pin=${encodeURIComponent(pinCode)}`;
 
       setAgent2PairData({
         success: true,
         userEmail: cleanEmail,
         token,
         pinCode,
-        qrData: JSON.stringify(qrPayload),
-        webhookUrl: qrPayload.webhookUrl,
+        qrData: qrUri,
+        webhookUrl: "https://sheetbot.cloud/api/webhooks/dispatch",
+        fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/webhooks/dispatch",
       });
     } catch (err: any) {
       console.warn("[Notifications] Agent2 pair generate warning:", err.message);
@@ -789,7 +781,7 @@ export default function NotificationsPage() {
                           <div className="mt-1 pt-1 border-t border-slate-100 text-center">
                             <span className="text-[10px] text-slate-400 mr-1 font-bold">PIN:</span>
                             <span className="text-xs font-mono font-black text-emerald-700 tracking-wider">
-                              {agent2PairData.pinCode || "SA2-123456"}
+                              {agent2PairData.pinCode || "SB-777777"}
                             </span>
                           </div>
                         </div>
@@ -1027,13 +1019,13 @@ export default function NotificationsPage() {
                 ) : agent2PairData?.qrData ? (
                   <div className="inline-block p-3 bg-white rounded-xl shadow-xs border border-emerald-200">
                     <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(agent2PairData.qrData)}`}
-                      alt="Agent2 Pairing QR"
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(agent2PairData.qrData || `sheetbot://pair?email=${encodeURIComponent(effectiveEmail || "")}&pin=SB-777777`)}`}
+                      alt="SheetBot Agent Pairing QR"
                       className="w-40 h-40 mx-auto"
                     />
                     <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-center gap-1.5 text-xs font-mono font-bold text-slate-700">
                       <span className="text-slate-400 font-sans text-[10px]">PIN:</span>
-                      <span className="text-emerald-700 font-black tracking-wider">{agent2PairData.pinCode || "SA2-123456"}</span>
+                      <span className="text-emerald-700 font-black tracking-wider">{agent2PairData.pinCode || "SB-777777"}</span>
                     </div>
                   </div>
                 ) : (

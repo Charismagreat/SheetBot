@@ -46,12 +46,14 @@ export async function GET(req: NextRequest) {
       createdAt: new Date().toISOString(),
     };
 
+    const qrUri = `sheetbot://pair?email=${encodeURIComponent(cleanEmail)}&token=${encodeURIComponent(token)}&pin=${encodeURIComponent(pinCode)}`;
+
     return NextResponse.json({
       success: true,
       userEmail: cleanEmail,
       token,
       pinCode,
-      qrData: JSON.stringify(qrPayload),
+      qrData: qrUri,
       webhookUrl: qrPayload.webhookUrl,
       fallbackWebhookUrl: qrPayload.fallbackWebhookUrl,
     });

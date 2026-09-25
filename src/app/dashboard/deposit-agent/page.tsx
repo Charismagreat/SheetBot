@@ -177,27 +177,16 @@ export default function DepositAgentPage() {
       }
 
       const pinCode = `SB-${pinNum}`;
-      const qrPayload = {
-        app: "SheetBotDepositAgent",
-        version: "1.0",
-        userEmail: cleanEmail,
-        token,
-        pinCode,
-        webhookUrl: "https://sheetbot.cloud/api/wallet/bank-webhook",
-        fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/bank-webhook",
-        heartbeatUrl: "https://sheetbot.cloud/api/wallet/agent/heartbeat",
-        fallbackHeartbeatUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/agent/heartbeat",
-        createdAt: new Date().toISOString(),
-      };
+      const qrUri = `sheetbot://pair?email=${encodeURIComponent(cleanEmail)}&token=${encodeURIComponent(token)}&pin=${encodeURIComponent(pinCode)}`;
 
       setPairingData({
         success: true,
         userEmail: cleanEmail,
         token,
         pinCode,
-        qrData: JSON.stringify(qrPayload),
-        webhookUrl: qrPayload.webhookUrl,
-        fallbackWebhookUrl: qrPayload.fallbackWebhookUrl,
+        qrData: qrUri,
+        webhookUrl: "https://sheetbot.cloud/api/wallet/bank-webhook",
+        fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/bank-webhook",
       });
     } catch (err: any) {
       console.error("Fetch pairing error:", err);
@@ -463,19 +452,10 @@ export default function DepositAgentPage() {
   };
 
   const userEmail = session?.user?.email || "chachogreat@gmail.com";
-  const defaultQrPayload = JSON.stringify({
-    app: "SheetBotDepositAgent",
-    version: "1.0",
-    userEmail,
-    pinCode: "SB-777777",
-    webhookUrl: "https://sheetbot.cloud/api/wallet/bank-webhook",
-    fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/bank-webhook",
-    heartbeatUrl: "https://sheetbot.cloud/api/wallet/agent/heartbeat",
-    fallbackHeartbeatUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/agent/heartbeat",
-  });
+  const defaultQrUri = `sheetbot://pair?email=${encodeURIComponent(userEmail)}&pin=SB-777777`;
 
   const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=8&data=${encodeURIComponent(
-    pairingData?.qrData || defaultQrPayload
+    pairingData?.qrData || defaultQrUri
   )}`;
 
   return (
