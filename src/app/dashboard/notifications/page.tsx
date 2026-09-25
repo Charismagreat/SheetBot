@@ -106,18 +106,22 @@ export default function NotificationsPage() {
     setTimeout(() => setAlert(null), 5000);
   };
 
-  // 1. 디바이스 목록 로드
+  // 1. 디바이스 목록 로드 (5초 안전 타임아웃 보호)
   const fetchDevices = useCallback(async () => {
     setLoadingDevices(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
     try {
-      const res = await apiFetch("/api/user/devices");
-      const data = await res.json();
-      if (data.success) {
+      const res = await apiFetch("/api/user/devices", { signal: controller.signal });
+      clearTimeout(timer);
+      const data = await res.json().catch(() => ({}));
+      if (data?.success) {
         setDevices(data.devices || []);
       }
     } catch (err: any) {
-      console.error("Fetch devices error:", err);
+      console.warn("[Notifications] Fetch devices warning/timeout:", err.message);
     } finally {
+      clearTimeout(timer);
       setLoadingDevices(false);
     }
   }, []);
