@@ -1,6 +1,7 @@
 "use client";
 
 import { apiFetch } from '@/lib/api';
+import { onUserDataChanged } from '@/lib/egdesk-helpers';
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
@@ -507,7 +508,7 @@ export default function EasyBot() {
     if (sessionStatus === "loading" || !session?.user?.email) return;
 
     let isSubscribed = true;
-    let pollTimer: any = null;
+    let unsubWatcher: (() => void) | null = null;
 
     const initAdminAssistant = async () => {
       try {
@@ -658,9 +659,23 @@ export default function EasyBot() {
           }
         };
 
-        // 첫 진입 시 기준점 동기화 1회 8초 지연 후 실행, 이후 120초 주기 완화 (소켓 보호)
-        setTimeout(pollAdminEvents, 8000);
-        pollTimer = setInterval(pollAdminEvents, 120000);
+        // ⚡ [0초 실시간 감시] 주기적 setInterval 폴링을 전면 제거하고 이지데스크 공식 DB 왓처(onUserDataChanged) 적용
+        const TARGET_TABLES = [
+          "sheetbot_enterprise_inquiries",
+          "sheetbot_tax_invoices",
+          "sheetbot_inquiries",
+          "sheetbot_user_devices",
+        ];
+
+        // 첫 진입 시 기준점 동기화 1회 4초 지연 후 실행 (초기 기준 ID 획득)
+        setTimeout(pollAdminEvents, 4000);
+
+        unsubWatcher = onUserDataChanged((event) => {
+          if (!isSubscribed) return;
+          if (!event.tableName || TARGET_TABLES.includes(event.tableName)) {
+            pollAdminEvents();
+          }
+        });
       } catch (err) {
         // 일반 유저인 경우 무시
       }
@@ -670,7 +685,7 @@ export default function EasyBot() {
 
     return () => {
       isSubscribed = false;
-      if (pollTimer) clearInterval(pollTimer);
+      if (unsubWatcher) unsubWatcher();
     };
   }, [session?.user?.email, sessionStatus, setOpenWithPersistence]);
 
