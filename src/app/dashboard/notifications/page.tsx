@@ -60,21 +60,27 @@ export default function NotificationsPage() {
   const [agent2PairData, setAgent2PairData] = useState<any>(null);
   const [loadingAgent2Pair, setLoadingAgent2Pair] = useState(false);
 
-  // SheetBot Agent2 실시간 페어링 정보 로드
+  // SheetBot Agent2 실시간 페어링 정보 로드 (userEmail 전달 및 5초 안전 타임아웃)
   const fetchAgent2Pairing = useCallback(async () => {
     setLoadingAgent2Pair(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
     try {
-      const res = await apiFetch("/api/user/agent2/pair");
-      const data = await res.json();
-      if (data.success) {
+      const email = session?.user?.email || "";
+      const emailParam = email ? `?userEmail=${encodeURIComponent(email)}` : "";
+      const res = await apiFetch(`/api/user/agent2/pair${emailParam}`, { signal: controller.signal });
+      clearTimeout(timer);
+      const data = await res.json().catch(() => ({}));
+      if (data?.success) {
         setAgent2PairData(data);
       }
     } catch (err: any) {
-      console.error("[Notifications] Agent2 pair error:", err);
+      console.warn("[Notifications] Agent2 pair warning/timeout:", err.message);
     } finally {
+      clearTimeout(timer);
       setLoadingAgent2Pair(false);
     }
-  }, []);
+  }, [session?.user?.email]);
 
   // 테스트 발송 모달
   const [testModalDevice, setTestModalDevice] = useState<any>(null);
@@ -107,7 +113,12 @@ export default function NotificationsPage() {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
-      const res = await apiFetch("/api/user/devices", { signal: controller.signal });
+      const email = session?.user?.email || "";
+      const emailParam = email ? `?userEmail=${encodeURIComponent(email)}` : "";
+      const res = await apiFetch(`/api/user/devices${emailParam}`, {
+        signal: controller.signal,
+        headers: email ? { "x-sheetbot-user-email": email } : undefined,
+      });
       clearTimeout(timer);
       const data = await res.json().catch(() => ({}));
       if (data?.success) {
@@ -119,39 +130,57 @@ export default function NotificationsPage() {
       clearTimeout(timer);
       setLoadingDevices(false);
     }
-  }, []);
+  }, [session?.user?.email]);
 
   // 2. 스마트 규칙 목록 로드
   const fetchRules = useCallback(async () => {
     setLoadingRules(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
     try {
-      const res = await apiFetch("/api/user/smart-rules");
-      const data = await res.json();
-      if (data.success) {
+      const email = session?.user?.email || "";
+      const emailParam = email ? `?userEmail=${encodeURIComponent(email)}` : "";
+      const res = await apiFetch(`/api/user/smart-rules${emailParam}`, {
+        signal: controller.signal,
+        headers: email ? { "x-sheetbot-user-email": email } : undefined,
+      });
+      clearTimeout(timer);
+      const data = await res.json().catch(() => ({}));
+      if (data?.success) {
         setRules(data.rules || []);
       }
     } catch (err: any) {
-      console.error("Fetch rules error:", err);
+      console.warn("[Notifications] Fetch rules warning/timeout:", err.message);
     } finally {
+      clearTimeout(timer);
       setLoadingRules(false);
     }
-  }, []);
+  }, [session?.user?.email]);
 
   // 3. 발송 로그 로드
   const fetchLogs = useCallback(async () => {
     setLoadingLogs(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
     try {
-      const res = await apiFetch("/api/user/dispatch-logs");
-      const data = await res.json();
-      if (data.success) {
+      const email = session?.user?.email || "";
+      const emailParam = email ? `?userEmail=${encodeURIComponent(email)}` : "";
+      const res = await apiFetch(`/api/user/dispatch-logs${emailParam}`, {
+        signal: controller.signal,
+        headers: email ? { "x-sheetbot-user-email": email } : undefined,
+      });
+      clearTimeout(timer);
+      const data = await res.json().catch(() => ({}));
+      if (data?.success) {
         setLogs(data.logs || []);
       }
     } catch (err: any) {
-      console.error("Fetch logs error:", err);
+      console.warn("[Notifications] Fetch logs warning/timeout:", err.message);
     } finally {
+      clearTimeout(timer);
       setLoadingLogs(false);
     }
-  }, []);
+  }, [session?.user?.email]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -211,10 +240,10 @@ export default function NotificationsPage() {
           } catch {}
         };
 
-        eventSource.onerror = (e) => {
-          // 일시적 재연결 지연 시 즉각적인 회색 점멸을 방지하고 상태 복구
-          if (eventSource?.readyState === EventSource.CONNECTING) {
-            // 브라우저 네이티브 재연결 대기 중
+        eventSource.onerror = () => {
+          // 브라우저가 자동 재연결 중이거나 열려있으면 정상 상태 유지
+          if (eventSource && (eventSource.readyState === EventSource.OPEN || eventSource.readyState === EventSource.CONNECTING)) {
+            setIsRealtimeLive(true);
             return;
           }
           setIsRealtimeLive(false);

@@ -11,8 +11,17 @@ import { setupDatabase } from "@/lib/setup-db";
  */
 export async function GET(req: NextRequest) {
   try {
-    await setupDatabase();
-    const userEmail = await getCurrentUserEmail();
+    const url = new URL(req.url);
+    const queryEmail = url.searchParams.get("userEmail") || url.searchParams.get("email");
+    const headerEmail = req.headers.get("x-sheetbot-user-email");
+    const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
+
+    const userEmail = (queryEmail && queryEmail.includes("@"))
+      ? queryEmail.toLowerCase().trim()
+      : (headerEmail && headerEmail.includes("@"))
+      ? headerEmail.toLowerCase().trim()
+      : (sessionEmail || "");
+
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }

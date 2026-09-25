@@ -986,9 +986,6 @@ export default function DashboardPage() {
               <Link
                 href="/dashboard/notifications"
                 prefetch={true}
-                onClick={() => {
-                  router.push("/dashboard/notifications");
-                }}
                 className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all shrink-0 active:scale-95 cursor-pointer"
                 data-easybot-hint="스마트 알림 센터: 내 안드로이드 스마트폰을 연동하고 구글 시트 자동 문자 발송 규칙을 관리합니다."
               >
