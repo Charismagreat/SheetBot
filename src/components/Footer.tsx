@@ -105,22 +105,22 @@ export default function Footer() {
                 <h4 className="font-bold text-slate-800 text-xs">서비스 바로가기</h4>
                 <ul className="space-y-1.5 text-slate-500">
                   <li>
-                    <Link href="/dashboard" className="hover:text-slate-900 transition-colors">
+                    <Link href="/dashboard" prefetch={false} className="hover:text-slate-900 transition-colors">
                       내 자동화 워크스페이스
                     </Link>
                   </li>
                   <li>
-                    <Link href="/dashboard/pricing" className="hover:text-slate-900 transition-colors">
+                    <Link href="/dashboard/pricing" prefetch={false} className="hover:text-slate-900 transition-colors">
                       토큰 충전 &amp; 요금제
                     </Link>
                   </li>
                   <li>
-                    <Link href="/dashboard/settings" className="hover:text-slate-900 transition-colors">
+                    <Link href="/dashboard/settings" prefetch={false} className="hover:text-slate-900 transition-colors">
                       AI 모델 환경 설정
                     </Link>
                   </li>
                   <li>
-                    <Link href="/dashboard/ai-usage" className="hover:text-slate-900 transition-colors">
+                    <Link href="/dashboard/ai-usage" prefetch={false} className="hover:text-slate-900 transition-colors">
                       AI 사용량 관제
                     </Link>
                   </li>
@@ -132,22 +132,22 @@ export default function Footer() {
                 <h4 className="font-bold text-slate-800 text-xs">가이드 &amp; 지원</h4>
                 <ul className="space-y-1.5 text-slate-500">
                   <li>
-                    <Link href="/guide" className="hover:text-slate-900 font-semibold text-emerald-700 transition-colors">
+                    <Link href="/guide" prefetch={false} className="hover:text-slate-900 font-semibold text-emerald-700 transition-colors">
                       📖 사용법 &amp; 활용 가이드
                     </Link>
                   </li>
                   <li>
-                    <Link href="/faq" className="hover:text-slate-900 transition-colors">
+                    <Link href="/faq" prefetch={false} className="hover:text-slate-900 transition-colors">
                       ❓ 자주 묻는 질문 (FAQ)
                     </Link>
                   </li>
                   <li>
-                    <Link href="/reviews" className="hover:text-slate-900 transition-colors">
+                    <Link href="/reviews" prefetch={false} className="hover:text-slate-900 transition-colors">
                       ⭐ 회원 사용 후기 게시판
                     </Link>
                   </li>
                   <li>
-                    <Link href="/contact" className="hover:text-slate-900 transition-colors">
+                    <Link href="/contact" prefetch={false} className="hover:text-slate-900 transition-colors">
                       💬 1:1 고객 문의 접수
                     </Link>
                   </li>
@@ -206,15 +206,15 @@ export default function Footer() {
           <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-slate-100 text-slate-400">
             <p>{footerInfo.copyright_text}</p>
             <div className="flex items-center gap-4 text-[11px]">
-              <Link href="/terms" className="hover:text-slate-700 transition-colors">
+              <Link href="/terms" prefetch={false} className="hover:text-slate-700 transition-colors">
                 이용약관
               </Link>
               <span>•</span>
-              <Link href="/privacy" className="hover:text-slate-900 font-bold transition-colors text-slate-700">
+              <Link href="/privacy" prefetch={false} className="hover:text-slate-900 font-bold transition-colors text-slate-700">
                 개인정보처리방침
               </Link>
               <span>•</span>
-              <Link href="/finance-terms" className="hover:text-slate-700 transition-colors">
+              <Link href="/finance-terms" prefetch={false} className="hover:text-slate-700 transition-colors">
                 전자금융거래 이용약관
               </Link>
             </div>

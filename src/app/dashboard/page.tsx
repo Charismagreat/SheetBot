@@ -676,16 +676,7 @@ export default function DashboardPage() {
     }
   };
 
-  if (status === "loading" && !user) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="flex items-center gap-2 text-slate-500 text-sm font-bold">
-          <RefreshCw className="w-4 h-4 animate-spin text-emerald-600" />
-          <span>구글 계정 세션 확인 중...</span>
-        </div>
-      </div>
-    );
-  }
+  // ⚡ 화면 블로킹 스피너를 완전히 제거하고 셸 UI 즉시 렌더링 (0초 즉각 렌더링 원칙)
 
   const activeSchedulesCount = schedules.filter((s) => s.status === "ACTIVE").length;
 

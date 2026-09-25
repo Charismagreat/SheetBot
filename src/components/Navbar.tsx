@@ -184,6 +184,7 @@ export default function Navbar() {
                   <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xl p-2 space-y-1">
                     <Link
                       href="/guide"
+                      prefetch={false}
                       onClick={() => setSupportDropdownOpen(false)}
                       className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 transition-all group"
                     >
@@ -198,6 +199,7 @@ export default function Navbar() {
 
                     <Link
                       href="/faq"
+                      prefetch={false}
                       onClick={() => setSupportDropdownOpen(false)}
                       className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-indigo-50 text-slate-700 hover:text-indigo-800 transition-all group"
                     >
@@ -212,6 +214,7 @@ export default function Navbar() {
 
                     <Link
                       href="/reviews"
+                      prefetch={false}
                       onClick={() => setSupportDropdownOpen(false)}
                       className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-amber-50 text-slate-700 hover:text-amber-800 transition-all group"
                     >
@@ -227,6 +230,7 @@ export default function Navbar() {
                     <div className="border-t border-slate-100 my-1 pt-1">
                       <Link
                         href="/contact"
+                        prefetch={false}
                         onClick={() => setSupportDropdownOpen(false)}
                         className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-slate-100 text-slate-800 font-bold transition-all group"
                       >
@@ -255,6 +259,7 @@ export default function Navbar() {
               {/* 내 워크스페이스 바로가기 */}
               <Link
                 href="/dashboard"
+                prefetch={false}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/80 rounded-xl transition-all shadow-2xs whitespace-nowrap shrink-0"
                 data-easybot-hint="워크스페이스 이동: 내 스프레드시트 자동화 프로젝트, 토큰 지갑, 스케줄 종합 관리 화면으로 이동합니다."
               >
@@ -504,6 +509,7 @@ export default function Navbar() {
             </div>
             <Link
               href="/guide"
+              prefetch={false}
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all"
             >
@@ -512,6 +518,7 @@ export default function Navbar() {
             </Link>
             <Link
               href="/faq"
+              prefetch={false}
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all"
             >
@@ -520,6 +527,7 @@ export default function Navbar() {
             </Link>
             <Link
               href="/reviews"
+              prefetch={false}
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all"
             >
@@ -528,6 +536,7 @@ export default function Navbar() {
             </Link>
             <Link
               href="/contact"
+              prefetch={false}
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all"
             >
