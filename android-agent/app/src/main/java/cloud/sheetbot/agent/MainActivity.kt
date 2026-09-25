@@ -394,21 +394,38 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun parseQrContents(contents: String): Pair<String, String?>? {
-        val uri = Uri.parse(contents)
-        val scheme = uri.scheme
-        val host = uri.host
+        val trimmed = contents.trim()
 
-        if (scheme == "sheetbot" && host == "pair") {
-            val email = uri.getQueryParameter("email") ?: return null
-            val token = uri.getQueryParameter("token")
-            return Pair(email, token)
+        // 1. JSON 형태
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            try {
+                val json = org.json.JSONObject(trimmed)
+                val email = json.optString("userEmail", json.optString("email", ""))
+                val token = json.optString("token").takeIf { it.isNotBlank() }
+                if (email.isNotBlank()) {
+                    return Pair(email, token)
+                }
+            } catch (_: Exception) {}
         }
 
-        if (contents.contains("sheetbot.cloud") || contents.contains("/pair")) {
-            val email = uri.getQueryParameter("email")
-            val token = uri.getQueryParameter("token")
-            if (!email.isNullOrBlank()) return Pair(email, token)
-        }
+        // 2. URI 형태 (sheetbot://pair 또는 https://...)
+        try {
+            val uri = Uri.parse(trimmed)
+            val scheme = uri.scheme
+            val host = uri.host
+
+            if (scheme == "sheetbot" && host == "pair") {
+                val email = uri.getQueryParameter("email") ?: return null
+                val token = uri.getQueryParameter("token")
+                return Pair(email, token)
+            }
+
+            if (trimmed.contains("sheetbot.cloud") || trimmed.contains("/pair")) {
+                val email = uri.getQueryParameter("email")
+                val token = uri.getQueryParameter("token")
+                if (!email.isNullOrBlank()) return Pair(email, token)
+            }
+        } catch (_: Exception) {}
 
         return null
     }

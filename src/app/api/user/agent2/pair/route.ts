@@ -34,27 +34,18 @@ export async function GET(req: NextRequest) {
 
     // 사용자가 입력하기 쉬운 6자리 숫자 핀코드 생성
     const pinHash = crypto.createHash("md5").update(`${cleanEmail}-${token}`).digest("hex");
-    const pinCode = "SA2-" + ((parseInt(pinHash.slice(0, 6), 16) % 900000) + 100000);
+    const pinCode = "SB-" + ((parseInt(pinHash.slice(0, 6), 16) % 900000) + 100000);
 
-    // QR코드에 인코딩될 JSON 데이터
-    const qrPayload = {
-      app: "SheetBotAgent2",
-      version: "1.0",
-      userEmail: cleanEmail,
-      token,
-      pinCode,
-      webhookUrl: "https://sheetbot.cloud/api/webhooks/dispatch",
-      heartbeatUrl: "https://sheetbot.cloud/api/user/agent2/heartbeat",
-      createdAt: new Date().toISOString(),
-    };
+    const qrUri = `sheetbot://pair?email=${encodeURIComponent(cleanEmail)}&token=${encodeURIComponent(token)}&pin=${encodeURIComponent(pinCode)}`;
 
     return NextResponse.json({
       success: true,
       userEmail: cleanEmail,
       token,
       pinCode,
-      qrData: JSON.stringify(qrPayload),
-      webhookUrl: qrPayload.webhookUrl,
+      qrData: qrUri,
+      webhookUrl: "https://sheetbot.cloud/api/webhooks/dispatch",
+      fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/webhooks/dispatch",
     });
   } catch (err: any) {
     console.error("[Agent2-Pair] GET error:", err);
@@ -127,7 +118,7 @@ export async function POST(req: NextRequest) {
         "sheetbot_user_devices",
         {
           status: "CONNECTED",
-          label: `${model} (SheetBot Agent2)`,
+          label: `${model} (SheetBot Agent)`,
           phone_number: phoneNumber || existing.rows[0].phone_number || "",
           device_id: deviceId,
           last_connected_at: now,
@@ -142,10 +133,10 @@ export async function POST(req: NextRequest) {
         {
           id: recordId,
           user_email: cleanEmail,
-          label: `${model} (SheetBot Agent2)`,
+          label: `${model} (SheetBot Agent)`,
           phone_number: phoneNumber || "",
           device_id: deviceId,
-          pairing_mode: "agent2",
+          pairing_mode: "agent",
           status: "CONNECTED",
           last_connected_at: now,
           created_at: now,
@@ -155,7 +146,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "SheetBot Agent2가 성공적으로 연동되었습니다! 이제 시트에서 0원 문자 발송과 수신 연동이 가능합니다.",
+      message: "SheetBot Agent가 성공적으로 연동되었습니다! 이제 시트에서 0원 문자 발송과 수신 연동이 가능합니다.",
       deviceId,
       userEmail: cleanEmail,
       status: "CONNECTED",
