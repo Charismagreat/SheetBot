@@ -157,12 +157,13 @@ export async function getCurrentUserEmail(req?: Request): Promise<string | null>
     }
   } catch {}
 
-  // 3. Visitor 세션 ID로부터 sheetbot_users 및 API 키 매핑 이메일 확인
+  // 3. Visitor 세션 ID로부터 실제 구글 로그인 이메일 확인 및 sheetbot_users 매핑
   try {
     const visitorSessionId = await getCurrentVisitorSessionId(req);
     if (visitorSessionId) {
-      const { queryTable } = await import("@/lib/egdesk-helpers");
-      // 3-1. sheetbot_users 테이블 매핑 확인
+      const { queryTable, updateRows, insertRows } = await import("@/lib/egdesk-helpers");
+
+      // 3-1. sheetbot_users 테이블 매핑 확인 (캐시)
       const userRes = await queryTable("sheetbot_users", {
         filters: { visitor_session_id: visitorSessionId },
         limit: 1,
@@ -173,7 +174,55 @@ export async function getCurrentUserEmail(req?: Request): Promise<string | null>
         return matchedUser.email.toLowerCase().trim();
       }
 
-      // 3-2. sheetbot_user_api_keys 테이블 매핑 확인
+      // 3-2. DB 매핑이 없을 경우 이지데스크 visitor-google status 직접 실시간 검증 (SSOT)
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || "http://localhost:8080";
+        const statusRes = await fetch(`${apiUrl}/visitor-google/tools/call`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${visitorSessionId}`,
+            Origin: "https://sheetbot.cloud",
+            "X-Visitor-Origin": "https://sheetbot.cloud",
+          },
+          body: JSON.stringify({ tool: "status", arguments: {} }),
+        });
+
+        if (statusRes.ok) {
+          const statusJson = await statusRes.json();
+          const realEmail =
+            statusJson?.email ||
+            statusJson?.result?.email ||
+            statusJson?.result?.content?.[0]?.text;
+
+          let resolvedEmail = "";
+          if (typeof realEmail === "string" && realEmail.includes("@")) {
+            resolvedEmail = realEmail.toLowerCase().trim();
+          } else if (typeof realEmail === "string") {
+            try {
+              const parsed = JSON.parse(realEmail);
+              if (parsed?.email && parsed.email.includes("@")) {
+                resolvedEmail = parsed.email.toLowerCase().trim();
+              }
+            } catch {}
+          }
+
+          if (resolvedEmail) {
+            // 백그라운드에서 sheetbot_users에 세션 매핑 즉시 영구 저장
+            void updateRows(
+              "sheetbot_users",
+              { visitor_session_id: visitorSessionId, updated_at: new Date().toISOString() },
+              { filters: { email: resolvedEmail } }
+            ).catch(() => {});
+
+            return resolvedEmail;
+          }
+        }
+      } catch (vgErr) {
+        console.warn("[Auth] visitor-google status call warning:", vgErr);
+      }
+
+      // 3-3. sheetbot_user_api_keys 테이블 매핑 확인
       const keyRes = await queryTable("sheetbot_user_api_keys", {
         filters: { visitor_session_id: visitorSessionId },
         limit: 1,
