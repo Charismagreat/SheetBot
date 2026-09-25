@@ -96,6 +96,7 @@ export default function Navbar() {
         </span>
         <Link
           href="/enterprise"
+          prefetch={false}
           className="underline hover:text-teal-300 font-extrabold flex items-center gap-0.5 shrink-0 text-teal-300 ml-1 whitespace-nowrap"
         >
           <span>자세히 보기</span>
@@ -108,6 +109,7 @@ export default function Navbar() {
         <div className="flex items-center gap-5 xl:gap-8 shrink-0">
           <Link
             href="/"
+            prefetch={false}
             className="group shrink-0 transition-transform active:scale-95"
             data-easybot-hint="홈 로고: SheetBot의 서비스 소개 및 랜딩 페이지로 이동합니다."
           >
@@ -119,6 +121,7 @@ export default function Navbar() {
             {/* 1. 활용 사례 (33종 레시피) */}
             <Link
               href="/use-cases"
+              prefetch={false}
               className="px-3 py-2 rounded-xl hover:text-teal-800 hover:bg-teal-50/70 transition-all whitespace-nowrap flex items-center gap-1.5"
             >
               <span>활용 사례</span>
@@ -130,6 +133,7 @@ export default function Navbar() {
             {/* 2. 기업 맞춤 AX 구축 (경량 ERP/MES) */}
             <Link
               href="/enterprise"
+              prefetch={false}
               className="px-3 py-2 rounded-xl text-teal-800 bg-teal-50/80 hover:bg-teal-100/80 border border-teal-200/80 font-black transition-all whitespace-nowrap flex items-center gap-1.5 shadow-2xs"
             >
               <Building2 className="w-3.5 h-3.5 text-teal-600" />
@@ -142,6 +146,7 @@ export default function Navbar() {
             {/* 3. 템플릿 마켓 */}
             <Link
               href="/marketplace"
+              prefetch={false}
               target="_blank"
               rel="noopener noreferrer"
               className="px-3 py-2 rounded-xl text-slate-700 hover:text-emerald-700 hover:bg-emerald-50/70 font-bold transition-all whitespace-nowrap flex items-center gap-1.5"
@@ -263,6 +268,7 @@ export default function Navbar() {
                   {pathname !== "/dashboard/notifications" && (
                     <Link
                       href="/dashboard/deposit-agent"
+                      prefetch={false}
                       className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-800 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-200/80 rounded-xl transition-all shadow-2xs whitespace-nowrap shrink-0"
                       data-easybot-hint="SheetBot Agent M: 안드로이드 스마트폰 전용 APK를 연동하여 24시간 실시간 무통장 입금 감지 및 전역 토큰 지갑 자동 충전을 가동합니다."
                       title="관리자 전용 무통장 입금 자동 감지 시스템 (SheetBot Agent M)"
@@ -275,6 +281,7 @@ export default function Navbar() {
 
                   <Link
                     href="/dashboard/admin"
+                    prefetch={false}
                     className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-rose-700 bg-rose-50/70 hover:bg-rose-100 border border-rose-200/60 rounded-xl transition-all whitespace-nowrap shrink-0"
                     data-easybot-hint="관리자 센터: 1:1 고객 문의 답변, 사용 후기 검수, FAQ 편집, 세금계산서 발행을 승인합니다."
                     title="통합 운영 관리자 센터"
@@ -455,6 +462,7 @@ export default function Navbar() {
             </div>
             <Link
               href="/use-cases"
+              prefetch={false}
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-teal-50 hover:text-teal-900 transition-all"
             >
@@ -465,6 +473,7 @@ export default function Navbar() {
             </Link>
             <Link
               href="/enterprise"
+              prefetch={false}
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-black text-teal-800 bg-teal-50/70 border border-teal-200/70 hover:bg-teal-100/80 transition-all"
             >
@@ -478,6 +487,7 @@ export default function Navbar() {
             </Link>
             <Link
               href="/marketplace"
+              prefetch={false}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setMobileMenuOpen(false)}
