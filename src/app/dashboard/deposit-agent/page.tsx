@@ -434,7 +434,7 @@ export default function DepositAgentPage() {
         {/* 상단 브레드크럼 및 헤더 */}
         <div className="mb-8">
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-2.5">
-            <Link href="/dashboard/admin" className="hover:text-rose-600 transition-colors flex items-center gap-1">
+            <Link href="/dashboard/admin" prefetch={false} className="hover:text-rose-600 transition-colors flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5 text-rose-600" />
               <span>관리자 센터</span>
             </Link>

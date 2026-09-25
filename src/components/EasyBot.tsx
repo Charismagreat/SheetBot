@@ -178,10 +178,6 @@ export default function EasyBot() {
   // 로컬스토리지 저장 및 불러오기
   useEffect(() => {
     setMounted(true);
-    // ⚡ 초기 로드 경합 방지: 4초 후 여유 있을 때 헬스체크 실행
-    const healthTimer = setTimeout(() => {
-      checkHealth();
-    }, 4000);
 
     // 이전에 대화창이 열려있었다면 페이지 이동/새로고침 후에도 열린 상태 자동 복원
     try {
@@ -452,369 +448,329 @@ export default function EasyBot() {
     }
   };
 
-  // 사용자별/게스트 대화 내역 불러오기 및 복원
+  const isInitializingRef = useRef(false);
+  const bundleLoadedRef = useRef(false);
+
+  // ⚡ [단일 통합 번들 로더] /api/easybot/init 1회 호출로 헬스체크, 대화 내역, 관리자 브리핑 병합 수신
+  const initEasyBotBundle = useCallback(async () => {
+    if (isInitializingRef.current || bundleLoadedRef.current) return;
+    isInitializingRef.current = true;
+
+    try {
+      const res = await apiFetch("/api/easybot/init");
+      const data = await res.json();
+
+      if (data?.success) {
+        bundleLoadedRef.current = true;
+
+        // 1. 헬스체크 반영
+        if (data.health) {
+          setHealth({
+            status: data.health.status || "healthy",
+            message: data.health.message || "정상 가동 중",
+            latencyMs: data.health.latencyMs,
+            model: data.health.model,
+            isQuotaExceeded: !!data.health.isQuotaExceeded,
+            userTokenDepleted: !!data.health.userTokenDepleted,
+          });
+        }
+
+        // 2. 대화 내역 반영
+        if (session?.user?.email) {
+          if (Array.isArray(data.messages) && data.messages.length > 0) {
+            setMessages(data.messages);
+            setHistoryLoaded(true);
+          } else {
+            setMessages([
+              {
+                id: "welcome",
+                role: "bot",
+                text: "안녕하세요! Google 스프레드시트 & Apps Script 전문 비서 **시트봇 AI (SheetBot AI)**입니다. 🤖\n\n상단 바를 마우스로 잡고 창을 자유롭게 이동하거나, 테두리를 당겨 원하는 크기로 조절하실 수 있습니다.\n자동화 스크립트 작성, 트리거 설정, 구글 시트 고급 수식 등 무엇이든 편하게 질문해 주세요!",
+                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              },
+            ]);
+            setHistoryLoaded(true);
+          }
+        } else {
+          // 비로그인 게스트 복원
+          try {
+            const guestHistory = localStorage.getItem("sheetbot_guest_messages");
+            if (guestHistory) {
+              const parsed = JSON.parse(guestHistory);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                setMessages(parsed);
+                setHistoryLoaded(true);
+              }
+            }
+          } catch {}
+        }
+
+        // 3. 관리자 브리핑 반영
+        if (data.isAdmin && data.briefing) {
+          setIsAdminUser(true);
+          const todayStr = new Date().toISOString().slice(0, 10);
+          const briefingStorageKey = `sheetbot_briefed_${session?.user?.email || "admin"}_${todayStr}`;
+          const hasBriefed = typeof window !== "undefined" && sessionStorage.getItem(briefingStorageKey);
+
+          if (data.briefing.vipAlert?.id) {
+            lastKnownEntIdRef.current = Number(data.briefing.vipAlert.id);
+          }
+
+          if (!hasBriefed && data.briefing.formattedText) {
+            sessionStorage.setItem(briefingStorageKey, "done");
+            setTimeout(() => {
+              setOpenWithPersistence(true);
+              playNotificationChime();
+              const isEvening = Boolean(data.briefing.isEvening);
+              const chips = isEvening
+                ? [
+                    { label: "🌇 마감 대장 최종 확인", url: "/dashboard/admin?tab=inquiries", highlight: true },
+                    { label: "📱 0원 문자 발송 이력 점검", url: "/dashboard/admin?tab=dispatch_logs" },
+                  ]
+                : [
+                    { label: "⚡ 골든타임 미답변 문의 확인", url: "/dashboard/admin?tab=inquiries", highlight: true },
+                    { label: "📊 전사 실시간 대시보드", url: "/dashboard/admin" },
+                  ];
+
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `briefing_${todayStr}`,
+                  role: "bot",
+                  text: data.briefing.formattedText,
+                  time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                  actionChips: chips,
+                },
+              ]);
+            }, 600);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[EasyBot] Failed to load init bundle:", err);
+    } finally {
+      isInitializingRef.current = false;
+    }
+  }, [session?.user?.email, setOpenWithPersistence]);
+
+  // ⚡ [이지데스크 공식 queryTable 직통 감시] 관리자 실시간 이벤트 감지 (DB 왓처 이벤트 시에만 실행)
+  const isPollingBusyRef = useRef(false);
+  const checkAdminEventsDirectly = useCallback(async () => {
+    if (isPollingBusyRef.current || (typeof document !== "undefined" && document.hidden)) return;
+    isPollingBusyRef.current = true;
+    try {
+      const [entRes, taxRes, genRes, devRes] = await Promise.all([
+        queryTable<any>("sheetbot_enterprise_inquiries", {
+          orderBy: "id",
+          orderDirection: "DESC",
+          limit: 10,
+        }).catch(() => ({ rows: [] })),
+        queryTable<any>("sheetbot_tax_invoices", {
+          orderBy: "id",
+          orderDirection: "DESC",
+          limit: 10,
+        }).catch(() => ({ rows: [] })),
+        queryTable<any>("sheetbot_inquiries", {
+          orderBy: "id",
+          orderDirection: "DESC",
+          limit: 20,
+        }).catch(() => ({ rows: [] })),
+        queryTable<any>("sheetbot_user_devices", {
+          limit: 10,
+        }).catch(() => ({ rows: [] })),
+      ]);
+
+      const validEnt = (entRes.rows || []).filter((r: any) => !r.deleted_at);
+      const validTax = (taxRes.rows || []).filter((r: any) => !r.deleted_at);
+      const validGen = (genRes.rows || []).filter((r: any) => !r.deleted_at);
+      const validDev = (devRes.rows || []).filter((r: any) => !r.deleted_at);
+
+      const latestEnt = validEnt[0];
+      const latestEntId = latestEnt ? Number(latestEnt.id) || 0 : 0;
+      const latestTax = validTax[0];
+      const latestTaxId = latestTax ? Number(latestTax.id) || 0 : 0;
+
+      const triggerAlert = (alertMsg: ChatMessage) => {
+        setOpenWithPersistence(true);
+        playNotificationChime();
+        setMessages((prev) => [...prev, alertMsg]);
+
+        apiFetch("/api/easybot/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: alertMsg.id,
+            role: "bot",
+            message: alertMsg.text,
+            actionChips: alertMsg.actionChips,
+          }),
+        }).catch((err) => console.warn("[EasyBot] Failed to persist alert:", err));
+      };
+
+      // [시나리오 1] VIP 고액 리드 인입 감시 (최우선 순위)
+      if (lastKnownEntIdRef.current > 0 && latestEntId > lastKnownEntIdRef.current && latestEnt) {
+        let scoreObj: any = null;
+        try {
+          if (latestEnt.ai_score) {
+            scoreObj = typeof latestEnt.ai_score === "string" ? JSON.parse(latestEnt.ai_score) : latestEnt.ai_score;
+          }
+        } catch {}
+
+        const companyName = latestEnt.company_name || "신규 고객사";
+        const tier = scoreObj?.tier || "S";
+        const probability = scoreObj?.conversionProbability || 85;
+        const estimatedPrice = scoreObj?.estimatedPriceRange || "650만 ~ 800만원";
+
+        triggerAlert({
+          id: `vip_${latestEnt.id}_${Date.now()}`,
+          role: "bot",
+          text: `🚨 **[VIP 긴급 알림]** 방금 **'${companyName}'**에서 **${estimatedPrice}** 규모의 기업 맞춤 구축 견적이 접수되었습니다!\n\n- 🎯 **판정**: ${tier}등급 (수주 확률 ${probability}%)\n- 🛠️ **구축 범위**: ${latestEnt.target_areas || "시트 자동화 및 API 연동"}\n\nAI 맞춤 제안서와 회신 초안이 이미 준비되어 있습니다. 지금 바로 문의 대장에서 검토하시겠습니까?`,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          actionChips: [
+            { label: "📑 VIP 견적서/제안서 확인", url: "/dashboard/admin?tab=inquiries", highlight: true },
+            { label: "📲 0원 문자 즉시 회신", url: "/dashboard/admin?tab=sms" },
+          ],
+        });
+      }
+
+      // [시나리오 5] 전자세금계산서 신규 신청 감지 (우선순위 2)
+      if (lastKnownTaxIdRef.current > 0 && latestTaxId > lastKnownTaxIdRef.current && latestTax) {
+        if (latestTax.status === "REQUESTED" || latestTax.status === "PENDING" || !latestTax.status) {
+          const company = latestTax.company_name || latestTax.user_email || "신청 고객";
+          const amount = Number(latestTax.amount_krw || 0).toLocaleString();
+          const bizNum = latestTax.biz_number || "미기재";
+
+          triggerAlert({
+            id: `tax_${latestTax.id}_${Date.now()}`,
+            role: "bot",
+            text: `📑 **[전자세금계산서 신청]** **'${company}'** 님으로부터 **${amount}원** 세금계산서 발행 요청이 접수되었습니다.\n\n- 🏢 **사업자번호**: ${bizNum}\n- 📧 **담당자 이메일**: ${latestTax.manager_email || latestTax.user_email}\n\n홈택스 전송 전 신청 내역을 검토하고 승인해 주세요.`,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            actionChips: [
+              { label: "📑 세금계산서 승인 검토", url: "/dashboard/admin?tab=tax_invoices", highlight: true },
+              { label: "🏛️ 홈택스 연동 확인", url: "/dashboard/admin?tab=tax_invoices" },
+            ],
+          });
+        }
+      }
+
+      // [시나리오 3] 24시간 방치 방지 SLA 골든타임 경보 (우선순위 3)
+      if (!suppressedSlaRef.current) {
+        const nowMs = Date.now();
+        const allPending = [
+          ...validEnt.filter((r: any) => r.status !== "ANSWERED" && r.status !== "COMPLETED").map((r: any) => ({ ...r, _type: "enterprise" })),
+          ...validGen.filter((r: any) => r.status !== "ANSWERED" && r.status !== "COMPLETED").map((r: any) => ({ ...r, _type: "general" })),
+        ];
+
+        let oldestPending: any = null;
+        let oldestElapsedHours = 0;
+
+        for (const p of allPending) {
+          const timeStr = p.created_at || p.updated_at;
+          if (!timeStr) continue;
+          const createdMs = new Date(timeStr).getTime();
+          if (isNaN(createdMs)) continue;
+          const diffHours = (nowMs - createdMs) / (1000 * 60 * 60);
+
+          if (diffHours >= 20 && diffHours > oldestElapsedHours) {
+            oldestPending = p;
+            oldestElapsedHours = Math.floor(diffHours);
+          }
+        }
+
+        if (oldestPending) {
+          suppressedSlaRef.current = true;
+          const name = oldestPending.company_name || oldestPending.user_name || oldestPending.user_email || "고객";
+          const contentPreview = (oldestPending.target_areas || oldestPending.message || oldestPending.content || "문의 상세").slice(0, 40);
+
+          triggerAlert({
+            id: `sla_${oldestPending.id}_${oldestElapsedHours}`,
+            role: "bot",
+            text: `⏰ **[SLA 골든타임 경보]** 접수된 지 **${oldestElapsedHours}시간**이 경과한 미답변 고객 문의가 있습니다!\n\n- 👤 **고객/사명**: ${name}\n- 📌 **문의 내용**: "${contentPreview}..."\n\n고객 만족도 및 수주율 유지를 위해 24시간 이내 회신을 권장합니다. 지금 바로 답변 초안을 확인하시겠습니까?`,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            actionChips: [
+              { label: "⚡ 골든타임 미답변 문의 확인", url: "/dashboard/admin?tab=inquiries", highlight: true },
+              { label: "🤖 AI 자동 초안 검토", url: "/dashboard/admin?tab=inquiries" },
+            ],
+          });
+        }
+      }
+
+      // [시나리오 4] 0원 문자 스마트폰 연결 이상 감지 (우선순위 4)
+      if (!suppressedDeviceRef.current && validDev.length > 0) {
+        const disconnectedDev = validDev.find((d: any) => d.status === "DISCONNECTED" || d.status === "OFFLINE");
+        if (disconnectedDev) {
+          suppressedDeviceRef.current = true;
+          const devLabel = disconnectedDev.label || disconnectedDev.phone_number || "스마트폰 기기";
+
+          triggerAlert({
+            id: `dev_${disconnectedDev.id}`,
+            role: "bot",
+            text: `⚠️ **[0원 문자 기기 경보]** 연동된 스마트폰(**${devLabel}**)이 오프라인 상태이거나 통신이 중단되었습니다.\n\n현재 상태에서는 고객 문의에 대한 자동 문자(SMS) 전송이 지연될 수 있습니다. 스마트폰의 구글 메시지 앱 연결 상태를 확인해 주세요.`,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            actionChips: [
+              { label: "📱 기기 연결 관리 바로가기", url: "/dashboard/user/phone", highlight: true },
+              { label: "🔄 연결 상태 점검", url: "/dashboard/user/phone" },
+            ],
+          });
+        }
+      }
+
+      // 기준점 최신화
+      if (latestEntId) {
+        lastKnownEntIdRef.current = Math.max(lastKnownEntIdRef.current, latestEntId);
+      }
+      if (latestTaxId) {
+        lastKnownTaxIdRef.current = Math.max(lastKnownTaxIdRef.current, latestTaxId);
+      }
+    } catch (e) {
+      // DB 조회 예외 시 조용히 유지
+    } finally {
+      isPollingBusyRef.current = false;
+    }
+  }, [setOpenWithPersistence]);
+
+  // 🌟 [통합 번들 로드] EasyBot 1회 통합 초기화 (/api/easybot/init)
   useEffect(() => {
     if (sessionStatus === "loading") return;
 
-    let isSubscribed = true;
+    let initTimer: NodeJS.Timeout | null = null;
 
-    const loadChatHistory = async () => {
-      // 1. 로그인 회원의 경우 클라우드 DB에서 대화 내역 조회
-      if (session?.user?.email) {
-        try {
-          const res = await apiFetch("/api/easybot/messages");
-          const data = await res.json();
-          if (isSubscribed && data?.success && Array.isArray(data.messages) && data.messages.length > 0) {
-            setMessages(data.messages);
-            setHistoryLoaded(true);
-            return;
-          }
-        } catch (err) {
-          console.warn("[EasyBot] Failed to load user chat history:", err);
-        }
-      } else {
-        // 2. 비로그인 게스트인 경우 로컬스토리지에서 복원
-        try {
-          const guestHistory = localStorage.getItem("sheetbot_guest_messages");
-          if (guestHistory) {
-            const parsed = JSON.parse(guestHistory);
-            if (isSubscribed && Array.isArray(parsed) && parsed.length > 0) {
-              setMessages(parsed);
-              setHistoryLoaded(true);
-              return;
-            }
-          }
-        } catch {}
-      }
-
-      // 3. 저장된 대화가 없으면 기본 환영 메시지 표시
-      if (isSubscribed) {
-        setMessages([
-          {
-            id: "welcome",
-            role: "bot",
-            text: "안녕하세요! Google 스프레드시트 & Apps Script 전문 비서 **시트봇 AI (SheetBot AI)**입니다. 🤖\n\n상단 바를 마우스로 잡고 창을 자유롭게 이동하거나, 테두리를 당겨 원하는 크기로 조절하실 수 있습니다.\n자동화 스크립트 작성, 트리거 설정, 구글 시트 고급 수식 등 무엇이든 편하게 질문해 주세요!",
-            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          },
-        ]);
-        setHistoryLoaded(true);
-      }
-    };
-
-    if (isOpen || historyLoaded) {
-      loadChatHistory();
-    } else {
-      // ⚡ 창이 닫혀있는 동안에는 메인 페이지 로드 경합을 피해 3.5초 지연 프리로드
-      const t = setTimeout(() => {
-        if (isSubscribed) loadChatHistory();
+    // EasyBot이 열려있거나 열렸을 때는 즉시 통합 번들 로드,
+    // 닫혀있는 상태라면 메인 페이지 렌더링 및 소켓 자원 경합을 피하기 위해 3.5초 지연 로드
+    if (isOpen && !historyLoaded) {
+      initEasyBotBundle();
+    } else if (!historyLoaded) {
+      initTimer = setTimeout(() => {
+        initEasyBotBundle();
       }, 3500);
-      return () => {
-        isSubscribed = false;
-        clearTimeout(t);
-      };
     }
 
     return () => {
-      isSubscribed = false;
+      if (initTimer) clearTimeout(initTimer);
     };
-  }, [session?.user?.email, sessionStatus, isOpen, historyLoaded]);
+  }, [isOpen, historyLoaded, sessionStatus, initEasyBotBundle]);
 
-  // 🌟 [능동형 AI 수석 비서] 관리자 6대 시나리오 실시간 모니터링 엔진
+  // 🌟 [능동형 AI 수석 비서] 관리자 실시간 DB 왓처 (onUserDataChanged 이벤트 발생 시에만 동작)
   useEffect(() => {
-    if (sessionStatus === "loading" || !session?.user?.email) return;
+    if (!isAdminUser) return;
 
-    // ⚡ 일반 회원은 브리핑/모니터링 대상이 아니므로 네트워크 호출을 0으로 원천 차단
-    const userEmail = (session.user.email || "").toLowerCase();
-    const isKnownAdmin =
-      KNOWN_ADMINS.includes(userEmail) ||
-      (typeof window !== "undefined" && sessionStorage.getItem("sb_is_admin") === "true");
-    if (!isKnownAdmin) return;
+    const TARGET_TABLES = [
+      "sheetbot_enterprise_inquiries",
+      "sheetbot_tax_invoices",
+      "sheetbot_inquiries",
+      "sheetbot_user_devices",
+    ];
 
-    let isSubscribed = true;
-    let unsubWatcher: (() => void) | null = null;
-    let initTimer: NodeJS.Timeout | null = null;
-
-    const initAdminAssistant = async () => {
-      try {
-        const res = await apiFetch("/api/admin/monitor/briefing");
-        const json = await res.json();
-        if (!isSubscribed || !json.success || !json.isAdmin) return;
-
-        setIsAdminUser(true);
-
-        const todayStr = new Date().toISOString().slice(0, 10);
-        const briefingStorageKey = `sheetbot_briefed_${session?.user?.email || "admin"}_${todayStr}`;
-        const hasBriefed = typeof window !== "undefined" && sessionStorage.getItem(briefingStorageKey);
-
-        // 최신 기준점 초기화
-        if (json.data?.vipAlert?.id) {
-          lastKnownEntIdRef.current = Number(json.data.vipAlert.id);
-        }
-
-        // ☀️ [시나리오 2 & 시나리오 6] 첫 접속 시 자동 오픈 & 브리핑 (모닝 경영 브리핑 / 퇴근길 마감 리포트)
-        if (!hasBriefed && json.data?.formattedText) {
-          sessionStorage.setItem(briefingStorageKey, "done");
-          setTimeout(() => {
-            if (!isSubscribed) return;
-            setOpenWithPersistence(true);
-            playNotificationChime();
-
-            const isEvening = Boolean(json.data?.isEvening);
-            const chips = isEvening
-              ? [
-                  {
-                    label: "🌇 마감 대장 최종 확인",
-                    url: "/dashboard/admin?tab=inquiries",
-                    highlight: true,
-                  },
-                  {
-                    label: "📊 오늘의 AI VOC 수요 리포트",
-                    url: "/dashboard/admin?tab=inquiries",
-                  },
-                ]
-              : [
-                  {
-                    label: "📋 고객 문의 대장 바로가기",
-                    url: "/dashboard/admin?tab=inquiries",
-                    highlight: true,
-                  },
-                  {
-                    label: "📊 AI VOC 수요 히트맵 보기",
-                    url: "/dashboard/admin?tab=inquiries",
-                  },
-                ];
-
-            const briefingMsg: ChatMessage = {
-              id: `briefing_${Date.now()}`,
-              role: "bot",
-              text: json.data.formattedText,
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-              actionChips: chips,
-            };
-
-            setMessages((prev) => [...prev, briefingMsg]);
-
-            // 💾 시트봇 AI 자율 브리핑 메시지 DB 영구 저장 (새로고침/페이지 이동 시에도 보존)
-            apiFetch("/api/easybot/messages", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                id: briefingMsg.id,
-                role: "bot",
-                message: briefingMsg.text,
-                actionChips: chips,
-              }),
-            }).catch((err) => console.warn("[EasyBot] Failed to persist briefing:", err));
-          }, 1400);
-        }
-
-        // ⚡ [이지데스크 공식 queryTable 직통 감시] /api/admin/monitor/poll 네트워크 중계 제거 및 직접 DB 조회
-        let isPollingBusy = false;
-        const checkAdminEventsDirectly = async () => {
-          if (!isSubscribed || isPollingBusy || (typeof document !== "undefined" && document.hidden)) return;
-          isPollingBusy = true;
-          try {
-            const [entRes, taxRes, genRes, devRes] = await Promise.all([
-              queryTable<any>("sheetbot_enterprise_inquiries", {
-                orderBy: "id",
-                orderDirection: "DESC",
-                limit: 10,
-              }).catch(() => ({ rows: [] })),
-              queryTable<any>("sheetbot_tax_invoices", {
-                orderBy: "id",
-                orderDirection: "DESC",
-                limit: 10,
-              }).catch(() => ({ rows: [] })),
-              queryTable<any>("sheetbot_inquiries", {
-                orderBy: "id",
-                orderDirection: "DESC",
-                limit: 20,
-              }).catch(() => ({ rows: [] })),
-              queryTable<any>("sheetbot_user_devices", {
-                limit: 10,
-              }).catch(() => ({ rows: [] })),
-            ]);
-
-            const validEnt = (entRes.rows || []).filter((r: any) => !r.deleted_at);
-            const validTax = (taxRes.rows || []).filter((r: any) => !r.deleted_at);
-            const validGen = (genRes.rows || []).filter((r: any) => !r.deleted_at);
-            const validDev = (devRes.rows || []).filter((r: any) => !r.deleted_at);
-
-            const latestEnt = validEnt[0];
-            const latestEntId = latestEnt ? Number(latestEnt.id) || 0 : 0;
-            const latestTax = validTax[0];
-            const latestTaxId = latestTax ? Number(latestTax.id) || 0 : 0;
-
-            const triggerAlert = (alertMsg: ChatMessage) => {
-              setOpenWithPersistence(true);
-              playNotificationChime();
-              setMessages((prev) => [...prev, alertMsg]);
-
-              apiFetch("/api/easybot/messages", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  id: alertMsg.id,
-                  role: "bot",
-                  message: alertMsg.text,
-                  actionChips: alertMsg.actionChips,
-                }),
-              }).catch((err) => console.warn("[EasyBot] Failed to persist alert:", err));
-            };
-
-            // [시나리오 1] VIP 고액 리드 인입 감시 (최우선 순위)
-            if (lastKnownEntIdRef.current > 0 && latestEntId > lastKnownEntIdRef.current && latestEnt) {
-              let scoreObj: any = null;
-              try {
-                if (latestEnt.ai_score) {
-                  scoreObj = typeof latestEnt.ai_score === "string" ? JSON.parse(latestEnt.ai_score) : latestEnt.ai_score;
-                }
-              } catch {}
-
-              const companyName = latestEnt.company_name || "신규 고객사";
-              const tier = scoreObj?.tier || "S";
-              const probability = scoreObj?.conversionProbability || 85;
-              const estimatedPrice = scoreObj?.estimatedPriceRange || "650만 ~ 800만원";
-
-              triggerAlert({
-                id: `vip_${latestEnt.id}_${Date.now()}`,
-                role: "bot",
-                text: `🚨 **[VIP 긴급 알림]** 방금 **'${companyName}'**에서 **${estimatedPrice}** 규모의 기업 맞춤 구축 견적이 접수되었습니다!\n\n- 🎯 **판정**: ${tier}등급 (수주 확률 ${probability}%)\n- 🛠️ **구축 범위**: ${latestEnt.target_areas || "시트 자동화 및 API 연동"}\n\nAI 맞춤 제안서와 회신 초안이 이미 준비되어 있습니다. 지금 바로 문의 대장에서 검토하시겠습니까?`,
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                actionChips: [
-                  { label: "📑 VIP 견적서/제안서 확인", url: "/dashboard/admin?tab=inquiries", highlight: true },
-                  { label: "📲 0원 문자 즉시 회신", url: "/dashboard/admin?tab=sms" },
-                ],
-              });
-            }
-
-            // [시나리오 5] 전자세금계산서 신규 신청 감지 (우선순위 2)
-            if (lastKnownTaxIdRef.current > 0 && latestTaxId > lastKnownTaxIdRef.current && latestTax) {
-              if (latestTax.status === "REQUESTED" || latestTax.status === "PENDING" || !latestTax.status) {
-                const company = latestTax.company_name || latestTax.user_email || "신청 고객";
-                const amount = Number(latestTax.amount_krw || 0).toLocaleString();
-                const bizNum = latestTax.biz_number || "미기재";
-
-                triggerAlert({
-                  id: `tax_${latestTax.id}_${Date.now()}`,
-                  role: "bot",
-                  text: `📑 **[전자세금계산서 신청]** **'${company}'** 님으로부터 **${amount}원** 세금계산서 발행 요청이 접수되었습니다.\n\n- 🏢 **사업자번호**: ${bizNum}\n- 📧 **담당자 이메일**: ${latestTax.manager_email || latestTax.user_email}\n\n홈택스 전송 전 신청 내역을 검토하고 승인해 주세요.`,
-                  time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                  actionChips: [
-                    { label: "📑 세금계산서 승인 검토", url: "/dashboard/admin?tab=tax_invoices", highlight: true },
-                    { label: "🏛️ 홈택스 연동 확인", url: "/dashboard/admin?tab=tax_invoices" },
-                  ],
-                });
-              }
-            }
-
-            // [시나리오 3] 24시간 방치 방지 SLA 골든타임 경보 (우선순위 3)
-            if (!suppressedSlaRef.current) {
-              const nowMs = Date.now();
-              const allPending = [
-                ...validEnt.filter((r: any) => r.status !== "ANSWERED" && r.status !== "COMPLETED").map((r: any) => ({ ...r, _type: "enterprise" })),
-                ...validGen.filter((r: any) => r.status !== "ANSWERED" && r.status !== "COMPLETED").map((r: any) => ({ ...r, _type: "general" })),
-              ];
-
-              let oldestPending: any = null;
-              let oldestElapsedHours = 0;
-
-              for (const p of allPending) {
-                const timeStr = p.created_at || p.updated_at;
-                if (!timeStr) continue;
-                const createdMs = new Date(timeStr).getTime();
-                if (isNaN(createdMs)) continue;
-                const diffHours = (nowMs - createdMs) / (1000 * 60 * 60);
-
-                if (diffHours >= 20 && diffHours > oldestElapsedHours) {
-                  oldestPending = p;
-                  oldestElapsedHours = Math.floor(diffHours);
-                }
-              }
-
-              if (oldestPending) {
-                suppressedSlaRef.current = true;
-                const name = oldestPending.company_name || oldestPending.user_name || oldestPending.user_email || "고객";
-                const contentPreview = (oldestPending.target_areas || oldestPending.message || oldestPending.content || "문의 상세").slice(0, 40);
-
-                triggerAlert({
-                  id: `sla_${oldestPending.id}_${oldestElapsedHours}`,
-                  role: "bot",
-                  text: `⏰ **[SLA 골든타임 경보]** 접수된 지 **${oldestElapsedHours}시간**이 경과한 미답변 고객 문의가 있습니다!\n\n- 👤 **고객/사명**: ${name}\n- 📌 **문의 내용**: "${contentPreview}..."\n\n고객 만족도 및 수주율 유지를 위해 24시간 이내 회신을 권장합니다. 지금 바로 답변 초안을 확인하시겠습니까?`,
-                  time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                  actionChips: [
-                    { label: "⚡ 골든타임 미답변 문의 확인", url: "/dashboard/admin?tab=inquiries", highlight: true },
-                    { label: "🤖 AI 자동 초안 검토", url: "/dashboard/admin?tab=inquiries" },
-                  ],
-                });
-              }
-            }
-
-            // [시나리오 4] 0원 문자 스마트폰 연결 이상 감지 (우선순위 4)
-            if (!suppressedDeviceRef.current && validDev.length > 0) {
-              const disconnectedDev = validDev.find((d: any) => d.status === "DISCONNECTED" || d.status === "OFFLINE");
-              if (disconnectedDev) {
-                suppressedDeviceRef.current = true;
-                const devLabel = disconnectedDev.label || disconnectedDev.phone_number || "스마트폰 기기";
-
-                triggerAlert({
-                  id: `dev_${disconnectedDev.id}`,
-                  role: "bot",
-                  text: `⚠️ **[0원 문자 기기 경보]** 연동된 스마트폰(**${devLabel}**)이 오프라인 상태이거나 통신이 중단되었습니다.\n\n현재 상태에서는 고객 문의에 대한 자동 문자(SMS) 전송이 지연될 수 있습니다. 스마트폰의 구글 메시지 앱 연결 상태를 확인해 주세요.`,
-                  time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                  actionChips: [
-                    { label: "📱 기기 연결 관리 바로가기", url: "/dashboard/user/phone", highlight: true },
-                    { label: "🔄 연결 상태 점검", url: "/dashboard/user/phone" },
-                  ],
-                });
-              }
-            }
-
-            // 기준점 최신화
-            if (latestEntId) {
-              lastKnownEntIdRef.current = Math.max(lastKnownEntIdRef.current, latestEntId);
-            }
-            if (latestTaxId) {
-              lastKnownTaxIdRef.current = Math.max(lastKnownTaxIdRef.current, latestTaxId);
-            }
-          } catch (e) {
-            // DB 조회 예외 시 조용히 유지
-          } finally {
-            isPollingBusy = false;
-          }
-        };
-
-        // ⚡ [0초 실시간 감시] 주기적 setInterval 폴링을 전면 제거하고 이지데스크 공식 DB 왓처(onUserDataChanged) 적용
-        const TARGET_TABLES = [
-          "sheetbot_enterprise_inquiries",
-          "sheetbot_tax_invoices",
-          "sheetbot_inquiries",
-          "sheetbot_user_devices",
-        ];
-
-        // 첫 진입 시 기준점 동기화 1회 4초 지연 후 실행 (초기 기준 ID 획득)
-        setTimeout(checkAdminEventsDirectly, 4000);
-
-        unsubWatcher = onUserDataChanged((event) => {
-          if (!isSubscribed) return;
-          if (!event.tableName || TARGET_TABLES.includes(event.tableName)) {
-            checkAdminEventsDirectly();
-          }
-        });
-      } catch (err) {
-        // 일반 유저인 경우 무시
+    const unsubWatcher = onUserDataChanged((event) => {
+      if (!event.tableName || TARGET_TABLES.includes(event.tableName)) {
+        checkAdminEventsDirectly();
       }
-    };
-
-    // ⚡ 메인 화면 렌더링 및 주요 번들 로드 경합을 완전히 피하기 위해 3.5초 지연 실행
-    initTimer = setTimeout(initAdminAssistant, 3500);
+    });
 
     return () => {
-      isSubscribed = false;
-      if (initTimer) clearTimeout(initTimer);
-      if (unsubWatcher) unsubWatcher();
+      unsubWatcher();
     };
-  }, [session?.user?.email, sessionStatus, setOpenWithPersistence]);
+  }, [isAdminUser, checkAdminEventsDirectly]);
 
   useEffect(() => {
     if (isOpen) {
