@@ -965,10 +965,10 @@ export default function AdminDashboardPage() {
             <Link
               href="/dashboard/deposit-agent"
               className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-indigo-50 border border-indigo-200 text-xs font-extrabold text-indigo-700 hover:bg-indigo-100 transition-all shadow-2xs"
-              title="무통장 입금 자동확인기 (Android APK) 센터"
+              title="운영자 전용 무통장 입금 감지 (시트봇 에이전트 M) 센터"
             >
               <Smartphone className="w-3.5 h-3.5 text-indigo-600" />
-              <span>📱 입금확인기</span>
+              <span>SheetBot Agent M</span>
             </Link>
 
             <button
@@ -1342,7 +1342,7 @@ export default function AdminDashboardPage() {
           <Link
             href="/dashboard/deposit-agent"
             className="px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-            title="관리자 전용 입금확인기 (시트봇 에이전트 M APK 다운로드 & QR 페어링)"
+            title="관리자 전용 무통장 입금 감지 (시트봇 에이전트 M APK 다운로드 & QR 페어링)"
           >
             <Smartphone className="w-4 h-4 text-indigo-600" />
             <span>시트봇 에이전트 M (관리자용)</span>
