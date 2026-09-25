@@ -291,7 +291,7 @@ export default function DashboardPage() {
 
     try {
       // 🚀 [이지데스크 공식 헬퍼스 직접 호출: 중간 API 라우트 없이 My DB 다이렉트 쿼리]
-      const [projectsRes, walletRes, schedulesRes, devicesRes] = await Promise.all([
+      const [projectsRes, walletRes, schedulesRes, devicesRes, aiUsageRes] = await Promise.all([
         queryTable("sheetbot_projects", {
           filters: { user_email: effectiveEmail },
           orderBy: "id",
@@ -311,6 +311,10 @@ export default function DashboardPage() {
         queryTable("sheetbot_user_devices", {
           filters: { user_email: effectiveEmail },
           limit: 50,
+        }).catch(() => ({ rows: [] })),
+        queryTable("sheetbot_ai_usage_logs", {
+          filters: { user_email: effectiveEmail },
+          limit: 100,
         }).catch(() => ({ rows: [] })),
       ]);
 
@@ -356,6 +360,18 @@ export default function DashboardPage() {
       const deviceRows = devicesRes.rows || [];
       const activeDevices = deviceRows.filter((r: any) => !r.deleted_at && r.status === "CONNECTED");
       setDeviceCount(activeDevices.length);
+
+      // 5. 당월 AI 사용량 동기화
+      const usageRows = (aiUsageRes.rows || []).filter((r: any) => !r.deleted_at);
+      let totalTok = 0;
+      let totalCost = 0;
+      for (const u of usageRows) {
+        totalTok += Number(u.total_tokens || (Number(u.prompt_tokens || 0) + Number(u.completion_tokens || 0)));
+        totalCost += Number(u.estimated_cost_krw || 0);
+      }
+      setUsageTokens(totalTok);
+      setUsageCalls(usageRows.length);
+      setUsageCostKrw(Math.round(totalCost));
 
       if (effectiveEmail) {
         lastFetchedEmailRef.current = effectiveEmail;
@@ -939,15 +955,15 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-black text-indigo-900 tracking-tight">
+                  <span suppressHydrationWarning className="text-2xl font-black text-indigo-900 tracking-tight">
                     {usageTokens.toLocaleString()}
                   </span>
                   <span className="text-xs font-bold text-indigo-700">Token</span>
                 </div>
                 <div className="text-[11px] text-indigo-800/80 font-medium mt-1 flex flex-wrap items-center gap-1.5">
-                  <span>총 <strong>{usageCalls}회</strong> 자동화 호출</span>
+                  <span suppressHydrationWarning>총 <strong>{usageCalls}회</strong> 자동화 호출</span>
                   {isAdminUser && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-200/60 text-indigo-950 font-bold border border-indigo-300/60">
+                    <span suppressHydrationWarning className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-200/60 text-indigo-950 font-bold border border-indigo-300/60">
                       API 원가 ₩{usageCostKrw.toLocaleString()}
                     </span>
                   )}

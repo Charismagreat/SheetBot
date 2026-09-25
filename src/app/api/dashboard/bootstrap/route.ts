@@ -131,11 +131,11 @@ export async function GET(request: Request) {
         { rows: [] }
       ),
 
-      // 6. 당월 AI 사용량 요약
+      // 6. 당월 AI 사용량 요약 (실제 My DB 테이블명: sheetbot_ai_usage_logs)
       timeoutRace(
-        queryTable("sheetbot_ai_audit_logs", {
+        queryTable("sheetbot_ai_usage_logs", {
           filters: { user_email: cleanEmail },
-          limit: 50,
+          limit: 100,
         }).catch(() => ({ rows: [] })),
         { rows: [] }
       ),
