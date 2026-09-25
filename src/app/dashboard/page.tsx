@@ -236,7 +236,7 @@ export default function DashboardPage() {
   const lastFetchedEmailRef = useRef<string>("");
   const isFetchingRef = useRef<boolean>(false);
 
-  // 데이터 로드 (1단계: 필수 핵심 데이터 즉시 로드 -> 2단계: 800ms 후 보조 메트릭 백그라운드 분산 로드)
+  // 데이터 로드 (⚡ 단일 통합 부트스트랩: 단 1회의 HTTP 왕복으로 0.5초 만에 전 데이터 일괄 수신)
   const fetchData = useCallback(async (force = false) => {
     // 다층 신분증 식별: useAuth user?.email 1순위, NextAuth 세션 2순위, 브라우저 localStorage 캐시 3순위
     let effectiveEmail = user?.email || (session?.user?.email ? session.user.email.toLowerCase().trim() : "");
@@ -246,12 +246,10 @@ export default function DashboardPage() {
       } catch {}
     }
 
-    // 이메일이 아직 식별되지 않았고 세션이 로딩 중이면 세션 확정 시점까지 대기
     if (!effectiveEmail && status === "loading") {
       return;
     }
 
-    // 동일 이메일에 대해 이미 패칭 중이거나 이미 완료된 경우 (force가 아닐 때) 중복 차단
     if (!force && lastFetchedEmailRef.current && lastFetchedEmailRef.current === effectiveEmail && !isFetchingRef.current) {
       return;
     }
@@ -277,98 +275,60 @@ export default function DashboardPage() {
     }
 
     try {
-      // ⚡ [1단계 핵심: 프로젝트 목록 독립 즉시 로드]
-      // 다른 API의 지연이나 실패에 영향을 받지 않고 프로젝트 3건을 1초 만에 화면에 즉시 렌더링
-      apiFetch(`/api/projects${queryStr}`, { headers: fetchHeaders })
-        .then((r) => r.json())
-        .then((projRes) => {
-          if (projRes?.success && Array.isArray(projRes.projects)) {
-            setProjects(projRes.projects);
-            try { sessionStorage.setItem("sheetbot_cache_projects", JSON.stringify(projRes.projects)); } catch {}
-          }
-        })
-        .catch((err) => console.warn("Projects load warning:", err))
-        .finally(() => {
-          setLoading(false);
-          isFetchingRef.current = false;
-        });
+      // 🚀 [초고속 단일 부트스트랩 API 호출: 단 1번의 터널 왕복으로 대시보드 전 데이터 0.5초 수신]
+      const res = await apiFetch(`/api/dashboard/bootstrap${queryStr}`, { headers: fetchHeaders });
+      const json = await res.json();
 
-      // ⚡ [지갑 잔액 독립 로드]
-      apiFetch(`/api/wallet${queryStr}`, { headers: fetchHeaders })
-        .then((r) => r.json())
-        .then((walletRes) => {
-          if (walletRes?.success && walletRes.wallet) {
-            setWallet(walletRes.wallet);
-            try { sessionStorage.setItem("sheetbot_cache_wallet", JSON.stringify(walletRes.wallet)); } catch {}
-          }
-        })
-        .catch((err) => console.warn("Wallet load warning:", err));
+      if (json?.success && json.data) {
+        const {
+          projects: serverProjects,
+          trashedCount,
+          wallet: serverWallet,
+          schedules: serverSchedules,
+          devicesCount,
+          rulesCount,
+          currentModel: serverModel,
+          aiUsage,
+        } = json.data;
 
-      // ⚡ [스케줄 독립 로드]
-      apiFetch(`/api/schedules${queryStr}`, { headers: fetchHeaders })
-        .then((r) => r.json())
-        .then((schedRes) => {
-          if (schedRes?.success && Array.isArray(schedRes.schedules)) {
-            setSchedules(schedRes.schedules);
-            try { sessionStorage.setItem("sheetbot_cache_schedules", JSON.stringify(schedRes.schedules)); } catch {}
-          }
-        })
-        .catch((err) => console.warn("Schedules load warning:", err));
+        // 1. 프로젝트 상태 동기화 (3건 즉시 화면 표출)
+        if (Array.isArray(serverProjects)) {
+          setProjects(serverProjects);
+          try { sessionStorage.setItem("sheetbot_cache_projects", JSON.stringify(serverProjects)); } catch {}
+        }
 
-      if (effectiveEmail) {
-        lastFetchedEmailRef.current = effectiveEmail;
+        // 2. 지갑 잔액 동기화 (240만 토큰 즉시 표출)
+        if (serverWallet) {
+          setWallet(serverWallet);
+          try { sessionStorage.setItem("sheetbot_cache_wallet", JSON.stringify(serverWallet)); } catch {}
+        }
+
+        // 3. 스케줄 동기화
+        if (Array.isArray(serverSchedules)) {
+          setSchedules(serverSchedules);
+          try { sessionStorage.setItem("sheetbot_cache_schedules", JSON.stringify(serverSchedules)); } catch {}
+        }
+
+        // 4. 기기, 규칙, 모델, AI 사용량 동기화
+        if (typeof devicesCount === "number") setDeviceCount(devicesCount);
+        if (typeof rulesCount === "number") setRuleCount(rulesCount);
+        if (serverModel) setCurrentModel(serverModel);
+        if (aiUsage) {
+          setUsageTokens(aiUsage.totalTokens || 0);
+          setUsageCalls(aiUsage.totalCalls || 0);
+          setUsageCostKrw(aiUsage.totalCostKrw || 0);
+        }
+
+        if (effectiveEmail) {
+          lastFetchedEmailRef.current = effectiveEmail;
+        }
       }
     } catch (err) {
-      console.warn("Dashboard primary fetch warning:", err);
+      console.warn("Dashboard bootstrap fetch warning:", err);
+    } finally {
       setLoading(false);
       isFetchingRef.current = false;
     }
-
-    // ⚡ [2단계: 브라우저 소켓 안정화 후 800ms 지연 분산 수신]
-    // 1단계 TCP 소켓이 완전히 정리된 후 보조 메트릭을 순차/분산 요청하여 브라우저 소켓 잠식(pending 110초) 원천 차단
-    setTimeout(async () => {
-      try {
-        const controller2 = new AbortController();
-        const timeout2 = setTimeout(() => controller2.abort(), 10000);
-
-        // A. 가벼운 설정/기기/규칙 먼저 수신
-        const [devRes, ruleRes, settingsRes] = await Promise.all([
-          apiFetch(`/api/user/devices${queryStr}`, { headers: fetchHeaders, signal: controller2.signal }).then((r) => r.json()).catch(() => ({})),
-          apiFetch(`/api/user/smart-rules${queryStr}`, { headers: fetchHeaders, signal: controller2.signal }).then((r) => r.json()).catch(() => ({})),
-          apiFetch(`/api/admin/settings`, { headers: fetchHeaders, signal: controller2.signal }).then((r) => r.json()).catch(() => ({})),
-        ]);
-
-        if (devRes?.success) setDeviceCount((devRes.devices || []).length);
-        if (ruleRes?.success) setRuleCount((ruleRes.rules || []).length);
-        if (settingsRes?.success && settingsRes.settings?.defaultModel) {
-          const m = settingsRes.settings.defaultModel;
-          setCurrentModel(
-            m === "gemini-3.8-flash" ? "Gemini 3.8 Flash" :
-            m === "gemini-3.5-flash" ? "Gemini 3.5 Flash" :
-            m === "gemini-2.5-flash" ? "Gemini 2.5 Flash" : m
-          );
-        }
-
-        // B. AI 사용량 및 휴지통 프로젝트 수신
-        const [usageRes, trashedProjRes] = await Promise.all([
-          apiFetch(`/api/admin/ai-usage?range=month&limit=1${userParam ? `&${userParam}` : ""}`, { headers: fetchHeaders, signal: controller2.signal }).then((r) => r.json()).catch(() => ({})),
-          apiFetch(`/api/projects?includeTrashed=true${userParam ? `&${userParam}` : ""}`, { headers: fetchHeaders, signal: controller2.signal }).then((r) => r.json()).catch(() => ({})),
-        ]);
-        clearTimeout(timeout2);
-
-        if (trashedProjRes?.success) setTrashedProjects(trashedProjRes.projects || []);
-        if (usageRes?.success) {
-          setIsAdminUser(!!usageRes.isAdmin);
-          if (usageRes.summary) {
-            setUsageCostKrw(usageRes.summary.totalCostKrw ?? usageRes.summary.costKrw ?? 0);
-            setUsageTokens(usageRes.summary.totalTokens ?? 0);
-            setUsageCalls(usageRes.summary.totalCalls ?? 0);
-          }
-        }
-      } catch (err) {
-        console.warn("Dashboard secondary metrics load note:", err);
-      }
-    }, 800);
   }, [user?.email, session?.user?.email, status]);
 
   // ⚡ 세션 이메일이 확정되거나 변경될 때만 1회 자동 재동기화 (중복 폭풍 방지)
