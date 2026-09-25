@@ -59,11 +59,9 @@ const nextConfig: any = {
       ]
     }
   },
+  reactStrictMode: true,
   async rewrites() {
-    const egdeskApiUrl =
-      process.env.NEXT_PUBLIC_EGDESK_API_URL ||
-      process.env.NEXT_PUBLIC_EGDESK_TUNNEL_URL ||
-      "https://tunneling-service.onrender.com/t/mcp-server-fxkud1";
+    const egdeskApiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || "http://localhost:8080";
     return [
       {
         source: "/t/:tunnel/p/:project/:path*",

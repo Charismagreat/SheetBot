@@ -144,55 +144,103 @@ export default function DepositAgentPage() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // 1. 페어링 정보(QR & 핀코드) 로드
+  // 1. 페어링 정보(QR & 핀코드) 클라이언트 즉시 생성 (서버 왕복 지연 0초)
   const fetchPairingInfo = useCallback(async () => {
     setLoadingPairing(true);
     try {
-      const res = await apiFetch("/api/wallet/agent/pair");
-      const data = await res.json();
-      if (data.success) {
-        setPairingData(data);
+      const email = session?.user?.email || "chachogreat@gmail.com";
+      const cleanEmail = email.toLowerCase().trim();
+      const todayStr = new Date().toISOString().slice(0, 10);
+      let token = "sb_dep_" + Math.random().toString(36).substring(2, 10);
+      let pinNum = 777777;
+
+      if (typeof window !== "undefined" && window.crypto && window.crypto.subtle) {
+        try {
+          const enc = new TextEncoder();
+          const keyData = enc.encode("sheetbot-agent-secret-key-2026");
+          const msgData = enc.encode(`${cleanEmail}-${todayStr}`);
+          const cryptoKey = await window.crypto.subtle.importKey(
+            "raw",
+            keyData,
+            { name: "HMAC", hash: "SHA-256" },
+            false,
+            ["sign"]
+          );
+          const signature = await window.crypto.subtle.sign("HMAC", cryptoKey, msgData);
+          const hashArray = Array.from(new Uint8Array(signature));
+          token = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
+          const pinSum = hashArray.slice(0, 4).reduce((acc, b) => (acc << 8) + b, 0);
+          pinNum = (Math.abs(pinSum) % 900000) + 100000;
+        } catch {
+          pinNum = 777777;
+        }
       }
+
+      const pinCode = `SB-${pinNum}`;
+      const qrPayload = {
+        app: "SheetBotDepositAgent",
+        version: "1.0",
+        userEmail: cleanEmail,
+        token,
+        pinCode,
+        webhookUrl: "https://sheetbot.cloud/api/wallet/bank-webhook",
+        fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/bank-webhook",
+        heartbeatUrl: "https://sheetbot.cloud/api/wallet/agent/heartbeat",
+        fallbackHeartbeatUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/agent/heartbeat",
+        createdAt: new Date().toISOString(),
+      };
+
+      setPairingData({
+        success: true,
+        userEmail: cleanEmail,
+        token,
+        pinCode,
+        qrData: JSON.stringify(qrPayload),
+        webhookUrl: qrPayload.webhookUrl,
+        fallbackWebhookUrl: qrPayload.fallbackWebhookUrl,
+      });
     } catch (err: any) {
       console.error("Fetch pairing error:", err);
     } finally {
       setLoadingPairing(false);
     }
-  }, []);
+  }, [session?.user?.email]);
 
-  // 2. 등록된 에이전트 기기 상태 로드 (silent 모드 지원으로 백그라운드 갱신 시 깜빡임 방지)
+  // 2. 등록된 에이전트 기기 상태 로드 (이지데스크 queryTable 직통 조회)
   const fetchDeviceStatus = useCallback(async (silent = false) => {
     if (!silent) setLoadingDevice(true);
     try {
-      const res = await apiFetch("/api/user/devices");
-      const data = await res.json();
-      if (data.success && data.devices) {
-        const agentDevices = data.devices.filter(
-          (d: any) => d.pairingMode === "android_agent" || d.pairing_mode === "android_agent"
-        );
-        // 가장 최근 통신한 기기 우선 정렬 (lastConnectedAt 기준 내림차순)
-        agentDevices.sort((a: any, b: any) => {
-          const tA = new Date(a.lastConnectedAt || a.last_connected_at || a.updated_at || a.created_at || 0).getTime();
-          const tB = new Date(b.lastConnectedAt || b.last_connected_at || b.updated_at || b.created_at || 0).getTime();
-          return tB - tA;
-        });
+      const res = await queryTable<any>("sheetbot_user_devices", {
+        limit: 50,
+        orderBy: "id",
+        orderDirection: "DESC",
+      }).catch(() => ({ rows: [] }));
 
-        // 💡 동일 기기 모델명 중복 제거 (가장 최근에 통신한 레코드 1대만 보존)
-        const uniqueDevices: any[] = [];
-        const seenLabels = new Set<string>();
-        for (const dev of agentDevices) {
-          const key = (dev.label || dev.deviceModel || "").trim().toLowerCase();
-          if (key && !seenLabels.has(key)) {
-            seenLabels.add(key);
-            uniqueDevices.push(dev);
-          } else if (!key) {
-            uniqueDevices.push(dev);
-          }
+      const rawRows = (res.rows || []).filter((r: any) => !r.deleted_at);
+      const agentDevices = rawRows.filter(
+        (r: any) => r.pairing_mode === "android_agent" || r.pairingMode === "android_agent"
+      );
+
+      agentDevices.sort((a: any, b: any) => {
+        const tA = new Date(a.last_connected_at || a.lastConnectedAt || a.updated_at || a.created_at || 0).getTime();
+        const tB = new Date(b.last_connected_at || b.lastConnectedAt || b.updated_at || b.created_at || 0).getTime();
+        return tB - tA;
+      });
+
+      const uniqueDevices: any[] = [];
+      const seenLabels = new Set<string>();
+      for (const dev of agentDevices) {
+        const key = (dev.label || dev.device_id || "").trim().toLowerCase();
+        if (key && !seenLabels.has(key)) {
+          seenLabels.add(key);
+          uniqueDevices.push(dev);
+        } else if (!key) {
+          uniqueDevices.push(dev);
         }
-
-        setDevices(uniqueDevices);
-        setDevice(uniqueDevices[0] || null);
       }
+
+      setDevices(uniqueDevices);
+      setDevice(uniqueDevices[0] || null);
     } catch (err: any) {
       console.error("Fetch device error:", err);
     } finally {
@@ -224,15 +272,18 @@ export default function DepositAgentPage() {
     }
   };
 
-  // 3. 최근 입금 대장 조회 (silent 모드 지원으로 백그라운드 갱신 시 테이블 깜빡임 방지)
+  // 3. 최근 입금 대장 조회 (이지데스크 queryTable 직통 조회)
   const fetchDepositLogs = useCallback(async (silent = false) => {
     if (!silent) setLoadingLogs(true);
     try {
-      const res = await apiFetch("/api/wallet/direct-deposit?limit=50");
-      const data = await res.json();
-      if (data.success && data.requests) {
-        setDepositLogs(data.requests);
-      }
+      const res = await queryTable<any>("sheetbot_deposit_requests", {
+        limit: 50,
+        orderBy: "id",
+        orderDirection: "DESC",
+      }).catch(() => ({ rows: [] }));
+
+      const validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
+      setDepositLogs(validRows);
     } catch (err: any) {
       console.error("Fetch logs error:", err);
     } finally {
