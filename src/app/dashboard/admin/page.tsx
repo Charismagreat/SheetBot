@@ -168,10 +168,10 @@ export default function AdminDashboardPage() {
   });
   const fetchingTabsRef = useRef<Set<string>>(new Set());
 
-  // ⚡ 세션이 로드되면 관리자 권한 검사 수행
+  // ⚡ 세션 로드 시 단일 통합 번들 로더 실행 (KPI 지표 + 초기 회원 목록 동시 수신)
   useEffect(() => {
     if (status === "loading") return;
-    void checkAdmin();
+    void fetchAdminBootstrap();
   }, [status, session?.user?.email]);
 
   // URL ?tab=... 쿼리 파라미터 및 시트봇 AI 탭 전환 커스텀 이벤트 연동
@@ -219,87 +219,58 @@ export default function AdminDashboardPage() {
     };
   }, []);
 
-  const checkAdmin = async (forceRefresh = false) => {
+  // ⚡ 단일 통합 번들 로더: 관리자 인증, KPI 12대 지표, 기본 탭(회원 목록)을 단 1회의 HTTP 왕복으로 병합 수신
+  const fetchAdminBootstrap = async (forceRefresh = false) => {
     const email = (session?.user?.email || "").toLowerCase().trim();
-
-    // ⚡ [클라이언트 0초 즉시 통과]: 알려진 관리자 이메일이면 네트워크 대기 없이 즉시 열람 허용
     const KNOWN_ADMINS = [
       "charismagreat@gmail.com",
       "chachogreat@gmail.com",
     ];
-    if (email && KNOWN_ADMINS.includes(email)) {
-      setIsAdmin(true);
-      if (typeof window !== "undefined") {
-        try { sessionStorage.setItem("sb_is_admin", "true"); } catch {}
+
+    // 비관리자 접근 사전 차단
+    if (status === "authenticated" && email && !KNOWN_ADMINS.includes(email)) {
+      const cachedAdmin = typeof window !== "undefined" && sessionStorage.getItem("sb_is_admin") === "true";
+      if (!cachedAdmin) {
+        setIsAdmin(false);
+        setLoading(false);
+        return;
       }
-      fetchKpiStats();
-      return;
     }
 
     try {
-      const queryParam = email ? `?userEmail=${encodeURIComponent(email)}${forceRefresh ? "&refresh=true" : ""}` : (forceRefresh ? "?refresh=true" : "");
+      const queryParam = forceRefresh ? "?refresh=true" : "";
       const headers: Record<string, string> = email ? { "x-sheetbot-user-email": email } : {};
 
-      // ⚡ 3초 타임아웃 레이스: 네트워크 지연 시 무한 행 방지
-      const fetchPromise = apiFetch(`/api/admin/check${queryParam}`, { headers }).then((res) => res.json());
-      const timeoutPromise = new Promise<{ success: boolean; isAdmin?: boolean }>((resolve) =>
-        setTimeout(() => resolve({ success: false }), 3000)
-      );
-      const data = await Promise.race([fetchPromise, timeoutPromise]);
+      const res = await apiFetch(`/api/admin/bootstrap${queryParam}`, { headers });
+      const data = await res.json();
 
       if (data.success && data.isAdmin) {
         setIsAdmin(true);
         if (typeof window !== "undefined") {
           try { sessionStorage.setItem("sb_is_admin", "true"); } catch {}
         }
-        fetchKpiStats();
-      } else if (data.success && !data.isAdmin) {
-        // 이메일이 확정되었는데 관리자가 아닌 경우에만 차단
-        if (status === "authenticated" || email) {
-          setIsAdmin(false);
+        if (data.stats) {
+          setKpiStats(data.stats);
           if (typeof window !== "undefined") {
-            try { sessionStorage.setItem("sb_is_admin", "false"); } catch {}
+            try { sessionStorage.setItem("sb_admin_kpi", JSON.stringify(data.stats)); } catch {}
           }
         }
-        setLoading(false);
-      } else {
-        const cachedAdmin = typeof window !== "undefined" && sessionStorage.getItem("sb_is_admin") === "true";
-        if (cachedAdmin) {
-          setIsAdmin(true);
-          fetchKpiStats();
-        } else {
-          setIsAdmin(false);
-          setLoading(false);
+        if (data.users) {
+          setUsers(data.users);
+          setLoadedTabs((prev) => ({ ...prev, users: true }));
+          if (typeof window !== "undefined") {
+            try { sessionStorage.setItem("sb_admin_users", JSON.stringify(data.users)); } catch {}
+          }
         }
-      }
-    } catch {
-      const cachedAdmin = typeof window !== "undefined" && sessionStorage.getItem("sb_is_admin") === "true";
-      if (cachedAdmin) {
-        setIsAdmin(true);
-        fetchKpiStats();
       } else {
         setIsAdmin(false);
-        setLoading(false);
-      }
-    }
-  };
-
-  // ⚡ 상단 KPI 지표 초고속 로드 (SWR 세션 스토리지 실시간 동기화)
-  const fetchKpiStats = async (force = false) => {
-    try {
-      const url = force ? "/api/admin/stats?refresh=true" : "/api/admin/stats";
-      const res = await apiFetch(url);
-      const data = await res.json();
-      if (data.success && data.stats) {
-        setKpiStats(data.stats);
-        if (typeof window !== "undefined") {
-          try {
-            sessionStorage.setItem("sb_admin_kpi", JSON.stringify(data.stats));
-          } catch {}
-        }
       }
     } catch (e) {
-      console.warn("Failed to fetch admin kpi stats", e);
+      console.warn("Failed to load admin bootstrap bundle", e);
+      const cachedAdmin = typeof window !== "undefined" && sessionStorage.getItem("sb_is_admin") === "true";
+      if (cachedAdmin) setIsAdmin(true);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -326,7 +297,9 @@ export default function AdminDashboardPage() {
     try {
       switch (tab) {
         case "users":
-          await fetchUsers(force);
+          if (force || !loadedTabs.users) {
+            await fetchUsers(force);
+          }
           break;
         case "inquiries":
           await fetchInquiries();
@@ -372,10 +345,14 @@ export default function AdminDashboardPage() {
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      await Promise.all([
-        fetchKpiStats(true),
-        fetchTabData(activeTab, true),
-      ]);
+      if (activeTab === "users") {
+        await fetchAdminBootstrap(true);
+      } else {
+        await Promise.all([
+          fetchAdminBootstrap(true),
+          fetchTabData(activeTab, true),
+        ]);
+      }
     } finally {
       setLoading(false);
     }
@@ -964,6 +941,7 @@ export default function AdminDashboardPage() {
           <div className="flex items-center gap-2 flex-wrap">
             <Link
               href="/dashboard/deposit-agent"
+              prefetch={false}
               className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-indigo-50 border border-indigo-200 text-xs font-extrabold text-indigo-700 hover:bg-indigo-100 transition-all shadow-2xs"
               title="운영자 전용 무통장 입금 감지 (시트봇 에이전트 M) 센터"
             >
@@ -1341,6 +1319,7 @@ export default function AdminDashboardPage() {
           {/* 관리자 전용: 무통장 입금 자동확인기 바로가기 */}
           <Link
             href="/dashboard/deposit-agent"
+            prefetch={false}
             className="px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
             title="관리자 전용 무통장 입금 감지 (시트봇 에이전트 M APK 다운로드 & QR 페어링)"
           >
