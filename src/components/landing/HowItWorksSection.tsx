@@ -1,5 +1,3 @@
-"use client";
-
 import React from "react";
 import { Layers, Terminal, Workflow } from "lucide-react";
 
