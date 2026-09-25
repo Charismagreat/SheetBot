@@ -5,6 +5,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/hooks/useAuth";
 import {
   Bot, Plus, FileCode, Clock, Calendar, RefreshCw, CheckCircle2, AlertTriangle,
   X, ArrowRight, ExternalLink, Sparkles, Layers, ShieldCheck, Trash2, Smartphone, Edit3,
@@ -44,6 +45,7 @@ const FdeRecruitModal = nextDynamic(() => import("@/components/dashboard/FdeRecr
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
+  const { user, isLoggedIn } = useAuth();
   const router = useRouter();
 
   // ⚡ SWR 캐시로 이전 방문 데이터 즉시 복원 (0초 렌더링)
@@ -234,8 +236,8 @@ export default function DashboardPage() {
       setLoading(true);
     }
 
-    // 다층 신분증 식별: NextAuth 세션 이메일 1순위, 브라우저 localStorage 캐시 2순위
-    let effectiveEmail = session?.user?.email ? session.user.email.toLowerCase().trim() : "";
+    // 다층 신분증 식별: useAuth user?.email 1순위, NextAuth 세션 2순위, 브라우저 localStorage 캐시 3순위
+    let effectiveEmail = user?.email || (session?.user?.email ? session.user.email.toLowerCase().trim() : "");
     if (!effectiveEmail && typeof window !== "undefined") {
       try {
         effectiveEmail = (localStorage.getItem("sheetbot_user_email") || "").toLowerCase().trim();
@@ -341,7 +343,7 @@ export default function DashboardPage() {
 
     const checkAuth = async () => {
       const localSessionId = typeof window !== "undefined" ? localStorage.getItem("egdesk_visitor_session") : null;
-      let currentEmail = session?.user?.email ? session.user.email.toLowerCase().trim() : null;
+      let currentEmail = user?.email || (session?.user?.email ? session.user.email.toLowerCase().trim() : null);
 
       if (currentEmail) {
         try { localStorage.setItem("sheetbot_user_email", currentEmail); } catch {}
@@ -357,7 +359,7 @@ export default function DashboardPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               email: currentEmail,
-              name: session?.user?.name || currentEmail.split("@")[0],
+              name: user?.name || session?.user?.name || currentEmail.split("@")[0],
               visitorSessionId: localSessionId,
             }),
           }).catch(() => {});
@@ -413,7 +415,13 @@ export default function DashboardPage() {
   const [isRealtimeLive, setIsRealtimeLive] = useState(false);
 
   useEffect(() => {
-    if (status !== "authenticated") return;
+    let effectiveEmail = user?.email || session?.user?.email || "";
+    if (!effectiveEmail && typeof window !== "undefined") {
+      try {
+        effectiveEmail = (localStorage.getItem("sheetbot_user_email") || "").toLowerCase().trim();
+      } catch {}
+    }
+    if (!effectiveEmail) return;
 
     let eventSource: EventSource | null = null;
     let reconnectTimer: any = null;
@@ -425,7 +433,7 @@ export default function DashboardPage() {
         } catch {}
       }
 
-      const email = session?.user?.email || "";
+      const email = effectiveEmail;
       const basePath = getEgdeskBasePath();
       const streamUrl = `${basePath}/api/realtime/stream?topic=all&userEmail=${encodeURIComponent(email)}`;
 
@@ -483,7 +491,7 @@ export default function DashboardPage() {
       }
       clearTimeout(reconnectTimer);
     };
-  }, [status, session?.user?.email, fetchData]);
+  }, [user?.email, session?.user?.email, fetchData]);
 
   const [syncingProjectId, setSyncingProjectId] = useState<string | null>(null);
   const [syncingCodeProjectId, setSyncingCodeProjectId] = useState<string | null>(null);
@@ -660,7 +668,7 @@ export default function DashboardPage() {
     }
   };
 
-  if (status === "loading" || (!session?.user && status !== "unauthenticated")) {
+  if (status === "loading" && !user) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="flex items-center gap-2 text-slate-500 text-sm font-bold">
@@ -713,7 +721,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h2 className="font-extrabold text-slate-800 text-base">
-                  {session?.user?.name || "구글 회원"}님의 자동화 워크스페이스
+                  {user?.name || session?.user?.name || "구글 회원"}님의 자동화 워크스페이스
                 </h2>
               </div>
             </div>
@@ -1500,8 +1508,8 @@ export default function DashboardPage() {
         isOpen={isFdeModalOpen}
         initialSheetUrl={fdeInitialSheetUrl}
         initialRequirement={fdeInitialReq}
-        userEmail={session?.user?.email}
-        userName={session?.user?.name}
+        userEmail={user?.email || session?.user?.email}
+        userName={user?.name || session?.user?.name}
         onClose={() => {
           setIsFdeModalOpen(false);
           setFdeInitialSheetUrl("");
@@ -1513,8 +1521,8 @@ export default function DashboardPage() {
       <FdeRecruitModal
         isOpen={isFdeRecruitOpen}
         initialApply={isApplyingFde}
-        userEmail={session?.user?.email}
-        userName={session?.user?.name}
+        userEmail={user?.email || session?.user?.email}
+        userName={user?.name || session?.user?.name}
         onClose={() => {
           setIsFdeRecruitOpen(false);
           setIsApplyingFde(false);

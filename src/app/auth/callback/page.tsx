@@ -1,110 +1,105 @@
-"use client";
+'use client';
 
-/**
- * Visitor Google OAuth callback & NextAuth Session Bridge.
- *
- * EGDesk completes Google/Supabase OAuth, then redirects here with ?code=
- * This page exchanges the code for a visitor session, synchronizes NextAuth session,
- * and safely redirects to the target destination.
- */
-
-import React, { useEffect, useState, useCallback, useRef } from "react";
-import { signIn } from "next-auth/react";
-import {
-  exchangeVisitorAuthCode,
-  getVisitorGoogleStatus,
-  resolveVisitorAppPath,
-} from "@/egdesk-visitor-google";
-import { RefreshCw, CheckCircle2, AlertTriangle, ArrowRight, LogIn, Home } from "lucide-react";
+import React, { useEffect, useState, useCallback } from 'react';
+import { exchangeVisitorAuthCode, getVisitorGoogleStatus, resolveVisitorAppPath } from '@/egdesk-visitor-google';
+import { signIn } from 'next-auth/react';
+import { RefreshCw, CheckCircle2, AlertTriangle, LogIn, Home } from 'lucide-react';
 
 export default function VisitorAuthCallbackPage() {
-  const [step, setStep] = useState<"exchanging" | "syncing" | "success" | "error" | "timeout">("exchanging");
-  const [errorMessage, setErrorMessage] = useState("");
+  const [step, setStep] = useState<'exchanging' | 'syncing' | 'success' | 'timeout' | 'error'>('exchanging');
+  const [errorMessage, setErrorMessage] = useState('');
   const [retryCount, setRetryCount] = useState(0);
 
   const attemptLogin = useCallback(async () => {
-    if (typeof window === "undefined") return;
+    if (typeof window === 'undefined') return;
 
     const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    const next = params.get("next") || "/dashboard";
+    const code = params.get('code');
+    const next = params.get('next') || '/dashboard';
 
     if (!code) {
-      setStep("error");
-      setErrorMessage("유효한 Google 로그인 인증 코드가 누락되었습니다.");
+      setStep('error');
+      setErrorMessage('로그인 인증 코드가 누락되었습니다. 다시 Google 로그인을 진행해 주세요.');
       return;
     }
 
-    setStep("exchanging");
-    setErrorMessage("");
-
     let finished = false;
-
-    // 타임아웃 60초 (네트워크/프록시 토큰 교환 지연 충분한 여유 보장)
     const timer = window.setTimeout(() => {
       if (finished) return;
       finished = true;
-      setStep("timeout");
-      setErrorMessage("Google 인증 응답 시간이 초과되었습니다. (60초)");
-    }, 60000);
+      setStep('timeout');
+      setErrorMessage('인증 응답 시간이 초과되었습니다. 네트워크 상태를 확인하고 다시 시도해 주세요.');
+    }, 20000);
 
     try {
-      // 1단계: EGDesk Visitor Auth 토큰 교환
+      // 1단계: EGDesk 일회용 인증 코드를 세션 ID로 교환
+      setStep('exchanging');
       const exchangeResult = await exchangeVisitorAuthCode(code);
-      if (finished) return;
+      if (!exchangeResult?.sessionId) {
+        throw new Error('방문자 인증 세션 생성에 실패했습니다.');
+      }
 
-      // 2단계: 워크스페이스 Google 상태 조회 및 NextAuth 세션 동기화
-      setStep("syncing");
-      let userEmail = "";
-      let userName = "";
-      let userImage = "";
+      // 서버 사이드 쿠키 전달을 위해 document.cookie에도 세션 ID 동기화
+      try {
+        const isSecure = window.location.protocol === 'https:';
+        document.cookie = `egdesk_visitor_session=${encodeURIComponent(
+          exchangeResult.sessionId
+        )}; path=/; max-age=2592000; SameSite=Lax${isSecure ? '; Secure' : ''}`;
+      } catch (cookieErr) {
+        console.warn('[AuthCallback] Cookie sync note:', cookieErr);
+      }
 
+      // 2단계: Google 프로필 정보 조회 및 로컬/NextAuth 세션 연동
+      setStep('syncing');
       try {
         const googleStatus = await getVisitorGoogleStatus();
         if (googleStatus?.connected && googleStatus.email) {
-          userEmail = googleStatus.email;
-          userName = (googleStatus as any).name || userEmail.split("@")[0];
-          userImage = (googleStatus as any).picture || "https://lh3.googleusercontent.com/a/default-user=s96-c";
+          const userEmail = googleStatus.email.toLowerCase().trim();
+          const userName = (googleStatus as any).name || userEmail.split('@')[0];
+          const userImage = (googleStatus as any).picture || 'https://lh3.googleusercontent.com/a/default-user=s96-c';
 
-          // NextAuth 세션 쿠키 발급
-          await signIn("google-login", {
+          localStorage.setItem('sheetbot_user_email', userEmail);
+          localStorage.setItem('sheetbot_user_name', userName);
+          localStorage.setItem('sheetbot_user_image', userImage);
+
+          // NextAuth 세션 쿠키 백그라운드 발급
+          await signIn('google-login', {
             redirect: false,
             email: userEmail,
             name: userName,
             image: userImage,
-          });
-
-          // 로컬 스토리지에 유저 식별자 보존
-          localStorage.setItem("sheetbot_user_email", userEmail);
+          }).catch(() => {});
         }
       } catch (syncErr: any) {
-        console.warn("[AuthCallback] NextAuth session sync warning:", syncErr?.message);
+        console.warn('[AuthCallback] Session sync warning:', syncErr?.message);
       }
 
-      // 3단계: 완료 및 대시보드 리다이렉트
+      // 전역 인증 갱신 이벤트 발행
+      window.dispatchEvent(new CustomEvent('sheetbot-auth-change'));
+
+      // 3단계: 완료 처리 및 대시보드로 이동
       finished = true;
       window.clearTimeout(timer);
-      setStep("success");
+      setStep('success');
 
-      const dest = resolveVisitorAppPath(next.startsWith("/") ? next : "/dashboard");
+      const dest = resolveVisitorAppPath(next.startsWith('/') ? next : '/dashboard');
       window.setTimeout(() => {
         window.location.replace(dest);
-      }, 500);
+      }, 350);
     } catch (err: any) {
       if (finished) return;
       finished = true;
       window.clearTimeout(timer);
 
-      console.error("[AuthCallback] Error during exchange:", err);
+      console.error('[AuthCallback] Error during exchange:', err);
       const text = err instanceof Error ? err.message : String(err);
 
-      // 이미 사용된 코드인 경우
-      if (text.includes("Invalid or expired") || text.includes("expired")) {
-        setStep("error");
-        setErrorMessage("이미 처리되었거나 만료된 일회용 로그인 코드입니다. 다시 로그인을 진행해 주세요.");
+      if (text.includes('Invalid or expired') || text.includes('expired')) {
+        setStep('error');
+        setErrorMessage('이미 처리되었거나 만료된 일회용 로그인 코드입니다. 다시 로그인을 진행해 주세요.');
       } else {
-        setStep("error");
-        setErrorMessage(text || "로그인 처리 중 네트워크 통신 오류가 발생했습니다.");
+        setStep('error');
+        setErrorMessage(text || '로그인 처리 중 네트워크 통신 오류가 발생했습니다.');
       }
     }
   }, []);
@@ -118,11 +113,11 @@ export default function VisitorAuthCallbackPage() {
   };
 
   const handleGoLogin = () => {
-    window.location.replace("/login");
+    window.location.replace('/login');
   };
 
   const handleGoHome = () => {
-    window.location.replace("/");
+    window.location.replace('/');
   };
 
   return (
@@ -130,22 +125,22 @@ export default function VisitorAuthCallbackPage() {
       <div className="bg-white rounded-3xl p-8 max-w-md w-full border border-slate-200/80 shadow-xl space-y-6 text-center animate-in fade-in zoom-in duration-200">
         {/* 상태 아이콘 */}
         <div className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center">
-          {step === "exchanging" && (
+          {step === 'exchanging' && (
             <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <RefreshCw className="w-8 h-8 animate-spin" />
             </div>
           )}
-          {step === "syncing" && (
+          {step === 'syncing' && (
             <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
               <RefreshCw className="w-8 h-8 animate-spin" />
             </div>
           )}
-          {step === "success" && (
+          {step === 'success' && (
             <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <CheckCircle2 className="w-8 h-8 text-emerald-600 animate-bounce" />
             </div>
           )}
-          {(step === "error" || step === "timeout") && (
+          {(step === 'error' || step === 'timeout') && (
             <div className="w-16 h-16 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
               <AlertTriangle className="w-8 h-8 text-rose-600" />
             </div>
@@ -154,7 +149,7 @@ export default function VisitorAuthCallbackPage() {
 
         {/* 텍스트 메시지 */}
         <div className="space-y-2">
-          {step === "exchanging" && (
+          {step === 'exchanging' && (
             <>
               <h2 className="text-lg font-black text-slate-900">Google 계정 인증 처리 중</h2>
               <p className="text-xs text-slate-500 leading-relaxed">
@@ -163,7 +158,7 @@ export default function VisitorAuthCallbackPage() {
             </>
           )}
 
-          {step === "syncing" && (
+          {step === 'syncing' && (
             <>
               <h2 className="text-lg font-black text-slate-900">자동화 워크스페이스 세션 연결 중</h2>
               <p className="text-xs text-slate-500 leading-relaxed">
@@ -172,7 +167,7 @@ export default function VisitorAuthCallbackPage() {
             </>
           )}
 
-          {step === "success" && (
+          {step === 'success' && (
             <>
               <h2 className="text-lg font-black text-emerald-700">로그인 완료!</h2>
               <p className="text-xs text-slate-500 leading-relaxed">
@@ -181,7 +176,7 @@ export default function VisitorAuthCallbackPage() {
             </>
           )}
 
-          {step === "timeout" && (
+          {step === 'timeout' && (
             <>
               <h2 className="text-lg font-black text-slate-900">인증 응답 시간 초과</h2>
               <p className="text-xs text-rose-600 leading-relaxed font-medium">
@@ -193,7 +188,7 @@ export default function VisitorAuthCallbackPage() {
             </>
           )}
 
-          {step === "error" && (
+          {step === 'error' && (
             <>
               <h2 className="text-lg font-black text-slate-900">로그인 처리 실패</h2>
               <p className="text-xs text-rose-600 leading-relaxed font-medium">
@@ -204,7 +199,7 @@ export default function VisitorAuthCallbackPage() {
         </div>
 
         {/* 액션 버튼 */}
-        {(step === "error" || step === "timeout") && (
+        {(step === 'error' || step === 'timeout') && (
           <div className="space-y-2 pt-2">
             <button
               onClick={handleGoLogin}
