@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -195,17 +195,32 @@ export default function DepositAgentPage() {
     }
   }, [session?.user?.email]);
 
-  // 2. 등록된 에이전트 기기 상태 로드 (이지데스크 queryTable 직통 조회)
-  const fetchDeviceStatus = useCallback(async (silent = false) => {
-    if (!silent) setLoadingDevice(true);
-    try {
-      const res = await queryTable<any>("sheetbot_user_devices", {
-        limit: 50,
-        orderBy: "id",
-        orderDirection: "DESC",
-      }).catch(() => ({ rows: [] }));
+  const isFetchingRef = useRef<boolean>(false);
 
-      const rawRows = (res.rows || []).filter((r: any) => !r.deleted_at);
+  // 2 & 3. ⚡ [단일 통합 데이터 로더] 기기 상태 및 입금 대장을 단 1회의 병렬 처리로 수집
+  const fetchDepositAgentData = useCallback(async (silent = false) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    if (!silent) {
+      setLoadingDevice(true);
+      setLoadingLogs(true);
+    }
+    try {
+      const [devicesRes, depositsRes] = await Promise.all([
+        queryTable<any>("sheetbot_user_devices", {
+          limit: 50,
+          orderBy: "id",
+          orderDirection: "DESC",
+        }).catch(() => ({ rows: [] })),
+        queryTable<any>("sheetbot_deposit_requests", {
+          limit: 50,
+          orderBy: "id",
+          orderDirection: "DESC",
+        }).catch(() => ({ rows: [] })),
+      ]);
+
+      // 1. 기기 목록 가공
+      const rawRows = (devicesRes.rows || []).filter((r: any) => !r.deleted_at);
       const agentDevices = rawRows.filter(
         (r: any) => r.pairing_mode === "android_agent" || r.pairingMode === "android_agent"
       );
@@ -230,12 +245,28 @@ export default function DepositAgentPage() {
 
       setDevices(uniqueDevices);
       setDevice(uniqueDevices[0] || null);
+
+      // 2. 최근 입금 대장 가공
+      const validRows = (depositsRes.rows || []).filter((r: any) => !r.deleted_at);
+      setDepositLogs(validRows);
     } catch (err: any) {
-      console.error("Fetch device error:", err);
+      console.error("Fetch deposit agent data error:", err);
     } finally {
-      if (!silent) setLoadingDevice(false);
+      isFetchingRef.current = false;
+      if (!silent) {
+        setLoadingDevice(false);
+        setLoadingLogs(false);
+      }
     }
   }, []);
+
+  const fetchDeviceStatus = useCallback(async (silent = false) => {
+    return fetchDepositAgentData(silent);
+  }, [fetchDepositAgentData]);
+
+  const fetchDepositLogs = useCallback(async (silent = false) => {
+    return fetchDepositAgentData(silent);
+  }, [fetchDepositAgentData]);
 
   const [deletingDeviceId, setDeletingDeviceId] = useState<string | number | null>(null);
 
@@ -250,7 +281,7 @@ export default function DepositAgentPage() {
       const data = await res.json();
       if (data.success) {
         showToast("success", "기기 연동이 성공적으로 해제되었습니다.");
-        await fetchDeviceStatus();
+        await fetchDepositAgentData(true);
       } else {
         showToast("error", data.error || "기기 연동 해제에 실패했습니다.");
       }
@@ -261,25 +292,6 @@ export default function DepositAgentPage() {
     }
   };
 
-  // 3. 최근 입금 대장 조회 (이지데스크 queryTable 직통 조회)
-  const fetchDepositLogs = useCallback(async (silent = false) => {
-    if (!silent) setLoadingLogs(true);
-    try {
-      const res = await queryTable<any>("sheetbot_deposit_requests", {
-        limit: 50,
-        orderBy: "id",
-        orderDirection: "DESC",
-      }).catch(() => ({ rows: [] }));
-
-      const validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
-      setDepositLogs(validRows);
-    } catch (err: any) {
-      console.error("Fetch logs error:", err);
-    } finally {
-      if (!silent) setLoadingLogs(false);
-    }
-  }, []);
-
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -288,35 +300,43 @@ export default function DepositAgentPage() {
       return;
     }
     if (status === "authenticated") {
-      // 페이지 진입 즉시 페어링 정보(QR/핀코드) 및 기기 상태 병렬 로드 (스피너 지연 방지)
-      fetchPairingInfo();
-      fetchDeviceStatus();
-      fetchDepositLogs();
+      // ⚡ [0초 클라이언트 권한 통과]: 알려진 관리자 이메일이면 네트워크 호출 없이 즉시 승인
+      const KNOWN_ADMINS = ["charismagreat@gmail.com", "chachogreat@gmail.com"];
+      const email = (session?.user?.email || "").toLowerCase().trim();
+      const cachedAdmin = typeof window !== "undefined" && sessionStorage.getItem("sb_is_admin") === "true";
 
-      // 관리자 권한 백그라운드 확인
-      apiFetch("/api/admin/check")
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && data.isAdmin) {
-            setIsAdmin(true);
-          } else {
+      if ((email && KNOWN_ADMINS.includes(email)) || cachedAdmin) {
+        setIsAdmin(true);
+        if (typeof window !== "undefined") {
+          try { sessionStorage.setItem("sb_is_admin", "true"); } catch {}
+        }
+      } else {
+        apiFetch("/api/admin/check")
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success && data.isAdmin) {
+              setIsAdmin(true);
+              try { sessionStorage.setItem("sb_is_admin", "true"); } catch {}
+            } else {
+              setIsAdmin(false);
+              router.push("/dashboard");
+            }
+          })
+          .catch(() => {
             setIsAdmin(false);
             router.push("/dashboard");
-          }
-        })
-        .catch(() => {
-          setIsAdmin(false);
-          router.push("/dashboard");
-        });
+          });
+      }
+
+      // 페이지 진입 즉시 페어링 정보(QR/핀코드) 및 단일 통합 데이터 로드
+      fetchPairingInfo();
+      fetchDepositAgentData();
 
       // ⚡ [0초 실시간 감시] 이지데스크 공식 onUserDataChanged 연동 (입금 요청 및 에이전트 기기 실시간 감시)
       const unsub = onUserDataChanged((event) => {
         setIsRealtimeLive(true);
-        if (!event.tableName || event.tableName === "sheetbot_deposit_requests") {
-          fetchDepositLogs(true);
-        }
-        if (!event.tableName || event.tableName === "sheetbot_user_devices") {
-          fetchDeviceStatus(true);
+        if (!event.tableName || event.tableName === "sheetbot_deposit_requests" || event.tableName === "sheetbot_user_devices") {
+          fetchDepositAgentData(true);
         }
       });
 
@@ -326,7 +346,7 @@ export default function DepositAgentPage() {
         unsub();
       };
     }
-  }, [status, session, router, fetchPairingInfo, fetchDeviceStatus, fetchDepositLogs]);
+  }, [status, session, router, fetchPairingInfo, fetchDepositAgentData]);
 
   // 🔍 [검색 & 탭 필터링] 메모이제이션
   const filteredLogs = React.useMemo(() => {
