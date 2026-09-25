@@ -99,6 +99,16 @@ export default function DashboardPage() {
     isExisting: false,
   });
 
+  // ⚡ 서브 대시보드(알림 센터, 요금제 등) 0초 즉시 이동을 위한 선제 프리페치(Prefetch)
+  useEffect(() => {
+    try {
+      router.prefetch("/dashboard/notifications");
+      router.prefetch("/dashboard/pricing");
+      router.prefetch("/dashboard/ai-usage");
+      router.prefetch("/dashboard/settings");
+    } catch {}
+  }, [router]);
+
   // 랜딩페이지에서 ?sheetUrl=... 또는 localStorage로 유입된 경우 1초 래핑 즉시 실행 및 전용 모달 오픈
   useEffect(() => {
     if (status === "loading") return;
@@ -975,7 +985,11 @@ export default function DashboardPage() {
 
               <Link
                 href="/dashboard/notifications"
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all shrink-0 active:scale-95"
+                prefetch={true}
+                onClick={() => {
+                  router.push("/dashboard/notifications");
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all shrink-0 active:scale-95 cursor-pointer"
                 data-easybot-hint="스마트 알림 센터: 내 안드로이드 스마트폰을 연동하고 구글 시트 자동 문자 발송 규칙을 관리합니다."
               >
                 <span>스마트 알림 센터 열기</span>
