@@ -25,10 +25,12 @@ import {
 import SheetBotLogo from "@/components/SheetBotLogo";
 import WithdrawModal from "@/components/WithdrawModal";
 import { useAuth } from "@/hooks/useAuth";
+import { useAuthAdmin } from "@/contexts/AuthAdminContext";
 
 export default function Navbar() {
   const pathname = usePathname();
-  const { user, isLoggedIn, isLoading, isAdmin, logout } = useAuth();
+  const { user, isLoggedIn, isLoading, isAdmin } = useAuthAdmin();
+  const { logout } = useAuth();
 
   const [aiHelpEnabled, setAiHelpEnabled] = useState(false);
   const [mounted, setMounted] = useState(false);

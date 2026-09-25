@@ -5,6 +5,7 @@ import { onUserDataChanged, queryTable } from '@/lib/egdesk-helpers';
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
+import { useAuthAdmin } from "@/contexts/AuthAdminContext";
 import {
   Bot,
   Sparkles,
@@ -95,6 +96,7 @@ export default function EasyBot() {
   const router = useRouter();
   const pathname = usePathname();
   const { data: session, status: sessionStatus } = useSession();
+  const { user, userEmail, isAdmin: isContextAdmin, isLoading: isAuthLoading } = useAuthAdmin();
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -113,7 +115,7 @@ export default function EasyBot() {
   const [isResetting, setIsResetting] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
-  const [isAdminUser, setIsAdminUser] = useState<boolean>(false);
+  const [isAdminUser, setIsAdminUser] = useState<boolean>(() => isContextAdmin);
   const lastKnownEntIdRef = useRef<number>(0);
   const lastKnownTaxIdRef = useRef<number>(0);
   const suppressedSlaRef = useRef<boolean>(false);
@@ -451,13 +453,20 @@ export default function EasyBot() {
   const isInitializingRef = useRef(false);
   const bundleLoadedRef = useRef(false);
 
-  // ⚡ [단일 통합 번들 로더] /api/easybot/init 1회 호출로 헬스체크, 대화 내역, 관리자 브리핑 병합 수신
+  // ⚡ [단일 통합 번들 로더] 이지데스크 공식 apiFetch 도구로 /api/easybot/init 1회 호출
   const initEasyBotBundle = useCallback(async () => {
     if (isInitializingRef.current || bundleLoadedRef.current) return;
     isInitializingRef.current = true;
 
     try {
-      const res = await apiFetch("/api/easybot/init");
+      const email = userEmail || (session?.user?.email ? session.user.email.toLowerCase().trim() : "");
+      const queryParam = email ? `?userEmail=${encodeURIComponent(email)}` : "";
+      const headers: Record<string, string> = email ? { "x-sheetbot-user-email": email } : {};
+
+      const res = await apiFetch(`/api/easybot/init${queryParam}`, {
+        headers,
+        credentials: "include",
+      });
       const data = await res.json();
 
       if (data?.success) {
@@ -551,7 +560,7 @@ export default function EasyBot() {
     } finally {
       isInitializingRef.current = false;
     }
-  }, [session?.user?.email, setOpenWithPersistence]);
+  }, [userEmail, session?.user?.email, setOpenWithPersistence]);
 
   // ⚡ [이지데스크 공식 queryTable 직통 감시] 관리자 실시간 이벤트 감지 (DB 왓처 이벤트 시에만 실행)
   const isPollingBusyRef = useRef(false);
@@ -750,9 +759,17 @@ export default function EasyBot() {
     };
   }, [isOpen, historyLoaded, sessionStatus, initEasyBotBundle]);
 
+  // 🌟 상위 Context의 관리자 권한 상태 실시간 동기화
+  useEffect(() => {
+    if (isContextAdmin) {
+      setIsAdminUser(true);
+    }
+  }, [isContextAdmin]);
+
   // 🌟 [능동형 AI 수석 비서] 관리자 실시간 DB 왓처 (onUserDataChanged 이벤트 발생 시에만 동작)
   useEffect(() => {
-    if (!isAdminUser) return;
+    const isEffectiveAdmin = isContextAdmin || isAdminUser;
+    if (!isEffectiveAdmin) return;
 
     const TARGET_TABLES = [
       "sheetbot_enterprise_inquiries",
@@ -770,7 +787,7 @@ export default function EasyBot() {
     return () => {
       unsubWatcher();
     };
-  }, [isAdminUser, checkAdminEventsDirectly]);
+  }, [isContextAdmin, isAdminUser, checkAdminEventsDirectly]);
 
   useEffect(() => {
     if (isOpen) {

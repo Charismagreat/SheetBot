@@ -59,15 +59,23 @@ export default function Footer() {
 
   useEffect(() => {
     if (pathname === "/marketplace") return;
-    fetchFooter();
+
+    // ⚡ 초기 마운트 시 메인 대시보드 네트워크 소켓을 100% 보존하기 위해 캐시가 있으면 네트워크 0건, 없을 때만 5초 지연 백그라운드 로드
+    let idleTimer: NodeJS.Timeout | null = null;
+    if (!memoryFooterCache) {
+      idleTimer = setTimeout(() => {
+        void fetchFooter();
+      }, 5000);
+    }
 
     const handleUpdate = () => {
-      fetchFooter();
+      void fetchFooter(true);
     };
 
     if (typeof window !== "undefined") {
       window.addEventListener("sheetbot-footer-updated", handleUpdate);
       return () => {
+        if (idleTimer) clearTimeout(idleTimer);
         window.removeEventListener("sheetbot-footer-updated", handleUpdate);
       };
     }

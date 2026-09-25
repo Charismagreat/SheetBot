@@ -30,6 +30,7 @@ import {
 import Navbar from "@/components/Navbar";
 import { apiFetch, getEgdeskBasePath } from "@/lib/api";
 import { onUserDataChanged } from "@/lib/egdesk-helpers";
+import { useAuthAdmin } from "@/contexts/AuthAdminContext";
 
 function formatDateTime(dateStr?: string | null): string {
   if (!dateStr) return "-";
@@ -59,6 +60,7 @@ function formatDateTime(dateStr?: string | null): string {
 
 export default function DepositAgentPage() {
   const { data: session, status } = useSession();
+  const { user, userEmail, isLoggedIn, isAdmin: isContextAdmin, isLoading: isAuthLoading } = useAuthAdmin();
   const router = useRouter();
 
   // ⚡ SWR 캐시 복원: 브라우저 세션 스토리지에서 이전 입금 에이전트 번들 즉시 복원 (0초 렌더링)
@@ -156,7 +158,14 @@ export default function DepositAgentPage() {
   };
 
   const isFetchingRef = useRef<boolean>(false);
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(() => {
+    if (isContextAdmin) return true;
+    if (typeof window !== "undefined") {
+      const cached = sessionStorage.getItem("sb_is_admin");
+      if (cached === "true") return true;
+    }
+    return null;
+  });
 
   // ⚡ [단일 통합 번들 로더] /api/wallet/agent/bootstrap 단 1회 호출로 페어링 정보, 기기 상태, 입금 대장을 병합 수신
   const fetchDepositAgentBootstrap = useCallback(async (silent = false, forceRefresh = false) => {
@@ -168,8 +177,11 @@ export default function DepositAgentPage() {
       setLoadingPairing(true);
     }
     try {
-      const url = `/api/wallet/agent/bootstrap${forceRefresh ? "?refresh=true" : ""}`;
-      const res = await apiFetch(url);
+      const email = userEmail || session?.user?.email || "";
+      const queryEmail = email ? `&email=${encodeURIComponent(email.toLowerCase().trim())}` : "";
+      const url = `/api/wallet/agent/bootstrap?${forceRefresh ? "refresh=true" : ""}${queryEmail}`;
+      const headers: Record<string, string> = email ? { "x-sheetbot-user-email": email.toLowerCase().trim() } : {};
+      const res = await apiFetch(url, { headers, credentials: "include" });
       const data = await res.json();
 
       if (data.success) {
@@ -242,41 +254,35 @@ export default function DepositAgentPage() {
   };
 
   useEffect(() => {
-    if (status === "unauthenticated") {
+    if (!isAuthLoading && !isLoggedIn && status === "unauthenticated") {
       router.push("/auth/signin");
       return;
     }
-    if (status === "authenticated") {
-      // ⚡ [0초 클라이언트 권한 통과]: 알려진 관리자 이메일이면 네트워크 호출 없이 즉시 승인
-      const KNOWN_ADMINS = ["charismagreat@gmail.com", "chachogreat@gmail.com"];
-      const email = (session?.user?.email || "").toLowerCase().trim();
-      const cachedAdmin = typeof window !== "undefined" && sessionStorage.getItem("sb_is_admin") === "true";
 
-      if ((email && KNOWN_ADMINS.includes(email)) || cachedAdmin) {
-        setIsAdmin(true);
-        if (typeof window !== "undefined") {
-          try { sessionStorage.setItem("sb_is_admin", "true"); } catch {}
-        }
+    if (isContextAdmin) {
+      setIsAdmin(true);
+      if (typeof window !== "undefined") {
+        try { sessionStorage.setItem("sb_is_admin", "true"); } catch {}
       }
-
-      // ⚡ 페이지 진입 즉시 단 1회의 통합 번들 로더 실행
-      fetchDepositAgentBootstrap();
-
-      // ⚡ [0초 실시간 감시] 이지데스크 공식 onUserDataChanged 연동 (입금 요청 및 에이전트 기기 실시간 감시)
-      const unsub = onUserDataChanged((event) => {
-        setIsRealtimeLive(true);
-        if (!event.tableName || event.tableName === "sheetbot_deposit_requests" || event.tableName === "sheetbot_user_devices") {
-          fetchDepositAgentBootstrap(true, true);
-        }
-      });
-
-      setIsRealtimeLive(true);
-
-      return () => {
-        unsub();
-      };
     }
-  }, [status, session, router, fetchDepositAgentBootstrap]);
+
+    // ⚡ 페이지 진입 즉시 단 1회의 통합 번들 로더 실행
+    fetchDepositAgentBootstrap();
+
+    // ⚡ [0초 실시간 감시] 이지데스크 공식 onUserDataChanged 연동 (입금 요청 및 에이전트 기기 실시간 감시)
+    const unsub = onUserDataChanged((event) => {
+      setIsRealtimeLive(true);
+      if (!event.tableName || event.tableName === "sheetbot_deposit_requests" || event.tableName === "sheetbot_user_devices") {
+        fetchDepositAgentBootstrap(true, true);
+      }
+    });
+
+    setIsRealtimeLive(true);
+
+    return () => {
+      unsub();
+    };
+  }, [isAuthLoading, isLoggedIn, isContextAdmin, status, router, fetchDepositAgentBootstrap]);
 
   // 🔍 [검색 & 탭 필터링] 메모이제이션
   const filteredLogs = React.useMemo(() => {
@@ -401,8 +407,8 @@ export default function DepositAgentPage() {
     }
   };
 
-  const userEmail = session?.user?.email || "chachogreat@gmail.com";
-  const defaultQrUri = `sheetbot://pair?email=${encodeURIComponent(userEmail)}&pin=SB-777777`;
+  const effectiveQrEmail = userEmail || session?.user?.email || "chachogreat@gmail.com";
+  const defaultQrUri = `sheetbot://pair?email=${encodeURIComponent(effectiveQrEmail)}&pin=SB-777777`;
 
   const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=8&data=${encodeURIComponent(
     pairingData?.qrData || defaultQrUri

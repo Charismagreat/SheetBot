@@ -37,7 +37,10 @@ export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
     const queryEmail = url.searchParams.get("userEmail") || url.searchParams.get("email");
-    let userEmail: string | null = (queryEmail && queryEmail.includes("@")) ? queryEmail.toLowerCase().trim() : null;
+    const headerEmail = req.headers.get("x-sheetbot-user-email");
+    let userEmail: string | null = (headerEmail && headerEmail.includes("@"))
+      ? headerEmail.toLowerCase().trim()
+      : ((queryEmail && queryEmail.includes("@")) ? queryEmail.toLowerCase().trim() : null);
 
     if (!userEmail) {
       userEmail = await getCurrentUserEmail(req).catch(() => null);
@@ -188,18 +191,35 @@ export async function GET(req: NextRequest) {
       briefingPromise,
     ]);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       health,
       messages,
       isAdmin,
       briefing,
     });
+    response.headers.set("Access-Control-Allow-Origin", "*");
+    response.headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+    response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    return response;
   } catch (error: any) {
     console.error("[EasyBot-Init-API] GET error:", error);
-    return NextResponse.json(
+    const errorResponse = NextResponse.json(
       { success: false, error: error.message || "Failed to initialize easybot bundle" },
       { status: 500 }
     );
+    errorResponse.headers.set("Access-Control-Allow-Origin", "*");
+    return errorResponse;
   }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+    },
+  });
 }
