@@ -1,7 +1,7 @@
 "use client";
 
 import { apiFetch, getEgdeskBasePath } from '@/lib/api';
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
@@ -29,7 +29,8 @@ import {
   ShieldCheck,
   Radio,
   ArrowRight,
-  Download
+  Download,
+  Share2
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import dynamic from "next/dynamic";
@@ -101,6 +102,50 @@ export default function NotificationsPage() {
   // 알림 토스트
   const [alert, setAlert] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // 이용자용 앱(APK) 공유 및 다운로드 QR 모달 상태
+  const [isApkQrModalOpen, setIsApkQrModalOpen] = useState(false);
+  const [apkCopied, setApkCopied] = useState(false);
+
+  const getApkDownloadUrl = useCallback(() => {
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}/downloads/SheetBotAgent.apk`;
+    }
+    return "https://sheetbot.cloud/downloads/SheetBotAgent.apk";
+  }, []);
+
+  const handleCopyApkLink = useCallback(async () => {
+    const url = getApkDownloadUrl();
+    try {
+      await navigator.clipboard.writeText(url);
+      setApkCopied(true);
+      showAlert("success", "📋 시트봇 에이전트 APK 다운로드 링크가 복사되었습니다! 카카오톡이나 메시지로 전달하세요.");
+      setTimeout(() => setApkCopied(false), 3000);
+    } catch {
+      showAlert("error", "링크 복사에 실패했습니다. 수동으로 복사해 주세요: " + url);
+    }
+  }, [getApkDownloadUrl]);
+
+  const handleShareApk = useCallback(async () => {
+    const url = getApkDownloadUrl();
+    if (typeof navigator !== "undefined" && (navigator as any).share) {
+      try {
+        await (navigator as any).share({
+          title: "시트봇 에이전트(SheetBot Agent) 다운로드",
+          text: "구글 시트 0원 알림 문자 발송을 위한 시트봇 에이전트 전용 앱을 스마트폰에 설치하세요.",
+          url: url,
+        });
+        return;
+      } catch (err: any) {
+        if (err.name !== "AbortError") {
+          await handleCopyApkLink();
+        }
+        return;
+      }
+    }
+    // Web Share 미지원 브라우저/PC에서는 다운로드 전용 QR 모달 오픈
+    setIsApkQrModalOpen(true);
+  }, [getApkDownloadUrl, handleCopyApkLink]);
 
   const showAlert = (type: "success" | "error", text: string) => {
     setAlert({ type, text });
@@ -196,6 +241,16 @@ export default function NotificationsPage() {
   // ⚡ [0초 실시간 감시] 이지데스크 DB 왓처 실시간 스트림 연동 (SMS 및 기기 변경 자동 감지)
   const [isRealtimeLive, setIsRealtimeLive] = useState(false);
 
+  // 리렌더링 시 EventSource 연결이 불필요하게 끊어지지 않도록 최신 콜백을 ref로 격리
+  const fetchLogsRef = useRef(fetchLogs);
+  const fetchDevicesRef = useRef(fetchDevices);
+  const fetchRulesRef = useRef(fetchRules);
+  useEffect(() => {
+    fetchLogsRef.current = fetchLogs;
+    fetchDevicesRef.current = fetchDevices;
+    fetchRulesRef.current = fetchRules;
+  });
+
   useEffect(() => {
     if (status !== "authenticated") return;
 
@@ -209,12 +264,12 @@ export default function NotificationsPage() {
         } catch {}
       }
 
-      const email = session?.user?.email || "";
+      const email = session?.user?.email || (typeof window !== "undefined" ? localStorage.getItem("sheetbot_user_email") || "" : "");
       const basePath = getEgdeskBasePath();
-      const streamUrl = `${basePath}/api/realtime/stream?topic=sms&userEmail=${encodeURIComponent(email)}`;
+      const streamUrl = `${basePath}/api/realtime/stream?topic=all${email ? `&userEmail=${encodeURIComponent(email)}` : ""}`;
 
       try {
-        eventSource = new EventSource(streamUrl);
+        eventSource = new EventSource(streamUrl, { withCredentials: true });
 
         eventSource.onopen = () => {
           setIsRealtimeLive(true);
@@ -230,11 +285,11 @@ export default function NotificationsPage() {
             }
             if (payload.type === "DATA_CHANGED") {
               if (payload.tableName === "sheetbot_sms_logs") {
-                fetchLogs();
+                fetchLogsRef.current?.();
               } else if (payload.tableName === "sheetbot_user_devices") {
-                fetchDevices();
+                fetchDevicesRef.current?.();
               } else if (payload.tableName === "sheetbot_smart_rules") {
-                fetchRules();
+                fetchRulesRef.current?.();
               }
             }
           } catch {}
@@ -272,7 +327,7 @@ export default function NotificationsPage() {
       }
       clearTimeout(reconnectTimer);
     };
-  }, [status, session?.user?.email, fetchLogs, fetchDevices, fetchRules]);
+  }, [status, session?.user?.email]);
 
 
   // 기기 삭제
@@ -522,13 +577,23 @@ export default function NotificationsPage() {
               <span>실전 활용 가이드</span>
             </button>
 
-            {/* 실시간 DB 왓처 연결 뱃지 */}
-            <div className="ml-auto hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-bold transition-all bg-white/5 border-white/10">
-              <span className={`w-2 h-2 rounded-full ${isRealtimeLive ? "bg-emerald-400 animate-pulse" : "bg-slate-400"}`} />
-              <span className={isRealtimeLive ? "text-emerald-300" : "text-slate-400"}>
+            {/* 실시간 DB 왓처 연결 뱃지 (클릭 시 수동 새로고침 겸용) */}
+            <button
+              onClick={() => {
+                fetchDevices();
+                fetchRules();
+                fetchLogs();
+                fetchAgent2Pairing();
+              }}
+              className="ml-auto hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-bold transition-all bg-white/10 hover:bg-white/20 active:scale-95 border-white/20 text-white cursor-pointer shadow-xs"
+              title="클릭 시 즉시 데이터 동기화 및 스트림 상태 확인"
+            >
+              <span className={`w-2 h-2 rounded-full ${isRealtimeLive ? "bg-emerald-400 animate-pulse ring-2 ring-emerald-400/40" : "bg-slate-400"}`} />
+              <span className={isRealtimeLive ? "text-emerald-300 font-extrabold" : "text-slate-300"}>
                 {isRealtimeLive ? "⚡ DB 왓처 0초 실시간 감시 중" : "스트림 연결 중..."}
               </span>
-            </div>
+              <RefreshCw className={`w-3 h-3 text-white/70 transition-transform ${loadingDevices || loadingRules || loadingLogs ? "animate-spin text-emerald-300" : ""}`} />
+            </button>
           </div>
         </div>
 
@@ -586,29 +651,75 @@ export default function NotificationsPage() {
 
                 {/* 3단계 가이드 그리드 */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto items-stretch">
-                  {/* 1단계: 이용자용 APK 다운로드 */}
+                  {/* 1단계: 이용자용 APK 다운로드 & 공유 */}
                   <div className="bg-slate-50/70 rounded-2xl p-5 border border-slate-200 flex flex-col justify-between text-left space-y-4">
                     <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white text-xs font-black flex items-center justify-center shrink-0">
-                          1
-                        </span>
-                        <h4 className="text-sm font-black text-slate-800">이용자용 앱 다운로드</h4>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white text-xs font-black flex items-center justify-center shrink-0">
+                            1
+                          </span>
+                          <h4 className="text-sm font-black text-slate-800">이용자용 앱 다운로드</h4>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleShareApk}
+                          className="px-2 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 transition-all cursor-pointer text-[11px] font-bold flex items-center gap-1 shadow-2xs shrink-0"
+                          title="스마트폰으로 공유 및 다운로드 QR 보기"
+                        >
+                          <Share2 className="w-3 h-3 text-emerald-600" />
+                          <span>공유</span>
+                        </button>
                       </div>
                       <p className="text-xs text-slate-500 leading-relaxed">
                         안드로이드 스마트폰에 <strong>시트봇 에이전트</strong> 전용 APK를 다운로드하여 설치합니다.
                       </p>
                     </div>
-                    <div className="pt-2">
+
+                    <div className="space-y-2 pt-1">
+                      {/* 메인 다운로드 버튼 */}
                       <a
                         href="/downloads/SheetBotAgent.apk"
                         download="SheetBotAgent.apk"
-                        className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+                        className="w-full flex items-center justify-center gap-2 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
                       >
                         <Download className="w-4 h-4" />
                         <span>시트봇 에이전트 APK 받기</span>
                       </a>
-                      <p className="text-[10px] text-slate-400 text-center mt-1.5 font-medium">
+
+                      {/* 보조 공유: 링크 복사 및 폰으로 받기(QR) 버튼 */}
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={handleCopyApkLink}
+                          className="flex items-center justify-center gap-1 py-1.5 px-2 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-200 transition-all cursor-pointer shadow-2xs"
+                          title="다운로드 URL 클립보드 복사"
+                        >
+                          {apkCopied ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              <span className="text-emerald-700">복사됨!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3 text-slate-500" />
+                              <span>링크 복사</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsApkQrModalOpen(true)}
+                          className="flex items-center justify-center gap-1 py-1.5 px-2 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-200 transition-all cursor-pointer shadow-2xs"
+                          title="스마트폰 카메라로 찍어 바로 받기"
+                        >
+                          <QrCode className="w-3 h-3 text-emerald-600" />
+                          <span>폰으로 받기</span>
+                        </button>
+                      </div>
+
+                      <p className="text-[10px] text-slate-400 text-center font-medium">
                         버전 1.0.0 (약 5.2MB, 안드로이드 전용)
                       </p>
                     </div>
@@ -839,20 +950,43 @@ export default function NotificationsPage() {
 
             {/* 시트봇 에이전트 2단계 연동 화면 */}
             <div className="space-y-4">
-              {/* 1단계: APK 다운로드 안내 */}
-              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-3">
+              {/* 1단계: APK 다운로드 안내 & 공유 */}
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs font-bold text-slate-800">1. 스마트폰에 앱 설치</div>
+                  <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <span>1. 스마트폰에 앱 설치</span>
+                    <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">무료</span>
+                  </div>
                   <div className="text-[11px] text-slate-500 mt-0.5">안드로이드 스마트폰에 시트봇 에이전트(SheetBot Agent)를 설치하세요.</div>
                 </div>
-                <a
-                  href="/downloads/SheetBotAgent.apk"
-                  download="SheetBotAgent.apk"
-                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 flex-shrink-0 cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>📥 APK 받기</span>
-                </a>
+                <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                  <button
+                    type="button"
+                    onClick={handleCopyApkLink}
+                    className="p-1.5 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-200 transition-all cursor-pointer shadow-2xs flex items-center gap-1"
+                    title="다운로드 링크 복사"
+                  >
+                    {apkCopied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-slate-500" />}
+                    <span>{apkCopied ? "복사됨" : "링크 복사"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsApkQrModalOpen(true)}
+                    className="p-1.5 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-200 transition-all cursor-pointer shadow-2xs flex items-center gap-1"
+                    title="폰 카메라로 QR 찍어 바로 받기"
+                  >
+                    <QrCode className="w-3 h-3 text-emerald-600" />
+                    <span>QR 받기</span>
+                  </button>
+                  <a
+                    href="/downloads/SheetBotAgent.apk"
+                    download="SheetBotAgent.apk"
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 shrink-0 cursor-pointer shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>APK 다운</span>
+                  </a>
+                </div>
               </div>
 
               {/* 2단계: QR 페어링 */}
@@ -962,6 +1096,84 @@ export default function NotificationsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 모달 3: 이용자용 앱(APK) 다운로드 전용 QR & 공유 모달 */}
+      {isApkQrModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-sm w-full border border-slate-200 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-150 text-left">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold">
+                  <Smartphone className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900">시트봇 에이전트 앱 다운로드</h3>
+                  <p className="text-[10.5px] text-slate-500">스마트폰 카메라로 비추면 바로 다운로드</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsApkQrModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 다운로드 직통 QR 코드 */}
+            <div className="p-4 bg-emerald-50/60 rounded-2xl border border-emerald-200 text-center space-y-3">
+              <div className="inline-block p-2.5 bg-white rounded-xl shadow-xs border border-emerald-200">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                    getApkDownloadUrl()
+                  )}`}
+                  alt="SheetBot Agent APK Download QR"
+                  className="w-36 h-36 mx-auto"
+                />
+              </div>
+              <p className="text-[11px] text-emerald-900 font-medium leading-relaxed">
+                스마트폰 기본 <strong>카메라 앱</strong>으로 위 QR코드를 비추면<br />
+                <strong>SheetBotAgent.apk</strong>가 폰에서 즉시 다운로드됩니다.
+              </p>
+            </div>
+
+            {/* 다운로드 링크 & 복사 */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                <input
+                  type="text"
+                  readOnly
+                  value={getApkDownloadUrl()}
+                  className="flex-1 bg-transparent text-slate-600 text-[11px] font-mono outline-hidden select-all"
+                />
+                <button
+                  onClick={handleCopyApkLink}
+                  className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[10.5px] font-bold shrink-0 cursor-pointer"
+                >
+                  {apkCopied ? "복사됨!" : "복사"}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleCopyApkLink}
+                  className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>링크 복사</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsApkQrModalOpen(false)}
+                  className="py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all cursor-pointer"
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
