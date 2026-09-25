@@ -18,6 +18,7 @@
  *    req.signal abort 시 클라이언트 즉시 등록 해제 및 타이머 정리.
  */
 
+import crypto from 'crypto';
 import { EGDESK_CONFIG } from '../../egdesk.config';
 import { depositEventBus, DepositEventPayload } from './deposit-events';
 
@@ -83,8 +84,9 @@ class SheetBotRealtimeHub {
     const encoder = new TextEncoder();
     const topic = options.topic || 'all';
 
-    // 1. 프록시/리버스 프록시 버퍼 즉시 플러시용 2KB 프리앰블 및 웰컴 패킷
-    const preamble = `: ${' '.repeat(2048)}\n\n`;
+    // 1. 프록시/리버스 프록시 버퍼 즉시 플러시용 난수 프리앰블(압축 후에도 5KB+ 유지되어 Render/Nginx 4KB 버퍼 즉시 관통) 및 웰컴 패킷
+    const randomBuffer = crypto.randomBytes(4096).toString('base64');
+    const preamble = `: ${randomBuffer}\n\n`;
     const welcome = `data: ${JSON.stringify({
       type: 'CONNECTED',
       topic,

@@ -34,9 +34,13 @@ export async function GET(req: NextRequest) {
     return new Response(stream, {
       headers: {
         "Content-Type": "text/event-stream; charset=utf-8",
-        "Cache-Control": "no-cache, no-transform",
+        "Cache-Control": "no-cache, no-transform, no-store, must-revalidate",
         Connection: "keep-alive",
         "X-Accel-Buffering": "no", // NGINX 및 리버스 프록시 버퍼링 차단
+        "X-No-Compression": "1", // 프록시 압축 버퍼링 차단
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
       },
     });
   } catch (err: any) {
