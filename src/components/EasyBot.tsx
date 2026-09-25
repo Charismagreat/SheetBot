@@ -66,6 +66,8 @@ function playNotificationChime() {
   } catch {}
 }
 
+const KNOWN_ADMINS = ["yegun2013@gmail.com", "charismagreat@gmail.com"];
+
 const SAMPLE_QUESTIONS = [
   "매일 아침 9시 특정 조건 행 이메일 발송",
   "시트 셀 수정 시 자동 타임스탬프 기록 (onEdit)",
@@ -176,7 +178,10 @@ export default function EasyBot() {
   // 로컬스토리지 저장 및 불러오기
   useEffect(() => {
     setMounted(true);
-    checkHealth();
+    // ⚡ 초기 로드 경합 방지: 4초 후 여유 있을 때 헬스체크 실행
+    const healthTimer = setTimeout(() => {
+      checkHealth();
+    }, 4000);
 
     // 이전에 대화창이 열려있었다면 페이지 이동/새로고침 후에도 열린 상태 자동 복원
     try {
@@ -496,19 +501,38 @@ export default function EasyBot() {
       }
     };
 
-    loadChatHistory();
+    if (isOpen || historyLoaded) {
+      loadChatHistory();
+    } else {
+      // ⚡ 창이 닫혀있는 동안에는 메인 페이지 로드 경합을 피해 3.5초 지연 프리로드
+      const t = setTimeout(() => {
+        if (isSubscribed) loadChatHistory();
+      }, 3500);
+      return () => {
+        isSubscribed = false;
+        clearTimeout(t);
+      };
+    }
 
     return () => {
       isSubscribed = false;
     };
-  }, [session?.user?.email, sessionStatus]);
+  }, [session?.user?.email, sessionStatus, isOpen, historyLoaded]);
 
   // 🌟 [능동형 AI 수석 비서] 관리자 6대 시나리오 실시간 모니터링 엔진
   useEffect(() => {
     if (sessionStatus === "loading" || !session?.user?.email) return;
 
+    // ⚡ 일반 회원은 브리핑/모니터링 대상이 아니므로 네트워크 호출을 0으로 원천 차단
+    const userEmail = (session.user.email || "").toLowerCase();
+    const isKnownAdmin =
+      KNOWN_ADMINS.includes(userEmail) ||
+      (typeof window !== "undefined" && sessionStorage.getItem("sb_is_admin") === "true");
+    if (!isKnownAdmin) return;
+
     let isSubscribed = true;
     let unsubWatcher: (() => void) | null = null;
+    let initTimer: NodeJS.Timeout | null = null;
 
     const initAdminAssistant = async () => {
       try {
@@ -782,10 +806,12 @@ export default function EasyBot() {
       }
     };
 
-    initAdminAssistant();
+    // ⚡ 메인 화면 렌더링 및 주요 번들 로드 경합을 완전히 피하기 위해 3.5초 지연 실행
+    initTimer = setTimeout(initAdminAssistant, 3500);
 
     return () => {
       isSubscribed = false;
+      if (initTimer) clearTimeout(initTimer);
       if (unsubWatcher) unsubWatcher();
     };
   }, [session?.user?.email, sessionStatus, setOpenWithPersistence]);

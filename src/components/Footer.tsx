@@ -16,16 +16,41 @@ import { DEFAULT_FOOTER, FooterInfo } from "@/lib/default-footer";
 import { SnsIcon } from "@/components/SnsIcons";
 import SheetBotLogo from "@/components/SheetBotLogo";
 
+let memoryFooterCache: FooterInfo | null = null;
+
 export default function Footer() {
   const pathname = usePathname();
-  const [footerInfo, setFooterInfo] = useState<FooterInfo>(DEFAULT_FOOTER);
+  const [footerInfo, setFooterInfo] = useState<FooterInfo>(() => {
+    if (memoryFooterCache) return memoryFooterCache;
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem("sb_footer_info");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          memoryFooterCache = parsed;
+          return parsed;
+        }
+      } catch {}
+    }
+    return DEFAULT_FOOTER;
+  });
 
-  const fetchFooter = async () => {
+  const fetchFooter = async (force = false) => {
+    if (!force && memoryFooterCache) {
+      setFooterInfo(memoryFooterCache);
+      return;
+    }
     try {
       const res = await apiFetch("/api/footer");
       const data = await res.json();
       if (data.success && data.footer) {
+        memoryFooterCache = data.footer;
         setFooterInfo(data.footer);
+        try {
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem("sb_footer_info", JSON.stringify(data.footer));
+          }
+        } catch {}
       }
     } catch (e) {
       console.warn("Failed to fetch dynamic footer, using default", e);
