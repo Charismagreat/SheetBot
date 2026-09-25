@@ -232,9 +232,9 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // 동시 중복 패칭 방지 가드 및 이메일 추적 Ref
-  const isFetchingRef = useRef(false);
+  // 마지막으로 성공적으로 패칭을 완료한 이메일 기록 Ref
   const lastFetchedEmailRef = useRef<string>("");
+  const isFetchingRef = useRef<boolean>(false);
 
   // 데이터 로드 (1단계: 필수 핵심 데이터 즉시 로드 -> 2단계: 800ms 후 보조 메트릭 백그라운드 분산 로드)
   const fetchData = useCallback(async (force = false) => {
@@ -246,7 +246,15 @@ export default function DashboardPage() {
       } catch {}
     }
 
-    // 이미 요청이 진행 중이거나, 강제 갱신이 아니면서 이미 동일 이메일로 패칭 완료된 경우 중복 호출 차단
+    // 이메일이 아직 식별되지 않았고 세션이 로딩 중이면 세션 확정 시점까지 대기
+    if (!effectiveEmail && status === "loading") {
+      return;
+    }
+
+    // 동일 이메일에 대해 이미 패칭 중이거나 이미 완료된 경우 (force가 아닐 때) 중복 차단
+    if (!force && lastFetchedEmailRef.current && lastFetchedEmailRef.current === effectiveEmail && !isFetchingRef.current) {
+      return;
+    }
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
 
@@ -269,9 +277,9 @@ export default function DashboardPage() {
     }
 
     try {
-      // ⚡ [1단계: 즉각 렌더링] 프로젝트, 스케줄, 지갑 3종만 5초 타임아웃 AbortSignal과 함께 요청
+      // ⚡ [1단계: 즉각 렌더링] 프로젝트, 스케줄, 지갑 3종만 12초 안전 타임아웃 AbortSignal과 함께 요청
       const controller1 = new AbortController();
-      const timeout1 = setTimeout(() => controller1.abort(), 5000);
+      const timeout1 = setTimeout(() => controller1.abort(), 12000);
 
       const [projRes, schedRes, walletRes] = await Promise.all([
         apiFetch(`/api/projects${queryStr}`, { headers: fetchHeaders, signal: controller1.signal })
@@ -312,7 +320,7 @@ export default function DashboardPage() {
     setTimeout(async () => {
       try {
         const controller2 = new AbortController();
-        const timeout2 = setTimeout(() => controller2.abort(), 4000);
+        const timeout2 = setTimeout(() => controller2.abort(), 10000);
 
         // A. 가벼운 설정/기기/규칙 먼저 수신
         const [devRes, ruleRes, settingsRes] = await Promise.all([
@@ -352,7 +360,7 @@ export default function DashboardPage() {
         console.warn("Dashboard secondary metrics load note:", err);
       }
     }, 800);
-  }, [user?.email, session?.user?.email]);
+  }, [user?.email, session?.user?.email, status]);
 
   // ⚡ 세션 이메일이 확정되거나 변경될 때만 1회 자동 재동기화 (중복 폭풍 방지)
   const activeUserEmail = user?.email || session?.user?.email || "";
@@ -903,6 +911,7 @@ export default function DashboardPage() {
                 </span>
                 <Link
                   href="/dashboard/pricing"
+                  prefetch={false}
                   className={`font-bold flex items-center gap-0.5 hover:underline ${
                     wallet && wallet.balanceTokens < 0
                       ? "text-rose-900 hover:text-rose-950 font-black"
@@ -950,6 +959,7 @@ export default function DashboardPage() {
                 <span className="text-indigo-700/80 font-medium">사용량 분석</span>
                 <Link
                   href="/dashboard/ai-usage"
+                  prefetch={false}
                   className="text-indigo-800 hover:text-indigo-950 font-bold flex items-center gap-0.5 hover:underline"
                 >
                   <span>사용량 관제 ➔</span>
@@ -984,6 +994,7 @@ export default function DashboardPage() {
                 <span className="text-slate-400 font-medium">파라미터 설정</span>
                 <Link
                   href="/dashboard/settings"
+                  prefetch={false}
                   className="text-slate-700 hover:text-indigo-600 font-bold flex items-center gap-0.5 hover:underline"
                 >
                   <span>모델 설정 ➔</span>
@@ -1024,7 +1035,7 @@ export default function DashboardPage() {
 
               <Link
                 href="/dashboard/notifications"
-                prefetch={true}
+                prefetch={false}
                 className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all shrink-0 active:scale-95 cursor-pointer"
                 data-easybot-hint="스마트 알림 센터: 내 안드로이드 스마트폰을 연동하고 구글 시트 자동 문자 발송 규칙을 관리합니다."
               >
@@ -1057,6 +1068,7 @@ export default function DashboardPage() {
 
             <Link
               href="/marketplace"
+              prefetch={false}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-slate-50 text-indigo-950 text-xs font-black rounded-xl shadow-md transition-all shrink-0 active:scale-95 self-end sm:self-center"
