@@ -4,6 +4,7 @@ import { apiFetch, getEgdeskBasePath } from '@/lib/api';
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/hooks/useAuth";
 import {
   Smartphone,
   Sparkles,
@@ -50,7 +51,13 @@ const NotificationsGuideTab = dynamic(
 
 export default function NotificationsPage() {
   const { data: session, status } = useSession();
+  const { user, isLoggedIn, isLoading: isAuthLoading } = useAuth();
   const router = useRouter();
+
+  const effectiveEmail =
+    user?.email ||
+    session?.user?.email ||
+    (typeof window !== "undefined" ? localStorage.getItem("sheetbot_user_email") || "" : "");
 
   const [activeTab, setActiveTab] = useState<"devices" | "rules" | "logs" | "guide">("devices");
 
@@ -67,7 +74,7 @@ export default function NotificationsPage() {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
-      const email = session?.user?.email || "";
+      const email = effectiveEmail;
       const emailParam = email ? `?userEmail=${encodeURIComponent(email)}` : "";
       const res = await apiFetch(`/api/user/agent2/pair${emailParam}`, { signal: controller.signal });
       clearTimeout(timer);
@@ -81,7 +88,7 @@ export default function NotificationsPage() {
       clearTimeout(timer);
       setLoadingAgent2Pair(false);
     }
-  }, [session?.user?.email]);
+  }, [effectiveEmail]);
 
   // 테스트 발송 모달
   const [testModalDevice, setTestModalDevice] = useState<any>(null);
@@ -158,7 +165,7 @@ export default function NotificationsPage() {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
-      const email = session?.user?.email || "";
+      const email = effectiveEmail;
       const emailParam = email ? `?userEmail=${encodeURIComponent(email)}` : "";
       const res = await apiFetch(`/api/user/devices${emailParam}`, {
         signal: controller.signal,
@@ -175,7 +182,7 @@ export default function NotificationsPage() {
       clearTimeout(timer);
       setLoadingDevices(false);
     }
-  }, [session?.user?.email]);
+  }, [effectiveEmail]);
 
   // 2. 스마트 규칙 목록 로드
   const fetchRules = useCallback(async () => {
@@ -183,7 +190,7 @@ export default function NotificationsPage() {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
-      const email = session?.user?.email || "";
+      const email = effectiveEmail;
       const emailParam = email ? `?userEmail=${encodeURIComponent(email)}` : "";
       const res = await apiFetch(`/api/user/smart-rules${emailParam}`, {
         signal: controller.signal,
@@ -200,7 +207,7 @@ export default function NotificationsPage() {
       clearTimeout(timer);
       setLoadingRules(false);
     }
-  }, [session?.user?.email]);
+  }, [effectiveEmail]);
 
   // 3. 발송 로그 로드
   const fetchLogs = useCallback(async () => {
@@ -208,7 +215,7 @@ export default function NotificationsPage() {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
-      const email = session?.user?.email || "";
+      const email = effectiveEmail;
       const emailParam = email ? `?userEmail=${encodeURIComponent(email)}` : "";
       const res = await apiFetch(`/api/user/dispatch-logs${emailParam}`, {
         signal: controller.signal,
@@ -225,18 +232,19 @@ export default function NotificationsPage() {
       clearTimeout(timer);
       setLoadingLogs(false);
     }
-  }, [session?.user?.email]);
+  }, [effectiveEmail]);
 
   useEffect(() => {
-    if (status === "unauthenticated") {
+    if (isAuthLoading) return;
+    if (!isLoggedIn && status === "unauthenticated" && !effectiveEmail) {
       router.push("/login");
-    } else if (status === "authenticated") {
+    } else if (effectiveEmail || isLoggedIn) {
       fetchDevices();
       fetchRules();
       fetchLogs();
       fetchAgent2Pairing();
     }
-  }, [status, router, fetchDevices, fetchRules, fetchLogs, fetchAgent2Pairing]);
+  }, [isLoggedIn, isAuthLoading, status, effectiveEmail, router, fetchDevices, fetchRules, fetchLogs, fetchAgent2Pairing]);
 
   // ⚡ [0초 실시간 감시] 이지데스크 DB 왓처 실시간 스트림 연동 (SMS 및 기기 변경 자동 감지)
   const [isRealtimeLive, setIsRealtimeLive] = useState(false);
@@ -252,7 +260,7 @@ export default function NotificationsPage() {
   });
 
   useEffect(() => {
-    if (status !== "authenticated") return;
+    if (!effectiveEmail) return;
 
     let eventSource: EventSource | null = null;
     let reconnectTimer: any = null;
@@ -264,7 +272,7 @@ export default function NotificationsPage() {
         } catch {}
       }
 
-      const email = session?.user?.email || (typeof window !== "undefined" ? localStorage.getItem("sheetbot_user_email") || "" : "");
+      const email = effectiveEmail;
       const basePath = getEgdeskBasePath();
       const streamUrl = `${basePath}/api/realtime/stream?topic=all&userEmail=${encodeURIComponent(email)}`;
 
@@ -327,7 +335,7 @@ export default function NotificationsPage() {
       }
       clearTimeout(reconnectTimer);
     };
-  }, [status, session?.user?.email]);
+  }, [effectiveEmail]);
 
 
   // 기기 삭제
@@ -469,7 +477,7 @@ export default function NotificationsPage() {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
-      userEmail: "${session?.user?.email || "user@example.com"}",
+      userEmail: "${effectiveEmail || "user@example.com"}",
       eventType: "sheet_edit",
       sheetName: sheet.getName(),
       rowData: rowData
