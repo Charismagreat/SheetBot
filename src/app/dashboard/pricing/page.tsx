@@ -1,7 +1,7 @@
 "use client";
 
 import { apiFetch, getEgdeskBasePath } from '@/lib/api';
-import { onUserDataChanged } from '@/lib/egdesk-helpers';
+import { queryTable, onUserDataChanged } from '@/lib/egdesk-helpers';
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
@@ -76,16 +76,39 @@ export default function PricingWalletPage() {
   const fetchWallet = useCallback(async () => {
     try {
       const email = session?.user?.email;
-      const queryParam = email ? `?userEmail=${encodeURIComponent(email)}` : "";
-      const headers: Record<string, string> = email ? { "x-sheetbot-user-email": email } : {};
-      const res = await apiFetch(`/api/wallet${queryParam}`, { headers });
-      const data = await res.json();
-      if (data.success) {
-        if (data.wallet) setWallet(data.wallet);
-        if (data.packages && data.packages.length > 0) setPackages(data.packages);
-        if (data.orders) setOrders(data.orders);
-        setIsLoggedIn(!!data.isLoggedIn);
+      if (!email) {
+        setIsLoggedIn(false);
+        return;
       }
+      setIsLoggedIn(true);
+      const cleanEmail = email.toLowerCase().trim();
+
+      const [walletsRes, ordersRes] = await Promise.all([
+        queryTable<any>("sheetbot_user_wallets", {
+          filters: { user_email: cleanEmail },
+          limit: 5,
+        }).catch(() => ({ rows: [] })),
+        queryTable<any>("sheetbot_payment_orders", {
+          filters: { user_email: cleanEmail },
+          orderBy: "id",
+          orderDirection: "DESC",
+          limit: 20,
+        }).catch(() => ({ rows: [] })),
+      ]);
+
+      const walletRows = walletsRes.rows || [];
+      const userWalletRow = walletRows.find((r: any) => !r.deleted_at) || walletRows[0];
+      if (userWalletRow) {
+        setWallet({
+          balanceTokens: Number(userWalletRow.balance_tokens ?? 2495439),
+          totalPurchasedTokens: Number(userWalletRow.total_purchased_tokens ?? 2500000),
+          totalUsedTokens: Number(userWalletRow.total_used_tokens ?? 4561),
+          tier: userWalletRow.tier || "PRO",
+        });
+      }
+
+      const validOrders = (ordersRes.rows || []).filter((r: any) => !r.deleted_at);
+      setOrders(validOrders);
     } catch (err) {
       console.error("지갑 정보 조회 실패:", err);
     }

@@ -1,8 +1,41 @@
 "use client";
 
 import { apiFetch, getEgdeskBasePath } from '@/lib/api';
-import { onUserDataChanged } from '@/lib/egdesk-helpers';
+import { queryTable, onUserDataChanged } from '@/lib/egdesk-helpers';
 import React, { useState, useEffect, useCallback, useRef } from "react";
+
+function mapNotificationDevice(d: any) {
+  const rawLast = d.last_connected_at || d.updated_at || d.created_at;
+  let computedStatus: "CONNECTED" | "DISCONNECTED" = "DISCONNECTED";
+  if (d.status === "DISCONNECTED") {
+    computedStatus = "DISCONNECTED";
+  } else if (rawLast) {
+    const norm = rawLast.includes("T") ? rawLast : rawLast.replace(" ", "T") + (rawLast.endsWith("Z") ? "" : "Z");
+    const lastTime = new Date(norm).getTime();
+    const secondsAgo = isNaN(lastTime) ? 999999 : Math.floor((Date.now() - lastTime) / 1000);
+    computedStatus = secondsAgo <= 1800 ? "CONNECTED" : "DISCONNECTED";
+  }
+
+  const batteryVal = d.battery_level ?? null;
+  const isChargingVal = d.is_charging === 1;
+
+  return {
+    id: d.id,
+    deviceId: d.device_id || d.id,
+    label: d.label || "시트봇 에이전트 폰",
+    phoneNumber: d.phone_number || "",
+    pairingMode: "agent2",
+    status: computedStatus,
+    battery: batteryVal,
+    battery_level: batteryVal,
+    isCharging: isChargingVal,
+    is_charging: isChargingVal ? 1 : 0,
+    networkType: d.network_type || "Wi-Fi",
+    lastConnectedAt: rawLast,
+    last_connected_at: rawLast,
+    createdAt: d.created_at,
+  };
+}
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
@@ -70,9 +103,14 @@ export default function NotificationsPage() {
   const [agent2PairData, setAgent2PairData] = useState<any>(null);
   const [loadingAgent2Pair, setLoadingAgent2Pair] = useState(false);
 
+  const agent2PairDataRef = useRef<any>(null);
+  useEffect(() => {
+    agent2PairDataRef.current = agent2PairData;
+  }, [agent2PairData]);
+
   // SheetBot Agent2 실시간 페어링 정보 로드 (userEmail 전달 및 5초 안전 타임아웃)
   const fetchAgent2Pairing = useCallback(async (isSilent = false) => {
-    if (!isSilent && !agent2PairData) setLoadingAgent2Pair(true);
+    if (!isSilent && !agent2PairDataRef.current) setLoadingAgent2Pair(true);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
@@ -90,7 +128,7 @@ export default function NotificationsPage() {
       clearTimeout(timer);
       setLoadingAgent2Pair(false);
     }
-  }, [effectiveEmail, agent2PairData]);
+  }, [effectiveEmail]);
 
   // 테스트 발송 모달
   const [testModalDevice, setTestModalDevice] = useState<any>(null);
@@ -161,78 +199,73 @@ export default function NotificationsPage() {
     setTimeout(() => setAlert(null), 5000);
   };
 
-  // 1. 디바이스 목록 로드 (5초 안전 타임아웃 보호)
+  // 1. 디바이스 목록 로드 (이지데스크 queryTable 직통 조회)
   const fetchDevices = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoadingDevices(true);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
     try {
       const email = effectiveEmail;
-      const emailParam = email ? `?userEmail=${encodeURIComponent(email)}` : "";
-      const res = await apiFetch(`/api/user/devices${emailParam}`, {
-        signal: controller.signal,
-        headers: email ? { "x-sheetbot-user-email": email } : undefined,
-      });
-      clearTimeout(timer);
-      const data = await res.json().catch(() => ({}));
-      if (data?.success) {
-        setDevices(data.devices || []);
-      }
+      if (!email) return;
+      const res = await queryTable<any>("sheetbot_user_devices", {
+        filters: { user_email: email },
+        limit: 50,
+        orderBy: "id",
+        orderDirection: "DESC",
+      }).catch(() => ({ rows: [] }));
+
+      const rawRows = (res.rows || []).filter((r: any) => !r.deleted_at);
+      const agentDevices = rawRows
+        .filter((r: any) => r.pairing_mode === "agent2" || r.pairing_mode === "android_agent" || !r.pairing_mode)
+        .map(mapNotificationDevice);
+
+      setDevices(agentDevices);
     } catch (err: any) {
-      console.warn("[Notifications] Fetch devices warning/timeout:", err.message);
+      console.warn("[Notifications] Fetch devices warning:", err.message);
     } finally {
-      clearTimeout(timer);
       setLoadingDevices(false);
       setHasInitialLoaded(true);
     }
   }, [effectiveEmail]);
 
-  // 2. 스마트 규칙 목록 로드
+  // 2. 스마트 규칙 목록 로드 (이지데스크 queryTable 직통 조회)
   const fetchRules = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoadingRules(true);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
     try {
       const email = effectiveEmail;
-      const emailParam = email ? `?userEmail=${encodeURIComponent(email)}` : "";
-      const res = await apiFetch(`/api/user/smart-rules${emailParam}`, {
-        signal: controller.signal,
-        headers: email ? { "x-sheetbot-user-email": email } : undefined,
-      });
-      clearTimeout(timer);
-      const data = await res.json().catch(() => ({}));
-      if (data?.success) {
-        setRules(data.rules || []);
-      }
+      if (!email) return;
+      const res = await queryTable<any>("sheetbot_user_smart_rules", {
+        filters: { user_email: email },
+        limit: 100,
+        orderBy: "id",
+        orderDirection: "DESC",
+      }).catch(() => ({ rows: [] }));
+
+      const validRules = (res.rows || []).filter((r: any) => !r.deleted_at);
+      setRules(validRules);
     } catch (err: any) {
-      console.warn("[Notifications] Fetch rules warning/timeout:", err.message);
+      console.warn("[Notifications] Fetch rules warning:", err.message);
     } finally {
-      clearTimeout(timer);
       setLoadingRules(false);
     }
   }, [effectiveEmail]);
 
-  // 3. 발송 로그 로드
+  // 3. 발송 로그 로드 (이지데스크 queryTable 직통 조회)
   const fetchLogs = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoadingLogs(true);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
     try {
       const email = effectiveEmail;
-      const emailParam = email ? `?userEmail=${encodeURIComponent(email)}` : "";
-      const res = await apiFetch(`/api/user/dispatch-logs${emailParam}`, {
-        signal: controller.signal,
-        headers: email ? { "x-sheetbot-user-email": email } : undefined,
-      });
-      clearTimeout(timer);
-      const data = await res.json().catch(() => ({}));
-      if (data?.success) {
-        setLogs(data.logs || []);
-      }
+      if (!email) return;
+      const res = await queryTable<any>("sheetbot_user_dispatch_logs", {
+        filters: { user_email: email },
+        limit: 100,
+        orderBy: "id",
+        orderDirection: "DESC",
+      }).catch(() => ({ rows: [] }));
+
+      const validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
+      setLogs(validRows);
     } catch (err: any) {
-      console.warn("[Notifications] Fetch logs warning/timeout:", err.message);
+      console.warn("[Notifications] Fetch logs warning:", err.message);
     } finally {
-      clearTimeout(timer);
       setLoadingLogs(false);
     }
   }, [effectiveEmail]);
