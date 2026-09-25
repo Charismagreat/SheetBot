@@ -64,13 +64,14 @@ export default function NotificationsPage() {
   // 디바이스 상태 (시트봇 에이전트 전용)
   const [devices, setDevices] = useState<any[]>([]);
   const [loadingDevices, setLoadingDevices] = useState(false);
+  const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false);
   const [agent2PairData, setAgent2PairData] = useState<any>(null);
   const [loadingAgent2Pair, setLoadingAgent2Pair] = useState(false);
 
   // SheetBot Agent2 실시간 페어링 정보 로드 (userEmail 전달 및 5초 안전 타임아웃)
-  const fetchAgent2Pairing = useCallback(async () => {
-    setLoadingAgent2Pair(true);
+  const fetchAgent2Pairing = useCallback(async (isSilent = false) => {
+    if (!isSilent && !agent2PairData) setLoadingAgent2Pair(true);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
@@ -88,7 +89,7 @@ export default function NotificationsPage() {
       clearTimeout(timer);
       setLoadingAgent2Pair(false);
     }
-  }, [effectiveEmail]);
+  }, [effectiveEmail, agent2PairData]);
 
   // 테스트 발송 모달
   const [testModalDevice, setTestModalDevice] = useState<any>(null);
@@ -160,8 +161,8 @@ export default function NotificationsPage() {
   };
 
   // 1. 디바이스 목록 로드 (5초 안전 타임아웃 보호)
-  const fetchDevices = useCallback(async () => {
-    setLoadingDevices(true);
+  const fetchDevices = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoadingDevices(true);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
@@ -181,12 +182,13 @@ export default function NotificationsPage() {
     } finally {
       clearTimeout(timer);
       setLoadingDevices(false);
+      setHasInitialLoaded(true);
     }
   }, [effectiveEmail]);
 
   // 2. 스마트 규칙 목록 로드
-  const fetchRules = useCallback(async () => {
-    setLoadingRules(true);
+  const fetchRules = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoadingRules(true);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
@@ -210,8 +212,8 @@ export default function NotificationsPage() {
   }, [effectiveEmail]);
 
   // 3. 발송 로그 로드
-  const fetchLogs = useCallback(async () => {
-    setLoadingLogs(true);
+  const fetchLogs = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoadingLogs(true);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
@@ -293,11 +295,11 @@ export default function NotificationsPage() {
             }
             if (payload.type === "DATA_CHANGED") {
               if (payload.tableName === "sheetbot_sms_logs") {
-                fetchLogsRef.current?.();
+                fetchLogsRef.current?.(true);
               } else if (payload.tableName === "sheetbot_user_devices") {
-                fetchDevicesRef.current?.();
+                fetchDevicesRef.current?.(true);
               } else if (payload.tableName === "sheetbot_smart_rules") {
-                fetchRulesRef.current?.();
+                fetchRulesRef.current?.(true);
               }
             }
           } catch {}
@@ -615,7 +617,7 @@ export default function NotificationsPage() {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={fetchDevices}
+                  onClick={() => fetchDevices()}
                   disabled={loadingDevices}
                   className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 transition-all cursor-pointer"
                   title="새로고침"
@@ -636,7 +638,7 @@ export default function NotificationsPage() {
             </div>
 
             {/* 디바이스 목록 */}
-            {loadingDevices ? (
+            {loadingDevices && !hasInitialLoaded ? (
               <div className="bg-white rounded-3xl p-12 text-center border border-slate-200/80">
                 <RefreshCw className="w-6 h-6 animate-spin text-emerald-600 mx-auto mb-2" />
                 <p className="text-xs font-bold text-slate-500">디바이스 정보를 불러오는 중...</p>
@@ -743,7 +745,7 @@ export default function NotificationsPage() {
                         <h4 className="text-sm font-black text-emerald-950">페어링 QR 코드</h4>
                       </div>
                       <button
-                        onClick={fetchAgent2Pairing}
+                        onClick={() => fetchAgent2Pairing()}
                         disabled={loadingAgent2Pair}
                         className="p-1 text-slate-400 hover:text-emerald-700 transition-colors cursor-pointer"
                         title="QR 새로고침"
@@ -753,7 +755,7 @@ export default function NotificationsPage() {
                     </div>
 
                     <div className="py-1">
-                      {loadingAgent2Pair ? (
+                      {loadingAgent2Pair && !agent2PairData ? (
                         <div className="w-36 h-36 flex flex-col items-center justify-center text-emerald-600 bg-white rounded-xl border border-emerald-200 mx-auto">
                           <RefreshCw className="w-6 h-6 animate-spin mb-1" />
                           <span className="text-[10px] font-bold">생성 중...</span>
@@ -776,7 +778,7 @@ export default function NotificationsPage() {
                         </div>
                       ) : (
                         <button
-                          onClick={fetchAgent2Pairing}
+                          onClick={() => fetchAgent2Pairing()}
                           className="px-3 py-2 bg-white border border-rose-200 text-rose-600 text-xs font-bold rounded-xl cursor-pointer"
                         >
                           QR코드 생성하기
