@@ -749,11 +749,15 @@ export async function proxy(request: NextRequest) {
       const authorization = request.headers.get('authorization');
       if (authorization) headers['Authorization'] = authorization;
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+
       const response = await fetch(`${apiUrl}/visitor-google/tools/call`, {
         method: 'POST',
         headers,
         body,
-      });
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
 
       const result = await response.json();
 
