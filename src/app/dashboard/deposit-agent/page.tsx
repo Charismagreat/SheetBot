@@ -449,8 +449,8 @@ export default function DepositAgentPage() {
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
         await navigator.share({
-          title: "SheetBot 무통장 입금 자동확인기 APK",
-          text: "스마트폰에 SheetBot 입금확인기 앱을 설치하세요.",
+          title: "SheetBot Agent M (관리자용 무통장 입금 감지 APK)",
+          text: "스마트폰에 SheetBot Agent M 앱을 설치하세요.",
           url,
         });
         return;

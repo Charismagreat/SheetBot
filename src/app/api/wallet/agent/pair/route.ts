@@ -194,7 +194,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "SheetBot 무통장 입금확인기 연동이 성공적으로 완료되었습니다!",
+      message: "SheetBot Agent M 연동이 성공적으로 완료되었습니다!",
       userEmail: cleanEmail,
       deviceToken,
       webhookUrl: "https://sheetbot.cloud/api/wallet/bank-webhook",
