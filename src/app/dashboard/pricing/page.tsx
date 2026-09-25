@@ -1,6 +1,7 @@
 "use client";
 
 import { apiFetch, getEgdeskBasePath } from '@/lib/api';
+import { onUserDataChanged } from '@/lib/egdesk-helpers';
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
@@ -94,76 +95,27 @@ export default function PricingWalletPage() {
     fetchWallet();
   }, [fetchWallet]);
 
-  // ⚡ [0초 실시간 감시] 이지데스크 DB 왓처 실시간 스트림 연동 (토큰 잔액 및 충전 내역)
+  // ⚡ [0초 실시간 감시] 이지데스크 공식 onUserDataChanged 연동 (토큰 지갑 및 충전 내역)
   useEffect(() => {
-    if (!session?.user?.email) return;
+    if (typeof window === "undefined" || !session?.user?.email) return;
 
-    let eventSource: EventSource | null = null;
-    let reconnectTimer: any = null;
-
-    const connectStream = () => {
-      if (eventSource) {
-        try {
-          eventSource.close();
-        } catch {}
+    const unsub = onUserDataChanged((event) => {
+      setIsRealtimeLive(true);
+      const relevant = [
+        "sheetbot_user_wallets",
+        "sheetbot_users",
+        "sheetbot_deposit_requests",
+        "sheetbot_payment_orders",
+      ];
+      if (!event.tableName || relevant.includes(event.tableName)) {
+        fetchWallet();
       }
+    });
 
-      const email = session?.user?.email || "";
-      const basePath = getEgdeskBasePath();
-      const streamUrl = `${basePath}/api/realtime/stream?topic=wallet&userEmail=${encodeURIComponent(email)}`;
-
-      try {
-        eventSource = new EventSource(streamUrl);
-
-        eventSource.onopen = () => {
-          setIsRealtimeLive(true);
-        };
-
-        eventSource.onmessage = (event) => {
-          setIsRealtimeLive(true);
-          try {
-            const payload = JSON.parse(event.data);
-            if (payload.type === "CONNECTED" || payload.type === "UPSTREAM_STATUS") {
-              setIsRealtimeLive(true);
-              return;
-            }
-            if (payload.type === "DATA_CHANGED") {
-              if (
-                payload.tableName === "sheetbot_users" ||
-                payload.tableName === "sheetbot_deposit_requests" ||
-                payload.tableName === "sheetbot_orders"
-              ) {
-                fetchWallet();
-              }
-            }
-          } catch {}
-        };
-
-        eventSource.onerror = () => {
-          setIsRealtimeLive(false);
-          if (eventSource) {
-            try {
-              eventSource.close();
-            } catch {}
-          }
-          clearTimeout(reconnectTimer);
-          reconnectTimer = setTimeout(connectStream, 3000);
-        };
-      } catch {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = setTimeout(connectStream, 5000);
-      }
-    };
-
-    connectStream();
+    setIsRealtimeLive(true);
 
     return () => {
-      if (eventSource) {
-        try {
-          eventSource.close();
-        } catch {}
-      }
-      clearTimeout(reconnectTimer);
+      unsub();
     };
   }, [session?.user?.email, fetchWallet]);
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { apiFetch, getEgdeskBasePath } from '@/lib/api';
+import { onUserDataChanged } from '@/lib/egdesk-helpers';
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -261,81 +262,27 @@ export default function NotificationsPage() {
     fetchRulesRef.current = fetchRules;
   });
 
+  // ⚡ [0초 실시간 감시] 이지데스크 공식 onUserDataChanged 연동 (SMS 알림 및 기기 변경 감시)
   useEffect(() => {
-    if (!effectiveEmail) return;
+    if (typeof window === "undefined" || !effectiveEmail) return;
 
-    let eventSource: EventSource | null = null;
-    let reconnectTimer: any = null;
-
-    const connectStream = () => {
-      if (eventSource) {
-        try {
-          eventSource.close();
-        } catch {}
+    const unsub = onUserDataChanged((event) => {
+      setIsRealtimeLive(true);
+      if (!event.tableName || event.tableName === "sheetbot_sms_logs") {
+        fetchLogsRef.current?.(true);
       }
-
-      const email = effectiveEmail;
-      const basePath = getEgdeskBasePath();
-      const streamUrl = `${basePath}/api/realtime/stream?topic=all&userEmail=${encodeURIComponent(email)}`;
-
-      try {
-        eventSource = new EventSource(streamUrl);
-
-        eventSource.onopen = () => {
-          setIsRealtimeLive(true);
-        };
-
-        eventSource.onmessage = (event) => {
-          setIsRealtimeLive(true);
-          try {
-            const payload = JSON.parse(event.data);
-            if (payload.type === "CONNECTED" || payload.type === "UPSTREAM_STATUS") {
-              setIsRealtimeLive(true);
-              return;
-            }
-            if (payload.type === "DATA_CHANGED") {
-              if (payload.tableName === "sheetbot_sms_logs") {
-                fetchLogsRef.current?.(true);
-              } else if (payload.tableName === "sheetbot_user_devices") {
-                fetchDevicesRef.current?.(true);
-              } else if (payload.tableName === "sheetbot_smart_rules") {
-                fetchRulesRef.current?.(true);
-              }
-            }
-          } catch {}
-        };
-
-        eventSource.onerror = () => {
-          // 브라우저가 자동 재연결 중이거나 열려있으면 정상 상태 유지
-          if (eventSource && (eventSource.readyState === EventSource.OPEN || eventSource.readyState === EventSource.CONNECTING)) {
-            setIsRealtimeLive(true);
-            return;
-          }
-          setIsRealtimeLive(false);
-          if (eventSource) {
-            try {
-              eventSource.close();
-            } catch {}
-          }
-          clearTimeout(reconnectTimer);
-          reconnectTimer = setTimeout(connectStream, 3000);
-        };
-      } catch {
-        setIsRealtimeLive(false);
-        clearTimeout(reconnectTimer);
-        reconnectTimer = setTimeout(connectStream, 5000);
+      if (!event.tableName || event.tableName === "sheetbot_user_devices") {
+        fetchDevicesRef.current?.(true);
       }
-    };
+      if (!event.tableName || event.tableName === "sheetbot_smart_rules") {
+        fetchRulesRef.current?.(true);
+      }
+    });
 
-    connectStream();
+    setIsRealtimeLive(true);
 
     return () => {
-      if (eventSource) {
-        try {
-          eventSource.close();
-        } catch {}
-      }
-      clearTimeout(reconnectTimer);
+      unsub();
     };
   }, [effectiveEmail]);
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { apiFetch, getEgdeskBasePath } from '@/lib/api';
-import { queryTable } from '@/lib/egdesk-helpers';
+import { queryTable, onUserDataChanged } from '@/lib/egdesk-helpers';
 import React, { useState, useEffect, useCallback, useRef } from "react";
 
 // 프로젝트 경량 변환 헬퍼 (대시보드 렌더링 전용)
@@ -318,13 +318,18 @@ export default function DashboardPage() {
         }).catch(() => ({ rows: [] })),
       ]);
 
-      // 1. 프로젝트 동기화 (3건 즉시 화면 표출)
+      // 1. 프로젝트 동기화 (활성 프로젝트 & 휴지통 분리 표출)
       const allRows = projectsRes.rows || [];
       const active = allRows
         .filter((r: any) => !r.deleted_at && r.status !== "PENDING_DELETE" && r.status !== "TRASHED")
         .map(mapLightProject);
       setProjects(active);
       try { sessionStorage.setItem("sheetbot_cache_projects", JSON.stringify(active)); } catch {}
+
+      const trashed = allRows
+        .filter((r: any) => r.deleted_at || r.status === "PENDING_DELETE" || r.status === "TRASHED")
+        .map(mapLightProject);
+      setTrashedProjects(trashed);
 
       // 2. 지갑 잔액 동기화 (240만 토큰 즉시 표출)
       const walletRows = walletRes.rows || [];
@@ -468,89 +473,39 @@ export default function DashboardPage() {
     };
   }, [status]);
 
-  // ⚡ [0초 실시간 감시] 이지데스크 DB 왓처 실시간 스트림 연동 (프로젝트/스케줄/토큰)
-  const [isRealtimeLive, setIsRealtimeLive] = useState(false);
+  // ⚡ [0초 실시간 감시] 이지데스크 공식 onUserDataChanged 브라우저 네이티브 SSE 연동
+  const [isRealtimeLive, setIsRealtimeLive] = useState(true);
   const fetchDataRef = useRef(fetchData);
   useEffect(() => {
     fetchDataRef.current = fetchData;
   }, [fetchData]);
 
   useEffect(() => {
-    let effectiveEmail = user?.email || session?.user?.email || "";
-    if (!effectiveEmail && typeof window !== "undefined") {
-      try {
-        effectiveEmail = (localStorage.getItem("sheetbot_user_email") || "").toLowerCase().trim();
-      } catch {}
-    }
-    if (!effectiveEmail) return;
+    if (typeof window === "undefined") return;
 
-    let eventSource: EventSource | null = null;
-    let reconnectTimer: any = null;
-
-    const connectStream = () => {
-      if (eventSource) {
-        try {
-          eventSource.close();
-        } catch {}
+    // 공식 헬퍼스로 My DB 실시간 변경 감시 (프로젝트/스케줄/지갑/입금 등)
+    const unsub = onUserDataChanged((event) => {
+      setIsRealtimeLive(true);
+      const relevantTables = [
+        "sheetbot_projects",
+        "sheetbot_schedules",
+        "sheetbot_user_wallets",
+        "sheetbot_users",
+        "sheetbot_deposit_requests",
+        "sheetbot_user_devices",
+        "sheetbot_ai_usage_logs",
+      ];
+      if (!event.tableName || relevantTables.includes(event.tableName)) {
+        fetchDataRef.current(true);
       }
+    });
 
-      const email = effectiveEmail;
-      const basePath = getEgdeskBasePath();
-      const streamUrl = `${basePath}/api/realtime/stream?topic=all&userEmail=${encodeURIComponent(email)}`;
-
-      try {
-        eventSource = new EventSource(streamUrl);
-
-        eventSource.onopen = () => {
-          setIsRealtimeLive(true);
-        };
-
-        eventSource.onmessage = (event) => {
-          setIsRealtimeLive(true);
-          try {
-            const payload = JSON.parse(event.data);
-            if (payload.type === "CONNECTED" || payload.type === "UPSTREAM_STATUS") {
-              setIsRealtimeLive(true);
-              return;
-            }
-            if (payload.type === "DATA_CHANGED") {
-              if (
-                payload.tableName === "sheetbot_projects" ||
-                payload.tableName === "sheetbot_schedules" ||
-                payload.tableName === "sheetbot_users" ||
-                payload.tableName === "sheetbot_deposit_requests"
-              ) {
-                fetchDataRef.current();
-              }
-            }
-          } catch {}
-        };
-
-        eventSource.onerror = () => {
-          // 브라우저 네이티브 자동 재연결을 존중하여 3초 강제 close 루프 및 소켓 잠식 방지
-          if (eventSource?.readyState === EventSource.CLOSED) {
-            setIsRealtimeLive(false);
-            clearTimeout(reconnectTimer);
-            reconnectTimer = setTimeout(connectStream, 5000);
-          }
-        };
-      } catch {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = setTimeout(connectStream, 5000);
-      }
-    };
-
-    connectStream();
+    setIsRealtimeLive(true);
 
     return () => {
-      if (eventSource) {
-        try {
-          eventSource.close();
-        } catch {}
-      }
-      clearTimeout(reconnectTimer);
+      unsub();
     };
-  }, [user?.email, session?.user?.email]);
+  }, []);
 
   const [syncingProjectId, setSyncingProjectId] = useState<string | null>(null);
   const [syncingCodeProjectId, setSyncingCodeProjectId] = useState<string | null>(null);
