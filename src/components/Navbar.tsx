@@ -30,8 +30,8 @@ export default function Navbar() {
   const pathname = usePathname();
   const { user, isLoggedIn, isLoading, isAdmin, logout } = useAuth();
 
-  // 기본값: 꺼짐(false)
   const [aiHelpEnabled, setAiHelpEnabled] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [supportDropdownOpen, setSupportDropdownOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -40,6 +40,7 @@ export default function Navbar() {
   const profileDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    setMounted(true);
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("sheetbot_ai_help_enabled");
       setAiHelpEnabled(saved === "true");
@@ -252,7 +253,7 @@ export default function Navbar() {
 
         {/* 우측 네비게이션 제어 영역 */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 whitespace-nowrap">
-          {isLoading ? (
+          {!mounted || isLoading ? (
             <div className="w-20 h-8 bg-slate-100 animate-pulse rounded-xl" />
           ) : isLoggedIn && user ? (
             <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 whitespace-nowrap">
@@ -545,7 +546,7 @@ export default function Navbar() {
             </Link>
           </div>
 
-          {isLoggedIn && user && (
+          {mounted && isLoggedIn && user && (
             <div className="space-y-2 border-t border-slate-100 pt-3">
               <div className="flex items-center justify-between px-2">
                 <div className="text-xs font-bold text-slate-800 truncate">

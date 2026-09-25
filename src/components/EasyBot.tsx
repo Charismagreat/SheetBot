@@ -789,24 +789,34 @@ export default function EasyBot() {
   const handleReset = async () => {
     if (!confirm("대화 내역을 초기화하시겠습니까?")) return;
 
+    // ⚡ 1. 화면 UI 즉시 0ms 초기화 (사용자 체감 지연 0초)
+    setMessages([
+      {
+        id: `welcome_reset_${Date.now()}`,
+        role: "bot",
+        text: "대화가 초기화되었습니다. 새로운 질문을 입력해 주세요!",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      },
+    ]);
+
     setIsResetting(true);
     try {
-      if (session?.user?.email) {
-        await apiFetch("/api/easybot/messages", { method: "DELETE" }).catch(() => {});
+      const email = session?.user?.email || localStorage.getItem("sheetbot_user_email");
+      if (email) {
+        // ⚡ 2. 서버 소프트 삭제 요청은 3초 타임아웃 가드로 안전하게 백그라운드 처리
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        await apiFetch(`/api/easybot/messages?userEmail=${encodeURIComponent(email)}`, {
+          method: "DELETE",
+          signal: controller.signal,
+        })
+          .catch(() => {})
+          .finally(() => clearTimeout(timeoutId));
       } else {
         localStorage.removeItem("sheetbot_guest_messages");
       }
-
-      setMessages([
-        {
-          id: `welcome_reset_${Date.now()}`,
-          role: "bot",
-          text: "대화가 초기화되었습니다. 새로운 질문을 입력해 주세요!",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        },
-      ]);
     } catch (err) {
-      console.error("[EasyBot] Reset failed:", err);
+      console.warn("[EasyBot] Background reset note:", err);
     } finally {
       setIsResetting(false);
     }
