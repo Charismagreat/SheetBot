@@ -36,10 +36,10 @@ export default function SessionWrapper({ children }: { children: React.ReactNode
     const syncVisitorSession = async () => {
       try {
         if (typeof window === "undefined") return;
-        // 이미 이번 브라우저 탭 세션에서 동기화가 완료되었거나 세션 토큰 쿠키가 있으면 중복 호출 방지
+        // 이미 이번 브라우저 탭 세션에서 동기화가 완료되었거나 로컬스토리지에 visitor 세션이 없으면 네트워크 호출 0건 처리
         const alreadySynced = sessionStorage.getItem("sheetbot_session_synced");
-        const hasSessionCookie = document.cookie.includes("next-auth.session-token");
-        if (alreadySynced || hasSessionCookie) {
+        const hasVisitorSession = typeof window !== "undefined" && !!localStorage.getItem("egdesk_visitor_session");
+        if (alreadySynced || !hasVisitorSession) {
           return;
         }
 
