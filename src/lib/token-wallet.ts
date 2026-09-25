@@ -68,17 +68,14 @@ export async function getOrCreateUserWallet(userEmail: string): Promise<UserWall
   return fetchWithCache(
     `user_wallet_${email}`,
     async () => {
-      // ⚡ 2초 타임아웃 레이스로 무한 대기 차단
-      const timeoutPromise = new Promise<{ rows: any[] }>((resolve) =>
-        setTimeout(() => resolve({ rows: [] }), 2000)
-      );
-
-      const fetchPromise = queryTable("sheetbot_user_wallets", {
+      // 터널 지연 상황에서도 실제 지갑(240만 토큰, PRO)을 안전하게 조회 (조급한 2초 타임아웃으로 인한 2만 토큰 오인식 원천 차단)
+      const res = await queryTable("sheetbot_user_wallets", {
         filters: { user_email: email },
         limit: 10,
-      }).catch(() => ({ rows: [] }));
-
-      const res = await Promise.race([fetchPromise, timeoutPromise]);
+      }).catch((err) => {
+        console.warn("[Wallet] queryTable error:", err);
+        return { rows: [] };
+      });
       const validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
 
       if (validRows.length > 0) {
