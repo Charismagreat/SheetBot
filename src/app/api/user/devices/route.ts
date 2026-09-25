@@ -37,26 +37,35 @@ export async function GET(req: NextRequest) {
 
     const userDevices = (dbRes.rows || []).filter((r: any) => !r.deleted_at);
 
-    // 2. 전체 디바이스 실시간 상태 조회 (Phone MCP)
+    // 2. 전체 디바이스 실시간 상태 조회 (구글 메시지 QR 기기가 있을 때만 1.5초 타임아웃 보호 하에 안전 조회)
     let liveDeviceMap: Record<string, any> = {};
-    try {
-      const devRes = await listPhoneDevices();
-      let allDevices: any[] = [];
-      if (Array.isArray(devRes)) {
-        allDevices = devRes;
-      } else if (devRes && Array.isArray(devRes.devices)) {
-        allDevices = devRes.devices;
-      } else if (typeof devRes === "string") {
-        try {
-          allDevices = JSON.parse(devRes);
-        } catch {}
+    const hasLegacyDevice = userDevices.some(
+      (d: any) => d.pairing_mode !== "agent2" && d.pairing_mode !== "android_agent"
+    );
+
+    if (hasLegacyDevice) {
+      try {
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Phone MCP timeout")), 1500)
+        );
+        const devRes = (await Promise.race([listPhoneDevices(), timeoutPromise])) as any;
+        let allDevices: any[] = [];
+        if (Array.isArray(devRes)) {
+          allDevices = devRes;
+        } else if (devRes && Array.isArray(devRes.devices)) {
+          allDevices = devRes.devices;
+        } else if (typeof devRes === "string") {
+          try {
+            allDevices = JSON.parse(devRes);
+          } catch {}
+        }
+        for (const d of allDevices) {
+          const id = d.id || d.deviceId || d.label;
+          if (id) liveDeviceMap[id] = d;
+        }
+      } catch (err: any) {
+        console.warn("[UserDevices] live devices fetch skipped or timed out:", err.message);
       }
-      for (const d of allDevices) {
-        const id = d.id || d.deviceId || d.label;
-        if (id) liveDeviceMap[id] = d;
-      }
-    } catch (err) {
-      console.warn("[UserDevices] live devices fetch warning:", err);
     }
 
     // 3. 마지막 하트비트 경과 시간 계산 헬퍼 (초 단위)
