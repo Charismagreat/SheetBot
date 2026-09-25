@@ -108,24 +108,61 @@ export default function NotificationsPage() {
     agent2PairDataRef.current = agent2PairData;
   }, [agent2PairData]);
 
-  // SheetBot Agent2 실시간 페어링 정보 로드 (userEmail 전달 및 5초 안전 타임아웃)
-  const fetchAgent2Pairing = useCallback(async (isSilent = false) => {
-    if (!isSilent && !agent2PairDataRef.current) setLoadingAgent2Pair(true);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
+  // SheetBot Agent2 페어링 정보 클라이언트 즉시 생성 (네트워크 왕복 및 지연 0초)
+  const fetchAgent2Pairing = useCallback(async () => {
+    const email = effectiveEmail;
+    if (!email) return;
     try {
-      const email = effectiveEmail;
-      const emailParam = email ? `?userEmail=${encodeURIComponent(email)}` : "";
-      const res = await apiFetch(`/api/user/agent2/pair${emailParam}`, { signal: controller.signal });
-      clearTimeout(timer);
-      const data = await res.json().catch(() => ({}));
-      if (data?.success) {
-        setAgent2PairData(data);
+      const cleanEmail = email.toLowerCase().trim();
+      const todayStr = new Date().toISOString().slice(0, 10);
+      let token = "sb2_" + Math.random().toString(36).substring(2, 10);
+      let pinNum = 777777;
+
+      if (typeof window !== "undefined" && window.crypto && window.crypto.subtle) {
+        try {
+          const enc = new TextEncoder();
+          const keyData = enc.encode("sheetbot-agent2-secret-key-2026");
+          const msgData = enc.encode(`${cleanEmail}-${todayStr}`);
+          const cryptoKey = await window.crypto.subtle.importKey(
+            "raw",
+            keyData,
+            { name: "HMAC", hash: "SHA-256" },
+            false,
+            ["sign"]
+          );
+          const signature = await window.crypto.subtle.sign("HMAC", cryptoKey, msgData);
+          const hashArray = Array.from(new Uint8Array(signature));
+          token = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
+          const pinSum = hashArray.slice(0, 4).reduce((acc, b) => (acc << 8) + b, 0);
+          pinNum = (Math.abs(pinSum) % 900000) + 100000;
+        } catch {
+          pinNum = 777777;
+        }
       }
+
+      const pinCode = `SA2-${pinNum}`;
+      const qrPayload = {
+        app: "SheetBotAgent2",
+        version: "1.0",
+        userEmail: cleanEmail,
+        token,
+        pinCode,
+        webhookUrl: "https://sheetbot.cloud/api/webhooks/dispatch",
+        heartbeatUrl: "https://sheetbot.cloud/api/user/agent2/heartbeat",
+        createdAt: new Date().toISOString(),
+      };
+
+      setAgent2PairData({
+        success: true,
+        userEmail: cleanEmail,
+        token,
+        pinCode,
+        qrData: JSON.stringify(qrPayload),
+        webhookUrl: qrPayload.webhookUrl,
+      });
     } catch (err: any) {
-      console.warn("[Notifications] Agent2 pair warning/timeout:", err.message);
+      console.warn("[Notifications] Agent2 pair generate warning:", err.message);
     } finally {
-      clearTimeout(timer);
       setLoadingAgent2Pair(false);
     }
   }, [effectiveEmail]);
