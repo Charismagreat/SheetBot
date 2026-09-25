@@ -17,8 +17,12 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url);
     const queryTopic = (url.searchParams.get("topic") || "all") as RealtimeTopic;
     const queryEmail = url.searchParams.get("userEmail") || url.searchParams.get("email");
-    const sessionEmail = await getCurrentUserEmail(req);
-    const userEmail = (queryEmail && queryEmail.includes("@")) ? queryEmail.toLowerCase().trim() : sessionEmail;
+    let userEmail: string | null = (queryEmail && queryEmail.includes("@")) ? queryEmail.toLowerCase().trim() : null;
+
+    // queryEmail이 없을 때만 세션 쿠키/헤더 확인 (불필요한 I/O 블로킹 방지)
+    if (!userEmail) {
+      userEmail = await getCurrentUserEmail(req).catch(() => null);
+    }
 
     const effectiveEmail = userEmail || "guest@sheetbot.local";
 
