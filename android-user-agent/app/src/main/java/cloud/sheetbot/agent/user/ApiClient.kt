@@ -5,10 +5,13 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 object ApiClient {
@@ -449,6 +452,63 @@ object ApiClient {
         }
         false
     }
+
+    /**
+     * 통화 녹음 파일 구글 드라이브 및 [SheetBot] 통화 녹음 대장 시트 자동 업로드
+     */
+    suspend fun uploadCallRecording(
+        file: File,
+        fileName: String,
+        contactName: String,
+        callTime: String,
+        userEmail: String,
+        folderName: String = "[SheetBot] 통화 녹음",
+        autoRecordSheet: Boolean = true
+    ): UploadRecordingResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val fileMediaType = "audio/mp4".toMediaType()
+        val requestFile = file.asRequestBody(fileMediaType)
+
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("userEmail", userEmail)
+            .addFormDataPart("fileName", fileName)
+            .addFormDataPart("contactName", contactName)
+            .addFormDataPart("callTime", callTime)
+            .addFormDataPart("folderName", folderName)
+            .addFormDataPart("autoRecordSheet", autoRecordSheet.toString())
+            .addFormDataPart("file", fileName, requestFile)
+            .build()
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/recordings/upload"
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(requestBody)
+                    .build()
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    Log.i(TAG, "🎉 [통화 녹음 업로드 성공] $fileName -> $folderName")
+                    return@withContext UploadRecordingResult(
+                        success = true,
+                        fileId = resJson.optString("fileId").takeIf { it.isNotBlank() },
+                        fileName = resJson.optString("fileName", fileName),
+                        webViewLink = resJson.optString("webViewLink").takeIf { it.isNotBlank() },
+                        spreadsheetUrl = resJson.optString("spreadsheetUrl").takeIf { it.isNotBlank() }
+                    )
+                } else {
+                    val msg = resJson.optString("error", "HTTP ${response.code}")
+                    Log.w(TAG, "통화 녹음 업로드 실패 ($host): $msg")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "통화 녹음 업로드 통신 예외 ($host): ${e.message}")
+            }
+        }
+        UploadRecordingResult(success = false, error = "구글 드라이브 업로드 실패")
+    }
 }
 
 data class PairResult(
@@ -493,6 +553,15 @@ data class PingResult(
     val isOnline: Boolean,
     val latencyMs: Long = 0,
     val connectedHost: String = "",
+    val error: String? = null
+)
+
+data class UploadRecordingResult(
+    val success: Boolean,
+    val fileId: String? = null,
+    val fileName: String? = null,
+    val webViewLink: String? = null,
+    val spreadsheetUrl: String? = null,
     val error: String? = null
 )
 

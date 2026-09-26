@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 1,
-      latestVersionName: "1.0.0",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v1.0.0/SheetBotAgent.apk",
+      latestVersionCode: 2,
+      latestVersionName: "1.1.0",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v1.1.0/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 에이전트 (이용자용) v1.0.0 출시\n• 안드로이드 스마트폰과 구글 스프레드시트 1:1 결합\n• 스마트폰으로 수신된 고객 SMS 구글 시트 실시간 자동 기록\n• 구글 시트에서 0원 문자 일괄 발송\n• 24시간 실시간 무중단 백그라운드 동기화",
+      releaseNotes: "시트봇 에이전트 v1.1.0 업데이트\n• 🎙️ 통화 녹음 파일 구글 드라이브 자동 백업 추가\n• 🎯 지정된 번호/이름 필터링 선택 백업 기능\n• 📁 [SheetBot] 표준 네이밍 폴더 자동 생성\n• 📊 [SheetBot] 통화 녹음 대장 시트 자동 생성 및 실시간 링크 기록\n• 백그라운드 문자 발송 반응 주기 대폭 단축 (20초)",
     },
     {
       headers: {

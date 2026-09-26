@@ -25,6 +25,7 @@ class KeepAliveService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Default + Job())
     private var heartbeatJob: Job? = null
     private var receiptQueueJob: Job? = null
+    private var recordingSyncJob: Job? = null
     private lateinit var prefs: PreferencesManager
 
     companion object {
@@ -53,10 +54,11 @@ class KeepAliveService : Service() {
         super.onCreate()
         prefs = PreferencesManager(this)
         createNotificationChannels()
-        startForeground(NOTIFICATION_ID, buildNotification("🟢 실시간 입금 감지 중 (${prefs.userEmail ?: "미연동"})"))
+        startForeground(NOTIFICATION_ID, buildNotification("🟢 24시간 실시간 고객 알림 문자 발송 대기 중 (${prefs.userEmail ?: "미연동"})"))
         startHeartbeatLoop()
         startReceiptQueueLoop()
-        Log.i(TAG, "KeepAliveService created and foregrounded with 1-min Heartbeat Watchdog.")
+        startRecordingSyncLoop()
+        Log.i(TAG, "KeepAliveService created with SMS, Heartbeat, and Call Recording Watchdog.")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -69,6 +71,7 @@ class KeepAliveService : Service() {
         super.onDestroy()
         heartbeatJob?.cancel()
         receiptQueueJob?.cancel()
+        recordingSyncJob?.cancel()
         Log.w(TAG, "KeepAliveService destroyed.")
     }
 
@@ -220,6 +223,25 @@ class KeepAliveService : Service() {
                 }
                 // 실시간 반응성을 위해 20초마다 대기열 체크 (기존 3분에서 20초로 단축)
                 delay(20 * 1000L)
+            }
+        }
+    }
+
+    private fun startRecordingSyncLoop() {
+        recordingSyncJob?.cancel()
+        recordingSyncJob = serviceScope.launch {
+            delay(5000L)
+            while (isActive) {
+                try {
+                    val uploaded = CallRecordingManager.scanAndUploadNewRecordings(this@KeepAliveService)
+                    if (uploaded > 0) {
+                        Log.i(TAG, "🎙️ [통화 녹음 백업] 신규 통화 녹음 ${uploaded}건 구글 드라이브 업로드 완료")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "통화 녹음 백업 감시 중 오류: ${e.message}")
+                }
+                // 25초마다 신규 통화 녹음 파일 감시
+                delay(25 * 1000L)
             }
         }
     }

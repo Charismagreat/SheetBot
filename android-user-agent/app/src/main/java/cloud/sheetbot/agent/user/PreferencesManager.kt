@@ -1,4 +1,4 @@
-﻿package cloud.sheetbot.agent.user
+package cloud.sheetbot.agent.user
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -54,6 +54,40 @@ class PreferencesManager(context: Context) {
     var isPushDetectionEnabled: Boolean
         get() = prefs.getBoolean("is_push_detection_enabled", true)
         set(value) = prefs.edit().putBoolean("is_push_detection_enabled", value).apply()
+
+    // 통화 녹음 파일 구글 드라이브 자동 백업 관련 설정
+    var isCallRecordingSyncEnabled: Boolean
+        get() = prefs.getBoolean("is_call_recording_sync_enabled", true)
+        set(value) = prefs.edit().putBoolean("is_call_recording_sync_enabled", value).apply()
+
+    var callRecordingTargetFilter: String
+        get() = prefs.getString("call_recording_target_filter", "") ?: ""
+        set(value) = prefs.edit().putString("call_recording_target_filter", value).apply()
+
+    var callRecordingDriveFolder: String
+        get() = prefs.getString("call_recording_drive_folder", "[SheetBot] 통화 녹음") ?: "[SheetBot] 통화 녹음"
+        set(value) = prefs.edit().putString("call_recording_drive_folder", value).apply()
+
+    var isCallRecordingSheetEnabled: Boolean
+        get() = prefs.getBoolean("is_call_recording_sheet_enabled", true)
+        set(value) = prefs.edit().putBoolean("is_call_recording_sheet_enabled", value).apply()
+
+    fun isRecordingSynced(fileName: String): Boolean {
+        val synced = prefs.getStringSet("synced_recording_files", emptySet()) ?: emptySet()
+        return synced.contains(fileName)
+    }
+
+    fun markRecordingSynced(fileName: String) {
+        val current = (prefs.getStringSet("synced_recording_files", emptySet()) ?: emptySet()).toMutableSet()
+        current.add(fileName)
+        // 최대 1000개 유지
+        if (current.size > 1000) {
+            val trimmed = current.toList().takeLast(1000).toSet()
+            prefs.edit().putStringSet("synced_recording_files", trimmed).apply()
+        } else {
+            prefs.edit().putStringSet("synced_recording_files", current).apply()
+        }
+    }
 
     fun clear() {
         prefs.edit().clear().apply()
