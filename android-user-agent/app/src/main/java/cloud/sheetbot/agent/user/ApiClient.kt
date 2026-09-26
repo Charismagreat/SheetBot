@@ -628,6 +628,52 @@ object ApiClient {
     }
 
     /**
+     * 스마트폰 자연어(음성/텍스트) 명령으로 구글 시트 Apps Script 원격 구동 (v1.7)
+     */
+    suspend fun executeAiCommand(
+        userEmail: String,
+        command: String,
+        spreadsheetId: String? = null,
+        deviceId: String? = null
+    ): AiCommandResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("command", command)
+            if (!spreadsheetId.isNullOrBlank()) put("spreadsheetId", spreadsheetId)
+            put("deviceId", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL} (SheetBot Agent)")
+        }
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/commands/execute"
+            try {
+                val request = Request.Builder().url(endpoint).post(body).build()
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    Log.i(TAG, "🎉 [자연어 명령 실행 성공] $command")
+                    return@withContext AiCommandResult(
+                        success = true,
+                        command = resJson.optString("command", command),
+                        actionType = resJson.optString("actionType", "GENERAL_ASSIST"),
+                        explanation = resJson.optString("explanation", "명령이 처리되었습니다."),
+                        spokenResult = resJson.optString("spokenResult", "요청하신 시트 명령이 완료되었습니다."),
+                        details = resJson.optJSONObject("details")
+                    )
+                } else {
+                    val msg = resJson.optString("error", "HTTP ${response.code}")
+                    Log.w(TAG, "자연어 명령 실행 실패 ($host): $msg")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "자연어 명령 실행 통신 예외 ($host): ${e.message}")
+            }
+        }
+        AiCommandResult(success = false, error = "자연어 시트 명령 실행에 실패했습니다.")
+    }
+
+    /**
      * 문자(SMS/LMS) 송수신 내역 구글 시트 실시간 자동 기록
      */
     suspend fun sendSmsSync(
@@ -826,6 +872,16 @@ data class BookmarkResult(
     val aiSummary: String? = null,
     val spreadsheetUrl: String? = null,
     val message: String? = null,
+    val error: String? = null
+)
+
+data class AiCommandResult(
+    val success: Boolean,
+    val command: String? = null,
+    val actionType: String = "GENERAL_ASSIST",
+    val explanation: String? = null,
+    val spokenResult: String? = null,
+    val details: JSONObject? = null,
     val error: String? = null
 )
 
