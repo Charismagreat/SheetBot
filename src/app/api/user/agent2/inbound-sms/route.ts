@@ -24,9 +24,9 @@ export async function POST(req: NextRequest) {
 
     const cleanEmail = String(userEmail).toLowerCase().trim();
     const nowIso = receivedAt || new Date().toISOString();
-    const logId = `inbound_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const logId = Date.now();
 
-    // 1. 회원의 스마트 알림 발송/수신 이력 대장에 INBOUND로 기록
+    // 1. 회원의 스마트 알림 발송/수신 이력 대장에 INBOUND로 기록 (SQLite INTEGER id 준수)
     await insertRows("sheetbot_user_dispatch_logs", [
       {
         id: logId,
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
         recipient: sender, // 수신된 발신자 번호
         content: message,
         status: "INBOUND", // 수신 상태
-        error_message: "",
+        error_message: null,
         created_at: nowIso,
       },
     ]);
