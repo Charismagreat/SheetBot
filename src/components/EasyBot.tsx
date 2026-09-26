@@ -109,13 +109,29 @@ export default function EasyBot() {
       }
     } catch {}
   }, []);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // ⚡ SWR 캐시 복원: 브라우저 세션 스토리지에서 이전 이지봇 번들 즉시 복원 (0초 렌더링)
+  const [cachedBundle] = useState<any>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem("sb_easybot_bundle");
+        return saved ? JSON.parse(saved) : null;
+      } catch {}
+    }
+    return null;
+  });
+
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    if (cachedBundle?.messages && Array.isArray(cachedBundle.messages) && cachedBundle.messages.length > 0) {
+      return cachedBundle.messages;
+    }
+    return [];
+  });
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
-  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(() => Boolean(cachedBundle?.messages?.length));
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
-  const [isAdminUser, setIsAdminUser] = useState<boolean>(() => isContextAdmin);
+  const [isAdminUser, setIsAdminUser] = useState<boolean>(() => isContextAdmin || Boolean(cachedBundle?.isAdmin));
   const lastKnownEntIdRef = useRef<number>(0);
   const lastKnownTaxIdRef = useRef<number>(0);
   const suppressedSlaRef = useRef<boolean>(false);
@@ -136,9 +152,21 @@ export default function EasyBot() {
   } | null>(null);
 
   // 실시간 AI API 헬스 및 할당량 상태
-  const [health, setHealth] = useState<BotHealthInfo>({
-    status: "healthy",
-    message: "정상 가동 중",
+  const [health, setHealth] = useState<BotHealthInfo>(() => {
+    if (cachedBundle?.health) {
+      return {
+        status: cachedBundle.health.status || "healthy",
+        message: cachedBundle.health.message || "정상 가동 중",
+        latencyMs: cachedBundle.health.latencyMs,
+        model: cachedBundle.health.model,
+        isQuotaExceeded: !!cachedBundle.health.isQuotaExceeded,
+        userTokenDepleted: !!cachedBundle.health.userTokenDepleted,
+      };
+    }
+    return {
+      status: "healthy",
+      message: "정상 가동 중",
+    };
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -554,6 +582,12 @@ export default function EasyBot() {
             }, 600);
           }
         }
+
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem("sb_easybot_bundle", JSON.stringify(data));
+          } catch {}
+        }
       }
     } catch (err) {
       console.warn("[EasyBot] Failed to load init bundle:", err);
@@ -738,26 +772,15 @@ export default function EasyBot() {
     }
   }, [setOpenWithPersistence]);
 
-  // 🌟 [통합 번들 로드] EasyBot 1회 통합 초기화 (/api/easybot/init)
+  // ⚡ [On-Demand 단일 통합 번들 로더] 창이 닫혀 있을 때는 네트워크 0건, 사용자가 직접 열었을 때만(isOpen === true) 비동기 1회 동기화
   useEffect(() => {
+    // 🛡️ 이지봇 창이 닫혀 있으면 네트워크 요청을 일체 발생시키지 않음 (소켓 100% 보존)
+    if (!isOpen) return;
     if (sessionStatus === "loading") return;
 
-    let initTimer: NodeJS.Timeout | null = null;
-
-    // EasyBot이 열려있거나 열렸을 때는 즉시 통합 번들 로드,
-    // 닫혀있는 상태라면 메인 페이지 렌더링 및 소켓 자원 경합을 피하기 위해 3.5초 지연 로드
-    if (isOpen && !historyLoaded) {
-      initEasyBotBundle();
-    } else if (!historyLoaded) {
-      initTimer = setTimeout(() => {
-        initEasyBotBundle();
-      }, 3500);
-    }
-
-    return () => {
-      if (initTimer) clearTimeout(initTimer);
-    };
-  }, [isOpen, historyLoaded, sessionStatus, initEasyBotBundle]);
+    // 창이 열렸을 때만 최신 번들 백그라운드 동기화 (이미 SWR 캐시로 화면은 0초 표시됨)
+    void initEasyBotBundle();
+  }, [isOpen, sessionStatus, initEasyBotBundle]);
 
   // 🌟 상위 Context의 관리자 권한 상태 실시간 동기화
   useEffect(() => {
