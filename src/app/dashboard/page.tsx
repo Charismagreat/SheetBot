@@ -265,10 +265,16 @@ export default function DashboardPage() {
   const lastFetchedEmailRef = useRef<string>("");
   const isFetchingRef = useRef<boolean>(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const authAdminEmailRef = useRef<string>(authAdminEmail);
+  authAdminEmailRef.current = authAdminEmail;
+  const hasCachedDataRef = useRef<boolean>(projects.length > 0 || !!wallet);
+  if (projects.length > 0 || !!wallet) {
+    hasCachedDataRef.current = true;
+  }
 
   // 데이터 로드 (⚡ 단일 통합 부트스트랩: 단 1회의 HTTP 왕복으로 0.5초 만에 전 데이터 일괄 수신)
   const fetchData = useCallback(async (force = false) => {
-    let effectiveEmail = authAdminEmail || "";
+    let effectiveEmail = authAdminEmailRef.current || "";
     if (!effectiveEmail && typeof window !== "undefined") {
       try {
         effectiveEmail = (localStorage.getItem("sheetbot_user_email") || "").toLowerCase().trim();
@@ -293,7 +299,7 @@ export default function DashboardPage() {
     isFetchingRef.current = true;
 
     // SWR 캐시가 없는 경우에만 로딩 스피너 표출
-    if (!projects.length && !wallet) {
+    if (!hasCachedDataRef.current) {
       setLoading(true);
     }
 
@@ -347,6 +353,7 @@ export default function DashboardPage() {
         }
 
         lastFetchedEmailRef.current = effectiveEmail;
+        hasCachedDataRef.current = true;
       }
     } catch (err: any) {
       if (err?.name === "AbortError") {
@@ -360,7 +367,7 @@ export default function DashboardPage() {
         abortControllerRef.current = null;
       }
     }
-  }, [authAdminEmail, projects.length, wallet]);
+  }, []);
 
   // ⚡ 사용자 이메일이 확정되면 단 1회만 패칭 (마운트 중복 및 다중 호출 원천 차단)
   useEffect(() => {
