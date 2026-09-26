@@ -49,9 +49,7 @@ function mapLightProject(row: any) {
   };
 }
 import Link from "next/link";
-import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/hooks/useAuth";
 import {
   Bot, Plus, FileCode, Clock, Calendar, RefreshCw, CheckCircle2, AlertTriangle,
   X, ArrowRight, ExternalLink, Sparkles, Layers, ShieldCheck, Trash2, Smartphone, Edit3,
@@ -90,9 +88,7 @@ const FdeRequestModal = nextDynamic(() => import("@/components/dashboard/FdeRequ
 const FdeRecruitModal = nextDynamic(() => import("@/components/dashboard/FdeRecruitModal"), { ssr: false });
 
 export default function DashboardPage() {
-  const { data: session, status } = useSession();
-  const { user, isLoggedIn } = useAuth();
-  const { userEmail: authAdminEmail, isAdmin: isContextAdmin } = useAuthAdmin();
+  const { user: authAdminUser, userEmail: authAdminEmail, isAdmin: isContextAdmin, isLoading: isAuthLoading } = useAuthAdmin();
   const router = useRouter();
 
   // ⚡ SSR-안전 기본 상태 (마운트 후 useEffect에서 캐시 즉시 복원하여 하이드레이션 불일치 0% 보장)
@@ -129,7 +125,7 @@ export default function DashboardPage() {
 
   // 랜딩페이지에서 ?sheetUrl=... 또는 localStorage로 유입된 경우 1초 래핑 즉시 실행 및 전용 모달 오픈
   useEffect(() => {
-    if (status === "loading") return;
+    if (isAuthLoading) return;
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       if (params.get("modal") === "fde" || params.get("fde") === "true") {
@@ -195,7 +191,7 @@ export default function DashboardPage() {
         })();
       }
     }
-  }, [status]);
+  }, [isAuthLoading]);
 
   // 요약 카드용 실시간 계정 자원 상태
   const [wallet, setWallet] = useState<{
@@ -265,28 +261,35 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // 마지막으로 성공적으로 패칭을 완료한 이메일 기록 Ref
+  // 마지막으로 성공적으로 패칭을 완료한 이메일 기록 Ref & In-flight 중복 방어용 AbortController
   const lastFetchedEmailRef = useRef<string>("");
   const isFetchingRef = useRef<boolean>(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // 데이터 로드 (⚡ 단일 통합 부트스트랩: 단 1회의 HTTP 왕복으로 0.5초 만에 전 데이터 일괄 수신)
   const fetchData = useCallback(async (force = false) => {
-    // 다층 신분증 식별: useAuthAdmin 1순위, useAuth 2순위, NextAuth 세션 3순위, 브라우저 localStorage 캐시 4순위
-    let effectiveEmail = authAdminEmail || user?.email || (session?.user?.email ? session.user.email.toLowerCase().trim() : "");
+    let effectiveEmail = authAdminEmail || "";
     if (!effectiveEmail && typeof window !== "undefined") {
       try {
         effectiveEmail = (localStorage.getItem("sheetbot_user_email") || "").toLowerCase().trim();
       } catch {}
     }
 
-    if (!effectiveEmail && status === "loading") {
+    if (!effectiveEmail) {
       return;
     }
 
-    if (!force && lastFetchedEmailRef.current && lastFetchedEmailRef.current === effectiveEmail && !isFetchingRef.current) {
+    // 이미 같은 이메일로 데이터 조회가 완료되었고 force가 아닌 경우 중복 호출 스킵
+    if (!force && lastFetchedEmailRef.current === effectiveEmail) {
       return;
     }
-    if (!force && isFetchingRef.current) return;
+
+    // 이미 진행 중인 요청이 있다면 브라우저 소켓 pending 방지를 위해 이전 요청 취소(Abort) 후 진행
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const abortCtrl = new AbortController();
+    abortControllerRef.current = abortCtrl;
     isFetchingRef.current = true;
 
     // SWR 캐시가 없는 경우에만 로딩 스피너 표출
@@ -298,6 +301,7 @@ export default function DashboardPage() {
       // 🚀 [서버 단일 통합 부트스트랩 API 호출: 브라우저 동시 소켓 점유 0, 5개 쿼리 병렬 일괄 수신]
       const res = await apiFetch(`/api/dashboard/bootstrap?userEmail=${encodeURIComponent(effectiveEmail)}`, {
         headers: { "Cache-Control": "no-cache" },
+        signal: abortCtrl.signal,
       });
       const resData = await res.json().catch(() => null);
 
@@ -342,101 +346,41 @@ export default function DashboardPage() {
           setUsageCostKrw(Math.round(Number(d.aiUsage.totalCostKrw || 0)));
         }
 
-        if (effectiveEmail) {
-          lastFetchedEmailRef.current = effectiveEmail;
-        }
+        lastFetchedEmailRef.current = effectiveEmail;
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        return; // 정상 취소된 요청은 조용히 무시
+      }
       console.warn("Dashboard bootstrap fetch warning:", err);
     } finally {
-      setLoading(false);
-      isFetchingRef.current = false;
-    }
-  }, [authAdminEmail, user?.email, session?.user?.email, status]);
-
-  // ⚡ 세션 이메일이 확정되거나 변경될 때만 1회 자동 재동기화 (중복 폭풍 방지)
-  const activeUserEmail = authAdminEmail || user?.email || session?.user?.email || "";
-  useEffect(() => {
-    if (activeUserEmail && lastFetchedEmailRef.current !== activeUserEmail) {
-      void fetchData(true);
-    }
-  }, [activeUserEmail, fetchData]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    // 🚀 마운트 시 초기 데이터 로드 (이미 진행 중이거나 로드된 경우 isFetchingRef에서 보호)
-    void fetchData();
-
-    const checkAuth = async () => {
-      const localSessionId = typeof window !== "undefined" ? localStorage.getItem("egdesk_visitor_session") : null;
-      let currentEmail = authAdminEmail || user?.email || (session?.user?.email ? session.user.email.toLowerCase().trim() : null);
-
-      if (currentEmail) {
-        try { localStorage.setItem("sheetbot_user_email", currentEmail); } catch {}
-      } else if (typeof window !== "undefined") {
-        currentEmail = localStorage.getItem("sheetbot_user_email");
+      if (abortControllerRef.current === abortCtrl) {
+        setLoading(false);
+        isFetchingRef.current = false;
+        abortControllerRef.current = null;
       }
+    }
+  }, [authAdminEmail, projects.length, wallet]);
 
-      // 0. 브라우저 localStorage에 저장된 최신 visitorSessionId를 서버 DB에 백그라운드 동기화
-      try {
-        if (localSessionId && currentEmail) {
-          void apiFetch("/api/auth/google/session", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              email: currentEmail,
-              name: user?.name || session?.user?.name || currentEmail.split("@")[0],
-              visitorSessionId: localSessionId,
-            }),
-          }).catch(() => {});
-        }
-      } catch {}
+  // ⚡ 사용자 이메일이 확정되면 단 1회만 패칭 (마운트 중복 및 다중 호출 원천 차단)
+  useEffect(() => {
+    if (authAdminEmail) {
+      void fetchData(false);
+    }
+  }, [authAdminEmail, fetchData]);
 
-      // 1. 미로그인 상태이거나 세션 이메일이 없는 경우 Visitor Google 계정 상태 검사 및 세션 복구 수행
-      if (status === "unauthenticated" || !session?.user?.email) {
-        try {
-          const { getVisitorGoogleStatus } = await import("@/egdesk-visitor-google");
-          const visitorStatus = await getVisitorGoogleStatus();
-
-          if (visitorStatus?.connected && visitorStatus?.email) {
-            const vEmail = visitorStatus.email.toLowerCase().trim();
-            try { localStorage.setItem("sheetbot_user_email", vEmail); } catch {}
-
-            const syncRes = await apiFetch("/api/auth/google/session", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                email: vEmail,
-                name: visitorStatus.email.split("@")[0],
-                visitorSessionId: localSessionId || undefined,
-              }),
-            });
-            if (syncRes.ok) {
-              void fetchData(true);
-              return;
-            }
-          }
-        } catch (err) {
-          console.warn("Visitor session auto-recovery error:", err);
-        }
-
-        // Visitor 세션조차 없을 때만 /login으로 안전하게 이동
-        if (isMounted && !localSessionId) {
-          const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
-          const match = currentPath.match(/^(\/t\/[^\/]+\/p\/[^\/]+)/);
-          const prefix = match ? match[1] : "";
-          window.location.href = `${prefix}/login`;
-        }
+  // ⚡ 비로그인 상태 시 안전 리다이렉트 (인증 로딩 종료 후 세션 확인)
+  useEffect(() => {
+    if (!isAuthLoading && !authAdminEmail) {
+      const savedEmail = typeof window !== "undefined" ? localStorage.getItem("sheetbot_user_email") : null;
+      if (!savedEmail) {
+        const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+        const match = currentPath.match(/^(\/t\/[^\/]+\/p\/[^\/]+)/);
+        const prefix = match ? match[1] : "";
+        window.location.href = `${prefix}/login`;
       }
-    };
-
-    void checkAuth();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [status]);
+    }
+  }, [isAuthLoading, authAdminEmail]);
 
   // ⚡ [0초 실시간 감시] 이지데스크 공식 onUserDataChanged 브라우저 네이티브 SSE 연동
   const [isRealtimeLive, setIsRealtimeLive] = useState(true);
@@ -691,7 +635,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h2 className="font-extrabold text-slate-800 text-base" suppressHydrationWarning>
-                  {mounted ? (user?.name || session?.user?.name || "구글 회원") : "구글 회원"}님의 자동화 워크스페이스
+                  {mounted ? (authAdminUser?.name || "구글 회원") : "구글 회원"}님의 자동화 워크스페이스
                 </h2>
               </div>
             </div>
@@ -1486,8 +1430,8 @@ export default function DashboardPage() {
         isOpen={isFdeModalOpen}
         initialSheetUrl={fdeInitialSheetUrl}
         initialRequirement={fdeInitialReq}
-        userEmail={user?.email || session?.user?.email}
-        userName={user?.name || session?.user?.name}
+        userEmail={authAdminEmail}
+        userName={authAdminUser?.name || "구글 회원"}
         onClose={() => {
           setIsFdeModalOpen(false);
           setFdeInitialSheetUrl("");
@@ -1499,8 +1443,8 @@ export default function DashboardPage() {
       <FdeRecruitModal
         isOpen={isFdeRecruitOpen}
         initialApply={isApplyingFde}
-        userEmail={user?.email || session?.user?.email}
-        userName={user?.name || session?.user?.name}
+        userEmail={authAdminEmail}
+        userName={authAdminUser?.name || "구글 회원"}
         onClose={() => {
           setIsFdeRecruitOpen(false);
           setIsApplyingFde(false);
