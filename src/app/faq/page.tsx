@@ -1,10 +1,23 @@
 "use client";
 
 import { apiFetch } from '@/lib/api';
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
-import { HelpCircle, ChevronDown, Sparkles, MessageSquare, ArrowRight, RefreshCw, Search, X, Building2 } from "lucide-react";
+import { onUserDataChanged } from "@/lib/egdesk-helpers";
+import {
+  HelpCircle,
+  ChevronDown,
+  Sparkles,
+  MessageSquare,
+  ArrowRight,
+  RefreshCw,
+  Search,
+  X,
+  Building2,
+  Clock,
+  Radio,
+} from "lucide-react";
 import { DEFAULT_FAQS } from "@/lib/default-faqs";
 
 interface FaqItem {
@@ -18,30 +31,69 @@ interface FaqItem {
 }
 
 export default function FaqPage() {
-  const [faqs, setFaqs] = useState<FaqItem[]>(DEFAULT_FAQS);
+  // ⚡ [SWR 캐시 복원] 세션 스토리지에서 이전 FAQ 즉시 복원 (화면 깜빡임 0ms)
+  const [cachedFaqs] = useState<FaqItem[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem("sb_faqs_cache");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return DEFAULT_FAQS;
+  });
+
+  const [faqs, setFaqs] = useState<FaqItem[]>(() => cachedFaqs);
   const [selectedCat, setSelectedCat] = useState<string>("전체");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [openIdx, setOpenIdx] = useState<number | null>(0);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [isRealtimeLive, setIsRealtimeLive] = useState(false);
+  const isFetchingRef = useRef<boolean>(false);
 
-  useEffect(() => {
-    fetchFaqs();
-  }, []);
+  // ⚡ [FAQ 단일 조회 헬퍼] 중복 호출 방지 및 SWR 캐시 동기화
+  const fetchFaqs = useCallback(async (silent = false) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
 
-  const fetchFaqs = async () => {
-    setLoading(true);
     try {
+      if (!silent) setLoading(true);
       const res = await apiFetch("/api/faqs");
       const data = await res.json();
       if (data.success && Array.isArray(data.faqs) && data.faqs.length > 0) {
         setFaqs(data.faqs);
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem("sb_faqs_cache", JSON.stringify(data.faqs));
+          } catch {}
+        }
       }
     } catch (e) {
-      console.warn("Failed to fetch dynamic faqs, using default", e);
+      console.warn("Failed to fetch dynamic faqs, using fallback", e);
     } finally {
-      setLoading(false);
+      isFetchingRef.current = false;
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
+
+  // ⚡ [부트스트랩 & 0초 실시간 DB 왓처] 마운트 시 1회 백그라운드 최신화 및 관리자 수정 실시간 반영
+  useEffect(() => {
+    void fetchFaqs(true);
+
+    // ⚡ [0초 실시간 감시] sheetbot_faqs 테이블 변경 이벤트 수신 시 0초 화면 갱신
+    const unsub = onUserDataChanged((event) => {
+      setIsRealtimeLive(true);
+      if (!event.tableName || event.tableName === "sheetbot_faqs") {
+        void fetchFaqs(true);
+      }
+    });
+
+    return () => {
+      unsub();
+    };
+  }, [fetchFaqs]);
 
   const categories = ["전체", "시작하기", "토큰/결제", "Apps Script/기능", "보안/계정"];
 
@@ -67,6 +119,21 @@ export default function FaqPage() {
           <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold border border-indigo-200/60 shadow-xs">
             <HelpCircle className="w-3.5 h-3.5 text-indigo-600" />
             <span>자주 묻는 질문</span>
+            {isRealtimeLive && (
+              <span className="inline-flex items-center gap-1 ml-1 px-1.5 py-0.5 rounded-full bg-emerald-100/80 text-emerald-800 text-[10px] font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>0초 실시간</span>
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => fetchFaqs(false)}
+              disabled={loading}
+              className="text-indigo-500 hover:text-indigo-800 transition-colors p-0.5 rounded cursor-pointer disabled:opacity-50"
+              title="새로고침"
+            >
+              <Clock className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
+            </button>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight break-keep">
             자주 묻는 질문 (FAQ)
