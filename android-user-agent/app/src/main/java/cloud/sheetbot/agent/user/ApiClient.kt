@@ -567,6 +567,86 @@ object ApiClient {
         }
         UploadGenericFileResult(success = false, error = "구글 드라이브 파일 업로드에 실패했습니다.")
     }
+
+    /**
+     * 문자(SMS/LMS) 송수신 내역 구글 시트 실시간 자동 기록
+     */
+    suspend fun sendSmsSync(
+        userEmail: String,
+        direction: String, // "INBOUND" 또는 "OUTBOUND"
+        phoneNumber: String,
+        contactName: String?,
+        message: String,
+        deviceId: String? = null,
+        sheetTitle: String = "[SheetBot] 스마트폰 문자(SMS) 송수신 대장"
+    ): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("direction", direction)
+            put("phoneNumber", phoneNumber)
+            put("contactName", contactName ?: "")
+            put("message", message)
+            put("deviceId", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL} (SheetBot Agent)")
+            put("sheetTitle", sheetTitle)
+        }
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/messages/sms"
+            try {
+                val request = Request.Builder().url(endpoint).post(body).build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    Log.i(TAG, "✅ [문자($direction) 시트 동기화 성공] 상대방: $phoneNumber, 호스트: $host")
+                    return@withContext true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "문자($direction) 시트 동기화 예외 ($host): ${e.message}")
+            }
+        }
+        false
+    }
+
+    /**
+     * 카카오톡 수신 메시지 구글 시트 실시간 자동 기록
+     */
+    suspend fun sendKakaoSync(
+        userEmail: String,
+        chatRoomName: String,
+        sender: String,
+        isGroupChat: Boolean,
+        message: String,
+        deviceId: String? = null,
+        sheetTitle: String = "[SheetBot] 카카오톡 메시지 대장"
+    ): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("chatRoomName", chatRoomName)
+            put("sender", sender)
+            put("isGroupChat", isGroupChat)
+            put("message", message)
+            put("deviceId", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL} (SheetBot Agent)")
+            put("sheetTitle", sheetTitle)
+        }
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/messages/kakao"
+            try {
+                val request = Request.Builder().url(endpoint).post(body).build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    Log.i(TAG, "✅ [카카오톡 시트 동기화 성공] 방: $chatRoomName / 발신자: $sender, 호스트: $host")
+                    return@withContext true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "카카오톡 시트 동기화 예외 ($host): ${e.message}")
+            }
+        }
+        false
+    }
 }
 
 data class PairResult(

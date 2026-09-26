@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 3,
-      latestVersionName: "1.2.0",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v1.2.0/SheetBotAgent.apk",
+      latestVersionCode: 4,
+      latestVersionName: "1.3.0",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v1.3.0/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 에이전트 v1.2.0 업데이트\n• 📁 스마트폰 사진 & 문서 구글 드라이브 보관함 자동 업로드\n• ⚡ 갤러리/파일 탐색기 [공유] ➡️ [SheetBot Agent] 1초 원클릭 업로드 지원\n• 📷/📁 앱 내 사진 & 파일 직접 선택 업로드 버튼 지원\n• 📁 구글 드라이브 [SheetBot] 폴더 자동 생성\n• 📊 [SheetBot] 파일 업로드 대장 시트 실시간 자동 기록\n• 🎙️ 통화 녹음 파일 구글 드라이브 백업 기능 안정화",
+      releaseNotes: "시트봇 에이전트 v1.3.0 업데이트\n• 💬 문자(SMS/LMS) 송수신 구글 시트 실시간 자동 기록\n• 📤 기본 문자 앱 직접 발신 문자 실시간 감지 (SmsSentObserver)\n• 👤 스마트폰 주소록(연락처) 이름 자동 매칭 (ContactHelper)\n• 🟡 카카오톡 1:1 및 단체 단톡방 수신 메시지 구글 시트 실시간 자동 기록\n• 🎯 사생활 보호를 위한 특정 번호/채팅방 선별 필터링 지원\n• 📁 [SheetBot] 표준 네이밍 구글 시트 대장 자동 생성",
     },
     {
       headers: {

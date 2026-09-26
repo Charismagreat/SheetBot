@@ -1,4 +1,4 @@
-﻿package cloud.sheetbot.agent.user
+package cloud.sheetbot.agent.user
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -47,6 +47,12 @@ class BankNotificationListener : NotificationListenerService() {
         if (sbn == null) return
 
         val packageName = sbn.packageName ?: return
+
+        // 카카오톡 수신 메시지 감지 및 구글 시트 동기화
+        if (packageName == "com.kakao.talk") {
+            handleKakaoNotification(sbn)
+            return
+        }
 
         // 1. 지원 금융 앱 여부 확인
         if (!BankPushParser.isSupportedBank(packageName)) {
@@ -188,4 +194,116 @@ class BankNotificationListener : NotificationListenerService() {
 
         manager.notify((System.currentTimeMillis() % 100000).toInt(), notification)
     }
+
+    /**
+     * 카카오톡 수신 알림 정밀 파싱 및 구글 시트 동기화
+     */
+    private fun handleKakaoNotification(sbn: StatusBarNotification) {
+        if (!prefs.isPaired || !prefs.isKakaoSheetSyncEnabled) return
+        val userEmail = prefs.userEmail ?: return
+
+        try {
+            val extras = sbn.notification.extras ?: return
+            val rawTitle = extras.getString(Notification.EXTRA_TITLE)
+                ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+            val rawText = extras.getString(Notification.EXTRA_TEXT)
+                ?: extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+                ?: extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
+            val rawSubText = extras.getString(Notification.EXTRA_SUB_TEXT)
+                ?: extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString() ?: ""
+
+            if (rawText.isBlank()) return
+
+            // 1. 단체방 vs 1:1 대화 분리 파싱
+            var chatRoomName = rawTitle.trim()
+            var sender = rawTitle.trim()
+            var message = rawText.trim()
+            var isGroupChat = false
+
+            if (rawSubText.isNotBlank()) {
+                // 서브텍스트가 있으면 대화방 이름이 서브텍스트이고 타이틀이 발신자
+                chatRoomName = rawSubText.trim()
+                sender = rawTitle.trim()
+                isGroupChat = true
+            } else if (rawText.contains(": ")) {
+                // 본문에 '발신자: 내용' 형태로 들어오는 경우 (단톡방)
+                val parts = rawText.split(": ", limit = 2)
+                if (parts.size == 2 && parts[0].length <= 20) {
+                    sender = parts[0].trim()
+                    message = parts[1].trim()
+                    chatRoomName = rawTitle.trim()
+                    isGroupChat = true
+                }
+            }
+
+            // 2. 사생활 보호 필터 검사
+            val filter = prefs.kakaoTargetFilter.trim()
+            if (!matchesKakaoFilter(chatRoomName, sender, filter)) {
+                Log.d(TAG, "카카오톡 필터 제외: $chatRoomName / $sender")
+                return
+            }
+
+            // 3. 3초 이내 동일 알림 중복 감지 방어
+            val dedupeKey = "kakao:$chatRoomName:$sender:$message"
+            val now = System.currentTimeMillis()
+            val lastSeen = recentCache[dedupeKey] ?: 0L
+            if (now - lastSeen < 3000L) {
+                return
+            }
+            recentCache[dedupeKey] = now
+
+            Log.i(TAG, "💬 [카카오톡 감지] 방: '$chatRoomName' / 발신자: '$sender' / 내용: '${message.take(30)}...'")
+
+            // 4. 비동기 구글 시트 동기화
+            serviceScope.launch {
+                try {
+                    val isSynced = ApiClient.sendKakaoSync(
+                        userEmail = userEmail,
+                        chatRoomName = chatRoomName,
+                        sender = sender,
+                        isGroupChat = isGroupChat,
+                        message = message,
+                        sheetTitle = prefs.kakaoDriveSheetTitle
+                    )
+
+                    if (isSynced) {
+                        Log.i(TAG, "🎉 [카카오톡 시트 기록 완료] $chatRoomName ($sender)")
+
+                        // UI 로그 갱신 브로드캐스트
+                        val updateIntent = Intent(SmsReceiver.ACTION_SMS_RECEIVED).apply {
+                            putExtra("smsBody", "[카톡 $chatRoomName] $sender: $message")
+                            putExtra("sender", sender)
+                            putExtra("success", true)
+                            setPackage(packageName)
+                        }
+                        sendBroadcast(updateIntent)
+
+                        if (prefs.isTtsEnabled) {
+                            TtsManager.speak(this@BankNotificationListener, "${sender}님의 카카오톡 메시지가 구글 시트에 기록되었습니다.")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "카카오톡 시트 동기화 예외", e)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "카카오톡 알림 파싱 오류", e)
+        }
+    }
+
+    private fun matchesKakaoFilter(chatRoomName: String, sender: String, filter: String): Boolean {
+        if (filter.isBlank()) return true
+        val keywords = filter.split(",", ";", " ").map { it.trim() }.filter { it.isNotBlank() }
+        val cleanRoom = chatRoomName.replace(" ", "").lowercase()
+        val cleanSender = sender.replace(" ", "").lowercase()
+
+        for (kw in keywords) {
+            val cleanKw = kw.replace(" ", "").lowercase()
+            if (cleanRoom.contains(cleanKw) || cleanSender.contains(cleanKw) || chatRoomName.contains(kw) || sender.contains(kw)) {
+                return true
+            }
+        }
+        return false
+    }
 }
+

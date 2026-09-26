@@ -39,7 +39,7 @@
                 android:background="@drawable/bg_badge_version"
                 android:paddingHorizontal="10dp"
                 android:paddingVertical="4dp"
-                android:text="v1.2"
+                android:text="v1.3"
                 android:textColor="#10B981"
                 android:textSize="12sp"
                 android:textStyle="bold" />
@@ -548,6 +548,186 @@
                     android:textColor="#64748B"
                     android:textSize="10.5sp"
                     android:lineSpacingExtra="2dp" />
+            </LinearLayout>
+
+            <!-- 스마트폰 문자(SMS/LMS) 송수신 구글 시트 자동 기록 섹션 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="💬 문자(SMS) 송수신 시트 자동 기록"
+                    android:textColor="#E2E8F0"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchSmsSync"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutSmsSyncSettings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0F172A"
+                android:padding="10dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🎯 기록 대상 번호/이름 (쉼표 구분, 빈칸은 전체):"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etSmsTargetFilter"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:background="#1E293B"
+                    android:paddingHorizontal="10dp"
+                    android:hint="예: 010-7523-5071, 홍길동, 거래처"
+                    android:textColorHint="#64748B"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📊 구글 스프레드시트 대장명:"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etSmsDriveSheet"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:background="#1E293B"
+                    android:paddingHorizontal="10dp"
+                    android:hint="[SheetBot] 스마트폰 문자(SMS) 송수신 대장"
+                    android:textColorHint="#64748B"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp"
+                    android:layout_marginBottom="8dp" />
+
+                <Button
+                    android:id="@+id/btnSaveSmsSettings"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:backgroundTint="#334155"
+                    android:text="💾 문자 시트 동기화 설정 저장"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp" />
+            </LinearLayout>
+
+            <!-- 카카오톡 수신 메시지 구글 시트 자동 기록 섹션 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="🟡 카카오톡 메시지 시트 자동 기록"
+                    android:textColor="#FEE500"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchKakaoSync"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutKakaoSyncSettings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0F172A"
+                android:padding="10dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🎯 기록 대상 채팅방/발신자 (쉼표 구분, 빈칸은 전체):"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etKakaoTargetFilter"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:background="#1E293B"
+                    android:paddingHorizontal="10dp"
+                    android:hint="예: [주문방], 거래처, 고객상담, 홍길동"
+                    android:textColorHint="#64748B"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📊 구글 스프레드시트 대장명:"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etKakaoDriveSheet"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:background="#1E293B"
+                    android:paddingHorizontal="10dp"
+                    android:hint="[SheetBot] 카카오톡 메시지 대장"
+                    android:textColorHint="#64748B"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp"
+                    android:layout_marginBottom="8dp" />
+
+                <Button
+                    android:id="@+id/btnSaveKakaoSettings"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:backgroundTint="#334155"
+                    android:text="💾 카카오톡 시트 동기화 설정 저장"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp" />
             </LinearLayout>
 
             <Button

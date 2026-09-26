@@ -81,6 +81,48 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_file_upload_sheet_enabled", true)
         set(value) = prefs.edit().putBoolean("is_file_upload_sheet_enabled", value).apply()
 
+    // 스마트폰 문자(SMS/LMS) 송수신 구글 시트 자동 동기화 설정
+    var isSmsSheetSyncEnabled: Boolean
+        get() = prefs.getBoolean("is_sms_sheet_sync_enabled", true)
+        set(value) = prefs.edit().putBoolean("is_sms_sheet_sync_enabled", value).apply()
+
+    var smsTargetFilter: String
+        get() = prefs.getString("sms_target_filter", "") ?: ""
+        set(value) = prefs.edit().putString("sms_target_filter", value).apply()
+
+    var smsDriveSheetTitle: String
+        get() = prefs.getString("sms_drive_sheet_title", "[SheetBot] 스마트폰 문자(SMS) 송수신 대장") ?: "[SheetBot] 스마트폰 문자(SMS) 송수신 대장"
+        set(value) = prefs.edit().putString("sms_drive_sheet_title", value).apply()
+
+    // 카카오톡 수신 메시지 구글 시트 자동 동기화 설정
+    var isKakaoSheetSyncEnabled: Boolean
+        get() = prefs.getBoolean("is_kakao_sheet_sync_enabled", true)
+        set(value) = prefs.edit().putBoolean("is_kakao_sheet_sync_enabled", true).apply()
+
+    var kakaoTargetFilter: String
+        get() = prefs.getString("kakao_target_filter", "") ?: ""
+        set(value) = prefs.edit().putString("kakao_target_filter", value).apply()
+
+    var kakaoDriveSheetTitle: String
+        get() = prefs.getString("kakao_drive_sheet_title", "[SheetBot] 카카오톡 메시지 대장") ?: "[SheetBot] 카카오톡 메시지 대장"
+        set(value) = prefs.edit().putString("kakao_drive_sheet_title", value).apply()
+
+    fun isSentSmsSynced(id: Long): Boolean {
+        val synced = prefs.getStringSet("synced_sent_sms_ids", emptySet()) ?: emptySet()
+        return synced.contains(id.toString())
+    }
+
+    fun markSentSmsSynced(id: Long) {
+        val current = (prefs.getStringSet("synced_sent_sms_ids", emptySet()) ?: emptySet()).toMutableSet()
+        current.add(id.toString())
+        if (current.size > 1000) {
+            val trimmed = current.toList().takeLast(1000).toSet()
+            prefs.edit().putStringSet("synced_sent_sms_ids", trimmed).apply()
+        } else {
+            prefs.edit().putStringSet("synced_sent_sms_ids", current).apply()
+        }
+    }
+
     fun isRecordingSynced(fileName: String): Boolean {
         val synced = prefs.getStringSet("synced_recording_files", emptySet()) ?: emptySet()
         return synced.contains(fileName)

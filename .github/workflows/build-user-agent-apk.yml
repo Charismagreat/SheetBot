@@ -78,7 +78,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add android-user-agent/keystore/sheetbot-agent.jks public/downloads/SheetBotAgent.apk public/downloads/SheetBotAgent2.apk
           if ! git diff --staged --quiet; then
-            git commit -m "build(user-agent): bundle release apk v1.2.0"
+            git commit -m "build(user-agent): bundle release apk v1.3.0"
             git push origin main
           fi
 
@@ -86,9 +86,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: user-v1.2.0
-          name: "SheetBot Agent (이용자용) v1.2.0"
-          body: "시트봇 에이전트 (SheetBot Agent 이용자용) v1.2.0 업데이트\n• 📁 스마트폰 사진 & 문서 구글 드라이브 보관함 자동 업로드\n• ⚡ 갤러리/파일 탐색기 [공유] ➡️ [SheetBot Agent] 1초 원클릭 업로드 지원\n• 📷/📁 앱 내 사진 & 파일 직접 선택 업로드 버튼 지원\n• 📁 구글 드라이브 [SheetBot] 폴더 자동 생성\n• 📊 [SheetBot] 파일 업로드 대장 시트 실시간 자동 기록\n• 🎙️ 통화 녹음 구글 드라이브 백업 기능 안정화"
+          tag_name: user-v1.3.0
+          name: "SheetBot Agent (이용자용) v1.3.0"
+          body: "시트봇 에이전트 (SheetBot Agent 이용자용) v1.3.0 업데이트\n• 💬 스마트폰 문자(SMS/LMS) 송수신 구글 시트 실시간 자동 기록\n• 📤 기본 문자 앱 직접 발신 문자 실시간 감지 (SmsSentObserver)\n• 👤 스마트폰 주소록(연락처) 이름 자동 매칭 (ContactHelper)\n• 🟡 카카오톡 1:1 및 단체 단톡방 수신 메시지 구글 시트 실시간 자동 기록\n• 🎯 사생활 보호를 위한 특정 번호/채팅방 선별 필터링 지원\n• 📁 [SheetBot] 표준 네이밍 구글 시트 대장 자동 생성 및 서식 스타일링"
           files: release-apk/SheetBotAgent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
