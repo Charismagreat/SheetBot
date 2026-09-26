@@ -390,7 +390,13 @@ object ApiClient {
     suspend fun fetchPendingReceipts(userEmail: String?): List<PendingReceipt> = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         for (host in hosts) {
-            val endpoint = "$host/api/wallet/agent/pending-receipts"
+            val baseEndpoint = "$host/api/wallet/agent/pending-receipts"
+            val endpoint = if (!userEmail.isNullOrBlank()) {
+                val enc = java.net.URLEncoder.encode(userEmail, "UTF-8")
+                "$baseEndpoint?email=$enc"
+            } else {
+                baseEndpoint
+            }
             try {
                 val request = Request.Builder().url(endpoint).get().build()
                 val response = client.newCall(request).execute()

@@ -1,4 +1,4 @@
-﻿package cloud.sheetbot.agent.user
+package cloud.sheetbot.agent.user
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -208,17 +208,18 @@ class KeepAliveService : Service() {
     private fun startReceiptQueueLoop() {
         receiptQueueJob?.cancel()
         receiptQueueJob = serviceScope.launch {
-            delay(5000L)
+            delay(3000L)
             while (isActive) {
                 try {
                     val count = SmsSenderUtil.processPendingReceipts(this@KeepAliveService)
                     if (count > 0) {
-                        Log.i(TAG, "🎯 [백그라운드 큐 발송] 미발송 영수증 ${count}건 자동 회신 완료")
+                        Log.i(TAG, "🎯 [백그라운드 큐 발송] 미발송 영수증/알림 문자 ${count}건 자동 전송 완료")
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "영수증 대기열 자동 발송 중 오류: ${e.message}")
+                    Log.w(TAG, "영수증/알림 문자 대기열 자동 발송 중 오류: ${e.message}")
                 }
-                delay(3 * 60 * 1000L)
+                // 실시간 반응성을 위해 20초마다 대기열 체크 (기존 3분에서 20초로 단축)
+                delay(20 * 1000L)
             }
         }
     }
@@ -238,10 +239,10 @@ class KeepAliveService : Service() {
         )
 
         val userEmail = prefs.userEmail ?: "미연동 (QR 스캔 필요)"
-        val text = statusText ?: if (prefs.isPaired) "🟢 실시간 입금 감지 중 ($userEmail)" else "⚠️ 미연동 상태: 앱을 열어 QR을 스캔하세요"
+        val text = statusText ?: if (prefs.isPaired) "🟢 24시간 실시간 고객 알림 문자 발송 대기 중 ($userEmail)" else "⚠️ 미연동 상태: 앱을 열어 QR을 스캔하세요"
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("시트봇 에이전트 M (SheetBot Agent M)")
+            .setContentTitle("시트봇 에이전트 (SheetBot Agent)")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
