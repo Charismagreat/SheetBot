@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { apiFetch } from "@/lib/api";
 
 export interface AuthAdminUser {
@@ -17,6 +17,7 @@ export interface AuthAdminContextValue {
   isAdmin: boolean;
   isLoading: boolean;
   refreshAdminStatus: () => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const KNOWN_ADMINS = [
@@ -31,6 +32,7 @@ const AuthAdminContext = createContext<AuthAdminContextValue>({
   isAdmin: false,
   isLoading: true,
   refreshAdminStatus: async () => {},
+  logout: async () => {},
 });
 
 export function AuthAdminProvider({ children }: { children: React.ReactNode }) {
@@ -131,6 +133,37 @@ export function AuthAdminProvider({ children }: { children: React.ReactNode }) {
     }
   }, [session, status, refreshAdminStatus]);
 
+  // 안전 로그아웃 핸들러
+  const logout = useCallback(async () => {
+    setIsLoading(true);
+    setUser(null);
+    setIsAdmin(false);
+
+    try {
+      const { signOutVisitorGoogle } = await import("@/egdesk-visitor-google");
+      await signOutVisitorGoogle().catch(() => {});
+    } catch {}
+
+    try {
+      await signOut({ redirect: false });
+    } catch {}
+
+    try {
+      await apiFetch("/api/auth/force-logout", { method: "POST" });
+    } catch {}
+
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem("sheetbot_user_email");
+        localStorage.removeItem("sheetbot_user_name");
+        localStorage.removeItem("sheetbot_user_image");
+        localStorage.removeItem("egdesk_visitor_session");
+        sessionStorage.clear();
+      } catch {}
+      window.location.href = "/login";
+    }
+  }, []);
+
   const value = useMemo<AuthAdminContextValue>(() => {
     const effectiveEmail = user?.email || (session?.user?.email ? session.user.email.toLowerCase().trim() : "");
     return {
@@ -140,8 +173,9 @@ export function AuthAdminProvider({ children }: { children: React.ReactNode }) {
       isAdmin,
       isLoading: status === "loading" && isLoading,
       refreshAdminStatus,
+      logout,
     };
-  }, [user, session?.user?.email, isAdmin, status, isLoading, refreshAdminStatus]);
+  }, [user, session?.user?.email, isAdmin, status, isLoading, refreshAdminStatus, logout]);
 
   return (
     <AuthAdminContext.Provider value={value}>
