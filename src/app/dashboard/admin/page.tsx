@@ -5,6 +5,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import Navbar from "@/components/Navbar";
+import { useAuthAdmin } from "@/contexts/AuthAdminContext";
 import {
   Users,
   ShieldAlert,
@@ -57,9 +58,11 @@ type TabType = "users" | "inquiries" | "reviews" | "faqs" | "tax_invoices" | "pr
 
 export default function AdminDashboardPage() {
   const { data: session, status } = useSession();
+  const { user, userEmail, isLoggedIn, isAdmin: isContextAdmin, isLoading: isAuthLoading } = useAuthAdmin();
 
-  // ⚡ SWR 관리자 권한 복원: 세션 동안 한 번 인증된 상태면 페이지 이동 시 확인 화면(0초) 건너뛰고 즉시 렌더링
+  // ⚡ SWR 관리자 권한 복원: 상위 Context 및 세션 스토리지에서 즉시 상속 (0초 렌더링)
   const [isAdmin, setIsAdmin] = useState<boolean | null>(() => {
+    if (isContextAdmin) return true;
     if (typeof window !== "undefined") {
       try {
         const saved = sessionStorage.getItem("sb_is_admin");
@@ -168,11 +171,18 @@ export default function AdminDashboardPage() {
   });
   const fetchingTabsRef = useRef<Set<string>>(new Set());
 
-  // ⚡ 세션 로드 시 단일 통합 번들 로더 실행 (KPI 지표 + 초기 회원 목록 동시 수신)
+  // ⚡ 상위 Context의 관리자 상태 즉시 동기화
   useEffect(() => {
-    if (status === "loading") return;
+    if (isContextAdmin) {
+      setIsAdmin(true);
+    }
+  }, [isContextAdmin]);
+
+  // ⚡ 세션 또는 상위 Context 로드 시 단일 통합 번들 로더 실행 (0ms 즉시 실행)
+  useEffect(() => {
+    if (isAuthLoading && status === "loading") return;
     void fetchAdminBootstrap();
-  }, [status, session?.user?.email]);
+  }, [isAuthLoading, isContextAdmin, userEmail, status, session?.user?.email]);
 
   // URL ?tab=... 쿼리 파라미터 및 시트봇 AI 탭 전환 커스텀 이벤트 연동
   useEffect(() => {
@@ -221,14 +231,14 @@ export default function AdminDashboardPage() {
 
   // ⚡ 단일 통합 번들 로더: 관리자 인증, KPI 12대 지표, 기본 탭(회원 목록)을 단 1회의 HTTP 왕복으로 병합 수신
   const fetchAdminBootstrap = async (forceRefresh = false) => {
-    const email = (session?.user?.email || "").toLowerCase().trim();
+    const email = userEmail || (session?.user?.email || "").toLowerCase().trim();
     const KNOWN_ADMINS = [
       "charismagreat@gmail.com",
       "chachogreat@gmail.com",
     ];
 
     // 비관리자 접근 사전 차단
-    if (status === "authenticated" && email && !KNOWN_ADMINS.includes(email)) {
+    if (!isAuthLoading && !isContextAdmin && email && !KNOWN_ADMINS.includes(email)) {
       const cachedAdmin = typeof window !== "undefined" && sessionStorage.getItem("sb_is_admin") === "true";
       if (!cachedAdmin) {
         setIsAdmin(false);
@@ -241,7 +251,10 @@ export default function AdminDashboardPage() {
       const queryParam = forceRefresh ? "?refresh=true" : "";
       const headers: Record<string, string> = email ? { "x-sheetbot-user-email": email } : {};
 
-      const res = await apiFetch(`/api/admin/bootstrap${queryParam}`, { headers });
+      const res = await apiFetch(`/api/admin/bootstrap${queryParam}`, {
+        headers,
+        credentials: "include",
+      });
       const data = await res.json();
 
       if (data.success && data.isAdmin) {
