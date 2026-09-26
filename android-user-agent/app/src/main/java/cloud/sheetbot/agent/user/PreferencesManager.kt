@@ -107,6 +107,30 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("kakao_drive_sheet_title", "[SheetBot] 카카오톡 메시지 대장") ?: "[SheetBot] 카카오톡 메시지 대장"
         set(value) = prefs.edit().putString("kakao_drive_sheet_title", value).apply()
 
+    // 부재중 전화(Missed Call) 감지 시 0원 스마트 안내 문자 자동 회신 설정
+    var isMissedCallAutoReplyEnabled: Boolean
+        get() = prefs.getBoolean("is_missed_call_auto_reply_enabled", true)
+        set(value) = prefs.edit().putBoolean("is_missed_call_auto_reply_enabled", value).apply()
+
+    var missedCallReplyTemplate: String
+        get() = prefs.getString("missed_call_reply_template", "안녕하세요, 시트봇입니다. 현재 통화가 어려워 확인 후 곧 연락드리겠습니다. 문의사항을 문자로 남겨주시면 빠르게 안내드리겠습니다.")
+            ?: "안녕하세요, 시트봇입니다. 현재 통화가 어려워 확인 후 곧 연락드리겠습니다. 문의사항을 문자로 남겨주시면 빠르게 안내드리겠습니다."
+        set(value) = prefs.edit().putString("missed_call_reply_template", value).apply()
+
+    var missedCallDriveSheetTitle: String
+        get() = prefs.getString("missed_call_drive_sheet_title", "[SheetBot] 부재중 전화 대장") ?: "[SheetBot] 부재중 전화 대장"
+        set(value) = prefs.edit().putString("missed_call_drive_sheet_title", value).apply()
+
+    // 통화 종료 직후 모바일 명함 / 감사 문자 원터치 발송 설정
+    var isCallEndedCardPromptEnabled: Boolean
+        get() = prefs.getBoolean("is_call_ended_card_prompt_enabled", true)
+        set(value) = prefs.edit().putBoolean("is_call_ended_card_prompt_enabled", value).apply()
+
+    var businessCardSmsTemplate: String
+        get() = prefs.getString("business_card_sms_template", "[SheetBot] 안녕하세요. 조금 전 통화드린 담당자 명함입니다.\n• 서비스: 시트봇 클라우드 (https://sheetbot.cloud)\n감사합니다.")
+            ?: "[SheetBot] 안녕하세요. 조금 전 통화드린 담당자 명함입니다.\n• 서비스: 시트봇 클라우드 (https://sheetbot.cloud)\n감사합니다."
+        set(value) = prefs.edit().putString("business_card_sms_template", value).apply()
+
     fun isSentSmsSynced(id: Long): Boolean {
         val synced = prefs.getStringSet("synced_sent_sms_ids", emptySet()) ?: emptySet()
         return synced.contains(id.toString())

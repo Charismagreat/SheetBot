@@ -400,6 +400,51 @@ class MainActivity : AppCompatActivity() {
             addLogItem("카톡설정", "시트: $sheetTitle / 대상: ${filter.ifBlank { "전체" }}", true)
         }
 
+        // 부재중 전화(Missed Call) 0원 스마트 자동 회신 UI 바인딩
+        binding.switchMissedCall.isChecked = prefs.isMissedCallAutoReplyEnabled
+        binding.layoutMissedCallSettings.visibility = if (prefs.isMissedCallAutoReplyEnabled) View.VISIBLE else View.GONE
+        binding.etMissedCallReply.setText(prefs.missedCallReplyTemplate)
+        binding.etMissedCallSheet.setText(prefs.missedCallDriveSheetTitle)
+
+        binding.switchMissedCall.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isMissedCallAutoReplyEnabled = isChecked
+            binding.layoutMissedCallSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
+            val msg = if (isChecked) "부재중 전화 자동 회신이 켜졌습니다." else "부재중 전화 자동 회신이 꺼졌습니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnSaveMissedCallSettings.setOnClickListener {
+            val replyMsg = binding.etMissedCallReply.text.toString().trim()
+            val sheetTitle = binding.etMissedCallSheet.text.toString().trim().takeIf { it.isNotBlank() }
+                ?: "[SheetBot] 부재중 전화 대장"
+
+            prefs.missedCallReplyTemplate = replyMsg
+            prefs.missedCallDriveSheetTitle = sheetTitle
+
+            Toast.makeText(this, "💾 부재중 전화 자동 회신 설정이 저장되었습니다.\n대장 시트: $sheetTitle", Toast.LENGTH_SHORT).show()
+            addLogItem("부재중설정", "대장: $sheetTitle / 회신: ${if (replyMsg.isNotBlank()) "설정완료" else "없음"}", true)
+        }
+
+        // 통화 종료 직후 모바일 명함 원터치 발송 UI 바인딩
+        binding.switchCallEndedCard.isChecked = prefs.isCallEndedCardPromptEnabled
+        binding.layoutCallEndedCardSettings.visibility = if (prefs.isCallEndedCardPromptEnabled) View.VISIBLE else View.GONE
+        binding.etBusinessCardSms.setText(prefs.businessCardSmsTemplate)
+
+        binding.switchCallEndedCard.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isCallEndedCardPromptEnabled = isChecked
+            binding.layoutCallEndedCardSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
+            val msg = if (isChecked) "통화 종료 모바일 명함 발송 기능이 켜졌습니다." else "모바일 명함 발송 기능이 꺼졌습니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnSaveBusinessCardSettings.setOnClickListener {
+            val cardMsg = binding.etBusinessCardSms.text.toString().trim()
+            prefs.businessCardSmsTemplate = cardMsg
+
+            Toast.makeText(this, "💾 모바일 명함 내용이 저장되었습니다.", Toast.LENGTH_SHORT).show()
+            addLogItem("명함설정", "모바일 명함 템플릿 저장 완료", true)
+        }
+
         binding.btnCheckUpdate.setOnClickListener {
             UpdateManager.checkForUpdates(this, showToastIfLatest = true)
         }

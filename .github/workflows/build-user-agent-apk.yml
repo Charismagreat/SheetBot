@@ -78,7 +78,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add android-user-agent/keystore/sheetbot-agent.jks public/downloads/SheetBotAgent.apk public/downloads/SheetBotAgent2.apk
           if ! git diff --staged --quiet; then
-            git commit -m "build(user-agent): bundle release apk v1.3.0"
+            git commit -m "build(user-agent): bundle release apk v1.4.0"
             git push origin main
           fi
 
@@ -86,9 +86,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: user-v1.3.0
-          name: "SheetBot Agent (이용자용) v1.3.0"
-          body: "시트봇 에이전트 (SheetBot Agent 이용자용) v1.3.0 업데이트\n• 💬 스마트폰 문자(SMS/LMS) 송수신 구글 시트 실시간 자동 기록\n• 📤 기본 문자 앱 직접 발신 문자 실시간 감지 (SmsSentObserver)\n• 👤 스마트폰 주소록(연락처) 이름 자동 매칭 (ContactHelper)\n• 🟡 카카오톡 1:1 및 단체 단톡방 수신 메시지 구글 시트 실시간 자동 기록\n• 🎯 사생활 보호를 위한 특정 번호/채팅방 선별 필터링 지원\n• 📁 [SheetBot] 표준 네이밍 구글 시트 대장 자동 생성 및 서식 스타일링"
+          tag_name: user-v1.4.0
+          name: "SheetBot Agent (이용자용) v1.4.0"
+          body: "시트봇 에이전트 (SheetBot Agent 이용자용) v1.4.0 업데이트\n• 🎙️ 통화 녹음 AI 자동 전사(STT) & 3줄 핵심 요약 & Action Items 자동 추출\n• 📞 부재중 전화(Missed Call) 감지 시 0원 스마트 안내 문자 자동 회신\n• 📊 [SheetBot] 부재중 전화 대장 구글 시트 실시간 자동 기록\n• 💼 통화 종료 직후 모바일 명함 / 회사 소개 문자 원터치 발송 지원\n• 💬 문자(SMS/LMS) 송수신 및 카카오톡 대화 구글 시트 실시간 자동 기록 안정화"
           files: release-apk/SheetBotAgent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

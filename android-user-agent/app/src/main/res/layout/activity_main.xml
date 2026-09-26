@@ -39,7 +39,7 @@
                 android:background="@drawable/bg_badge_version"
                 android:paddingHorizontal="10dp"
                 android:paddingVertical="4dp"
-                android:text="v1.3"
+                android:text="v1.4"
                 android:textColor="#10B981"
                 android:textSize="12sp"
                 android:textStyle="bold" />
@@ -726,6 +726,164 @@
                     android:layout_height="36dp"
                     android:backgroundTint="#334155"
                     android:text="💾 카카오톡 시트 동기화 설정 저장"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp" />
+            </LinearLayout>
+
+            <!-- 부재중 전화(Missed Call) 0원 스마트 자동 회신 섹션 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="📞 부재중 전화 0원 스마트 자동 회신"
+                    android:textColor="#F97316"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchMissedCall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutMissedCallSettings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0F172A"
+                android:padding="10dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📝 부재중 전화 자동 회신 안내 문자:"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etMissedCallReply"
+                    android:layout_width="match_parent"
+                    android:layout_height="60dp"
+                    android:background="#1E293B"
+                    android:padding="8dp"
+                    android:gravity="top|start"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📊 구글 스프레드시트 대장명:"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etMissedCallSheet"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:background="#1E293B"
+                    android:paddingHorizontal="10dp"
+                    android:hint="[SheetBot] 부재중 전화 대장"
+                    android:textColorHint="#64748B"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp"
+                    android:layout_marginBottom="8dp" />
+
+                <Button
+                    android:id="@+id/btnSaveMissedCallSettings"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:backgroundTint="#334155"
+                    android:text="💾 부재중 자동 회신 설정 저장"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp" />
+            </LinearLayout>
+
+            <!-- 통화 종료 직후 모바일 명함 원터치 발송 섹션 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="💼 통화 종료 직후 모바일 명함 발송"
+                    android:textColor="#38BDF8"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchCallEndedCard"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutCallEndedCardSettings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0F172A"
+                android:padding="10dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🪪 모바일 명함 / 회사 소개 문자 내용:"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etBusinessCardSms"
+                    android:layout_width="match_parent"
+                    android:layout_height="65dp"
+                    android:background="#1E293B"
+                    android:padding="8dp"
+                    android:gravity="top|start"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="8dp" />
+
+                <Button
+                    android:id="@+id/btnSaveBusinessCardSettings"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:backgroundTint="#334155"
+                    android:text="💾 모바일 명함 내용 저장"
                     android:textColor="#FFFFFF"
                     android:textSize="11.5sp" />
             </LinearLayout>

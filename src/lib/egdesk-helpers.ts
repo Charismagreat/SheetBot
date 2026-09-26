@@ -6,6 +6,12 @@ export interface AiCallerOptions {
   model?: string;
   temperature?: number;
   systemPrompt?: string;
+  files?: Array<{
+    name: string;
+    content: string;
+    encoding?: string;
+    mimeType?: string;
+  }>;
 }
 
 export interface AiCallerResponse {
@@ -46,6 +52,7 @@ export async function callAiCaller(
     ...(options.model ? { model: options.model } : {}),
     ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
     ...(options.systemPrompt ? { systemPrompt: options.systemPrompt } : {}),
+    ...(options.files && options.files.length > 0 ? { files: options.files } : {}),
   };
 
   const response = await fetch(`${apiUrl}/ai-caller/tools/call`, {

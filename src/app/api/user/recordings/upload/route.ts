@@ -5,6 +5,7 @@ import { getCurrentUserEmail } from "@/lib/auth";
 import {
   callDriveTool,
   callSheetsTool,
+  callAiCaller,
   listDriveFiles,
   createDriveFolder,
   uploadDriveFile,
@@ -150,13 +151,13 @@ export async function POST(req: NextRequest) {
               await moveDriveFile(targetSpreadsheetId, targetFolderId, true).catch(() => {});
             }
 
-            // 초기 헤더 서식 기입
+            // 초기 헤더 서식 기입 (AI 분석 컬럼 포함 8대 표준 열)
             const headers = [
-              ["통화일시", "상대방 (이름/번호)", "파일명", "파일크기", "구글 드라이브 바로듣기 링크", "등록일시"]
+              ["통화일시", "상대방 (이름/번호)", "파일명", "파일크기", "AI 3줄 핵심 요약", "후속 할 일 (Action Items)", "전체 텍스트 전사(STT)", "구글 드라이브 바로듣기 링크"]
             ];
             await callSheetsTool("sheets_update_range", {
               spreadsheetId: targetSpreadsheetId,
-              range: "A1:F1",
+              range: "A1:H1",
               values: headers,
               preferOAuth: true,
             }).catch(() => {});
@@ -174,16 +175,33 @@ export async function POST(req: NextRequest) {
 
         // 6-3. 시트에 신규 통화 기록 행 추가
         if (targetSpreadsheetId) {
-          const nowStr = new Date().toISOString().replace("T", " ").slice(0, 19);
-          const newRowValues = [
-            [callTime, contactName, targetFileName, fileSizeMb, webViewLink, nowStr]
+          const initialRowValues = [
+            [callTime, contactName, targetFileName, fileSizeMb, "⏳ AI 분석 준비 중...", "⏳ AI 분석 준비 중...", "⏳ 음성 전사 준비 중...", webViewLink]
           ];
-          await callSheetsTool("sheets_append_values", {
+          const appendRes = await callSheetsTool("sheets_append_values", {
             spreadsheetId: targetSpreadsheetId,
-            range: "A:F",
-            values: newRowValues,
+            range: "A:H",
+            values: initialRowValues,
             preferOAuth: true,
-          }).catch((err: any) => console.warn("[RecordingsUpload] append_values warning:", err.message));
+          }).catch((err: any) => {
+            console.warn("[RecordingsUpload] append_values warning:", err.message);
+            return null;
+          });
+
+          // 6-4. 비동기 백그라운드 AI 음성 전사(STT) 및 3줄 요약 실행
+          const base64Audio = buffer.toString("base64");
+          const targetSpreadsheetIdCopy = targetSpreadsheetId;
+          const updatedRange = appendRes?.updates?.updatedRange || "";
+          const targetRowIndexMatch = updatedRange.match(/A(\d+)/);
+          const targetRowIndex = targetRowIndexMatch ? parseInt(targetRowIndexMatch[1], 10) : null;
+
+          triggerAiAudioAnalysis(
+            base64Audio,
+            targetFileName,
+            targetSpreadsheetIdCopy,
+            targetRowIndex,
+            cleanEmail
+          ).catch((e) => console.warn("[RecordingsUpload] AI analysis background error:", e.message));
         }
       } catch (sheetErr: any) {
         console.warn("[RecordingsUpload] Sheet auto-record warning:", sheetErr.message);
@@ -227,5 +245,74 @@ export async function POST(req: NextRequest) {
         fs.unlinkSync(tempFilePath);
       } catch {}
     }
+  }
+}
+
+/**
+ * 백그라운드 AI 음성 전사(STT) 및 핵심 3줄 요약 & Action Items 파이프라인
+ */
+async function triggerAiAudioAnalysis(
+  base64Audio: string,
+  fileName: string,
+  spreadsheetId: string,
+  rowIndex: number | null,
+  userEmail: string
+) {
+  try {
+    const prompt = `당신은 비즈니스 통화 녹음 분석 전문 AI입니다.
+첨부된 통화 녹음 파일("${fileName}")의 음성을 정밀하게 분석하여 다음 JSON 포맷으로만 답변하세요. 마크다운 따옴표나 기타 텍스트 없이 순수 JSON만 반환하세요:
+{
+  "summary": "1. [고객 주요 문의 내용]\\n2. [협의 및 결정 사항]\\n3. [기타 중요 사항]",
+  "actionItems": "• [후속 조치 1]\\n• [후속 조치 2]",
+  "transcript": "[전체 통화 대화 내용 전사]"
+}`;
+
+    const aiRes = await callAiCaller(prompt, {
+      model: "gemini-3.8-flash",
+      temperature: 0.1,
+      files: [
+        {
+          name: fileName,
+          content: base64Audio,
+          encoding: "base64",
+          mimeType: "audio/mp4",
+        },
+      ],
+    });
+
+    let rawText = (aiRes.text || aiRes.content || "").trim();
+    if (rawText.startsWith("```json")) {
+      rawText = rawText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+    } else if (rawText.startsWith("```")) {
+      rawText = rawText.replace(/^```\s*/, "").replace(/\s*```$/, "");
+    }
+
+    let summary = "1. 통화 확인 완료\n2. 후속 조치 요망\n3. 상세 내용 녹음 참조";
+    let actionItems = "• 담당자 확인 필요";
+    let transcript = "음성 분석 완료";
+
+    try {
+      const parsed = JSON.parse(rawText);
+      if (parsed.summary) summary = parsed.summary;
+      if (parsed.actionItems) actionItems = parsed.actionItems;
+      if (parsed.transcript) transcript = parsed.transcript;
+    } catch {
+      if (rawText.length > 0) {
+        summary = rawText.slice(0, 300);
+        transcript = rawText;
+      }
+    }
+
+    // 구글 시트 행 업데이트 (E열: 3줄 요약, F열: Action Items, G열: 전사 텍스트)
+    if (spreadsheetId && rowIndex && rowIndex > 1) {
+      await callSheetsTool("sheets_update_range", {
+        spreadsheetId,
+        range: `E${rowIndex}:G${rowIndex}`,
+        values: [[summary, actionItems, transcript]],
+        preferOAuth: true,
+      }).catch((e: any) => console.warn("[AiAudioAnalysis] Sheet update warning:", e.message));
+    }
+  } catch (err: any) {
+    console.warn("[AiAudioAnalysis] Background audio analysis failed:", err.message);
   }
 }
