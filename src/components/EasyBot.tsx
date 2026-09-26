@@ -789,8 +789,11 @@ export default function EasyBot() {
     }
   }, [isContextAdmin]);
 
-  // 🌟 [능동형 AI 수석 비서] 관리자 실시간 DB 왓처 (onUserDataChanged 이벤트 발생 시에만 동작)
+  // 🌟 [능동형 AI 수석 비서] 관리자 실시간 DB 왓처 (대화창이 열려 있을 때만 활성화하여 초기 소켓 및 pending 100% 보존)
   useEffect(() => {
+    // 🛡️ 이지봇 창이 닫혀 있으면 추가 SSE 연결 및 4개 쿼리를 일체 실행하지 않음 (초기 대시보드 소켓 100% 보존)
+    if (!isOpen) return;
+
     const isEffectiveAdmin = isContextAdmin || isAdminUser;
     if (!isEffectiveAdmin) return;
 
@@ -802,7 +805,8 @@ export default function EasyBot() {
     ];
 
     const unsubWatcher = onUserDataChanged((event) => {
-      if (!event.tableName || TARGET_TABLES.includes(event.tableName)) {
+      // 초기 연결 핸드셰이크 등 빈 테이블 이벤트는 무시하고 실제 대상 테이블 변경 시에만 반응
+      if (event.tableName && TARGET_TABLES.includes(event.tableName)) {
         checkAdminEventsDirectly();
       }
     });
@@ -810,7 +814,7 @@ export default function EasyBot() {
     return () => {
       unsubWatcher();
     };
-  }, [isContextAdmin, isAdminUser, checkAdminEventsDirectly]);
+  }, [isOpen, isContextAdmin, isAdminUser, checkAdminEventsDirectly]);
 
   useEffect(() => {
     if (isOpen) {
