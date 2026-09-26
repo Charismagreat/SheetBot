@@ -578,6 +578,56 @@ object ApiClient {
     }
 
     /**
+     * 웹 링크 및 유튜브 영상 구글 시트 자동 스크랩 및 AI 요약
+     */
+    suspend fun bookmarkLink(
+        userEmail: String,
+        url: String,
+        rawText: String? = null,
+        memo: String = "스마트폰 공유하기(Share) 스크랩",
+        deviceId: String? = null
+    ): BookmarkResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("url", url)
+            put("rawText", rawText ?: "")
+            put("memo", memo)
+            put("deviceId", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL} (SheetBot Agent)")
+        }
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/links/bookmark"
+            try {
+                val request = Request.Builder().url(endpoint).post(body).build()
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    Log.i(TAG, "🎉 [링크 스크랩 성공] $url (${resJson.optString("title")})")
+                    return@withContext BookmarkResult(
+                        success = true,
+                        category = resJson.optString("category", "🌐 웹사이트"),
+                        title = resJson.optString("title", url),
+                        url = resJson.optString("url", url),
+                        siteName = resJson.optString("siteName"),
+                        aiSummary = resJson.optString("aiSummary"),
+                        spreadsheetUrl = resJson.optString("spreadsheetUrl").takeIf { it.isNotBlank() },
+                        message = resJson.optString("message", "스크랩 완료")
+                    )
+                } else {
+                    val msg = resJson.optString("error", "HTTP ${response.code}")
+                    Log.w(TAG, "링크 스크랩 실패 ($host): $msg")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "링크 스크랩 통신 예외 ($host): ${e.message}")
+            }
+        }
+        BookmarkResult(success = false, error = "링크 스크랩 처리에 실패했습니다.")
+    }
+
+    /**
      * 문자(SMS/LMS) 송수신 내역 구글 시트 실시간 자동 기록
      */
     suspend fun sendSmsSync(
@@ -765,5 +815,17 @@ data class UploadGenericFileResult(
     val error: String? = null,
     val ocrType: String? = null,
     val ocrData: JSONObject? = null
+)
+
+data class BookmarkResult(
+    val success: Boolean,
+    val category: String = "🌐 웹사이트",
+    val title: String? = null,
+    val url: String? = null,
+    val siteName: String? = null,
+    val aiSummary: String? = null,
+    val spreadsheetUrl: String? = null,
+    val message: String? = null,
+    val error: String? = null
 )
 

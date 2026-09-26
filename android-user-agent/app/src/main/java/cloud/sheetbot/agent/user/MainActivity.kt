@@ -840,6 +840,20 @@ class MainActivity : AppCompatActivity() {
 
             if (uri != null) {
                 uploadFiles(listOf(uri), "스마트폰 공유하기(Share) 1초 연동")
+            } else {
+                // 웹 브라우저나 유튜브 앱에서 [공유하기]로 전달된 텍스트 및 URL 처리 (v1.6)
+                val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
+                    ?: intent.clipData?.getItemAt(0)?.text?.toString()
+                if (!sharedText.isNullOrBlank()) {
+                    val urlRegex = Regex("https?://[a-zA-Z0-9.-]+(?:/[^\\s]*)?")
+                    val match = urlRegex.find(sharedText)
+                    if (match != null) {
+                        val extractedUrl = match.value
+                        bookmarkSharedUrl(extractedUrl, sharedText)
+                    } else {
+                        Toast.makeText(this, "공유된 텍스트에서 링크(URL)를 찾을 수 없습니다.", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         } else if (Intent.ACTION_SEND_MULTIPLE == action) {
             val uris = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -972,6 +986,64 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 binding.progressBar.visibility = View.GONE
                 Toast.makeText(this@MainActivity, "명함 처리 예외: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /**
+     * 외부 앱에서 공유된 웹 링크 또는 유튜브 링크를 구글 스프레드시트에 자동 스크랩 및 AI 3줄 요약 기록 (v1.6)
+     */
+    private fun bookmarkSharedUrl(url: String, rawText: String?) {
+        if (!prefs.isPaired) {
+            Toast.makeText(this, "⚠️ 시트봇 계정 연동 후 링크를 스크랩할 수 있습니다.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val userEmail = prefs.userEmail
+        if (userEmail.isNullOrBlank()) {
+            Toast.makeText(this, "⚠️ 연동된 계정 이메일이 없습니다.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val isYouTube = url.contains("youtube.com", ignoreCase = true) || url.contains("youtu.be", ignoreCase = true)
+        val tagMsg = if (isYouTube) "🔴 유튜브 영상" else "🌐 웹 링크"
+
+        binding.progressBar.visibility = View.VISIBLE
+        Toast.makeText(this, "🚀 $tagMsg 정보를 분석하여 구글 시트에 스크랩합니다...", Toast.LENGTH_SHORT).show()
+
+        activityScope.launch {
+            try {
+                val result = ApiClient.bookmarkLink(
+                    userEmail = userEmail,
+                    url = url,
+                    rawText = rawText,
+                    memo = "스마트폰 공유하기(Share) 스크랩"
+                )
+                binding.progressBar.visibility = View.GONE
+
+                if (result.success) {
+                    val title = result.title ?: url
+                    val cat = result.category
+                    Toast.makeText(
+                        this@MainActivity,
+                        "🎉 [$cat] $title\n구글 스프레드시트에 안전하게 스크랩되었습니다!",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                    addLogItem("링크 스크랩", "$cat $title -> 스크랩 대장", true)
+
+                    if (prefs.isTtsEnabled) {
+                        val voiceMsg = if (isYouTube) "유튜브 영상이 스크랩 대장에 기록되었습니다." else "웹사이트 링크가 스크랩 대장에 기록되었습니다."
+                        TtsManager.speak(this@MainActivity, voiceMsg)
+                    }
+                } else {
+                    val err = result.error ?: "스크랩 실패"
+                    Toast.makeText(this@MainActivity, "⚠️ 링크 스크랩 실패: $err", Toast.LENGTH_LONG).show()
+                    addLogItem("스크랩 실패", err, false)
+                }
+            } catch (e: Exception) {
+                binding.progressBar.visibility = View.GONE
+                Toast.makeText(this@MainActivity, "링크 스크랩 예외: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
