@@ -1,9 +1,10 @@
 "use client";
 
 import { apiFetch } from '@/lib/api';
-import React, { useState, useEffect } from "react";
-import { useSession } from "next-auth/react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Navbar from "@/components/Navbar";
+import { useAuthAdmin } from "@/contexts/AuthAdminContext";
+import { onUserDataChanged } from "@/lib/egdesk-helpers";
 import {
   MessageSquare,
   Send,
@@ -16,6 +17,7 @@ import {
   Building,
   Loader2,
   History,
+  Radio,
 } from "lucide-react";
 
 interface Inquiry {
@@ -29,11 +31,23 @@ interface Inquiry {
 }
 
 export default function ContactPage() {
-  const { data: session } = useSession();
+  // ⚡ [인헤릿 최상위 상속] NextAuth 세션 및 사용자 정보 즉시 상속 (중복 로딩 0ms)
+  const { session, userEmail } = useAuthAdmin();
+
+  // ⚡ [SWR 캐시 복원] 브라우저 세션 스토리지에서 이전 문의 내역 즉시 복원 (화면 깜빡임 0ms)
+  const [cachedInquiries] = useState<Inquiry[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem("sb_contact_inquiries");
+        return saved ? JSON.parse(saved) : [];
+      } catch {}
+    }
+    return [];
+  });
 
   const [form, setForm] = useState({
-    name: "",
-    email: "",
+    name: session?.user?.name || "",
+    email: userEmail || "",
     category: "GAS_ERROR",
     title: "",
     content: "",
@@ -43,34 +57,67 @@ export default function ContactPage() {
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const [inquiries, setInquiries] = useState<Inquiry[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [inquiries, setInquiries] = useState<Inquiry[]>(() => cachedInquiries);
+  const [loadingHistory, setLoadingHistory] = useState(() => cachedInquiries.length === 0 && Boolean(userEmail));
+  const [isRealtimeLive, setIsRealtimeLive] = useState(false);
+  const isFetchingRef = useRef<boolean>(false);
 
+  // 상위 인증 컨텍스트 변경 시 폼 기본값 실시간 동기화
   useEffect(() => {
-    if (session?.user) {
+    if (userEmail) {
       setForm((prev) => ({
         ...prev,
-        name: session.user?.name || "",
-        email: session.user?.email || "",
+        name: prev.name || session?.user?.name || "",
+        email: prev.email || userEmail,
       }));
-      fetchMyInquiries();
     }
-  }, [session]);
+  }, [userEmail, session?.user?.name]);
 
-  const fetchMyInquiries = async () => {
+  // ⚡ [문의 대장 단일 조회 헬퍼] 중복 호출 방지 및 SWR 캐시 동기화
+  const fetchMyInquiries = useCallback(async (silent = false) => {
+    if (!userEmail) return;
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
     try {
-      setLoadingHistory(true);
+      if (!silent && inquiries.length === 0) setLoadingHistory(true);
       const res = await apiFetch("/api/inquiries");
       const data = await res.json();
-      if (data.success) {
-        setInquiries(data.inquiries || []);
+      if (data.success && Array.isArray(data.inquiries)) {
+        setInquiries(data.inquiries);
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem("sb_contact_inquiries", JSON.stringify(data.inquiries));
+          } catch {}
+        }
       }
     } catch (err) {
       console.error("문의 내역 조회 오류:", err);
     } finally {
-      setLoadingHistory(false);
+      isFetchingRef.current = false;
+      if (!silent) setLoadingHistory(false);
     }
-  };
+  }, [userEmail, inquiries.length]);
+
+  // ⚡ [부트스트랩 & 0초 실시간 DB 왓처] 마운트 시 1회 조회 및 관리자 답변 즉시 반영
+  useEffect(() => {
+    if (!userEmail) return;
+
+    // 초기 마운트 시 캐시 유무와 무관하게 백그라운드 1회 최신화
+    void fetchMyInquiries(cachedInquiries.length > 0);
+
+    // ⚡ [0초 실시간 감시] sheetbot_inquiries 테이블 변경 이벤트 수신 시 0초 화면 갱신
+    const unsub = onUserDataChanged((event) => {
+      setIsRealtimeLive(true);
+      if (!event.tableName || event.tableName === "sheetbot_inquiries") {
+        void fetchMyInquiries(true);
+      }
+    });
+
+    return () => {
+      unsub();
+    };
+  }, [userEmail, fetchMyInquiries, cachedInquiries.length]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,7 +145,8 @@ export default function ContactPage() {
           title: "",
           content: "",
         }));
-        fetchMyInquiries();
+        // 등록 즉시 내역 갱신
+        await fetchMyInquiries(true);
       } else {
         setSubmitError(data.error || "문의 접수에 실패했습니다.");
       }
@@ -297,14 +345,31 @@ export default function ContactPage() {
         </div>
 
         {/* 내 접수 문의 내역 (로그인 회원인 경우) */}
-        {session?.user && (
+        {userEmail && (
           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2 text-slate-800 font-extrabold text-sm">
+              <div className="flex items-center gap-2.5 text-slate-800 font-extrabold text-sm">
                 <History className="w-4 h-4 text-emerald-600" />
                 <span>내가 접수한 1:1 문의 대장</span>
+                {isRealtimeLive && (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200/60 animate-fade-in">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>0초 실시간</span>
+                  </span>
+                )}
               </div>
-              <span className="text-xs text-slate-400">{inquiries.length}건</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-400">{inquiries.length}건</span>
+                <button
+                  type="button"
+                  onClick={() => fetchMyInquiries(false)}
+                  disabled={loadingHistory}
+                  className="p-1 text-slate-400 hover:text-slate-600 transition-colors rounded-lg hover:bg-slate-100 cursor-pointer disabled:opacity-50"
+                  title="새로고침"
+                >
+                  <Clock className={`w-3.5 h-3.5 ${loadingHistory ? "animate-spin" : ""}`} />
+                </button>
+              </div>
             </div>
 
             {loadingHistory ? (
