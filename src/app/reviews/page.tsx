@@ -28,6 +28,7 @@ import {
 
 interface Review {
   id: string;
+  user_email?: string;
   user_name: string;
   rating: number;
   title: string;
@@ -37,23 +38,35 @@ interface Review {
   created_at: string;
 }
 
+interface ReviewStats {
+  totalCount: number;
+  avgRating: string;
+  distribution?: Record<number, number>;
+}
+
 export default function ReviewsPage() {
   // ⚡ [인헤릿 최상위 상속] NextAuth 세션 및 로그인 정보 즉시 상속 (로딩 대기 0ms)
   const { session, userEmail } = useAuthAdmin();
 
-  // ⚡ [SWR 캐시 복원] 세션 스토리지에서 이전 리뷰 목록 즉시 복원 (화면 깜빡임 0ms)
-  const [cachedReviews] = useState<Review[]>(() => {
+  // ⚡ [SWR 통합 번들 캐시 복원] 세션 스토리지에서 이전 번들(후기 대장 + 평점 통계 + 내 후기) 즉시 복원 (0초 렌더링)
+  const [cachedBundle] = useState<any>(() => {
     if (typeof window !== "undefined") {
       try {
-        const saved = sessionStorage.getItem("sb_reviews_list");
-        return saved ? JSON.parse(saved) : [];
+        const saved = sessionStorage.getItem("sb_reviews_bundle");
+        return saved ? JSON.parse(saved) : null;
       } catch {}
     }
-    return [];
+    return null;
   });
 
-  const [reviews, setReviews] = useState<Review[]>(() => cachedReviews);
-  const [loading, setLoading] = useState(() => cachedReviews.length === 0);
+  const [reviews, setReviews] = useState<Review[]>(() => cachedBundle?.reviews || []);
+  const [stats, setStats] = useState<ReviewStats>(() => cachedBundle?.stats || {
+    totalCount: cachedBundle?.reviews?.length || 0,
+    avgRating: "5.0",
+    distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+  });
+  const [myReview, setMyReview] = useState<Review | null>(() => cachedBundle?.myReview || null);
+  const [loading, setLoading] = useState(() => !cachedBundle?.reviews?.length);
   const [isRealtimeLive, setIsRealtimeLive] = useState(false);
   const isFetchingRef = useRef<boolean>(false);
 
@@ -76,25 +89,27 @@ export default function ReviewsPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ⚡ [후기 목록 단일 조회 헬퍼] 중복 호출 방지 및 SWR 캐시 동기화
-  const fetchReviews = useCallback(async (silent = false) => {
+  // ⚡ [통합 번들 단일 조회 헬퍼] /api/reviews/bootstrap 단 1회 호출로 통계/대장/내후기 수집
+  const fetchReviewsBootstrap = useCallback(async (silent = false) => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
 
     try {
       if (!silent && reviews.length === 0) setLoading(true);
-      const res = await apiFetch("/api/reviews");
+      const res = await apiFetch("/api/reviews/bootstrap");
       const data = await res.json();
       if (data.success && Array.isArray(data.reviews)) {
         setReviews(data.reviews);
+        if (data.stats) setStats(data.stats);
+        setMyReview(data.myReview || null);
         if (typeof window !== "undefined") {
           try {
-            sessionStorage.setItem("sb_reviews_list", JSON.stringify(data.reviews));
+            sessionStorage.setItem("sb_reviews_bundle", JSON.stringify(data));
           } catch {}
         }
       }
     } catch (err) {
-      console.error("후기 조회 오류:", err);
+      console.error("[Reviews Bootstrap] 조회 오류:", err);
     } finally {
       isFetchingRef.current = false;
       if (!silent) setLoading(false);
@@ -104,20 +119,20 @@ export default function ReviewsPage() {
   // ⚡ [부트스트랩 & 0초 실시간 DB 왓처] 마운트 시 1회 조회 및 타 사용자 후기 실시간 반영
   useEffect(() => {
     // 초기 마운트 시 캐시 유무에 따라 조용히 백그라운드 동기화
-    void fetchReviews(cachedReviews.length > 0);
+    void fetchReviewsBootstrap(Boolean(cachedBundle?.reviews?.length));
 
     // ⚡ [0초 실시간 감시] sheetbot_reviews 테이블 변경 이벤트 수신 시 0초 화면 갱신
     const unsub = onUserDataChanged((event) => {
       setIsRealtimeLive(true);
       if (!event.tableName || event.tableName === "sheetbot_reviews") {
-        void fetchReviews(true);
+        void fetchReviewsBootstrap(true);
       }
     });
 
     return () => {
       unsub();
     };
-  }, [fetchReviews, cachedReviews.length]);
+  }, [fetchReviewsBootstrap, cachedBundle?.reviews?.length]);
 
   // 이미지 파일 선택 및 압축(리사이즈) 처리
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -201,7 +216,7 @@ export default function ReviewsPage() {
           image_url: "",
         });
         setPreviewImage(null);
-        await fetchReviews();
+        await fetchReviewsBootstrap(true);
         setTimeout(() => {
           setIsModalOpen(false);
           setFormSuccess(null);
@@ -216,10 +231,11 @@ export default function ReviewsPage() {
     }
   };
 
-  // 평균 평점 계산
-  const avgRating = reviews.length > 0
+  const displayAvgRating = stats.avgRating || (reviews.length > 0
     ? (reviews.reduce((acc, r) => acc + (r.rating || 5), 0) / reviews.length).toFixed(1)
-    : "5.0";
+    : "5.0");
+
+  const displayTotalCount = stats.totalCount || reviews.length;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-slate-100/60 to-white text-slate-800 pb-20">
@@ -243,14 +259,14 @@ export default function ReviewsPage() {
 
           <div className="flex items-center gap-6 p-5 bg-slate-50 rounded-2xl border border-slate-100 shrink-0">
             <div className="text-center space-y-1">
-              <div className="text-3xl font-black text-slate-900 tracking-tight">{avgRating}</div>
+              <div className="text-3xl font-black text-slate-900 tracking-tight">{displayAvgRating}</div>
               <div className="flex items-center gap-0.5 text-amber-400">
                 {[1, 2, 3, 4, 5].map((s) => (
                   <Star key={s} className="w-3.5 h-3.5 fill-amber-400" />
                 ))}
               </div>
               <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400 font-medium">
-                <span>총 {reviews.length}개 리뷰</span>
+                <span>총 {displayTotalCount}개 리뷰</span>
                 {isRealtimeLive && (
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[9px] font-bold border border-emerald-200/60" title="이지데스크 DB 왓처 실시간 감시 중">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -259,7 +275,7 @@ export default function ReviewsPage() {
                 )}
                 <button
                   type="button"
-                  onClick={() => fetchReviews(false)}
+                  onClick={() => fetchReviewsBootstrap(false)}
                   disabled={loading}
                   className="text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer disabled:opacity-50"
                   title="새로고침"
@@ -279,7 +295,7 @@ export default function ReviewsPage() {
                   className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-extrabold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                 >
                   <PlusCircle className="w-4 h-4" />
-                  <span>내 후기 남기기</span>
+                  <span>{myReview ? "후기 추가 작성" : "내 후기 남기기"}</span>
                 </button>
               ) : (
                 <Link
@@ -300,10 +316,14 @@ export default function ReviewsPage() {
           <div className="text-center py-24 text-slate-400 text-xs">아직 등록된 후기가 없습니다. 첫 번째 후기의 주인공이 되어보세요!</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {reviews.map((r) => (
+            {reviews.map((r) => {
+              const isMyPost = Boolean(myReview && r.id === myReview.id);
+              return (
               <div
                 key={r.id}
-                className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 relative"
+                className={`p-6 rounded-3xl border shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 relative bg-white ${
+                  isMyPost ? "border-emerald-300 ring-2 ring-emerald-500/20" : "border-slate-200/80"
+                }`}
               >
                 <div className="space-y-3">
                   {/* 상단: 별점 & 유즈케이스 */}
@@ -318,11 +338,18 @@ export default function ReviewsPage() {
                         />
                       ))}
                     </div>
-                    {r.use_case && (
-                      <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded-md text-[10px] font-bold border border-emerald-200/60">
-                        {r.use_case}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {isMyPost && (
+                        <span className="px-2 py-0.5 bg-emerald-600 text-white rounded-md text-[10px] font-extrabold shadow-xs">
+                          내 후기
+                        </span>
+                      )}
+                      {r.use_case && (
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded-md text-[10px] font-bold border border-emerald-200/60">
+                          {r.use_case}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* 제목 & 본문 */}
@@ -360,7 +387,8 @@ export default function ReviewsPage() {
                   <span>{r.created_at ? r.created_at.substring(0, 10) : ""}</span>
                 </div>
               </div>
-            ))}
+            );
+          })}
           </div>
         )}
 
