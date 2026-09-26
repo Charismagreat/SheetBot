@@ -647,6 +647,48 @@ object ApiClient {
         }
         false
     }
+
+    /**
+     * 부재중 전화(Missed Call) 감지 및 자동 회신 내역 구글 시트 실시간 자동 기록
+     */
+    suspend fun sendMissedCallSync(
+        userEmail: String,
+        callerPhone: String,
+        contactName: String?,
+        callTime: String,
+        autoReplied: Boolean,
+        replyMessage: String,
+        deviceId: String? = null,
+        sheetTitle: String = "[SheetBot] 부재중 전화 대장"
+    ): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("callerPhone", callerPhone)
+            put("contactName", contactName ?: "")
+            put("callTime", callTime)
+            put("autoReplied", autoReplied)
+            put("replyMessage", replyMessage)
+            put("deviceId", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL} (SheetBot Agent)")
+            put("sheetTitle", sheetTitle)
+        }
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/calls/missed"
+            try {
+                val request = Request.Builder().url(endpoint).post(body).build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    Log.i(TAG, "✅ [부재중 전화 시트 동기화 성공] 발신: $callerPhone, 호스트: $host")
+                    return@withContext true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "부재중 전화 시트 동기화 예외 ($host): ${e.message}")
+            }
+        }
+        false
+    }
 }
 
 data class PairResult(

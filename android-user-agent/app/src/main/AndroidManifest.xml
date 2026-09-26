@@ -110,6 +110,17 @@
             </intent-filter>
         </receiver>
 
+        <!-- 전화 상태(부재중 전화 감지 & 모바일 명함 발송) 리시버 -->
+        <receiver
+            android:name=".PhoneCallReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PHONE_STATE" />
+                <action android:name="cloud.sheetbot.agent.user.ACTION_SEND_BUSINESS_CARD" />
+            </intent-filter>
+        </receiver>
+
         <!-- 스마트폰 재부팅 시 자동 재실행 리시버 -->
         <receiver
             android:name=".BootReceiver"

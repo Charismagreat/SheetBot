@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 4,
-      latestVersionName: "1.3.0",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v1.3.0/SheetBotAgent.apk",
+      latestVersionCode: 5,
+      latestVersionName: "1.4.0",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v1.4.0/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 에이전트 v1.3.0 업데이트\n• 💬 문자(SMS/LMS) 송수신 구글 시트 실시간 자동 기록\n• 📤 기본 문자 앱 직접 발신 문자 실시간 감지 (SmsSentObserver)\n• 👤 스마트폰 주소록(연락처) 이름 자동 매칭 (ContactHelper)\n• 🟡 카카오톡 1:1 및 단체 단톡방 수신 메시지 구글 시트 실시간 자동 기록\n• 🎯 사생활 보호를 위한 특정 번호/채팅방 선별 필터링 지원\n• 📁 [SheetBot] 표준 네이밍 구글 시트 대장 자동 생성",
+      releaseNotes: "시트봇 에이전트 v1.4.0 업데이트\n• 🎙️ 통화 녹음 AI 음성 전사(STT) & 3줄 요약 & Action Items 자동 추출\n• 📞 부재중 전화 감지 시 0원 스마트 안내 문자 자동 회신\n• 📊 [SheetBot] 부재중 전화 대장 구글 시트 실시간 자동 기록\n• 💼 통화 종료 직후 모바일 명함 원터치 발송 지원\n• 💬 문자 송수신 및 카카오톡 대화 구글 시트 자동 기록 안정화",
     },
     {
       headers: {

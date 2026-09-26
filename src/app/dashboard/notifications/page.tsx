@@ -184,7 +184,7 @@ export default function NotificationsPage() {
   const [apkCopied, setApkCopied] = useState(false);
 
   const getApkDownloadUrl = useCallback(() => {
-    return "https://github.com/Charismagreat/SheetBot/releases/download/user-v1.3.0/SheetBotAgent.apk";
+    return "https://github.com/Charismagreat/SheetBot/releases/download/user-v1.4.0/SheetBotAgent.apk";
   }, []);
 
   const handleCopyApkLink = useCallback(async () => {
