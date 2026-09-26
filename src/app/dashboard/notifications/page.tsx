@@ -184,10 +184,7 @@ export default function NotificationsPage() {
   const [apkCopied, setApkCopied] = useState(false);
 
   const getApkDownloadUrl = useCallback(() => {
-    if (typeof window !== "undefined") {
-      return `${window.location.origin}/downloads/SheetBotAgent.apk`;
-    }
-    return "https://sheetbot.cloud/downloads/SheetBotAgent.apk";
+    return "https://github.com/Charismagreat/SheetBot/releases/download/user-v1.0.0/SheetBotAgent.apk";
   }, []);
 
   const handleCopyApkLink = useCallback(async () => {
@@ -699,7 +696,7 @@ export default function NotificationsPage() {
                     <div className="space-y-2 pt-1">
                       {/* 메인 다운로드 버튼 */}
                       <a
-                        href="/downloads/SheetBotAgent.apk"
+                        href={getApkDownloadUrl()}
                         download="SheetBotAgent.apk"
                         className="w-full flex items-center justify-center gap-2 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
                       >
@@ -999,7 +996,7 @@ export default function NotificationsPage() {
                     <span>QR 받기</span>
                   </button>
                   <a
-                    href="/downloads/SheetBotAgent.apk"
+                    href={getApkDownloadUrl()}
                     download="SheetBotAgent.apk"
                     className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 shrink-0 cursor-pointer shadow-xs"
                   >
