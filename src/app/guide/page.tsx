@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
+import { useAuthAdmin } from "@/contexts/AuthAdminContext";
+import { onUserDataChanged } from "@/lib/egdesk-helpers";
 import {
   BookOpen,
   Sparkles,
@@ -41,13 +43,34 @@ import {
   PhoneCall,
   Printer,
   Building2,
+  Crown,
+  User,
 } from "lucide-react";
 
 export default function GuidePage() {
+  // ⚡ [인헤릿 최상위 상속] NextAuth 세션 및 관리자 정보 즉시 상속 (로딩 대기 0ms)
+  const { session, userEmail, isAdmin } = useAuthAdmin();
+
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isRealtimeLive, setIsRealtimeLive] = useState(false);
+
+  // ⚡ [0초 실시간 감시] 이지데스크 공식 DB 왓처 연동
+  useEffect(() => {
+    const unsub = onUserDataChanged((event) => {
+      setIsRealtimeLive(true);
+    });
+    return () => {
+      unsub();
+    };
+  }, []);
 
   const handleCopy = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
+    // 로그인된 회원이면 프롬프트 내의 플레이스홀더를 스마트하게 치환
+    let finalText = text;
+    if (userEmail) {
+      finalText = finalText.replace("help@company.com", userEmail);
+    }
+    navigator.clipboard.writeText(finalText);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
@@ -280,9 +303,29 @@ export default function GuidePage() {
         <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 rounded-3xl p-8 sm:p-12 text-white shadow-xl relative overflow-hidden">
           <div className="absolute right-0 bottom-0 translate-x-10 translate-y-10 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
           <div className="relative z-10 max-w-3xl space-y-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-emerald-300 text-xs font-bold border border-white/10">
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>사용 가이드 &amp; 업무 자동화 마스터 레시피</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-emerald-300 text-xs font-bold border border-white/10">
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>사용 가이드 &amp; 업무 자동화 마스터 레시피</span>
+              </div>
+              {userEmail && (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/20 backdrop-blur-md rounded-full text-emerald-200 text-xs font-bold border border-emerald-400/30 animate-fade-in">
+                  <User className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>{session?.user?.name || userEmail.split("@")[0]} 님</span>
+                </div>
+              )}
+              {isAdmin && (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 backdrop-blur-md rounded-full text-amber-200 text-xs font-bold border border-amber-400/30 animate-fade-in">
+                  <Crown className="w-3.5 h-3.5 text-amber-300" />
+                  <span>관리자 프리패스</span>
+                </div>
+              )}
+              {isRealtimeLive && (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white/10 backdrop-blur-md rounded-full text-emerald-300 text-[11px] font-bold border border-white/10 animate-fade-in">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>0초 실시간</span>
+                </div>
+              )}
             </div>
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight break-keep">
               SheetBot 완벽 가이드:<br />
@@ -298,7 +341,7 @@ export default function GuidePage() {
                 href="/dashboard"
                 className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs rounded-xl flex items-center gap-2 transition-all shadow-md active:scale-95"
               >
-                <span>내 워크스페이스 시작하기</span>
+                <span>{userEmail ? "내 대시보드로 이동" : "내 워크스페이스 시작하기"}</span>
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <Link
