@@ -50,6 +50,21 @@ function mapLightProject(row: any) {
 }
 
 /**
+ * OPTIONS /api/dashboard/bootstrap
+ * 브라우저 CORS 프리플라이트 대응
+ */
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, x-user-email, x-admin-key",
+    },
+  });
+}
+
+/**
  * GET /api/dashboard/bootstrap
  * ⚡ 대시보드 전체 데이터를 서버 내부에서 초고속 수집하여 단 1회의 HTTP 왕복으로 반환
  */
@@ -144,12 +159,14 @@ export async function GET(request: Request) {
     // A. 활성 프로젝트 vs 휴지통 프로젝트 분류
     const allProjectRows = projectsRes.rows || [];
     const activeProjects: any[] = [];
+    const trashedProjects: any[] = [];
     let trashedCount = 0;
 
     for (const r of allProjectRows) {
       const isDeleted = Boolean(r.deleted_at) || r.status === "PENDING_DELETE" || r.status === "TRASHED";
       if (isDeleted) {
         trashedCount++;
+        trashedProjects.push(mapLightProject(r));
       } else {
         activeProjects.push(mapLightProject(r));
       }
@@ -224,6 +241,7 @@ export async function GET(request: Request) {
       elapsedMs,
       data: {
         projects: activeProjects,
+        trashedProjects,
         trashedCount,
         wallet: resolvedWallet,
         schedules: validSchedules,
@@ -241,6 +259,7 @@ export async function GET(request: Request) {
       headers: {
         "Content-Type": "application/json; charset=utf-8",
         "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Access-Control-Allow-Origin": "*",
       }
     });
   } catch (err: any) {
@@ -258,6 +277,11 @@ export async function GET(request: Request) {
         currentModel: "Gemini 3.8 Flash",
         aiUsage: { totalTokens: 0, totalCalls: 0, totalCostKrw: 0 },
       },
-    }, { status: 500 });
+    }, {
+      status: 500,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+      }
+    });
   }
 }
