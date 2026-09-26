@@ -34,10 +34,11 @@
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- 통화 녹음 파일 자동 감지 및 구글 드라이브 동기화 -->
+    <!-- 통화 녹음 파일 자동 감지 및 구글 드라이브 동기화, 연락처 이름 매칭 -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <application
         android:allowBackup="true"

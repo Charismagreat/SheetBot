@@ -45,21 +45,42 @@ class SmsReceiver : BroadcastReceiver() {
 
             Log.i(TAG, "📱 [고객 SMS 수신 감지] 발신: $sender / 본문: ${fullBody.take(40)}...")
 
+            // 주소록 매칭 및 필터 검사
+            val contactName = ContactHelper.getContactName(context, sender)
+            val filter = prefs.smsTargetFilter.trim()
+            if (!matchesSmsFilter(sender, contactName, filter)) {
+                Log.d(TAG, "SMS 필터 제외 대상: $sender / $contactName")
+                return
+            }
+
             val pendingResult = goAsync()
             CoroutineScope(Dispatchers.IO).launch {
                 try {
-                    val isSynced = ApiClient.sendInboundSms(
-                        userEmail = userEmail,
-                        sender = sender,
-                        message = fullBody
-                    )
+                    val isSynced = if (prefs.isSmsSheetSyncEnabled) {
+                        ApiClient.sendSmsSync(
+                            userEmail = userEmail,
+                            direction = "INBOUND",
+                            phoneNumber = sender,
+                            contactName = contactName,
+                            message = fullBody,
+                            sheetTitle = prefs.smsDriveSheetTitle
+                        )
+                    } else {
+                        ApiClient.sendInboundSms(
+                            userEmail = userEmail,
+                            sender = sender,
+                            message = fullBody
+                        )
+                    }
 
-                    showInboundSmsNotification(context, sender, fullBody, isSynced)
+                    showInboundSmsNotification(context, contactName ?: sender, fullBody, isSynced)
 
                     if (isSynced) {
-                        Log.i(TAG, "✅ [고객 문자 시트 동기화 완료] 발신: $sender")
+                        val who = if (contactName != null) "$contactName($sender)" else sender
+                        Log.i(TAG, "✅ [고객 문자 시트 동기화 완료] $who")
                         if (prefs.isTtsEnabled) {
-                            TtsManager.speak(context, "새로운 고객 문자가 수신되어 구글 시트에 기록되었습니다.")
+                            val voiceWho = contactName ?: "고객"
+                            TtsManager.speak(context, "${voiceWho}님의 새 문자가 구글 시트에 기록되었습니다.")
                         }
                     } else {
                         Log.w(TAG, "⚠️ [고객 문자 동기화 실패] 발신: $sender")
@@ -67,8 +88,8 @@ class SmsReceiver : BroadcastReceiver() {
 
                     // UI 로그 갱신용 브로드캐스트 발송
                     val updateIntent = Intent(ACTION_SMS_RECEIVED).apply {
-                        putExtra("smsBody", fullBody)
-                        putExtra("sender", sender)
+                        putExtra("smsBody", "[수신] ${contactName?.let { "$it: " } ?: ""}$fullBody")
+                        putExtra("sender", contactName ?: sender)
                         putExtra("success", isSynced)
                         setPackage(context.packageName)
                     }
@@ -82,6 +103,21 @@ class SmsReceiver : BroadcastReceiver() {
         } catch (e: Exception) {
             Log.e(TAG, "onReceive SMS 파싱 오류", e)
         }
+    }
+
+    private fun matchesSmsFilter(sender: String, contactName: String?, filter: String): Boolean {
+        if (filter.isBlank()) return true
+        val keywords = filter.split(",", ";", " ").map { it.trim() }.filter { it.isNotBlank() }
+        val cleanSender = sender.replace("-", "").replace(" ", "").lowercase()
+        val cleanName = (contactName ?: "").replace(" ", "").lowercase()
+
+        for (kw in keywords) {
+            val cleanKw = kw.replace("-", "").replace(" ", "").lowercase()
+            if (cleanSender.contains(cleanKw) || cleanName.contains(cleanKw) || (contactName != null && contactName.contains(kw))) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun showInboundSmsNotification(context: Context, sender: String, body: String, isSuccess: Boolean) {

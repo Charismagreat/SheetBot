@@ -45,6 +45,7 @@ class MainActivity : AppCompatActivity() {
     private var aodJob: Job? = null
     private var serverMonitorJob: Job? = null
     private lateinit var aodGestureDetector: GestureDetector
+    private var smsSentObserver: SmsSentObserver? = null
 
     // 입금 감지 시 실시간 화면 갱신 리시버
     private val depositUpdateReceiver = object : BroadcastReceiver() {
@@ -106,6 +107,18 @@ class MainActivity : AppCompatActivity() {
         // 외부 공유하기(Share) 인텐트 처리
         handleSharedIntent(intent)
 
+        // 스마트폰 직접 발신(Sent) 문자 실시간 감지 Observer 등록
+        try {
+            smsSentObserver = SmsSentObserver(this)
+            contentResolver.registerContentObserver(
+                SmsSentObserver.SENT_SMS_URI,
+                true,
+                smsSentObserver!!
+            )
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "SmsSentObserver 등록 실패: ${e.message}")
+        }
+
         // 실시간 고객 SMS 수신 및 입금 감지 브로드캐스트 리시버 등록
         val filter = IntentFilter().apply {
             addAction(SmsReceiver.ACTION_SMS_RECEIVED)
@@ -140,6 +153,9 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         aodJob?.cancel()
         serverMonitorJob?.cancel()
+        try {
+            smsSentObserver?.let { contentResolver.unregisterContentObserver(it) }
+        } catch (_: Exception) {}
         try {
             unregisterReceiver(depositUpdateReceiver)
         } catch (_: Exception) {}
@@ -332,6 +348,56 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             filePickerLauncher.launch("*/*")
+        }
+
+        // 문자(SMS/LMS) 송수신 구글 시트 동기화 UI 바인딩
+        binding.switchSmsSync.isChecked = prefs.isSmsSheetSyncEnabled
+        binding.layoutSmsSyncSettings.visibility = if (prefs.isSmsSheetSyncEnabled) View.VISIBLE else View.GONE
+        binding.etSmsTargetFilter.setText(prefs.smsTargetFilter)
+        binding.etSmsDriveSheet.setText(prefs.smsDriveSheetTitle)
+
+        binding.switchSmsSync.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isSmsSheetSyncEnabled = isChecked
+            binding.layoutSmsSyncSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
+            val msg = if (isChecked) "문자(SMS) 시트 자동 기록이 켜졌습니다." else "문자 시트 자동 기록이 꺼졌습니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnSaveSmsSettings.setOnClickListener {
+            val filter = binding.etSmsTargetFilter.text.toString().trim()
+            val sheetTitle = binding.etSmsDriveSheet.text.toString().trim().takeIf { it.isNotBlank() }
+                ?: "[SheetBot] 스마트폰 문자(SMS) 송수신 대장"
+
+            prefs.smsTargetFilter = filter
+            prefs.smsDriveSheetTitle = sheetTitle
+
+            Toast.makeText(this, "💾 문자 시트 기록 설정이 저장되었습니다.\n대장 시트: $sheetTitle", Toast.LENGTH_SHORT).show()
+            addLogItem("문자설정", "시트: $sheetTitle / 대상: ${filter.ifBlank { "전체" }}", true)
+        }
+
+        // 카카오톡 수신 메시지 구글 시트 동기화 UI 바인딩
+        binding.switchKakaoSync.isChecked = prefs.isKakaoSheetSyncEnabled
+        binding.layoutKakaoSyncSettings.visibility = if (prefs.isKakaoSheetSyncEnabled) View.VISIBLE else View.GONE
+        binding.etKakaoTargetFilter.setText(prefs.kakaoTargetFilter)
+        binding.etKakaoDriveSheet.setText(prefs.kakaoDriveSheetTitle)
+
+        binding.switchKakaoSync.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isKakaoSheetSyncEnabled = isChecked
+            binding.layoutKakaoSyncSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
+            val msg = if (isChecked) "카카오톡 메시지 시트 기록이 켜졌습니다." else "카카오톡 시트 기록이 꺼졌습니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnSaveKakaoSettings.setOnClickListener {
+            val filter = binding.etKakaoTargetFilter.text.toString().trim()
+            val sheetTitle = binding.etKakaoDriveSheet.text.toString().trim().takeIf { it.isNotBlank() }
+                ?: "[SheetBot] 카카오톡 메시지 대장"
+
+            prefs.kakaoTargetFilter = filter
+            prefs.kakaoDriveSheetTitle = sheetTitle
+
+            Toast.makeText(this, "💾 카카오톡 시트 기록 설정이 저장되었습니다.\n대장 시트: $sheetTitle", Toast.LENGTH_SHORT).show()
+            addLogItem("카톡설정", "시트: $sheetTitle / 대상: ${filter.ifBlank { "전체" }}", true)
         }
 
         binding.btnCheckUpdate.setOnClickListener {
@@ -611,6 +677,9 @@ class MainActivity : AppCompatActivity() {
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
             permissionsToRequest.add(Manifest.permission.READ_PHONE_STATE)
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(Manifest.permission.READ_CONTACTS)
         }
 
         if (permissionsToRequest.isNotEmpty()) {
