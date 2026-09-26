@@ -39,24 +39,29 @@ export async function POST(req: NextRequest) {
     }
 
     const sendContent = customMessage || `[SheetBot] 스마트폰(시트봇 에이전트) 연동 테스트 문자가 정상 발송되었습니다.`;
-    const logId = `log_${Date.now()}`;
+    const logId = Date.now();
     const now = new Date().toISOString();
 
     // 2. 먼저 발송 대기 상태(PENDING)로 DB 적재 (스마트폰 앱이 대기열에서 즉시 가져갈 수 있도록 보장)
-    await insertRows("sheetbot_user_dispatch_logs", [
-      {
-        id: logId,
-        user_email: cleanEmail,
-        rule_id: "test",
-        rule_name: "디바이스 연결 테스트 발송",
-        device_id: deviceId || "SheetBot Agent",
-        recipient,
-        content: sendContent,
-        status: "PENDING",
-        error_message: null,
-        created_at: now,
-      },
-    ]).catch((err) => console.warn("[UserDevicesTest] DB insert warning:", err));
+    try {
+      const insertRes = await insertRows("sheetbot_user_dispatch_logs", [
+        {
+          id: logId,
+          user_email: cleanEmail,
+          rule_id: "test",
+          rule_name: "디바이스 연결 테스트 발송",
+          device_id: deviceId || "SheetBot Agent",
+          recipient,
+          content: sendContent,
+          status: "PENDING",
+          error_message: null,
+          created_at: now,
+        },
+      ]);
+      console.log("[UserDevicesTest] DB insert success:", insertRes);
+    } catch (err: any) {
+      console.warn("[UserDevicesTest] DB insert warning:", err.message);
+    }
 
     // 3. 만약 egdesk-phone 장치가 연결되어 있다면 직접 전송도 시도
     let directSent = false;

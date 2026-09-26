@@ -328,13 +328,13 @@ export default function NotificationsPage() {
 
     const unsub = onUserDataChanged((event) => {
       setIsRealtimeLive(true);
-      if (!event.tableName || event.tableName === "sheetbot_sms_logs") {
+      if (!event.tableName || event.tableName === "sheetbot_user_dispatch_logs" || event.tableName === "sheetbot_sms_logs") {
         fetchLogsRef.current?.(true);
       }
       if (!event.tableName || event.tableName === "sheetbot_user_devices") {
         fetchDevicesRef.current?.(true);
       }
-      if (!event.tableName || event.tableName === "sheetbot_smart_rules") {
+      if (!event.tableName || event.tableName === "sheetbot_smart_rules" || event.tableName === "sheetbot_user_smart_rules") {
         fetchRulesRef.current?.(true);
       }
     });

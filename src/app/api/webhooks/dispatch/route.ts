@@ -123,28 +123,29 @@ export async function POST(req: NextRequest) {
                 errorMsg = sErr.message || "문자 발송 실패";
               }
 
-              // 발송 로그 DB 적재
-              const logId = `dlog_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+              // 발송 로그 DB 적재 (SQLite INTEGER id 규격 준수)
+              const logId = Date.now() + Math.floor(Math.random() * 1000);
+              const dispatchStatus = sendSuccess ? "SUCCESS" : "PENDING";
               await insertRows("sheetbot_user_dispatch_logs", [
                 {
                   id: logId,
                   user_email: cleanEmail,
                   rule_id: rule.id,
                   rule_name: rule.name,
-                  device_id: activeDevice?.device_id || "default",
+                  device_id: activeDevice?.device_id || "SheetBot Agent",
                   recipient: targetPhone,
                   content: messageToSend,
-                  status: sendSuccess ? "SUCCESS" : "FAILED",
-                  error_message: errorMsg || null,
+                  status: dispatchStatus,
+                  error_message: sendSuccess ? null : (errorMsg || null),
                   created_at: new Date().toISOString(),
                 },
-              ]).catch(() => {});
+              ]).catch((err) => console.warn("[WebhookDispatch] Log insert warning:", err.message));
 
               dispatchCount++;
               dispatchResults.push({
                 ruleName: rule.name,
                 recipient: targetPhone,
-                status: sendSuccess ? "SUCCESS" : "FAILED",
+                status: dispatchStatus,
                 error: errorMsg || undefined,
               });
             }
