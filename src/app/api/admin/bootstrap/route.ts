@@ -13,12 +13,14 @@ import { cachedQueryTable, fetchWithCache } from "@/lib/server-cache";
  */
 export async function GET(req: NextRequest) {
   try {
-    const adminEmail = await getCurrentUserEmail();
+    const adminEmail = await getCurrentUserEmail(req);
     if (!adminEmail || !(await isCurrentUserAdmin(adminEmail))) {
-      return NextResponse.json(
+      const forbiddenRes = NextResponse.json(
         { success: false, error: "관리자 권한이 필요합니다." },
         { status: 403 }
       );
+      forbiddenRes.headers.set("Access-Control-Allow-Origin", "*");
+      return forbiddenRes;
     }
 
     const { searchParams } = new URL(req.url);
@@ -230,17 +232,34 @@ export async function GET(req: NextRequest) {
       forceRefresh
     );
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       isAdmin: true,
       stats: bundleData.stats,
       users: bundleData.users,
     });
+    response.headers.set("Access-Control-Allow-Origin", "*");
+    response.headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+    response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    return response;
   } catch (error: any) {
     console.error("[Admin-Bootstrap-API] GET error:", error);
-    return NextResponse.json(
+    const errRes = NextResponse.json(
       { success: false, error: error.message || "Failed to load admin bootstrap bundle" },
       { status: 500 }
     );
+    errRes.headers.set("Access-Control-Allow-Origin", "*");
+    return errRes;
   }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+    },
+  });
 }
