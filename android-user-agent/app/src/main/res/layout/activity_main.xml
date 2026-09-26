@@ -39,7 +39,7 @@
                 android:background="@drawable/bg_badge_version"
                 android:paddingHorizontal="10dp"
                 android:paddingVertical="4dp"
-                android:text="v1.0"
+                android:text="v1.1"
                 android:textColor="#10B981"
                 android:textSize="12sp"
                 android:textStyle="bold" />
@@ -310,6 +310,128 @@
                 android:textSize="11.5sp"
                 android:textStyle="bold"
                 android:layout_marginBottom="8dp" />
+
+            <!-- 통화 녹음 구글 드라이브 자동 백업 섹션 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="🎙️ 통화 녹음 드라이브 자동 백업"
+                    android:textColor="#E2E8F0"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchCallRecording"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutCallRecordingSettings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0F172A"
+                android:padding="10dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🎯 업로드 대상 번호/이름 (쉼표 구분, 빈칸은 전체):"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etRecordingTargetFilter"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:background="#1E293B"
+                    android:paddingHorizontal="10dp"
+                    android:hint="예: 010-7523-5071, 홍길동, 거래처"
+                    android:textColorHint="#64748B"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📁 구글 드라이브 저장 폴더명:"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etRecordingDriveFolder"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:background="#1E293B"
+                    android:paddingHorizontal="10dp"
+                    android:hint="[SheetBot] 통화 녹음"
+                    android:textColorHint="#64748B"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp"
+                    android:layout_marginBottom="8dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="📊 [SheetBot] 통화 녹음 대장 시트 자동 기록"
+                        android:textColor="#CBD5E1"
+                        android:textSize="11sp" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchRecordingSheet"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btnSaveRecordingSettings"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:backgroundTint="#4F46E5"
+                    android:text="💾 통화 녹음 백업 설정 저장"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp"
+                    android:layout_marginBottom="4dp" />
+
+                <Button
+                    android:id="@+id/btnSyncRecordingsNow"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:backgroundTint="#059669"
+                    android:text="⚡ 지금 새 녹음 파일 즉시 동기화"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp" />
+            </LinearLayout>
 
             <Button
                 android:id="@+id/btnCheckUpdate"

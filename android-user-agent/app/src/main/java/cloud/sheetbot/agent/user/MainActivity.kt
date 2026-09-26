@@ -247,6 +247,52 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // 통화 녹음 구글 드라이브 자동 백업 UI 바인딩
+        binding.switchCallRecording.isChecked = prefs.isCallRecordingSyncEnabled
+        binding.layoutCallRecordingSettings.visibility = if (prefs.isCallRecordingSyncEnabled) View.VISIBLE else View.GONE
+        binding.etRecordingTargetFilter.setText(prefs.callRecordingTargetFilter)
+        binding.etRecordingDriveFolder.setText(prefs.callRecordingDriveFolder)
+        binding.switchRecordingSheet.isChecked = prefs.isCallRecordingSheetEnabled
+
+        binding.switchCallRecording.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isCallRecordingSyncEnabled = isChecked
+            binding.layoutCallRecordingSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
+            val msg = if (isChecked) "통화 녹음 드라이브 자동 백업이 켜졌습니다." else "통화 녹음 드라이브 백업이 꺼졌습니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnSaveRecordingSettings.setOnClickListener {
+            val filter = binding.etRecordingTargetFilter.text.toString().trim()
+            val folder = binding.etRecordingDriveFolder.text.toString().trim().takeIf { it.isNotBlank() } ?: "[SheetBot] 통화 녹음"
+            val sheetEnabled = binding.switchRecordingSheet.isChecked
+
+            prefs.callRecordingTargetFilter = filter
+            prefs.callRecordingDriveFolder = folder
+            prefs.isCallRecordingSheetEnabled = sheetEnabled
+
+            Toast.makeText(this, "💾 통화 녹음 백업 설정이 저장되었습니다.\n저장 폴더: $folder", Toast.LENGTH_SHORT).show()
+            addLogItem("녹음설정", "폴더: $folder / 대상: ${filter.ifBlank { "전체" }}", true)
+        }
+
+        binding.btnSyncRecordingsNow.setOnClickListener {
+            binding.progressBar.visibility = View.VISIBLE
+            activityScope.launch {
+                try {
+                    val count = CallRecordingManager.scanAndUploadNewRecordings(this@MainActivity)
+                    binding.progressBar.visibility = View.GONE
+                    if (count > 0) {
+                        Toast.makeText(this@MainActivity, "🎉 신규 통화 녹음 ${count}건이 구글 드라이브에 안전하게 업로드되었습니다!", Toast.LENGTH_LONG).show()
+                        addLogItem("녹음 백업", "통화 녹음 ${count}건 구글 드라이브 업로드 완료", true)
+                    } else {
+                        Toast.makeText(this@MainActivity, "업로드할 신규 통화 녹음 파일이 없습니다.", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    binding.progressBar.visibility = View.GONE
+                    Toast.makeText(this@MainActivity, "통화 녹음 동기화 중 오류: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
         binding.btnCheckUpdate.setOnClickListener {
             UpdateManager.checkForUpdates(this, showToastIfLatest = true)
         }
@@ -514,6 +560,16 @@ class MainActivity : AppCompatActivity() {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
             }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.READ_MEDIA_AUDIO)
+            }
+        } else {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(Manifest.permission.READ_PHONE_STATE)
         }
 
         if (permissionsToRequest.isNotEmpty()) {
