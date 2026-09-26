@@ -511,7 +511,7 @@ object ApiClient {
     }
 
     /**
-     * 사진 및 일반 파일 구글 드라이브 및 [SheetBot] 파일 업로드 대장 시트 업로드
+     * 사진 및 일반 파일 구글 드라이브 및 [SheetBot] 파일 업로드 대장 시트 업로드 (AI OCR 지원)
      */
     suspend fun uploadGenericFile(
         file: File,
@@ -520,21 +520,28 @@ object ApiClient {
         userEmail: String,
         folderName: String = "[SheetBot] 파일 보관함",
         memo: String = "스마트폰 시트봇 에이전트 업로드",
-        autoRecordSheet: Boolean = true
+        autoRecordSheet: Boolean = true,
+        ocrType: String? = null
     ): UploadGenericFileResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val fileMediaType = (mimeType.takeIf { it.isNotBlank() } ?: "application/octet-stream").toMediaType()
         val requestFile = file.asRequestBody(fileMediaType)
 
-        val requestBody = MultipartBody.Builder()
+        val requestBodyBuilder = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("userEmail", userEmail)
             .addFormDataPart("fileName", fileName)
             .addFormDataPart("folderName", folderName)
             .addFormDataPart("memo", memo)
             .addFormDataPart("autoRecordSheet", autoRecordSheet.toString())
+            .addFormDataPart("deviceId", "${Build.MANUFACTURER} ${Build.MODEL} (SheetBot Agent)")
             .addFormDataPart("file", fileName, requestFile)
-            .build()
+
+        if (!ocrType.isNullOrBlank()) {
+            requestBodyBuilder.addFormDataPart("ocrType", ocrType)
+        }
+
+        val requestBody = requestBodyBuilder.build()
 
         for (host in hosts) {
             val endpoint = "$host/api/user/files/upload"
@@ -547,7 +554,7 @@ object ApiClient {
                 val resStr = response.body?.string() ?: ""
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
-                    Log.i(TAG, "🎉 [파일 업로드 성공] $fileName -> $folderName")
+                    Log.i(TAG, "🎉 [파일 업로드 성공] $fileName -> $folderName (ocr: $ocrType)")
                     return@withContext UploadGenericFileResult(
                         success = true,
                         fileId = resJson.optString("fileId").takeIf { it.isNotBlank() },
@@ -555,7 +562,9 @@ object ApiClient {
                         folderName = resJson.optString("folderName", folderName),
                         webViewLink = resJson.optString("webViewLink").takeIf { it.isNotBlank() },
                         spreadsheetUrl = resJson.optString("spreadsheetUrl").takeIf { it.isNotBlank() },
-                        message = resJson.optString("message", "업로드 완료")
+                        message = resJson.optString("message", "업로드 완료"),
+                        ocrType = resJson.optString("ocrType").takeIf { it.isNotBlank() } ?: ocrType,
+                        ocrData = resJson.optJSONObject("ocrData")
                     )
                 } else {
                     val msg = resJson.optString("error", "HTTP ${response.code}")
@@ -753,6 +762,8 @@ data class UploadGenericFileResult(
     val webViewLink: String? = null,
     val spreadsheetUrl: String? = null,
     val message: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val ocrType: String? = null,
+    val ocrData: JSONObject? = null
 )
 

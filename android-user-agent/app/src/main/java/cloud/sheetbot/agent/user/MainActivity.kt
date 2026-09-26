@@ -86,6 +86,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 영수증 AI OCR 장부화 전용 이미지/문서 선택 런처 (v1.5)
+    private val receiptPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            uploadReceipt(uri)
+        }
+    }
+
+    // 명함 AI OCR 인맥 등록 전용 이미지/문서 선택 런처 (v1.5)
+    private val businessCardPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            uploadBusinessCard(uri)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -348,6 +366,22 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             filePickerLauncher.launch("*/*")
+        }
+
+        binding.btnPickReceipt.setOnClickListener {
+            if (!prefs.isPaired) {
+                Toast.makeText(this, "먼저 시트봇 워크스페이스와 연동해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            receiptPickerLauncher.launch("image/*")
+        }
+
+        binding.btnPickBusinessCard.setOnClickListener {
+            if (!prefs.isPaired) {
+                Toast.makeText(this, "먼저 시트봇 워크스페이스와 연동해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            businessCardPickerLauncher.launch("image/*")
         }
 
         // 문자(SMS/LMS) 송수신 구글 시트 동기화 UI 바인딩
@@ -860,6 +894,84 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 binding.progressBar.visibility = View.GONE
                 Toast.makeText(this@MainActivity, "업로드 처리 중 예외 발생: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /**
+     * 영수증 사진을 전송하여 Gemini AI OCR로 결제 금액/상호명/품목을 분석하고 [SheetBot] 스마트 경비 영수증 대장에 자동 기록
+     */
+    private fun uploadReceipt(uri: Uri) {
+        if (!prefs.isPaired) {
+            Toast.makeText(this, "⚠️ 시트봇 계정 연동 후 이용할 수 있습니다.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        binding.progressBar.visibility = View.VISIBLE
+        Toast.makeText(this, "🧾 영수증을 업로드하고 AI 분석을 시작합니다...", Toast.LENGTH_SHORT).show()
+
+        activityScope.launch {
+            try {
+                val result = FileUploadManager.uploadOcrReceipt(this@MainActivity, uri)
+                binding.progressBar.visibility = View.GONE
+
+                if (result.success) {
+                    val ocr = result.ocrData
+                    val merchant = ocr?.optString("merchantName", "영수증") ?: "영수증"
+                    val amount = ocr?.optString("amount")?.let { "${it}원" } ?: ""
+                    Toast.makeText(
+                        this@MainActivity,
+                        "🎉 [영수증 장부화 완료] $merchant $amount\n구글 시트에 자동 기록되었습니다!",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    addLogItem("🧾 영수증 OCR", "$merchant $amount -> 경비 대장", true)
+                } else {
+                    val err = result.error ?: "영수증 분석 실패"
+                    Toast.makeText(this@MainActivity, "⚠️ 영수증 분석 실패: $err", Toast.LENGTH_LONG).show()
+                    addLogItem("영수증 오류", err, false)
+                }
+            } catch (e: Exception) {
+                binding.progressBar.visibility = View.GONE
+                Toast.makeText(this@MainActivity, "영수증 처리 예외: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /**
+     * 명함 사진을 전송하여 Gemini AI OCR로 성함/직함/회사명/전화번호를 분석하고 [SheetBot] 스마트 명함 관리 대장에 자동 기록
+     */
+    private fun uploadBusinessCard(uri: Uri) {
+        if (!prefs.isPaired) {
+            Toast.makeText(this, "⚠️ 시트봇 계정 연동 후 이용할 수 있습니다.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        binding.progressBar.visibility = View.VISIBLE
+        Toast.makeText(this, "🪪 명함을 업로드하고 AI 인맥 분석을 시작합니다...", Toast.LENGTH_SHORT).show()
+
+        activityScope.launch {
+            try {
+                val result = FileUploadManager.uploadOcrBusinessCard(this@MainActivity, uri)
+                binding.progressBar.visibility = View.GONE
+
+                if (result.success) {
+                    val ocr = result.ocrData
+                    val name = ocr?.optString("name", "명함") ?: "명함"
+                    val comp = ocr?.optString("company")?.let { "($it)" } ?: ""
+                    Toast.makeText(
+                        this@MainActivity,
+                        "🎉 [명함 등록 완료] $name $comp\n인맥 관리 대장에 자동 기록되었습니다!",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    addLogItem("🪪 명함 OCR", "$name $comp -> 인맥 대장", true)
+                } else {
+                    val err = result.error ?: "명함 분석 실패"
+                    Toast.makeText(this@MainActivity, "⚠️ 명함 분석 실패: $err", Toast.LENGTH_LONG).show()
+                    addLogItem("명함 오류", err, false)
+                }
+            } catch (e: Exception) {
+                binding.progressBar.visibility = View.GONE
+                Toast.makeText(this@MainActivity, "명함 처리 예외: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }

@@ -17,21 +17,23 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 스마트폰 사진 및 일반 문서 파일의 구글 드라이브 보관함 자동 업로드 매니저
- * - 갤러리/파일 탐색기 '공유하기(Share)' 인텐트 및 앱 내 직접 파일 선택 지원
- * - 구글 드라이브 지정 폴더에 자동 업로드 및 [SheetBot] 파일 업로드 대장 시트 실시간 기록
+ * 스마트폰 사진 및 일반 문서 파일의 구글 드라이브 보관함 자동 업로드 & AI OCR 매니저
+ * - 갤러리/파일 탐색기 '공유하기(Share)' 인텐트 및 앱 내 직접 파일/사진 선택 지원
+ * - 구글 드라이브 지정 폴더에 자동 업로드 및 [SheetBot] 대장 시트 실시간 기록
+ * - v1.5.0: 영수증(RECEIPT) 및 명함(BUSINESS_CARD) AI OCR 자동 장부화 지원
  */
 object FileUploadManager {
     private const val TAG = "FileUploadManager"
     private const val NOTIFICATION_CHANNEL_ID = "sheetbot_file_upload_channel"
 
     /**
-     * 단일 URI 파일 업로드
+     * 단일 URI 파일 업로드 (일반 파일 및 OCR 공용)
      */
     suspend fun uploadFromUri(
         context: Context,
         uri: Uri,
-        customMemo: String? = null
+        customMemo: String? = null,
+        ocrType: String? = null
     ): UploadGenericFileResult = withContext(Dispatchers.IO) {
         val prefs = PreferencesManager(context)
         if (!prefs.isPaired) {
@@ -58,11 +60,19 @@ object FileUploadManager {
             )
         }
 
-        val targetFolder = prefs.fileUploadDriveFolder.takeIf { it.isNotBlank() } ?: "[SheetBot] 파일 보관함"
+        val targetFolder = when (ocrType?.uppercase()) {
+            "RECEIPT" -> "[SheetBot] 영수증 보관함"
+            "BUSINESS_CARD" -> "[SheetBot] 명함 보관함"
+            else -> prefs.fileUploadDriveFolder.takeIf { it.isNotBlank() } ?: "[SheetBot] 파일 보관함"
+        }
         val autoRecordSheet = prefs.isFileUploadSheetEnabled
-        val memo = customMemo ?: "스마트폰 시트봇 에이전트 업로드"
+        val memo = customMemo ?: when (ocrType?.uppercase()) {
+            "RECEIPT" -> "스마트폰 시트봇 에이전트 영수증 AI 장부화"
+            "BUSINESS_CARD" -> "스마트폰 시트봇 에이전트 명함 AI 인맥화"
+            else -> "스마트폰 시트봇 에이전트 업로드"
+        }
 
-        Log.i(TAG, "🚀 [파일 업로드 시작] ${meta.fileName} (${meta.mimeType}) -> $targetFolder")
+        Log.i(TAG, "🚀 [파일 업로드 시작] ${meta.fileName} (${meta.mimeType}) -> $targetFolder (ocr: $ocrType)")
 
         val result = try {
             ApiClient.uploadGenericFile(
@@ -72,7 +82,8 @@ object FileUploadManager {
                 userEmail = userEmail,
                 folderName = targetFolder,
                 memo = memo,
-                autoRecordSheet = autoRecordSheet
+                autoRecordSheet = autoRecordSheet,
+                ocrType = ocrType
             )
         } finally {
             try {
@@ -83,14 +94,46 @@ object FileUploadManager {
         if (result.success) {
             val uploadedName = result.fileName ?: meta.fileName
             val folderName = result.folderName ?: targetFolder
-            showUploadSuccessNotification(context, uploadedName, folderName)
 
-            if (prefs.isTtsEnabled) {
-                TtsManager.speak(context, "파일이 구글 드라이브 보관함에 안전하게 업로드되었습니다.")
+            if (ocrType.equals("RECEIPT", ignoreCase = true)) {
+                val ocrData = result.ocrData
+                val mName = ocrData?.optString("merchantName", "영수증") ?: "영수증"
+                val amt = ocrData?.optString("amount")?.let { "${it}원" } ?: ""
+                showOcrSuccessNotification(context, "🧾 [영수증 AI 자동 장부화 완료]", "$mName $amt 결제 내역이 경비 대장에 기록되었습니다.")
+                if (prefs.isTtsEnabled) {
+                    TtsManager.speak(context, "영수증이 분석되어 경비 대장에 자동 기록되었습니다.")
+                }
+            } else if (ocrType.equals("BUSINESS_CARD", ignoreCase = true)) {
+                val ocrData = result.ocrData
+                val cName = ocrData?.optString("name", "명함") ?: "명함"
+                val comp = ocrData?.optString("company")?.let { "($it)" } ?: ""
+                showOcrSuccessNotification(context, "🪪 [명함 AI 인맥 등록 완료]", "$cName $comp 정보가 스마트 인맥 대장에 등록되었습니다.")
+                if (prefs.isTtsEnabled) {
+                    TtsManager.speak(context, "명함이 분석되어 인맥 대장에 자동 등록되었습니다.")
+                }
+            } else {
+                showUploadSuccessNotification(context, uploadedName, folderName)
+                if (prefs.isTtsEnabled) {
+                    TtsManager.speak(context, "파일이 구글 드라이브 보관함에 안전하게 업로드되었습니다.")
+                }
             }
         }
 
         result
+    }
+
+    /**
+     * 영수증 전용 AI OCR 장부화 업로드
+     */
+    suspend fun uploadOcrReceipt(context: Context, uri: Uri): UploadGenericFileResult {
+        return uploadFromUri(context, uri, customMemo = "영수증 촬영/선택 AI OCR", ocrType = "RECEIPT")
+    }
+
+    /**
+     * 명함 전용 AI OCR 인맥 등록 업로드
+     */
+    suspend fun uploadOcrBusinessCard(context: Context, uri: Uri): UploadGenericFileResult {
+        return uploadFromUri(context, uri, customMemo = "명함 촬영/선택 AI OCR", ocrType = "BUSINESS_CARD")
     }
 
     /**
@@ -204,6 +247,31 @@ object FileUploadManager {
             .setContentTitle("📁 [구글 드라이브 업로드 완료]")
             .setContentText("'$fileName' 파일이 '$folderName' 폴더에 보관되었습니다.")
             .setStyle(NotificationCompat.BigTextStyle().bigText("파일명: $fileName\n저장 위치: 구글 드라이브 > $folderName\n대장 시트 실시간 자동 기록 완료"))
+            .setSmallIcon(android.R.drawable.stat_sys_upload_done)
+            .setAutoCancel(true)
+            .build()
+
+        manager.notify((System.currentTimeMillis() % 100000).toInt(), noti)
+    }
+
+    private fun showOcrSuccessNotification(context: Context, title: String, text: String) {
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "SheetBot 파일 업로드 알림",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "사진 및 파일이 구글 드라이브로 업로드되었을 때 알립니다."
+            }
+            manager.createNotificationChannel(channel)
+        }
+
+        val noti = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setSmallIcon(android.R.drawable.stat_sys_upload_done)
             .setAutoCancel(true)
             .build()
