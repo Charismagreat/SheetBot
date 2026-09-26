@@ -1,6 +1,7 @@
 package cloud.sheetbot.agent.user
 
 import android.Manifest
+import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -11,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.speech.RecognizerIntent
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
@@ -101,6 +103,20 @@ class MainActivity : AppCompatActivity() {
     ) { uri ->
         if (uri != null) {
             uploadBusinessCard(uri)
+        }
+    }
+
+    // 자연어 AI 시트 코파일럿 음성 인식 런처 (v1.7)
+    private val speechRecognizerLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            val matches = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            if (!matches.isNullOrEmpty()) {
+                val spokenText = matches[0]
+                binding.etAiCommand.setText(spokenText)
+                executeAiCommand(spokenText)
+            }
         }
     }
 
@@ -358,6 +374,28 @@ class MainActivity : AppCompatActivity() {
 
             Toast.makeText(this, "💾 파일 업로드 설정이 저장되었습니다.\n저장 폴더: $folder", Toast.LENGTH_SHORT).show()
             addLogItem("파일설정", "폴더: $folder / 대장시트: $sheetEnabled", true)
+        }
+
+        // 자연어 AI 시트 코파일럿 UI 리스너 (v1.7)
+        binding.btnVoiceCommand.setOnClickListener {
+            if (!prefs.isPaired) {
+                Toast.makeText(this, "먼저 시트봇 워크스페이스와 연동해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            startVoiceRecognition()
+        }
+
+        binding.btnExecuteCommand.setOnClickListener {
+            if (!prefs.isPaired) {
+                Toast.makeText(this, "먼저 시트봇 워크스페이스와 연동해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val cmd = binding.etAiCommand.text.toString().trim()
+            if (cmd.isBlank()) {
+                Toast.makeText(this, "구글 시트에 내릴 명령을 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            executeAiCommand(cmd)
         }
 
         binding.btnPickAndUploadFile.setOnClickListener {
@@ -1044,6 +1082,72 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 binding.progressBar.visibility = View.GONE
                 Toast.makeText(this@MainActivity, "링크 스크랩 예외: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /**
+     * 구글 음성 인식 다이얼로그 호출 (v1.7)
+     */
+    private fun startVoiceRecognition() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "구글 시트에 내릴 명령을 말씀해 주세요...\n(예: 홍길동 고객에게 결제 안내 문자 보내줘)")
+        }
+        try {
+            speechRecognizerLauncher.launch(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "음성 인식을 지원하지 않는 기기이거나 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * 자연어 명령을 시트봇 서버로 전송하여 구글 시트 Apps Script 원격 구동 (v1.7)
+     */
+    private fun executeAiCommand(command: String) {
+        val userEmail = prefs.userEmail
+        if (userEmail.isNullOrBlank()) {
+            Toast.makeText(this, "⚠️ 연동된 계정 이메일이 없습니다.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        binding.progressBar.visibility = View.VISIBLE
+        binding.layoutAiCommandResult.visibility = View.GONE
+        Toast.makeText(this, "🤖 AI가 시트 명령을 분석하고 원격 실행합니다...", Toast.LENGTH_SHORT).show()
+
+        activityScope.launch {
+            try {
+                val res = ApiClient.executeAiCommand(
+                    userEmail = userEmail,
+                    command = command
+                )
+                binding.progressBar.visibility = View.GONE
+
+                if (res.success) {
+                    binding.layoutAiCommandResult.visibility = View.VISIBLE
+                    binding.tvAiCommandExplanation.text = "✅ ${res.explanation}"
+                    binding.tvAiCommandSpoken.text = "🗣️ ${res.spokenResult}"
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "🎉 [시트 실행 완료]\n${res.explanation}",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                    addLogItem("AI 시트실행", "${res.actionType}: ${res.explanation}", true)
+
+                    if (prefs.isTtsEnabled) {
+                        TtsManager.speak(this@MainActivity, res.spokenResult ?: "명령 처리가 완료되었습니다.")
+                    }
+                } else {
+                    val err = res.error ?: "명령 실행 실패"
+                    Toast.makeText(this@MainActivity, "⚠️ 시트 명령 실행 실패: $err", Toast.LENGTH_LONG).show()
+                    addLogItem("시트실행 실패", err, false)
+                }
+            } catch (e: Exception) {
+                binding.progressBar.visibility = View.GONE
+                Toast.makeText(this@MainActivity, "명령 실행 예외: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
