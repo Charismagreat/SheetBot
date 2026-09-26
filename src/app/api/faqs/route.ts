@@ -1,9 +1,25 @@
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { queryTable } from "@/lib/egdesk-helpers";
 import { DEFAULT_FAQS } from "@/lib/default-faqs";
 import { fetchWithCache } from "@/lib/server-cache";
+
+/**
+ * OPTIONS /api/faqs
+ * 브라우저 CORS 프리플라이트 대응
+ */
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, x-user-email, x-admin-key",
+    },
+  });
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -35,18 +51,22 @@ export async function GET(req: NextRequest) {
       60
     );
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       { success: true, faqs: faqs || DEFAULT_FAQS },
       {
         headers: {
           "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+          "Access-Control-Allow-Origin": "*",
         },
       }
     );
+    return response;
   } catch (err: any) {
-    return NextResponse.json(
+    const errorResponse = NextResponse.json(
       { success: true, error: err.message, faqs: DEFAULT_FAQS },
       { status: 200 }
     );
+    errorResponse.headers.set("Access-Control-Allow-Origin", "*");
+    return errorResponse;
   }
 }
