@@ -1,10 +1,11 @@
 "use client";
 
 import { apiFetch } from '@/lib/api';
-import React, { useState, useEffect, useRef } from "react";
-import { useSession } from "next-auth/react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
+import { useAuthAdmin } from "@/contexts/AuthAdminContext";
+import { onUserDataChanged } from "@/lib/egdesk-helpers";
 import {
   Star,
   MessageSquare,
@@ -20,7 +21,9 @@ import {
   Quote,
   Image as ImageIcon,
   UploadCloud,
-  Maximize2
+  Maximize2,
+  Clock,
+  Radio
 } from "lucide-react";
 
 interface Review {
@@ -35,10 +38,24 @@ interface Review {
 }
 
 export default function ReviewsPage() {
-  const { data: session } = useSession();
+  // ⚡ [인헤릿 최상위 상속] NextAuth 세션 및 로그인 정보 즉시 상속 (로딩 대기 0ms)
+  const { session, userEmail } = useAuthAdmin();
 
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [loading, setLoading] = useState(true);
+  // ⚡ [SWR 캐시 복원] 세션 스토리지에서 이전 리뷰 목록 즉시 복원 (화면 깜빡임 0ms)
+  const [cachedReviews] = useState<Review[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem("sb_reviews_list");
+        return saved ? JSON.parse(saved) : [];
+      } catch {}
+    }
+    return [];
+  });
+
+  const [reviews, setReviews] = useState<Review[]>(() => cachedReviews);
+  const [loading, setLoading] = useState(() => cachedReviews.length === 0);
+  const [isRealtimeLive, setIsRealtimeLive] = useState(false);
+  const isFetchingRef = useRef<boolean>(false);
 
   // 후기 작성 모달 상태
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -59,24 +76,48 @@ export default function ReviewsPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchReviews = async () => {
+  // ⚡ [후기 목록 단일 조회 헬퍼] 중복 호출 방지 및 SWR 캐시 동기화
+  const fetchReviews = useCallback(async (silent = false) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
     try {
-      setLoading(true);
+      if (!silent && reviews.length === 0) setLoading(true);
       const res = await apiFetch("/api/reviews");
       const data = await res.json();
-      if (data.success) {
-        setReviews(data.reviews || []);
+      if (data.success && Array.isArray(data.reviews)) {
+        setReviews(data.reviews);
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem("sb_reviews_list", JSON.stringify(data.reviews));
+          } catch {}
+        }
       }
     } catch (err) {
       console.error("후기 조회 오류:", err);
     } finally {
-      setLoading(false);
+      isFetchingRef.current = false;
+      if (!silent) setLoading(false);
     }
-  };
+  }, [reviews.length]);
 
+  // ⚡ [부트스트랩 & 0초 실시간 DB 왓처] 마운트 시 1회 조회 및 타 사용자 후기 실시간 반영
   useEffect(() => {
-    fetchReviews();
-  }, []);
+    // 초기 마운트 시 캐시 유무에 따라 조용히 백그라운드 동기화
+    void fetchReviews(cachedReviews.length > 0);
+
+    // ⚡ [0초 실시간 감시] sheetbot_reviews 테이블 변경 이벤트 수신 시 0초 화면 갱신
+    const unsub = onUserDataChanged((event) => {
+      setIsRealtimeLive(true);
+      if (!event.tableName || event.tableName === "sheetbot_reviews") {
+        void fetchReviews(true);
+      }
+    });
+
+    return () => {
+      unsub();
+    };
+  }, [fetchReviews, cachedReviews.length]);
 
   // 이미지 파일 선택 및 압축(리사이즈) 처리
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -208,7 +249,24 @@ export default function ReviewsPage() {
                   <Star key={s} className="w-3.5 h-3.5 fill-amber-400" />
                 ))}
               </div>
-              <div className="text-[11px] text-slate-400 font-medium">총 {reviews.length}개 리뷰</div>
+              <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400 font-medium">
+                <span>총 {reviews.length}개 리뷰</span>
+                {isRealtimeLive && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[9px] font-bold border border-emerald-200/60" title="이지데스크 DB 왓처 실시간 감시 중">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>실시간</span>
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => fetchReviews(false)}
+                  disabled={loading}
+                  className="text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer disabled:opacity-50"
+                  title="새로고침"
+                >
+                  <Clock className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
+                </button>
+              </div>
             </div>
 
             <div className="pl-4 border-l border-slate-200">
