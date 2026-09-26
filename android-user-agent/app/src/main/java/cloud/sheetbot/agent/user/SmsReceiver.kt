@@ -22,6 +22,7 @@ class SmsReceiver : BroadcastReceiver() {
         private const val TAG = "UserSmsReceiver"
         const val SMS_CHANNEL_ID = "sheetbot_user_sms_channel"
         const val ACTION_SMS_RECEIVED = "cloud.sheetbot.agent.user.SMS_RECEIVED"
+        const val ACTION_DEPOSIT_DETECTED = "cloud.sheetbot.agent.user.DEPOSIT_DETECTED"
     }
 
     override fun onReceive(context: Context, intent: Intent) {

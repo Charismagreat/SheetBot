@@ -94,8 +94,11 @@ class MainActivity : AppCompatActivity() {
             KeepAliveService.start(this)
         }
 
-        // 실시간 고객 SMS 수신 브로드캐스트 리시버 등록
-        val filter = IntentFilter(SmsReceiver.ACTION_SMS_RECEIVED)
+        // 실시간 고객 SMS 수신 및 입금 감지 브로드캐스트 리시버 등록
+        val filter = IntentFilter().apply {
+            addAction(SmsReceiver.ACTION_SMS_RECEIVED)
+            addAction(SmsReceiver.ACTION_DEPOSIT_DETECTED)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(depositUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {

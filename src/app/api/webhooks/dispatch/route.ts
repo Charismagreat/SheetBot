@@ -40,15 +40,17 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 2. 회원의 연결된 디바이스 조회
+    // 2. 회원의 연결된 디바이스 조회 (이용자용 에이전트 agent2 / agent 기기만 대상)
     const devRes = await queryTable("sheetbot_user_devices", {
       filters: { user_email: cleanEmail },
-      limit: 5,
+      limit: 10,
       orderBy: "id",
       orderDirection: "DESC",
     }).catch(() => ({ rows: [] }));
 
-    const userDevices = (devRes.rows || []).filter((d: any) => !d.deleted_at);
+    const userDevices = (devRes.rows || []).filter(
+      (d: any) => !d.deleted_at && (d.pairing_mode === "agent2" || d.pairing_mode === "agent")
+    );
     const activeDevice = userDevices[0] || null;
 
     let dispatchCount = 0;

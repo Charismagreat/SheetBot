@@ -234,7 +234,7 @@ export default function NotificationsPage() {
     try {
       const email = effectiveEmail;
       if (!email) return;
-      const res = await queryTable<any>("sheetbot_user_devices", {
+      const res = await queryTable("sheetbot_user_devices", {
         filters: { user_email: email },
         limit: 50,
         orderBy: "id",
@@ -242,8 +242,9 @@ export default function NotificationsPage() {
       }).catch(() => ({ rows: [] }));
 
       const rawRows = (res.rows || []).filter((r: any) => !r.deleted_at);
+      // 이용자용 시트봇 에이전트(agent2, agent)만 필터링 (관리자 전용 입금 에이전트 M인 android_agent는 배제)
       const agentDevices = rawRows
-        .filter((r: any) => r.pairing_mode === "agent2" || r.pairing_mode === "android_agent" || !r.pairing_mode)
+        .filter((r: any) => r.pairing_mode === "agent2" || r.pairing_mode === "agent")
         .map(mapNotificationDevice);
 
       setDevices(agentDevices);
@@ -261,7 +262,7 @@ export default function NotificationsPage() {
     try {
       const email = effectiveEmail;
       if (!email) return;
-      const res = await queryTable<any>("sheetbot_user_smart_rules", {
+      const res = await queryTable("sheetbot_user_smart_rules", {
         filters: { user_email: email },
         limit: 100,
         orderBy: "id",
@@ -283,7 +284,7 @@ export default function NotificationsPage() {
     try {
       const email = effectiveEmail;
       if (!email) return;
-      const res = await queryTable<any>("sheetbot_user_dispatch_logs", {
+      const res = await queryTable("sheetbot_user_dispatch_logs", {
         filters: { user_email: email },
         limit: 100,
         orderBy: "id",
