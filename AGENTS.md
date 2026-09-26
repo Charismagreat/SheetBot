@@ -269,3 +269,26 @@
    - DB 왓처의 스펙을 검증하지 않은 상태에서 애플리케이션 레벨의 복잡한 임의 스트림(SSE 등)을 독단적으로 급조하여 연동하거나, 외부 인프라(Nginx 등) 핑계를 대는 행위를 엄격히 금지합니다.
    - 반드시 테스트 결과가 확보된 후 공식 표준 방식으로 프로덕션에 단계적으로 통합해야 합니다.
 <!-- END:egdesk-db-watcher-rules -->
+
+<!-- BEGIN:bootstrap-and-inherit-architecture-rules -->
+## 프론트엔드 데이터 인헤릿(Inherit) & 통합 번들 로드(Bootstrap) 최적화 표준 원칙 (절대 원칙)
+
+1. **클라이언트 분산 쿼리(`queryTable` 다중 발사) 엄격 금지 및 서버 통합 번들(Bootstrap) 단일화**:
+   - 클라이언트 컴포넌트에서 여러 개의 `queryTable`을 병렬로 직접 호출하면 브라우저 동시 HTTP 소켓(최대 6개)을 모두 점유하여 다른 리소스(이미지, API 등)가 모두 `(pending)` 상태로 갇히는 네트워크 병목이 발생합니다.
+   - 대시보드 및 주요 서비스 페이지는 반드시 서버 내부에서 4초 타임아웃 레이스를 통해 완전 병렬로 수집하는 단일 통합 부트스트랩 API(`/api/{feature}/bootstrap`)를 구축하고, 브라우저 클라이언트는 `apiFetch` 1회 호출로 전 데이터를 일괄 수신해야 합니다.
+   - 이를 통해 브라우저 점유 소켓을 단 1개로 압축하고 네트워크 왕복을 획기적으로 단축합니다.
+
+2. **최상위 인증 싱글톤 상속(`useAuthAdmin`) 일원화 및 다중 인증 호출 제거**:
+   - 하위 페이지나 컴포넌트(`Navbar`, `dashboard/page.tsx` 등)에서 중복으로 `useAuth()`, `useSession()`, `checkAuth`, `getVisitorGoogleStatus`(`__visitor_google_proxy`)를 각자 호출하여 세션 검사 폭풍을 일으키는 것을 엄격히 금지합니다.
+   - 반드시 최상위 `AuthAdminContext`(`useAuthAdmin`)를 상속받아 `user`, `userEmail`, `isLoggedIn`, `isAdmin`, `isLoading`, `logout`을 0ms 만에 안전하게 즉시 공유받아야 합니다.
+
+3. **React 의존성 배열 고정 및 불변 싱글톤(Stable Singleton) 패턴 준수 (Re-fetch Loop 차단)**:
+   - `fetchData`의 `useCallback` 의존성 배열에 자신이 세팅하는 상태(`projects.length`, `wallet`, `data` 등)를 넣으면, 데이터 수신 즉시 함수가 재생성되고 `useEffect`가 스스로를 다시 트리거하여 무한 연쇄 호출(`bootstrap` 난사 및 이전 요청 `(canceled)`)이 발생합니다.
+   - 가변 상태나 이메일은 반드시 `useRef`(`authAdminEmailRef`, `hasCachedDataRef` 등)로 추적하여 `fetchData`의 의존성 배열을 완전히 비우거나(`[]`) 불변으로 유지해야 합니다.
+   - 또한 `AbortController`를 필수 탑재하여 사용자의 빠른 탭 이동이나 재호출 시 진행 중이던 이전 요청을 브라우저 레벨에서 즉시 `abort()`하고, 브라우저 소켓을 반환하여 pending 정체를 방지해야 합니다.
+
+4. **서브 컴포넌트(EasyBot, 모달 등)의 온디맨드(On-Demand) 지연 로딩 및 SSE 단일화 원칙**:
+   - 화면 구석의 플로팅 챗봇(`EasyBot`)이나 모달 등은 사용자가 실제로 창을 열기 전(`!isOpen`)에는 백그라운드 쿼리(`queryTable` 등)나 추가 네트워크 요청을 일체 발생시켜서는 안 됩니다.
+   - 동일한 웹 페이지에서 메인 페이지와 자식 컴포넌트가 각각 `onUserDataChanged`를 구독하여 이지데스크 터널과 2중 3중으로 SSE 스트림을 열지 않도록 해야 합니다. (단일 SSE 허브 준수)
+   - `onUserDataChanged`의 콜백에서 `!event.tableName`일 때(초기 연결 핑/핸드셰이크) 무조건 전체 쿼리를 날리는 버그를 금지하고, 반드시 `if (event.tableName && TARGET_TABLES.includes(event.tableName))`로 실제 대상 데이터 변경 시에만 반응해야 합니다.
+<!-- END:bootstrap-and-inherit-architecture-rules -->
