@@ -71,6 +71,10 @@ export default function NotificationsLogsTab({
                         <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-black border border-emerald-200 text-[10px]">
                           발송 성공
                         </span>
+                      ) : log.status === "PENDING" ? (
+                        <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 font-black border border-amber-200 text-[10px] animate-pulse">
+                          ⏳ 대기 중 (스마트폰 발송 대기)
+                        </span>
                       ) : (
                         <span
                           className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 font-black border border-rose-200 text-[10px]"
