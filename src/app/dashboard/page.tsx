@@ -1,7 +1,8 @@
 "use client";
 
 import { apiFetch, getEgdeskBasePath } from '@/lib/api';
-import { queryTable, onUserDataChanged } from '@/lib/egdesk-helpers';
+import { onUserDataChanged } from '@/lib/egdesk-helpers';
+import { useAuthAdmin } from "@/contexts/AuthAdminContext";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 
 // 프로젝트 경량 변환 헬퍼 (대시보드 렌더링 전용)
@@ -91,6 +92,7 @@ const FdeRecruitModal = nextDynamic(() => import("@/components/dashboard/FdeRecr
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const { user, isLoggedIn } = useAuth();
+  const { userEmail: authAdminEmail, isAdmin: isContextAdmin } = useAuthAdmin();
   const router = useRouter();
 
   // ⚡ SSR-안전 기본 상태 (마운트 후 useEffect에서 캐시 즉시 복원하여 하이드레이션 불일치 0% 보장)
@@ -205,7 +207,10 @@ export default function DashboardPage() {
   const [usageCostKrw, setUsageCostKrw] = useState<number>(0);
   const [usageTokens, setUsageTokens] = useState<number>(0);
   const [usageCalls, setUsageCalls] = useState<number>(0);
-  const [isAdminUser, setIsAdminUser] = useState<boolean>(false);
+  const [isAdminUser, setIsAdminUser] = useState<boolean>(() => isContextAdmin);
+  useEffect(() => {
+    setIsAdminUser(isContextAdmin);
+  }, [isContextAdmin]);
   const [mounted, setMounted] = useState<boolean>(false);
   const [deviceCount, setDeviceCount] = useState<number>(0);
   const [ruleCount, setRuleCount] = useState<number>(0);
@@ -266,8 +271,8 @@ export default function DashboardPage() {
 
   // 데이터 로드 (⚡ 단일 통합 부트스트랩: 단 1회의 HTTP 왕복으로 0.5초 만에 전 데이터 일괄 수신)
   const fetchData = useCallback(async (force = false) => {
-    // 다층 신분증 식별: useAuth user?.email 1순위, NextAuth 세션 2순위, 브라우저 localStorage 캐시 3순위
-    let effectiveEmail = user?.email || (session?.user?.email ? session.user.email.toLowerCase().trim() : "");
+    // 다층 신분증 식별: useAuthAdmin 1순위, useAuth 2순위, NextAuth 세션 3순위, 브라우저 localStorage 캐시 4순위
+    let effectiveEmail = authAdminEmail || user?.email || (session?.user?.email ? session.user.email.toLowerCase().trim() : "");
     if (!effectiveEmail && typeof window !== "undefined") {
       try {
         effectiveEmail = (localStorage.getItem("sheetbot_user_email") || "").toLowerCase().trim();
@@ -290,107 +295,67 @@ export default function DashboardPage() {
     }
 
     try {
-      // 🚀 [이지데스크 공식 헬퍼스 직접 호출: 중간 API 라우트 없이 My DB 다이렉트 쿼리]
-      const [projectsRes, walletRes, schedulesRes, devicesRes, aiUsageRes] = await Promise.all([
-        queryTable("sheetbot_projects", {
-          filters: { user_email: effectiveEmail },
-          orderBy: "id",
-          orderDirection: "DESC",
-          limit: 100,
-        }).catch(() => ({ rows: [] })),
-        queryTable("sheetbot_user_wallets", {
-          filters: { user_email: effectiveEmail },
-          limit: 10,
-        }).catch(() => ({ rows: [] })),
-        queryTable("sheetbot_schedules", {
-          filters: { user_email: effectiveEmail },
-          orderBy: "id",
-          orderDirection: "DESC",
-          limit: 50,
-        }).catch(() => ({ rows: [] })),
-        queryTable("sheetbot_user_devices", {
-          filters: { user_email: effectiveEmail },
-          limit: 50,
-        }).catch(() => ({ rows: [] })),
-        queryTable("sheetbot_ai_usage_logs", {
-          filters: { user_email: effectiveEmail },
-          limit: 100,
-        }).catch(() => ({ rows: [] })),
-      ]);
+      // 🚀 [서버 단일 통합 부트스트랩 API 호출: 브라우저 동시 소켓 점유 0, 5개 쿼리 병렬 일괄 수신]
+      const res = await apiFetch(`/api/dashboard/bootstrap?userEmail=${encodeURIComponent(effectiveEmail)}`, {
+        headers: { "Cache-Control": "no-cache" },
+      });
+      const resData = await res.json().catch(() => null);
 
-      // 1. 프로젝트 동기화 (활성 프로젝트 & 휴지통 분리 표출)
-      const allRows = projectsRes.rows || [];
-      const active = allRows
-        .filter((r: any) => !r.deleted_at && r.status !== "PENDING_DELETE" && r.status !== "TRASHED")
-        .map(mapLightProject);
-      setProjects(active);
-      try { sessionStorage.setItem("sheetbot_cache_projects", JSON.stringify(active)); } catch {}
+      if (resData?.success && resData.data) {
+        const d = resData.data;
 
-      const trashed = allRows
-        .filter((r: any) => r.deleted_at || r.status === "PENDING_DELETE" || r.status === "TRASHED")
-        .map(mapLightProject);
-      setTrashedProjects(trashed);
+        // 1. 프로젝트 동기화 (활성 프로젝트 & 휴지통 분리 표출)
+        const active = d.projects || [];
+        setProjects(active);
+        try { sessionStorage.setItem("sheetbot_cache_projects", JSON.stringify(active)); } catch {}
 
-      // 2. 지갑 잔액 동기화 (240만 토큰 즉시 표출)
-      const walletRows = walletRes.rows || [];
-      const userWalletRow = walletRows.find((r: any) => !r.deleted_at) || walletRows[0];
-      if (userWalletRow) {
-        const walletData = {
-          balanceTokens: Number(userWalletRow.balance_tokens ?? 2495439),
-          totalPurchasedTokens: Number(userWalletRow.total_purchased_tokens ?? 2500000),
-          totalUsedTokens: Number(userWalletRow.total_used_tokens ?? 4561),
-          tier: userWalletRow.tier || "PRO",
-        };
-        setWallet(walletData);
-        try { sessionStorage.setItem("sheetbot_cache_wallet", JSON.stringify(walletData)); } catch {}
-      } else {
-        // 기본 PRO 지갑 세팅
-        const defaultWallet = {
-          balanceTokens: 2495439,
-          totalPurchasedTokens: 2500000,
-          totalUsedTokens: 4561,
-          tier: "PRO",
-        };
-        setWallet(defaultWallet);
-        try { sessionStorage.setItem("sheetbot_cache_wallet", JSON.stringify(defaultWallet)); } catch {}
-      }
+        const trashed = d.trashedProjects || [];
+        setTrashedProjects(trashed);
 
-      // 3. 스케줄 동기화
-      const scheduleRows = schedulesRes.rows || [];
-      const activeScheds = scheduleRows.filter((r: any) => !r.deleted_at);
-      setSchedules(activeScheds);
-      try { sessionStorage.setItem("sheetbot_cache_schedules", JSON.stringify(activeScheds)); } catch {}
+        // 2. 지갑 잔액 동기화 (실제 보유 잔액 우선 표출)
+        if (d.wallet) {
+          const walletData = {
+            balanceTokens: Number(d.wallet.balanceTokens ?? 2495439),
+            totalPurchasedTokens: Number(d.wallet.totalPurchasedTokens ?? 2500000),
+            totalUsedTokens: Number(d.wallet.totalUsedTokens ?? 4561),
+            tier: d.wallet.tier || "PRO",
+          };
+          setWallet(walletData);
+          try { sessionStorage.setItem("sheetbot_cache_wallet", JSON.stringify(walletData)); } catch {}
+        }
 
-      // 4. 연동 기기 수
-      const deviceRows = devicesRes.rows || [];
-      const activeDevices = deviceRows.filter((r: any) => !r.deleted_at && r.status === "CONNECTED");
-      setDeviceCount(activeDevices.length);
+        // 3. 스케줄 동기화
+        const activeScheds = d.schedules || [];
+        setSchedules(activeScheds);
+        try { sessionStorage.setItem("sheetbot_cache_schedules", JSON.stringify(activeScheds)); } catch {}
 
-      // 5. 당월 AI 사용량 동기화
-      const usageRows = (aiUsageRes.rows || []).filter((r: any) => !r.deleted_at);
-      let totalTok = 0;
-      let totalCost = 0;
-      for (const u of usageRows) {
-        totalTok += Number(u.total_tokens || (Number(u.prompt_tokens || 0) + Number(u.completion_tokens || 0)));
-        totalCost += Number(u.estimated_cost_krw || 0);
-      }
-      setUsageTokens(totalTok);
-      setUsageCalls(usageRows.length);
-      setUsageCostKrw(Math.round(totalCost));
+        // 4. 연동 기기 수
+        setDeviceCount(d.devicesCount || 0);
 
-      if (effectiveEmail) {
-        lastFetchedEmailRef.current = effectiveEmail;
+        // 5. AI 모델 설정
+        if (d.currentModel) setCurrentModel(d.currentModel);
+
+        // 6. 당월 AI 사용량 동기화
+        if (d.aiUsage) {
+          setUsageTokens(Number(d.aiUsage.totalTokens || 0));
+          setUsageCalls(Number(d.aiUsage.totalCalls || 0));
+          setUsageCostKrw(Math.round(Number(d.aiUsage.totalCostKrw || 0)));
+        }
+
+        if (effectiveEmail) {
+          lastFetchedEmailRef.current = effectiveEmail;
+        }
       }
     } catch (err) {
-      console.warn("Direct My DB query warning:", err);
+      console.warn("Dashboard bootstrap fetch warning:", err);
     } finally {
       setLoading(false);
       isFetchingRef.current = false;
     }
-  }, [user?.email, session?.user?.email, status]);
+  }, [authAdminEmail, user?.email, session?.user?.email, status]);
 
   // ⚡ 세션 이메일이 확정되거나 변경될 때만 1회 자동 재동기화 (중복 폭풍 방지)
-  const activeUserEmail = user?.email || session?.user?.email || "";
+  const activeUserEmail = authAdminEmail || user?.email || session?.user?.email || "";
   useEffect(() => {
     if (activeUserEmail && lastFetchedEmailRef.current !== activeUserEmail) {
       void fetchData(true);
@@ -405,7 +370,7 @@ export default function DashboardPage() {
 
     const checkAuth = async () => {
       const localSessionId = typeof window !== "undefined" ? localStorage.getItem("egdesk_visitor_session") : null;
-      let currentEmail = user?.email || (session?.user?.email ? session.user.email.toLowerCase().trim() : null);
+      let currentEmail = authAdminEmail || user?.email || (session?.user?.email ? session.user.email.toLowerCase().trim() : null);
 
       if (currentEmail) {
         try { localStorage.setItem("sheetbot_user_email", currentEmail); } catch {}
