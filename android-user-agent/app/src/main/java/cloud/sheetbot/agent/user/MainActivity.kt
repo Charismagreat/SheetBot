@@ -76,6 +76,15 @@ class MainActivity : AppCompatActivity() {
         checkNotificationListenerPermission()
     }
 
+    // 사진 및 일반 파일 다중 선택 런처
+    private val filePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (!uris.isNullOrEmpty()) {
+            uploadFiles(uris, "앱 내 직접 선택 파일 업로드")
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -94,6 +103,9 @@ class MainActivity : AppCompatActivity() {
             KeepAliveService.start(this)
         }
 
+        // 외부 공유하기(Share) 인텐트 처리
+        handleSharedIntent(intent)
+
         // 실시간 고객 SMS 수신 및 입금 감지 브로드캐스트 리시버 등록
         val filter = IntentFilter().apply {
             addAction(SmsReceiver.ACTION_SMS_RECEIVED)
@@ -104,6 +116,12 @@ class MainActivity : AppCompatActivity() {
         } else {
             registerReceiver(depositUpdateReceiver, filter)
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleSharedIntent(intent)
     }
 
     override fun onResume() {
@@ -291,6 +309,29 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, "통화 녹음 동기화 중 오류: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
+        }
+
+        // 사진 및 문서 파일 구글 드라이브 업로드 UI 바인딩
+        binding.etFileUploadDriveFolder.setText(prefs.fileUploadDriveFolder)
+        binding.switchFileUploadSheet.isChecked = prefs.isFileUploadSheetEnabled
+
+        binding.btnSaveFileUploadSettings.setOnClickListener {
+            val folder = binding.etFileUploadDriveFolder.text.toString().trim().takeIf { it.isNotBlank() } ?: "[SheetBot] 파일 보관함"
+            val sheetEnabled = binding.switchFileUploadSheet.isChecked
+
+            prefs.fileUploadDriveFolder = folder
+            prefs.isFileUploadSheetEnabled = sheetEnabled
+
+            Toast.makeText(this, "💾 파일 업로드 설정이 저장되었습니다.\n저장 폴더: $folder", Toast.LENGTH_SHORT).show()
+            addLogItem("파일설정", "폴더: $folder / 대장시트: $sheetEnabled", true)
+        }
+
+        binding.btnPickAndUploadFile.setOnClickListener {
+            if (!prefs.isPaired) {
+                Toast.makeText(this, "먼저 시트봇 워크스페이스와 연동해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            filePickerLauncher.launch("*/*")
         }
 
         binding.btnCheckUpdate.setOnClickListener {
@@ -630,6 +671,81 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) {
                 val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
                 startActivity(intent)
+            }
+        }
+    }
+
+    /**
+     * 외부 앱(갤러리, 파일 탐색기 등)에서 [공유하기]를 통해 SheetBot Agent로 전달된 파일 인텐트 처리
+     */
+    private fun handleSharedIntent(intent: Intent?) {
+        if (intent == null) return
+        val action = intent.action
+
+        if (Intent.ACTION_SEND == action) {
+            val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+            } ?: intent.clipData?.getItemAt(0)?.uri
+
+            if (uri != null) {
+                uploadFiles(listOf(uri), "스마트폰 공유하기(Share) 1초 연동")
+            }
+        } else if (Intent.ACTION_SEND_MULTIPLE == action) {
+            val uris = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+            } ?: emptyList<Uri>()
+
+            if (!uris.isNullOrEmpty()) {
+                uploadFiles(uris, "스마트폰 공유하기(Share) 다중 연동")
+            }
+        }
+    }
+
+    /**
+     * 선택되거나 공유된 파일들을 구글 드라이브로 백그라운드 업로드
+     */
+    private fun uploadFiles(uris: List<Uri>, memo: String) {
+        if (!prefs.isPaired) {
+            Toast.makeText(this, "⚠️ 시트봇 계정 연동 후 파일을 업로드할 수 있습니다.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        binding.progressBar.visibility = View.VISIBLE
+        Toast.makeText(this, "🚀 ${uris.size}건의 파일을 구글 드라이브로 업로드합니다...", Toast.LENGTH_SHORT).show()
+
+        activityScope.launch {
+            try {
+                val results = FileUploadManager.uploadMultipleUris(this@MainActivity, uris, memo)
+                binding.progressBar.visibility = View.GONE
+                val successCount = results.count { it.success }
+
+                if (successCount > 0) {
+                    val targetFolder = prefs.fileUploadDriveFolder.takeIf { it.isNotBlank() } ?: "[SheetBot] 파일 보관함"
+                    Toast.makeText(
+                        this@MainActivity,
+                        "🎉 ${successCount}건의 파일이 구글 드라이브 '${targetFolder}'에 안전하게 업로드되었습니다!",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                    for (r in results.filter { it.success }) {
+                        val fileName = r.fileName ?: "알 수 없는 파일"
+                        val folder = r.folderName ?: targetFolder
+                        addLogItem("파일 업로드", "$fileName -> $folder", true)
+                    }
+                } else {
+                    val firstErr = results.firstOrNull()?.error ?: "알 수 없는 오류"
+                    Toast.makeText(this@MainActivity, "⚠️ 파일 업로드 실패: $firstErr", Toast.LENGTH_LONG).show()
+                    addLogItem("파일 업로드 실패", firstErr, false)
+                }
+            } catch (e: Exception) {
+                binding.progressBar.visibility = View.GONE
+                Toast.makeText(this@MainActivity, "업로드 처리 중 예외 발생: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }

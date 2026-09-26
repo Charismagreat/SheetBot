@@ -72,6 +72,15 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_call_recording_sheet_enabled", true)
         set(value) = prefs.edit().putBoolean("is_call_recording_sheet_enabled", value).apply()
 
+    // 사진 및 일반 파일 구글 드라이브 업로드 관련 설정
+    var fileUploadDriveFolder: String
+        get() = prefs.getString("file_upload_drive_folder", "[SheetBot] 파일 보관함") ?: "[SheetBot] 파일 보관함"
+        set(value) = prefs.edit().putString("file_upload_drive_folder", value).apply()
+
+    var isFileUploadSheetEnabled: Boolean
+        get() = prefs.getBoolean("is_file_upload_sheet_enabled", true)
+        set(value) = prefs.edit().putBoolean("is_file_upload_sheet_enabled", value).apply()
+
     fun isRecordingSynced(fileName: String): Boolean {
         val synced = prefs.getStringSet("synced_recording_files", emptySet()) ?: emptySet()
         return synced.contains(fileName)

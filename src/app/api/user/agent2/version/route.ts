@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 2,
-      latestVersionName: "1.1.0",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v1.1.0/SheetBotAgent.apk",
+      latestVersionCode: 3,
+      latestVersionName: "1.2.0",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v1.2.0/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 에이전트 v1.1.0 업데이트\n• 🎙️ 통화 녹음 파일 구글 드라이브 자동 백업 추가\n• 🎯 지정된 번호/이름 필터링 선택 백업 기능\n• 📁 [SheetBot] 표준 네이밍 폴더 자동 생성\n• 📊 [SheetBot] 통화 녹음 대장 시트 자동 생성 및 실시간 링크 기록\n• 백그라운드 문자 발송 반응 주기 대폭 단축 (20초)",
+      releaseNotes: "시트봇 에이전트 v1.2.0 업데이트\n• 📁 스마트폰 사진 & 문서 구글 드라이브 보관함 자동 업로드\n• ⚡ 갤러리/파일 탐색기 [공유] ➡️ [SheetBot Agent] 1초 원클릭 업로드 지원\n• 📷/📁 앱 내 사진 & 파일 직접 선택 업로드 버튼 지원\n• 📁 구글 드라이브 [SheetBot] 폴더 자동 생성\n• 📊 [SheetBot] 파일 업로드 대장 시트 실시간 자동 기록\n• 🎙️ 통화 녹음 파일 구글 드라이브 백업 기능 안정화",
     },
     {
       headers: {

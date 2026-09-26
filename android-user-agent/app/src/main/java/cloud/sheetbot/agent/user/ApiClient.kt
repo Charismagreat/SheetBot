@@ -509,6 +509,64 @@ object ApiClient {
         }
         UploadRecordingResult(success = false, error = "구글 드라이브 업로드 실패")
     }
+
+    /**
+     * 사진 및 일반 파일 구글 드라이브 및 [SheetBot] 파일 업로드 대장 시트 업로드
+     */
+    suspend fun uploadGenericFile(
+        file: File,
+        fileName: String,
+        mimeType: String,
+        userEmail: String,
+        folderName: String = "[SheetBot] 파일 보관함",
+        memo: String = "스마트폰 시트봇 에이전트 업로드",
+        autoRecordSheet: Boolean = true
+    ): UploadGenericFileResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val fileMediaType = (mimeType.takeIf { it.isNotBlank() } ?: "application/octet-stream").toMediaType()
+        val requestFile = file.asRequestBody(fileMediaType)
+
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("userEmail", userEmail)
+            .addFormDataPart("fileName", fileName)
+            .addFormDataPart("folderName", folderName)
+            .addFormDataPart("memo", memo)
+            .addFormDataPart("autoRecordSheet", autoRecordSheet.toString())
+            .addFormDataPart("file", fileName, requestFile)
+            .build()
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/files/upload"
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(requestBody)
+                    .build()
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    Log.i(TAG, "🎉 [파일 업로드 성공] $fileName -> $folderName")
+                    return@withContext UploadGenericFileResult(
+                        success = true,
+                        fileId = resJson.optString("fileId").takeIf { it.isNotBlank() },
+                        fileName = resJson.optString("fileName", fileName),
+                        folderName = resJson.optString("folderName", folderName),
+                        webViewLink = resJson.optString("webViewLink").takeIf { it.isNotBlank() },
+                        spreadsheetUrl = resJson.optString("spreadsheetUrl").takeIf { it.isNotBlank() },
+                        message = resJson.optString("message", "업로드 완료")
+                    )
+                } else {
+                    val msg = resJson.optString("error", "HTTP ${response.code}")
+                    Log.w(TAG, "파일 업로드 실패 ($host): $msg")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "파일 업로드 통신 예외 ($host): ${e.message}")
+            }
+        }
+        UploadGenericFileResult(success = false, error = "구글 드라이브 파일 업로드에 실패했습니다.")
+    }
 }
 
 data class PairResult(
@@ -562,6 +620,17 @@ data class UploadRecordingResult(
     val fileName: String? = null,
     val webViewLink: String? = null,
     val spreadsheetUrl: String? = null,
+    val error: String? = null
+)
+
+data class UploadGenericFileResult(
+    val success: Boolean,
+    val fileId: String? = null,
+    val fileName: String? = null,
+    val folderName: String? = null,
+    val webViewLink: String? = null,
+    val spreadsheetUrl: String? = null,
+    val message: String? = null,
     val error: String? = null
 )
 
