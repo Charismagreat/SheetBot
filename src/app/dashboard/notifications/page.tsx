@@ -384,6 +384,7 @@ export default function NotificationsPage() {
           recipient: testRecipient.trim(),
           message: testMessage.trim() || undefined,
           deviceId: testModalDevice?.deviceId,
+          userEmail: effectiveEmail,
         }),
       });
       const data = await res.json();
