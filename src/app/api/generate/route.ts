@@ -838,14 +838,6 @@ function getAiCopilotSidebarHtml() {
         '</div>' +
         '<div id="tunnelDetail" class="text-[10px] text-slate-400 mt-1">EGDesk Cloud 터널 통신 준비 완료</div>' +
       '</div>' +
-      '<div class="p-3 bg-white rounded-xl border border-slate-200 shadow-sm space-y-2">' +
-        '<div class="flex items-center justify-between">' +
-          '<span class="text-[11px] font-bold text-slate-700">📱 SheetBot Agent2 연동</span>' +
-          '<span class="px-1.5 py-0.5 text-[9px] font-extrabold rounded bg-emerald-50 text-emerald-700 border border-emerald-200">0원 무제한</span>' +
-        '</div>' +
-        '<p class="text-[10px] text-slate-500 leading-snug">스마트폰 요금제로 0원 고객 문자 발송 & 수신 문자 시트 자동 기록</p>' +
-        '<a href="https://sheetbot.cloud/dashboard/notifications" target="_blank" class="block w-full py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg text-center no-underline">📲 SheetBot Agent2 0초 QR 연동 ↗</a>' +
-      '</div>' +
       '<div class="p-3 bg-white rounded-xl border border-slate-200 shadow-sm space-y-2.5">' +
         '<div class="text-[11px] font-bold text-slate-700">🚀 안티그라비티(Antigravity) AI 확장</div>' +
         '<p class="text-[11px] text-slate-500 leading-relaxed">새로운 자동화 기능 구현은 최첨단 AI 에이전트 안티그라비티에게 명령하세요.</p>' +
