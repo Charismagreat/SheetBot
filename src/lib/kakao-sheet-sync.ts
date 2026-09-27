@@ -6,7 +6,8 @@
  * - 시간순 자동 재정렬
  */
 
-import { callSheetsTool, listDriveFiles, insertRows } from "@/lib/egdesk-helpers";
+import { callSheetsTool, insertRows } from "@/lib/egdesk-helpers";
+import { resolveUserSpreadsheet } from "./sheet-binding-helper";
 import { KakaoChatParseResult } from "./kakao-chat-parser";
 
 export interface SyncKakaoChatResult {
@@ -42,33 +43,22 @@ export async function syncKakaoChatToSheet(
     };
   }
 
-  // 1. 대장 시트 검색 및 생성
+  // 1. 대장 시트 고유 ID 영구 바인딩 및 생성
   let targetSpreadsheetId: string | null = null;
   let spreadsheetUrl = "";
 
-  const queryStr = `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${sheetTitle}' and trashed = false`;
-  const sheetSearch = await (listDriveFiles as any)({
-    query: queryStr,
-    preferOAuth: true,
-  }).catch(() => ({ files: [] }));
-
-  const foundSheets = sheetSearch?.files || [];
-  if (foundSheets.length > 0) {
-    targetSpreadsheetId = foundSheets[0].id;
-    spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
-  } else {
-    const createRes = await callSheetsTool("sheets_create_spreadsheet", {
-      title: sheetTitle,
+  try {
+    const resolved = await resolveUserSpreadsheet({
+      userEmail,
+      sheetType: "KAKAO",
+      defaultTitle: "[SheetBot] 카카오톡 메시지 대장",
+      requestedTitle: sheetTitle,
       preferOAuth: true,
-    }).catch((err: any) => {
-      console.warn("[KakaoSheetSync] 시트 생성 실패:", err.message);
-      return null;
     });
-
-    targetSpreadsheetId = createRes?.spreadsheetId || createRes?.id || null;
-    if (targetSpreadsheetId) {
-      spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
-    }
+    targetSpreadsheetId = resolved.spreadsheetId;
+    spreadsheetUrl = resolved.spreadsheetUrl;
+  } catch (err: any) {
+    console.warn("[KakaoSheetSync] 시트 연동 실패:", err.message);
   }
 
   if (!targetSpreadsheetId) {

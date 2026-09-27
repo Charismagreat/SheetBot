@@ -10,6 +10,7 @@ import {
 import { setupDatabase } from "@/lib/setup-db";
 import { realtimeHub } from "@/lib/realtime-hub";
 import { maskPhoneNumber, formatZeroRetentionContent } from "@/lib/privacy";
+import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 
 /**
  * POST /api/user/calls/missed
@@ -56,57 +57,41 @@ export async function POST(req: NextRequest) {
       sheetTitle = `[SheetBot] ${sheetTitle}`;
     }
 
-    // 1. 구글 스프레드시트 대장 자동 생성 및 행 기록
+    // 1. 구글 스프레드시트 대장 고유 ID 영구 바인딩 및 행 기록
     let spreadsheetUrl = "";
     if (autoRecordSheet) {
       try {
-        let targetSpreadsheetId: string | null = null;
-
-        const queryStr = `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${sheetTitle}' and trashed = false`;
-        const sheetSearch = await listDriveFiles({
-          query: queryStr,
+        const resolved = await resolveUserSpreadsheet({
+          userEmail: cleanEmail,
+          sheetType: "MISSED_CALL",
+          defaultTitle: "[SheetBot] 부재중 전화 대장",
+          requestedTitle: sheetTitle,
           preferOAuth: true,
-        }).catch(() => ({ files: [] }));
+        });
 
-        const foundSheets = sheetSearch?.files || [];
-        if (foundSheets.length > 0) {
-          targetSpreadsheetId = foundSheets[0].id;
-          spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
-        } else {
-          // 대장 시트 신규 생성
-          const createRes = await callSheetsTool("sheets_create_spreadsheet", {
-            title: sheetTitle,
+        const targetSpreadsheetId = resolved.spreadsheetId;
+        spreadsheetUrl = resolved.spreadsheetUrl;
+
+        if (resolved.isNew && targetSpreadsheetId) {
+          // 초기 헤더 기입
+          const headers = [
+            ["부재중 일시", "상대방 이름", "전화번호", "자동 회신 여부", "회신 내용", "기기명"]
+          ];
+          await callSheetsTool("sheets_update_range", {
+            spreadsheetId: targetSpreadsheetId,
+            range: "A1:F1",
+            values: headers,
             preferOAuth: true,
-          }).catch((err: any) => {
-            console.warn("[MissedCalls] sheets_create_spreadsheet warning:", err.message);
-            return null;
-          });
+          }).catch(() => {});
 
-          targetSpreadsheetId = createRes?.spreadsheetId || createRes?.id || null;
-
-          if (targetSpreadsheetId) {
-            spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
-
-            // 초기 헤더 기입
-            const headers = [
-              ["부재중 일시", "상대방 이름", "전화번호", "자동 회신 여부", "회신 내용", "기기명"]
-            ];
-            await callSheetsTool("sheets_update_range", {
-              spreadsheetId: targetSpreadsheetId,
-              range: "A1:F1",
-              values: headers,
-              preferOAuth: true,
-            }).catch(() => {});
-
-            // 헤더 서식 스타일링 (앰버/레드 테마)
-            await callSheetsTool("sheets_format_headers", {
-              spreadsheetId: targetSpreadsheetId,
-              tabName: "시트1",
-              headerBgColor: "#7c2d12",
-              headerTextColor: "#fed7aa",
-              preferOAuth: true,
-            }).catch(() => {});
-          }
+          // 헤더 서식 스타일링 (앰버/레드 테마)
+          await callSheetsTool("sheets_format_headers", {
+            spreadsheetId: targetSpreadsheetId,
+            tabName: "시트1",
+            headerBgColor: "#7c2d12",
+            headerTextColor: "#fed7aa",
+            preferOAuth: true,
+          }).catch(() => {});
         }
 
         // 시트에 신규 부재중 기록 행 추가

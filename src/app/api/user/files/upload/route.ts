@@ -14,6 +14,7 @@ import {
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { getAiModelSettings } from "@/lib/ai-settings";
+import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -144,106 +145,85 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 7. 구글 시트 대장 자동 생성 및 행 기록 (autoRecordSheet == true)
+    // 7. 구글 시트 대장 고유 ID 영구 바인딩 및 행 기록 (autoRecordSheet == true)
     let spreadsheetUrl = "";
     if (autoRecordSheet) {
       try {
         const sheetTitle = defaultSheetTitle;
-        let targetSpreadsheetId: string | null = null;
+        const bindingType = ocrType === "RECEIPT"
+          ? "RECEIPT"
+          : (ocrType === "BUSINESS_CARD" ? "BUSINESS_CARD" : "FILE_UPLOAD");
 
-        // 7-1. 해당 폴더 내 대장 시트 파일 검색
-        const queryStr = targetFolderId
-          ? `'${targetFolderId}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${sheetTitle}' and trashed = false`
-          : `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${sheetTitle}' and trashed = false`;
-
-        const sheetSearch = await listDriveFiles({
-          query: queryStr,
+        const resolved = await resolveUserSpreadsheet({
+          userEmail: cleanEmail,
+          sheetType: bindingType,
+          defaultTitle: sheetTitle,
+          folderId: targetFolderId,
           preferOAuth: true,
-        }).catch(() => ({ files: [] }));
+        });
 
-        const foundSheets = sheetSearch?.files || [];
-        if (foundSheets.length > 0) {
-          targetSpreadsheetId = foundSheets[0].id;
-          spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
-        } else {
-          // 7-2. 대장 시트 신규 생성
-          const createRes = await callSheetsTool("sheets_create_spreadsheet", {
-            title: sheetTitle,
-            preferOAuth: true,
-          }).catch((err: any) => {
-            console.warn("[FilesUpload] sheets_create_spreadsheet warning:", err.message);
-            return null;
-          });
+        const targetSpreadsheetId = resolved.spreadsheetId;
+        spreadsheetUrl = resolved.spreadsheetUrl;
 
-          targetSpreadsheetId = createRes?.spreadsheetId || createRes?.id || null;
+        if (resolved.isNew && targetSpreadsheetId) {
+          // 헤더 및 테마 서식 기입
+          if (ocrType === "RECEIPT") {
+            // 영수증 헤더 (9열)
+            const headers = [
+              ["결제일시", "상호명 (가맹점)", "사업자등록번호", "결제금액 (원)", "부가세 (원)", "결제수단", "주요 품목 요약", "영수증 원본 링크", "등록 기기"]
+            ];
+            await callSheetsTool("sheets_update_range", {
+              spreadsheetId: targetSpreadsheetId,
+              range: "A1:I1",
+              values: headers,
+              preferOAuth: true,
+            }).catch(() => {});
 
-          if (targetSpreadsheetId) {
-            spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
+            await callSheetsTool("sheets_format_headers", {
+              spreadsheetId: targetSpreadsheetId,
+              tabName: "시트1",
+              headerBgColor: "#065f46", // 에메랄드 테마
+              headerTextColor: "#ffffff",
+              preferOAuth: true,
+            }).catch(() => {});
+          } else if (ocrType === "BUSINESS_CARD") {
+            // 명함 헤더 (10열)
+            const headers = [
+              ["등록일시", "성함", "직함", "회사명 / 소속", "휴대전화", "이메일", "회사전화", "회사주소", "명함 원본 링크", "등록 기기"]
+            ];
+            await callSheetsTool("sheets_update_range", {
+              spreadsheetId: targetSpreadsheetId,
+              range: "A1:J1",
+              values: headers,
+              preferOAuth: true,
+            }).catch(() => {});
 
-            // 해당 폴더로 시트 이동
-            if (targetFolderId) {
-              await moveDriveFile(targetSpreadsheetId, targetFolderId, true).catch(() => {});
-            }
+            await callSheetsTool("sheets_format_headers", {
+              spreadsheetId: targetSpreadsheetId,
+              tabName: "시트1",
+              headerBgColor: "#1e3a8a", // 네이비 블루 테마
+              headerTextColor: "#ffffff",
+              preferOAuth: true,
+            }).catch(() => {});
+          } else {
+            // 일반 파일 헤더 (6열)
+            const headers = [
+              ["업로드 일시", "파일명", "파일 종류", "파일 크기", "출처 / 메모", "구글 드라이브 바로보기 링크"]
+            ];
+            await callSheetsTool("sheets_update_range", {
+              spreadsheetId: targetSpreadsheetId,
+              range: "A1:F1",
+              values: headers,
+              preferOAuth: true,
+            }).catch(() => {});
 
-            // 헤더 및 테마 서식 기입
-            if (ocrType === "RECEIPT") {
-              // 영수증 헤더 (9열)
-              const headers = [
-                ["결제일시", "상호명 (가맹점)", "사업자등록번호", "결제금액 (원)", "부가세 (원)", "결제수단", "주요 품목 요약", "영수증 원본 링크", "등록 기기"]
-              ];
-              await callSheetsTool("sheets_update_range", {
-                spreadsheetId: targetSpreadsheetId,
-                range: "A1:I1",
-                values: headers,
-                preferOAuth: true,
-              }).catch(() => {});
-
-              await callSheetsTool("sheets_format_headers", {
-                spreadsheetId: targetSpreadsheetId,
-                tabName: "시트1",
-                headerBgColor: "#065f46", // 에메랄드 테마
-                headerTextColor: "#ffffff",
-                preferOAuth: true,
-              }).catch(() => {});
-            } else if (ocrType === "BUSINESS_CARD") {
-              // 명함 헤더 (10열)
-              const headers = [
-                ["등록일시", "성함", "직함", "회사명 / 소속", "휴대전화", "이메일", "회사전화", "회사주소", "명함 원본 링크", "등록 기기"]
-              ];
-              await callSheetsTool("sheets_update_range", {
-                spreadsheetId: targetSpreadsheetId,
-                range: "A1:J1",
-                values: headers,
-                preferOAuth: true,
-              }).catch(() => {});
-
-              await callSheetsTool("sheets_format_headers", {
-                spreadsheetId: targetSpreadsheetId,
-                tabName: "시트1",
-                headerBgColor: "#1e3a8a", // 네이비 블루 테마
-                headerTextColor: "#ffffff",
-                preferOAuth: true,
-              }).catch(() => {});
-            } else {
-              // 일반 파일 헤더 (6열)
-              const headers = [
-                ["업로드 일시", "파일명", "파일 종류", "파일 크기", "출처 / 메모", "구글 드라이브 바로보기 링크"]
-              ];
-              await callSheetsTool("sheets_update_range", {
-                spreadsheetId: targetSpreadsheetId,
-                range: "A1:F1",
-                values: headers,
-                preferOAuth: true,
-              }).catch(() => {});
-
-              await callSheetsTool("sheets_format_headers", {
-                spreadsheetId: targetSpreadsheetId,
-                tabName: "시트1",
-                headerBgColor: "#1e293b",
-                headerTextColor: "#ffffff",
-                preferOAuth: true,
-              }).catch(() => {});
-            }
+            await callSheetsTool("sheets_format_headers", {
+              spreadsheetId: targetSpreadsheetId,
+              tabName: "시트1",
+              headerBgColor: "#1e293b",
+              headerTextColor: "#ffffff",
+              preferOAuth: true,
+            }).catch(() => {});
           }
         }
 
