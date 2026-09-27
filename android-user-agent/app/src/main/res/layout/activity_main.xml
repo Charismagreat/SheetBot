@@ -33,47 +33,144 @@
                 android:textSize="22sp"
                 android:textStyle="bold" />
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_badge_version"
-                android:paddingHorizontal="10dp"
-                android:paddingVertical="4dp"
-                android:text="v1.8"
-                android:textColor="#10B981"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-        </LinearLayout>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="4dp"
+                    android:text="v1.9"
+                    android:textColor="#10B981"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
 
-        <!-- 실시간 상태 카드 -->
-        <LinearLayout
-            android:id="@+id/cardStatus"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="18dp"
-            android:background="@drawable/bg_card_unpaired"
-            android:layout_marginBottom="14dp">
-
-            <TextView
-                android:id="@+id/tvStatusTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="⚠️ 미연동 상태"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/tvStatusDesc"
+            <!-- 실시간 상태 카드 -->
+            <LinearLayout
+                android:id="@+id/cardStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="시트봇 워크스페이스의 QR코드를 스캔하여 계정을 연동해 주세요."
-                android:textColor="#94A3B8"
-                android:textSize="12sp"
-                android:lineSpacingExtra="3dp" />
-        </LinearLayout>
+                android:orientation="vertical"
+                android:padding="18dp"
+                android:background="@drawable/bg_card_unpaired"
+                android:layout_marginBottom="14dp">
+
+                <TextView
+                    android:id="@+id/tvStatusTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⚠️ 미연동 상태"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvStatusDesc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="시트봇 워크스페이스의 QR코드를 스캔하여 계정을 연동해 주세요."
+                    android:textColor="#94A3B8"
+                    android:textSize="12sp"
+                    android:lineSpacingExtra="3dp" />
+            </LinearLayout>
+
+            <!-- 토큰 지갑 카드 (v1.9 NEW, 연동 시 상시 노출) -->
+            <LinearLayout
+                android:id="@+id/layoutWalletCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#1E293B"
+                android:padding="16dp"
+                android:layout_marginBottom="14dp"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="💰 내 토큰 지갑"
+                        android:textColor="#F8FAFC"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvWalletTier"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_badge_version"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="2dp"
+                        android:text="FREE"
+                        android:textColor="#10B981"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_marginEnd="6dp" />
+
+                    <Button
+                        android:id="@+id/btnRefreshWallet"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:backgroundTint="#334155"
+                        android:text="🔄 새로고침"
+                        android:textColor="#38BDF8"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="bottom"
+                    android:layout_marginBottom="4dp">
+
+                    <TextView
+                        android:id="@+id/tvWalletBalance"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textColor="#34D399"
+                        android:textSize="24sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text=" 토큰"
+                        android:textColor="#94A3B8"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:layout_marginStart="4dp"
+                        android:layout_marginBottom="2dp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvWalletUsageGuide"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="💡 AI 코파일럿 &amp; 구글 시트 자동화 이용 가능"
+                    android:textColor="#94A3B8"
+                    android:textSize="11.5sp"
+                    android:layout_marginBottom="12dp" />
+
+                <Button
+                    android:id="@+id/btnRechargeToken"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:backgroundTint="#6366F1"
+                    android:text="💳 토큰 즉시 충전 (토스 1초 송금 / 계좌이체)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
 
         <!-- 실시간 서버 통신 & 오프라인 대기열 관제 패널 (연동 시 상시 노출) -->
         <LinearLayout

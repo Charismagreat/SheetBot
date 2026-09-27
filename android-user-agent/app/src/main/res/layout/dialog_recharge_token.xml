@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#0F172A">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- 타이틀 헤더 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="💳 토큰 즉시 충전"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_badge_version"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="3dp"
+                android:text="⚡ 0원 수수료"
+                android:textColor="#10B981"
+                android:textSize="10.5sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="토스(Toss) 앱으로 1초 만에 안전하게 충전할 수 있습니다."
+            android:textColor="#94A3B8"
+            android:textSize="12sp"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 1. 패키지 선택 영역 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="1. 충전 패키지 선택"
+            android:textColor="#E2E8F0"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="16dp">
+
+            <!-- 스타터 -->
+            <Button
+                android:id="@+id/btnPkgStarter"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:backgroundTint="#1E293B"
+                android:gravity="start|center_vertical"
+                android:padding="12dp"
+                android:text="🌱 스타터 (5만 토큰) — 5,000원\n   약 25회 생성 가능"
+                android:textColor="#E2E8F0"
+                android:textSize="12.5sp"
+                android:layout_marginBottom="6dp" />
+
+            <!-- 스탠다드 (추천) -->
+            <Button
+                android:id="@+id/btnPkgStandard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:backgroundTint="#4338CA"
+                android:gravity="start|center_vertical"
+                android:padding="12dp"
+                android:text="🔥 스탠다드 (15만 토큰) — 12,000원 [추천]\n   +25% 보너스 토큰 혜택 (가장 인기)"
+                android:textColor="#FFFFFF"
+                android:textSize="12.5sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <!-- 프로 -->
+            <Button
+                android:id="@+id/btnPkgPro"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:backgroundTint="#1E293B"
+                android:gravity="start|center_vertical"
+                android:padding="12dp"
+                android:text="👑 프로 자동화 (45만 토큰) — 30,000원\n   +50% 대용량 보너스 (최대 혜택)"
+                android:textColor="#E2E8F0"
+                android:textSize="12.5sp" />
+        </LinearLayout>
+
+        <!-- 2. 송금자 정보 입력 영역 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="2. 송금자 실명 확인"
+            android:textColor="#E2E8F0"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="6dp" />
+
+        <EditText
+            android:id="@+id/etDepositorName"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:background="#1E293B"
+            android:hint="은행 송금 시 보낼 실명 (예: 홍길동)"
+            android:textColorHint="#64748B"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:paddingHorizontal="14dp"
+            android:inputType="textPersonName"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 계좌 발급 버튼 -->
+        <Button
+            android:id="@+id/btnRequestDeposit"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:backgroundTint="#10B981"
+            android:text="🚀 계좌 발급 &amp; 토스 1초 송금 준비"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 발급 결과 패널 (처음에는 숨김) -->
+        <LinearLayout
+            android:id="@+id/layoutDepositResult"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#1E293B"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🎉 송금 준비가 완료되었습니다!"
+                android:textColor="#34D399"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:id="@+id/tvFinalAmount"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="최종 입금액: 11,987원 (난수 즉시 할인 적용)"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:id="@+id/tvAccountInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="카카오뱅크 3333-12-1695965 (차호석)"
+                android:textColor="#38BDF8"
+                android:textSize="13sp"
+                android:layout_marginBottom="12dp" />
+
+            <!-- 토스 1초 송금 버튼 -->
+            <Button
+                android:id="@+id/btnOpenToss"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:backgroundTint="#0064FF"
+                android:text="⚡ 토스 앱으로 1초 송금 (금액/계좌 자동입력)"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <!-- 계좌번호 복사 버튼 -->
+            <Button
+                android:id="@+id/btnCopyAccount"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:backgroundTint="#334155"
+                android:text="📋 계좌번호 복사하기"
+                android:textColor="#E2E8F0"
+                android:textSize="12sp"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="💡 송금 완료 시 관리자 에이전트가 3초 이내에 입금을 감지하여 토큰을 자동 충전해 드립니다."
+                android:textColor="#94A3B8"
+                android:textSize="11.5sp"
+                android:lineSpacingExtra="2dp" />
+        </LinearLayout>
+
+        <!-- 닫기 버튼 -->
+        <Button
+            android:id="@+id/btnCloseDialog"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:backgroundTint="#1E293B"
+            android:text="닫기"
+            android:textColor="#94A3B8"
+            android:textSize="12sp" />
+
+    </LinearLayout>
+</ScrollView>
