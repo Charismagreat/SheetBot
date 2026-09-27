@@ -61,6 +61,11 @@ const TYPE_NAMES: Record<string, { title: string; icon: string; desc: string }> 
     icon: "🧾",
     desc: "결제 완료 후 고객에게 자동 전송된 0원 스마트 영수증",
   },
+  website_monitor: {
+    title: "웹사이트 모니터링 & 장애 대장",
+    icon: "🚨",
+    desc: "내 홈페이지/사이트 실시간 24시간 장애 감시 및 복구 이력",
+  },
 };
 
 function MobileSheetWebAppContent() {
@@ -69,6 +74,7 @@ function MobileSheetWebAppContent() {
 
   const sheetTypeParam = (params?.sheetType as string) || "sms";
   const userEmail = searchParams?.get("email") || "";
+  const sheetIdParam = searchParams?.get("sheetId") || "";
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<SheetDataResponse | null>(null);
@@ -87,13 +93,26 @@ function MobileSheetWebAppContent() {
       return;
     }
     setLoading(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     try {
-      const res = await apiFetch(`/api/user/sheets/data?email=${encodeURIComponent(userEmail)}&sheetType=${encodeURIComponent(sheetTypeParam)}`
-      );
+      const queryUrl = `/api/user/sheets/data?email=${encodeURIComponent(userEmail)}&sheetType=${encodeURIComponent(sheetTypeParam)}${
+        sheetIdParam ? `&sheetId=${encodeURIComponent(sheetIdParam)}` : ""
+      }`;
+      const res = await apiFetch(queryUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
       const json: SheetDataResponse = await res.json();
       setData(json);
     } catch (e: any) {
-      setData({ success: false, error: e.message || "데이터 조회 실패" });
+      clearTimeout(timeoutId);
+      const isAbort = e.name === "AbortError";
+      setData({
+        success: false,
+        error: isAbort
+          ? "구글 드라이브 응답 지연으로 대장을 불러오지 못했습니다. 상단 새로고침을 눌러주세요."
+          : e.message || "데이터 조회 실패",
+      });
     } finally {
       setLoading(false);
     }
@@ -101,7 +120,7 @@ function MobileSheetWebAppContent() {
 
   useEffect(() => {
     fetchData();
-  }, [sheetTypeParam, userEmail]);
+  }, [sheetTypeParam, userEmail, sheetIdParam]);
 
   // 실시간 검색 필터링
   const filteredRows = useMemo(() => {
