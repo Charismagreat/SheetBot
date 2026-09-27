@@ -1925,10 +1925,10 @@ class MainActivity : AppCompatActivity() {
 
         activityScope.launch(Dispatchers.IO) {
             val targets = mutableListOf<Triple<String, String, String?>>()
-            if (prefs.isSmsSyncEnabled && prefs.getSheetUrl("SMS").isNullOrBlank()) {
+            if (prefs.isSmsSheetSyncEnabled && prefs.getSheetUrl("SMS").isNullOrBlank()) {
                 targets.add(Triple("SMS", prefs.smsDriveSheetTitle, null))
             }
-            if (prefs.isKakaoSyncEnabled && prefs.getSheetUrl("KAKAO").isNullOrBlank()) {
+            if (prefs.isKakaoSheetSyncEnabled && prefs.getSheetUrl("KAKAO").isNullOrBlank()) {
                 targets.add(Triple("KAKAO", prefs.kakaoDriveSheetTitle, null))
             }
             if (prefs.isMissedCallAutoReplyEnabled && prefs.getSheetUrl("MISSED_CALL").isNullOrBlank()) {
@@ -1943,13 +1943,13 @@ class MainActivity : AppCompatActivity() {
             if (prefs.isLinkScrapEnabled && prefs.getSheetUrl("LINK_BOOKMARK").isNullOrBlank()) {
                 targets.add(Triple("LINK_BOOKMARK", prefs.linkScrapDriveSheetTitle, null))
             }
-            if (prefs.isCallEndedCardEnabled && prefs.getSheetUrl("CALL_ENDED_CARD").isNullOrBlank()) {
+            if (prefs.isCallEndedCardPromptEnabled && prefs.getSheetUrl("CALL_ENDED_CARD").isNullOrBlank()) {
                 targets.add(Triple("CALL_ENDED_CARD", "[SheetBot] 모바일 명함 발송 대장", null))
             }
-            if (prefs.isPaymentPushSyncEnabled && prefs.getSheetUrl("PAYMENT_PUSH").isNullOrBlank()) {
+            if (prefs.isPushDetectionEnabled && prefs.getSheetUrl("PAYMENT_PUSH").isNullOrBlank()) {
                 targets.add(Triple("PAYMENT_PUSH", "[SheetBot] 매장 결제 및 매출 대장", null))
             }
-            if (prefs.isAutoReceiptEnabled && prefs.getSheetUrl("RECEIPT_SMS").isNullOrBlank()) {
+            if (prefs.isReceiptSmsEnabled && prefs.getSheetUrl("RECEIPT_SMS").isNullOrBlank()) {
                 targets.add(Triple("RECEIPT_SMS", "[SheetBot] 고객 영수증 문자 발송 대장", null))
             }
 
