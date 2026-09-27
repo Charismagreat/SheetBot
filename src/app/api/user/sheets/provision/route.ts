@@ -153,13 +153,32 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3. 1행 A1 확인 후 비어있으면 헤더 및 고급 다크 서식 주입
+    // 3. 스프레드시트 첫 번째 메인 탭 이름 동적 확인 및 1행 A1 헤더 주입
     try {
-      const firstRowCheck = await callSheetsTool("sheets_get_range", {
-        spreadsheetId: targetSpreadsheetId,
-        range: "A1:A1",
-        preferOAuth: true,
-      }).catch(() => null);
+      let primaryTabName = "시트1";
+      try {
+        const meta = await callSheetsTool(
+          "sheets_get_spreadsheet",
+          { spreadsheetId: targetSpreadsheetId, preferOAuth: true },
+          { preferOAuth: true }
+        );
+        if (meta?.sheets && meta.sheets.length > 0 && meta.sheets[0].title) {
+          primaryTabName = meta.sheets[0].title;
+        }
+      } catch (metaErr: any) {
+        console.warn(`[ProvisionSheet] sheets_get_spreadsheet warning:`, metaErr.message);
+      }
+
+      const checkRange = `${primaryTabName}!A1:A1`;
+      const firstRowCheck = await callSheetsTool(
+        "sheets_get_range",
+        {
+          spreadsheetId: targetSpreadsheetId,
+          range: checkRange,
+          preferOAuth: true,
+        },
+        { preferOAuth: true }
+      ).catch(() => null);
 
       const hasHeaderOrData =
         firstRowCheck?.values &&
@@ -167,20 +186,32 @@ export async function POST(req: NextRequest) {
         firstRowCheck.values[0]?.[0];
 
       if (!hasHeaderOrData) {
-        await callSheetsTool("sheets_update_range", {
-          spreadsheetId: targetSpreadsheetId,
-          range: def.range,
-          values: [def.headers],
-          preferOAuth: true,
-        }).catch(() => {});
+        const updateRange = `${primaryTabName}!${def.range}`;
+        console.log(`[ProvisionSheet] Injecting headers to ${updateRange} for ${typeKey}...`);
+        await callSheetsTool(
+          "sheets_update_range",
+          {
+            spreadsheetId: targetSpreadsheetId,
+            range: updateRange,
+            values: [def.headers],
+            preferOAuth: true,
+          },
+          { preferOAuth: true }
+        );
 
-        await callSheetsTool("sheets_format_headers", {
-          spreadsheetId: targetSpreadsheetId,
-          tabName: "시트1",
-          headerBgColor: "#1e293b",
-          headerTextColor: "#ffffff",
-          preferOAuth: true,
-        }).catch(() => {});
+        await callSheetsTool(
+          "sheets_format_headers",
+          {
+            spreadsheetId: targetSpreadsheetId,
+            tabName: primaryTabName,
+            headerBgColor: "#1e293b",
+            headerTextColor: "#ffffff",
+            preferOAuth: true,
+          },
+          { preferOAuth: true }
+        ).catch((fmtErr: any) => {
+          console.warn(`[ProvisionSheet] sheets_format_headers warning:`, fmtErr.message);
+        });
       }
     } catch (fmtErr: any) {
       console.warn(`[ProvisionSheet] Header format warning:`, fmtErr.message);

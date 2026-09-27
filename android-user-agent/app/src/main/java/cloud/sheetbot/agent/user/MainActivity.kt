@@ -2050,22 +2050,34 @@ class MainActivity : AppCompatActivity() {
         val progressDialog = AlertDialog.Builder(this)
             .setTitle("📊 구글 스프레드시트 대장 준비 중")
             .setMessage("구글 드라이브에서 '${defaultTitle}'을(를) 확인하고 있습니다...\n\n준비되는 즉시 자동으로 열립니다. 잠시만 기다려주세요.")
-            .setCancelable(false)
+            .setCancelable(true)
+            .setNegativeButton("닫기") { dialog, _ ->
+                dialog.dismiss()
+            }
             .create()
         progressDialog.show()
 
         activityScope.launch {
             try {
-                val result = ApiClient.provisionSheet(
-                    userEmail = userEmail,
-                    sheetType = sheetType,
-                    sheetTitle = defaultTitle,
-                    folderName = folderName
-                )
+                val result = kotlinx.coroutines.withTimeoutOrNull(25_000L) {
+                    ApiClient.provisionSheet(
+                        userEmail = userEmail,
+                        sheetType = sheetType,
+                        sheetTitle = defaultTitle,
+                        folderName = folderName
+                    )
+                }
+
                 withContext(Dispatchers.Main) {
                     if (progressDialog.isShowing) {
                         progressDialog.dismiss()
                     }
+
+                    if (result == null) {
+                        Toast.makeText(this@MainActivity, "시트 연결 요청 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.", Toast.LENGTH_LONG).show()
+                        return@withContext
+                    }
+
                     if (result.success && !result.spreadsheetUrl.isNullOrBlank()) {
                         prefs.setSheetUrl(sheetType, result.spreadsheetUrl)
                         if (!result.spreadsheetId.isNullOrBlank()) {
