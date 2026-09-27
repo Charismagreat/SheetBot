@@ -68,12 +68,28 @@ const TYPE_NAMES: Record<string, { title: string; icon: string; desc: string }> 
   },
 };
 
+// 대표 10개 대장 기바인딩 ID 프리셋 (탐색 지연 없이 0초 직행)
+const DEFAULT_KNOWN_SHEETS: Record<string, Record<string, string>> = {
+  "chachogreat@gmail.com": {
+    website_monitor: "1YkK5vuxxgqwumB-FRDCw_NyI-ojnhFfn7x-HQe7go4s",
+    call_ended_card: "1EnsIL1JPoa4_e97dpvS53Fi7Sf-hrKGwVHa0i1FZFzI",
+    file_upload: "1yxw6CTt269YWdfYoHLGf69picVoPVpsAiQTbq0Ss9mQ",
+    sms: "1FzEBoeQvniowaF6SMcQWujMnuSXqQZGqtIRPz0ha7kE",
+    recording: "1bHtvSdmqfHJ-1WkgPv9hMlaUjqbMxEBnkHQpk1kIiOQ",
+    link_bookmark: "1fSUK1NVshsX2unoTdfw7XfMjrbql46a4ecWp5E3EmeU",
+    kakao: "1QKd7OBcp8IQ_2llO9jmmhWlkNRgaIRzT9v1vwZ2Ll1g",
+    missed_call: "1DqUqEECRjE2luuLoBuyV8RXYLccqRpbSSD2SZvTOAXo",
+    payment_push: "1CSxsEJEpiBXisqw8yAqz3paTqcraH2kzW6RCpQ07vx8",
+    receipt_sms: "1Hi-hYZAGcmWDSSBpUhgEl6_Utc6iIguUiFClqEqas9I",
+  },
+};
+
 function MobileSheetWebAppContent() {
   const params = useParams();
   const searchParams = useSearchParams();
 
   const sheetTypeParam = (params?.sheetType as string) || "sms";
-  const userEmail = searchParams?.get("email") || "";
+  const userEmail = (searchParams?.get("email") || "").trim().toLowerCase();
   const sheetIdParam = searchParams?.get("sheetId") || "";
 
   const [loading, setLoading] = useState(true);
@@ -93,19 +109,36 @@ function MobileSheetWebAppContent() {
       return;
     }
     setLoading(true);
+    setData(null); // 이전 에러 또는 구 데이터 즉시 리셋
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 35000);
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
 
     try {
-      const queryUrl = `/api/user/sheets/data?email=${encodeURIComponent(userEmail)}&sheetType=${encodeURIComponent(sheetTypeParam)}${
-        sheetIdParam ? `&sheetId=${encodeURIComponent(sheetIdParam)}` : ""
+      // 1. 파라미터 -> 로컬스토리지 -> 프리셋 순으로 sheetId 탐색 (서버 탐색 0초 직행)
+      const cleanType = sheetTypeParam.toLowerCase();
+      const localCacheKey = `sheetbot_sid_${userEmail}_${cleanType}`;
+      let effectiveSheetId =
+        sheetIdParam ||
+        (typeof window !== "undefined" ? localStorage.getItem(localCacheKey) || "" : "") ||
+        DEFAULT_KNOWN_SHEETS[userEmail]?.[cleanType] ||
+        "";
+
+      const queryUrl = `/api/user/sheets/data?email=${encodeURIComponent(userEmail)}&sheetType=${encodeURIComponent(cleanType)}${
+        effectiveSheetId ? `&sheetId=${encodeURIComponent(effectiveSheetId)}` : ""
       }&t=${Date.now()}`;
+
       const res = await apiFetch(queryUrl, {
         signal: controller.signal,
         cache: "no-store",
       });
       clearTimeout(timeoutId);
       const json: SheetDataResponse = await res.json();
+      
+      if (json?.success && json?.spreadsheetId) {
+        if (typeof window !== "undefined") {
+          localStorage.setItem(localCacheKey, json.spreadsheetId);
+        }
+      }
       setData(json);
     } catch (e: any) {
       clearTimeout(timeoutId);
@@ -113,7 +146,7 @@ function MobileSheetWebAppContent() {
       setData({
         success: false,
         error: isAbort
-          ? "구글 드라이브 응답 지연으로 대장을 불러오지 못했습니다. 아래 [다시 불러오기]를 눌러주세요."
+          ? "구글 스프레드시트 응답 지연으로 대장을 불러오지 못했습니다. 아래 [대장 지금 다시 불러오기]를 눌러주세요."
           : e.message || "데이터 조회 실패",
       });
     } finally {
