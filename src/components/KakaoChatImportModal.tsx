@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState } from "react";
 import { MessageSquare, Upload, CheckCircle2, AlertCircle, FileText, ArrowRight, ExternalLink } from "lucide-react";
 
@@ -43,7 +44,7 @@ export function KakaoChatImportModal({ isOpen, onClose, onSuccess }: KakaoChatIm
         formData.append("myName", myName.trim());
       }
 
-      const res = await fetch("/api/user/messages/kakao/import", {
+      const res = await apiFetch("/api/user/messages/kakao/import", {
         method: "POST",
         body: formData,
       });

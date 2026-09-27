@@ -13,6 +13,7 @@ import {
   insertRows,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { getAiModelSettings } from "@/lib/ai-settings";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -117,9 +118,9 @@ export async function POST(req: NextRequest) {
     let webViewLink = "";
     try {
       const uploadRes = await uploadDriveFile({
-        localPath: tempFilePath,
+        filePath: tempFilePath,
         folderId: targetFolderId || undefined,
-        fileName: targetFileName,
+        destName: targetFileName,
         preferOAuth: true,
       });
 
@@ -130,12 +131,14 @@ export async function POST(req: NextRequest) {
       throw new Error(`구글 드라이브 파일 업로드에 실패했습니다: ${uploadErr.message}`);
     }
 
-    // 6. AI OCR 분석 실행 (영수증 또는 명함인 경우 Gemini 3.8 Flash 파일 분석)
+    // 6. AI OCR 분석 실행 (영수증 또는 명함인 경우 사이트 설정 AI 모델로 분석)
     let ocrResultData: any = null;
     if (ocrType === "RECEIPT" || ocrType === "BUSINESS_CARD") {
       try {
+        const aiSettings = await getAiModelSettings();
+        const configuredModel = aiSettings.defaultModel;
         const base64File = buffer.toString("base64");
-        ocrResultData = await performAiOcr(base64File, targetFileName, mimeType, ocrType);
+        ocrResultData = await performAiOcr(base64File, targetFileName, mimeType, ocrType, configuredModel);
       } catch (ocrErr: any) {
         console.warn(`[FilesUpload] AI OCR analysis warning (${ocrType}):`, ocrErr.message);
       }
@@ -379,7 +382,8 @@ async function performAiOcr(
   base64File: string,
   fileName: string,
   mimeType: string,
-  ocrType: "RECEIPT" | "BUSINESS_CARD"
+  ocrType: "RECEIPT" | "BUSINESS_CARD",
+  modelName?: string
 ): Promise<any> {
   const prompt = ocrType === "RECEIPT"
     ? `당신은 대한민국 영수증 및 결제 전표 분석 전문 AI 회계사입니다.
@@ -406,7 +410,7 @@ async function performAiOcr(
 }`;
 
   const aiRes = await callAiCaller(prompt, {
-    model: "gemini-3.8-flash",
+    model: modelName || undefined,
     temperature: 0.1,
     files: [
       {

@@ -1428,28 +1428,33 @@ class MainActivity : AppCompatActivity() {
         val action = intent.action
 
         if (Intent.ACTION_SEND == action) {
-            val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
+                ?: intent.clipData?.getItemAt(0)?.text?.toString()
+
+            val streamUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
             } else {
                 @Suppress("DEPRECATION")
                 intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
-            } ?: intent.clipData?.getItemAt(0)?.uri
+            }
 
-            if (uri != null) {
-                uploadFiles(listOf(uri), "스마트폰 공유하기(Share) 1초 연동")
+            val clipUri = intent.clipData?.getItemAt(0)?.uri
+            val urlRegex = Regex("https?://[a-zA-Z0-9.-]+(?:/[^\\s]*)?")
+            val matchedUrlInText = if (!sharedText.isNullOrBlank()) urlRegex.find(sharedText)?.value else null
+            val isWebUri = clipUri?.scheme in listOf("http", "https")
+
+            // 1순위: 텍스트에 웹 링크가 포함되어 있거나 clipUri가 웹 주소인 경우 -> 웹 링크 & 유튜브 자동 스크랩
+            if (matchedUrlInText != null) {
+                bookmarkSharedUrl(matchedUrlInText, sharedText)
+            } else if (isWebUri && clipUri != null) {
+                bookmarkSharedUrl(clipUri.toString(), sharedText)
             } else {
-                // 웹 브라우저나 유튜브 앱에서 [공유하기]로 전달된 텍스트 및 URL 처리 (v1.6)
-                val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
-                    ?: intent.clipData?.getItemAt(0)?.text?.toString()
-                if (!sharedText.isNullOrBlank()) {
-                    val urlRegex = Regex("https?://[a-zA-Z0-9.-]+(?:/[^\\s]*)?")
-                    val match = urlRegex.find(sharedText)
-                    if (match != null) {
-                        val extractedUrl = match.value
-                        bookmarkSharedUrl(extractedUrl, sharedText)
-                    } else {
-                        Toast.makeText(this, "공유된 텍스트에서 링크(URL)를 찾을 수 없습니다.", Toast.LENGTH_SHORT).show()
-                    }
+                // 2순위: 실제 로컬 파일(content:// 또는 file://) 스트림인 경우 -> 구글 드라이브 파일 업로드
+                val fileUri = streamUri ?: clipUri?.takeIf { it.scheme in listOf("content", "file") }
+                if (fileUri != null) {
+                    uploadFiles(listOf(fileUri), "스마트폰 공유하기(Share) 1초 연동")
+                } else if (!sharedText.isNullOrBlank()) {
+                    Toast.makeText(this, "공유된 텍스트에서 링크(URL)를 찾을 수 없습니다.", Toast.LENGTH_SHORT).show()
                 }
             }
         } else if (Intent.ACTION_SEND_MULTIPLE == action) {
@@ -1460,8 +1465,9 @@ class MainActivity : AppCompatActivity() {
                 intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
             } ?: emptyList<Uri>()
 
-            if (!uris.isNullOrEmpty()) {
-                uploadFiles(uris, "스마트폰 공유하기(Share) 다중 연동")
+            val validFileUris = uris.filter { it.scheme in listOf("content", "file") }
+            if (validFileUris.isNotEmpty()) {
+                uploadFiles(validFileUris, "스마트폰 공유하기(Share) 다중 연동")
             }
         }
     }
