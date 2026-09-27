@@ -8,6 +8,7 @@ import { executeSmartDispatchRules } from "@/lib/smart-dispatch-rules";
 import { setupDatabase } from "@/lib/setup-db";
 import { parseBankDepositSms } from "@/lib/bank-sms-parser";
 import { emitDepositEvent } from "@/lib/deposit-events";
+import { recordPaymentToGoogleSheet } from "@/lib/payment-sheet-sync";
 
 /**
  * POST /api/wallet/bank-webhook
@@ -383,7 +384,20 @@ export async function POST(request: Request) {
         });
       }
 
-      // 2. 실제 은행 문자이지만 웹에 대기 세션이 없는 경우
+      // 2. 실제 은행 문자이지만 웹에 대기 세션이 없는 경우 (매장 매출 대장 시트 자동 기록)
+      const targetUserEmail = body?.userEmail || "";
+      if (targetUserEmail && targetUserEmail.includes("@")) {
+        recordPaymentToGoogleSheet({
+          userEmail: targetUserEmail,
+          paymentTime: new Date().toISOString().replace("T", " ").slice(0, 19),
+          channelOrBank: bankName || "금융/결제사",
+          customerName: cleanDepositor || "미확인",
+          amount: cleanAmount,
+          memoOrRawText: rawSms.slice(0, 200),
+          deviceId: body?.deviceModel || "SheetBot Agent",
+        }).catch((err) => console.warn("[Bank-Webhook] Sheet sync error (unmatched):", err));
+      }
+
       return NextResponse.json({
         success: true,
         matched: false,
@@ -394,7 +408,18 @@ export async function POST(request: Request) {
       });
     }
 
-    // 3. 토큰 지갑 충전 실행
+    // 3. 토큰 지갑 충전 실행 및 매장 매출 대장 시트 동기화
+    if (matched?.user_email) {
+      recordPaymentToGoogleSheet({
+        userEmail: matched.user_email,
+        paymentTime: new Date().toISOString().replace("T", " ").slice(0, 19),
+        channelOrBank: bankName || "다이렉트 송금",
+        customerName: matched.depositor_name || cleanDepositor || "회원",
+        amount: cleanAmount,
+        memoOrRawText: `${matched.package_name} 토큰 충전 승인`,
+        deviceId: body?.deviceModel || "SheetBot Agent",
+      }).catch((err) => console.warn("[Bank-Webhook] Sheet sync error (matched):", err));
+    }
     const now = new Date().toISOString();
     const creditRes = await creditTokens(
       matched.user_email,

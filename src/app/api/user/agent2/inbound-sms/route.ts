@@ -5,6 +5,8 @@ import { queryTable, insertRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { realtimeHub } from "@/lib/realtime-hub";
 import { maskPhoneNumber, formatZeroRetentionContent } from "@/lib/privacy";
+import { parseBankDepositSms } from "@/lib/bank-sms-parser";
+import { recordPaymentToGoogleSheet } from "@/lib/payment-sheet-sync";
 
 /**
  * POST /api/user/agent2/inbound-sms
@@ -42,6 +44,20 @@ export async function POST(req: NextRequest) {
         created_at: nowIso,
       },
     ]);
+
+    // 1-1. 은행/결제/배달앱 승인 문자일 경우 [SheetBot] 매장 결제 및 매출 대장 시트에 실시간 자동 기록
+    const parsedBank = parseBankDepositSms(message);
+    if (parsedBank.amountKrw && parsedBank.amountKrw > 0) {
+      recordPaymentToGoogleSheet({
+        userEmail: cleanEmail,
+        paymentTime: nowIso.replace("T", " ").slice(0, 19),
+        channelOrBank: parsedBank.bankName || "카드/은행 결제",
+        customerName: parsedBank.depositorName || "고객",
+        amount: parsedBank.amountKrw,
+        memoOrRawText: message.slice(0, 200),
+        deviceId: deviceId || "SheetBot Agent",
+      }).catch((err) => console.warn("[InboundSms] Payment sheet sync error:", err));
+    }
 
     // 2. 실시간 SSE 알림 브로드캐스트 (대시보드 실시간 반영)
     try {
