@@ -5,6 +5,13 @@ import { resolveUserSpreadsheet, SheetBindingType } from "@/lib/sheet-binding-he
 import { callSheetsTool } from "@/lib/egdesk-helpers";
 import { SHEET_DEFINITIONS } from "@/app/api/user/sheets/provision/route";
 
+interface CachedSheetData {
+  data: any;
+  timestamp: number;
+}
+const sheetDataCache = new Map<string, CachedSheetData>();
+const CACHE_TTL_MS = 15_000; // 15초 인메모리 캐시
+
 /**
  * GET /api/user/sheets/data?email=...&sheetType=...
  * 모바일 스마트 웹앱용 시트 데이터 실시간 조회 API
@@ -32,6 +39,16 @@ export async function GET(req: NextRequest) {
       ? `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`
       : "";
 
+    // 1. 단기 인메모리 캐시 확인 (15초 이내 중복/연속 요청 즉시 0초 반환)
+    const cacheKey = `${cleanEmail}_${typeKey}`;
+    const cached = sheetDataCache.get(cacheKey);
+    const now = Date.now();
+    if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+      return NextResponse.json(cached.data, {
+        headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
+      });
+    }
+
     // sheetId가 직접 전달되지 않은 경우에만 resolveUserSpreadsheet 실행
     if (!targetSpreadsheetId) {
       const resolved = await resolveUserSpreadsheet({
@@ -53,12 +70,12 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 시트의 데이터 읽기 (상위 300행 직통 조회)
+    // 시트의 데이터 읽기 (빠른 로딩을 위해 상위 80행 및 최대 9열 A1:I80으로 최적화)
     let rangeRes = await callSheetsTool(
       "sheets_get_range",
       {
         spreadsheetId: targetSpreadsheetId,
-        range: "A1:Z300",
+        range: "A1:I80",
         preferOAuth: true,
       },
       { preferOAuth: true }
@@ -70,7 +87,7 @@ export async function GET(req: NextRequest) {
         "sheets_get_range",
         {
           spreadsheetId: targetSpreadsheetId,
-          range: "시트1!A1:Z300",
+          range: "시트1!A1:I80",
           preferOAuth: true,
         },
         { preferOAuth: true }
@@ -84,7 +101,7 @@ export async function GET(req: NextRequest) {
         : def?.headers || [];
     const rows = values.length > 1 ? values.slice(1).reverse() : []; // 최신순 정렬
 
-    return NextResponse.json({
+    const responsePayload = {
       success: true,
       spreadsheetId: targetSpreadsheetId,
       spreadsheetUrl,
@@ -92,6 +109,13 @@ export async function GET(req: NextRequest) {
       headers,
       rows,
       totalCount: rows.length,
+    };
+
+    // 캐시에 보관
+    sheetDataCache.set(cacheKey, { data: responsePayload, timestamp: now });
+
+    return NextResponse.json(responsePayload, {
+      headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
     });
   } catch (error: any) {
     console.error("[SheetsDataAPI] Unexpected error:", error);
