@@ -754,7 +754,7 @@
                     android:id="@+id/switchCallRecording"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true" />
+                    android:checked="false" />
             </LinearLayout>
 
             <LinearLayout
@@ -875,7 +875,7 @@
                         android:id="@+id/switchRecordingSheet"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:checked="true" />
+                        android:checked="false" />
                 </LinearLayout>
 
                 <TextView
@@ -1025,7 +1025,7 @@
                         android:id="@+id/switchFileUploadSheet"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:checked="true" />
+                        android:checked="false" />
                 </LinearLayout>
 
                 <TextView
@@ -1074,7 +1074,7 @@
                     android:id="@+id/switchLinkScrap"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true" />
+                    android:checked="false" />
             </LinearLayout>
 
             <LinearLayout
@@ -1152,7 +1152,7 @@
                     android:id="@+id/switchSmsSync"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true" />
+                    android:checked="false" />
             </LinearLayout>
 
             <LinearLayout
@@ -1292,7 +1292,7 @@
                     android:id="@+id/switchKakaoSync"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true" />
+                    android:checked="false" />
             </LinearLayout>
 
             <LinearLayout
@@ -1412,7 +1412,7 @@
                     android:id="@+id/switchMissedCall"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true" />
+                    android:checked="false" />
             </LinearLayout>
 
             <LinearLayout
@@ -1501,7 +1501,7 @@
                     android:id="@+id/switchCallEndedCard"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true" />
+                    android:checked="false" />
             </LinearLayout>
 
             <LinearLayout

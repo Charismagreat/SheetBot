@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 22,
-      latestVersionName: "2.1.1",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.1/SheetBotAgent.apk",
+      latestVersionCode: 23,
+      latestVersionName: "2.1.2",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.2/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.1 정식 릴리스\n• 🌐 웹 링크 & 🔴 유튜브 AI 자동 스크랩 설정 카드 디자인 통일 (배경/패딩/라벨 완벽 일치)\n• 👥 문자(SMS) 및 통화 녹음 기록 대상 번호 '연락처에서 추가' 기능 지원\n• 📋 등록 대상 실시간 뱃지 및 대상 관리(개별 제외/삭제, 전체 해제) 팝업 다이얼로그 추가\n• 🟡 카카오톡 기록 대상 관리 및 원클릭 제외 지원",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.2 정식 릴리스\n• 🛡️ 신규 설치 시 기능 기본 꺼짐(Default OFF) 전환으로 완전한 사용자 주도권(Opt-in) 보장\n• ⚡ 기능 스위치 ON 시 구글 스프레드시트 대장 및 헤더 즉시 자동 생성(Eager Provisioning)\n• 👥 문자/통화녹음 기록 대상 주소록(연락처) 선택 및 대상 관리(개별 제외/전체 해제) 다이얼로그 탑재",
     },
     {
       headers: {

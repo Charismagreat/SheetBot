@@ -1073,6 +1073,60 @@ object ApiClient {
         }
         ReferralClaimResult(success = false, error = lastError)
     }
+
+    /**
+     * 기능 스위치 ON 시 구글 스프레드시트 대장 및 헤더 선제 생성 (Eager Provisioning, v2.1.2)
+     */
+    suspend fun provisionSheet(
+        userEmail: String,
+        sheetType: String,
+        sheetTitle: String? = null
+    ): ProvisionSheetResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastError = "구글 시트 생성 요청 실패"
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/sheets/provision"
+            try {
+                val json = JSONObject().apply {
+                    put("userEmail", userEmail)
+                    put("sheetType", sheetType)
+                    if (!sheetTitle.isNullOrBlank()) {
+                        put("sheetTitle", sheetTitle)
+                    }
+                }
+                val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(body)
+                    .build()
+
+                val response = longTimeoutClient.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val isNew = resJson.optBoolean("isNew", false)
+                    val spreadsheetUrl = resJson.optString("spreadsheetUrl", "")
+                    val title = resJson.optString("title", sheetTitle ?: "")
+                    Log.i(TAG, "📊 [시트 선제 생성 완료] $sheetType -> $title ($spreadsheetUrl, isNew=$isNew)")
+                    return@withContext ProvisionSheetResult(
+                        success = true,
+                        isNew = isNew,
+                        spreadsheetId = resJson.optString("spreadsheetId", ""),
+                        spreadsheetUrl = spreadsheetUrl,
+                        title = title,
+                        message = resJson.optString("message", "구글 스프레드시트 대장이 준비되었습니다.")
+                    )
+                } else {
+                    lastError = resJson.optString("error", "HTTP ${response.code}")
+                }
+            } catch (e: Exception) {
+                lastError = "[$host] ${e.localizedMessage ?: "통신 오류"}"
+            }
+        }
+        ProvisionSheetResult(success = false, error = lastError)
+    }
 }
 
 
@@ -1212,6 +1266,16 @@ data class ReferralClaimResult(
     val message: String = "",
     val rewardTokens: Int = 10000,
     val inviterEmail: String = "",
+    val error: String? = null
+)
+
+data class ProvisionSheetResult(
+    val success: Boolean,
+    val isNew: Boolean = false,
+    val spreadsheetId: String? = null,
+    val spreadsheetUrl: String? = null,
+    val title: String? = null,
+    val message: String? = null,
     val error: String? = null
 )
 
