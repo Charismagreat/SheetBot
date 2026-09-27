@@ -44,7 +44,7 @@ export async function generateInquiryAiDraft(input: InquiryDraftInput): Promise<
 - 연락처: ${phone || "미기재"}
 - 이메일: ${userEmail || "미기재"}
 - 업종 / 산업군: ${industry || "일반 기업"}
-- 희망 자동화 영역: ${targetAreas || "업무 자동화 및 시트 연동"}
+- 희망 자동화 영역: ${targetAreas || "업무 자동화 및 시트 래핑"}
 - 정부지원사업(비대면 바우처 등) 연계 희망: ${useVoucher === "YES" ? "희망함 (최대 70~80% 정부지원 연계 필요)" : useVoucher === "CONSULT" ? "상담 후 결정" : "자체 예산 집행"}
 - 고객 상세 요구사항:
 ${content || "(별도 텍스트 없음)"}

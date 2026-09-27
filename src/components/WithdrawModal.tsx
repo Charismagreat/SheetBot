@@ -97,7 +97,7 @@ export default function WithdrawModal({ isOpen, onClose, userEmail }: WithdrawMo
             <div className="space-y-1">
               <h4 className="text-lg font-black text-slate-800">계정이 안전하게 삭제되었습니다</h4>
               <p className="text-xs text-slate-500 leading-relaxed">
-                모든 개인 API 키와 구글 시트 연동 주소가 즉각 영구 삭제되었습니다.<br />
+                모든 개인 API 키와 구글 시트 래핑 주소가 즉각 영구 삭제되었습니다.<br />
                 그동안 SheetBot을 이용해 주셔서 진심으로 감사드립니다.
               </p>
             </div>

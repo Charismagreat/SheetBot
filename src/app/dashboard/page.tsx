@@ -678,14 +678,14 @@ export default function DashboardPage() {
 
           {/* 4대 핵심 자원 & 현황 요약 카드 그리드 */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* 카드 1: 연동 프로젝트 & 스케줄 */}
+            {/* 카드 1: 래핑 프로젝트 & 스케줄 */}
             <div
               className="bg-slate-50/80 hover:bg-slate-50 p-4 rounded-2xl border border-slate-200/80 transition-all flex flex-col justify-between"
-              data-easybot-hint="내 연동 프로젝트: 현재 내 구글 계정에 등록되어 스프레드시트에 바인딩된 Apps Script 프로젝트와 가동 중인 스케줄 현황입니다."
+              data-easybot-hint="내 래핑 프로젝트: 현재 내 구글 계정에 등록되어 스프레드시트에 래핑된 Apps Script 프로젝트와 가동 중인 스케줄 현황입니다."
             >
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="text-xs font-bold text-slate-500">내 연동 프로젝트</span>
+                  <span className="text-xs font-bold text-slate-500">내 래핑 프로젝트</span>
                   <div className="w-7 h-7 rounded-xl bg-emerald-100/80 text-emerald-700 flex items-center justify-center">
                     <FileCode className="w-3.5 h-3.5" />
                   </div>
@@ -966,7 +966,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 2. 연동된 내 자동화 프로젝트 목록 */}
+        {/* 2. 래핑된 내 자동화 프로젝트 목록 */}
         <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2">
             <div className="flex items-center gap-3">
@@ -1009,7 +1009,7 @@ export default function DashboardPage() {
                 <button
                   onClick={() => setIsNewProjectModalOpen(true)}
                   className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
-                  data-easybot-hint="새 구글 시트 생성: 새 구글 스프레드시트를 생성하거나 기존 시트를 연동하여 AI 자동화 코드를 주입합니다."
+                  data-easybot-hint="새 구글 시트 생성: 새 구글 스프레드시트를 생성하거나 기존 시트를 래핑하여 AI 자동화 코드를 주입합니다."
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>새 구글 시트 생성</span>
@@ -1067,7 +1067,7 @@ export default function DashboardPage() {
                           <span className="text-[10px] text-slate-400">유예 기간: {daysLeft}일 남음</span>
                         </div>
                         <p className="text-[10px] text-slate-500 leading-snug">
-                          삭제되어 외부 AI 및 구글 시트에서의 호출이 차단된 상태입니다. 복원 시 모든 연동이 다시 활성화됩니다.
+                          삭제되어 외부 AI 및 구글 시트에서의 호출이 차단된 상태입니다. 복원 시 모든 래핑과 스케줄이 다시 활성화됩니다.
                         </p>
                       </div>
 
@@ -1180,7 +1180,7 @@ export default function DashboardPage() {
                       {p.scriptId || p.gasProjectId ? (
                         <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-md flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          <span>연결 완료</span>
+                          <span>래핑 완료</span>
                         </span>
                       ) : (
                         <span className="px-2 py-0.5 bg-violet-100 text-violet-800 text-[10px] font-bold rounded-md flex items-center gap-1">

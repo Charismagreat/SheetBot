@@ -1022,7 +1022,7 @@ export async function GET() {
   <!-- [4] 접이식 고급 관리 아코디언 -->
   <details class="advanced-box">
     <summary>
-      <span>⚙️ 고급 설정 및 연동 관리</span>
+      <span>⚙️ 고급 설정 및 래핑 관리</span>
       <span>▼</span>
     </summary>
     <div class="danger-inner">
@@ -1030,7 +1030,7 @@ export async function GET() {
         시트봇 스크립트와 설치형 트리거를 완전히 초기화합니다. (시트 데이터는 100% 안전 보존됩니다)
       </p>
       <button class="btn-danger-clean" onclick="confirmUninstall()">
-        🗑️ 시트봇 연동 해제 및 전체 삭제
+        🗑️ 시트봇 래핑 해제 및 스크립트 삭제
       </button>
     </div>
   </details>
@@ -1413,7 +1413,7 @@ export async function GET() {
     }
 
     function confirmUninstall() {
-      if (!confirm('정말로 시트봇 연동을 해제하고 모든 자동화 스크립트를 삭제하시겠습니까? (시트 데이터는 보존됩니다)')) return;
+      if (!confirm('정말로 시트봇 래핑을 해제하고 모든 자동화 스크립트를 삭제하시겠습니까? (시트 데이터는 보존됩니다)')) return;
       if (window.google && window.google.script && window.google.script.run) {
         try {
           var fn = google.script.run.uninstallScript || google.script.run.uninstallSheetBot || google.script.run.resetSheetBotIntegration;

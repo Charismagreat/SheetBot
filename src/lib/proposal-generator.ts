@@ -201,7 +201,7 @@ export function buildProposalData(inquiry: any): ProposalData {
     projectObjective = `${compName}의 의뢰 내용('${mainReq}')을 최적화된 구글 시트 솔루션으로 구현하여 실무자의 생산성을 향상시킵니다.`;
     projectScopes = [
       `[맞춤 개발] ${mainReq}`,
-      parsed.customerNotes ? `[추가 요구] ${parsed.customerNotes}` : "스프레드시트 연동 자동화",
+      parsed.customerNotes ? `[추가 요구] ${parsed.customerNotes}` : "스프레드시트 래핑 자동화",
       "사용자 편의 인터페이스 구축",
       "안정화 검증 및 기술지원",
     ];
