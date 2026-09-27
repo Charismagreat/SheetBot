@@ -51,9 +51,32 @@ export const DEFAULT_GUIDE_STEPS: GuideStep[] = [
     tip: "Zero-Retention 아키텍처로 서버에 개인정보가 전혀 남지 않으며, APK 앱 상단에서도 상시 안심 보증 뱃지를 확인할 수 있습니다.",
     badge: "모바일 에이전트 & 서버 무보관",
   },
+  {
+    step: "06",
+    title: "모든 비즈니스 데이터 시트 실시간 누적 & Apps Script 2차 무한 자동화",
+    desc: "카카오톡 메시지, 문자(SMS) 송수신, 부재중 전화, 통화 녹음 백업뿐만 아니라 매장 결제(배달의민족·요기요·카드·은행 푸시)까지 모든 데이터가 본인 구글 시트에 실시간으로 기록됩니다. Self-Healing 헤더 보장 기술로 열 제목이 자동 세팅되며, D열 결제 금액은 순수 숫자로 누적되어 Apps Script(GAS)를 통해 매일 밤 11시 일일 결산 이메일 발송, VIP 단골 고객 감사 쿠폰 발송 등 무한한 2차 업무 자동화를 연결할 수 있습니다.",
+    tip: "메모, 처리 여부 등 사용자 정의 열은 G열 이후(우측)에 자유롭게 추가하여 나만의 맞춤형 ERP/CRM으로 확장하세요.",
+    badge: "매장 결제 & Apps Script 연계",
+  },
 ];
 
 export const DEFAULT_RECIPES: GuideRecipe[] = [
+  {
+    id: "ex_daily_sales_settlement",
+    title: "매장 결제 대장 기반 매일 밤 11시 일일 매출 결산 리포트 자동 발송 (Gmail)",
+    tag: "일일 매출 자동 결산 (NEW)",
+    iconName: "Landmark",
+    color: "border-indigo-200 bg-indigo-50/60 text-indigo-800",
+    prompt: "[SheetBot] 매장 결제 및 매출 대장 시트에 기록된 데이터를 바탕으로, 매일 밤 11시 시간 기반 트리거(Time-driven Trigger)로 당일 총 결제 금액, 결제 건수, 채널별(배민 vs 포스 vs 은행) 매출 분석 요약표를 모던 HTML 서식으로 사장님 Gmail에 자동 발송해줘.",
+  },
+  {
+    id: "ex_vip_retention_coupon",
+    title: "누적 3회 이상 결제 VIP 단골 고객 자동 판별 및 감사 쿠폰 문자 0원 자동 발송",
+    tag: "단골 리텐션 자동화 (NEW)",
+    iconName: "Sparkles",
+    color: "border-amber-200 bg-amber-50/60 text-amber-800",
+    prompt: "결제 대장과 문자 대장을 전화번호 기준으로 대조하여, 누적 결제가 3회 이상 발생한 고객의 시트 행에 'VIP 단골' 태그를 부여하고, 스마트폰 에이전트(SheetBot Agent)를 통해 '단골 고객 감사 10% 재방문 할인 쿠폰' 문자를 0원에 자동 발송해줘.",
+  },
   {
     id: "ex_sms_batch_dispatch",
     title: "A열 체크박스 선택 행 스마트폰(SheetBot Agent) 문자 일괄 발송 & 사전 장치 점검",
