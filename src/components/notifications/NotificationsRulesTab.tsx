@@ -35,9 +35,9 @@ export default function NotificationsRulesTab({
             <Zap className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-sm font-extrabold text-slate-900">자연어 발송 템플릿 &amp; 자동 발송 규칙</h3>
+            <h3 className="text-sm font-extrabold text-slate-900">자연어 스마트 규칙 &amp; POS·배달앱 자동 수신</h3>
             <p className="text-xs text-slate-500">
-              발송 조건과 문자 문구를 자연어로 입력하면, AI가 치환 변수(예: &#123;&#123;고객명&#125;&#125;, &#123;&#123;주문금액&#125;&#125;)와 트리거를 자동 분석해 등록합니다.
+              구글 시트 ➔ 고객 알림 문자 발송뿐만 아니라, <strong>포스 결제 승인 푸시(페이히어·오케이포스) 및 배달앱 주문</strong>을 시트에 실시간 자동 기록하는 규칙도 자연어로 손쉽게 등록할 수 있습니다.
             </p>
           </div>
         </div>
@@ -47,7 +47,7 @@ export default function NotificationsRulesTab({
             <textarea
               value={promptInput}
               onChange={(e) => setPromptInput(e.target.value)}
-              placeholder="예: D열의 주문상태가 '결제완료'로 바뀌면 고객 연락처로 감사 문자를 보내줘"
+              placeholder="예: 페이히어·오케이포스 결제 승인 알림 수신 시 매출 시트에 승인금액과 시간을 실시간 1행 추가해줘"
               rows={3}
               className="w-full p-4 rounded-2xl border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none text-xs sm:text-sm resize-none"
             />

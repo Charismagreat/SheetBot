@@ -71,7 +71,7 @@ export default function NotificationsGuideTab() {
               2
             </div>
             <div>
-              <span className="text-[10px] font-extrabold text-indigo-600 uppercase tracking-wider">Inbound • 수신</span>
+              <span className="text-[10px] font-extrabold text-indigo-600 uppercase tracking-wider">Inbound • 수신 SMS</span>
               <h4 className="text-sm font-extrabold text-slate-900">스마트폰 수신 문자 ➔ 구글 시트 자동 기록</h4>
             </div>
           </div>
@@ -103,6 +103,74 @@ export default function NotificationsGuideTab() {
                 <strong className="text-slate-900">스마트 후속 자동화 연계:</strong>
                 <div className="text-[11px] text-slate-500 mt-0.5">기록과 동시에 재고 차감이나 감사 이메일 발송 등 연쇄 파이프라인이 즉시 작동합니다.</div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 카드 3: 매장 POS 결제 & 배달앱 푸시 실시간 감지 (0원 자동 장부) */}
+        <div className="bg-gradient-to-br from-white via-amber-50/20 to-orange-50/30 rounded-3xl p-6 sm:p-7 border-2 border-amber-200/90 shadow-sm space-y-4 md:col-span-2 relative overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-black text-sm shadow-xs">
+                🏪
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-extrabold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    킬러 기능 • POS &amp; 배달앱 푸시 감지
+                  </span>
+                  <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                    API 연동비 0원
+                  </span>
+                </div>
+                <h4 className="text-base font-black text-slate-900 mt-0.5">
+                  페이히어 · 오케이포스 · 나이스포스 · 배민사장님 결제 푸시 ➔ 실시간 매출 시트 자동 기록
+                </h4>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+              <span className="px-2 py-0.5 bg-white border border-amber-300 rounded-md text-[10.5px] font-bold text-slate-700 shadow-2xs">페이히어</span>
+              <span className="px-2 py-0.5 bg-white border border-amber-300 rounded-md text-[10.5px] font-bold text-slate-700 shadow-2xs">오케이포스</span>
+              <span className="px-2 py-0.5 bg-white border border-amber-300 rounded-md text-[10.5px] font-bold text-slate-700 shadow-2xs">나이스포스</span>
+              <span className="px-2 py-0.5 bg-white border border-amber-300 rounded-md text-[10.5px] font-bold text-slate-700 shadow-2xs">토스플레이스</span>
+              <span className="px-2 py-0.5 bg-white border border-amber-300 rounded-md text-[10.5px] font-bold text-slate-700 shadow-2xs">배민사장님</span>
+              <span className="px-2 py-0.5 bg-white border border-amber-300 rounded-md text-[10.5px] font-bold text-slate-700 shadow-2xs">쿠팡이츠</span>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-700 leading-relaxed">
+            포스사/VAN사의 비싼 API 연동 없이도, 점주 스마트폰에 설치된 <strong>포스 앱이나 배달앱의 실시간 결제 승인 푸시 알림</strong>을 시트봇 에이전트가 0.05초 만에 캡처합니다. 승인금액, 결제수단, 시간, 매장명을 발라내어 구글 시트 매출 장부에 자동으로 1행씩 누적합니다.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-xs">
+            <div className="p-3.5 rounded-2xl bg-white/90 border border-amber-200/80 shadow-2xs space-y-1">
+              <div className="font-extrabold text-slate-900 flex items-center gap-1.5">
+                <span className="text-amber-600">⚡</span>
+                <span>실시간 마감 대기 0초</span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                매일 밤 영수증 모아 엑셀에 수작업 입력하거나 POS 사이트에서 엑셀을 내려받을 필요가 없습니다. 손님이 카드 긁는 즉시 시트에 기록됩니다.
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-white/90 border border-amber-200/80 shadow-2xs space-y-1">
+              <div className="font-extrabold text-slate-900 flex items-center gap-1.5">
+                <span className="text-emerald-600">📊</span>
+                <span>홀 + 배달앱 통합 장부</span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                매장 포스(오케이포스·페이히어)와 배달앱(배민·쿠팡이츠) 알림을 한 구글 시트에 모아 실시간 일일 총매출과 채널별 비중을 자동 피벗 집계합니다.
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-white/90 border border-amber-200/80 shadow-2xs space-y-1">
+              <div className="font-extrabold text-slate-900 flex items-center gap-1.5">
+                <span className="text-indigo-600">🎯</span>
+                <span>목표 &amp; VIP 자동 알림</span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                "일 매출 150만원 달성 시 사장님 폰으로 축하 문자", "15만원 이상 단체 결제 시 VIP 고객 시트로 자동 분류" 등 무제한 자동화가 가능합니다.
+              </p>
             </div>
           </div>
         </div>

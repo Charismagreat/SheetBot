@@ -90,7 +90,7 @@ export default function MarketplacePage() {
                 </span>
               </div>
               <span className="text-[11px] text-slate-400 font-medium block -mt-0.5">
-                실무 검증 4대 핵심 구글 시트 자동화 전용 쇼케이스
+                실무 검증 5대 핵심 구글 시트 자동화 전용 쇼케이스
               </span>
             </div>
           </div>
