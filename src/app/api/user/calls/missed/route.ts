@@ -9,6 +9,7 @@ import {
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { realtimeHub } from "@/lib/realtime-hub";
+import { maskPhoneNumber, formatZeroRetentionContent } from "@/lib/privacy";
 
 /**
  * POST /api/user/calls/missed
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. 발송/수신 감사 대장 DB 적재 (SQLite INTEGER id 규격 준수)
+    // 2. 발송/수신 감사 대장 DB 적재 (Zero-Retention: 고객 전화번호 마스킹 및 통화내용 서버 미보관 정책 준수)
     const logId = Date.now();
     await insertRows("sheetbot_user_dispatch_logs", [
       {
@@ -134,8 +135,8 @@ export async function POST(req: NextRequest) {
         rule_id: "MISSED_CALL",
         rule_name: "📞 부재중 전화 감지 및 스마트 회신",
         device_id: deviceId,
-        recipient: `${displayName} (${callerPhone})`,
-        content: `[부재중 통화] 회신: ${replyStatusLabel} - ${replyMessage.slice(0, 80)}`,
+        recipient: `${displayName} (${maskPhoneNumber(callerPhone)})`,
+        content: formatZeroRetentionContent(`부재중 통화 (${replyStatusLabel})`, replyMessage.length),
         status: autoReplied ? "SUCCESS" : "INBOUND",
         error_message: null,
         created_at: new Date().toISOString(),

@@ -9,6 +9,7 @@ import {
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { realtimeHub } from "@/lib/realtime-hub";
+import { maskPhoneNumber, formatZeroRetentionContent } from "@/lib/privacy";
 
 /**
  * POST /api/user/messages/sms
@@ -128,7 +129,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. 발송/수신 감사 대장 DB 적재 (SQLite INTEGER id 규격 준수)
+    // 2. 발송/수신 감사 대장 DB 적재 (Zero-Retention: 고객 전화번호 마스킹 및 본문 서버 미보관 정책 준수)
     const logId = Date.now();
     await insertRows("sheetbot_user_dispatch_logs", [
       {
@@ -137,8 +138,8 @@ export async function POST(req: NextRequest) {
         rule_id: isOutbound ? "OUTBOUND_SMS" : "INBOUND_SMS",
         rule_name: isOutbound ? "📱 스마트폰 고객 문자 직접 발신" : "📱 스마트폰 고객 문자 수신",
         device_id: deviceId,
-        recipient: `${displayName} (${phoneNumber})`,
-        content: `[${directionLabel}] ${message.take ? message.take(100) : message.slice(0, 100)}`,
+        recipient: `${displayName} (${maskPhoneNumber(phoneNumber)})`,
+        content: formatZeroRetentionContent(`문자(${directionLabel})`, message.length),
         status: isOutbound ? "SUCCESS" : "INBOUND",
         error_message: null,
         created_at: new Date().toISOString(),

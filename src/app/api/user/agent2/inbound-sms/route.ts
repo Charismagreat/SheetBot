@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { queryTable, insertRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { realtimeHub } from "@/lib/realtime-hub";
+import { maskPhoneNumber, formatZeroRetentionContent } from "@/lib/privacy";
 
 /**
  * POST /api/user/agent2/inbound-sms
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
     const nowIso = receivedAt || new Date().toISOString();
     const logId = Date.now();
 
-    // 1. 회원의 스마트 알림 발송/수신 이력 대장에 INBOUND로 기록 (SQLite INTEGER id 준수)
+    // 1. 회원의 스마트 알림 발송/수신 이력 대장에 INBOUND로 기록 (Zero-Retention: 고객 전화번호 마스킹 및 본문 서버 미보관 정책 준수)
     await insertRows("sheetbot_user_dispatch_logs", [
       {
         id: logId,
@@ -34,8 +35,8 @@ export async function POST(req: NextRequest) {
         rule_id: "INBOUND_SMS",
         rule_name: "📱 스마트폰 고객 문자 수신",
         device_id: deviceId || "SheetBot Agent",
-        recipient: sender, // 수신된 발신자 번호
-        content: message,
+        recipient: maskPhoneNumber(sender), // 마스킹된 발신자 번호
+        content: formatZeroRetentionContent("수신 문자", message.length),
         status: "INBOUND", // 수신 상태
         error_message: null,
         created_at: nowIso,
