@@ -1,5 +1,5 @@
 import React from "react";
-import { Smartphone, CheckCircle2, Sparkles, ArrowRight } from "lucide-react";
+import { Smartphone, CheckCircle2, Sparkles, ArrowRight, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 export default function NotificationsGuideTab() {
@@ -8,16 +8,47 @@ export default function NotificationsGuideTab() {
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-3">
         <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-800 text-xs font-black rounded-full border border-emerald-200">
           <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
-          <span>시트봇 에이전트(SheetBot Agent) 양방향 자동화 매뉴얼</span>
+          <span>시트봇 모바일 에이전트(SheetBot Agent) 양방향 자동화 매뉴얼</span>
         </div>
         <h3 className="text-xl font-black text-slate-900">
-          내 스마트폰을 24시간 0원 문자 발송 &amp; 시트 수신 서버로 활용하기
+          구글 시트 ↔ 스마트폰 양방향 자동화 (서버 무보관 100%)
         </h3>
         <p className="text-xs text-slate-600 leading-relaxed max-w-3xl">
           복잡한 코드를 복사하거나 붙여넣을 필요가 없습니다. 
-          스마트폰에 <strong>시트봇 에이전트(SheetBot Agent)</strong> 앱을 설치하고 QR 코드를 1초 만에 스캔하면,
-          구글 스프레드시트와 스마트폰이 안전하게 1:1로 결합되어 완벽한 양방향 문자 자동화가 시작됩니다.
+          스마트폰에 <strong>시트봇 모바일 에이전트(SheetBot Agent)</strong> 앱을 설치하고 QR 코드를 1초 만에 스캔하면,
+          구글 스프레드시트와 스마트폰이 안전하게 1:1로 결합되어 24시간 0원 문자 발송 &amp; 실시간 수신 자동화가 시작됩니다.
         </p>
+      </div>
+
+      {/* 🛡️ Zero-Retention 프라이버시 안심 보증 카드 */}
+      <div className="bg-gradient-to-r from-teal-950 via-slate-900 to-emerald-950 rounded-3xl p-6 sm:p-7 text-white border border-teal-500/30 shadow-md relative overflow-hidden">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
+          <div className="space-y-1.5 max-w-2xl">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 text-[11px] font-black border border-teal-400/30">
+                <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
+                Zero-Retention 아키텍처
+              </span>
+              <span className="text-[11px] font-bold text-teal-200/80">중앙 서버 무보관 100%</span>
+            </div>
+            <h4 className="text-base font-black text-white">
+              고객 개인정보와 문자/통화/결제 내역은 오직 내 구글 드라이브에만 저장됩니다
+            </h4>
+            <p className="text-xs text-teal-100/80 leading-relaxed">
+              시트봇은 고객의 휴대폰 번호, 문자 전문, 통화 기록, 결제 승인 내역을 중앙 서버에 일체 보관하지 않습니다. 모든 데이터는 회원님 본인의 스마트폰과 구글 드라이브(Google Sheets) 간에 1:1 직통 암호화 통신으로만 처리됩니다.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="px-3.5 py-2.5 rounded-2xl bg-teal-900/40 border border-teal-400/20 text-center">
+              <div className="text-[10px] text-teal-300 font-bold">서버 보관 여부</div>
+              <div className="text-xs font-black text-white">0건 (완전 무보관)</div>
+            </div>
+            <div className="px-3.5 py-2.5 rounded-2xl bg-emerald-900/40 border border-emerald-400/20 text-center">
+              <div className="text-[10px] text-emerald-300 font-bold">저장 위치</div>
+              <div className="text-xs font-black text-white">내 구글 드라이브</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
