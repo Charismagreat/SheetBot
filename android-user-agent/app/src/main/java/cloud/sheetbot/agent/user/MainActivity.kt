@@ -316,6 +316,19 @@ class MainActivity : AppCompatActivity() {
             updateStatusDetailsVisibility(nextState)
         }
 
+        // 0-0-2. AI 토큰 안내 상세 접기/펼치기 및 확인 버튼 (v2.0.5)
+        updateTokenNoticeVisibility(prefs.isTokenNoticeDismissed)
+        binding.btnConfirmTokenNotice.setOnClickListener {
+            prefs.isTokenNoticeDismissed = true
+            updateTokenNoticeVisibility(true)
+            Toast.makeText(this, "토큰 안내가 접혔습니다. 언제든 '자세히 보기'를 누르면 다시 확인하실 수 있습니다.", Toast.LENGTH_SHORT).show()
+        }
+        binding.btnToggleTokenNotice.setOnClickListener {
+            val nextState = !prefs.isTokenNoticeDismissed
+            prefs.isTokenNoticeDismissed = nextState
+            updateTokenNoticeVisibility(nextState)
+        }
+
         // 0. Google 원클릭 로그인 버튼 (v1.8.0 / v2.0.1 무중단 연동 강화)
         binding.btnGoogleSignIn.setOnClickListener {
             try {
@@ -785,12 +798,18 @@ class MainActivity : AppCompatActivity() {
         binding.btnToggleStatusDetails.text = if (hidden) "펼치기" else "접기"
     }
 
+    private fun updateTokenNoticeVisibility(dismissed: Boolean) {
+        binding.layoutTokenNoticeDetails.visibility = if (dismissed) View.GONE else View.VISIBLE
+        binding.btnToggleTokenNotice.text = if (dismissed) "자세히 보기" else "접기"
+    }
+
     private fun updateUiState() {
         val isPaired = prefs.isPaired
         val email = prefs.userEmail
 
         updatePrivacyCardVisibility(prefs.isPrivacyCardHidden)
         updateStatusDetailsVisibility(prefs.isStatusDetailsHidden)
+        updateTokenNoticeVisibility(prefs.isTokenNoticeDismissed)
 
         if (isPaired && !email.isNullOrBlank()) {
             binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
@@ -816,20 +835,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 회원 토큰 지갑 잔액 실시간 조회 및 UI 갱신 (v1.9.0)
+     * 회원 토큰 지갑 잔액 실시간 조회 및 UI 갱신 (v1.9.0 / v2.0.5 캐싱 강화)
      */
     private fun loadWalletBalance(userEmail: String, isManualRefresh: Boolean = false) {
+        // 로컬 캐시 잔액이 있으면 네트워크 지연 없이 0초 만에 즉시 표시 (0원 노출 방지)
+        if (prefs.lastBalanceTokens >= 0L) {
+            binding.tvWalletBalance.text = NumberFormat.getNumberInstance().format(prefs.lastBalanceTokens)
+            binding.tvWalletTier.text = prefs.lastTier
+        }
         if (isManualRefresh) {
             binding.tvWalletBalance.text = "..."
         }
         activityScope.launch {
             val result = ApiClient.fetchWalletBalance(userEmail)
             if (result.success) {
+                prefs.lastBalanceTokens = result.balanceTokens
+                prefs.lastTier = result.tier
+
                 val formattedBalance = NumberFormat.getNumberInstance().format(result.balanceTokens)
                 binding.tvWalletBalance.text = formattedBalance
                 binding.tvWalletTier.text = result.tier
-                val estQueries = (result.balanceTokens / 200).coerceAtLeast(0)
-                binding.tvWalletUsageGuide.text = "💡 AI 코파일럿 & 구글 시트 자동화 약 ${NumberFormat.getNumberInstance().format(estQueries.toLong())}회 질의 가능"
                 if (isManualRefresh) {
                     Toast.makeText(this@MainActivity, "토큰 잔액이 갱신되었습니다.", Toast.LENGTH_SHORT).show()
                 }

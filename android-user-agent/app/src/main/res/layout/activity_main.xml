@@ -39,7 +39,7 @@
                     android:background="@drawable/bg_badge_version"
                     android:paddingHorizontal="10dp"
                     android:paddingVertical="4dp"
-                    android:text="v2.0.4"
+                    android:text="v2.0.5"
                     android:textColor="#10B981"
                     android:textSize="12sp"
                     android:textStyle="bold" />
@@ -304,15 +304,6 @@
                         android:layout_marginBottom="2dp" />
                 </LinearLayout>
 
-                <TextView
-                    android:id="@+id/tvWalletUsageGuide"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="💡 AI 코파일럿 &amp; 구글 시트 자동화 이용 가능"
-                    android:textColor="#94A3B8"
-                    android:textSize="11.5sp"
-                    android:layout_marginBottom="12dp" />
-
                 <Button
                     android:id="@+id/btnRechargeToken"
                     android:layout_width="match_parent"
@@ -398,7 +389,7 @@
                     android:background="@drawable/bg_badge_version"
                     android:paddingHorizontal="6dp"
                     android:paddingVertical="2dp"
-                    android:text="v2.0.4"
+                    android:text="v2.0.5"
                     android:textColor="#10B981"
                     android:textSize="10sp"
                     android:textStyle="bold" />
@@ -425,8 +416,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="4dp">
+                    android:gravity="center_vertical">
 
                     <TextView
                         android:layout_width="0dp"
@@ -438,33 +428,60 @@
                         android:textStyle="bold" />
 
                     <TextView
+                        android:id="@+id/btnToggleTokenNotice"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:background="@drawable/bg_badge_version"
-                        android:backgroundTint="#134E4A"
-                        android:paddingHorizontal="6dp"
-                        android:paddingVertical="2dp"
-                        android:text="100% 무료 보장"
-                        android:textColor="#2DD4BF"
-                        android:textSize="9.5sp"
+                        android:backgroundTint="#1E293B"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="3dp"
+                        android:text="자세히 보기"
+                        android:textColor="#38BDF8"
+                        android:textSize="10.5sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
-                <TextView
+                <!-- 토큰 안내 상세 내용 (확인 버튼 클릭 시 접힘) -->
+                <LinearLayout
+                    android:id="@+id/layoutTokenNoticeDetails"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="• 평생 0원 무료: 0원 문자 발송·수신, 포스·배달앱 결제 알림 시트 기입, SQLite 백업 등 모든 기본 자동화는 토큰 차감 없이 100% 완전 무료(0원)입니다.\n• 오직 AI만 소량 차감: 스스로 생각하고 판단해야 하는 위 [AI 시트 코파일럿] 명령 실행 시에만 1회당 약 200~300 토큰(약 0.05원)의 극소량 연산 토큰만 차감됩니다."
-                    android:textColor="#94A3B8"
-                    android:textSize="10.5sp"
-                    android:lineSpacingExtra="2.5dp" />
+                    android:orientation="vertical"
+                    android:layout_marginTop="6dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="• 평생 0원 무료: 0원 문자 발송·수신, 포스·배달앱 결제 알림 시트 기입, 통화 녹음 백업 등 모든 기본 자동화는 토큰 차감 없이 100% 완전 무료(0원)입니다.\n• 오직 AI만 소량 차감: AI 사용 1회당 약 200~300토큰의 소량만 차감됩니다. AI가 사용되지 않는 대부분의 작업에는 토큰이 차감되지 않으며 100% 무료로 제공됩니다."
+                        android:textColor="#94A3B8"
+                        android:textSize="10.5sp"
+                        android:lineSpacingExtra="2.5dp"
+                        android:layout_marginBottom="8dp" />
+
+                    <Button
+                        android:id="@+id/btnConfirmTokenNotice"
+                        android:layout_width="match_parent"
+                        android:layout_height="36dp"
+                        android:backgroundTint="#334155"
+                        android:text="✓ 확인 (내용 접기)"
+                        android:textColor="#38BDF8"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
             </LinearLayout>
 
             <EditText
                 android:id="@+id/etAiCommand"
                 android:layout_width="match_parent"
-                android:layout_height="42dp"
+                android:layout_height="wrap_content"
+                android:minHeight="44dp"
+                android:maxLines="6"
                 android:background="#0F172A"
                 android:paddingHorizontal="10dp"
+                android:paddingVertical="8dp"
+                android:gravity="top|start"
+                android:inputType="textMultiLine|textCapSentences"
+                android:scrollbars="vertical"
                 android:hint="예: 홍길동 고객에게 결제 안내 문자 보내줘, 이번 달 정산해줘"
                 android:textColorHint="#64748B"
                 android:textColor="#FFFFFF"

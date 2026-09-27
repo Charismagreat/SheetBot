@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 15,
-      latestVersionName: "2.0.4",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.0.4/SheetBotAgent.apk",
+      latestVersionCode: 16,
+      latestVersionName: "2.0.5",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.0.5/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.0.4 정식 릴리스\n• 🛡️ 안심보증 카드 '접기/펼치기' 원터치 버튼 전환\n• 🟢 가동 상태 & 서버 통신 단일 통합 카드 구성 및 접기/펼치기 지원\n• 💡 AI 코파일럿 카드 투명한 토큰 안내 & 다른 기능 평생 100% 무료(0원) 보장 배너 탑재\n• 📱 UI 컴팩트화 및 불필요한 중복 카드 완전 제거",
+      releaseNotes: "시트봇 모바일 에이전트 v2.0.5 정식 릴리스\n• 🪙 토큰 잔액 로컬 캐시 즉시 표시 (0원 표시 현상 완전 해결)\n• 💡 AI 코파일럿 불필요 문구 삭제 및 토큰 안내 확인(접기)/자세히 보기 토글 탑재\n• 🛡️ 토큰 소량 차감 및 기본 자동화 100% 무료 안내 배너 문구 고도화\n• 📝 자연어 입력창 여러 줄 자동 확장 (입력 길이에 따라 최대 6줄까지 자동 확장)",
     },
     {
       headers: {
