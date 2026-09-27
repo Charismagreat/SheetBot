@@ -94,13 +94,16 @@ function MobileSheetWebAppContent() {
     }
     setLoading(true);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const timeoutId = setTimeout(() => controller.abort(), 35000);
 
     try {
       const queryUrl = `/api/user/sheets/data?email=${encodeURIComponent(userEmail)}&sheetType=${encodeURIComponent(sheetTypeParam)}${
         sheetIdParam ? `&sheetId=${encodeURIComponent(sheetIdParam)}` : ""
-      }`;
-      const res = await apiFetch(queryUrl, { signal: controller.signal });
+      }&t=${Date.now()}`;
+      const res = await apiFetch(queryUrl, {
+        signal: controller.signal,
+        cache: "no-store",
+      });
       clearTimeout(timeoutId);
       const json: SheetDataResponse = await res.json();
       setData(json);
@@ -110,7 +113,7 @@ function MobileSheetWebAppContent() {
       setData({
         success: false,
         error: isAbort
-          ? "구글 드라이브 응답 지연으로 대장을 불러오지 못했습니다. 상단 새로고침을 눌러주세요."
+          ? "구글 드라이브 응답 지연으로 대장을 불러오지 못했습니다. 아래 [다시 불러오기]를 눌러주세요."
           : e.message || "데이터 조회 실패",
       });
     } finally {
@@ -246,12 +249,20 @@ function MobileSheetWebAppContent() {
 
         {/* 에러 상태 */}
         {!loading && data && !data.success && (
-          <div className="bg-rose-950/40 border border-rose-800/60 rounded-2xl p-6 text-center space-y-3">
+          <div className="bg-rose-950/40 border border-rose-800/60 rounded-2xl p-6 text-center space-y-3.5">
             <div className="text-3xl">⚠️</div>
             <h3 className="text-sm font-bold text-rose-300">대장을 불러올 수 없습니다</h3>
             <p className="text-xs text-rose-200/80 leading-relaxed">
               {data.error || "구글 시트가 아직 생성되지 않았거나 권한이 없습니다."}
             </p>
+            <div className="pt-2">
+              <button
+                onClick={fetchData}
+                className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-semibold text-xs rounded-xl shadow-lg transition flex items-center justify-center space-x-2"
+              >
+                <span>🔄 대장 지금 다시 불러오기</span>
+              </button>
+            </div>
             <p className="text-[11px] text-slate-400">
               스마트폰 모바일 앱에서 해당 기능의 스위치를 켜주시면 즉시 자동 생성됩니다.
             </p>
