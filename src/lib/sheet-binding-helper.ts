@@ -73,8 +73,6 @@ export async function resolveUserSpreadsheet(
 async function doResolveUserSpreadsheet(
   options: ResolveSheetOptions
 ): Promise<ResolveSheetResult> {
-  await setupDatabase();
-
   const {
     userEmail,
     sheetType,
@@ -90,7 +88,7 @@ async function doResolveUserSpreadsheet(
     ? requestedTitle.trim()
     : defaultTitle;
 
-  // 1. My DB에서 기존 영구 바인딩된 고유 spreadsheetId 확인
+  // 1. My DB에서 기존 영구 바인딩된 고유 spreadsheetId 확인 (지연 초기화 적용)
   let boundRecord: any = null;
   try {
     const queryRes = await queryTable("sheetbot_user_sheet_bindings", {
@@ -101,7 +99,12 @@ async function doResolveUserSpreadsheet(
       boundRecord = queryRes.rows[0];
     }
   } catch (err: any) {
-    console.warn(`[SheetBinding] Failed to query bindings for ${bindingId}:`, err.message);
+    if (String(err?.message || "").includes("not found")) {
+      // 테이블이 아직 없으면 단 1회 셋업 실행
+      await setupDatabase().catch(() => {});
+    } else {
+      console.warn(`[SheetBinding] Failed to query bindings for ${bindingId}:`, err.message);
+    }
   }
 
   // 2. 바인딩된 ID가 유효한지 구글 드라이브에서 실시간 검증 (파일명이 바뀌었어도 ID만 일치하면 OK)

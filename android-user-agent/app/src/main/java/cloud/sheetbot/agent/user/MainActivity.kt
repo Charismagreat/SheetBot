@@ -1996,10 +1996,18 @@ class MainActivity : AppCompatActivity() {
             "https://docs.google.com/spreadsheets/d/$cachedId/edit"
         } else null
 
-        val webAppUrl = if (!userEmail.isNullOrBlank()) {
-            "https://sheetbot.cloud/m/${sheetType.lowercase()}?email=${Uri.encode(userEmail)}"
-        } else {
-            "https://sheetbot.cloud/m/${sheetType.lowercase()}"
+        val webAppUrl = buildString {
+            append("https://sheetbot.cloud/m/${sheetType.lowercase()}")
+            val queryParams = mutableListOf<String>()
+            if (!userEmail.isNullOrBlank()) {
+                queryParams.add("email=${Uri.encode(userEmail)}")
+            }
+            if (!cachedId.isNullOrBlank()) {
+                queryParams.add("sheetId=${Uri.encode(cachedId)}")
+            }
+            if (queryParams.isNotEmpty()) {
+                append("?").append(queryParams.joinToString("&"))
+            }
         }
 
         val items = arrayOf(
@@ -2090,7 +2098,12 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this@MainActivity, "🎉 대장 시트가 준비되었습니다!", Toast.LENGTH_SHORT).show()
 
                         if (isWebApp) {
-                            val webAppUrl = "https://sheetbot.cloud/m/${sheetType.lowercase()}?email=${Uri.encode(userEmail)}"
+                            val sid = result.spreadsheetId ?: prefs.getSheetId(sheetType)
+                            val webAppUrl = if (!sid.isNullOrBlank()) {
+                                "https://sheetbot.cloud/m/${sheetType.lowercase()}?email=${Uri.encode(userEmail)}&sheetId=${Uri.encode(sid)}"
+                            } else {
+                                "https://sheetbot.cloud/m/${sheetType.lowercase()}?email=${Uri.encode(userEmail)}"
+                            }
                             openExternalUrl(webAppUrl)
                         } else {
                             openExternalUrl(result.spreadsheetUrl)
