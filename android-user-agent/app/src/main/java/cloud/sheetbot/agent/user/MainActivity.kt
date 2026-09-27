@@ -737,8 +737,8 @@ class MainActivity : AppCompatActivity() {
 
             if (ping.isOnline) {
                 binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
-                binding.tvStatusTitle.text = "🟢 시트봇 에이전트 가동 중"
-                binding.tvStatusDesc.text = "계정: $email\n0원 양방향 SMS & 구글 시트 1:1 연동 중"
+                binding.tvStatusTitle.text = "🟢 시트봇 모바일 에이전트 가동 중"
+                binding.tvStatusDesc.text = "계정: $email\n구글 시트 ↔ 스마트폰 양방향 자동화 (서버 무보관 100%)"
                 binding.tvServerStatus.text = "🌐 서버 통신: 🟢 정상 (${ping.latencyMs}ms)"
 
                 if (showToast) {
@@ -764,7 +764,7 @@ class MainActivity : AppCompatActivity() {
         if (isPaired && !email.isNullOrBlank()) {
             binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
             binding.tvStatusTitle.text = "✅ 연동 완료 (${email})"
-            binding.tvStatusDesc.text = "구글 시트봇과 실시간 연동 중입니다."
+            binding.tvStatusDesc.text = "구글 시트 ↔ 스마트폰 양방향 자동화 가동 중\n🛡️ 데이터는 본인 구글 드라이브에만 안전 저장됩니다."
             binding.layoutPairedControls.visibility = View.VISIBLE
             binding.layoutServerMonitor.visibility = View.VISIBLE
             binding.layoutWalletCard.visibility = View.VISIBLE
@@ -774,7 +774,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
             binding.tvStatusTitle.text = "⚠️ 미연동 상태"
-            binding.tvStatusDesc.text = "시트봇 알림 센터의 QR코드를 스캔하여 계정을 연동해 주세요."
+            binding.tvStatusDesc.text = "시트봇 모바일 에이전트 QR코드를 스캔하여 계정을 연동해 주세요.\n🛡️ 서버 무보관 100% · 내 구글 드라이브로만 직통 전송"
             binding.layoutPairedControls.visibility = View.GONE
             binding.layoutServerMonitor.visibility = View.GONE
             binding.layoutWalletCard.visibility = View.GONE
