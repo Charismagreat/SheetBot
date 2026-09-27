@@ -2519,7 +2519,7 @@ class MainActivity : AppCompatActivity() {
         binding.tvWebsiteMonitorStatus.text = "🔄 실시간 응답 점검 중..."
         binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#38BDF8"))
 
-        lifecycleScope.launch {
+        activityScope.launch {
             val result = ApiClient.checkWebsiteHealth(url)
             binding.btnCheckWebsiteNow.isEnabled = true
             binding.btnCheckWebsiteNow.text = "⚡ 지금 점검"
