@@ -149,6 +149,21 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_call_ended_card_prompt_enabled", true)
         set(value) = prefs.edit().putBoolean("is_call_ended_card_prompt_enabled", value).apply()
 
+    // 발송 방식: "WEB_LINK" (0원 무료 웹링크) 또는 "MMS_IMAGE" (갤러리 사진 직접 첨부 MMS)
+    var businessCardSendMode: String
+        get() = prefs.getString("business_card_send_mode", "WEB_LINK") ?: "WEB_LINK"
+        set(value) = prefs.edit().putString("business_card_send_mode", value).apply()
+
+    // 방안 1: 웹 명함 / 이벤트 페이지 링크
+    var businessCardWebLink: String
+        get() = prefs.getString("business_card_web_link", "https://sheetbot.cloud") ?: "https://sheetbot.cloud"
+        set(value) = prefs.edit().putString("business_card_web_link", value).apply()
+
+    // 방안 2: 저장된 명함 / 포스터 이미지 파일 절대 경로
+    var businessCardImagePath: String
+        get() = prefs.getString("business_card_image_path", "") ?: ""
+        set(value) = prefs.edit().putString("business_card_image_path", value).apply()
+
     var businessCardSmsTemplate: String
         get() = prefs.getString("business_card_sms_template", "[SheetBot] 안녕하세요. 조금 전 통화드린 담당자 명함입니다.\n• 서비스: 시트봇 클라우드 (https://sheetbot.cloud)\n감사합니다.")
             ?: "[SheetBot] 안녕하세요. 조금 전 통화드린 담당자 명함입니다.\n• 서비스: 시트봇 클라우드 (https://sheetbot.cloud)\n감사합니다."

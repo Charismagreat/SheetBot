@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
@@ -25,6 +26,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import java.io.File
 import java.text.NumberFormat
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -114,6 +116,15 @@ class MainActivity : AppCompatActivity() {
     ) { uri ->
         if (uri != null) {
             uploadBusinessCard(uri)
+        }
+    }
+
+    // 통화 종료 모바일 명함 발송용 첨부 이미지(MMS) 선택 런처 (v2.0.7)
+    private val callEndedImagePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            saveBusinessCardImage(uri)
         }
     }
 
@@ -628,7 +639,34 @@ class MainActivity : AppCompatActivity() {
         // 통화 종료 직후 모바일 명함 원터치 발송 UI 바인딩
         binding.switchCallEndedCard.isChecked = prefs.isCallEndedCardPromptEnabled
         binding.layoutCallEndedCardSettings.visibility = if (prefs.isCallEndedCardPromptEnabled) View.VISIBLE else View.GONE
+
+        // 1. 발송 방식 라디오 버튼 초기화 (WEB_LINK vs MMS_IMAGE)
+        val isWebLinkMode = prefs.businessCardSendMode == "WEB_LINK"
+        binding.rbModeWebLink.isChecked = isWebLinkMode
+        binding.rbModeMmsImage.isChecked = !isWebLinkMode
+        binding.layoutModeWebLink.visibility = if (isWebLinkMode) View.VISIBLE else View.GONE
+        binding.layoutModeMmsImage.visibility = if (isWebLinkMode) View.GONE else View.VISIBLE
+
+        binding.rgBusinessCardMode.setOnCheckedChangeListener { _, checkedId ->
+            val isWeb = checkedId == binding.rbModeWebLink.id
+            binding.layoutModeWebLink.visibility = if (isWeb) View.VISIBLE else View.GONE
+            binding.layoutModeMmsImage.visibility = if (isWeb) View.GONE else View.VISIBLE
+        }
+
+        // 2. 값 설정
+        binding.etBusinessCardWebUrl.setText(prefs.businessCardWebLink)
         binding.etBusinessCardSms.setText(prefs.businessCardSmsTemplate)
+
+        // 3. 사진 선택 및 미리보기 바인딩
+        renderBusinessCardImagePreview()
+
+        binding.btnPickBusinessCardImage.setOnClickListener {
+            callEndedImagePickerLauncher.launch("image/*")
+        }
+
+        binding.btnRemoveBusinessCardImage.setOnClickListener {
+            removeBusinessCardImage()
+        }
 
         binding.switchCallEndedCard.setOnCheckedChangeListener { _, isChecked ->
             prefs.isCallEndedCardPromptEnabled = isChecked
@@ -638,11 +676,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnSaveBusinessCardSettings.setOnClickListener {
+            val isWeb = binding.rbModeWebLink.isChecked
+            val mode = if (isWeb) "WEB_LINK" else "MMS_IMAGE"
+            val webUrl = binding.etBusinessCardWebUrl.text.toString().trim()
             val cardMsg = binding.etBusinessCardSms.text.toString().trim()
+
+            prefs.businessCardSendMode = mode
+            prefs.businessCardWebLink = webUrl
             prefs.businessCardSmsTemplate = cardMsg
 
-            Toast.makeText(this, "💾 모바일 명함 내용이 저장되었습니다.", Toast.LENGTH_SHORT).show()
-            addLogItem("명함설정", "모바일 명함 템플릿 저장 완료", true)
+            val modeName = if (isWeb) "스마트 웹 명함(0원)" else "직접 사진 첨부(MMS)"
+            Toast.makeText(this, "💾 모바일 명함 설정이 저장되었습니다.\n(방식: $modeName)", Toast.LENGTH_SHORT).show()
+            addLogItem("명함설정", "모드: $modeName / 설정 저장 완료", true)
         }
 
         binding.btnCheckUpdate.setOnClickListener {
@@ -1664,5 +1709,73 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this@MainActivity, "명령 실행 예외: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    /**
+     * 통화 종료 모바일 명함 발송용 첨부 이미지(MMS) 로컬 저장
+     */
+    private fun saveBusinessCardImage(uri: Uri) {
+        try {
+            val targetFile = File(filesDir, "business_card_image.jpg")
+            contentResolver.openInputStream(uri)?.use { input ->
+                targetFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            prefs.businessCardImagePath = targetFile.absolutePath
+            renderBusinessCardImagePreview()
+            Toast.makeText(this, "🖼️ 명함/포스터 이미지가 등록되었습니다.", Toast.LENGTH_SHORT).show()
+            addLogItem("명함이미지", "이미지 등록 완료 (${targetFile.length() / 1024} KB)", true)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "명함 이미지 저장 실패", e)
+            Toast.makeText(this, "이미지 저장에 실패했습니다: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * 등록된 모바일 명함 첨부 이미지 삭제
+     */
+    private fun removeBusinessCardImage() {
+        try {
+            val imagePath = prefs.businessCardImagePath
+            if (imagePath.isNotBlank()) {
+                val file = File(imagePath)
+                if (file.exists()) {
+                    file.delete()
+                }
+            }
+            prefs.businessCardImagePath = ""
+            renderBusinessCardImagePreview()
+            Toast.makeText(this, "🗑️ 등록된 이미지가 삭제되었습니다.", Toast.LENGTH_SHORT).show()
+            addLogItem("명함이미지", "이미지 삭제 완료", true)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "이미지 삭제 실패", e)
+        }
+    }
+
+    /**
+     * 등록된 명함 이미지 미리보기 UI 렌더링
+     */
+    private fun renderBusinessCardImagePreview() {
+        val imagePath = prefs.businessCardImagePath
+        if (imagePath.isNotBlank()) {
+            val file = File(imagePath)
+            if (file.exists() && file.length() > 0) {
+                try {
+                    val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+                    if (bitmap != null) {
+                        binding.ivBusinessCardPreview.setImageBitmap(bitmap)
+                        binding.tvImageFileName.text = "${file.name} (${file.length() / 1024} KB)"
+                        binding.layoutImagePreview.visibility = View.VISIBLE
+                        binding.btnRemoveBusinessCardImage.visibility = View.VISIBLE
+                        return
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("MainActivity", "이미지 디코딩 오류", e)
+                }
+            }
+        }
+        binding.layoutImagePreview.visibility = View.GONE
+        binding.btnRemoveBusinessCardImage.visibility = View.GONE
     }
 }

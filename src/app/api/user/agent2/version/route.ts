@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 17,
-      latestVersionName: "2.0.6",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.0.6/SheetBotAgent.apk",
+      latestVersionCode: 18,
+      latestVersionName: "2.0.7",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.0.7/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.0.6 정식 릴리스\n• 🧹 불필요한 '오프라인 대기열 서버 전송' 버튼 완전 삭제 (백그라운드 100% 자동화)\n• ⚙️ '계정 연동 해제' 버튼을 화면 최하단 위험 구역(Danger Zone)으로 이동하여 실수 방지\n• 💳 '스마트 편의 설정' ➔ '매장 결제 & 영수증 문자 전송' 전용 비즈니스 카드로 개편\n• 📲 '0원 영수증 문자' ➔ '영수증 문자 전송'으로 명칭 통일 및 직관적 UX 완성",
+      releaseNotes: "시트봇 모바일 에이전트 v2.0.7 정식 릴리스\n• 💼 통화 종료 모바일 명함 하이브리드 발송 지원\n• 🌐 [방안 1] 스마트 웹 명함 링크 모드 (0원 무료 · 아이폰/갤럭시 고화질 미리보기 썸네일 카드)\n• 🖼️ [방안 2] 갤러리 사진 직접 첨부 모드 (통화 종료 시 등록된 명함/포스터 사진과 문구가 문자 앱에 자동 첨부되어 MMS 원클릭 발송)\n• 🪪 이용자가 원하는 발송 방식을 앱 화면에서 언제든 라디오 버튼으로 자유롭게 선택 가능",
     },
     {
       headers: {
