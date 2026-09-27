@@ -104,6 +104,15 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_file_upload_sheet_enabled", true)
         set(value) = prefs.edit().putBoolean("is_file_upload_sheet_enabled", value).apply()
 
+    // 웹 링크 및 유튜브 영상 AI 자동 스크랩 설정
+    var isLinkScrapEnabled: Boolean
+        get() = prefs.getBoolean("is_link_scrap_enabled", true)
+        set(value) = prefs.edit().putBoolean("is_link_scrap_enabled", value).apply()
+
+    var linkScrapDriveSheetTitle: String
+        get() = prefs.getString("link_scrap_drive_sheet_title", "[SheetBot] 웹 링크 & 유튜브 스크랩 대장") ?: "[SheetBot] 웹 링크 & 유튜브 스크랩 대장"
+        set(value) = prefs.edit().putString("link_scrap_drive_sheet_title", value).apply()
+
     // 스마트폰 문자(SMS/LMS) 송수신 구글 시트 자동 동기화 설정
     var isSmsSheetSyncEnabled: Boolean
         get() = prefs.getBoolean("is_sms_sheet_sync_enabled", true)

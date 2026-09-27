@@ -409,12 +409,12 @@ class MainActivity : AppCompatActivity() {
             checkServerAndQueueStatus(showToast = true)
         }
 
-        // 5. 계정 연동 해제 버튼 (화면 최하단 Danger Zone)
+        // 5. 계정 삭제 버튼 (화면 최하단 Danger Zone)
         binding.btnUnlink.setOnClickListener {
             AlertDialog.Builder(this)
-                .setTitle("연동 해제")
-                .setMessage("시트봇 계정 연동을 해제하시겠습니까?\n해제 시 더 이상 결제 알림 및 자동화가 연동되지 않습니다.")
-                .setPositiveButton("해제") { _, _ ->
+                .setTitle("계정 삭제")
+                .setMessage("시트봇 계정 및 등록된 스마트폰 기기 정보를 삭제하시겠습니까?\n삭제 시 더 이상 고객 알림 및 구글 시트 자동화가 연동되지 않습니다.")
+                .setPositiveButton("삭제") { _, _ ->
                     val emailToUnlink = prefs.userEmail
                     if (!emailToUnlink.isNullOrBlank()) {
                         activityScope.launch {
@@ -424,7 +424,7 @@ class MainActivity : AppCompatActivity() {
                     prefs.clear()
                     KeepAliveService.stop(this)
                     updateUiState()
-                    Toast.makeText(this, "연동이 해제되었습니다.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "계정 정보가 삭제되고 연동이 해제되었습니다.", Toast.LENGTH_SHORT).show()
                 }
                 .setNegativeButton("취소", null)
                 .show()
@@ -507,6 +507,23 @@ class MainActivity : AppCompatActivity() {
         }
         binding.switchFileUploadSheet.setOnCheckedChangeListener { _, isChecked ->
             prefs.isFileUploadSheetEnabled = isChecked
+        }
+
+        // 웹 링크 & 유튜브 영상 AI 자동 스크랩 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
+        binding.switchLinkScrap.isChecked = prefs.isLinkScrapEnabled
+        binding.layoutLinkScrapSettings.visibility = if (prefs.isLinkScrapEnabled) View.VISIBLE else View.GONE
+        binding.etLinkScrapSheet.setText(prefs.linkScrapDriveSheetTitle)
+
+        binding.switchLinkScrap.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isLinkScrapEnabled = isChecked
+            binding.layoutLinkScrapSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
+            val msg = if (isChecked) "웹 링크 & 유튜브 AI 자동 스크랩이 켜졌습니다." else "웹 링크 & 유튜브 자동 스크랩이 꺼졌습니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+
+        binding.etLinkScrapSheet.doAfterTextChanged {
+            prefs.linkScrapDriveSheetTitle = it?.toString()?.trim()?.takeIf { s -> s.isNotBlank() }
+                ?: "[SheetBot] 웹 링크 & 유튜브 스크랩 대장"
         }
 
         // 자연어 AI 시트 코파일럿 UI 리스너 (v1.7)
@@ -1574,6 +1591,11 @@ class MainActivity : AppCompatActivity() {
     private fun bookmarkSharedUrl(url: String, rawText: String?) {
         if (!prefs.isPaired) {
             Toast.makeText(this, "⚠️ 시트봇 계정 연동 후 링크를 스크랩할 수 있습니다.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        if (!prefs.isLinkScrapEnabled) {
+            Toast.makeText(this, "⚠️ 웹 링크 & 유튜브 AI 스크랩 기능이 꺼져 있습니다. 앱 설정에서 켜주세요.", Toast.LENGTH_LONG).show()
             return
         }
 
