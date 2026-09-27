@@ -3,10 +3,14 @@ package cloud.sheetbot.agent.user
 import android.Manifest
 import android.app.Activity
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -17,8 +21,11 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.Button
 import android.widget.EditText
+import android.widget.TextView
 import android.widget.Toast
+import java.text.NumberFormat
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -234,6 +241,18 @@ class MainActivity : AppCompatActivity() {
             val signInIntent = googleSignInClient.signInIntent
             googleSignInLauncher.launch(signInIntent)
         }
+
+        // 0-1. 토큰 지갑 새로고침 및 즉시 충전 버튼 (v1.9.0)
+        binding.btnRefreshWallet.setOnClickListener {
+            val email = prefs.userEmail
+            if (!email.isNullOrBlank()) {
+                loadWalletBalance(email, isManualRefresh = true)
+            }
+        }
+        binding.btnRechargeToken.setOnClickListener {
+            showRechargeDialog()
+        }
+
 
         // 1. QR 코드 스캔 버튼
         binding.btnScanQr.setOnClickListener {
@@ -662,19 +681,179 @@ class MainActivity : AppCompatActivity() {
         val email = prefs.userEmail
 
         if (isPaired && !email.isNullOrBlank()) {
+            binding.cardStatus.setBackgroundResource(R.drawable.bg_card_paired)
+            binding.tvStatusTitle.text = "✅ 연동 완료 (${email})"
+            binding.tvStatusDesc.text = "구글 시트봇과 실시간 연동 중입니다."
             binding.layoutPairedControls.visibility = View.VISIBLE
             binding.layoutServerMonitor.visibility = View.VISIBLE
+            binding.layoutWalletCard.visibility = View.VISIBLE
             binding.layoutUnpairedControls.visibility = View.GONE
             checkServerAndQueueStatus(showToast = false)
+            loadWalletBalance(email)
         } else {
             binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
             binding.tvStatusTitle.text = "⚠️ 미연동 상태"
             binding.tvStatusDesc.text = "시트봇 알림 센터의 QR코드를 스캔하여 계정을 연동해 주세요."
             binding.layoutPairedControls.visibility = View.GONE
             binding.layoutServerMonitor.visibility = View.GONE
+            binding.layoutWalletCard.visibility = View.GONE
             binding.layoutUnpairedControls.visibility = View.VISIBLE
         }
     }
+
+    /**
+     * 회원 토큰 지갑 잔액 실시간 조회 및 UI 갱신 (v1.9.0)
+     */
+    private fun loadWalletBalance(userEmail: String, isManualRefresh: Boolean = false) {
+        if (isManualRefresh) {
+            binding.tvWalletBalance.text = "..."
+        }
+        activityScope.launch {
+            val result = ApiClient.fetchWalletBalance(userEmail)
+            if (result.success) {
+                val formattedBalance = NumberFormat.getNumberInstance().format(result.balanceTokens)
+                binding.tvWalletBalance.text = formattedBalance
+                binding.tvWalletTier.text = result.tier
+                val estQueries = (result.balanceTokens / 200).coerceAtLeast(0)
+                binding.tvWalletUsageGuide.text = "💡 AI 코파일럿 & 구글 시트 자동화 약 ${NumberFormat.getNumberInstance().format(estQueries)}회 질의 가능"
+                if (isManualRefresh) {
+                    Toast.makeText(this@MainActivity, "토큰 잔액이 갱신되었습니다.", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                if (isManualRefresh) {
+                    Toast.makeText(this@MainActivity, "잔액 조회 실패: ${result.error}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    /**
+     * 토큰 즉시 충전 다이얼로그 (v1.9.0)
+     * 스타터(5,000원)/스탠다드(12,000원)/프로(30,000원) 패키지 선택 후
+     * 토스(Toss) 앱 딥링크 1초 송금 또는 계좌번호 복사 지원
+     */
+    private fun showRechargeDialog() {
+        val email = prefs.userEmail
+        if (email.isNullOrBlank()) {
+            Toast.makeText(this, "먼저 시트봇 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val dialogView = layoutInflater.inflate(R.layout.dialog_recharge_token, null)
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        var selectedPkgId = "pkg_standard"
+
+        val btnStarter = dialogView.findViewById<Button>(R.id.btnPkgStarter)
+        val btnStandard = dialogView.findViewById<Button>(R.id.btnPkgStandard)
+        val btnPro = dialogView.findViewById<Button>(R.id.btnPkgPro)
+        val etDepositorName = dialogView.findViewById<EditText>(R.id.etDepositorName)
+        val btnRequestDeposit = dialogView.findViewById<Button>(R.id.btnRequestDeposit)
+
+        val layoutResult = dialogView.findViewById<View>(R.id.layoutDepositResult)
+        val tvFinalAmount = dialogView.findViewById<TextView>(R.id.tvFinalAmount)
+        val tvAccountInfo = dialogView.findViewById<TextView>(R.id.tvAccountInfo)
+        val btnOpenToss = dialogView.findViewById<Button>(R.id.btnOpenToss)
+        val btnCopyAccount = dialogView.findViewById<Button>(R.id.btnCopyAccount)
+        val btnClose = dialogView.findViewById<Button>(R.id.btnCloseDialog)
+
+        // 초기 송금자명 세팅 (이메일 앞자리)
+        val defaultName = email.substringBefore("@")
+        etDepositorName.setText(defaultName)
+
+        fun updatePkgSelection(pkgId: String) {
+            selectedPkgId = pkgId
+            val activeColor = ColorStateList.valueOf(Color.parseColor("#4338CA"))
+            val inactiveColor = ColorStateList.valueOf(Color.parseColor("#1E293B"))
+            btnStarter.backgroundTintList = if (pkgId == "pkg_starter") activeColor else inactiveColor
+            btnStandard.backgroundTintList = if (pkgId == "pkg_standard") activeColor else inactiveColor
+            btnPro.backgroundTintList = if (pkgId == "pkg_pro") activeColor else inactiveColor
+        }
+
+        btnStarter.setOnClickListener { updatePkgSelection("pkg_starter") }
+        btnStandard.setOnClickListener { updatePkgSelection("pkg_standard") }
+        btnPro.setOnClickListener { updatePkgSelection("pkg_pro") }
+
+        var currentTossUrl = ""
+        var currentAccountFull = ""
+
+        btnRequestDeposit.setOnClickListener {
+            val depositorName = etDepositorName.text.toString().trim()
+            if (depositorName.length < 2) {
+                Toast.makeText(this, "송금자 실명을 2글자 이상 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            btnRequestDeposit.isEnabled = false
+            btnRequestDeposit.text = "계좌 발급 중..."
+
+            activityScope.launch {
+                val res = ApiClient.requestDirectDeposit(
+                    userEmail = email,
+                    userName = depositorName,
+                    packageId = selectedPkgId,
+                    depositorName = depositorName
+                )
+
+                btnRequestDeposit.isEnabled = true
+                btnRequestDeposit.text = "🚀 계좌 발급 & 토스 1초 송금 준비"
+
+                if (res.success) {
+                    layoutResult.visibility = View.VISIBLE
+                    val formattedPrice = NumberFormat.getNumberInstance().format(res.amountKrw)
+                    val discountMsg = if (res.discountKrw > 0) " (${res.discountKrw}원 즉시 할인)" else ""
+                    tvFinalAmount.text = "최종 입금액: ${formattedPrice}원${discountMsg}"
+                    currentAccountFull = "${res.bankName} ${res.accountNumber} (${res.accountHolder})"
+                    tvAccountInfo.text = currentAccountFull
+                    currentTossUrl = res.tossUrl
+
+                    if (currentTossUrl.isNotBlank()) {
+                        btnOpenToss.visibility = View.VISIBLE
+                    } else {
+                        btnOpenToss.visibility = View.GONE
+                    }
+                    Toast.makeText(this@MainActivity, "입금 계좌가 발급되었습니다. 토스로 송금해 주세요.", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@MainActivity, "계좌 발급 실패: ${res.error}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+
+        btnOpenToss.setOnClickListener {
+            if (currentTossUrl.isNotBlank()) {
+                try {
+                    val tossIntent = Intent(Intent.ACTION_VIEW, Uri.parse(currentTossUrl))
+                    startActivity(tossIntent)
+                } catch (e: Exception) {
+                    Toast.makeText(this, "토스 앱을 열 수 없어 웹 브라우저로 연결합니다.", Toast.LENGTH_SHORT).show()
+                    try {
+                        val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(currentTossUrl))
+                        startActivity(webIntent)
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+
+        btnCopyAccount.setOnClickListener {
+            if (currentAccountFull.isNotBlank()) {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText("SheetBot 입금 계좌", currentAccountFull)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(this, "계좌 정보가 복사되었습니다.", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnClose.setOnClickListener {
+            dialog.dismiss()
+            // 닫을 때 최신 잔액 다시 확인
+            loadWalletBalance(email)
+        }
+
+        dialog.show()
+    }
+
 
     private fun handleQrScanResult(contents: String) {
         val parsed = parseQrContents(contents)

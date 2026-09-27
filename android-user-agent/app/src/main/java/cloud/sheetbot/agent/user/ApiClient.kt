@@ -936,6 +936,144 @@ data class BookmarkResult(
     val error: String? = null
 )
 
+    /**
+     * 회원 토큰 지갑 잔액 및 등급 실시간 조회 (v1.9.0)
+     * GET /api/wallet/balance?userEmail={email}
+     */
+    suspend fun fetchWalletBalance(userEmail: String): WalletBalanceResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastError = "토큰 잔액 조회 실패"
+
+        for ((index, host) in hosts.withIndex()) {
+            val endpoint = "$host/api/wallet/balance?userEmail=${java.net.URLEncoder.encode(userEmail, "UTF-8")}"
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .get()
+                    .header("Cache-Control", "no-cache")
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val balance = resJson.optLong("balanceTokens", 0L)
+                    val tier = resJson.optString("tier", "FREE")
+                    Log.i(TAG, "💰 [토큰 잔액 조회 성공] $userEmail: ${balance}개 (Tier: $tier)")
+                    return@withContext WalletBalanceResult(
+                        success = true,
+                        userEmail = userEmail,
+                        balanceTokens = balance,
+                        tier = tier
+                    )
+                } else {
+                    val errMsg = resJson.optString("error", "HTTP ${response.code}")
+                    lastError = "[$host] $errMsg"
+                }
+            } catch (e: Exception) {
+                lastError = "[$host] ${e.localizedMessage ?: "네트워크 연결 불가"}"
+            }
+        }
+        WalletBalanceResult(success = false, error = lastError)
+    }
+
+    /**
+     * 인앱 토큰 다이렉트 충전 세션 발급 요청 (v1.9.0)
+     * POST /api/wallet/direct-deposit
+     */
+    suspend fun requestDirectDeposit(
+        userEmail: String,
+        userName: String,
+        packageId: String,
+        depositorName: String,
+        phoneNumber: String? = null
+    ): DepositSessionResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastError = "충전 세션 발급 실패"
+
+        for ((index, host) in hosts.withIndex()) {
+            val endpoint = "$host/api/wallet/direct-deposit"
+            try {
+                val json = JSONObject().apply {
+                    put("userEmail", userEmail)
+                    put("userName", userName)
+                    put("packageId", packageId)
+                    put("depositorName", depositorName)
+                    if (!phoneNumber.isNullOrBlank()) {
+                        put("phoneNumber", phoneNumber)
+                    }
+                }
+
+                val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(body)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val bankObj = resJson.optJSONObject("bank") ?: JSONObject()
+                    val pkgObj = resJson.optJSONObject("package") ?: JSONObject()
+                    Log.i(TAG, "💳 [충전 세션 발급 성공] 금액: ${resJson.optInt("amountKrw")}원, 입금자: $depositorName")
+
+                    return@withContext DepositSessionResult(
+                        success = true,
+                        requestId = resJson.optString("requestId", ""),
+                        depositCode = resJson.optString("depositCode", ""),
+                        depositorName = resJson.optString("depositorName", depositorName),
+                        amountKrw = resJson.optInt("amountKrw", 0),
+                        originalAmountKrw = resJson.optInt("originalAmountKrw", 0),
+                        discountKrw = resJson.optInt("discountKrw", 0),
+                        tokensToCredit = pkgObj.optInt("totalTokens", 0),
+                        bankName = bankObj.optString("bankName", "카카오뱅크"),
+                        accountNumber = bankObj.optString("accountNumber", "3333-12-1695965"),
+                        accountHolder = bankObj.optString("accountHolder", "차호석"),
+                        tossUrl = resJson.optString("tossUrl", ""),
+                        qrImageUrl = resJson.optString("qrImageUrl", ""),
+                        expiresAt = resJson.optString("expiresAt", "")
+                    )
+                } else {
+                    val errMsg = resJson.optString("error", "HTTP ${response.code}")
+                    lastError = "[$host] $errMsg"
+                }
+            } catch (e: Exception) {
+                lastError = "[$host] ${e.localizedMessage ?: "네트워크 연결 불가"}"
+            }
+        }
+        DepositSessionResult(success = false, error = lastError)
+    }
+}
+
+data class WalletBalanceResult(
+    val success: Boolean,
+    val userEmail: String = "",
+    val balanceTokens: Long = 0L,
+    val tier: String = "FREE",
+    val error: String? = null
+)
+
+data class DepositSessionResult(
+    val success: Boolean,
+    val requestId: String = "",
+    val depositCode: String = "",
+    val depositorName: String = "",
+    val amountKrw: Int = 0,
+    val originalAmountKrw: Int = 0,
+    val discountKrw: Int = 0,
+    val tokensToCredit: Int = 0,
+    val bankName: String = "카카오뱅크",
+    val accountNumber: String = "",
+    val accountHolder: String = "",
+    val tossUrl: String = "",
+    val qrImageUrl: String = "",
+    val expiresAt: String = "",
+    val error: String? = null
+)
+
 data class AiCommandResult(
     val success: Boolean,
     val command: String? = null,
@@ -945,4 +1083,6 @@ data class AiCommandResult(
     val details: JSONObject? = null,
     val error: String? = null
 )
+
+
 
