@@ -30,6 +30,13 @@ object ApiClient {
         .retryOnConnectionFailure(true)
         .build()
 
+    // 파일 업로드, AI OCR/요약 및 구글 시트 연동을 위한 대기 타임아웃 클라이언트 (60초)
+    private val longTimeoutClient = client.newBuilder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
+        .build()
+
     /**
      * QR코드 또는 핀코드로 시트봇 서버에 기기 페어링 요청
      * 1차: sheetbot.cloud -> 실패 시 2차: tunneling-service/p/SheetBot 자동 폴백
@@ -552,7 +559,7 @@ object ApiClient {
                     .url(endpoint)
                     .post(requestBody)
                     .build()
-                val response = client.newCall(request).execute()
+                val response = longTimeoutClient.newCall(request).execute()
                 val resStr = response.body?.string() ?: ""
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
@@ -615,7 +622,7 @@ object ApiClient {
                     .url(endpoint)
                     .post(requestBody)
                     .build()
-                val response = client.newCall(request).execute()
+                val response = longTimeoutClient.newCall(request).execute()
                 val resStr = response.body?.string() ?: ""
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
@@ -666,7 +673,7 @@ object ApiClient {
             val endpoint = "$host/api/user/links/bookmark"
             try {
                 val request = Request.Builder().url(endpoint).post(body).build()
-                val response = client.newCall(request).execute()
+                val response = longTimeoutClient.newCall(request).execute()
                 val resStr = response.body?.string() ?: ""
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
@@ -714,7 +721,7 @@ object ApiClient {
             val endpoint = "$host/api/user/commands/execute"
             try {
                 val request = Request.Builder().url(endpoint).post(body).build()
-                val response = client.newCall(request).execute()
+                val response = longTimeoutClient.newCall(request).execute()
                 val resStr = response.body?.string() ?: ""
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {

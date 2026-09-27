@@ -12,6 +12,7 @@ import {
   insertRows,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { getAiModelSettings } from "@/lib/ai-settings";
 
 /**
  * POST /api/user/links/bookmark
@@ -114,9 +115,12 @@ export async function POST(req: NextRequest) {
       title = rawText.replace(rawUrl, "").trim() || rawUrl;
     }
 
-    // 3. Gemini 3.8 Flash AI 핵심 3줄 요약 생성
+    // 3. 사이트 설정 AI 모델 기반 핵심 3줄 요약 생성
     let aiSummary = "1. 원본 링크 참조\n2. 주요 콘텐츠 확인 완료\n3. 후속 검토 요망";
     try {
+      const aiSettings = await getAiModelSettings();
+      const targetModel = aiSettings.defaultModel;
+
       const prompt = `당신은 웹 콘텐츠 및 유튜브 영상 스크랩 분석 비서입니다.
 다음 수신된 링크 콘텐츠 정보를 분석하여 바쁜 직장인을 위한 핵심 3줄 요약(각 줄 머리에 1., 2., 3. 번호 부여)을 작성해 주세요. 불필요한 서두나 마크다운 없이 순수 텍스트 3줄로만 답변하세요:
 
@@ -126,7 +130,7 @@ export async function POST(req: NextRequest) {
 - URL: ${rawUrl}`;
 
       const aiRes = await callAiCaller(prompt, {
-        model: "gemini-3.8-flash",
+        model: targetModel || undefined,
         temperature: 0.2,
       });
 

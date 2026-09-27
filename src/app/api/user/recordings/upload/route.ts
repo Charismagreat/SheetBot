@@ -97,9 +97,9 @@ export async function POST(req: NextRequest) {
     let webViewLink = "";
     try {
       const uploadRes = await uploadDriveFile({
-        localPath: tempFilePath,
+        filePath: tempFilePath,
         folderId: targetFolderId || undefined,
-        fileName: targetFileName,
+        destName: targetFileName,
         preferOAuth: true,
       });
 
