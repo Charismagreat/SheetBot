@@ -92,6 +92,67 @@ object ApiClient {
     }
 
     /**
+     * Google 원클릭 로그인(Sign in with Google) 기반 0초 자동 페어링 (v1.8.0)
+     */
+    suspend fun pairWithGoogle(
+        idToken: String?,
+        userEmail: String?,
+        deviceModel: String = "${Build.MANUFACTURER} ${Build.MODEL}",
+        appVersion: String = "1.8.0"
+    ): PairResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastError = "구글 로그인 페어링 실패"
+
+        for ((index, host) in hosts.withIndex()) {
+            val endpoint = "$host/api/user/agent2/pair-google"
+            Log.i(TAG, "[구글 로그인 페어링 시도 ${index + 1}/${hosts.size}] 엔드포인트: $endpoint")
+
+            try {
+                val json = JSONObject().apply {
+                    if (!idToken.isNullOrBlank()) put("idToken", idToken)
+                    if (!userEmail.isNullOrBlank()) put("userEmail", userEmail)
+                    put("deviceModel", deviceModel)
+                    put("appVersion", appVersion)
+                }
+
+                val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(body)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val finalEmail = resJson.optString("userEmail", userEmail ?: "")
+                    Log.i(TAG, "🎉 [구글 로그인 페어링 성공] 이메일: $finalEmail ($host)")
+                    return@withContext PairResult(
+                        success = true,
+                        userEmail = finalEmail,
+                        deviceToken = resJson.optString("token", ""),
+                        webhookUrl = resJson.optString("webhookUrl", "$PRIMARY_HOST/api/user/agent2/inbound-sms"),
+                        fallbackWebhookUrl = resJson.optString("fallbackWebhookUrl", "$FALLBACK_HOST/api/user/agent2/inbound-sms"),
+                        heartbeatUrl = "$PRIMARY_HOST/api/user/agent2/heartbeat",
+                        fallbackHeartbeatUrl = "$FALLBACK_HOST/api/user/agent2/heartbeat",
+                        message = resJson.optString("message", "구글 계정 연동 성공")
+                    )
+                } else {
+                    val errMsg = resJson.optString("error", "HTTP ${response.code}")
+                    lastError = "[$host] $errMsg"
+                    Log.w(TAG, "구글 페어링 실패 ($host): $errMsg")
+                }
+            } catch (e: Exception) {
+                lastError = "[$host] ${e.localizedMessage ?: "네트워크 연결 불가"}"
+                Log.w(TAG, "구글 페어링 예외 ($host): ${e.message}")
+            }
+        }
+
+        PairResult(success = false, error = lastError)
+    }
+
+    /**
      * 입금 SMS 감지 시 시트봇 실시간 웹훅으로 암호화 전송
      * 1차 webhookUrl 실패 시 fallbackWebhookUrl로 자동 재전송
      */

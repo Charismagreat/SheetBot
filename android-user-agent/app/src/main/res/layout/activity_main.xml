@@ -39,7 +39,7 @@
                 android:background="@drawable/bg_badge_version"
                 android:paddingHorizontal="10dp"
                 android:paddingVertical="4dp"
-                android:text="v1.7"
+                android:text="v1.8"
                 android:textColor="#10B981"
                 android:textSize="12sp"
                 android:textStyle="bold" />
@@ -272,7 +272,7 @@
             android:layout_margin="8dp"
             android:visibility="gone" />
 
-        <!-- 미연동 시 컨트롤 (QR 스캔 & 핀코드 입력) -->
+        <!-- 미연동 시 컨트롤 (Google 원클릭 로그인 & QR 스캔 & 핀코드 입력) -->
         <LinearLayout
             android:id="@+id/layoutUnpairedControls"
             android:layout_width="match_parent"
@@ -281,13 +281,24 @@
             android:layout_marginBottom="16dp">
 
             <Button
-                android:id="@+id/btnScanQr"
+                android:id="@+id/btnGoogleSignIn"
                 android:layout_width="match_parent"
                 android:layout_height="54dp"
-                android:backgroundTint="#4F46E5"
-                android:text="📷 워크스페이스 QR코드 스캔 (0초 연동)"
-                android:textColor="#FFFFFF"
+                android:backgroundTint="#FFFFFF"
+                android:text="G  Google 계정으로 1초 로그인 (PC 불필요)"
+                android:textColor="#1F2937"
                 android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="10dp" />
+
+            <Button
+                android:id="@+id/btnScanQr"
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:backgroundTint="#4F46E5"
+                android:text="📷 워크스페이스 QR코드 스캔 (PC 화면 연동)"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
                 android:textStyle="bold"
                 android:layout_marginBottom="8dp" />
 

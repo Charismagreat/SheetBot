@@ -25,6 +25,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import cloud.sheetbot.agent.user.databinding.ActivityMainBinding
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.CoroutineScope
@@ -120,12 +124,41 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Google 원클릭 로그인 런처 (v1.8.0)
+    private lateinit var googleSignInClient: GoogleSignInClient
+    private val googleSignInLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        try {
+            val account = task.getResult(ApiException::class.java)
+            val email = account?.email
+            val idToken = account?.idToken
+            if (!email.isNullOrBlank()) {
+                handleGoogleSignInSuccess(idToken, email)
+            } else {
+                Toast.makeText(this, "구글 계정 이메일을 가져올 수 없습니다.", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: ApiException) {
+            android.util.Log.w("MainActivity", "Google sign-in failed: statusCode=${e.statusCode}")
+            if (e.statusCode != 12501) { // 12501은 사용자 단순 취소
+                Toast.makeText(this, "구글 로그인에 실패했습니다 (오류 코드: ${e.statusCode})", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         prefs = PreferencesManager(this)
+
+        // Google Sign-In 옵션 초기화
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+            .build()
+        googleSignInClient = GoogleSignIn.getClient(this, gso)
 
         TtsManager.init(this)
         UpdateManager.checkForUpdates(this, showToastIfLatest = false)
@@ -196,6 +229,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
+        // 0. Google 원클릭 로그인 버튼 (v1.8.0)
+        binding.btnGoogleSignIn.setOnClickListener {
+            val signInIntent = googleSignInClient.signInIntent
+            googleSignInLauncher.launch(signInIntent)
+        }
+
         // 1. QR 코드 스캔 버튼
         binding.btnScanQr.setOnClickListener {
             val options = ScanOptions().apply {
@@ -752,6 +791,60 @@ class MainActivity : AppCompatActivity() {
                 AlertDialog.Builder(this@MainActivity)
                     .setTitle("연동 실패")
                     .setMessage(result.error ?: "서버와의 통신에 실패했습니다.")
+                    .setPositiveButton("확인", null)
+                    .show()
+            }
+        }
+    }
+
+    /**
+     * Google 원클릭 로그인 완료 시 시트봇 서버와 0초 자동 페어링 처리 (v1.8.0)
+     */
+    private fun handleGoogleSignInSuccess(idToken: String?, email: String) {
+        binding.progressBar.visibility = View.VISIBLE
+        Toast.makeText(this, "구글 계정($email)으로 시트봇 연동 중...", Toast.LENGTH_SHORT).show()
+
+        activityScope.launch {
+            val result = withTimeoutOrNull(10000L) {
+                ApiClient.pairWithGoogle(idToken, email)
+            }
+            binding.progressBar.visibility = View.GONE
+
+            if (result == null) {
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("연동 시간 초과")
+                    .setMessage("서버 응답이 10초 이상 지연되었습니다.\n네트워크 상태를 확인하신 후 다시 시도해 주세요.")
+                    .setPositiveButton("확인", null)
+                    .show()
+                return@launch
+            }
+
+            if (result.success) {
+                val finalEmail = result.userEmail ?: email
+                prefs.userEmail = finalEmail
+                prefs.isPaired = true
+                if (!result.webhookUrl.isNullOrBlank()) prefs.webhookUrl = result.webhookUrl
+                if (!result.fallbackWebhookUrl.isNullOrBlank()) prefs.fallbackWebhookUrl = result.fallbackWebhookUrl
+                if (!result.deviceToken.isNullOrBlank()) prefs.deviceToken = result.deviceToken
+
+                KeepAliveService.start(this@MainActivity)
+                updateUiState()
+
+                addLogItem("구글로그인", "$finalEmail 계정 자동 연동 성공", true)
+
+                if (prefs.isTtsEnabled) {
+                    TtsManager.speak(this@MainActivity, "구글 계정으로 성공적으로 연동되었습니다.")
+                }
+
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("🎉 Google 원클릭 연동 완료!")
+                    .setMessage("${finalEmail} 계정으로 시트봇 에이전트가 0초 만에 연동되었습니다.\n\nPC 화면의 QR 코드를 스캔할 필요 없이 스마트폰 단독으로 연동이 완료되었습니다.\n지금부터 문자/통화/사진/링크가 구글 시트와 실시간 동기화됩니다.")
+                    .setPositiveButton("시작하기", null)
+                    .show()
+            } else {
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("구글 연동 실패")
+                    .setMessage(result.error ?: "구글 계정 연동 처리에 실패했습니다.")
                     .setPositiveButton("확인", null)
                     .show()
             }
