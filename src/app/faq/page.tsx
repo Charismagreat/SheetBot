@@ -17,6 +17,7 @@ import {
   Building2,
   Clock,
   Radio,
+  ShieldCheck,
 } from "lucide-react";
 import { DEFAULT_FAQS } from "@/lib/default-faqs";
 
@@ -138,6 +139,33 @@ export default function FaqPage() {
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight break-keep">
             자주 묻는 질문 (FAQ)
           </h1>
+          <p className="text-xs text-slate-500 break-keep">
+            시트봇 이용에 관한 궁금증을 빠르고 정확하게 해결해 드립니다.
+          </p>
+        </div>
+
+        {/* 🛡️ Zero-Retention 안심 보증 요약 카드 */}
+        <div className="max-w-3xl mx-auto bg-gradient-to-r from-teal-900/95 via-slate-900 to-emerald-950 rounded-2xl p-5 text-white border border-teal-500/30 shadow-md">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 text-[11px] font-black border border-teal-400/30">
+                  <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
+                  Zero-Retention 안심 보증
+                </span>
+                <span className="text-[11px] font-bold text-teal-200/80">중앙 서버 무보관 100%</span>
+              </div>
+              <p className="text-xs text-teal-100/90 leading-relaxed break-keep">
+                시트봇은 고객의 개인정보, 통화내역, 문자 전문, 카톡 대화, 결제 내역을 <strong>중앙 서버에 일체 보관하지 않습니다</strong>. 모든 원본 데이터는 오직 회원님 본인의 안전한 구글 드라이브(Google Drive) 및 구글 시트로만 안전하게 보관됩니다.
+              </p>
+            </div>
+            <Link
+              href="/privacy"
+              className="text-xs font-bold text-teal-300 hover:text-white underline underline-offset-4 shrink-0 transition-colors"
+            >
+              개인정보처리방침 &rarr;
+            </Link>
+          </div>
         </div>
 
         {/* 실시간 키워드 검색창 */}

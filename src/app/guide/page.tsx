@@ -218,8 +218,36 @@ export default function GuidePage() {
                 className="px-5 py-3 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl border border-white/10 transition-all flex items-center gap-1.5"
               >
                 <Smartphone className="w-4 h-4 text-emerald-300" />
-                <span>스마트폰 연동 &amp; 무료 문자 설정</span>
+                <span>시트봇 모바일 에이전트 바로가기</span>
               </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* 🛡️ Zero-Retention 프라이버시 안심 보증 하이라이트 배너 */}
+        <div className="bg-gradient-to-r from-teal-950 via-slate-900 to-emerald-950 rounded-3xl p-6 sm:p-8 text-white border border-teal-500/30 shadow-lg relative overflow-hidden">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="space-y-2 max-w-3xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-teal-500/20 text-teal-300 rounded-full text-xs font-bold border border-teal-400/30">
+                <ShieldCheck className="w-4 h-4 text-teal-400" />
+                <span>Zero-Retention 아키텍처 • 중앙 서버 무보관 100%</span>
+              </div>
+              <h3 className="text-xl font-black text-white tracking-tight break-keep">
+                고객 정보, 문자 전문, 통화/결제 내역은 중앙 서버에 절대 남지 않습니다
+              </h3>
+              <p className="text-xs sm:text-sm text-teal-100/90 leading-relaxed break-keep">
+                시트봇은 고객의 민감한 비즈니스 데이터를 자체 서버에 일체 보관하지 않습니다. 모든 고객 연락처, 결제 승인 알림, 주고받은 메시지 원문은 오직 <strong>회원님 본인의 안전한 구글 드라이브(Google Drive) 및 구글 스프레드시트</strong>로만 직통 전송·보관됩니다.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+              <div className="px-4 py-3 rounded-2xl bg-teal-900/40 border border-teal-400/20 text-center space-y-0.5">
+                <div className="text-[11px] text-teal-300 font-extrabold">개인정보·대화원문</div>
+                <div className="text-base font-black text-white">서버 무보관 100%</div>
+              </div>
+              <div className="px-4 py-3 rounded-2xl bg-emerald-900/40 border border-emerald-400/20 text-center space-y-0.5">
+                <div className="text-[11px] text-emerald-300 font-extrabold">데이터 보관 위치</div>
+                <div className="text-base font-black text-white">내 구글 드라이브</div>
+              </div>
             </div>
           </div>
         </div>
@@ -232,7 +260,7 @@ export default function GuidePage() {
               누구나 3분 만에 마스터하는 5단계 자동화 여정
             </h2>
             <p className="text-xs text-slate-500 break-keep">
-              구글 계정 로그인부터 스마트폰 연동, AI 비서 협업까지 직관적인 단계로 구성되어 있습니다.
+              구글 계정 로그인부터 안티그라비티 원터치 연동, 시트봇 모바일 에이전트까지 직관적인 단계로 구성되어 있습니다.
             </p>
           </div>
 
