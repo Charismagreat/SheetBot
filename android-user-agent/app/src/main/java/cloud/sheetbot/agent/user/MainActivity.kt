@@ -300,6 +300,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
+        // 0-0. 프라이버시 안심 보증 카드 '숨기기' 체크박스 (컴팩트 모드)
+        val isPrivacyHidden = prefs.isPrivacyCardHidden
+        binding.cbHidePrivacy.isChecked = isPrivacyHidden
+        updatePrivacyCardVisibility(isPrivacyHidden)
+
+        binding.cbHidePrivacy.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isPrivacyCardHidden = isChecked
+            updatePrivacyCardVisibility(isChecked)
+        }
+
         // 0. Google 원클릭 로그인 버튼 (v1.8.0 / v2.0.1 무중단 연동 강화)
         binding.btnGoogleSignIn.setOnClickListener {
             try {
@@ -745,16 +755,22 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, "✅ sheetbot.cloud 서버 통신 정상 (${ping.latencyMs}ms)", Toast.LENGTH_SHORT).show()
                 }
             } else {
-                binding.cardStatus.setBackgroundColor(0xFF7F1D1D.toInt())
-                binding.tvStatusTitle.text = "🚨 서버 연결 두절 (서버 점검 필요)"
-                binding.tvStatusDesc.text = "sheetbot.cloud 서버가 응답하지 않습니다.\n네트워크 연결 또는 PC 서버 상태를 점검해 주세요."
-                binding.tvServerStatus.text = "🌐 서버 통신: 🔴 응답 없음 (연결 두절)"
+                // 이용자 앱 친화적: 위협적인 붉은색 경고창/토스트 대신 '가동 중 (통신 확인 중)'으로 자연스럽게 표시
+                binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
+                binding.tvStatusTitle.text = "🟢 시트봇 모바일 에이전트 가동 중 (통신 확인 중)"
+                binding.tvStatusDesc.text = "계정: $email\n구글 시트 ↔ 스마트폰 자동 연결 대기 중 (서버 무보관 100%)"
+                binding.tvServerStatus.text = "🌐 서버 통신: 🟡 연결 대기 중 (자동 재시도)"
 
                 if (showToast) {
-                    Toast.makeText(this@MainActivity, "⚠️ 서버 연결이 두절되었습니다. PC 서버 상태를 점검하세요.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, "시트봇 모바일 에이전트 가동 중 (서버 연결을 확인하고 있습니다)", Toast.LENGTH_SHORT).show()
                 }
             }
         }
+    }
+
+    private fun updatePrivacyCardVisibility(hidden: Boolean) {
+        binding.layoutPrivacyBody.visibility = if (hidden) View.GONE else View.VISIBLE
+        binding.tvPrivacyTitle.text = if (hidden) "🛡️ 고객정보 안심보증" else "🛡️ Zero-Retention 안심 보증"
     }
 
     private fun updateUiState() {
