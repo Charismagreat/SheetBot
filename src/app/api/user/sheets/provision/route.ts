@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUserSpreadsheet, SheetBindingType } from "@/lib/sheet-binding-helper";
-import { callSheetsTool, callDriveTool, listDriveFiles, createDriveFolder } from "@/lib/egdesk-helpers";
+import { callSheetsTool, callDriveTool, listDriveFiles, createDriveFolder, trashDriveFile } from "@/lib/egdesk-helpers";
 
 interface SheetDefinition {
   defaultTitle: string;
@@ -73,7 +73,14 @@ async function ensureDriveFolder(folderName: string): Promise<string | null> {
     ).catch(() => ({ files: [] }));
 
     if (searchRes?.files && searchRes.files.length > 0) {
-      return searchRes.files[0].id;
+      const primaryFolder = searchRes.files[0];
+      if (searchRes.files.length > 1) {
+        console.log(`[ProvisionSheet] Found ${searchRes.files.length} folders for '${folderName}', cleaning up duplicates...`);
+        for (let i = 1; i < searchRes.files.length; i++) {
+          trashDriveFile(searchRes.files[i].id, true).catch(() => {});
+        }
+      }
+      return primaryFolder.id;
     }
 
     const createRes = await createDriveFolder(folderName, undefined, true).catch((err: any) => {
