@@ -76,6 +76,101 @@ export async function GET() {
     }
     .strip-reload:hover { color: #2563eb; }
 
+    /* [1-1] 스마트 하이브리드 지갑 미니 스트립 */
+    .wallet-mini-strip {
+      width: 100%;
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      border-radius: 8px;
+      padding: 6px 9px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 7px;
+      color: #ffffff;
+      box-shadow: 0 2px 5px rgba(15, 23, 42, 0.1);
+      box-sizing: border-box;
+      transition: all 0.2s ease;
+    }
+    .wallet-mini-strip:hover {
+      border-color: rgba(99, 102, 241, 0.6);
+    }
+    .wallet-mini-left {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .wallet-mini-icon {
+      font-size: 13px;
+    }
+    .wallet-mini-label {
+      font-size: 10.5px;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+    .wallet-mini-amount {
+      font-size: 13px;
+      font-weight: 800;
+      color: #38bdf8;
+      letter-spacing: -0.2px;
+      font-variant-numeric: tabular-nums;
+    }
+    .wallet-mini-tier {
+      font-size: 8.5px;
+      font-weight: 800;
+      padding: 1px 4px;
+      border-radius: 3px;
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    .wallet-toggle-arrow {
+      font-size: 9px;
+      color: #94a3b8;
+      margin-left: 2px;
+      transition: transform 0.2s;
+    }
+    .wallet-mini-right {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .wallet-eye-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #cbd5e1;
+      padding: 3px 6px;
+      border-radius: 5px;
+      font-size: 11px;
+      cursor: pointer;
+      line-height: 1;
+      transition: all 0.15s;
+    }
+    .wallet-eye-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+      color: #ffffff;
+    }
+    .wallet-mini-charge-btn {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #ffffff;
+      border: none;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      transition: filter 0.15s;
+      box-shadow: 0 1px 4px rgba(16, 185, 129, 0.3);
+    }
+    .wallet-mini-charge-btn:hover {
+      filter: brightness(1.1);
+    }
+
     /* [2] 프리미엄 토큰 지갑 카드 */
     .wallet-card {
       width: 100%;
@@ -908,16 +1003,36 @@ export async function GET() {
     </div>
   </div>
 
-  <!-- [2] 프리미엄 토큰 지갑 카드 -->
-  <div class="wallet-card">
+  <!-- [1-1] 스마트 하이브리드 지갑 미니 스트립 (평상시 슬림 표시 & 마스킹) -->
+  <div class="wallet-mini-strip" id="wallet-mini-strip">
+    <div class="wallet-mini-left" onclick="toggleWalletCard()" title="클릭하여 지갑 상세 카드 열기/닫기">
+      <span class="wallet-mini-icon">🪙</span>
+      <span class="wallet-mini-label">토큰</span>
+      <span class="wallet-mini-amount" id="token-amount-mini">동기화 중...</span>
+      <span class="wallet-mini-tier" id="tier-badge-mini">PRO</span>
+      <span class="wallet-toggle-arrow" id="wallet-toggle-arrow">▼</span>
+    </div>
+    <div class="wallet-mini-right">
+      <button class="wallet-eye-btn" onclick="toggleMaskBalance(event)" id="mask-btn" title="프라이버시 잔액 숨김/보임 (화면 공유 시 보호)">👁️</button>
+      <button class="wallet-mini-charge-btn" onclick="openRechargeModal(event)" title="토큰 즉시 충전">+ 충전</button>
+    </div>
+  </div>
+
+  <!-- [2] 프리미엄 토큰 지갑 상세 카드 (접이식) -->
+  <div class="wallet-card" id="wallet-card-details" style="display: none;">
     <div class="wallet-top-row">
       <div style="display: flex; align-items: center; gap: 6px;">
         <span class="tier-badge" id="tier-badge">PRO</span>
         <span class="user-email-text" id="token-user">계정 동기화 중...</span>
       </div>
-      <button class="refresh-icon-btn" onclick="refreshBalance()" title="실시간 잔액 새로고침">
-        <span>🔄</span><span>새로고침</span>
-      </button>
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <button class="refresh-icon-btn" onclick="refreshBalance()" title="실시간 잔액 새로고침">
+          <span>🔄</span><span>새로고침</span>
+        </button>
+        <button class="refresh-icon-btn" onclick="toggleWalletCard()" title="지갑 상세 접기" style="color: #94a3b8;">
+          <span>▲ 접기</span>
+        </button>
+      </div>
     </div>
 
     <div class="wallet-balance-row">
@@ -1136,9 +1251,61 @@ export async function GET() {
 
   <script>
     var currentEmail = 'chachogreat@gmail.com';
+    var currentBalance = 0;
+    var isMasked = false;
+    var isDetailsOpen = false;
+
+    try {
+      isMasked = localStorage.getItem('sheetbot_wallet_masked') === 'true';
+    } catch(e) {}
+
+    function toggleWalletCard() {
+      var detailsEl = document.getElementById('wallet-card-details');
+      var arrowEl = document.getElementById('wallet-toggle-arrow');
+      if (!detailsEl) return;
+      isDetailsOpen = !isDetailsOpen;
+      detailsEl.style.display = isDetailsOpen ? 'block' : 'none';
+      if (arrowEl) arrowEl.innerText = isDetailsOpen ? '▲' : '▼';
+    }
+
+    function toggleMaskBalance(event) {
+      if (event && event.stopPropagation) event.stopPropagation();
+      isMasked = !isMasked;
+      try {
+        localStorage.setItem('sheetbot_wallet_masked', isMasked ? 'true' : 'false');
+      } catch(e) {}
+      applyBalanceDisplay(currentBalance);
+    }
+
+    function applyBalanceDisplay(bal) {
+      if (bal !== undefined && bal !== null && !isNaN(bal)) {
+        currentBalance = Number(bal);
+      }
+      var miniEl = document.getElementById('token-amount-mini');
+      var fullEl = document.getElementById('token-amount');
+      var maskBtn = document.getElementById('mask-btn');
+
+      if (isMasked) {
+        if (miniEl) miniEl.innerText = '••••• T';
+        if (fullEl) fullEl.innerText = '•••••';
+        if (maskBtn) {
+          maskBtn.innerText = '🔒';
+          maskBtn.title = '프라이버시 잔액 숨김 해제';
+        }
+      } else {
+        var formatted = currentBalance.toLocaleString();
+        if (miniEl) miniEl.innerText = formatted + ' T';
+        if (fullEl) fullEl.innerText = formatted;
+        if (maskBtn) {
+          maskBtn.innerText = '👁️';
+          maskBtn.title = '프라이버시 잔액 숨김 (화면 공유 시 보호)';
+        }
+      }
+    }
 
     function updateTokenWarningState(bal) {
       var amountEl = document.getElementById('token-amount');
+      var miniEl = document.getElementById('token-amount-mini');
       var warningBox = document.getElementById('token-warning-box');
       var warningIcon = document.getElementById('warning-icon');
       var warningTitle = document.getElementById('warning-title');
@@ -1146,12 +1313,14 @@ export async function GET() {
 
       if (bal === undefined || bal === null || isNaN(bal)) return;
       var num = Number(bal);
+      applyBalanceDisplay(num);
 
       if (num <= 0) {
         if (amountEl) {
           amountEl.style.color = '#ef4444';
           amountEl.style.textShadow = '0 0 12px rgba(239, 68, 68, 0.55)';
         }
+        if (miniEl) miniEl.style.color = '#ef4444';
         if (warningBox) {
           warningBox.style.display = 'block';
           warningBox.className = 'token-warning-box warning-depleted';
@@ -1159,11 +1328,22 @@ export async function GET() {
           if (warningTitle) warningTitle.innerText = '토큰 소진 (AI 기능 일시 중지)';
           if (warningDesc) warningDesc.innerText = '잔여 토큰이 0이 되어 AI 자동화 호출이 중지되었습니다. 즉시 충전 후 계속 이용해 주세요.';
         }
+        // 토큰 소진 시 자동으로 상세 지갑 카드를 펼쳐 경고 안내
+        if (!isDetailsOpen) {
+          var detailsEl = document.getElementById('wallet-card-details');
+          var arrowEl = document.getElementById('wallet-toggle-arrow');
+          if (detailsEl) {
+            detailsEl.style.display = 'block';
+            isDetailsOpen = true;
+            if (arrowEl) arrowEl.innerText = '▲';
+          }
+        }
       } else if (num <= 5000) {
         if (amountEl) {
           amountEl.style.color = '#f59e0b';
           amountEl.style.textShadow = '0 0 8px rgba(245, 158, 11, 0.4)';
         }
+        if (miniEl) miniEl.style.color = '#f59e0b';
         if (warningBox) {
           warningBox.style.display = 'block';
           warningBox.className = 'token-warning-box warning-low';
@@ -1171,11 +1351,22 @@ export async function GET() {
           if (warningTitle) warningTitle.innerText = '잔여 토큰 부족 주의 (' + num.toLocaleString() + ' Token)';
           if (warningDesc) warningDesc.innerText = '잔여 토큰이 5,000 이하입니다. 원활한 AI 자동화를 위해 충전을 권장합니다.';
         }
+        // 토큰 부족 시 자동으로 상세 지갑 카드를 펼쳐 경고 안내
+        if (!isDetailsOpen) {
+          var detailsEl = document.getElementById('wallet-card-details');
+          var arrowEl = document.getElementById('wallet-toggle-arrow');
+          if (detailsEl) {
+            detailsEl.style.display = 'block';
+            isDetailsOpen = true;
+            if (arrowEl) arrowEl.innerText = '▲';
+          }
+        }
       } else {
         if (amountEl) {
           amountEl.style.color = '#38bdf8';
           amountEl.style.textShadow = 'none';
         }
+        if (miniEl) miniEl.style.color = '#38bdf8';
         if (warningBox) {
           warningBox.style.display = 'none';
         }
@@ -1193,19 +1384,21 @@ export async function GET() {
 
     function fetchDirectWallet(email) {
       var targetEmail = email || currentEmail || 'chachogreat@gmail.com';
-      var amountEl = document.getElementById('token-amount');
       var userEl = document.getElementById('token-user');
       var tierEl = document.getElementById('tier-badge');
+      var miniTierEl = document.getElementById('tier-badge-mini');
 
       fetch('https://sheetbot.cloud/api/wallet/balance?userEmail=' + encodeURIComponent(targetEmail), { cache: 'no-store' })
         .then(function(res) { return res.json(); })
         .then(function(data) {
           if (data && data.success && data.balanceTokens !== undefined) {
             var bal = Number(data.balanceTokens);
-            amountEl.innerText = bal.toLocaleString();
             userEl.innerText = data.userEmail || targetEmail;
             if (tierEl && data.tier) {
               tierEl.innerText = data.tier;
+            }
+            if (miniTierEl && data.tier) {
+              miniTierEl.innerText = data.tier;
             }
             updateTokenWarningState(bal);
           }
@@ -1217,7 +1410,9 @@ export async function GET() {
 
     function refreshBalance() {
       var amountEl = document.getElementById('token-amount');
-      amountEl.innerText = '동기화 중...';
+      var miniEl = document.getElementById('token-amount-mini');
+      if (amountEl && !isMasked) amountEl.innerText = '동기화 중...';
+      if (miniEl && !isMasked) miniEl.innerText = '동기화 중...';
 
       if (window.google && window.google.script && window.google.script.run) {
         try {
@@ -1543,6 +1738,7 @@ export async function GET() {
 
     // Google Apps Script 비동기 바인딩 감지 즉시 실행
     (function initGasBridge() {
+      applyBalanceDisplay(0);
       var attempts = 0;
       loadDynamicPromotions();
       var interval = setInterval(function() {
