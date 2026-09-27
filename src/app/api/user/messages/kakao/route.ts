@@ -89,19 +89,32 @@ export async function POST(req: NextRequest) {
 
           if (targetSpreadsheetId) {
             spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
+          }
+        }
 
-            // 초기 헤더 기입
-            const headers = [
-              ["수신 일시", "채팅방 구분", "채팅방/상대방 이름", "발신자", "메시지 내용", "기기명"]
-            ];
+        // 시트에 신규 카카오톡 메시지 행 추가 (자가 치유: 1행 헤더 보장)
+        if (targetSpreadsheetId) {
+          const headerValues = [
+            ["수신 일시", "채팅방 구분", "채팅방/상대방 이름", "발신자", "메시지 내용", "기기명"]
+          ];
+
+          // 1행 A1 셀 확인하여 비어있으면 헤더 선제 주입
+          const firstRowCheck = await callSheetsTool("sheets_get_range", {
+            spreadsheetId: targetSpreadsheetId,
+            range: "A1:A1",
+            preferOAuth: true,
+          }).catch(() => null);
+
+          const hasHeaderOrData = firstRowCheck?.values && firstRowCheck.values.length > 0 && firstRowCheck.values[0]?.[0];
+
+          if (!hasHeaderOrData) {
             await callSheetsTool("sheets_update_range", {
               spreadsheetId: targetSpreadsheetId,
               range: "A1:F1",
-              values: headers,
+              values: headerValues,
               preferOAuth: true,
             }).catch(() => {});
 
-            // 헤더 서식 스타일링 (카카오 노란색/다크 브라운 테마)
             await callSheetsTool("sheets_format_headers", {
               spreadsheetId: targetSpreadsheetId,
               tabName: "시트1",
@@ -110,10 +123,7 @@ export async function POST(req: NextRequest) {
               preferOAuth: true,
             }).catch(() => {});
           }
-        }
 
-        // 시트에 신규 카카오톡 메시지 행 추가
-        if (targetSpreadsheetId) {
           const newRowValues = [
             [nowStr, roomTypeLabel, roomName, senderName, message, deviceId]
           ];
