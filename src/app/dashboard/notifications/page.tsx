@@ -1,7 +1,7 @@
 "use client";
 
-import { apiFetch, getEgdeskBasePath } from '@/lib/api';
-import { queryTable, onUserDataChanged } from '@/lib/egdesk-helpers';
+import { apiFetch } from '@/lib/api';
+import { onUserDataChanged } from '@/lib/egdesk-helpers';
 import React, { useState, useEffect, useCallback, useRef } from "react";
 
 function mapNotificationDevice(d: any) {
@@ -230,101 +230,105 @@ export default function NotificationsPage() {
     setTimeout(() => setAlert(null), 5000);
   };
 
-  // 1. 디바이스 목록 로드 (이지데스크 queryTable 직통 조회)
-  const fetchDevices = useCallback(async (isSilent = false) => {
-    if (!isSilent) setLoadingDevices(true);
+  // ⚡ 마운트 즉시 캐시 복원으로 0초 렌더링 지원 (SWR 패턴)
+  useEffect(() => {
     try {
-      const email = effectiveEmail;
-      if (!email) return;
-      const res = await queryTable("sheetbot_user_devices", {
-        filters: { user_email: email },
-        limit: 50,
-        orderBy: "id",
-        orderDirection: "DESC",
-      }).catch(() => ({ rows: [] }));
+      const cached = sessionStorage.getItem("sheetbot_notifications_bootstrap_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.devices && Array.isArray(parsed.devices)) setDevices(parsed.devices);
+        if (parsed?.rules && Array.isArray(parsed.rules)) setRules(parsed.rules);
+        if (parsed?.logs && Array.isArray(parsed.logs)) setLogs(parsed.logs);
+        setHasInitialLoaded(true);
+      }
+    } catch {}
+  }, []);
 
-      const rawRows = (res.rows || []).filter((r: any) => !r.deleted_at);
-      // 이용자용 시트봇 에이전트(agent2, agent)만 필터링 (관리자 전용 입금 에이전트 M인 android_agent는 배제)
-      const agentDevices = rawRows
-        .filter((r: any) => r.pairing_mode === "agent2" || r.pairing_mode === "agent")
-        .map(mapNotificationDevice);
+  // ⚡ 통합 서버 부트스트랩 API 호출 (소켓 점유 0, 브라우저 프록시 무한 pending 원천 차단)
+  const isFetchingBootstrapRef = useRef(false);
 
-      setDevices(agentDevices);
+  const fetchBootstrapData = useCallback(async (isSilent = false) => {
+    const email = effectiveEmail;
+    if (!email) return;
+
+    if (!isSilent) {
+      setLoadingDevices(true);
+      setLoadingRules(true);
+      setLoadingLogs(true);
+    }
+
+    const abortCtrl = new AbortController();
+    const timeoutId = setTimeout(() => abortCtrl.abort(), 6000);
+
+    try {
+      isFetchingBootstrapRef.current = true;
+      const res = await apiFetch(`/api/user/notifications/bootstrap?userEmail=${encodeURIComponent(email)}`, {
+        headers: { "Cache-Control": "no-cache" },
+        signal: abortCtrl.signal,
+      });
+
+      if (!res.ok) {
+        throw new Error(`Bootstrap HTTP error: ${res.status}`);
+      }
+
+      const resJson = await res.json();
+      if (resJson && resJson.success) {
+        const payload = resJson.data || resJson;
+        const rawDevices = (payload.devices || []).map(mapNotificationDevice);
+        const validRules = payload.rules || [];
+        const validLogs = payload.logs || [];
+
+        setDevices(rawDevices);
+        setRules(validRules);
+        setLogs(validLogs);
+
+        // 빠른 재진입을 위한 sessionStorage 캐싱
+        try {
+          sessionStorage.setItem(
+            "sheetbot_notifications_bootstrap_cache",
+            JSON.stringify({
+              devices: rawDevices,
+              rules: validRules,
+              logs: validLogs,
+              timestamp: Date.now(),
+            })
+          );
+        } catch {}
+      }
     } catch (err: any) {
-      console.warn("[Notifications] Fetch devices warning:", err.message);
+      if (err.name !== "AbortError") {
+        console.warn("[Notifications] Bootstrap fetch warning:", err.message);
+      }
     } finally {
+      clearTimeout(timeoutId);
+      isFetchingBootstrapRef.current = false;
       setLoadingDevices(false);
+      setLoadingRules(false);
+      setLoadingLogs(false);
       setHasInitialLoaded(true);
     }
   }, [effectiveEmail]);
 
-  // 2. 스마트 규칙 목록 로드 (이지데스크 queryTable 직통 조회)
-  const fetchRules = useCallback(async (isSilent = false) => {
-    if (!isSilent) setLoadingRules(true);
-    try {
-      const email = effectiveEmail;
-      if (!email) return;
-      const res = await queryTable("sheetbot_user_smart_rules", {
-        filters: { user_email: email },
-        limit: 100,
-        orderBy: "id",
-        orderDirection: "DESC",
-      }).catch(() => ({ rows: [] }));
-
-      const validRules = (res.rows || []).filter((r: any) => !r.deleted_at);
-      setRules(validRules);
-    } catch (err: any) {
-      console.warn("[Notifications] Fetch rules warning:", err.message);
-    } finally {
-      setLoadingRules(false);
-    }
-  }, [effectiveEmail]);
-
-  // 3. 발송 로그 로드 (이지데스크 queryTable 직통 조회)
-  const fetchLogs = useCallback(async (isSilent = false) => {
-    if (!isSilent) setLoadingLogs(true);
-    try {
-      const email = effectiveEmail;
-      if (!email) return;
-      const res = await queryTable("sheetbot_user_dispatch_logs", {
-        filters: { user_email: email },
-        limit: 100,
-        orderBy: "id",
-        orderDirection: "DESC",
-      }).catch(() => ({ rows: [] }));
-
-      const validRows = (res.rows || []).filter((r: any) => !r.deleted_at);
-      setLogs(validRows);
-    } catch (err: any) {
-      console.warn("[Notifications] Fetch logs warning:", err.message);
-    } finally {
-      setLoadingLogs(false);
-    }
-  }, [effectiveEmail]);
+  // 하위 호환 및 탭 컴포넌트 갱신 호환 래퍼
+  const fetchDevices = useCallback((isSilent = false) => fetchBootstrapData(isSilent), [fetchBootstrapData]);
+  const fetchRules = useCallback((isSilent = false) => fetchBootstrapData(isSilent), [fetchBootstrapData]);
+  const fetchLogs = useCallback((isSilent = false) => fetchBootstrapData(isSilent), [fetchBootstrapData]);
 
   useEffect(() => {
     if (isAuthLoading) return;
     if (!isLoggedIn && status === "unauthenticated" && !effectiveEmail) {
       router.push("/login");
     } else if (effectiveEmail || isLoggedIn) {
-      fetchDevices();
-      fetchRules();
-      fetchLogs();
+      fetchBootstrapData();
       fetchAgent2Pairing();
     }
-  }, [isLoggedIn, isAuthLoading, status, effectiveEmail, router, fetchDevices, fetchRules, fetchLogs, fetchAgent2Pairing]);
+  }, [isLoggedIn, isAuthLoading, status, effectiveEmail, router, fetchBootstrapData, fetchAgent2Pairing]);
 
   // ⚡ [0초 실시간 감시] 이지데스크 DB 왓처 실시간 스트림 연동 (SMS 및 기기 변경 자동 감지)
   const [isRealtimeLive, setIsRealtimeLive] = useState(false);
-
-  // 리렌더링 시 EventSource 연결이 불필요하게 끊어지지 않도록 최신 콜백을 ref로 격리
-  const fetchLogsRef = useRef(fetchLogs);
-  const fetchDevicesRef = useRef(fetchDevices);
-  const fetchRulesRef = useRef(fetchRules);
+  const fetchBootstrapDataRef = useRef(fetchBootstrapData);
   useEffect(() => {
-    fetchLogsRef.current = fetchLogs;
-    fetchDevicesRef.current = fetchDevices;
-    fetchRulesRef.current = fetchRules;
+    fetchBootstrapDataRef.current = fetchBootstrapData;
   });
 
   // ⚡ [0초 실시간 감시] 이지데스크 공식 onUserDataChanged 연동 (SMS 알림 및 기기 변경 감시)
@@ -333,14 +337,15 @@ export default function NotificationsPage() {
 
     const unsub = onUserDataChanged((event) => {
       setIsRealtimeLive(true);
-      if (!event.tableName || event.tableName === "sheetbot_user_dispatch_logs" || event.tableName === "sheetbot_sms_logs") {
-        fetchLogsRef.current?.(true);
-      }
-      if (!event.tableName || event.tableName === "sheetbot_user_devices") {
-        fetchDevicesRef.current?.(true);
-      }
-      if (!event.tableName || event.tableName === "sheetbot_smart_rules" || event.tableName === "sheetbot_user_smart_rules") {
-        fetchRulesRef.current?.(true);
+      const targetTables = [
+        "sheetbot_user_dispatch_logs",
+        "sheetbot_sms_logs",
+        "sheetbot_user_devices",
+        "sheetbot_smart_rules",
+        "sheetbot_user_smart_rules",
+      ];
+      if (!event.tableName || targetTables.includes(event.tableName)) {
+        fetchBootstrapDataRef.current?.(true);
       }
     });
 
@@ -605,9 +610,7 @@ export default function NotificationsPage() {
             {/* 실시간 DB 왓처 연결 뱃지 (클릭 시 수동 새로고침 겸용) */}
             <button
               onClick={() => {
-                fetchDevices();
-                fetchRules();
-                fetchLogs();
+                fetchBootstrapData();
                 fetchAgent2Pairing();
               }}
               className="ml-auto hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-bold transition-all bg-white/10 hover:bg-white/20 active:scale-95 border-white/20 text-white cursor-pointer shadow-xs"
