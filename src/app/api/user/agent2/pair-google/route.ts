@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
 
     const existingDevices = (existDevRes.rows || []).filter((d: any) => !d.deleted_at);
 
+    const nowIso = new Date().toISOString();
     if (existingDevices.length > 0) {
       await updateRows("sheetbot_user_devices", {
         filters: { id: existingDevices[0].id },
@@ -86,8 +87,9 @@ export async function POST(req: NextRequest) {
           phone_number: cleanPhone || existingDevices[0].phone_number || null,
           pairing_mode: "google",
           app_version: cleanVersion,
-          last_ping: new Date().toISOString(),
-          updated_at: new Date().toISOString().replace("T", " ").slice(0, 19),
+          last_connected_at: nowIso,
+          last_ping: nowIso,
+          updated_at: nowIso,
           updated_by: cleanEmail,
         },
       }).catch((e) => console.warn("[PairGoogle] device update warning:", e.message));
@@ -102,9 +104,10 @@ export async function POST(req: NextRequest) {
           phone_number: cleanPhone || null,
           pairing_mode: "google",
           app_version: cleanVersion,
-          last_ping: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString().replace("T", " ").slice(0, 19),
+          last_connected_at: nowIso,
+          last_ping: nowIso,
+          created_at: nowIso,
+          updated_at: nowIso,
           updated_by: cleanEmail,
           deleted_at: null,
           deleted_by: null,
@@ -161,6 +164,8 @@ export async function POST(req: NextRequest) {
       referralMessage,
       webhookUrl: "https://sheetbot.cloud/api/webhooks/dispatch",
       fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/webhooks/dispatch",
+      heartbeatUrl: "https://sheetbot.cloud/api/user/agent2/heartbeat",
+      fallbackHeartbeatUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/user/agent2/heartbeat",
     });
   } catch (err: any) {
     console.error("[PairGoogle] Error:", err);

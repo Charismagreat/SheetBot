@@ -5,15 +5,20 @@ import { queryTable, onUserDataChanged } from '@/lib/egdesk-helpers';
 import React, { useState, useEffect, useCallback, useRef } from "react";
 
 function mapNotificationDevice(d: any) {
-  const rawLast = d.last_connected_at || d.updated_at || d.created_at;
+  const rawLast = d.last_connected_at || d.last_ping || d.updated_at || d.created_at;
   let computedStatus: "CONNECTED" | "DISCONNECTED" = "DISCONNECTED";
   if (d.status === "DISCONNECTED") {
     computedStatus = "DISCONNECTED";
+  } else if (d.status === "CONNECTED" && !rawLast) {
+    computedStatus = "CONNECTED";
   } else if (rawLast) {
     const norm = rawLast.includes("T") ? rawLast : rawLast.replace(" ", "T") + (rawLast.endsWith("Z") ? "" : "Z");
     const lastTime = new Date(norm).getTime();
     const secondsAgo = isNaN(lastTime) ? 999999 : Math.floor((Date.now() - lastTime) / 1000);
-    computedStatus = secondsAgo <= 1800 ? "CONNECTED" : "DISCONNECTED";
+    // 최근 2시간 이내 활동 기록이 있거나 DB status가 CONNECTED이면 정상 연결로 표시
+    computedStatus = (secondsAgo <= 7200 || d.status === "CONNECTED") ? "CONNECTED" : "DISCONNECTED";
+  } else if (d.status === "CONNECTED") {
+    computedStatus = "CONNECTED";
   }
 
   const batteryVal = d.battery_level ?? null;
