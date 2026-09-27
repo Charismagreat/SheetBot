@@ -78,9 +78,9 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_token_notice_dismissed", false)
         set(value) = prefs.edit().putBoolean("is_token_notice_dismissed", value).apply()
 
-    // 통화 녹음 파일 구글 드라이브 자동 백업 관련 설정
+    // 통화 녹음 파일 구글 드라이브 자동 백업 관련 설정 (신규 설치 시 기본 꺼짐: false)
     var isCallRecordingSyncEnabled: Boolean
-        get() = prefs.getBoolean("is_call_recording_sync_enabled", true)
+        get() = prefs.getBoolean("is_call_recording_sync_enabled", false)
         set(value) = prefs.edit().putBoolean("is_call_recording_sync_enabled", value).apply()
 
     var callRecordingTargetFilter: String
@@ -92,7 +92,7 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putString("call_recording_drive_folder", value).apply()
 
     var isCallRecordingSheetEnabled: Boolean
-        get() = prefs.getBoolean("is_call_recording_sheet_enabled", true)
+        get() = prefs.getBoolean("is_call_recording_sheet_enabled", false)
         set(value) = prefs.edit().putBoolean("is_call_recording_sheet_enabled", value).apply()
 
     // 사진 및 일반 파일 구글 드라이브 업로드 관련 설정
@@ -101,21 +101,21 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putString("file_upload_drive_folder", value).apply()
 
     var isFileUploadSheetEnabled: Boolean
-        get() = prefs.getBoolean("is_file_upload_sheet_enabled", true)
+        get() = prefs.getBoolean("is_file_upload_sheet_enabled", false)
         set(value) = prefs.edit().putBoolean("is_file_upload_sheet_enabled", value).apply()
 
-    // 웹 링크 및 유튜브 영상 AI 자동 스크랩 설정
+    // 웹 링크 및 유튜브 영상 AI 자동 스크랩 설정 (신규 설치 시 기본 꺼짐: false)
     var isLinkScrapEnabled: Boolean
-        get() = prefs.getBoolean("is_link_scrap_enabled", true)
+        get() = prefs.getBoolean("is_link_scrap_enabled", false)
         set(value) = prefs.edit().putBoolean("is_link_scrap_enabled", value).apply()
 
     var linkScrapDriveSheetTitle: String
         get() = prefs.getString("link_scrap_drive_sheet_title", "[SheetBot] 웹 링크 & 유튜브 스크랩 대장") ?: "[SheetBot] 웹 링크 & 유튜브 스크랩 대장"
         set(value) = prefs.edit().putString("link_scrap_drive_sheet_title", value).apply()
 
-    // 스마트폰 문자(SMS/LMS) 송수신 구글 시트 자동 동기화 설정
+    // 스마트폰 문자(SMS/LMS) 송수신 구글 시트 자동 동기화 설정 (신규 설치 시 기본 꺼짐: false)
     var isSmsSheetSyncEnabled: Boolean
-        get() = prefs.getBoolean("is_sms_sheet_sync_enabled", true)
+        get() = prefs.getBoolean("is_sms_sheet_sync_enabled", false)
         set(value) = prefs.edit().putBoolean("is_sms_sheet_sync_enabled", value).apply()
 
     var smsTargetFilter: String
@@ -126,10 +126,10 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("sms_drive_sheet_title", "[SheetBot] 스마트폰 문자(SMS) 송수신 대장") ?: "[SheetBot] 스마트폰 문자(SMS) 송수신 대장"
         set(value) = prefs.edit().putString("sms_drive_sheet_title", value).apply()
 
-    // 카카오톡 수신 메시지 구글 시트 자동 동기화 설정
+    // 카카오톡 수신 메시지 구글 시트 자동 동기화 설정 (신규 설치 시 기본 꺼짐: false)
     var isKakaoSheetSyncEnabled: Boolean
-        get() = prefs.getBoolean("is_kakao_sheet_sync_enabled", true)
-        set(value) = prefs.edit().putBoolean("is_kakao_sheet_sync_enabled", true).apply()
+        get() = prefs.getBoolean("is_kakao_sheet_sync_enabled", false)
+        set(value) = prefs.edit().putBoolean("is_kakao_sheet_sync_enabled", value).apply()
 
     var kakaoTargetFilter: String
         get() = prefs.getString("kakao_target_filter", "") ?: ""
@@ -139,9 +139,9 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("kakao_drive_sheet_title", "[SheetBot] 카카오톡 메시지 대장") ?: "[SheetBot] 카카오톡 메시지 대장"
         set(value) = prefs.edit().putString("kakao_drive_sheet_title", value).apply()
 
-    // 부재중 전화(Missed Call) 감지 시 0원 스마트 안내 문자 자동 회신 설정
+    // 부재중 전화(Missed Call) 감지 시 0원 스마트 안내 문자 자동 회신 설정 (신규 설치 시 기본 꺼짐: false)
     var isMissedCallAutoReplyEnabled: Boolean
-        get() = prefs.getBoolean("is_missed_call_auto_reply_enabled", true)
+        get() = prefs.getBoolean("is_missed_call_auto_reply_enabled", false)
         set(value) = prefs.edit().putBoolean("is_missed_call_auto_reply_enabled", value).apply()
 
     var missedCallReplyTemplate: String
@@ -153,9 +153,9 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("missed_call_drive_sheet_title", "[SheetBot] 부재중 전화 대장") ?: "[SheetBot] 부재중 전화 대장"
         set(value) = prefs.edit().putString("missed_call_drive_sheet_title", value).apply()
 
-    // 통화 종료 직후 모바일 명함 / 감사 문자 원터치 발송 설정
+    // 통화 종료 직후 모바일 명함 / 감사 문자 원터치 발송 설정 (신규 설치 시 기본 꺼짐: false)
     var isCallEndedCardPromptEnabled: Boolean
-        get() = prefs.getBoolean("is_call_ended_card_prompt_enabled", true)
+        get() = prefs.getBoolean("is_call_ended_card_prompt_enabled", false)
         set(value) = prefs.edit().putBoolean("is_call_ended_card_prompt_enabled", value).apply()
 
     // 발송 방식: "WEB_LINK" (0원 무료 웹링크) 또는 "MMS_IMAGE" (갤러리 사진 직접 첨부 MMS)

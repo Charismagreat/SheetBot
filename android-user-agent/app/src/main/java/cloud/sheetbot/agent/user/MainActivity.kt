@@ -494,6 +494,9 @@ class MainActivity : AppCompatActivity() {
             binding.layoutCallRecordingSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
             val msg = if (isChecked) "통화 녹음 드라이브 자동 백업이 켜졌습니다." else "통화 녹음 드라이브 백업이 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            if (isChecked && prefs.isCallRecordingSheetEnabled) {
+                provisionSheetAsync("RECORDING", "[SheetBot] 통화 녹음 대장")
+            }
         }
 
         binding.btnPickRecordingContact.setOnClickListener {
@@ -512,6 +515,9 @@ class MainActivity : AppCompatActivity() {
         }
         binding.switchRecordingSheet.setOnCheckedChangeListener { _, isChecked ->
             prefs.isCallRecordingSheetEnabled = isChecked
+            if (isChecked) {
+                provisionSheetAsync("RECORDING", "[SheetBot] 통화 녹음 대장")
+            }
         }
 
         binding.btnSyncRecordingsNow.setOnClickListener {
@@ -542,6 +548,9 @@ class MainActivity : AppCompatActivity() {
         }
         binding.switchFileUploadSheet.setOnCheckedChangeListener { _, isChecked ->
             prefs.isFileUploadSheetEnabled = isChecked
+            if (isChecked) {
+                provisionSheetAsync("FILE_UPLOAD", "[SheetBot] 파일 업로드 대장")
+            }
         }
 
         // 웹 링크 & 유튜브 영상 AI 자동 스크랩 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
@@ -554,6 +563,9 @@ class MainActivity : AppCompatActivity() {
             binding.layoutLinkScrapSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
             val msg = if (isChecked) "웹 링크 & 유튜브 AI 자동 스크랩이 켜졌습니다." else "웹 링크 & 유튜브 자동 스크랩이 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            if (isChecked) {
+                provisionSheetAsync("LINK_BOOKMARK", prefs.linkScrapDriveSheetTitle)
+            }
         }
 
         binding.etLinkScrapSheet.doAfterTextChanged {
@@ -618,6 +630,9 @@ class MainActivity : AppCompatActivity() {
             binding.layoutSmsSyncSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
             val msg = if (isChecked) "문자(SMS) 시트 자동 기록이 켜졌습니다." else "문자 시트 자동 기록이 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            if (isChecked) {
+                provisionSheetAsync("SMS", prefs.smsDriveSheetTitle)
+            }
         }
 
         binding.btnPickSmsContact.setOnClickListener {
@@ -647,6 +662,9 @@ class MainActivity : AppCompatActivity() {
             binding.layoutKakaoSyncSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
             val msg = if (isChecked) "카카오톡 메시지 시트 기록이 켜졌습니다." else "카카오톡 시트 기록이 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            if (isChecked) {
+                provisionSheetAsync("KAKAO", prefs.kakaoDriveSheetTitle)
+            }
         }
 
         binding.btnManageKakaoTargets.setOnClickListener {
@@ -673,6 +691,9 @@ class MainActivity : AppCompatActivity() {
             binding.layoutMissedCallSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
             val msg = if (isChecked) "부재중 전화 자동 회신이 켜졌습니다." else "부재중 전화 자동 회신이 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            if (isChecked) {
+                provisionSheetAsync("MISSED_CALL", prefs.missedCallDriveSheetTitle)
+            }
         }
 
         binding.etMissedCallReply.doAfterTextChanged {
@@ -1829,6 +1850,34 @@ class MainActivity : AppCompatActivity() {
         }
         binding.layoutImagePreview.visibility = View.GONE
         binding.btnRemoveBusinessCardImage.visibility = View.GONE
+    }
+
+    /**
+     * 기능 스위치 ON 시 구글 스프레드시트 대장 선제 생성 (Eager Provisioning, v2.1.2)
+     */
+    private fun provisionSheetAsync(sheetType: String, sheetTitle: String) {
+        val userEmail = prefs.userEmail
+        if (!prefs.isPaired || userEmail.isNullOrBlank()) {
+            return
+        }
+
+        activityScope.launch {
+            try {
+                val result = ApiClient.provisionSheet(
+                    userEmail = userEmail,
+                    sheetType = sheetType,
+                    sheetTitle = sheetTitle
+                )
+                if (result.success) {
+                    val statusPrefix = if (result.isNew) "🎉 새 대장 생성 완료" else "✅ 기존 대장 연결 확인"
+                    val msg = "📊 ${result.title ?: sheetTitle}\n$statusPrefix (구글 드라이브에 준비되었습니다)"
+                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+                    addLogItem("대장 준비", "${result.title ?: sheetTitle} 확인 완료", true)
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("MainActivity", "시트 선제 생성 통신 예외: ${e.message}")
+            }
+        }
     }
 
     /**
