@@ -94,7 +94,7 @@ function MobileSheetWebAppContent() {
     }
     setLoading(true);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
 
     try {
       const queryUrl = `/api/user/sheets/data?email=${encodeURIComponent(userEmail)}&sheetType=${encodeURIComponent(sheetTypeParam)}${
