@@ -11,7 +11,7 @@ interface SheetDefinition {
   defaultFolder?: string;
 }
 
-const SHEET_DEFINITIONS: Record<string, SheetDefinition> = {
+export const SHEET_DEFINITIONS: Record<string, SheetDefinition> = {
   SMS: {
     defaultTitle: "[SheetBot] 스마트폰 문자(SMS) 송수신 대장",
     headers: ["일시", "구분", "상대방 이름", "상대방 전화번호", "메시지 내용", "기기명"],

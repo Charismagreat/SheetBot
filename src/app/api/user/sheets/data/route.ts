@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUserSpreadsheet, SheetBindingType } from "@/lib/sheet-binding-helper";
 import { callSheetsTool } from "@/lib/egdesk-helpers";
+import { SHEET_DEFINITIONS } from "@/app/api/user/sheets/provision/route";
 
 /**
  * GET /api/user/sheets/data?email=...&sheetType=...
@@ -23,12 +24,13 @@ export async function GET(req: NextRequest) {
 
     const cleanEmail = email.trim().toLowerCase();
     const typeKey = sheetType.toUpperCase() as SheetBindingType;
+    const def = SHEET_DEFINITIONS[typeKey];
 
     // 사용자 시트 바인딩 조회
     const resolved = await resolveUserSpreadsheet({
       userEmail: cleanEmail,
       sheetType: typeKey,
-      defaultTitle: `[SheetBot] ${typeKey} 대장`,
+      defaultTitle: def?.defaultTitle || `[SheetBot] ${typeKey} 대장`,
       preferOAuth: true,
     });
 
@@ -50,7 +52,9 @@ export async function GET(req: NextRequest) {
     });
 
     const values: string[][] = rangeRes?.values || [];
-    const headers = values.length > 0 ? values[0] : [];
+    const headers = values.length > 0 && values[0]?.length > 0
+      ? values[0]
+      : (def?.headers || []);
     const rows = values.length > 1 ? values.slice(1).reverse() : []; // 최신순 정렬
 
     const spreadsheetUrl =
@@ -61,7 +65,7 @@ export async function GET(req: NextRequest) {
       success: true,
       spreadsheetId: resolved.spreadsheetId,
       spreadsheetUrl,
-      title: `${typeKey} 대장`,
+      title: def?.defaultTitle || `${typeKey} 대장`,
       headers,
       rows,
       totalCount: rows.length,
