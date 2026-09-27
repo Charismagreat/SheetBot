@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { queryTable, insertRows, updateRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { getOrCreateUserWallet, processReferralReward } from "@/lib/token-wallet";
 import crypto from "crypto";
 
 /**
@@ -14,7 +15,8 @@ export async function POST(req: NextRequest) {
   try {
     await setupDatabase().catch(() => {});
     const body = await req.json().catch(() => ({}));
-    const { idToken, userEmail: clientEmail, deviceModel, appVersion, phoneNumber } = body;
+    const { idToken, userEmail: clientEmail, deviceModel, appVersion, phoneNumber, referralCode } = body;
+
 
     let verifiedEmail = "";
     let googleName = "";
@@ -129,12 +131,34 @@ export async function POST(req: NextRequest) {
       },
     ]).catch(() => {});
 
+    // 6. 회원 지갑 초기화(웰컴 토큰) 및 추천 보너스 처리
+    await getOrCreateUserWallet(cleanEmail).catch(() => {});
+    let referralMessage: string | null = null;
+    if (referralCode && typeof referralCode === "string" && referralCode.trim().length >= 2) {
+      try {
+        const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "";
+        const refResult = await processReferralReward({
+          inviterCodeOrEmail: referralCode.trim(),
+          inviteeEmail: cleanEmail,
+          deviceId: cleanModel,
+          ipAddress: ip,
+          channel: "MOBILE_AGENT",
+        });
+        if (refResult.success) {
+          referralMessage = refResult.message;
+        }
+      } catch (e: any) {
+        console.warn("[PairGoogle] Referral reward error:", e.message);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: `구글 계정(${cleanEmail})으로 시트봇 에이전트가 성공적으로 연동되었습니다!`,
       userEmail: cleanEmail,
       googleName,
       token,
+      referralMessage,
       webhookUrl: "https://sheetbot.cloud/api/webhooks/dispatch",
       fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/webhooks/dispatch",
     });
@@ -142,4 +166,5 @@ export async function POST(req: NextRequest) {
     console.error("[PairGoogle] Error:", err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
+
 }

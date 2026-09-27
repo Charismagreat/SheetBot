@@ -253,6 +253,15 @@ class MainActivity : AppCompatActivity() {
             showRechargeDialog()
         }
 
+        // 0-2. 친구 초대 및 추천인 코드 등록 버튼 (v2.0.0)
+        binding.btnInviteFriend.setOnClickListener {
+            showReferralInviteDialog()
+        }
+        binding.btnEnterReferralCode.setOnClickListener {
+            showReferralClaimDialog()
+        }
+
+
 
         // 1. QR 코드 스캔 버튼
         binding.btnScanQr.setOnClickListener {
@@ -854,6 +863,135 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    /**
+     * 친구/동료 초대 다이얼로그 (v2.0.0)
+     * 내 추천 코드 확인 및 카카오톡/문자 원터치 공유 지원
+     */
+    private fun showReferralInviteDialog() {
+        val email = prefs.userEmail
+        if (email.isNullOrBlank()) {
+            Toast.makeText(this, "먼저 시트봇 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val dialogView = layoutInflater.inflate(R.layout.dialog_referral_invite, null)
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        val tvMyCode = dialogView.findViewById<TextView>(R.id.tvDialogMyCode)
+        val btnCopyCode = dialogView.findViewById<Button>(R.id.btnCopyMyCode)
+        val btnShare = dialogView.findViewById<Button>(R.id.btnShareInvite)
+        val tvStats = dialogView.findViewById<TextView>(R.id.tvReferralStats)
+        val btnClose = dialogView.findViewById<Button>(R.id.btnCloseInviteDialog)
+
+        var sharePayload = ""
+        var myCodeText = ""
+
+        activityScope.launch {
+            val info = ApiClient.fetchReferralInfo(email)
+            if (info.success) {
+                myCodeText = info.myCode
+                tvMyCode.text = myCodeText
+                sharePayload = info.shareText
+                val count = info.inviteCount
+                val earned = NumberFormat.getNumberInstance().format(info.earnedTokens.toLong())
+                tvStats.text = "현재 ${count}명 초대 완료 (누적 ${earned} 토큰 획득 🎉)"
+            } else {
+                tvMyCode.text = email.substringBefore("@").uppercase()
+                myCodeText = tvMyCode.text.toString()
+                tvStats.text = "추천 정보를 불러오는 중입니다..."
+            }
+        }
+
+        btnCopyCode.setOnClickListener {
+            if (myCodeText.isNotBlank()) {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText("SheetBot 추천 코드", myCodeText)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(this, "추천인 코드(${myCodeText})가 복사되었습니다.", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnShare.setOnClickListener {
+            val textToSend = if (sharePayload.isNotBlank()) sharePayload else {
+                "🚀 Google 스프레드시트 1초 AI 자동화 [SheetBot]\n" +
+                "초대 링크로 앱을 설치하시면 가입 즉시 10,000 보너스 토큰이 선물됩니다 🎁\n\n" +
+                "• 추천인 코드: $myCodeText\n" +
+                "• 다운로드: https://sheetbot.cloud/downloads/SheetBotAgent.apk"
+            }
+            val sendIntent = Intent().apply {
+                action = Intent.ACTION_SEND
+                putExtra(Intent.EXTRA_TEXT, textToSend)
+                type = "text/plain"
+            }
+            startActivity(Intent.createChooser(sendIntent, "친구/동료에게 시트봇 초대장 보내기"))
+        }
+
+        btnClose.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
+    /**
+     * 추천인 코드 등록 다이얼로그 (v2.0.0)
+     * 코드 등록 시 양측 지갑에 10,000 토큰 즉시 적립
+     */
+    private fun showReferralClaimDialog() {
+        val email = prefs.userEmail
+        if (email.isNullOrBlank()) {
+            Toast.makeText(this, "먼저 시트봇 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val dialogView = layoutInflater.inflate(R.layout.dialog_referral_claim, null)
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        val etCode = dialogView.findViewById<EditText>(R.id.etReferralCodeInput)
+        val btnSubmit = dialogView.findViewById<Button>(R.id.btnSubmitReferralCode)
+        val btnClose = dialogView.findViewById<Button>(R.id.btnCloseClaimDialog)
+
+        btnSubmit.setOnClickListener {
+            val code = etCode.text.toString().trim()
+            if (code.length < 2) {
+                Toast.makeText(this, "추천인 코드 또는 이메일을 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            btnSubmit.isEnabled = false
+            btnSubmit.text = "보너스 수령 확인 중..."
+
+            activityScope.launch {
+                val res = ApiClient.claimReferralReward(email, code)
+                btnSubmit.isEnabled = true
+                btnSubmit.text = "🎉 10,000 토큰 즉시 수령하기"
+
+                if (res.success) {
+                    dialog.dismiss()
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("🎉 10,000 토큰 지급 완료!")
+                        .setMessage(res.message)
+                        .setPositiveButton("확인", null)
+                        .show()
+                    loadWalletBalance(email)
+                } else {
+                    Toast.makeText(this@MainActivity, res.message.ifBlank { "등록 실패: ${res.error}" }, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+
+        btnClose.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
+
 
     private fun handleQrScanResult(contents: String) {
         val parsed = parseQrContents(contents)
@@ -983,9 +1121,23 @@ class MainActivity : AppCompatActivity() {
         binding.progressBar.visibility = View.VISIBLE
         Toast.makeText(this, "구글 계정($email)으로 시트봇 연동 중...", Toast.LENGTH_SHORT).show()
 
+        var detectedRefCode: String? = null
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = clipboard.primaryClip
+            if (clip != null && clip.itemCount > 0) {
+                val clipText = clip.getItemAt(0).text?.toString()?.trim() ?: ""
+                if (clipText.contains("ref=")) {
+                    detectedRefCode = clipText.substringAfter("ref=").substringBefore("&").substringBefore(" ").trim()
+                } else if (clipText.length in 4..12 && !clipText.contains(" ") && !clipText.contains("\n")) {
+                    detectedRefCode = clipText
+                }
+            }
+        } catch (_: Exception) {}
+
         activityScope.launch {
             val result = withTimeoutOrNull(10000L) {
-                ApiClient.pairWithGoogle(idToken, email)
+                ApiClient.pairWithGoogle(idToken, email, referralCode = detectedRefCode)
             }
             binding.progressBar.visibility = View.GONE
 
