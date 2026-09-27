@@ -107,39 +107,18 @@ async function doResolveUserSpreadsheet(
     }
   }
 
-  // 2. 바인딩된 ID가 유효한지 구글 드라이브에서 실시간 검증 (파일명이 바뀌었어도 ID만 일치하면 OK)
+  // 2. 바인딩된 고유 ID가 있으면 구글 드라이브 추가 왕복 없이 즉시 반환 (0초 응답 보장)
   if (boundRecord?.spreadsheet_id) {
     const existingId = boundRecord.spreadsheet_id;
-    try {
-      const driveFile = await getDriveFile(existingId, { preferOAuth });
-      if (driveFile && !driveFile.trashed && !driveFile.explicitlyTrashed) {
-        // 구글 드라이브에 시트가 정상 존재함 -> 영구 바인딩 ID로 즉시 반환
-        const url = `https://docs.google.com/spreadsheets/d/${existingId}/edit`;
+    const url =
+      boundRecord.spreadsheet_url ||
+      `https://docs.google.com/spreadsheets/d/${existingId}/edit`;
 
-        // 지정 폴더가 있는데 다른 곳에 있다면 지정 폴더로 이동 보장
-        if (folderId && driveFile.parents && !driveFile.parents.includes(folderId)) {
-          await moveDriveFile(existingId, folderId, preferOAuth).catch(() => {});
-        }
-
-        return {
-          spreadsheetId: existingId,
-          spreadsheetUrl: url,
-          isNew: false,
-        };
-      }
-    } catch (checkErr: any) {
-      console.warn(`[SheetBinding] Bound sheet ${existingId} verify warning:`, checkErr.message);
-      if (checkErr.message?.includes("404") || checkErr.message?.includes("notFound") || checkErr.message?.includes("File not found")) {
-        boundRecord = null; // 실제로 삭제된 경우에만 재탐색
-      } else {
-        const url = `https://docs.google.com/spreadsheets/d/${existingId}/edit`;
-        return {
-          spreadsheetId: existingId,
-          spreadsheetUrl: url,
-          isNew: false,
-        };
-      }
-    }
+    return {
+      spreadsheetId: existingId,
+      spreadsheetUrl: url,
+      isNew: false,
+    };
   }
 
   // 3. 바인딩이 없거나 실제 파일이 삭제된 경우: 구글 드라이브 2단계 스마트 탐색

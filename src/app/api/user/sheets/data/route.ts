@@ -53,35 +53,29 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 1. 첫 번째 메인 탭 이름 동적 확인 (시트1 vs Sheet1 호환)
-    let primaryTabName = "시트1";
-    try {
-      const meta = await callSheetsTool(
-        "sheets_get_spreadsheet",
-        { spreadsheetId: targetSpreadsheetId, preferOAuth: true },
-        { preferOAuth: true }
-      );
-      if (meta?.sheets && meta.sheets.length > 0 && meta.sheets[0].title) {
-        primaryTabName = meta.sheets[0].title;
-      }
-    } catch (metaErr: any) {
-      console.warn("[SheetsDataAPI] Failed to get spreadsheet metadata:", metaErr.message);
-    }
-
-    // 2. 시트의 데이터 읽기 (상위 300행)
-    const rangeToRead = `${primaryTabName}!A1:Z300`;
-    const rangeRes = await callSheetsTool(
+    // 시트의 데이터 읽기 (상위 300행 직통 조회)
+    let rangeRes = await callSheetsTool(
       "sheets_get_range",
       {
         spreadsheetId: targetSpreadsheetId,
-        range: rangeToRead,
+        range: "A1:Z300",
         preferOAuth: true,
       },
       { preferOAuth: true }
-    ).catch((err: any) => {
-      console.warn("[SheetsDataAPI] Failed to get range:", err.message);
-      return null;
-    });
+    ).catch(() => null);
+
+    // 혹시 탭 이름 명시가 필요한 경우 시트1 fallback
+    if (!rangeRes || !rangeRes.values) {
+      rangeRes = await callSheetsTool(
+        "sheets_get_range",
+        {
+          spreadsheetId: targetSpreadsheetId,
+          range: "시트1!A1:Z300",
+          preferOAuth: true,
+        },
+        { preferOAuth: true }
+      ).catch(() => null);
+    }
 
     const values: string[][] = rangeRes?.values || [];
     const headers =
