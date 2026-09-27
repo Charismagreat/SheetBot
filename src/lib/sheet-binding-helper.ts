@@ -17,7 +17,10 @@ export type SheetBindingType =
   | "FILE_UPLOAD"
   | "RECEIPT"
   | "BUSINESS_CARD"
-  | "LINK_BOOKMARK";
+  | "LINK_BOOKMARK"
+  | "CALL_ENDED_CARD"
+  | "PAYMENT_PUSH"
+  | "RECEIPT_SMS";
 
 export interface ResolveSheetOptions {
   userEmail: string;
@@ -117,10 +120,10 @@ export async function resolveUserSpreadsheet(
     : `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${targetTitle}' and trashed = false`;
 
   try {
-    const searchRes = await listDriveFiles({
-      query: queryStr,
-      preferOAuth,
-    });
+    const searchRes = await listDriveFiles(
+      { query: queryStr },
+      { preferOAuth }
+    );
     const foundFiles = searchRes?.files || [];
     if (foundFiles.length > 0) {
       targetSpreadsheetId = foundFiles[0].id;

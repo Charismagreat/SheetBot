@@ -1080,7 +1080,8 @@ object ApiClient {
     suspend fun provisionSheet(
         userEmail: String,
         sheetType: String,
-        sheetTitle: String? = null
+        sheetTitle: String? = null,
+        folderName: String? = null
     ): ProvisionSheetResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         var lastError = "구글 시트 생성 요청 실패"
@@ -1093,6 +1094,9 @@ object ApiClient {
                     put("sheetType", sheetType)
                     if (!sheetTitle.isNullOrBlank()) {
                         put("sheetTitle", sheetTitle)
+                    }
+                    if (!folderName.isNullOrBlank()) {
+                        put("folderName", folderName)
                     }
                 }
                 val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
@@ -1274,6 +1278,7 @@ data class ProvisionSheetResult(
     val isNew: Boolean = false,
     val spreadsheetId: String? = null,
     val spreadsheetUrl: String? = null,
+    val folderName: String? = null,
     val title: String? = null,
     val message: String? = null,
     val error: String? = null
