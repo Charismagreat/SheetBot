@@ -10,9 +10,11 @@ import android.os.Build
 import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.FileProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -157,28 +159,69 @@ class PhoneCallReceiver : BroadcastReceiver() {
     private fun showCallEndedCardPrompt(context: Context, phoneNumber: String) {
         val contactName = ContactHelper.getContactName(context, phoneNumber)
         val displayName = contactName ?: phoneNumber
+        val prefs = PreferencesManager(context)
 
         ensureNotificationChannel(context)
 
-        val sendIntent = Intent(context, PhoneCallReceiver::class.java).apply {
-            action = ACTION_SEND_BUSINESS_CARD
-            putExtra(EXTRA_TARGET_PHONE, phoneNumber)
-            putExtra(EXTRA_CONTACT_NAME, contactName)
+        val isMmsMode = prefs.businessCardSendMode == "MMS_IMAGE"
+        val imagePath = prefs.businessCardImagePath
+        val imageFile = if (imagePath.isNotBlank()) File(imagePath) else null
+        val hasValidImage = imageFile != null && imageFile.exists() && imageFile.length() > 0
+
+        val (contentPrompt, actionLabel, pendingSend) = if (isMmsMode && hasValidImage) {
+            // [방안 2: 사진 직접 첨부 MMS 모드]
+            val cleanPhone = phoneNumber.replace(Regex("[^0-9+]"), "").trim()
+            val imageUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", imageFile!!)
+            val template = prefs.businessCardSmsTemplate.trim()
+
+            val mmsIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "image/*"
+                putExtra("address", cleanPhone)
+                putExtra(Intent.EXTRA_PHONE_NUMBER, cleanPhone)
+                putExtra("sms_body", template)
+                putExtra(Intent.EXTRA_TEXT, template)
+                putExtra(Intent.EXTRA_STREAM, imageUri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            val pending = PendingIntent.getActivity(
+                context,
+                (System.currentTimeMillis() % 10000).toInt(),
+                mmsIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            Triple(
+                "방금 통화한 상대방에게 등록된 명함/포스터 사진(MMS)과 소개글을 보내시겠습니까?",
+                "🖼️ 모바일 명함(사진) 전송",
+                pending
+            )
+        } else {
+            // [방안 1: 스마트 웹 명함 링크 모드 (0원 무료)]
+            val sendIntent = Intent(context, PhoneCallReceiver::class.java).apply {
+                action = ACTION_SEND_BUSINESS_CARD
+                putExtra(EXTRA_TARGET_PHONE, phoneNumber)
+                putExtra(EXTRA_CONTACT_NAME, contactName)
+            }
+            val pending = PendingIntent.getBroadcast(
+                context,
+                (System.currentTimeMillis() % 10000).toInt(),
+                sendIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            Triple(
+                "방금 통화한 상대방에게 스마트 모바일 명함(0원 무료)을 보내시겠습니까?",
+                "💼 모바일 명함 즉시 발송",
+                pending
+            )
         }
-        val pendingSend = PendingIntent.getBroadcast(
-            context,
-            (System.currentTimeMillis() % 10000).toInt(),
-            sendIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
 
         val notification = NotificationCompat.Builder(context, MISSED_CALL_CHANNEL_ID)
             .setContentTitle("💼 [통화 종료] $displayName")
-            .setContentText("방금 통화한 상대방에게 모바일 명함/안내를 보내시겠습니까?")
+            .setContentText(contentPrompt)
             .setSmallIcon(android.R.drawable.ic_menu_send)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
-            .addAction(android.R.drawable.ic_menu_send, "💼 모바일 명함 즉시 발송", pendingSend)
+            .addAction(android.R.drawable.ic_menu_send, actionLabel, pendingSend)
             .build()
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -186,15 +229,21 @@ class PhoneCallReceiver : BroadcastReceiver() {
     }
 
     /**
-     * 모바일 명함 문자 즉시 전송
+     * 모바일 명함 문자 즉시 전송 (웹 명함 링크 모드)
      */
     private fun sendBusinessCardSms(context: Context, phoneNumber: String, contactName: String?) {
         val prefs = PreferencesManager(context)
-        val cardTemplate = prefs.businessCardSmsTemplate
+        val template = prefs.businessCardSmsTemplate.trim()
+        val webLink = prefs.businessCardWebLink.trim()
+        val finalMessage = if (webLink.isNotBlank() && !template.contains(webLink)) {
+            "$template\n▶ 모바일 명함: $webLink"
+        } else {
+            template
+        }
         val userEmail = prefs.userEmail
 
         CoroutineScope(Dispatchers.IO).launch {
-            val isSent = SmsSenderUtil.sendSms(context, phoneNumber, cardTemplate)
+            val isSent = SmsSenderUtil.sendSms(context, phoneNumber, finalMessage)
             if (isSent) {
                 Log.i(TAG, "🎉 [모바일 명함 발송 성공] 대상: $phoneNumber")
                 if (prefs.isTtsEnabled) {
@@ -208,7 +257,7 @@ class PhoneCallReceiver : BroadcastReceiver() {
                         direction = "OUTBOUND",
                         phoneNumber = phoneNumber,
                         contactName = contactName,
-                        message = cardTemplate,
+                        message = finalMessage,
                         sheetTitle = prefs.smsDriveSheetTitle
                     )
                 }

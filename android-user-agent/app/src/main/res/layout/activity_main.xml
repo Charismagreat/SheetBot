@@ -1303,13 +1303,178 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:background="#0F172A"
-                android:padding="10dp"
+                android:padding="12dp"
                 android:layout_marginBottom="12dp">
 
+                <!-- 1. 발송 방식 선택 라디오 그룹 -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="🪪 모바일 명함 / 회사 소개 문자 내용:"
+                    android:text="📌 발송 방식 선택:"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="6dp" />
+
+                <RadioGroup
+                    android:id="@+id/rgBusinessCardMode"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginBottom="10dp">
+
+                    <RadioButton
+                        android:id="@+id/rbModeWebLink"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="🌐 [방안 1] 스마트 웹 명함 링크 (0원 무료 · 미리보기 카드)"
+                        android:textColor="#E2E8F0"
+                        android:textSize="11.5sp"
+                        android:checked="true"
+                        android:buttonTint="#38BDF8"
+                        android:paddingVertical="4dp" />
+
+                    <RadioButton
+                        android:id="@+id/rbModeMmsImage"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="🖼️ [방안 2] 갤러리 사진 직접 첨부 (MMS 문자 전송)"
+                        android:textColor="#E2E8F0"
+                        android:textSize="11.5sp"
+                        android:buttonTint="#38BDF8"
+                        android:paddingVertical="4dp" />
+                </RadioGroup>
+
+                <!-- 2-A. 방안 1 상세 설정: 웹 링크 입력란 -->
+                <LinearLayout
+                    android:id="@+id/layoutModeWebLink"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#1E293B"
+                    android:padding="10dp"
+                    android:layout_marginBottom="10dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔗 웹 명함 / 이벤트 페이지 링크 URL:"
+                        android:textColor="#38BDF8"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp" />
+
+                    <EditText
+                        android:id="@+id/etBusinessCardWebUrl"
+                        android:layout_width="match_parent"
+                        android:layout_height="38dp"
+                        android:background="#0F172A"
+                        android:paddingHorizontal="8dp"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11sp"
+                        android:hint="https://sheetbot.cloud 또는 개인 홈페이지/블로그"
+                        android:textColorHint="#64748B"
+                        android:inputType="textUri"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="💡 통신사 MMS 비용 없이 100% 무료로 발송되며, 상대방 스마트폰(아이폰/갤럭시) 화면에 고화질 명함 썸네일 카드가 함께 표시됩니다."
+                        android:textColor="#94A3B8"
+                        android:textSize="10sp"
+                        android:lineSpacingExtra="2dp" />
+                </LinearLayout>
+
+                <!-- 2-B. 방안 2 상세 설정: 갤러리 사진 선택 및 미리보기 -->
+                <LinearLayout
+                    android:id="@+id/layoutModeMmsImage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#1E293B"
+                    android:padding="10dp"
+                    android:visibility="gone"
+                    android:layout_marginBottom="10dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🖼️ 첨부할 명함 / 포스터 이미지:"
+                        android:textColor="#38BDF8"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="6dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="8dp">
+
+                        <Button
+                            android:id="@+id/btnPickBusinessCardImage"
+                            android:layout_width="wrap_content"
+                            android:layout_height="36dp"
+                            android:backgroundTint="#0284C7"
+                            android:text="📁 갤러리에서 사진 선택"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp" />
+
+                        <Button
+                            android:id="@+id/btnRemoveBusinessCardImage"
+                            android:layout_width="wrap_content"
+                            android:layout_height="36dp"
+                            android:backgroundTint="#EF4444"
+                            android:text="❌ 사진 삭제"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp"
+                            android:visibility="gone"
+                            android:layout_marginStart="8dp" />
+                    </LinearLayout>
+
+                    <!-- 이미지 미리보기 영역 -->
+                    <LinearLayout
+                        android:id="@+id/layoutImagePreview"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone"
+                        android:layout_marginBottom="6dp">
+
+                        <ImageView
+                            android:id="@+id/ivBusinessCardPreview"
+                            android:layout_width="match_parent"
+                            android:layout_height="140dp"
+                            android:scaleType="fitCenter"
+                            android:background="#0F172A"
+                            android:padding="4dp" />
+
+                        <TextView
+                            android:id="@+id/tvImageFileName"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="business_card.jpg"
+                            android:textColor="#38BDF8"
+                            android:textSize="10.5sp"
+                            android:layout_marginTop="4dp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="💡 통화 종료 시 사진과 문구가 기본 문자 앱에 자동 첨부되어 원클릭으로 발송됩니다. (통신사 요금제에 따라 MMS 과금이 발생할 수 있습니다)"
+                        android:textColor="#94A3B8"
+                        android:textSize="10sp"
+                        android:lineSpacingExtra="2dp" />
+                </LinearLayout>
+
+                <!-- 3. 소개 문구 입력란 -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🪪 함께 보낼 소개 문구:"
                     android:textColor="#94A3B8"
                     android:textSize="11sp"
                     android:layout_marginBottom="4dp" />
@@ -1328,9 +1493,9 @@
                 <Button
                     android:id="@+id/btnSaveBusinessCardSettings"
                     android:layout_width="match_parent"
-                    android:layout_height="36dp"
+                    android:layout_height="38dp"
                     android:backgroundTint="#334155"
-                    android:text="💾 모바일 명함 내용 저장"
+                    android:text="💾 모바일 명함 설정 저장"
                     android:textColor="#FFFFFF"
                     android:textSize="11.5sp" />
             </LinearLayout>
