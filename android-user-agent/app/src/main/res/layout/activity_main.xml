@@ -996,6 +996,82 @@
                     android:lineSpacingExtra="2dp" />
             </LinearLayout>
 
+            <!-- 웹 링크 및 유튜브 영상 AI 자동 스크랩 섹션 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="🌐 웹 링크 &amp; 🔴 유튜브 AI 자동 스크랩"
+                    android:textColor="#E2E8F0"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchLinkScrap"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutLinkScrapSettings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginBottom="6dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="스크랩 대장 시트 이름"
+                    android:textColor="#94A3B8"
+                    android:textSize="10.5sp"
+                    android:layout_marginBottom="3dp" />
+
+                <EditText
+                    android:id="@+id/etLinkScrapSheet"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:background="#1E293B"
+                    android:paddingHorizontal="10dp"
+                    android:hint="[SheetBot] 웹 링크 &amp; 유튜브 스크랩 대장"
+                    android:textColorHint="#64748B"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp"
+                    android:layout_marginBottom="6dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="💡 입력창 변경 시 즉시 자동 저장됩니다."
+                    android:textColor="#64748B"
+                    android:textSize="10.5sp"
+                    android:gravity="center"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="💡 팁: 유튜브 앱이나 웹 브라우저에서 [공유] ➡️ [SheetBot Agent]를 선택하면 AI가 3줄 핵심 요약하여 구글 시트에 1초 만에 깔끔하게 자동 스크랩됩니다."
+                    android:textColor="#64748B"
+                    android:textSize="10.5sp"
+                    android:lineSpacingExtra="2dp" />
+            </LinearLayout>
+
             <!-- 스마트폰 문자(SMS/LMS) 송수신 구글 시트 자동 기록 섹션 -->
             <View
                 android:layout_width="match_parent"
@@ -1587,7 +1663,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="38dp"
                 android:backgroundTint="#1E293B"
-                android:text="⚙️ 계정 연동 해제 (로그아웃)"
+                android:text="🗑️ 계정 삭제 (기기 연동 해제)"
                 android:textColor="#94A3B8"
                 android:textSize="11.5sp" />
         </LinearLayout>
