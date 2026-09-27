@@ -815,18 +815,18 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
               <span>
                 {sourceMode === "NEW_SHEET"
                   ? "Google 계정 로그인 완료 • AI 새 시트 자동 설계 모드"
-                  : "Google 드라이브·스프레드시트 연동 권한: 정상 승인됨"}
+                  : "Google 드라이브·스프레드시트 래핑 권한: 정상 승인됨"}
               </span>
             </div>
             <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-200/70 text-emerald-800">
-              {sourceMode === "NEW_SHEET" ? "자동 설계 활성" : "연동 완료"}
+              {sourceMode === "NEW_SHEET" ? "자동 설계 활성" : "래핑 완료"}
             </span>
           </div>
         ) : scopeStatus === "needed" ? (
           <div className="px-3.5 py-2 bg-amber-50 border border-amber-200/80 rounded-2xl flex items-center justify-between gap-2 text-amber-900 text-xs font-bold shadow-2xs">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>구글 시트 연동 권한 승인이 필요합니다.</span>
+              <span>구글 시트 래핑 권한 승인이 필요합니다.</span>
             </div>
             <button
               type="button"
@@ -857,14 +857,14 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                 </div>
                 <div className="space-y-1">
                   <h4 className="font-extrabold text-xs text-indigo-950 flex items-center gap-1.5">
-                    <span>Google 스프레드시트 및 드라이브 연동 권한 안내</span>
+                    <span>Google 스프레드시트 래핑 및 드라이브 권한 안내</span>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-200/80 text-indigo-800">
                       최소 권한 보호
                     </span>
                   </h4>
                   <p className="text-[11px] text-indigo-900/80 leading-relaxed">
                     회원가입 시점에는 보안을 위해 최소 권한(이메일)만 수집되었습니다.<br />
-                    내 구글 시트와 직접 연동하거나 자동 생성된 시트에 Apps Script 코드를 배포하기 위해 <strong>스프레드시트/드라이브 파일 권한</strong>을 추가로 승인해 주세요.
+                    내 구글 시트를 직접 래핑하거나 자동 생성된 시트에 Apps Script 코드를 배포하기 위해 <strong>스프레드시트/드라이브 파일 권한</strong>을 추가로 승인해 주세요.
                   </p>
                 </div>
               </div>

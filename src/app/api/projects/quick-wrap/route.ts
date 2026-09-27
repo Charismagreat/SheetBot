@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
         id: projectId,
         user_email: userEmail,
         name: projectName,
-        description: "1초 래핑으로 자동 등록된 AI 에이전트(안티그라비티, Cursor, Claude Code) 연동 프로젝트",
+        description: "1초 래핑으로 자동 등록된 AI 에이전트(안티그라비티, Cursor, Claude Code) 래핑 프로젝트",
         spreadsheet_id: spreadsheetId || "",
         spreadsheet_url: finalSheetUrl,
         status: "ACTIVE",

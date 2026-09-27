@@ -463,9 +463,9 @@ ${existingScriptCode.trim()}
          <summary class="text-xs text-slate-500 cursor-pointer">📝 직접 짠 코드 긴급 주입 (고급)</summary>
          <textarea id="userPrompt" class="w-full mt-2 text-xs p-2 border rounded resize-y min-h-[100px]" placeholder="자연어 요청 또는 function ... 코드 붙여넣기"></textarea>
          <button onclick="submitCustomCode()" class="mt-1.5 w-full py-1.5 bg-slate-800 text-white text-xs font-bold rounded">⚡ 시트에 즉시 주입</button>
-     [3] 연동 관리 Danger Zone (최하단 카드):
+     [3] 래핑 관리 Danger Zone (최하단 카드):
        - 연한 붉은색 경고 카드 (border-rose-200, bg-rose-50):
-       - 타이틀: '⚠️ 시트봇 연동 해제 및 스크립트 전체 삭제'
+       - 타이틀: '⚠️ 시트봇 래핑 해제 및 스크립트 전체 삭제'
        - 안내 문구: '시트의 표 데이터는 100% 안전하게 유지되며, 상단 메뉴와 Apps Script 코드만 완전히 제거됩니다.'
        - 버튼: 붉은색 [🗑️ 스크립트 전체 삭제]
        - 인터랙션: 클릭 시 confirm('⚠️ 정말로 시트봇 자동화 스크립트를 모두 제거하시겠습니까?\\n\\n• 시트 내 셀 데이터(표, 텍스트)는 100% 안전하게 유지됩니다.\\n• 상단 메뉴와 자동화 기능만 깨끗하게 초기화됩니다.\\n\\n계속하시겠습니까?') 확인 후,
@@ -476,9 +476,9 @@ ${existingScriptCode.trim()}
      * 실시간 터널 통신 및 응답속도(ms) 측정 후 { success: true, elapsed: elapsed, serverName: ..., message: '...' } 반환.
    - executeUninstallSheetBot():
      * 1) ScriptApp.getProjectTriggers().forEach(function(t) { ScriptApp.deleteTrigger(t); }); 로 설치형 트리거 전체 제거.
-     * 2) 프로젝트 ID 조회 후 egdeskToolsCall('apps-script', 'apps_script_write_file', { projectId: gasProjectId, fileName: 'Code.gs', content: '// SheetBot 자동화 연동이 해제되었습니다.\\nfunction onOpen() {}\\n' }) 호출.
+     * 2) 프로젝트 ID 조회 후 egdeskToolsCall('apps-script', 'apps_script_write_file', { projectId: gasProjectId, fileName: 'Code.gs', content: '// SheetBot 자동화 래핑이 해제되었습니다.\\nfunction onOpen() {}\\n' }) 호출.
      * 3) egdeskToolsCall('apps-script', 'apps_script_push_to_google', { projectId: gasProjectId }) 호출하여 구글 클라우드에 빈 스크립트 배포.
-     * 4) egdeskToolsCall('user-data', 'user_data_update_rows', { tableName: 'sheetbot_projects', filters: { id: projectId }, updates: { script_code: '// SheetBot 연동 해제됨', status: 'UNLINKED', updated_at: new Date().toISOString() } }) 로 상태 갱신.
+     * 4) egdeskToolsCall('user-data', 'user_data_update_rows', { tableName: 'sheetbot_projects', filters: { id: projectId }, updates: { script_code: '// SheetBot 래핑 해제됨', status: 'UNLINKED', updated_at: new Date().toISOString() } }) 로 상태 갱신.
      * 5) { success: true, message: '모든 스크립트가 성공적으로 제거되었습니다.' } 반환.
    - executeSelfCodeInjection(userPrompt): 기존 직접 코드 주입 및 자가 병합 배포 로직 유지.
 `;
@@ -848,7 +848,7 @@ function getAiCopilotSidebarHtml() {
         '<button onclick="copyPrompt()" class="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg">📋 프롬프트 복사하기</button>' +
       '</div>' +
       '<div class="p-3 bg-rose-50/70 rounded-xl border border-rose-200 text-xs space-y-2">' +
-        '<div class="font-bold text-rose-800 flex items-center gap-1">⚠️ 연동 관리 (Danger Zone)</div>' +
+        '<div class="font-bold text-rose-800 flex items-center gap-1">⚠️ 래핑 관리 (Danger Zone)</div>' +
         '<p class="text-[11px] text-rose-600 leading-relaxed">시트 데이터는 100% 보존되며, 상단 메뉴와 Apps Script 코드만 완전히 제거됩니다.</p>' +
         '<button onclick="uninstallScript()" id="uninstallBtn" class="w-full py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg transition-colors">🗑️ 스크립트 전체 삭제</button>' +
       '</div>' +

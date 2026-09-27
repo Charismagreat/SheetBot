@@ -237,7 +237,7 @@ export default function WrapGuidePage() {
                     <span>시트 주소가 없는 경우</span>
                   </div>
                   <p className="text-slate-400 leading-relaxed">
-                    [✨ 시트 주소 없이 새 시트로 즉시 시작]을 클릭하면 새 시트 연동 주소가 생성되며, AI가 필요한 컬럼 헤더 구조를 처음부터 스마트하게 설계해 줍니다.
+                    [✨ 시트 주소 없이 새 시트로 즉시 시작]을 클릭하면 새 시트 래핑 주소가 생성되며, AI가 필요한 컬럼 헤더 구조를 처음부터 스마트하게 설계해 줍니다.
                   </p>
                 </div>
               </div>
