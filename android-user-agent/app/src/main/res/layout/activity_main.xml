@@ -828,15 +828,15 @@
                         android:checked="true" />
                 </LinearLayout>
 
-                <Button
-                    android:id="@+id/btnSaveRecordingSettings"
+                <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="36dp"
-                    android:backgroundTint="#4F46E5"
-                    android:text="💾 통화 녹음 백업 설정 저장"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11.5sp"
-                    android:layout_marginBottom="4dp" />
+                    android:layout_height="wrap_content"
+                    android:text="💡 입력창이나 옵션 변경 시 즉시 자동 저장됩니다."
+                    android:textColor="#64748B"
+                    android:textSize="10.5sp"
+                    android:gravity="center"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="6dp" />
 
                 <Button
                     android:id="@+id/btnSyncRecordingsNow"
@@ -978,14 +978,13 @@
                         android:checked="true" />
                 </LinearLayout>
 
-                <Button
-                    android:id="@+id/btnSaveFileUploadSettings"
+                <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="36dp"
-                    android:backgroundTint="#334155"
-                    android:text="💾 파일 업로드 설정 저장"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11.5sp"
+                    android:layout_height="wrap_content"
+                    android:text="💡 저장 폴더나 옵션 변경 시 즉시 자동 저장됩니다."
+                    android:textColor="#64748B"
+                    android:textSize="10.5sp"
+                    android:gravity="center"
                     android:layout_marginBottom="6dp" />
 
                 <TextView
@@ -1077,14 +1076,14 @@
                     android:textSize="11.5sp"
                     android:layout_marginBottom="8dp" />
 
-                <Button
-                    android:id="@+id/btnSaveSmsSettings"
+                <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="36dp"
-                    android:backgroundTint="#334155"
-                    android:text="💾 문자 시트 동기화 설정 저장"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11.5sp" />
+                    android:layout_height="wrap_content"
+                    android:text="💡 입력창 변경 시 즉시 자동 저장됩니다."
+                    android:textColor="#64748B"
+                    android:textSize="10.5sp"
+                    android:gravity="center"
+                    android:layout_marginTop="2dp" />
             </LinearLayout>
 
             <!-- 카카오톡 수신 메시지 구글 시트 자동 기록 섹션 -->
@@ -1167,14 +1166,14 @@
                     android:textSize="11.5sp"
                     android:layout_marginBottom="8dp" />
 
-                <Button
-                    android:id="@+id/btnSaveKakaoSettings"
+                <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="36dp"
-                    android:backgroundTint="#334155"
-                    android:text="💾 카카오톡 시트 동기화 설정 저장"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11.5sp" />
+                    android:layout_height="wrap_content"
+                    android:text="💡 입력창 변경 시 즉시 자동 저장됩니다."
+                    android:textColor="#64748B"
+                    android:textSize="10.5sp"
+                    android:gravity="center"
+                    android:layout_marginTop="2dp" />
             </LinearLayout>
 
             <!-- 부재중 전화(Missed Call) 0원 스마트 자동 회신 섹션 -->
@@ -1256,14 +1255,14 @@
                     android:textSize="11.5sp"
                     android:layout_marginBottom="8dp" />
 
-                <Button
-                    android:id="@+id/btnSaveMissedCallSettings"
+                <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="36dp"
-                    android:backgroundTint="#334155"
-                    android:text="💾 부재중 자동 회신 설정 저장"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11.5sp" />
+                    android:layout_height="wrap_content"
+                    android:text="💡 회신 문구나 대장 시트 변경 시 즉시 자동 저장됩니다."
+                    android:textColor="#64748B"
+                    android:textSize="10.5sp"
+                    android:gravity="center"
+                    android:layout_marginTop="2dp" />
             </LinearLayout>
 
             <!-- 통화 종료 직후 모바일 명함 원터치 발송 섹션 -->
@@ -1490,14 +1489,14 @@
                     android:textSize="11sp"
                     android:layout_marginBottom="8dp" />
 
-                <Button
-                    android:id="@+id/btnSaveBusinessCardSettings"
+                <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="38dp"
-                    android:backgroundTint="#334155"
-                    android:text="💾 모바일 명함 설정 저장"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11.5sp" />
+                    android:layout_height="wrap_content"
+                    android:text="💡 발송 방식, 링크, 문구 변경 시 즉시 자동 저장됩니다."
+                    android:textColor="#64748B"
+                    android:textSize="10.5sp"
+                    android:gravity="center"
+                    android:layout_marginTop="2dp" />
             </LinearLayout>
 
             <Button

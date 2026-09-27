@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 19,
-      latestVersionName: "2.0.8",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.0.8/SheetBotAgent.apk",
+      latestVersionCode: 20,
+      latestVersionName: "2.0.9",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.0.9/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.0.8 정식 릴리스\n• 🚀 구글 드라이브 파일 업로드 엔진 최적화 (API 파라미터 교정 및 대용량 파일 전송 60초 타임아웃 보장)\n• 🔴 유튜브 영상 & 웹 링크 공유(Share) 자동 스크랩 정상화 (인텐트 라우팅 교정 및 시트 실시간 기입)\n• 🧠 사이트 환경설정에서 이용자가 선택한 AI 모델(Gemini 2.5 Flash 등) 우선 적용 연동",
+      releaseNotes: "시트봇 모바일 에이전트 v2.0.9 정식 릴리스\n• 🔗 구글 스프레드시트 고유 ID 영구 바인딩 (구글 드라이브에서 시트 파일명을 수정해도 100% 지속 연동)\n• 🧹 화면 내 6개 [설정 저장] 버튼 완전 삭제 및 슬림화\n• ⚡ 모든 기능 스위치 On/Off 및 입력창 텍스트 변경 시 실시간 자동 저장(Auto-Save) 지원",
     },
     {
       headers: {

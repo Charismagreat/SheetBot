@@ -697,7 +697,24 @@ export async function setupDatabase(force = false): Promise<void> {
       { tableName: 'sheetbot_referrals' }
     );
 
-    // 22. 기본 추천 프롬프트 시딩
+    // 22. sheetbot_user_sheet_bindings 테이블 생성 (회원별 시트 고유 ID 영구 바인딩 대장)
+    await safeCreateTable(
+      'SheetBot 회원별 시트 고유 ID 바인딩 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'sheet_type', type: 'TEXT', notNull: true }, // 'SMS' | 'KAKAO' | 'MISSED_CALL' | 'RECORDING' | 'FILE_UPLOAD' | 'LINK_BOOKMARK'
+        { name: 'spreadsheet_id', type: 'TEXT', notNull: true },
+        { name: 'spreadsheet_url', type: 'TEXT' },
+        { name: 'sheet_title', type: 'TEXT' },
+        { name: 'folder_id', type: 'TEXT' },
+        { name: 'updated_at', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_user_sheet_bindings' }
+    );
+
+    // 23. 기본 추천 프롬프트 시딩
     await seedDefaultPromptTemplates();
 
     // 23. 레거시 데이터 마이그레이션 실행

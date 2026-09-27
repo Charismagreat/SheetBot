@@ -10,6 +10,7 @@ import {
 import { setupDatabase } from "@/lib/setup-db";
 import { realtimeHub } from "@/lib/realtime-hub";
 import { maskPhoneNumber, formatZeroRetentionContent } from "@/lib/privacy";
+import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 
 /**
  * POST /api/user/messages/sms
@@ -58,39 +59,20 @@ export async function POST(req: NextRequest) {
       sheetTitle = `[SheetBot] ${sheetTitle}`;
     }
 
-    // 1. 구글 스프레드시트 대장 자동 생성 및 행 기록
+    // 1. 구글 스프레드시트 대장 고유 ID 영구 바인딩 및 행 기록
     let spreadsheetUrl = "";
     if (autoRecordSheet) {
       try {
-        let targetSpreadsheetId: string | null = null;
-
-        // 드라이브 내 대장 시트 검색
-        const queryStr = `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${sheetTitle}' and trashed = false`;
-        const sheetSearch = await listDriveFiles({
-          query: queryStr,
+        const resolved = await resolveUserSpreadsheet({
+          userEmail: cleanEmail,
+          sheetType: "SMS",
+          defaultTitle: "[SheetBot] 스마트폰 문자(SMS) 송수신 대장",
+          requestedTitle: sheetTitle,
           preferOAuth: true,
-        }).catch(() => ({ files: [] }));
+        });
 
-        const foundSheets = sheetSearch?.files || [];
-        if (foundSheets.length > 0) {
-          targetSpreadsheetId = foundSheets[0].id;
-          spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
-        } else {
-          // 대장 시트 신규 생성
-          const createRes = await callSheetsTool("sheets_create_spreadsheet", {
-            title: sheetTitle,
-            preferOAuth: true,
-          }).catch((err: any) => {
-            console.warn("[SmsSync] sheets_create_spreadsheet warning:", err.message);
-            return null;
-          });
-
-          targetSpreadsheetId = createRes?.spreadsheetId || createRes?.id || null;
-
-          if (targetSpreadsheetId) {
-            spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
-          }
-        }
+        const targetSpreadsheetId = resolved.spreadsheetId;
+        spreadsheetUrl = resolved.spreadsheetUrl;
 
         // 시트에 신규 문자 기록 행 추가 (자가 치유: 1행 헤더 보장)
         if (targetSpreadsheetId) {

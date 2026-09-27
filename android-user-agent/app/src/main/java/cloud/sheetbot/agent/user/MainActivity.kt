@@ -26,6 +26,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.widget.doAfterTextChanged
 import java.io.File
 import java.text.NumberFormat
 import androidx.activity.result.contract.ActivityResultContracts
@@ -454,7 +455,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 통화 녹음 구글 드라이브 자동 백업 UI 바인딩
+        // 통화 녹음 구글 드라이브 자동 백업 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchCallRecording.isChecked = prefs.isCallRecordingSyncEnabled
         binding.layoutCallRecordingSettings.visibility = if (prefs.isCallRecordingSyncEnabled) View.VISIBLE else View.GONE
         binding.etRecordingTargetFilter.setText(prefs.callRecordingTargetFilter)
@@ -468,17 +469,14 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
 
-        binding.btnSaveRecordingSettings.setOnClickListener {
-            val filter = binding.etRecordingTargetFilter.text.toString().trim()
-            val folder = binding.etRecordingDriveFolder.text.toString().trim().takeIf { it.isNotBlank() } ?: "[SheetBot] 통화 녹음"
-            val sheetEnabled = binding.switchRecordingSheet.isChecked
-
-            prefs.callRecordingTargetFilter = filter
-            prefs.callRecordingDriveFolder = folder
-            prefs.isCallRecordingSheetEnabled = sheetEnabled
-
-            Toast.makeText(this, "💾 통화 녹음 백업 설정이 저장되었습니다.\n저장 폴더: $folder", Toast.LENGTH_SHORT).show()
-            addLogItem("녹음설정", "폴더: $folder / 대상: ${filter.ifBlank { "전체" }}", true)
+        binding.etRecordingTargetFilter.doAfterTextChanged {
+            prefs.callRecordingTargetFilter = it?.toString()?.trim() ?: ""
+        }
+        binding.etRecordingDriveFolder.doAfterTextChanged {
+            prefs.callRecordingDriveFolder = it?.toString()?.trim()?.takeIf { s -> s.isNotBlank() } ?: "[SheetBot] 통화 녹음"
+        }
+        binding.switchRecordingSheet.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isCallRecordingSheetEnabled = isChecked
         }
 
         binding.btnSyncRecordingsNow.setOnClickListener {
@@ -500,19 +498,15 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 사진 및 문서 파일 구글 드라이브 업로드 UI 바인딩
+        // 사진 및 문서 파일 구글 드라이브 업로드 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.etFileUploadDriveFolder.setText(prefs.fileUploadDriveFolder)
         binding.switchFileUploadSheet.isChecked = prefs.isFileUploadSheetEnabled
 
-        binding.btnSaveFileUploadSettings.setOnClickListener {
-            val folder = binding.etFileUploadDriveFolder.text.toString().trim().takeIf { it.isNotBlank() } ?: "[SheetBot] 파일 보관함"
-            val sheetEnabled = binding.switchFileUploadSheet.isChecked
-
-            prefs.fileUploadDriveFolder = folder
-            prefs.isFileUploadSheetEnabled = sheetEnabled
-
-            Toast.makeText(this, "💾 파일 업로드 설정이 저장되었습니다.\n저장 폴더: $folder", Toast.LENGTH_SHORT).show()
-            addLogItem("파일설정", "폴더: $folder / 대장시트: $sheetEnabled", true)
+        binding.etFileUploadDriveFolder.doAfterTextChanged {
+            prefs.fileUploadDriveFolder = it?.toString()?.trim()?.takeIf { s -> s.isNotBlank() } ?: "[SheetBot] 파일 보관함"
+        }
+        binding.switchFileUploadSheet.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isFileUploadSheetEnabled = isChecked
         }
 
         // 자연어 AI 시트 코파일럿 UI 리스너 (v1.7)
@@ -561,7 +555,7 @@ class MainActivity : AppCompatActivity() {
             businessCardPickerLauncher.launch("image/*")
         }
 
-        // 문자(SMS/LMS) 송수신 구글 시트 동기화 UI 바인딩
+        // 문자(SMS/LMS) 송수신 구글 시트 동기화 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchSmsSync.isChecked = prefs.isSmsSheetSyncEnabled
         binding.layoutSmsSyncSettings.visibility = if (prefs.isSmsSheetSyncEnabled) View.VISIBLE else View.GONE
         binding.etSmsTargetFilter.setText(prefs.smsTargetFilter)
@@ -574,19 +568,15 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
 
-        binding.btnSaveSmsSettings.setOnClickListener {
-            val filter = binding.etSmsTargetFilter.text.toString().trim()
-            val sheetTitle = binding.etSmsDriveSheet.text.toString().trim().takeIf { it.isNotBlank() }
+        binding.etSmsTargetFilter.doAfterTextChanged {
+            prefs.smsTargetFilter = it?.toString()?.trim() ?: ""
+        }
+        binding.etSmsDriveSheet.doAfterTextChanged {
+            prefs.smsDriveSheetTitle = it?.toString()?.trim()?.takeIf { s -> s.isNotBlank() }
                 ?: "[SheetBot] 스마트폰 문자(SMS) 송수신 대장"
-
-            prefs.smsTargetFilter = filter
-            prefs.smsDriveSheetTitle = sheetTitle
-
-            Toast.makeText(this, "💾 문자 시트 기록 설정이 저장되었습니다.\n대장 시트: $sheetTitle", Toast.LENGTH_SHORT).show()
-            addLogItem("문자설정", "시트: $sheetTitle / 대상: ${filter.ifBlank { "전체" }}", true)
         }
 
-        // 카카오톡 수신 메시지 구글 시트 동기화 UI 바인딩
+        // 카카오톡 수신 메시지 구글 시트 동기화 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchKakaoSync.isChecked = prefs.isKakaoSheetSyncEnabled
         binding.layoutKakaoSyncSettings.visibility = if (prefs.isKakaoSheetSyncEnabled) View.VISIBLE else View.GONE
         binding.etKakaoTargetFilter.setText(prefs.kakaoTargetFilter)
@@ -599,19 +589,15 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
 
-        binding.btnSaveKakaoSettings.setOnClickListener {
-            val filter = binding.etKakaoTargetFilter.text.toString().trim()
-            val sheetTitle = binding.etKakaoDriveSheet.text.toString().trim().takeIf { it.isNotBlank() }
+        binding.etKakaoTargetFilter.doAfterTextChanged {
+            prefs.kakaoTargetFilter = it?.toString()?.trim() ?: ""
+        }
+        binding.etKakaoDriveSheet.doAfterTextChanged {
+            prefs.kakaoDriveSheetTitle = it?.toString()?.trim()?.takeIf { s -> s.isNotBlank() }
                 ?: "[SheetBot] 카카오톡 메시지 대장"
-
-            prefs.kakaoTargetFilter = filter
-            prefs.kakaoDriveSheetTitle = sheetTitle
-
-            Toast.makeText(this, "💾 카카오톡 시트 기록 설정이 저장되었습니다.\n대장 시트: $sheetTitle", Toast.LENGTH_SHORT).show()
-            addLogItem("카톡설정", "시트: $sheetTitle / 대상: ${filter.ifBlank { "전체" }}", true)
         }
 
-        // 부재중 전화(Missed Call) 0원 스마트 자동 회신 UI 바인딩
+        // 부재중 전화(Missed Call) 0원 스마트 자동 회신 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchMissedCall.isChecked = prefs.isMissedCallAutoReplyEnabled
         binding.layoutMissedCallSettings.visibility = if (prefs.isMissedCallAutoReplyEnabled) View.VISIBLE else View.GONE
         binding.etMissedCallReply.setText(prefs.missedCallReplyTemplate)
@@ -624,23 +610,19 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
 
-        binding.btnSaveMissedCallSettings.setOnClickListener {
-            val replyMsg = binding.etMissedCallReply.text.toString().trim()
-            val sheetTitle = binding.etMissedCallSheet.text.toString().trim().takeIf { it.isNotBlank() }
+        binding.etMissedCallReply.doAfterTextChanged {
+            prefs.missedCallReplyTemplate = it?.toString()?.trim() ?: ""
+        }
+        binding.etMissedCallSheet.doAfterTextChanged {
+            prefs.missedCallDriveSheetTitle = it?.toString()?.trim()?.takeIf { s -> s.isNotBlank() }
                 ?: "[SheetBot] 부재중 전화 대장"
-
-            prefs.missedCallReplyTemplate = replyMsg
-            prefs.missedCallDriveSheetTitle = sheetTitle
-
-            Toast.makeText(this, "💾 부재중 전화 자동 회신 설정이 저장되었습니다.\n대장 시트: $sheetTitle", Toast.LENGTH_SHORT).show()
-            addLogItem("부재중설정", "대장: $sheetTitle / 회신: ${if (replyMsg.isNotBlank()) "설정완료" else "없음"}", true)
         }
 
-        // 통화 종료 직후 모바일 명함 원터치 발송 UI 바인딩
+        // 통화 종료 직후 모바일 명함 원터치 발송 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchCallEndedCard.isChecked = prefs.isCallEndedCardPromptEnabled
         binding.layoutCallEndedCardSettings.visibility = if (prefs.isCallEndedCardPromptEnabled) View.VISIBLE else View.GONE
 
-        // 1. 발송 방식 라디오 버튼 초기화 (WEB_LINK vs MMS_IMAGE)
+        // 1. 발송 방식 라디오 버튼 초기화 (WEB_LINK vs MMS_IMAGE) 및 실시간 자동 저장
         val isWebLinkMode = prefs.businessCardSendMode == "WEB_LINK"
         binding.rbModeWebLink.isChecked = isWebLinkMode
         binding.rbModeMmsImage.isChecked = !isWebLinkMode
@@ -651,11 +633,19 @@ class MainActivity : AppCompatActivity() {
             val isWeb = checkedId == binding.rbModeWebLink.id
             binding.layoutModeWebLink.visibility = if (isWeb) View.VISIBLE else View.GONE
             binding.layoutModeMmsImage.visibility = if (isWeb) View.GONE else View.VISIBLE
+            prefs.businessCardSendMode = if (isWeb) "WEB_LINK" else "MMS_IMAGE"
         }
 
-        // 2. 값 설정
+        // 2. 값 설정 및 텍스트 변경 실시간 자동 저장
         binding.etBusinessCardWebUrl.setText(prefs.businessCardWebLink)
         binding.etBusinessCardSms.setText(prefs.businessCardSmsTemplate)
+
+        binding.etBusinessCardWebUrl.doAfterTextChanged {
+            prefs.businessCardWebLink = it?.toString()?.trim() ?: ""
+        }
+        binding.etBusinessCardSms.doAfterTextChanged {
+            prefs.businessCardSmsTemplate = it?.toString()?.trim() ?: ""
+        }
 
         // 3. 사진 선택 및 미리보기 바인딩
         renderBusinessCardImagePreview()
@@ -673,21 +663,6 @@ class MainActivity : AppCompatActivity() {
             binding.layoutCallEndedCardSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
             val msg = if (isChecked) "통화 종료 모바일 명함 발송 기능이 켜졌습니다." else "모바일 명함 발송 기능이 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-        }
-
-        binding.btnSaveBusinessCardSettings.setOnClickListener {
-            val isWeb = binding.rbModeWebLink.isChecked
-            val mode = if (isWeb) "WEB_LINK" else "MMS_IMAGE"
-            val webUrl = binding.etBusinessCardWebUrl.text.toString().trim()
-            val cardMsg = binding.etBusinessCardSms.text.toString().trim()
-
-            prefs.businessCardSendMode = mode
-            prefs.businessCardWebLink = webUrl
-            prefs.businessCardSmsTemplate = cardMsg
-
-            val modeName = if (isWeb) "스마트 웹 명함(0원)" else "직접 사진 첨부(MMS)"
-            Toast.makeText(this, "💾 모바일 명함 설정이 저장되었습니다.\n(방식: $modeName)", Toast.LENGTH_SHORT).show()
-            addLogItem("명함설정", "모드: $modeName / 설정 저장 완료", true)
         }
 
         binding.btnCheckUpdate.setOnClickListener {

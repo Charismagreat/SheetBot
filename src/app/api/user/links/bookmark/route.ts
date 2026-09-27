@@ -13,6 +13,7 @@ import {
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { getAiModelSettings } from "@/lib/ai-settings";
+import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 
 /**
  * POST /api/user/links/bookmark
@@ -166,61 +167,38 @@ export async function POST(req: NextRequest) {
       console.warn("[LinkBookmark] Folder resolve warning:", fErr.message);
     }
 
-    let targetSpreadsheetId: string | null = null;
-    let spreadsheetUrl = "";
-
-    const queryStr = targetFolderId
-      ? `'${targetFolderId}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${sheetTitle}' and trashed = false`
-      : `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${sheetTitle}' and trashed = false`;
-
-    const sheetSearch = await listDriveFiles({
-      query: queryStr,
+    // 4-1. 고유 ID 영구 바인딩 및 시트 탐색/생성
+    const resolved = await resolveUserSpreadsheet({
+      userEmail: cleanEmail,
+      sheetType: "LINK_BOOKMARK",
+      defaultTitle: sheetTitle,
+      folderId: targetFolderId,
       preferOAuth: true,
-    }).catch(() => ({ files: [] }));
+    });
 
-    const foundSheets = sheetSearch?.files || [];
-    if (foundSheets.length > 0) {
-      targetSpreadsheetId = foundSheets[0].id;
-      spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
-    } else {
-      // 신규 시트 생성
-      const createRes = await callSheetsTool("sheets_create_spreadsheet", {
-        title: sheetTitle,
+    const targetSpreadsheetId = resolved.spreadsheetId;
+    const spreadsheetUrl = resolved.spreadsheetUrl;
+
+    if (resolved.isNew && targetSpreadsheetId) {
+      // 헤더 8열 서식 기입
+      const headers = [
+        ["스크랩일시", "구분", "제목 / 콘텐츠명", "원본 URL 링크", "채널 / 출처", "AI 핵심 요약 (3줄)", "공유 메모", "등록 기기"]
+      ];
+      await callSheetsTool("sheets_update_range", {
+        spreadsheetId: targetSpreadsheetId,
+        range: "A1:H1",
+        values: headers,
         preferOAuth: true,
-      }).catch((err: any) => {
-        console.warn("[LinkBookmark] sheets_create_spreadsheet warning:", err.message);
-        return null;
-      });
+      }).catch(() => {});
 
-      targetSpreadsheetId = createRes?.spreadsheetId || createRes?.id || null;
-
-      if (targetSpreadsheetId) {
-        spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
-
-        if (targetFolderId) {
-          await moveDriveFile(targetSpreadsheetId, targetFolderId, true).catch(() => {});
-        }
-
-        // 헤더 8열 서식 기입
-        const headers = [
-          ["스크랩일시", "구분", "제목 / 콘텐츠명", "원본 URL 링크", "채널 / 출처", "AI 핵심 요약 (3줄)", "공유 메모", "등록 기기"]
-        ];
-        await callSheetsTool("sheets_update_range", {
-          spreadsheetId: targetSpreadsheetId,
-          range: "A1:H1",
-          values: headers,
-          preferOAuth: true,
-        }).catch(() => {});
-
-        // 버건디/레드 테마 서식 스타일링
-        await callSheetsTool("sheets_format_headers", {
-          spreadsheetId: targetSpreadsheetId,
-          tabName: "시트1",
-          headerBgColor: "#991b1b", // 유튜브 레드/버건디 테마
-          headerTextColor: "#ffffff",
-          preferOAuth: true,
-        }).catch(() => {});
-      }
+      // 버건디/레드 테마 서식 스타일링
+      await callSheetsTool("sheets_format_headers", {
+        spreadsheetId: targetSpreadsheetId,
+        tabName: "시트1",
+        headerBgColor: "#991b1b", // 유튜브 레드/버건디 테마
+        headerTextColor: "#ffffff",
+        preferOAuth: true,
+      }).catch(() => {});
     }
 
     // 5. 시트에 신규 스크랩 행 추가

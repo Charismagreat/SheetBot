@@ -13,6 +13,7 @@ import {
   insertRows,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -111,66 +112,42 @@ export async function POST(req: NextRequest) {
     }
 
     // 6. 구글 시트 대장 자동 생성 및 행 기록 (autoRecordSheet == true)
+    // 6. 구글 스프레드시트 대장 고유 ID 영구 바인딩 및 행 기록
     let spreadsheetUrl = "";
     if (autoRecordSheet) {
       try {
         const sheetTitle = "[SheetBot] 통화 녹음 대장";
-        let targetSpreadsheetId: string | null = null;
-
-        // 6-1. 해당 폴더 내 시트 파일 검색
-        const queryStr = targetFolderId
-          ? `'${targetFolderId}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${sheetTitle}' and trashed = false`
-          : `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${sheetTitle}' and trashed = false`;
-
-        const sheetSearch = await listDriveFiles({
-          query: queryStr,
+        const resolved = await resolveUserSpreadsheet({
+          userEmail: cleanEmail,
+          sheetType: "RECORDING",
+          defaultTitle: sheetTitle,
+          folderId: targetFolderId,
           preferOAuth: true,
-        }).catch(() => ({ files: [] }));
+        });
 
-        const foundSheets = sheetSearch?.files || [];
-        if (foundSheets.length > 0) {
-          targetSpreadsheetId = foundSheets[0].id;
-          spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
-        } else {
-          // 6-2. 시트 신규 생성
-          const createRes = await callSheetsTool("sheets_create_spreadsheet", {
-            title: sheetTitle,
+        const targetSpreadsheetId = resolved.spreadsheetId;
+        spreadsheetUrl = resolved.spreadsheetUrl;
+
+        if (resolved.isNew && targetSpreadsheetId) {
+          // 초기 헤더 서식 기입 (AI 분석 컬럼 포함 8대 표준 열)
+          const headers = [
+            ["통화일시", "상대방 (이름/번호)", "파일명", "파일크기", "AI 3줄 핵심 요약", "후속 할 일 (Action Items)", "전체 텍스트 전사(STT)", "구글 드라이브 바로듣기 링크"]
+          ];
+          await callSheetsTool("sheets_update_range", {
+            spreadsheetId: targetSpreadsheetId,
+            range: "A1:H1",
+            values: headers,
             preferOAuth: true,
-          }).catch((err: any) => {
-            console.warn("[RecordingsUpload] sheets_create_spreadsheet warning:", err.message);
-            return null;
-          });
+          }).catch(() => {});
 
-          targetSpreadsheetId = createRes?.spreadsheetId || createRes?.id || null;
-
-          if (targetSpreadsheetId) {
-            spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
-
-            // 해당 폴더로 시트 이동
-            if (targetFolderId) {
-              await moveDriveFile(targetSpreadsheetId, targetFolderId, true).catch(() => {});
-            }
-
-            // 초기 헤더 서식 기입 (AI 분석 컬럼 포함 8대 표준 열)
-            const headers = [
-              ["통화일시", "상대방 (이름/번호)", "파일명", "파일크기", "AI 3줄 핵심 요약", "후속 할 일 (Action Items)", "전체 텍스트 전사(STT)", "구글 드라이브 바로듣기 링크"]
-            ];
-            await callSheetsTool("sheets_update_range", {
-              spreadsheetId: targetSpreadsheetId,
-              range: "A1:H1",
-              values: headers,
-              preferOAuth: true,
-            }).catch(() => {});
-
-            // 헤더 서식 스타일링
-            await callSheetsTool("sheets_format_headers", {
-              spreadsheetId: targetSpreadsheetId,
-              tabName: "시트1",
-              headerBgColor: "#1e293b",
-              headerTextColor: "#ffffff",
-              preferOAuth: true,
-            }).catch(() => {});
-          }
+          // 헤더 서식 스타일링
+          await callSheetsTool("sheets_format_headers", {
+            spreadsheetId: targetSpreadsheetId,
+            tabName: "시트1",
+            headerBgColor: "#1e293b",
+            headerTextColor: "#ffffff",
+            preferOAuth: true,
+          }).catch(() => {});
         }
 
         // 6-3. 시트에 신규 통화 기록 행 추가
