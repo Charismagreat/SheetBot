@@ -69,10 +69,12 @@ import {
   Radio,
   ArrowRight,
   Download,
-  Share2
+  Share2,
+  MessageSquare
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import dynamic from "next/dynamic";
+import { KakaoChatImportModal } from "@/components/KakaoChatImportModal";
 
 const NotificationsRulesTab = dynamic(
   () => import("@/components/notifications/NotificationsRulesTab"),
@@ -110,6 +112,7 @@ export default function NotificationsPage() {
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false);
+  const [isKakaoImportModalOpen, setIsKakaoImportModalOpen] = useState(false);
   const [agent2PairData, setAgent2PairData] = useState<any>(null);
   const [loadingAgent2Pair, setLoadingAgent2Pair] = useState(false);
 
@@ -624,6 +627,15 @@ export default function NotificationsPage() {
             >
               <FileText className="w-4 h-4" />
               <span>실전 활용 가이드</span>
+            </button>
+
+            <button
+              onClick={() => setIsKakaoImportModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 transition-all cursor-pointer font-bold"
+              title="카카오톡 대화 내용 내보내기(.txt) 파일을 업로드하여 수신/발신 대화를 구글 시트에 구간 덮어쓰기 반영합니다."
+            >
+              <MessageSquare className="w-4 h-4 text-amber-400" />
+              <span>💬 카톡 대화내보내기(.txt) 가져오기</span>
             </button>
 
             {/* 실시간 DB 왓처 연결 뱃지 (클릭 시 수동 새로고침 겸용) */}
@@ -1224,6 +1236,15 @@ export default function NotificationsPage() {
           </div>
         </div>
       )}
+
+      {/* 카카오톡 대화 내용 내보내기 가져오기 모달 */}
+      <KakaoChatImportModal
+        isOpen={isKakaoImportModalOpen}
+        onClose={() => setIsKakaoImportModalOpen(false)}
+        onSuccess={(res) => {
+          showAlert("success", `'${res.chatRoomName}' 카톡 대화 ${res.totalCount}건(수신 ${res.inboundCount}, 발신 ${res.outboundCount})이 구글 시트에 덮어쓰기 반영되었습니다!`);
+        }}
+      />
     </div>
   );
 }

@@ -53,7 +53,7 @@ export async function recordPaymentToGoogleSheet(
 
     // 1. 드라이브 내 대장 시트 검색
     const queryStr = `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${sheetTitle}' and trashed = false`;
-    const sheetSearch = await listDriveFiles({
+    const sheetSearch = await (listDriveFiles as any)({
       query: queryStr,
       preferOAuth: true,
     }).catch(() => ({ files: [] }));
