@@ -6,6 +6,7 @@ import {
   getDriveFile,
   callSheetsTool,
   moveDriveFile,
+  trashDriveFile,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 
@@ -38,16 +39,37 @@ export interface ResolveSheetResult {
   isNew: boolean;
 }
 
+// 동시 다발적 요청 시 중복 시트 생성 방지를 위한 인메모리 뮤텍스
+const inFlightResolutions = new Map<string, Promise<ResolveSheetResult>>();
+
 /**
  * 회원별 구글 스프레드시트 고유 ID 영구 바인딩 및 자가 치유 탐색기
  *
  * [원리 및 보장]:
- * 1. 사용자가 구글 드라이브에서 시트 파일명을 '2026 대장', '고객 관리' 등으로 자유롭게 변경하더라도,
- *    바인딩된 고유 spreadsheetId를 우선 조회하므로 100% 끊김 없이 동일 시트에 계속 기록됩니다.
- * 2. 시트가 실제로 구글 드라이브 휴지통에 가 있거나 삭제된 경우에만 자동으로 새 시트를 탐색/생성하고
- *    새 고유 ID로 스마트하게 자동 갱신(Re-binding)합니다.
+ * 1. 동시성 제어(In-flight Mutex): 앱 시작 시 동시에 들어오는 다중 프로비저닝 요청을 1개의 Promise로 단일화.
+ * 2. 2단계 스마트 탐색(Smart Fallback): 폴더 내 탐색 실패 시 전체 드라이브에서 기존 시트를 선제 발굴하여 중복 생성 원천 차단.
+ * 3. 자가 치유 정리(Self-Healing Cleanup): 동일 이름의 여분 중복 시트 발견 시 최신 1개만 확정하고 나머지는 자동 휴지통 정리.
  */
 export async function resolveUserSpreadsheet(
+  options: ResolveSheetOptions
+): Promise<ResolveSheetResult> {
+  const cleanEmail = options.userEmail.trim().toLowerCase();
+  const bindingKey = `${cleanEmail}_${options.sheetType}`;
+
+  // 이미 동일 사용자의 동일 시트에 대해 탐색/생성이 진행 중이면 기존 Promise를 함께 대기
+  if (inFlightResolutions.has(bindingKey)) {
+    return inFlightResolutions.get(bindingKey)!;
+  }
+
+  const promise = doResolveUserSpreadsheet(options).finally(() => {
+    inFlightResolutions.delete(bindingKey);
+  });
+
+  inFlightResolutions.set(bindingKey, promise);
+  return promise;
+}
+
+async function doResolveUserSpreadsheet(
   options: ResolveSheetOptions
 ): Promise<ResolveSheetResult> {
   await setupDatabase();
@@ -87,8 +109,14 @@ export async function resolveUserSpreadsheet(
     try {
       const driveFile = await getDriveFile(existingId, { preferOAuth });
       if (driveFile && !driveFile.trashed && !driveFile.explicitlyTrashed) {
-        // 구글 드라이브에 시트가 정상 존재함 -> 파일명이 바뀌었어도 영구 바인딩 ID로 직행!
+        // 구글 드라이브에 시트가 정상 존재함 -> 영구 바인딩 ID로 즉시 반환
         const url = `https://docs.google.com/spreadsheets/d/${existingId}/edit`;
+
+        // 지정 폴더가 있는데 다른 곳에 있다면 지정 폴더로 이동 보장
+        if (folderId && driveFile.parents && !driveFile.parents.includes(folderId)) {
+          await moveDriveFile(existingId, folderId, preferOAuth).catch(() => {});
+        }
+
         return {
           spreadsheetId: existingId,
           spreadsheetUrl: url,
@@ -97,7 +125,6 @@ export async function resolveUserSpreadsheet(
       }
     } catch (checkErr: any) {
       console.warn(`[SheetBinding] Bound sheet ${existingId} verify warning:`, checkErr.message);
-      // 권한 또는 일시적 오류일 경우 기존 ID를 최대한 보존
       if (checkErr.message?.includes("404") || checkErr.message?.includes("notFound") || checkErr.message?.includes("File not found")) {
         boundRecord = null; // 실제로 삭제된 경우에만 재탐색
       } else {
@@ -111,28 +138,53 @@ export async function resolveUserSpreadsheet(
     }
   }
 
-  // 3. 바인딩이 없거나 실제 파일이 삭제된 경우: 구글 드라이브에서 시트 탐색
+  // 3. 바인딩이 없거나 실제 파일이 삭제된 경우: 구글 드라이브 2단계 스마트 탐색
   let targetSpreadsheetId: string | null = null;
   let isNew = false;
 
-  const queryStr = folderId
-    ? `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${targetTitle}' and trashed = false`
-    : `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${targetTitle}' and trashed = false`;
-
-  try {
-    const searchRes = await listDriveFiles(
-      { query: queryStr },
-      { preferOAuth }
-    );
-    const foundFiles = searchRes?.files || [];
-    if (foundFiles.length > 0) {
-      targetSpreadsheetId = foundFiles[0].id;
+  // 3-1. 1차: 지정된 폴더가 있다면 해당 폴더 내부 탐색
+  if (folderId) {
+    try {
+      const folderQuery = `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${targetTitle}' and trashed = false`;
+      const searchRes = await listDriveFiles({ query: folderQuery }, { preferOAuth });
+      const foundFiles = searchRes?.files || [];
+      if (foundFiles.length > 0) {
+        targetSpreadsheetId = foundFiles[0].id;
+      }
+    } catch (searchErr: any) {
+      console.warn(`[SheetBinding] Folder drive search warning for ${targetTitle}:`, searchErr.message);
     }
-  } catch (searchErr: any) {
-    console.warn(`[SheetBinding] Drive search warning for ${targetTitle}:`, searchErr.message);
   }
 
-  // 4. 드라이브에도 없으면 신규 생성
+  // 3-2. 2차: 폴더 내에서 못 찾았거나 폴더가 지정되지 않은 경우, 전체 드라이브에서 동일 파일명 시트 탐색 (중복 생성 방지 핵심 안전망)
+  if (!targetSpreadsheetId) {
+    try {
+      const globalQuery = `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${targetTitle}' and trashed = false`;
+      const searchRes = await listDriveFiles({ query: globalQuery }, { preferOAuth });
+      const foundFiles = searchRes?.files || [];
+      if (foundFiles.length > 0) {
+        // 가장 최근에 수정된 파일 선택
+        targetSpreadsheetId = foundFiles[0].id;
+
+        // 만약 지정 폴더가 있는데 루트 등 다른 곳에 있었다면 폴더로 이동
+        if (folderId) {
+          await moveDriveFile(targetSpreadsheetId, folderId, preferOAuth).catch(() => {});
+        }
+
+        // 만약 중복으로 생성된 여분의 동일 파일들이 있다면 2번째부터는 자동으로 휴지통 정리(Self-Healing)
+        if (foundFiles.length > 1) {
+          console.log(`[SheetBinding] Cleaning up ${foundFiles.length - 1} duplicate sheets for '${targetTitle}'...`);
+          for (let i = 1; i < foundFiles.length; i++) {
+            trashDriveFile(foundFiles[i].id, preferOAuth).catch(() => {});
+          }
+        }
+      }
+    } catch (searchErr: any) {
+      console.warn(`[SheetBinding] Global drive search warning for ${targetTitle}:`, searchErr.message);
+    }
+  }
+
+  // 4. 드라이브 전체에도 없으면 그때에만 최초 1회 신규 생성
   if (!targetSpreadsheetId) {
     try {
       const createRes = await callSheetsTool("sheets_create_spreadsheet", {
