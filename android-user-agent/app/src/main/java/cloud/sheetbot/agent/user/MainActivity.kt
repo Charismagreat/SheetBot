@@ -397,32 +397,11 @@ class MainActivity : AppCompatActivity() {
             checkServerAndQueueStatus(showToast = true)
         }
 
-        // 5. 오프라인 대기열 서버 즉시 전송 버튼
-        binding.btnSyncPendingDeposits.setOnClickListener {
-            binding.progressBar.visibility = View.VISIBLE
-            activityScope.launch {
-                val drained = DepositQueueManager.drainQueue(this@MainActivity)
-                binding.progressBar.visibility = View.GONE
-                if (drained > 0) {
-                    Toast.makeText(this@MainActivity, "🎉 오프라인 대기열 ${drained}건이 서버로 안전하게 전송되었습니다!", Toast.LENGTH_LONG).show()
-                    addLogItem("대기열 전송", "미전송 입금 ${drained}건 서버 동기화 완료", true)
-                } else {
-                    val count = DepositQueueManager.getPendingCount(this@MainActivity)
-                    if (count == 0) {
-                        Toast.makeText(this@MainActivity, "현재 전송 대기 중인 입금 내역이 없습니다.", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(this@MainActivity, "⚠️ 서버가 응답하지 않아 전송에 실패했습니다. (대기 ${count}건 유지)", Toast.LENGTH_SHORT).show()
-                    }
-                }
-                checkServerAndQueueStatus(false)
-            }
-        }
-
-        // 6. 연동 해제 버튼
+        // 5. 계정 연동 해제 버튼 (화면 최하단 Danger Zone)
         binding.btnUnlink.setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle("연동 해제")
-                .setMessage("시트봇 계정 연동을 해제하시겠습니까?\n해제 시 더 이상 입금 문자가 감지되지 않습니다.")
+                .setMessage("시트봇 계정 연동을 해제하시겠습니까?\n해제 시 더 이상 결제 알림 및 자동화가 연동되지 않습니다.")
                 .setPositiveButton("해제") { _, _ ->
                     val emailToUnlink = prefs.userEmail
                     if (!emailToUnlink.isNullOrBlank()) {
@@ -439,7 +418,7 @@ class MainActivity : AppCompatActivity() {
                 .show()
         }
 
-        // 7. 스마트 편의 스위치 & 업데이트 버튼
+        // 6. 매장 결제 & 영수증 문자 전송 스위치
         binding.switchTts.isChecked = prefs.isTtsEnabled
         binding.switchTts.setOnCheckedChangeListener { _, isChecked ->
             prefs.isTtsEnabled = isChecked
@@ -449,7 +428,7 @@ class MainActivity : AppCompatActivity() {
         binding.switchReceiptSms.isChecked = prefs.isReceiptSmsEnabled
         binding.switchReceiptSms.setOnCheckedChangeListener { _, isChecked ->
             prefs.isReceiptSmsEnabled = isChecked
-            val msg = if (isChecked) "고객 영수증 SMS 자동 회신이 켜졌습니다." else "고객 영수증 SMS 자동 회신이 꺼졌습니다."
+            val msg = if (isChecked) "고객 영수증 문자 자동 전송이 켜졌습니다." else "고객 영수증 문자 자동 전송이 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
 
@@ -459,27 +438,8 @@ class MainActivity : AppCompatActivity() {
             if (isChecked && !isNotificationListenerEnabled()) {
                 requestNotificationListenerPermission()
             } else {
-                val msg = if (isChecked) "금융사 앱 무료 푸시 실시간 감지가 켜졌습니다." else "금융사 앱 푸시 감지가 꺼졌습니다."
+                val msg = if (isChecked) "금융/결제 앱 푸시 실시간 감지가 켜졌습니다." else "금융/결제 앱 푸시 감지가 꺼졌습니다."
                 Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        binding.btnSyncPendingReceipts.setOnClickListener {
-            binding.progressBar.visibility = View.VISIBLE
-            activityScope.launch {
-                try {
-                    val count = SmsSenderUtil.processPendingReceipts(this@MainActivity)
-                    binding.progressBar.visibility = View.GONE
-                    if (count > 0) {
-                        Toast.makeText(this@MainActivity, "🎉 미발송 영수증 ${count}건이 정상 발송되었습니다!", Toast.LENGTH_LONG).show()
-                        addLogItem("영수증 발송", "미발송 영수증 ${count}건 고객 휴대폰으로 전송 완료", true)
-                    } else {
-                        Toast.makeText(this@MainActivity, "현재 발송 대기 중인 영수증이 없습니다.", Toast.LENGTH_SHORT).show()
-                    }
-                } catch (e: Exception) {
-                    binding.progressBar.visibility = View.GONE
-                    Toast.makeText(this@MainActivity, "동기화 중 오류: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
             }
         }
 
@@ -817,7 +777,7 @@ class MainActivity : AppCompatActivity() {
             binding.tvStatusDesc.text = "구글 시트 ↔ 스마트폰 양방향 자동화 가동 중\n🛡️ 데이터는 본인 구글 드라이브에만 안전 저장됩니다."
             binding.btnRefreshServerStatus.visibility = View.VISIBLE
             binding.btnToggleStatusDetails.visibility = View.VISIBLE
-            binding.layoutPairedControls.visibility = View.VISIBLE
+            binding.layoutUnlinkZone.visibility = View.VISIBLE
             binding.layoutWalletCard.visibility = View.VISIBLE
             binding.layoutUnpairedControls.visibility = View.GONE
             checkServerAndQueueStatus(showToast = false)
@@ -828,7 +788,7 @@ class MainActivity : AppCompatActivity() {
             binding.tvStatusDesc.text = "시트봇 모바일 에이전트 QR코드를 스캔하여 계정을 연동해 주세요.\n🛡️ 서버 무보관 100% · 내 구글 드라이브로만 직통 전송"
             binding.btnRefreshServerStatus.visibility = View.GONE
             binding.btnToggleStatusDetails.visibility = View.GONE
-            binding.layoutPairedControls.visibility = View.GONE
+            binding.layoutUnlinkZone.visibility = View.GONE
             binding.layoutWalletCard.visibility = View.GONE
             binding.layoutUnpairedControls.visibility = View.VISIBLE
         }

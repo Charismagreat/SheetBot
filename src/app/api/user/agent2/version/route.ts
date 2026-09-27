@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 16,
-      latestVersionName: "2.0.5",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.0.5/SheetBotAgent.apk",
+      latestVersionCode: 17,
+      latestVersionName: "2.0.6",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.0.6/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.0.5 정식 릴리스\n• 🪙 토큰 잔액 로컬 캐시 즉시 표시 (0원 표시 현상 완전 해결)\n• 💡 AI 코파일럿 불필요 문구 삭제 및 토큰 안내 확인(접기)/자세히 보기 토글 탑재\n• 🛡️ 토큰 소량 차감 및 기본 자동화 100% 무료 안내 배너 문구 고도화\n• 📝 자연어 입력창 여러 줄 자동 확장 (입력 길이에 따라 최대 6줄까지 자동 확장)",
+      releaseNotes: "시트봇 모바일 에이전트 v2.0.6 정식 릴리스\n• 🧹 불필요한 '오프라인 대기열 서버 전송' 버튼 완전 삭제 (백그라운드 100% 자동화)\n• ⚙️ '계정 연동 해제' 버튼을 화면 최하단 위험 구역(Danger Zone)으로 이동하여 실수 방지\n• 💳 '스마트 편의 설정' ➔ '매장 결제 & 영수증 문자 전송' 전용 비즈니스 카드로 개편\n• 📲 '0원 영수증 문자' ➔ '영수증 문자 전송'으로 명칭 통일 및 직관적 UX 완성",
     },
     {
       headers: {

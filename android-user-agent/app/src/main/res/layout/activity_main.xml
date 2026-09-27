@@ -39,7 +39,7 @@
                     android:background="@drawable/bg_badge_version"
                     android:paddingHorizontal="10dp"
                     android:paddingVertical="4dp"
-                    android:text="v2.0.5"
+                    android:text="v2.0.6"
                     android:textColor="#10B981"
                     android:textSize="12sp"
                     android:textStyle="bold" />
@@ -389,7 +389,7 @@
                     android:background="@drawable/bg_badge_version"
                     android:paddingHorizontal="6dp"
                     android:paddingVertical="2dp"
-                    android:text="v2.0.5"
+                    android:text="v2.0.6"
                     android:textColor="#10B981"
                     android:textSize="10sp"
                     android:textStyle="bold" />
@@ -620,36 +620,7 @@
                 android:textSize="13sp" />
         </LinearLayout>
 
-        <!-- 연동 완료 시 컨트롤 (대기열 수동 동기화 & 연동 해제) -->
-        <LinearLayout
-            android:id="@+id/layoutPairedControls"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginBottom="16dp"
-            android:visibility="gone">
-
-            <Button
-                android:id="@+id/btnSyncPendingDeposits"
-                android:layout_width="match_parent"
-                android:layout_height="46dp"
-                android:backgroundTint="#1E293B"
-                android:text="📥 오프라인 대기열 서버 즉시 전송"
-                android:textColor="#38BDF8"
-                android:textSize="12.5sp"
-                android:layout_marginBottom="8dp" />
-
-            <Button
-                android:id="@+id/btnUnlink"
-                android:layout_width="match_parent"
-                android:layout_height="44dp"
-                android:backgroundTint="#334155"
-                android:text="연동 해제"
-                android:textColor="#94A3B8"
-                android:textSize="12sp" />
-        </LinearLayout>
-
-        <!-- Phase 1 & 2: 스마트 편의 제어 패널 (TTS 음성 & 영수증 SMS & 앱푸시 감지 & 원클릭 업데이트) -->
+        <!-- Phase 1 & 2: 매장 결제 & 영수증 문자 전송 제어 패널 (v2.0.6) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -658,14 +629,33 @@
             android:padding="14dp"
             android:layout_marginBottom="16dp">
 
-            <TextView
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="⚙️ 스마트 편의 설정"
-                android:textColor="#38BDF8"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="10dp" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="10dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="💳 매장 결제(포스/배달앱) &amp; 영수증 문자 전송"
+                    android:textColor="#38BDF8"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:paddingHorizontal="6dp"
+                    android:paddingVertical="2dp"
+                    android:text="AUTO"
+                    android:textColor="#34D399"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -678,13 +668,13 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="🔊 실시간 TTS 음성 안내"
+                    android:text="🔔 결제/입금 앱 푸시 실시간 감지 (배달앱·포스·은행)"
                     android:textColor="#E2E8F0"
-                    android:textSize="12.5sp"
+                    android:textSize="12sp"
                     android:textStyle="bold" />
 
                 <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/switchTts"
+                    android:id="@+id/switchPushDetection"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:checked="true" />
@@ -701,9 +691,9 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="📲 0원 영수증 SMS 자동 회신"
+                    android:text="📲 고객에게 영수증 문자 자동 전송"
                     android:textColor="#E2E8F0"
-                    android:textSize="12.5sp"
+                    android:textSize="12sp"
                     android:textStyle="bold" />
 
                 <androidx.appcompat.widget.SwitchCompat
@@ -718,34 +708,23 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="12dp">
+                android:layout_marginBottom="4dp">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="🔔 금융사 앱 무료 푸시 실시간 감지"
+                    android:text="🔊 결제 감지 시 실시간 TTS 음성 안내"
                     android:textColor="#E2E8F0"
-                    android:textSize="12.5sp"
+                    android:textSize="12sp"
                     android:textStyle="bold" />
 
                 <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/switchPushDetection"
+                    android:id="@+id/switchTts"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:checked="true" />
             </LinearLayout>
-
-            <Button
-                android:id="@+id/btnSyncPendingReceipts"
-                android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:backgroundTint="#0284C7"
-                android:text="📤 미발송 영수증 즉시 발송"
-                android:textColor="#FFFFFF"
-                android:textSize="11.5sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp" />
 
             <!-- 통화 녹음 구글 드라이브 자동 백업 섹션 -->
             <View
@@ -1427,6 +1406,27 @@
             android:textSize="10.5sp"
             android:fontFamily="monospace"
             android:text="대기 중... 은행 입금 문자가 오면 자동으로 웹훅 전송됩니다.\n" />
+
+        <!-- 계정 연동 해제 (실수 터치 방지 최하단 배치) -->
+        <LinearLayout
+            android:id="@+id/layoutUnlinkZone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/btnUnlink"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:backgroundTint="#1E293B"
+                android:text="⚙️ 계정 연동 해제 (로그아웃)"
+                android:textColor="#94A3B8"
+                android:textSize="11.5sp" />
+        </LinearLayout>
 
     </LinearLayout>
     </ScrollView>

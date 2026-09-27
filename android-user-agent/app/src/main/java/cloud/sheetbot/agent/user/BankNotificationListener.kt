@@ -114,7 +114,7 @@ class BankNotificationListener : NotificationListenerService() {
 
                         showNotification(title, text, true, bankName)
 
-                        // 7. 0원 영수증 SMS 자동 회신
+                        // 7. 고객 영수증 문자 자동 전송 (설정 ON && 서버에서 대상 번호/문구 회신 시)
                         if (prefs.isReceiptSmsEnabled && !result.replySmsPhone.isNullOrBlank() && !result.replySmsText.isNullOrBlank()) {
                             val isSent = SmsSenderUtil.sendSms(this@BankNotificationListener, result.replySmsPhone, result.replySmsText)
                             if (isSent) {
