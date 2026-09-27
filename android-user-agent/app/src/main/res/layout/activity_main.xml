@@ -44,6 +44,67 @@
                     android:textSize="12sp"
                     android:textStyle="bold" />
             </LinearLayout>
+ 
+            <!-- 🛡️ Zero-Retention 프라이버시 안심 보증 카드 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:background="@drawable/bg_card_privacy"
+                android:layout_marginBottom="14dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="6dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🛡️ Zero-Retention 안심 보증"
+                        android:textColor="#2DD4BF"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_badge_privacy"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="3dp"
+                        android:text="서버 무보관 100%"
+                        android:textColor="#5EEAD4"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="시트봇은 고객의 개인정보, 문자 전문, 통화 내역을 중앙 서버에 일체 보관하지 않습니다. 모든 데이터는 오직 회원님 본인의 안전한 구글 드라이브(Google Drive) 및 구글 시트로만 직통 전송·보관됩니다."
+                    android:textColor="#CCFBF1"
+                    android:textSize="11.5sp"
+                    android:lineSpacingExtra="3dp" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="#134E4A"
+                    android:layout_marginTop="10dp"
+                    android:layout_marginBottom="10dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="✓ 통신비 0원 무제한 고객 알림 문자 발송\n✓ 포스·결제 승인 알림 실시간 구글 시트 기입\n✓ 내 구글 계정(BYOD) 100% 프라이빗 보관"
+                    android:textColor="#99F6E4"
+                    android:textSize="11sp"
+                    android:lineSpacingExtra="4dp" />
+            </LinearLayout>
 
             <!-- 실시간 상태 카드 -->
             <LinearLayout
@@ -69,7 +130,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:text="시트봇 워크스페이스의 QR코드를 스캔하여 계정을 연동해 주세요."
+                    android:text="시트봇 워크스페이스의 QR코드를 스캔하여 계정을 연동해 주세요.\n🔒 연동 시 데이터는 서버에 보관되지 않고 오직 본인 구글 드라이브에만 안전 저장됩니다."
                     android:textColor="#94A3B8"
                     android:textSize="12sp"
                     android:lineSpacingExtra="3dp" />
