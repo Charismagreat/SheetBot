@@ -320,6 +320,7 @@ class MainActivity : AppCompatActivity() {
         checkAndRequestBatteryOptimization()
         startServerMonitorLoop()
         preloadActiveSheetUrls()
+        updateWebsiteMonitorStatusText()
     }
 
     override fun onPause() {
@@ -769,6 +770,9 @@ class MainActivity : AppCompatActivity() {
         binding.btnOpenCallEndedCardSheet.setOnClickListener {
             showOpenSheetChooserDialog("CALL_ENDED_CARD", "[SheetBot] 모바일 명함 발송 대장")
         }
+
+        // 🌐 내 웹사이트 실시간 장애 감시 (Uptime Sentinel) UI 바인딩
+        setupWebsiteMonitorUI()
 
         binding.btnCheckUpdate.setOnClickListener {
             UpdateManager.checkForUpdates(this, showToastIfLatest = true)
@@ -2429,5 +2433,114 @@ class MainActivity : AppCompatActivity() {
         }
 
         builder.show()
+    }
+
+    // ==========================================
+    // 🌐 내 웹사이트 실시간 장애 감시 (Uptime Sentinel) UI 바인딩
+    // ==========================================
+    private fun setupWebsiteMonitorUI() {
+        binding.switchWebsiteMonitor.isChecked = prefs.isWebsiteMonitorEnabled
+        binding.layoutWebsiteMonitorSettings.visibility = if (prefs.isWebsiteMonitorEnabled) View.VISIBLE else View.GONE
+        binding.etTargetWebsiteUrl.setText(prefs.targetWebsiteUrl)
+        binding.cbWebsiteEmergencyAlarm.isChecked = prefs.isWebsiteEmergencyAlarmEnabled
+        updateWebsiteMonitorStatusText()
+
+        binding.switchWebsiteMonitor.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isWebsiteMonitorEnabled = isChecked
+            binding.layoutWebsiteMonitorSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
+            val msg = if (isChecked) "내 웹사이트 실시간 장애 감시가 시작되었습니다." else "웹사이트 장애 감시가 중단되었습니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            updateWebsiteMonitorStatusText()
+
+            if (isChecked && prefs.targetWebsiteUrl.isNotBlank()) {
+                checkWebsiteHealthImmediate()
+            }
+        }
+
+        binding.etTargetWebsiteUrl.doAfterTextChanged {
+            val url = it?.toString()?.trim() ?: ""
+            prefs.targetWebsiteUrl = url
+            updateWebsiteMonitorStatusText()
+        }
+
+        binding.cbWebsiteEmergencyAlarm.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isWebsiteEmergencyAlarmEnabled = isChecked
+        }
+
+        binding.btnCheckWebsiteNow.setOnClickListener {
+            checkWebsiteHealthImmediate()
+        }
+    }
+
+    private fun updateWebsiteMonitorStatusText() {
+        if (!prefs.isWebsiteMonitorEnabled) {
+            binding.tvWebsiteMonitorStatus.text = "상태: 감시 꺼짐 (스위치를 켜면 활성화됩니다)"
+            binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#94A3B8"))
+            return
+        }
+
+        val url = prefs.targetWebsiteUrl
+        if (url.isBlank()) {
+            binding.tvWebsiteMonitorStatus.text = "상태: URL 미등록 (감시할 웹사이트 주소를 입력하세요)"
+            binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#FBBF24"))
+            return
+        }
+
+        val lastStatus = prefs.lastWebsiteCheckStatus
+        val lastCode = prefs.lastWebsiteCheckStatusCode
+        val lastTime = prefs.lastWebsiteCheckTime
+
+        val timeStr = if (lastTime > 0) {
+            val sdf = SimpleDateFormat("HH:mm:ss", Locale.KOREA)
+            " (최근 점검: ${sdf.format(Date(lastTime))})"
+        } else ""
+
+        if (lastCode in 200..399 || lastStatus.contains("정상")) {
+            binding.tvWebsiteMonitorStatus.text = "🟢 $lastStatus$timeStr"
+            binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#34D399"))
+        } else if (lastStatus == "미설정") {
+            binding.tvWebsiteMonitorStatus.text = "🟡 3분 주기 감시 대기 중$timeStr"
+            binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#FBBF24"))
+        } else {
+            binding.tvWebsiteMonitorStatus.text = "🔴 $lastStatus$timeStr"
+            binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#F87171"))
+        }
+    }
+
+    private fun checkWebsiteHealthImmediate() {
+        val url = prefs.targetWebsiteUrl.trim()
+        if (url.isBlank()) {
+            Toast.makeText(this, "점검할 웹사이트 URL을 먼저 입력해 주세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        binding.btnCheckWebsiteNow.isEnabled = false
+        binding.btnCheckWebsiteNow.text = "점검 중..."
+        binding.tvWebsiteMonitorStatus.text = "🔄 실시간 응답 점검 중..."
+        binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#38BDF8"))
+
+        lifecycleScope.launch {
+            val result = ApiClient.checkWebsiteHealth(url)
+            binding.btnCheckWebsiteNow.isEnabled = true
+            binding.btnCheckWebsiteNow.text = "⚡ 지금 점검"
+
+            prefs.lastWebsiteCheckStatusCode = result.statusCode
+            prefs.lastWebsiteCheckTime = System.currentTimeMillis()
+
+            if (result.isOnline) {
+                prefs.lastWebsiteCheckStatus = "정상 응답 (HTTP ${result.statusCode}, ${result.responseTimeMs}ms)"
+                Toast.makeText(this@MainActivity, "🎉 [정상 응답] ${result.checkedUrl} (${result.responseTimeMs}ms)", Toast.LENGTH_SHORT).show()
+            } else {
+                val isNetOk = ApiClient.verifyInternetConnectivity()
+                val errText = if (isNetOk) {
+                    "사이트 접속 불가 (${result.errorMessage ?: "HTTP " + result.statusCode})"
+                } else {
+                    "스마트폰 인터넷 연결 불안정"
+                }
+                prefs.lastWebsiteCheckStatus = errText
+                Toast.makeText(this@MainActivity, "⚠️ [접속 실패] $errText", Toast.LENGTH_LONG).show()
+            }
+            updateWebsiteMonitorStatusText()
+        }
     }
 }

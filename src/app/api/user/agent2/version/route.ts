@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 26,
-      latestVersionName: "2.1.5",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.5/SheetBotAgent.apk",
+      latestVersionCode: 27,
+      latestVersionName: "2.1.6",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.6/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.5 릴리스\n• ⚡ [시트 열기 즉각 반응] 대장 시트 열기 시 생성 대기 지연 없이 확인 즉시 브라우저/웹앱 자동 실행\n• 🔄 [사전 캐싱 최적화] 앱 실행 시 활성화된 기능의 대장 시트 URL을 백그라운드에서 선제 동기화\n• 📁 [드라이브 폴더 직행] 폴더 열기 시 구글 드라이브 보관함 폴더로 1초 만에 바로가기\n• 📊 구글 스프레드시트 원본 및 모바일 스마트 웹앱 열기 경험 개선",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.6 릴리스\n• 🌐 [웹사이트 실시간 장애 감시 (Uptime Sentinel)] 내 홈페이지/쇼핑몰 다운타임 실시간 감지 & 새벽 긴급 비상 경보 탑재\n• 🛡️ [오탐 방지 교차 검증] 스마트폰 인터넷 정상 여부 자동 확인으로 가짜 알람 원천 차단\n• 🔕 [조용한 오프라인 전환] 시트봇 서버 점검/지연 시 불필요한 비상 사이렌 제거 및 조용한 오프라인 모드 적용\n• ⚡ [즉시 점검] 등록한 웹사이트 응답 속도 및 HTTP 상태 실시간 원터치 점검 지원",
     },
     {
       headers: {

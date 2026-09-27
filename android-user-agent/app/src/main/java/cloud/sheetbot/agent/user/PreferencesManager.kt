@@ -177,6 +177,31 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("business_card_image_path", "") ?: ""
         set(value) = prefs.edit().putString("business_card_image_path", value).apply()
 
+    // 웹사이트 실시간 다운타임 모니터링 (Uptime Sentinel) 설정
+    var isWebsiteMonitorEnabled: Boolean
+        get() = prefs.getBoolean("is_website_monitor_enabled", false)
+        set(value) = prefs.edit().putBoolean("is_website_monitor_enabled", value).apply()
+
+    var targetWebsiteUrl: String
+        get() = prefs.getString("target_website_url", "") ?: ""
+        set(value) = prefs.edit().putString("target_website_url", value).apply()
+
+    var isWebsiteEmergencyAlarmEnabled: Boolean
+        get() = prefs.getBoolean("is_website_emergency_alarm_enabled", true)
+        set(value) = prefs.edit().putBoolean("is_website_emergency_alarm_enabled", value).apply()
+
+    var lastWebsiteCheckStatus: String
+        get() = prefs.getString("last_website_check_status", "미설정") ?: "미설정"
+        set(value) = prefs.edit().putString("last_website_check_status", value).apply()
+
+    var lastWebsiteCheckStatusCode: Int
+        get() = prefs.getInt("last_website_check_status_code", 0)
+        set(value) = prefs.edit().putInt("last_website_check_status_code", value).apply()
+
+    var lastWebsiteCheckTime: Long
+        get() = prefs.getLong("last_website_check_time", 0L)
+        set(value) = prefs.edit().putLong("last_website_check_time", value).apply()
+
     var businessCardSmsTemplate: String
         get() = prefs.getString("business_card_sms_template", "[SheetBot] 안녕하세요. 조금 전 통화드린 담당자 명함입니다.\n• 서비스: 시트봇 클라우드 (https://sheetbot.cloud)\n감사합니다.")
             ?: "[SheetBot] 안녕하세요. 조금 전 통화드린 담당자 명함입니다.\n• 서비스: 시트봇 클라우드 (https://sheetbot.cloud)\n감사합니다."

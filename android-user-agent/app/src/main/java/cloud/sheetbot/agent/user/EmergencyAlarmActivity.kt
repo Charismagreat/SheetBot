@@ -1,8 +1,9 @@
-﻿package cloud.sheetbot.agent.user
+package cloud.sheetbot.agent.user
 
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
@@ -28,13 +29,26 @@ class EmergencyAlarmActivity : AppCompatActivity() {
     private val activityScope = CoroutineScope(Dispatchers.Main)
     private var autoCheckJob: Job? = null
     private var isMuted = false
+    private var targetUrl: String = ""
 
     companion object {
+        const val EXTRA_TARGET_URL = "extra_target_url"
+        const val EXTRA_STATUS_CODE = "extra_status_code"
+        const val EXTRA_ERROR_MESSAGE = "extra_error_message"
+
         fun start(context: Context) {
+            val prefs = PreferencesManager(context)
+            startWebsiteAlarm(context, prefs.targetWebsiteUrl, 0, "서버 응답 없음")
+        }
+
+        fun startWebsiteAlarm(context: Context, targetUrl: String, statusCode: Int, errorMessage: String?) {
             val intent = Intent(context, EmergencyAlarmActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                         Intent.FLAG_ACTIVITY_CLEAR_TOP or
                         Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_TARGET_URL, targetUrl)
+                putExtra(EXTRA_STATUS_CODE, statusCode)
+                putExtra(EXTRA_ERROR_MESSAGE, errorMessage)
             }
             context.startActivity(intent)
         }
@@ -47,10 +61,27 @@ class EmergencyAlarmActivity : AppCompatActivity() {
         binding = ActivityEmergencyAlarmBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        val prefs = PreferencesManager(this)
+        targetUrl = intent.getStringExtra(EXTRA_TARGET_URL) ?: prefs.targetWebsiteUrl
+        val statusCode = intent.getIntExtra(EXTRA_STATUS_CODE, 0)
+        val errorMessage = intent.getStringExtra(EXTRA_ERROR_MESSAGE) ?: "응답 시간 초과"
+
         val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA)
         binding.tvEmergencyTime.text = "감지 시각: ${timeFormat.format(Date())}"
 
-        updatePendingCount()
+        if (targetUrl.isNotBlank()) {
+            binding.tvWebsiteTargetUrl.text = "⚠️ $targetUrl"
+        } else {
+            binding.tvWebsiteTargetUrl.text = "⚠️ 등록된 웹사이트"
+        }
+
+        val statusText = if (statusCode > 0) "HTTP $statusCode" else "서버 응답 없음"
+        binding.tvWebsiteErrorDetail.text = "대상 웹사이트가 2회 연속 응답하지 않습니다.\n\n" +
+                "• 상태: $statusText\n" +
+                "• 상세: $errorMessage\n\n" +
+                "• 스마트폰 인터넷 연결은 정상이며, 해당 사이트만 접속 불가함을 교차 검증 완료했습니다.\n" +
+                "• 신속히 호스팅/서버 가동 상태를 점검하세요."
+
         triggerVibration()
         setupListeners()
         startAutoRecoveryCheckLoop()
@@ -74,49 +105,48 @@ class EmergencyAlarmActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        // 1. 서버 지금 재확인
+        // 1. 내 사이트 브라우저로 직접 접속 시도
+        binding.btnOpenWebsiteInBrowser.setOnClickListener {
+            if (targetUrl.isNotBlank()) {
+                var url = targetUrl.trim()
+                if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    url = "https://$url"
+                }
+                try {
+                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    startActivity(browserIntent)
+                } catch (e: Exception) {
+                    Toast.makeText(this, "브라우저 실행 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                Toast.makeText(this, "등록된 웹사이트 주소가 없습니다.", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // 2. 웹사이트 지금 재점검
         binding.btnEmergencyRetry.setOnClickListener {
             binding.btnEmergencyRetry.isEnabled = false
-            binding.btnEmergencyRetry.text = "🔄 서버 연결 확인 중..."
+            binding.btnEmergencyRetry.text = "🔄 사이트 연결 확인 중..."
             activityScope.launch {
-                val ping = ApiClient.pingServer()
-                if (ping.isOnline) {
-                    Toast.makeText(this@EmergencyAlarmActivity, "🎉 서버가 정상 복구되었습니다!", Toast.LENGTH_LONG).show()
-                    TtsManager.speak(this@EmergencyAlarmActivity, "서버 연결이 정상 복구되었습니다.")
-                    // 오프라인 큐 즉시 비우기
-                    val drained = DepositQueueManager.drainQueue(this@EmergencyAlarmActivity)
-                    if (drained > 0) {
-                        Toast.makeText(this@EmergencyAlarmActivity, "대기열 ${drained}건 서버 전송 완료", Toast.LENGTH_SHORT).show()
-                    }
+                val check = ApiClient.checkWebsiteHealth(targetUrl)
+                if (check.isOnline) {
+                    Toast.makeText(this@EmergencyAlarmActivity, "🎉 웹사이트가 정상 복구되었습니다! (${check.responseTimeMs}ms)", Toast.LENGTH_LONG).show()
+                    TtsManager.speak(this@EmergencyAlarmActivity, "웹사이트 연결이 정상 복구되었습니다.")
                     finish()
                 } else {
-                    Toast.makeText(this@EmergencyAlarmActivity, "⚠️ 아직 서버가 응답하지 않습니다.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@EmergencyAlarmActivity, "⚠️ 아직 웹사이트가 응답하지 않습니다. (${check.errorMessage})", Toast.LENGTH_SHORT).show()
                     binding.btnEmergencyRetry.isEnabled = true
-                    binding.btnEmergencyRetry.text = "🔄 서버 연결 지금 재점검"
+                    binding.btnEmergencyRetry.text = "🔄 웹사이트 연결 지금 재점검"
                 }
             }
         }
 
-        // 2. 경보 소리 끄기
+        // 3. 비상 경보 소리 끄기 및 닫기
         binding.btnEmergencyDismiss.setOnClickListener {
             isMuted = true
-            Toast.makeText(this, "비상 알람 소리가 음소거되었습니다.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "비상 알람이 해제되었습니다.", Toast.LENGTH_SHORT).show()
             finish()
         }
-
-        // 3. 메인 화면 열기
-        binding.btnEmergencyGoMain.setOnClickListener {
-            val intent = Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            startActivity(intent)
-            finish()
-        }
-    }
-
-    private fun updatePendingCount() {
-        val count = DepositQueueManager.getPendingCount(this)
-        binding.tvEmergencyPendingCount.text = "📥 오프라인 안전 대기열: ${count}건 보관 중"
     }
 
     private fun triggerVibration() {
@@ -138,15 +168,15 @@ class EmergencyAlarmActivity : AppCompatActivity() {
     }
 
     private fun startAutoRecoveryCheckLoop() {
+        if (targetUrl.isBlank()) return
         autoCheckJob?.cancel()
         autoCheckJob = activityScope.launch {
             while (isActive) {
-                delay(10000L) // 10초마다 자동 복구 점검
-                updatePendingCount()
-                val ping = withContext(Dispatchers.IO) { ApiClient.pingServer() }
-                if (ping.isOnline) {
-                    TtsManager.speak(this@EmergencyAlarmActivity, "서버 연결이 정상 복구되었습니다.")
-                    DepositQueueManager.drainQueue(this@EmergencyAlarmActivity)
+                delay(15000L) // 15초마다 자동 복구 점검
+                val check = withContext(Dispatchers.IO) { ApiClient.checkWebsiteHealth(targetUrl) }
+                if (check.isOnline) {
+                    TtsManager.speak(this@EmergencyAlarmActivity, "웹사이트 연결이 정상 복구되었습니다.")
+                    Toast.makeText(this@EmergencyAlarmActivity, "🎉 웹사이트가 정상 복구되어 알람을 종료합니다.", Toast.LENGTH_LONG).show()
                     finish()
                     break
                 }

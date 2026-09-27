@@ -263,6 +263,98 @@ object ApiClient {
     }
 
     /**
+     * 감시 대상 웹사이트(홈페이지/쇼핑몰) 실시간 헬스체크 (HEAD 또는 GET)
+     */
+    suspend fun checkWebsiteHealth(targetUrl: String): WebsiteCheckResult = withContext(Dispatchers.IO) {
+        val trimmed = targetUrl.trim()
+        if (trimmed.isBlank()) {
+            return@withContext WebsiteCheckResult(
+                isOnline = false,
+                statusCode = 0,
+                responseTimeMs = 0L,
+                errorMessage = "감시 대상 URL이 비어 있습니다."
+            )
+        }
+
+        var normalizedUrl = trimmed
+        if (!normalizedUrl.startsWith("http://", ignoreCase = true) && !normalizedUrl.startsWith("https://", ignoreCase = true)) {
+            normalizedUrl = "https://$normalizedUrl"
+        }
+
+        val startTime = System.currentTimeMillis()
+        try {
+            // 1단계: 가벼운 HEAD 요청 시도
+            val headRequest = Request.Builder()
+                .url(normalizedUrl)
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) SheetBotSentinel/1.0")
+                .head()
+                .build()
+
+            var response = try {
+                client.newCall(headRequest).execute()
+            } catch (_: Exception) {
+                null
+            }
+
+            // HEAD가 지원되지 않거나 405 Method Not Allowed인 경우 GET으로 재시도
+            if (response == null || response.code == 405) {
+                val getRequest = Request.Builder()
+                    .url(normalizedUrl)
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) SheetBotSentinel/1.0")
+                    .get()
+                    .build()
+                response = client.newCall(getRequest).execute()
+            }
+
+            val elapsed = System.currentTimeMillis() - startTime
+            val statusCode = response.code
+            val isOk = response.isSuccessful || statusCode in 200..399
+
+            WebsiteCheckResult(
+                isOnline = isOk,
+                statusCode = statusCode,
+                responseTimeMs = elapsed,
+                errorMessage = if (!isOk) "HTTP $statusCode ${response.message}" else null,
+                checkedUrl = normalizedUrl
+            )
+        } catch (e: Exception) {
+            val elapsed = System.currentTimeMillis() - startTime
+            val err = e.localizedMessage ?: e.message ?: "연결 시간 초과 또는 네트워크 오류"
+            WebsiteCheckResult(
+                isOnline = false,
+                statusCode = 0,
+                responseTimeMs = elapsed,
+                errorMessage = err,
+                checkedUrl = normalizedUrl
+            )
+        }
+    }
+
+    /**
+     * 휴대폰 자체의 외부 인터넷 정상 연결 여부 교차 검증 (False Alarm 오탐 방지)
+     * Google generate_204 핑 확인
+     */
+    suspend fun verifyInternetConnectivity(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("https://www.google.com/generate_204")
+                .header("User-Agent", "SheetBotSentinel/1.0")
+                .get()
+                .build()
+            val response = client.newCall(request).execute()
+            response.isSuccessful || response.code == 204
+        } catch (_: Exception) {
+            // 보조 검증: 시트봇 서버 핑 시도
+            try {
+                val ping = pingServer()
+                ping.isOnline
+            } catch (_: Exception) {
+                false
+            }
+        }
+    }
+
+    /**
      * 백그라운드 생존 신호(Heartbeat) 전송 (1차 실패 시 2차 폴백)
      */
     suspend fun sendHeartbeat(
@@ -1287,6 +1379,14 @@ data class ProvisionSheetResult(
     val title: String? = null,
     val message: String? = null,
     val error: String? = null
+)
+
+data class WebsiteCheckResult(
+    val isOnline: Boolean,
+    val statusCode: Int,
+    val responseTimeMs: Long,
+    val errorMessage: String? = null,
+    val checkedUrl: String = ""
 )
 
 
