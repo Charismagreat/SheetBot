@@ -556,14 +556,17 @@ export default function NotificationsPage() {
           <div className="relative z-10 space-y-3">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-400/20 text-emerald-300 text-xs font-bold border border-emerald-400/30">
               <Smartphone className="w-3.5 h-3.5" />
-              <span>시트봇 에이전트 스마트 알림 & 0원 문자 센터</span>
+              <span>📱 시트봇 모바일 에이전트 허브</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-              시트봇 에이전트(SheetBot Agent) 연동 & 구글 시트 양방향 문자 자동화
+              시트봇 모바일 에이전트
             </h1>
+            <p className="text-emerald-400 font-extrabold text-sm sm:text-base">
+              구글 시트 ↔ 스마트폰 양방향 자동화
+            </p>
             <p className="text-slate-300 text-xs sm:text-sm max-w-2xl leading-relaxed">
-              본인의 스마트폰에 <strong>시트봇 에이전트(SheetBot Agent)</strong>를 설치하고 0초 QR 연동하면,
-              <strong>통신 비용 0원</strong>으로 고객 알림 문자를 자동 발송하고 수신 문자를 시트에 실시간 자동 기록할 수 있습니다.
+              본인의 스마트폰에 <strong>시트봇 에이전트(SheetBot Agent)</strong> 앱을 설치하고 0초 QR 페어링하면,
+              <strong>통신 비용 0원</strong>으로 고객 알림 문자를 자동 발송하고 포스 결제 알림 및 수신 문자를 구글 시트에 실시간 자동 기록할 수 있습니다.
             </p>
           </div>
 
@@ -578,7 +581,7 @@ export default function NotificationsPage() {
               }`}
             >
               <Smartphone className="w-4 h-4" />
-              <span>시트봇 에이전트 기기 ({devices.length})</span>
+              <span>모바일 에이전트 기기 ({devices.length})</span>
             </button>
 
             <button

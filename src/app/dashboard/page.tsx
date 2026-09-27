@@ -898,7 +898,7 @@ export default function DashboardPage() {
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h4 className="font-extrabold text-sm text-slate-800">
-                    스마트 알림 센터 (내 안드로이드 폰 연동)
+                    시트봇 모바일 에이전트
                   </h4>
                   <span className="px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-black">
                     통신비 0원
@@ -908,7 +908,7 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
-                  스마트폰을 10초 만에 연동하고, "D열 입금완료 시 고객 감사 문자 발송" 같은 자연어 규칙을 설정해 보세요.
+                  구글 시트 ↔ 스마트폰 양방향 자동화 · 통신비 0원 고객 문자 발송 및 포스 결제 알림 실시간 시트 기록
                 </p>
               </div>
             </div>
@@ -916,16 +916,16 @@ export default function DashboardPage() {
             <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
               <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-slate-500 bg-white/80 px-2.5 py-1.5 rounded-xl border border-emerald-200/60">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="font-bold text-emerald-700">인프라 연동 완료</span>
+                <span className="font-bold text-emerald-700">모바일 에이전트 활성</span>
               </div>
 
               <Link
                 href="/dashboard/notifications"
                 prefetch={false}
                 className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all shrink-0 active:scale-95 cursor-pointer"
-                data-easybot-hint="스마트 알림 센터: 내 안드로이드 스마트폰을 연동하고 구글 시트 자동 문자 발송 규칙을 관리합니다."
+                data-easybot-hint="시트봇 모바일 에이전트: 스마트폰을 페어링하여 통신비 0원 고객 문자 발송 및 실시간 결제 수신을 구글 시트와 양방향 자동화합니다."
               >
-                <span>스마트 알림 센터 열기</span>
+                <span>시트봇 모바일 에이전트 열기</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>

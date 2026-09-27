@@ -283,7 +283,7 @@ export default function GuidePage() {
               href="/dashboard/notifications"
               className="px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold rounded-xl shadow-md transition-all flex items-center gap-1.5 shrink-0 self-start md:self-auto"
             >
-              <span>스마트 알림 센터 바로가기</span>
+              <span>시트봇 모바일 에이전트 바로가기</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
