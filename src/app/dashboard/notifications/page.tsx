@@ -554,9 +554,15 @@ export default function NotificationsPage() {
         <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden border border-indigo-500/20">
           <div className="absolute right-0 top-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
           <div className="relative z-10 space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-400/20 text-emerald-300 text-xs font-bold border border-emerald-400/30">
-              <Smartphone className="w-3.5 h-3.5" />
-              <span>📱 시트봇 모바일 에이전트 허브</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-400/20 text-emerald-300 text-xs font-bold border border-emerald-400/30">
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>📱 시트봇 모바일 에이전트 허브</span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-400/20 text-teal-300 text-xs font-bold border border-teal-400/30 shadow-2xs">
+                <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
+                <span>🛡️ Zero-Retention 프라이버시 안심 (서버 무보관 · 100% 구글 드라이브 저장)</span>
+              </div>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
               시트봇 모바일 에이전트

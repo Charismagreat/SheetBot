@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { queryTable, insertRows, sendPhoneSms, callAiCaller } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { maskPhoneNumber, formatZeroRetentionContent } from "@/lib/privacy";
 
 /**
  * POST /api/webhooks/dispatch
@@ -123,7 +124,7 @@ export async function POST(req: NextRequest) {
                 errorMsg = sErr.message || "문자 발송 실패";
               }
 
-              // 발송 로그 DB 적재 (SQLite INTEGER id 규격 준수)
+              // 발송 로그 DB 적재 (Zero-Retention: 고객 전화번호 마스킹 및 본문 서버 미보관 정책 준수)
               const logId = Date.now() + Math.floor(Math.random() * 1000);
               const dispatchStatus = sendSuccess ? "SUCCESS" : "PENDING";
               await insertRows("sheetbot_user_dispatch_logs", [
@@ -133,8 +134,8 @@ export async function POST(req: NextRequest) {
                   rule_id: rule.id,
                   rule_name: rule.name,
                   device_id: activeDevice?.device_id || "SheetBot Agent",
-                  recipient: targetPhone,
-                  content: messageToSend,
+                  recipient: maskPhoneNumber(targetPhone),
+                  content: formatZeroRetentionContent("발송 문자", messageToSend.length),
                   status: dispatchStatus,
                   error_message: sendSuccess ? null : (errorMsg || null),
                   created_at: new Date().toISOString(),

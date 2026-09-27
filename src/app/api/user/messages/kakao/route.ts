@@ -9,6 +9,7 @@ import {
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { realtimeHub } from "@/lib/realtime-hub";
+import { maskRecipient, formatZeroRetentionContent } from "@/lib/privacy";
 
 /**
  * POST /api/user/messages/kakao
@@ -128,7 +129,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. 발송/수신 감사 대장 DB 적재 (SQLite INTEGER id 규격 준수)
+    // 2. 발송/수신 감사 대장 DB 적재 (Zero-Retention: 고객 개인정보 마스킹 및 대화 본문 서버 미보관 정책 준수)
     const logId = Date.now();
     await insertRows("sheetbot_user_dispatch_logs", [
       {
@@ -137,8 +138,8 @@ export async function POST(req: NextRequest) {
         rule_id: "INBOUND_KAKAO",
         rule_name: "🟡 카카오톡 메시지 실시간 수신",
         device_id: deviceId,
-        recipient: `[${roomTypeLabel}] ${roomName} (${senderName})`,
-        content: message.slice(0, 100),
+        recipient: `[${roomTypeLabel}] ${roomName} (${maskRecipient(senderName)})`,
+        content: formatZeroRetentionContent("카카오톡 메시지", message.length),
         status: "INBOUND",
         error_message: null,
         created_at: new Date().toISOString(),
