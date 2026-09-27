@@ -1259,6 +1259,11 @@ export async function GET() {
       isMasked = localStorage.getItem('sheetbot_wallet_masked') === 'true';
     } catch(e) {}
 
+    // 사이드바 로드 즉시 브라우저에서 0.1초 만에 1차 잔액 직접 동기화
+    setTimeout(function() {
+      fetchDirectWallet(currentEmail);
+    }, 20);
+
     function toggleWalletCard() {
       var detailsEl = document.getElementById('wallet-card-details');
       var arrowEl = document.getElementById('wallet-toggle-arrow');
@@ -1393,13 +1398,14 @@ export async function GET() {
         .then(function(data) {
           if (data && data.success && data.balanceTokens !== undefined) {
             var bal = Number(data.balanceTokens);
-            userEl.innerText = data.userEmail || targetEmail;
+            if (userEl) userEl.innerText = data.userEmail || targetEmail;
             if (tierEl && data.tier) {
               tierEl.innerText = data.tier;
             }
             if (miniTierEl && data.tier) {
               miniTierEl.innerText = data.tier;
             }
+            applyBalanceDisplay(bal);
             updateTokenWarningState(bal);
           }
         })
@@ -1414,6 +1420,10 @@ export async function GET() {
       if (amountEl && !isMasked) amountEl.innerText = '동기화 중...';
       if (miniEl && !isMasked) miniEl.innerText = '동기화 중...';
 
+      // 1. ⚡ 브라우저 직접 fetch를 즉시 우선 실행 (0.1초 즉시 동기화!)
+      fetchDirectWallet(currentEmail);
+
+      // 2. Apps Script 백엔드 함수 병렬 실행
       if (window.google && window.google.script && window.google.script.run) {
         try {
           google.script.run
@@ -1422,10 +1432,13 @@ export async function GET() {
                 currentEmail = res.email;
               }
               if (res && res.balance !== undefined) {
-                amountEl.innerText = Number(res.balance).toLocaleString();
-                updateTokenWarningState(Number(res.balance));
+                var bal = Number(res.balance);
+                applyBalanceDisplay(bal);
+                updateTokenWarningState(bal);
               }
-              fetchDirectWallet(currentEmail);
+              if (res && res.email && res.email !== 'chachogreat@gmail.com') {
+                fetchDirectWallet(res.email);
+              }
             })
             .withFailureHandler(function(err) {
               fetchDirectWallet(currentEmail);
@@ -1434,8 +1447,6 @@ export async function GET() {
         } catch(e) {
           fetchDirectWallet(currentEmail);
         }
-      } else {
-        fetchDirectWallet(currentEmail);
       }
     }
 
