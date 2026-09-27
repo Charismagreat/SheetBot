@@ -1956,6 +1956,9 @@ class MainActivity : AppCompatActivity() {
             if (prefs.isReceiptSmsEnabled && prefs.getSheetUrl("RECEIPT_SMS").isNullOrBlank()) {
                 targets.add(Triple("RECEIPT_SMS", "[SheetBot] 고객 영수증 문자 발송 대장", null))
             }
+            if (prefs.isWebsiteMonitorEnabled && prefs.getSheetUrl("WEBSITE_MONITOR").isNullOrBlank()) {
+                targets.add(Triple("WEBSITE_MONITOR", "[SheetBot] 웹사이트 모니터링 & 장애 대장", null))
+            }
 
             for ((sheetType, title, folder) in targets) {
                 try {
@@ -2452,9 +2455,16 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             updateWebsiteMonitorStatusText()
 
-            if (isChecked && prefs.targetWebsiteUrl.isNotBlank()) {
-                checkWebsiteHealthImmediate()
+            if (isChecked) {
+                provisionSheetAsync("WEBSITE_MONITOR", "[SheetBot] 웹사이트 모니터링 & 장애 대장")
+                if (prefs.targetWebsiteUrl.isNotBlank()) {
+                    checkWebsiteHealthImmediate()
+                }
             }
+        }
+
+        binding.btnOpenWebsiteMonitorSheet.setOnClickListener {
+            showOpenSheetChooserDialog("WEBSITE_MONITOR", "[SheetBot] 웹사이트 모니터링 & 장애 대장")
         }
 
         binding.etTargetWebsiteUrl.doAfterTextChanged {

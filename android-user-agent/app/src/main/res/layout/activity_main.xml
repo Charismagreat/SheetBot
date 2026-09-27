@@ -1744,6 +1744,19 @@
                     android:checked="true"
                     android:buttonTint="#F43F5E" />
 
+                <!-- 시트 열기 바로가기 뱃지 -->
+                <Button
+                    android:id="@+id/btnOpenWebsiteMonitorSheet"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="📊 웹사이트 장애 대장 시트 열기 ↗"
+                    android:textColor="#F43F5E"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="6dp"
+                    android:layout_marginBottom="6dp" />
+
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

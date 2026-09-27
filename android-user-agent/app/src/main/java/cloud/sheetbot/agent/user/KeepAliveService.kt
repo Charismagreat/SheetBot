@@ -144,6 +144,13 @@ class KeepAliveService : Service() {
                                 if (prefs.isTtsEnabled) {
                                     TtsManager.speak(this@KeepAliveService, "웹사이트 연결이 정상 복구되었습니다.")
                                 }
+                                // 구글 시트 대장에 복구 이력 자동 기록
+                                val email = prefs.userEmail
+                                if (!email.isNullOrBlank()) {
+                                    serviceScope.launch {
+                                        ApiClient.logWebsiteMonitorStatus(email, targetUrl, check.statusCode, check.responseTimeMs, "정상 복구 완료", true)
+                                    }
+                                }
                             }
                             consecutiveWebsiteFailures = 0
                             prefs.lastWebsiteCheckStatus = "정상 (HTTP ${check.statusCode}, ${check.responseTimeMs}ms)"
@@ -179,7 +186,7 @@ class KeepAliveService : Service() {
     }
 
     /**
-     * 사용자가 등록한 웹사이트 다운 시 비상 경보 발동 (화면 켜기 + 전체화면 팝업 + 알림)
+     * 사용자가 등록한 웹사이트 다운 시 비상 경보 발동 (화면 켜기 + 전체화면 팝업 + 알림 + 구글 시트 기록)
      */
     private fun triggerWebsiteDownEmergency(targetUrl: String, statusCode: Int, errorMessage: String?) {
         Log.e(TAG, "🚨 [웹사이트 다운타임 비상 경보 발동] $targetUrl (HTTP $statusCode)")
@@ -195,6 +202,14 @@ class KeepAliveService : Service() {
 
         // 2. 비상 헤드업 노티피케이션 발행
         showWebsiteEmergencyNotification(targetUrl, statusCode, errorMessage)
+
+        // 3. 구글 시트 대장에 장애 이력 실시간 자동 기록
+        val email = prefs.userEmail
+        if (!email.isNullOrBlank()) {
+            serviceScope.launch {
+                ApiClient.logWebsiteMonitorStatus(email, targetUrl, statusCode, 0L, errorMessage ?: "연결 불가 / 서버 다운", true)
+            }
+        }
     }
 
     private fun wakeUpScreen() {
