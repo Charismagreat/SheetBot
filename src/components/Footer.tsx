@@ -81,7 +81,7 @@ export default function Footer() {
     }
   }, [pathname]);
 
-  if (pathname === "/marketplace") {
+  if (pathname === "/marketplace" || pathname?.startsWith("/m/") || pathname === "/m") {
     return null;
   }
 
