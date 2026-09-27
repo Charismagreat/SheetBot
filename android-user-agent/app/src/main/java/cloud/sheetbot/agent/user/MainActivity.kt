@@ -300,14 +300,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        // 0-0. 프라이버시 안심 보증 카드 '숨기기' 체크박스 (컴팩트 모드)
-        val isPrivacyHidden = prefs.isPrivacyCardHidden
-        binding.cbHidePrivacy.isChecked = isPrivacyHidden
-        updatePrivacyCardVisibility(isPrivacyHidden)
+        // 0-0. 프라이버시 안심 보증 카드 '접기/펼치기' 토글
+        updatePrivacyCardVisibility(prefs.isPrivacyCardHidden)
+        binding.btnTogglePrivacy.setOnClickListener {
+            val nextState = !prefs.isPrivacyCardHidden
+            prefs.isPrivacyCardHidden = nextState
+            updatePrivacyCardVisibility(nextState)
+        }
 
-        binding.cbHidePrivacy.setOnCheckedChangeListener { _, isChecked ->
-            prefs.isPrivacyCardHidden = isChecked
-            updatePrivacyCardVisibility(isChecked)
+        // 0-0-1. 통합 모바일 에이전트 & 서버 관제 카드 '접기/펼치기' 토글
+        updateStatusDetailsVisibility(prefs.isStatusDetailsHidden)
+        binding.btnToggleStatusDetails.setOnClickListener {
+            val nextState = !prefs.isStatusDetailsHidden
+            prefs.isStatusDetailsHidden = nextState
+            updateStatusDetailsVisibility(nextState)
         }
 
         // 0. Google 원클릭 로그인 버튼 (v1.8.0 / v2.0.1 무중단 연동 강화)
@@ -771,18 +777,28 @@ class MainActivity : AppCompatActivity() {
     private fun updatePrivacyCardVisibility(hidden: Boolean) {
         binding.layoutPrivacyBody.visibility = if (hidden) View.GONE else View.VISIBLE
         binding.tvPrivacyTitle.text = if (hidden) "🛡️ 고객정보 안심보증" else "🛡️ Zero-Retention 안심 보증"
+        binding.btnTogglePrivacy.text = if (hidden) "펼치기" else "접기"
+    }
+
+    private fun updateStatusDetailsVisibility(hidden: Boolean) {
+        binding.layoutStatusDetails.visibility = if (hidden) View.GONE else View.VISIBLE
+        binding.btnToggleStatusDetails.text = if (hidden) "펼치기" else "접기"
     }
 
     private fun updateUiState() {
         val isPaired = prefs.isPaired
         val email = prefs.userEmail
 
+        updatePrivacyCardVisibility(prefs.isPrivacyCardHidden)
+        updateStatusDetailsVisibility(prefs.isStatusDetailsHidden)
+
         if (isPaired && !email.isNullOrBlank()) {
             binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
             binding.tvStatusTitle.text = "✅ 연동 완료 (${email})"
             binding.tvStatusDesc.text = "구글 시트 ↔ 스마트폰 양방향 자동화 가동 중\n🛡️ 데이터는 본인 구글 드라이브에만 안전 저장됩니다."
+            binding.btnRefreshServerStatus.visibility = View.VISIBLE
+            binding.btnToggleStatusDetails.visibility = View.VISIBLE
             binding.layoutPairedControls.visibility = View.VISIBLE
-            binding.layoutServerMonitor.visibility = View.VISIBLE
             binding.layoutWalletCard.visibility = View.VISIBLE
             binding.layoutUnpairedControls.visibility = View.GONE
             checkServerAndQueueStatus(showToast = false)
@@ -791,8 +807,9 @@ class MainActivity : AppCompatActivity() {
             binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
             binding.tvStatusTitle.text = "⚠️ 미연동 상태"
             binding.tvStatusDesc.text = "시트봇 모바일 에이전트 QR코드를 스캔하여 계정을 연동해 주세요.\n🛡️ 서버 무보관 100% · 내 구글 드라이브로만 직통 전송"
+            binding.btnRefreshServerStatus.visibility = View.GONE
+            binding.btnToggleStatusDetails.visibility = View.GONE
             binding.layoutPairedControls.visibility = View.GONE
-            binding.layoutServerMonitor.visibility = View.GONE
             binding.layoutWalletCard.visibility = View.GONE
             binding.layoutUnpairedControls.visibility = View.VISIBLE
         }
