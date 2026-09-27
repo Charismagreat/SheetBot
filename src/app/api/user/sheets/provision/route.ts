@@ -174,12 +174,20 @@ export async function POST(req: NextRequest) {
       console.warn(`[ProvisionSheet] Header format warning:`, fmtErr.message);
     }
 
+    const finalSpreadsheetUrl =
+      resolved.spreadsheetUrl ||
+      `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
+    const finalFolderUrl = createdFolderId
+      ? `https://drive.google.com/drive/folders/${createdFolderId}`
+      : null;
+
     return NextResponse.json({
       success: true,
       isNew: resolved.isNew,
       spreadsheetId: targetSpreadsheetId,
-      spreadsheetUrl: resolved.spreadsheetUrl,
+      spreadsheetUrl: finalSpreadsheetUrl,
       folderId: createdFolderId,
+      folderUrl: finalFolderUrl,
       folderName: targetFolder,
       title: sheetTitle || def.defaultTitle,
       message: resolved.isNew

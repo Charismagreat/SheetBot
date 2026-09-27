@@ -728,6 +728,39 @@
                     android:checked="true" />
             </LinearLayout>
 
+            <!-- 매장 결제 & 고객 영수증 시트 열기 바로가기 뱃지 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="4dp">
+
+                <Button
+                    android:id="@+id/btnOpenPaymentPushSheet"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1"
+                    android:backgroundTint="#1E293B"
+                    android:text="📊 결제 대장 열기 ↗"
+                    android:textColor="#38BDF8"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:layout_marginEnd="4dp" />
+
+                <Button
+                    android:id="@+id/btnOpenReceiptSmsSheet"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1"
+                    android:backgroundTint="#1E293B"
+                    android:text="📊 영수증 대장 열기 ↗"
+                    android:textColor="#38BDF8"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:layout_marginStart="4dp" />
+            </LinearLayout>
+
             <!-- 통화 녹음 구글 드라이브 자동 백업 섹션 -->
             <View
                 android:layout_width="match_parent"
@@ -838,57 +871,37 @@
                     android:textSize="11.5sp"
                     android:layout_marginBottom="8dp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="📁 구글 드라이브 저장 폴더명:"
-                    android:textColor="#94A3B8"
-                    android:textSize="11sp"
-                    android:layout_marginBottom="4dp" />
-
-                <EditText
-                    android:id="@+id/etRecordingDriveFolder"
-                    android:layout_width="match_parent"
-                    android:layout_height="38dp"
-                    android:background="#1E293B"
-                    android:paddingHorizontal="10dp"
-                    android:hint="[SheetBot] 통화 녹음"
-                    android:textColorHint="#64748B"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11.5sp"
-                    android:layout_marginBottom="8dp" />
-
+                <!-- 시트 열기 & 드라이브 폴더 열기 바로가기 뱃지 -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:gravity="center_vertical"
                     android:layout_marginBottom="8dp">
 
-                    <TextView
+                    <Button
+                        android:id="@+id/btnOpenRecordingSheet"
                         android:layout_width="0dp"
-                        android:layout_height="wrap_content"
+                        android:layout_height="40dp"
                         android:layout_weight="1"
-                        android:text="📊 [SheetBot] 통화 녹음 대장 시트 자동 기록"
-                        android:textColor="#CBD5E1"
-                        android:textSize="11sp" />
+                        android:backgroundTint="#1E293B"
+                        android:text="📊 대장 시트 열기 ↗"
+                        android:textColor="#38BDF8"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold"
+                        android:layout_marginEnd="4dp" />
 
-                    <androidx.appcompat.widget.SwitchCompat
-                        android:id="@+id/switchRecordingSheet"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:checked="false" />
+                    <Button
+                        android:id="@+id/btnOpenRecordingFolder"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#1E293B"
+                        android:text="📁 드라이브 폴더 ↗"
+                        android:textColor="#A78BFA"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold"
+                        android:layout_marginStart="4dp" />
                 </LinearLayout>
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="💡 입력창이나 옵션 변경 시 즉시 자동 저장됩니다."
-                    android:textColor="#64748B"
-                    android:textSize="10.5sp"
-                    android:gravity="center"
-                    android:layout_marginTop="2dp"
-                    android:layout_marginBottom="6dp" />
 
                 <Button
                     android:id="@+id/btnSyncRecordingsNow"
@@ -983,56 +996,37 @@
                 android:padding="10dp"
                 android:layout_marginBottom="12dp">
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="📁 구글 드라이브 저장 폴더명:"
-                    android:textColor="#94A3B8"
-                    android:textSize="11sp"
-                    android:layout_marginBottom="4dp" />
-
-                <EditText
-                    android:id="@+id/etFileUploadDriveFolder"
-                    android:layout_width="match_parent"
-                    android:layout_height="38dp"
-                    android:background="#1E293B"
-                    android:paddingHorizontal="10dp"
-                    android:hint="[SheetBot] 파일 보관함"
-                    android:textColorHint="#64748B"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11.5sp"
-                    android:layout_marginBottom="8dp" />
-
+                <!-- 시트 열기 & 드라이브 폴더 열기 바로가기 뱃지 -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:gravity="center_vertical"
                     android:layout_marginBottom="8dp">
 
-                    <TextView
+                    <Button
+                        android:id="@+id/btnOpenFileSheet"
                         android:layout_width="0dp"
-                        android:layout_height="wrap_content"
+                        android:layout_height="40dp"
                         android:layout_weight="1"
-                        android:text="📊 [SheetBot] 파일 업로드 대장 시트 자동 기록"
-                        android:textColor="#CBD5E1"
-                        android:textSize="11sp" />
+                        android:backgroundTint="#1E293B"
+                        android:text="📊 파일 대장 열기 ↗"
+                        android:textColor="#38BDF8"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold"
+                        android:layout_marginEnd="4dp" />
 
-                    <androidx.appcompat.widget.SwitchCompat
-                        android:id="@+id/switchFileUploadSheet"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:checked="false" />
+                    <Button
+                        android:id="@+id/btnOpenFileFolder"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#1E293B"
+                        android:text="📁 보관함 폴더 ↗"
+                        android:textColor="#A78BFA"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold"
+                        android:layout_marginStart="4dp" />
                 </LinearLayout>
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="💡 저장 폴더나 옵션 변경 시 즉시 자동 저장됩니다."
-                    android:textColor="#64748B"
-                    android:textSize="10.5sp"
-                    android:gravity="center"
-                    android:layout_marginBottom="6dp" />
 
                 <TextView
                     android:layout_width="match_parent"
@@ -1083,34 +1077,17 @@
                 android:padding="10dp"
                 android:layout_marginBottom="12dp">
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="📊 구글 스프레드시트 대장명:"
-                    android:textColor="#94A3B8"
-                    android:textSize="11sp"
-                    android:layout_marginBottom="4dp" />
-
-                <EditText
-                    android:id="@+id/etLinkScrapSheet"
+                <!-- 시트 열기 바로가기 뱃지 -->
+                <Button
+                    android:id="@+id/btnOpenLinkScrapSheet"
                     android:layout_width="match_parent"
-                    android:layout_height="38dp"
-                    android:background="#1E293B"
-                    android:paddingHorizontal="10dp"
-                    android:hint="[SheetBot] 웹 링크 &amp; 유튜브 스크랩 대장"
-                    android:textColorHint="#64748B"
-                    android:textColor="#FFFFFF"
+                    android:layout_height="40dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="📊 스크랩 대장 시트 열기 ↗"
+                    android:textColor="#38BDF8"
                     android:textSize="11.5sp"
+                    android:textStyle="bold"
                     android:layout_marginBottom="8dp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="💡 입력창 변경 시 즉시 자동 저장됩니다."
-                    android:textColor="#64748B"
-                    android:textSize="10.5sp"
-                    android:gravity="center"
-                    android:layout_marginBottom="6dp" />
 
                 <TextView
                     android:layout_width="match_parent"
@@ -1231,33 +1208,16 @@
                     android:textSize="11.5sp"
                     android:layout_marginBottom="8dp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="📊 구글 스프레드시트 대장명:"
-                    android:textColor="#94A3B8"
-                    android:textSize="11sp"
-                    android:layout_marginBottom="4dp" />
-
-                <EditText
-                    android:id="@+id/etSmsDriveSheet"
+                <!-- 시트 열기 바로가기 뱃지 -->
+                <Button
+                    android:id="@+id/btnOpenSmsSheet"
                     android:layout_width="match_parent"
-                    android:layout_height="38dp"
-                    android:background="#1E293B"
-                    android:paddingHorizontal="10dp"
-                    android:hint="[SheetBot] 스마트폰 문자(SMS) 송수신 대장"
-                    android:textColorHint="#64748B"
-                    android:textColor="#FFFFFF"
+                    android:layout_height="40dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="📊 문자 송수신 대장 시트 열기 ↗"
+                    android:textColor="#38BDF8"
                     android:textSize="11.5sp"
-                    android:layout_marginBottom="8dp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="💡 입력창 변경 시 즉시 자동 저장됩니다."
-                    android:textColor="#64748B"
-                    android:textSize="10.5sp"
-                    android:gravity="center"
+                    android:textStyle="bold"
                     android:layout_marginTop="2dp" />
             </LinearLayout>
 
@@ -1351,33 +1311,16 @@
                     android:textSize="11.5sp"
                     android:layout_marginBottom="8dp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="📊 구글 스프레드시트 대장명:"
-                    android:textColor="#94A3B8"
-                    android:textSize="11sp"
-                    android:layout_marginBottom="4dp" />
-
-                <EditText
-                    android:id="@+id/etKakaoDriveSheet"
+                <!-- 시트 열기 바로가기 뱃지 -->
+                <Button
+                    android:id="@+id/btnOpenKakaoSheet"
                     android:layout_width="match_parent"
-                    android:layout_height="38dp"
-                    android:background="#1E293B"
-                    android:paddingHorizontal="10dp"
-                    android:hint="[SheetBot] 카카오톡 메시지 대장"
-                    android:textColorHint="#64748B"
-                    android:textColor="#FFFFFF"
+                    android:layout_height="40dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="📊 카카오톡 메시지 대장 시트 열기 ↗"
+                    android:textColor="#38BDF8"
                     android:textSize="11.5sp"
-                    android:layout_marginBottom="8dp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="💡 입력창 변경 시 즉시 자동 저장됩니다."
-                    android:textColor="#64748B"
-                    android:textSize="10.5sp"
-                    android:gravity="center"
+                    android:textStyle="bold"
                     android:layout_marginTop="2dp" />
             </LinearLayout>
 
@@ -1440,33 +1383,16 @@
                     android:textSize="11sp"
                     android:layout_marginBottom="8dp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="📊 구글 스프레드시트 대장명:"
-                    android:textColor="#94A3B8"
-                    android:textSize="11sp"
-                    android:layout_marginBottom="4dp" />
-
-                <EditText
-                    android:id="@+id/etMissedCallSheet"
+                <!-- 시트 열기 바로가기 뱃지 -->
+                <Button
+                    android:id="@+id/btnOpenMissedCallSheet"
                     android:layout_width="match_parent"
-                    android:layout_height="38dp"
-                    android:background="#1E293B"
-                    android:paddingHorizontal="10dp"
-                    android:hint="[SheetBot] 부재중 전화 대장"
-                    android:textColorHint="#64748B"
-                    android:textColor="#FFFFFF"
+                    android:layout_height="40dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="📊 부재중 전화 대장 시트 열기 ↗"
+                    android:textColor="#38BDF8"
                     android:textSize="11.5sp"
-                    android:layout_marginBottom="8dp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="💡 회신 문구나 대장 시트 변경 시 즉시 자동 저장됩니다."
-                    android:textColor="#64748B"
-                    android:textSize="10.5sp"
-                    android:gravity="center"
+                    android:textStyle="bold"
                     android:layout_marginTop="2dp" />
             </LinearLayout>
 
@@ -1702,6 +1628,18 @@
                     android:textSize="10.5sp"
                     android:gravity="center"
                     android:layout_marginTop="2dp" />
+
+                <!-- 시트 열기 바로가기 뱃지 -->
+                <Button
+                    android:id="@+id/btnOpenCallEndedCardSheet"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="📊 모바일 명함 발송 대장 시트 열기 ↗"
+                    android:textColor="#38BDF8"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="6dp" />
             </LinearLayout>
 
             <Button
