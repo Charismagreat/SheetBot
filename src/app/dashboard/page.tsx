@@ -943,11 +943,11 @@ export default function DashboardPage() {
                     100% 무료 제공
                   </span>
                   <h4 className="font-black text-sm text-white">
-                    SheetBot 공식 검증 4대 킬러 자동화 템플릿
+                    SheetBot 공식 검증 5대 킬러 자동화 템플릿
                   </h4>
                 </div>
                 <p className="text-xs text-indigo-100 mt-0.5 leading-relaxed">
-                  문자 대량 발송 · Gmail 일괄 발송 · 명함/영수증 AI OCR · 통화 녹음 AI 분석 시트를 클릭 1번에 내 구글 드라이브로 복제하세요.
+                  매장 POS 결제 장부 · 문자 대량 발송 · Gmail 일괄 발송 · 명함/영수증 AI OCR · 통화 녹음 AI 분석 시트를 클릭 1번에 내 구글 드라이브로 복제하세요.
                 </p>
               </div>
             </div>

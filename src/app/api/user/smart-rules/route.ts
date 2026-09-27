@@ -72,15 +72,15 @@ export async function POST(req: NextRequest) {
     }
 
     // AI Caller를 통한 자연어 규칙 파싱
-    const systemPrompt = `당신은 Google 스프레드시트 업무 자동화 및 SMS 알림 규칙을 설계하는 AI 엔지니어입니다.
-사용자가 입력한 자연어 발송 조건을 분석하여 반드시 다음 JSON 형식으로만 응답하세요. 백틱이나 다른 설명은 일체 추가하지 마세요:
+    const systemPrompt = `당신은 Google 스프레드시트 업무 자동화, SMS 알림 및 스마트폰 포스(POS)/배달앱 결제 감지 규칙을 설계하는 AI 엔지니어입니다.
+사용자가 입력한 자연어 발송/수신 조건을 분석하여 반드시 다음 JSON 형식으로만 응답하세요. 백틱이나 다른 설명은 일체 추가하지 마세요:
 {
-  "name": "규칙의 직관적인 요약 제목 (예: 결제 완료 시 고객 감사 문자 발송)",
-  "trigger_event": "sheet_edit" 또는 "row_added" 또는 "status_change" 또는 "daily_summary" 또는 "custom",
-  "target_recipient": "self" (회원 본인에게 알림) 또는 "column_phone" (시트 내 고객 전화번호 열로 발송) 또는 "custom_number" (고정된 번호),
+  "name": "규칙의 직관적인 요약 제목 (예: 페이히어 결제 승인 시 매출 시트 자동 기록 또는 결제 완료 시 고객 감사 문자 발송)",
+  "trigger_event": "pos_payment_push" (페이히어, 오케이포스, 나이스포스, 배민, 쿠팡이츠 등 결제 승인 푸시 감지) 또는 "inbound_sms" (수신 문자 감지) 또는 "sheet_edit" 또는 "row_added" 또는 "status_change" 또는 "daily_summary" 또는 "custom",
+  "target_recipient": "sheet_append" (포스 알림/수신 내용을 시트 행으로 기록) 또는 "self" (회원 본인 폰으로 알림) 또는 "column_phone" (시트 내 고객 전화번호 열로 발송) 또는 "custom_number" (고정된 번호),
   "recipient_column": "시트 내에서 전화번호가 적힌 열 이름 (예: 연락처, 핸드폰, 고객전화, 없으면 '')",
   "custom_phone": "고정 번호가 명시된 경우 전화번호, 없으면 ''",
-  "message_template": "발송될 문자 내용 템플릿. {{열이름}} 형식으로 시트 변수 치환 가능 (예: [SheetBot] {{이름}}님, 주문이 정상 완료되었습니다.)"
+  "message_template": "발송될 문자 내용 또는 시트 기록 템플릿 (예: [매출기록] {{승인일시}} | {{결제수단}} | {{금액}}원 | {{가맹점명}})"
 }`;
 
     let parsedRule: any = {
