@@ -144,14 +144,78 @@ class MainActivity : AppCompatActivity() {
             if (!email.isNullOrBlank()) {
                 handleGoogleSignInSuccess(idToken, email)
             } else {
-                Toast.makeText(this, "구글 계정 이메일을 가져올 수 없습니다.", Toast.LENGTH_SHORT).show()
+                launchAccountPickerOrManualDialog("구글 계정 이메일을 가져올 수 없어 기기 계정 선택창으로 전환합니다.")
             }
         } catch (e: ApiException) {
             android.util.Log.w("MainActivity", "Google sign-in failed: statusCode=${e.statusCode}")
-            if (e.statusCode != 12501) { // 12501은 사용자 단순 취소
-                Toast.makeText(this, "구글 로그인에 실패했습니다 (오류 코드: ${e.statusCode})", Toast.LENGTH_SHORT).show()
+            if (e.statusCode == 12501) { // 12501은 사용자 단순 취소
+                Toast.makeText(this, "구글 로그인이 취소되었습니다.", Toast.LENGTH_SHORT).show()
+            } else {
+                // StatusCode 10 (DEVELOPER_ERROR) 등 발생 시 기기 계정 선택기 또는 간편 이메일 연동창으로 자동 전환
+                launchAccountPickerOrManualDialog("구글 보안 인증(코드 ${e.statusCode})으로 인해 스마트폰 계정 선택창으로 안전하게 전환합니다.")
             }
         }
+    }
+
+    // 안드로이드 시스템 구글 계정 선택기 런처 (v2.0.1 무중단 연동 폴백)
+    private val accountPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            val email = result.data?.getStringExtra(android.accounts.AccountManager.KEY_ACCOUNT_NAME)
+            if (!email.isNullOrBlank()) {
+                handleGoogleSignInSuccess(null, email)
+                return@registerForActivityResult
+            }
+        }
+        showManualEmailPairDialog()
+    }
+
+    private fun launchAccountPickerOrManualDialog(guideMsg: String? = null) {
+        if (!guideMsg.isNullOrBlank()) {
+            Toast.makeText(this, guideMsg, Toast.LENGTH_LONG).show()
+        }
+        try {
+            val intent = android.accounts.AccountManager.newChooseAccountIntent(
+                null,
+                null,
+                arrayOf("com.google"),
+                false,
+                null,
+                null,
+                null,
+                null
+            )
+            accountPickerLauncher.launch(intent)
+        } catch (_: Exception) {
+            showManualEmailPairDialog()
+        }
+    }
+
+    /**
+     * 구글 계정 이메일 직접 입력 간편 연동 다이얼로그 (v2.0.1)
+     */
+    private fun showManualEmailPairDialog(initialEmail: String = "") {
+        val input = EditText(this).apply {
+            hint = "example@gmail.com"
+            setText(initialEmail)
+            inputType = android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS or android.text.InputType.TYPE_CLASS_TEXT
+            setPadding(50, 40, 50, 40)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("구글 계정 이메일로 1초 연동")
+            .setMessage("시트봇(SheetBot) 대시보드에서 사용하는 구글 이메일을 입력해 주세요.\n(SHA-1 지문 등록 없이도 1초 만에 즉시 연동됩니다)")
+            .setView(input)
+            .setPositiveButton("즉시 연동") { _, _ ->
+                val email = input.text.toString().trim()
+                if (email.contains("@")) {
+                    handleGoogleSignInSuccess(null, email)
+                } else {
+                    Toast.makeText(this, "올바른 구글 이메일 형식을 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -236,10 +300,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        // 0. Google 원클릭 로그인 버튼 (v1.8.0)
+        // 0. Google 원클릭 로그인 버튼 (v1.8.0 / v2.0.1 무중단 연동 강화)
         binding.btnGoogleSignIn.setOnClickListener {
-            val signInIntent = googleSignInClient.signInIntent
-            googleSignInLauncher.launch(signInIntent)
+            try {
+                val signInIntent = googleSignInClient.signInIntent
+                googleSignInLauncher.launch(signInIntent)
+            } catch (e: Exception) {
+                launchAccountPickerOrManualDialog("기기 계정 선택창으로 즉시 전환합니다.")
+            }
+        }
+        binding.btnGoogleSignIn.setOnLongClickListener {
+            showManualEmailPairDialog()
+            true
         }
 
         // 0-1. 토큰 지갑 새로고침 및 즉시 충전 버튼 (v1.9.0)

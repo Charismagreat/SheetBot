@@ -98,7 +98,7 @@ object ApiClient {
         idToken: String?,
         userEmail: String?,
         deviceModel: String = "${Build.MANUFACTURER} ${Build.MODEL}",
-        appVersion: String = "2.0.0",
+        appVersion: String = "2.0.1",
         referralCode: String? = null
     ): PairResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
