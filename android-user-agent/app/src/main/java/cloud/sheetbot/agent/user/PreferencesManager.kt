@@ -56,6 +56,10 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_push_detection_enabled", true)
         set(value) = prefs.edit().putBoolean("is_push_detection_enabled", value).apply()
 
+    var isPrivacyCardHidden: Boolean
+        get() = prefs.getBoolean("is_privacy_card_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_privacy_card_hidden", value).apply()
+
     // 통화 녹음 파일 구글 드라이브 자동 백업 관련 설정
     var isCallRecordingSyncEnabled: Boolean
         get() = prefs.getBoolean("is_call_recording_sync_enabled", true)
