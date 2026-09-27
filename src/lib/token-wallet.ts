@@ -314,3 +314,231 @@ export async function creditTokens(
     throw err;
   }
 }
+
+/**
+ * 친구/동료 초대 양방향 보너스 토큰 규격 (각각 1만 토큰)
+ */
+export const REFERRAL_REWARD_TOKENS = 10000;
+
+/**
+ * 회원의 고유 추천 코드 생성 (이메일 앞자리 기반 + 4자리 고유 해시)
+ */
+export function getUserReferralCode(userEmail: string): string {
+  const clean = userEmail.toLowerCase().trim();
+  const prefix = clean.split("@")[0].replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 8) || "SHEET";
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) {
+    hash = (hash << 5) - hash + clean.charCodeAt(i);
+    hash |= 0;
+  }
+  const suffix = Math.abs(hash).toString(36).toUpperCase().padStart(4, "0").slice(0, 4);
+  return `${prefix}${suffix}`;
+}
+
+/**
+ * 추천 코드 또는 이메일로 초대한 회원 이메일 역추적
+ */
+export async function findUserEmailByReferralCode(codeOrEmail: string): Promise<string | null> {
+  const query = codeOrEmail.trim().toLowerCase();
+  if (query.includes("@")) {
+    return query;
+  }
+
+  // 1. 이메일 앞자리 또는 추천 코드가 일치하는 지갑 탐색
+  const walletsRes = await queryTable("sheetbot_user_wallets", { limit: 500 }).catch(() => ({ rows: [] }));
+  const rows = (walletsRes.rows || []).filter((r: any) => !r.deleted_at);
+
+  for (const row of rows) {
+    const email = String(row.user_email || "").toLowerCase().trim();
+    if (!email) continue;
+    const myCode = getUserReferralCode(email).toLowerCase();
+    const myPrefix = email.split("@")[0].toLowerCase();
+    if (query === myCode || query === myPrefix) {
+      return email;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * 친구/동료 초대 보너스 정산 트랜잭션 (양방향 각각 1만 토큰 즉시 적립)
+ */
+export async function processReferralReward(options: {
+  inviterCodeOrEmail: string;
+  inviteeEmail: string;
+  deviceId?: string;
+  ipAddress?: string;
+  channel?: "MOBILE_AGENT" | "SHEET_COPILOT" | "WEB_INVITE";
+}): Promise<{
+  success: boolean;
+  message: string;
+  rewardTokens: number;
+  inviterEmail?: string;
+  error?: string;
+}> {
+  try {
+    await setupDatabase();
+    const { inviterCodeOrEmail, inviteeEmail, deviceId, ipAddress, channel = "MOBILE_AGENT" } = options;
+    const cleanInvitee = inviteeEmail.toLowerCase().trim();
+
+    if (!cleanInvitee || !cleanInvitee.includes("@")) {
+      return { success: false, rewardTokens: 0, message: "유효한 가입자 이메일이 아닙니다.", error: "INVALID_EMAIL" };
+    }
+
+    if (!inviterCodeOrEmail || inviterCodeOrEmail.trim().length < 2) {
+      return { success: false, rewardTokens: 0, message: "추천인 코드 또는 이메일을 입력해 주세요.", error: "INVALID_CODE" };
+    }
+
+    // 1. 추천인 이메일 탐색
+    const inviterEmail = await findUserEmailByReferralCode(inviterCodeOrEmail);
+    if (!inviterEmail) {
+      return { success: false, rewardTokens: 0, message: "존재하지 않거나 유효하지 않은 추천인 코드입니다.", error: "INVITER_NOT_FOUND" };
+    }
+
+    // 2. 셀프 추천 차단
+    if (inviterEmail.toLowerCase() === cleanInvitee) {
+      return { success: false, rewardTokens: 0, message: "본인의 추천 코드는 직접 등록할 수 없습니다.", error: "SELF_REFERRAL_FORBIDDEN" };
+    }
+
+    // 3. 중복 수급 방지 (이미 추천 보상을 받은 적이 있는지 검증)
+    const existingRefRes = await queryTable("sheetbot_referrals", {
+      filters: { invitee_email: cleanInvitee },
+      limit: 1,
+    }).catch(() => ({ rows: [] }));
+    const existingRefs = (existingRefRes.rows || []).filter((r: any) => !r.deleted_at);
+
+    if (existingRefs.length > 0) {
+      return {
+        success: false,
+        rewardTokens: 0,
+        message: "이미 친구 초대 보너스를 수령한 계정입니다. (1인 1회 한정)",
+        error: "ALREADY_CLAIMED",
+      };
+    }
+
+    // 4. 기기 다중 계정 어뷰징 차단 (동일 스마트폰에서 다계정 수급 방지)
+    if (deviceId && deviceId.trim().length > 3) {
+      const deviceCheck = await queryTable("sheetbot_referrals", {
+        filters: { device_id: deviceId.trim() },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+      const deviceRefs = (deviceCheck.rows || []).filter((r: any) => !r.deleted_at);
+      if (deviceRefs.length > 0) {
+        return {
+          success: false,
+          rewardTokens: 0,
+          message: "해당 기기에서 이미 초대 보너스가 지급되었습니다.",
+          error: "DEVICE_ALREADY_USED",
+        };
+      }
+    }
+
+    const now = new Date().toISOString();
+    const numericId = Date.now();
+
+    // 5. 추천인 지갑에 1만 토큰 지급
+    const inviterWallet = await getOrCreateUserWallet(inviterEmail);
+    const newInviterBalance = inviterWallet.balanceTokens + REFERRAL_REWARD_TOKENS;
+    await updateRows(
+      "sheetbot_user_wallets",
+      {
+        balance_tokens: newInviterBalance,
+        total_purchased_tokens: inviterWallet.totalPurchasedTokens + REFERRAL_REWARD_TOKENS,
+        updated_at: now,
+        updated_by: "system_referral_reward",
+      },
+      { filters: { id: inviterWallet.id } }
+    );
+    invalidateServerCache(`user_wallet_${inviterEmail.toLowerCase()}`);
+
+    // 6. 가입자(피초대자) 지갑에 1만 토큰 지급
+    const inviteeWallet = await getOrCreateUserWallet(cleanInvitee);
+    const newInviteeBalance = inviteeWallet.balanceTokens + REFERRAL_REWARD_TOKENS;
+    await updateRows(
+      "sheetbot_user_wallets",
+      {
+        balance_tokens: newInviteeBalance,
+        total_purchased_tokens: inviteeWallet.totalPurchasedTokens + REFERRAL_REWARD_TOKENS,
+        updated_at: now,
+        updated_by: "system_referral_reward",
+      },
+      { filters: { id: inviteeWallet.id } }
+    );
+    invalidateServerCache(`user_wallet_${cleanInvitee}`);
+
+    // 7. 추천 대장에 기록
+    await insertRows("sheetbot_referrals", [
+      {
+        id: numericId,
+        uuid: `ref_${numericId}`,
+        inviter_email: inviterEmail,
+        inviter_code: getUserReferralCode(inviterEmail),
+        invitee_email: cleanInvitee,
+        reward_tokens: REFERRAL_REWARD_TOKENS,
+        device_id: deviceId || null,
+        ip_address: ipAddress || null,
+        channel,
+        status: "COMPLETED",
+        created_at: now,
+      },
+    ]);
+
+    console.log(`[Referral] 🎉 양방향 10,000 토큰 지급 완료: 초대한 분(${inviterEmail}) + 신규 가입(${cleanInvitee})`);
+
+    return {
+      success: true,
+      message: `🎉 친구 초대 보너스 10,000 토큰이 즉시 충전되었습니다! (초대한 분: ${inviterEmail})`,
+      rewardTokens: REFERRAL_REWARD_TOKENS,
+      inviterEmail,
+    };
+  } catch (err: any) {
+    console.error("[Referral] Process error:", err);
+    return { success: false, rewardTokens: 0, message: "초대 보너스 정산 중 오류가 발생했습니다: " + err.message, error: err.message };
+  }
+}
+
+/**
+ * 회원의 초대 실적 및 통계 조회
+ */
+export async function getReferralStats(userEmail: string): Promise<{
+  myCode: string;
+  inviteCount: number;
+  earnedTokens: number;
+  hasClaimedReward: boolean;
+}> {
+  try {
+    await setupDatabase();
+    const email = userEmail.toLowerCase().trim();
+    const myCode = getUserReferralCode(email);
+
+    // 내가 초대한 실적
+    const inviteRes = await queryTable("sheetbot_referrals", {
+      filters: { inviter_email: email },
+      limit: 500,
+    }).catch(() => ({ rows: [] }));
+    const inviteRows = (inviteRes.rows || []).filter((r: any) => !r.deleted_at);
+
+    // 내가 다른 사람의 초대를 받아 보상을 받았는지 여부
+    const claimedRes = await queryTable("sheetbot_referrals", {
+      filters: { invitee_email: email },
+      limit: 1,
+    }).catch(() => ({ rows: [] }));
+    const claimedRows = (claimedRes.rows || []).filter((r: any) => !r.deleted_at);
+
+    return {
+      myCode,
+      inviteCount: inviteRows.length,
+      earnedTokens: inviteRows.length * REFERRAL_REWARD_TOKENS,
+      hasClaimedReward: claimedRows.length > 0,
+    };
+  } catch (e: any) {
+    return {
+      myCode: getUserReferralCode(userEmail),
+      inviteCount: 0,
+      earnedTokens: 0,
+      hasClaimedReward: false,
+    };
+  }
+}
+

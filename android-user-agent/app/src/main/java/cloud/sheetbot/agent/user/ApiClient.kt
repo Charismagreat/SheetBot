@@ -98,7 +98,8 @@ object ApiClient {
         idToken: String?,
         userEmail: String?,
         deviceModel: String = "${Build.MANUFACTURER} ${Build.MODEL}",
-        appVersion: String = "1.8.0"
+        appVersion: String = "2.0.0",
+        referralCode: String? = null
     ): PairResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         var lastError = "구글 로그인 페어링 실패"
@@ -113,6 +114,7 @@ object ApiClient {
                     if (!userEmail.isNullOrBlank()) put("userEmail", userEmail)
                     put("deviceModel", deviceModel)
                     put("appVersion", appVersion)
+                    if (!referralCode.isNullOrBlank()) put("referralCode", referralCode.trim())
                 }
 
                 val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
@@ -127,16 +129,18 @@ object ApiClient {
 
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
                     val finalEmail = resJson.optString("userEmail", userEmail ?: "")
+                    val refMsg = resJson.optString("referralMessage", "")
                     Log.i(TAG, "🎉 [구글 로그인 페어링 성공] 이메일: $finalEmail ($host)")
                     return@withContext PairResult(
                         success = true,
                         userEmail = finalEmail,
                         deviceToken = resJson.optString("token", ""),
-                        webhookUrl = resJson.optString("webhookUrl", "$PRIMARY_HOST/api/user/agent2/inbound-sms"),
-                        fallbackWebhookUrl = resJson.optString("fallbackWebhookUrl", "$FALLBACK_HOST/api/user/agent2/inbound-sms"),
+                        webhookUrl = resJson.optString("webhookUrl", "$PRIMARY_HOST/api/webhooks/dispatch"),
+                        fallbackWebhookUrl = resJson.optString("fallbackWebhookUrl", "$FALLBACK_HOST/api/webhooks/dispatch"),
                         heartbeatUrl = "$PRIMARY_HOST/api/user/agent2/heartbeat",
                         fallbackHeartbeatUrl = "$FALLBACK_HOST/api/user/agent2/heartbeat",
-                        message = resJson.optString("message", "구글 계정 연동 성공")
+                        message = if (refMsg.isNotBlank()) "$refMsg\n구글 계정 연동 성공" else resJson.optString("message", "구글 계정 연동 성공"),
+                        referralMessage = if (refMsg.isNotBlank()) refMsg else null
                     )
                 } else {
                     val errMsg = resJson.optString("error", "HTTP ${response.code}")
@@ -966,6 +970,102 @@ object ApiClient {
         }
         DepositSessionResult(success = false, error = lastError)
     }
+
+    /**
+     * 회원 고유 추천 코드 및 친구 초대 실적 조회 (v2.0.0)
+     * GET /api/wallet/referral?userEmail={email}
+     */
+    suspend fun fetchReferralInfo(userEmail: String): ReferralInfoResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastError = "추천 정보 조회 실패"
+
+        for ((index, host) in hosts.withIndex()) {
+            val endpoint = "$host/api/wallet/referral?userEmail=${java.net.URLEncoder.encode(userEmail, "UTF-8")}"
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .get()
+                    .header("Cache-Control", "no-cache")
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    Log.i(TAG, "🎁 [추천 정보 조회 성공] ${resJson.optString("myCode")}")
+                    return@withContext ReferralInfoResult(
+                        success = true,
+                        userEmail = userEmail,
+                        myCode = resJson.optString("myCode", ""),
+                        inviteUrl = resJson.optString("inviteUrl", ""),
+                        apkInviteUrl = resJson.optString("apkInviteUrl", ""),
+                        shareText = resJson.optString("shareText", ""),
+                        inviteCount = resJson.optInt("inviteCount", 0),
+                        earnedTokens = resJson.optInt("earnedTokens", 0),
+                        hasClaimedReward = resJson.optBoolean("hasClaimedReward", false)
+                    )
+                } else {
+                    val errMsg = resJson.optString("error", "HTTP ${response.code}")
+                    lastError = "[$host] $errMsg"
+                }
+            } catch (e: Exception) {
+                lastError = "[$host] ${e.localizedMessage ?: "네트워크 연결 불가"}"
+            }
+        }
+        ReferralInfoResult(success = false, error = lastError)
+    }
+
+    /**
+     * 친구 추천인 코드 등록 및 10,000 보너스 토큰 수령 (v2.0.0)
+     * POST /api/wallet/referral/claim
+     */
+    suspend fun claimReferralReward(
+        inviteeEmail: String,
+        referralCode: String,
+        deviceId: String = "${Build.MANUFACTURER} ${Build.MODEL}"
+    ): ReferralClaimResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastError = "초대 코드 등록 실패"
+
+        for ((index, host) in hosts.withIndex()) {
+            val endpoint = "$host/api/wallet/referral/claim"
+            try {
+                val json = JSONObject().apply {
+                    put("inviteeEmail", inviteeEmail)
+                    put("referralCode", referralCode.trim())
+                    put("deviceId", deviceId)
+                    put("channel", "MOBILE_AGENT")
+                }
+
+                val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(body)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    Log.i(TAG, "🎉 [추천 보너스 수령 성공] $inviteeEmail -> ${resJson.optString("message")}")
+                    return@withContext ReferralClaimResult(
+                        success = true,
+                        message = resJson.optString("message", "10,000 토큰이 지급되었습니다!"),
+                        rewardTokens = resJson.optInt("rewardTokens", 10000),
+                        inviterEmail = resJson.optString("inviterEmail", "")
+                    )
+                } else {
+                    val errMsg = resJson.optString("message", resJson.optString("error", "HTTP ${response.code}"))
+                    lastError = errMsg
+                }
+            } catch (e: Exception) {
+                lastError = "[$host] ${e.localizedMessage ?: "네트워크 연결 불가"}"
+            }
+        }
+        ReferralClaimResult(success = false, error = lastError)
+    }
 }
 
 
@@ -978,8 +1078,10 @@ data class PairResult(
     val heartbeatUrl: String? = null,
     val fallbackHeartbeatUrl: String? = null,
     val message: String? = null,
+    val referralMessage: String? = null,
     val error: String? = null
 )
+
 
 data class WebhookResult(
     val statusCode: Int,
@@ -1084,6 +1186,28 @@ data class AiCommandResult(
     val details: JSONObject? = null,
     val error: String? = null
 )
+
+data class ReferralInfoResult(
+    val success: Boolean,
+    val userEmail: String = "",
+    val myCode: String = "",
+    val inviteUrl: String = "",
+    val apkInviteUrl: String = "",
+    val shareText: String = "",
+    val inviteCount: Int = 0,
+    val earnedTokens: Int = 0,
+    val hasClaimedReward: Boolean = false,
+    val error: String? = null
+)
+
+data class ReferralClaimResult(
+    val success: Boolean,
+    val message: String = "",
+    val rewardTokens: Int = 10000,
+    val inviterEmail: String = "",
+    val error: String? = null
+)
+
 
 
 

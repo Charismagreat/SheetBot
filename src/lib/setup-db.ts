@@ -678,10 +678,29 @@ export async function setupDatabase(force = false): Promise<void> {
       await executeSQL(`ALTER TABLE sheetbot_enterprise_inquiries ADD COLUMN candidate_profiles TEXT;`);
     } catch {}
 
-    // 21. 기본 추천 프롬프트 시딩
+    // 21. sheetbot_referrals 테이블 생성 (친구/동료 초대 양방향 1만 토큰 보상 대장)
+    await safeCreateTable(
+      'SheetBot 추천인 및 친구 초대 보상 대장',
+      [
+        { name: 'id', type: 'INTEGER', notNull: true, primaryKey: true },
+        { name: 'uuid', type: 'TEXT' },
+        { name: 'inviter_email', type: 'TEXT', notNull: true },
+        { name: 'inviter_code', type: 'TEXT' },
+        { name: 'invitee_email', type: 'TEXT', notNull: true },
+        { name: 'reward_tokens', type: 'INTEGER', notNull: true },
+        { name: 'device_id', type: 'TEXT' },
+        { name: 'ip_address', type: 'TEXT' },
+        { name: 'channel', type: 'TEXT' }, // 'MOBILE_AGENT' | 'SHEET_COPILOT' | 'WEB_INVITE'
+        { name: 'status', type: 'TEXT' }, // 'COMPLETED'
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_referrals' }
+    );
+
+    // 22. 기본 추천 프롬프트 시딩
     await seedDefaultPromptTemplates();
 
-    // 22. 레거시 데이터 마이그레이션 실행
+    // 23. 레거시 데이터 마이그레이션 실행
     await migrateLegacySettingsData();
 
     isDbInitialized = true;

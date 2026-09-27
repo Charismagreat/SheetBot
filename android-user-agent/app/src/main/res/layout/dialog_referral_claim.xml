@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#0F172A"
+    android:padding="20dp">
+
+    <!-- 헤더 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="6dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🏷️ 추천인 코드 등록"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_badge_version"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="3dp"
+            android:text="+10,000T 즉시 충전"
+            android:textColor="#10B981"
+            android:textSize="10.5sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="친구 또는 동료로부터 전달받은 추천인 코드(또는 이메일)를 등록하시면 10,000 보너스 토큰이 즉시 충전됩니다."
+        android:textColor="#94A3B8"
+        android:textSize="12sp"
+        android:lineSpacingExtra="2dp"
+        android:layout_marginBottom="16dp" />
+
+    <EditText
+        android:id="@+id/etReferralCodeInput"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:background="#1E293B"
+        android:hint="추천인 코드 (예: K7D9X2 또는 이메일)"
+        android:textColorHint="#64748B"
+        android:textColor="#FFFFFF"
+        android:textSize="13.5sp"
+        android:paddingHorizontal="14dp"
+        android:inputType="textCapCharacters"
+        android:layout_marginBottom="16dp" />
+
+    <!-- 등록 버튼 -->
+    <Button
+        android:id="@+id/btnSubmitReferralCode"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:backgroundTint="#10B981"
+        android:text="🎉 10,000 토큰 즉시 수령하기"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="10dp" />
+
+    <!-- 닫기 버튼 -->
+    <Button
+        android:id="@+id/btnCloseClaimDialog"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:backgroundTint="#1E293B"
+        android:text="닫기"
+        android:textColor="#94A3B8"
+        android:textSize="12sp" />
+
+</LinearLayout>
