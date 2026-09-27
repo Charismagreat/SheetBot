@@ -167,7 +167,7 @@ async function doResolveUserSpreadsheet(
         targetSpreadsheetId = foundFiles[0].id;
 
         // 만약 지정 폴더가 있는데 루트 등 다른 곳에 있었다면 폴더로 이동
-        if (folderId) {
+        if (folderId && targetSpreadsheetId) {
           await moveDriveFile(targetSpreadsheetId, folderId, preferOAuth).catch(() => {});
         }
 

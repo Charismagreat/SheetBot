@@ -26,6 +26,7 @@ class KeepAliveService : Service() {
     private var heartbeatJob: Job? = null
     private var receiptQueueJob: Job? = null
     private var recordingSyncJob: Job? = null
+    private var websiteMonitorJob: Job? = null
     private lateinit var prefs: PreferencesManager
 
     companion object {
@@ -58,7 +59,8 @@ class KeepAliveService : Service() {
         startHeartbeatLoop()
         startReceiptQueueLoop()
         startRecordingSyncLoop()
-        Log.i(TAG, "KeepAliveService created with SMS, Heartbeat, and Call Recording Watchdog.")
+        startWebsiteMonitorLoop()
+        Log.i(TAG, "KeepAliveService created with SMS, Heartbeat, Call Recording, and Website Monitor Watchdog.")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -72,6 +74,7 @@ class KeepAliveService : Service() {
         heartbeatJob?.cancel()
         receiptQueueJob?.cancel()
         recordingSyncJob?.cancel()
+        websiteMonitorJob?.cancel()
         Log.w(TAG, "KeepAliveService destroyed.")
     }
 
@@ -97,58 +100,101 @@ class KeepAliveService : Service() {
                     if (isSuccess) {
                         if (consecutiveHeartbeatFailures >= 2) {
                             Log.i(TAG, "🎉 서버 통신 정상 복구 감지!")
-                            showWatchdogNotification("🟢 서버 통신 복구 완료", "SheetBot 서버와의 연결이 정상화되었습니다.", false)
-                            if (prefs.isTtsEnabled) {
-                                TtsManager.speak(this@KeepAliveService, "시트봇 서버 연결이 정상 복구되었습니다.")
-                            }
-                            // 오프라인 큐 즉시 비우기
-                            val drained = DepositQueueManager.drainQueue(this@KeepAliveService)
-                            if (drained > 0) {
-                                Log.i(TAG, "대기열 ${drained}건 서버 자동 전송 완료")
-                            }
-                            // 포그라운드 노티 복구
-                            updateForegroundNotification("🟢 실시간 입금 감지 중 ($email)")
+                            // 포그라운드 노티 정상 복구 (이용자 친화적 문구)
+                            updateForegroundNotification("🟢 24시간 실시간 고객 알림 문자 발송 대기 중 ($email)")
                         }
                         consecutiveHeartbeatFailures = 0
                     } else {
                         consecutiveHeartbeatFailures++
                         Log.w(TAG, "서버 헬스체크 실패 (${consecutiveHeartbeatFailures}회 연속)")
 
-                        // 2회 연속 실패 (2분 경과 시) 비상 경보 발동
+                        // 2회 연속 실패 시 비상 사이렌 대신 조용히 오프라인 상태 노티로만 업데이트 (사용자 불편 방지)
                         if (consecutiveHeartbeatFailures >= 2) {
-                            triggerEmergencyAlarm()
+                            updateForegroundNotification("🟡 오프라인 모드 (네트워크 재연결 대기 중)")
                         }
                     }
                 }
-                // 1분(60초)마다 생존 신호 전송 (기존 5분에서 1분으로 단축)
+                // 1분(60초)마다 생존 신호 전송
                 delay(60 * 1000L)
             }
         }
     }
 
-    /**
-     * 잠금화면 화면 켜기 + 비상 경보 팝업 + 고성능 노티피케이션 + TTS 발동
-     */
-    private fun triggerEmergencyAlarm() {
-        Log.e(TAG, "🚨 [서버 다운 비상 경보 발동] 2분 이상 서버 응답 없음")
+    // ==========================================
+    // 🌐 내 웹사이트 실시간 다운타임 모니터링 (Uptime Sentinel)
+    // ==========================================
+    private var consecutiveWebsiteFailures = 0
 
-        // 1. 포그라운드 노티 붉은색 경고로 갱신
-        val pendingCount = DepositQueueManager.getPendingCount(this)
-        updateForegroundNotification("🔴 서버 연결 두절 (입금 대기열 ${pendingCount}건 로컬 보관 중)")
+    private fun startWebsiteMonitorLoop() {
+        websiteMonitorJob?.cancel()
+        websiteMonitorJob = serviceScope.launch {
+            delay(5000L) // 앱 시작 후 5초 뒤 첫 체크
+            while (isActive) {
+                try {
+                    val isEnabled = prefs.isWebsiteMonitorEnabled
+                    val targetUrl = prefs.targetWebsiteUrl.trim()
 
-        // 2. WakeLock으로 꺼진 화면 강제 켜기
-        wakeUpScreen()
+                    if (isEnabled && targetUrl.isNotBlank()) {
+                        val check = ApiClient.checkWebsiteHealth(targetUrl)
 
-        // 3. 풀스크린 비상 경보 액티비티 기동
-        EmergencyAlarmActivity.start(this)
+                        if (check.isOnline) {
+                            if (consecutiveWebsiteFailures >= 2) {
+                                Log.i(TAG, "🎉 [웹사이트 복구] $targetUrl 정상 응답 (${check.statusCode}, ${check.responseTimeMs}ms)")
+                                showWatchdogNotification("🟢 웹사이트 정상 복구", "$targetUrl 사이트가 정상 복구되었습니다. (HTTP ${check.statusCode})", false)
+                                if (prefs.isTtsEnabled) {
+                                    TtsManager.speak(this@KeepAliveService, "웹사이트 연결이 정상 복구되었습니다.")
+                                }
+                            }
+                            consecutiveWebsiteFailures = 0
+                            prefs.lastWebsiteCheckStatus = "정상 (HTTP ${check.statusCode}, ${check.responseTimeMs}ms)"
+                            prefs.lastWebsiteCheckStatusCode = check.statusCode
+                            prefs.lastWebsiteCheckTime = System.currentTimeMillis()
+                        } else {
+                            // 1차 실패: 스마트폰 인터넷 자체 연결 상태 교차 검증 (False Alarm 방지)
+                            val isInternetOk = ApiClient.verifyInternetConnectivity()
+                            if (isInternetOk) {
+                                // 폰 인터넷은 정상이므로 실제 웹사이트 다운타임으로 판정!
+                                consecutiveWebsiteFailures++
+                                Log.w(TAG, "🚨 [웹사이트 응답 불가] $targetUrl (${consecutiveWebsiteFailures}회 연속): ${check.errorMessage}")
+                                prefs.lastWebsiteCheckStatus = "응답 불가 (${check.errorMessage ?: "HTTP " + check.statusCode})"
+                                prefs.lastWebsiteCheckStatusCode = check.statusCode
+                                prefs.lastWebsiteCheckTime = System.currentTimeMillis()
 
-        // 4. 헤드업 비상 노티피케이션 발행 (잠금화면에서도 볼 수 있도록)
-        showEmergencyNotification()
-
-        // 5. 알람 볼륨 강제 출력 & 비상 사이렌 선행 TTS 경보 (설정 ON 시)
-        if (prefs.isTtsEnabled) {
-            TtsManager.speakAlarm(this, "주의! 시트봇 서버 연결이 두절되었습니다. 입금 자동 처리가 중단되니 서버 상태를 확인하세요.")
+                                // 2회 연속 실패 시 비상 경보 발동 (옵트인된 사용자 설정 준수)
+                                if (consecutiveWebsiteFailures >= 2) {
+                                    triggerWebsiteDownEmergency(targetUrl, check.statusCode, check.errorMessage)
+                                }
+                            } else {
+                                Log.w(TAG, "스마트폰 외부 인터넷 일시 단절 감지 - 웹사이트 알람 유예")
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "웹사이트 모니터링 체크 중 오류: ${e.message}")
+                }
+                // 3분(180초) 주기로 웹사이트 헬스체크
+                delay(180 * 1000L)
+            }
         }
+    }
+
+    /**
+     * 사용자가 등록한 웹사이트 다운 시 비상 경보 발동 (화면 켜기 + 전체화면 팝업 + 알림)
+     */
+    private fun triggerWebsiteDownEmergency(targetUrl: String, statusCode: Int, errorMessage: String?) {
+        Log.e(TAG, "🚨 [웹사이트 다운타임 비상 경보 발동] $targetUrl (HTTP $statusCode)")
+
+        // 1. 설정에 따라 화면 켜기
+        if (prefs.isWebsiteEmergencyAlarmEnabled) {
+            wakeUpScreen()
+            EmergencyAlarmActivity.startWebsiteAlarm(this, targetUrl, statusCode, errorMessage)
+            if (prefs.isTtsEnabled) {
+                TtsManager.speakAlarm(this, "주의! 등록하신 웹사이트에 응답이 없습니다. 서버 가동 상태를 확인하세요.")
+            }
+        }
+
+        // 2. 비상 헤드업 노티피케이션 발행
+        showWebsiteEmergencyNotification(targetUrl, statusCode, errorMessage)
     }
 
     private fun wakeUpScreen() {
@@ -158,7 +204,7 @@ class KeepAliveService : Service() {
                 PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
                         PowerManager.ACQUIRE_CAUSES_WAKEUP or
                         PowerManager.ON_AFTER_RELEASE,
-                "SheetBot:EmergencyWakeLock"
+                "SheetBot:WebsiteEmergencyWakeLock"
             )
             wl.acquire(15000L) // 15초간 화면 점등 유지
         } catch (e: Exception) {
@@ -166,29 +212,33 @@ class KeepAliveService : Service() {
         }
     }
 
-    private fun showEmergencyNotification() {
+    private fun showWebsiteEmergencyNotification(targetUrl: String, statusCode: Int, errorMessage: String?) {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val fullScreenIntent = Intent(this, EmergencyAlarmActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EmergencyAlarmActivity.EXTRA_TARGET_URL, targetUrl)
+            putExtra(EmergencyAlarmActivity.EXTRA_STATUS_CODE, statusCode)
+            putExtra(EmergencyAlarmActivity.EXTRA_ERROR_MESSAGE, errorMessage)
         }
         val fullScreenPendingIntent = PendingIntent.getActivity(
             this, 1001, fullScreenIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val pendingCount = DepositQueueManager.getPendingCount(this)
+        val statusText = if (statusCode > 0) "HTTP $statusCode" else "응답 시간 초과"
         val noti = NotificationCompat.Builder(this, EMERGENCY_CHANNEL_ID)
-            .setContentTitle("🚨 [비상 경보] 시트봇 서버 연결 두절!")
-            .setContentText("sheetbot.cloud 서버가 응답하지 않습니다. (오프라인 큐: ${pendingCount}건)")
+            .setContentTitle("🚨 [웹사이트 긴급 다운 감지]")
+            .setContentText("$targetUrl ($statusText)")
             .setStyle(NotificationCompat.BigTextStyle().bigText(
-                "2분 이상 서버 통신이 두절되었습니다.\n" +
-                "입금 내역은 스마트폰에 안전하게 임시 보관 중입니다.\n" +
-                "관리자 PC에서 서버 또는 터널 가동 상태를 즉시 점검하세요."
+                "등록하신 웹사이트가 2회 연속 응답하지 않습니다.\n" +
+                "• URL: $targetUrl\n" +
+                "• 상태: $statusText (${errorMessage ?: "연결 불가"})\n" +
+                "• 휴대폰 인터넷은 정상이므로 서버 호스팅 상태를 점검하세요."
             ))
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setFullScreenIntent(fullScreenPendingIntent, true)
+            .setFullScreenIntent(fullScreenPendingIntent, prefs.isWebsiteEmergencyAlarmEnabled)
             .setAutoCancel(true)
             .build()
 
