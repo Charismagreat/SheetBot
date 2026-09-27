@@ -521,134 +521,6 @@ export async function GET() {
       transform: translateX(4px);
     }
 
-    /* [2-1] 비상 SMS 및 스마트폰 연동 카드 */
-    .phone-card {
-      width: 100%;
-      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-      border: 1px solid #cbd5e1;
-      border-radius: 9px;
-      padding: 10px 10px;
-      margin-bottom: 7px;
-      box-sizing: border-box;
-    }
-
-    /* [2-2] ⚡ 1초 실무 템플릿 모음 카드 */
-    .templates-card {
-      width: 100%;
-      background: #ffffff;
-      border: 1px solid #e2e8f0;
-      border-radius: 9px;
-      padding: 9px 10px;
-      margin-bottom: 7px;
-      box-sizing: border-box;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-    }
-    .templates-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 6px;
-    }
-    .templates-title {
-      font-size: 11.5px;
-      font-weight: 800;
-      color: #1e293b;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-    .templates-tag {
-      font-size: 9.5px;
-      padding: 1px 6px;
-      background: #e0e7ff;
-      color: #4338ca;
-      border-radius: 4px;
-      font-weight: 700;
-    }
-    .templates-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 5px;
-    }
-    .template-chip {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      padding: 6px 4px;
-      font-size: 10.5px;
-      font-weight: 600;
-      color: #334155;
-      text-decoration: none;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      gap: 3px;
-      transition: all 0.15s ease;
-      box-sizing: border-box;
-      white-space: nowrap;
-    }
-    .template-chip:hover {
-      background: #eff6ff;
-      border-color: #93c5fd;
-      color: #1d4ed8;
-      transform: translateY(-1px);
-      box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
-    }
-    .template-chip:active {
-      transform: scale(0.98);
-    }
-    .phone-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 4px;
-    }
-    .phone-title {
-      font-size: 11.5px;
-      font-weight: 800;
-      color: #1e293b;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-    .phone-tag {
-      font-size: 9.5px;
-      padding: 1px 5px;
-      background: #e2e8f0;
-      color: #475569;
-      border-radius: 4px;
-      font-weight: 700;
-    }
-    .phone-desc {
-      font-size: 10.5px;
-      color: #64748b;
-      line-height: 1.4;
-      margin-bottom: 7px;
-    }
-    .btn-phone-register {
-      width: 100%;
-      background: #ffffff;
-      border: 1px solid #94a3b8;
-      color: #1e293b;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 6px 8px;
-      border-radius: 6px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 5px;
-      text-decoration: none;
-      box-sizing: border-box;
-      transition: all 0.2s;
-    }
-    .btn-phone-register:hover {
-      background: #e2e8f0;
-      border-color: #64748b;
-    }
-
     /* [3] 안티그라비티 허브 */
     .studio-card {
       width: 100%;
@@ -1078,53 +950,6 @@ export async function GET() {
     </button>
   </div>
 
-  <!-- [2-1] 📱 SheetBot Agent2 스마트폰 연동 카드 (0원 무제한 발송 & 수신 기록) -->
-  <div class="phone-card">
-    <div class="phone-header">
-      <div class="phone-title">
-        <span>📱 SheetBot Agent2 연동</span>
-      </div>
-      <span class="phone-tag" style="background: #ecfdf5; color: #047857; font-weight: 800; border: 1px solid #a7f3d0;">0원 무제한</span>
-    </div>
-    <div class="phone-desc">
-      스마트폰 요금제로 <strong>0원 고객 문자 발송</strong> & 수신 문자 시트 자동 기록
-    </div>
-    <div id="agent2-status-box" style="display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 7px; font-size: 10.5px;">
-      <span style="display: flex; align-items: center; gap: 4px; color: #475569;">
-        <span id="agent2-dot" style="width: 7px; height: 7px; border-radius: 50%; background: #94a3b8;"></span>
-        <span id="agent2-status-text">기기 상태 점검 중...</span>
-      </span>
-      <span id="agent2-device-label" style="color: #64748b; font-weight: 700; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">-</span>
-    </div>
-    <a href="https://sheetbot.cloud/dashboard/notifications" target="_blank" onclick="handleAgent2Click(event)" class="btn-phone-register" id="btn-phone-register-link" title="SheetBot Agent2 0초 QR 연동 및 기기 관리">
-      <span>📲 SheetBot Agent2 0초 QR 연동</span>
-      <span style="font-size: 11px; opacity: 0.8;">↗</span>
-    </a>
-  </div>
-
-  <!-- [2-2] ⚡ 1초 실무 템플릿 모음 카드 -->
-  <div class="templates-card">
-    <div class="templates-header">
-      <div class="templates-title">
-        <span>⚡ 1초 실무 템플릿 모음</span>
-      </div>
-      <span class="templates-tag">원클릭 복제</span>
-    </div>
-    <div class="templates-grid" id="templates-grid">
-      <a href="https://sheetbot.cloud/wrap?tpl=delivery" target="_blank" class="template-chip" title="배송·송장 실시간 배송상태 자동조회">
-        <span>📦 송장 자동조회</span>
-      </a>
-      <a href="https://sheetbot.cloud/wrap?tpl=ocr" target="_blank" class="template-chip" title="영수증·명함 스마트 AI OCR">
-        <span>🧾 영수증 OCR</span>
-      </a>
-      <a href="https://sheetbot.cloud/wrap?tpl=kakao" target="_blank" class="template-chip" title="카카오 알림톡/문자 자동 발송">
-        <span>💬 알림톡 발송</span>
-      </a>
-      <a href="https://sheetbot.cloud/wrap?tpl=inventory" target="_blank" class="template-chip" title="실시간 재고·단가 관리 대장">
-        <span>📊 실시간 재고</span>
-      </a>
-    </div>
-  </div>
 
   <!-- [3] 안티그라비티 허브 -->
   <div class="studio-card">
@@ -1493,72 +1318,6 @@ export async function GET() {
       window.open('https://sheetbot.cloud/dashboard/pricing', '_blank');
     }
 
-    function handleAgent2Click(e) {
-      if (window.google && window.google.script && window.google.script.run) {
-        try {
-          if (e && e.preventDefault) e.preventDefault();
-          google.script.run
-            .withFailureHandler(function(err) {
-              console.warn("Native modal failed, opening dashboard:", err);
-              window.open('https://sheetbot.cloud/dashboard/notifications', '_blank');
-            })
-            .openPhoneRegisterModal();
-          return false;
-        } catch(err) {
-          console.warn("Failed to invoke openPhoneRegisterModal:", err);
-        }
-      }
-    }
-
-    function openAgent2Modal() {
-      handleAgent2Click();
-    }
-    function openPhoneModal() {
-      openAgent2Modal();
-    }
-
-    function checkAgent2Status() {
-      var dotEl = document.getElementById('agent2-dot');
-      var statusEl = document.getElementById('agent2-status-text');
-      var labelEl = document.getElementById('agent2-device-label');
-      if (!dotEl || !statusEl) return;
-
-      var targetEmail = currentEmail || 'chachogreat@gmail.com';
-      fetch('https://sheetbot.cloud/api/user/devices?email=' + encodeURIComponent(targetEmail), { cache: 'no-store' })
-        .then(function(res) { return res.json(); })
-        .then(function(data) {
-          if (data && data.success && data.devices && data.devices.length > 0) {
-            var activeDev = data.devices.find(function(d) {
-              return d.status === 'CONNECTED' || d.pairingMode === 'agent2';
-            }) || data.devices[0];
-
-            if (activeDev && activeDev.status === 'CONNECTED') {
-              dotEl.style.background = '#10b981';
-              dotEl.style.boxShadow = '0 0 0 2px rgba(16, 185, 129, 0.2)';
-              statusEl.innerText = '정상 연동됨 (0원)';
-              statusEl.style.color = '#047857';
-              if (labelEl) labelEl.innerText = activeDev.label || '안드로이드';
-            } else {
-              dotEl.style.background = '#f59e0b';
-              dotEl.style.boxShadow = 'none';
-              statusEl.innerText = '페어링 대기 중';
-              statusEl.style.color = '#b45309';
-              if (labelEl) labelEl.innerText = activeDev.label || '기기 페어링';
-            }
-          } else {
-            dotEl.style.background = '#94a3b8';
-            dotEl.style.boxShadow = 'none';
-            statusEl.innerText = '기기 미등록 (0원 발송)';
-            statusEl.style.color = '#64748b';
-            if (labelEl) labelEl.innerText = 'QR 연동 필요';
-          }
-        })
-        .catch(function(e) {
-          dotEl.style.background = '#10b981';
-          statusEl.innerText = 'SheetBot Agent2 준비됨';
-          if (labelEl) labelEl.innerText = '0원 발송';
-        });
-    }
 
     function copyReferralLink() {
       var userEmail = '';
@@ -1689,20 +1448,6 @@ export async function GET() {
           .then(function(data) {
             if (!data || !data.success) return;
 
-            // 1. 템플릿 그리드 동적 갱신
-            if (data.templates && data.templates.length > 0) {
-              var gridEl = document.getElementById('templates-grid');
-              if (gridEl) {
-                var chipsHtml = '';
-                data.templates.forEach(function(t) {
-                  chipsHtml += '<a href="' + t.url + '" target="_blank" class="template-chip" title="' + (t.tooltip || t.title) + '">'
-                             + '<span>' + t.icon + ' ' + t.title + '</span>'
-                             + '</a>';
-                });
-                gridEl.innerHTML = chipsHtml;
-              }
-            }
-
             // 2. FDE 파트너스 카드 동적 갱신
             if (data.fdeRecruit) {
               var fdeCard = document.getElementById('fde-recruit-card');
@@ -1763,7 +1508,6 @@ export async function GET() {
           setTimeout(function() {
             refreshBalance();
             checkTunnel();
-            checkAgent2Status();
             loadDynamicPromotions();
             try {
               if (google.script.run.getSpreadsheetUrl) {
@@ -1781,7 +1525,6 @@ export async function GET() {
         } else if (attempts >= 30) {
           clearInterval(interval);
           refreshBalance();
-          checkAgent2Status();
         }
       }, 50);
     })();
