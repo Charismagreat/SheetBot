@@ -319,6 +319,7 @@ class MainActivity : AppCompatActivity() {
         checkNotificationListenerPermission()
         checkAndRequestBatteryOptimization()
         startServerMonitorLoop()
+        preloadActiveSheetUrls()
     }
 
     override fun onPause() {
@@ -1916,7 +1917,68 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 구글 시트 원본 vs 모바일 스마트 웹앱 선택 다이얼로그 (v2.1.4)
+     * 활성화된 기능들의 구글 시트 URL을 백그라운드에서 사전 캐싱 (v2.1.5)
+     */
+    private fun preloadActiveSheetUrls() {
+        val userEmail = prefs.userEmail
+        if (!prefs.isPaired || userEmail.isNullOrBlank()) return
+
+        activityScope.launch(Dispatchers.IO) {
+            val targets = mutableListOf<Triple<String, String, String?>>()
+            if (prefs.isSmsSyncEnabled && prefs.getSheetUrl("SMS").isNullOrBlank()) {
+                targets.add(Triple("SMS", prefs.smsDriveSheetTitle, null))
+            }
+            if (prefs.isKakaoSyncEnabled && prefs.getSheetUrl("KAKAO").isNullOrBlank()) {
+                targets.add(Triple("KAKAO", prefs.kakaoDriveSheetTitle, null))
+            }
+            if (prefs.isMissedCallAutoReplyEnabled && prefs.getSheetUrl("MISSED_CALL").isNullOrBlank()) {
+                targets.add(Triple("MISSED_CALL", prefs.missedCallDriveSheetTitle, null))
+            }
+            if (prefs.isCallRecordingSyncEnabled && prefs.getSheetUrl("RECORDING").isNullOrBlank()) {
+                targets.add(Triple("RECORDING", "[SheetBot] 통화 녹음 대장", prefs.callRecordingDriveFolder))
+            }
+            if (prefs.isFileUploadSyncEnabled && prefs.getSheetUrl("FILE_UPLOAD").isNullOrBlank()) {
+                targets.add(Triple("FILE_UPLOAD", "[SheetBot] 파일 업로드 대장", prefs.fileUploadDriveFolder))
+            }
+            if (prefs.isLinkScrapEnabled && prefs.getSheetUrl("LINK_BOOKMARK").isNullOrBlank()) {
+                targets.add(Triple("LINK_BOOKMARK", prefs.linkScrapDriveSheetTitle, null))
+            }
+            if (prefs.isCallEndedCardEnabled && prefs.getSheetUrl("CALL_ENDED_CARD").isNullOrBlank()) {
+                targets.add(Triple("CALL_ENDED_CARD", "[SheetBot] 모바일 명함 발송 대장", null))
+            }
+            if (prefs.isPaymentPushSyncEnabled && prefs.getSheetUrl("PAYMENT_PUSH").isNullOrBlank()) {
+                targets.add(Triple("PAYMENT_PUSH", "[SheetBot] 매장 결제 및 매출 대장", null))
+            }
+            if (prefs.isAutoReceiptEnabled && prefs.getSheetUrl("RECEIPT_SMS").isNullOrBlank()) {
+                targets.add(Triple("RECEIPT_SMS", "[SheetBot] 고객 영수증 문자 발송 대장", null))
+            }
+
+            for ((sheetType, title, folder) in targets) {
+                try {
+                    val result = ApiClient.provisionSheet(
+                        userEmail = userEmail,
+                        sheetType = sheetType,
+                        sheetTitle = title,
+                        folderName = folder
+                    )
+                    if (result.success) {
+                        if (!result.spreadsheetUrl.isNullOrBlank()) {
+                            prefs.setSheetUrl(sheetType, result.spreadsheetUrl)
+                        }
+                        if (!result.spreadsheetId.isNullOrBlank()) {
+                            prefs.setSheetId(sheetType, result.spreadsheetId)
+                        }
+                        if (!result.folderUrl.isNullOrBlank()) {
+                            prefs.setFolderUrl(sheetType, result.folderUrl)
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    /**
+     * 구글 시트 원본 vs 모바일 스마트 웹앱 선택 다이얼로그 (v2.1.5)
      */
     private fun showOpenSheetChooserDialog(sheetType: String, defaultTitle: String) {
         val userEmail = prefs.userEmail
@@ -1946,17 +2008,92 @@ class MainActivity : AppCompatActivity() {
                         if (!finalSheetUrl.isNullOrBlank()) {
                             openExternalUrl(finalSheetUrl)
                         } else {
-                            Toast.makeText(this, "대장 시트를 생성하는 중입니다. 잠시 후 다시 열어주세요.", Toast.LENGTH_SHORT).show()
-                            provisionSheetAsync(sheetType, defaultTitle)
+                            openSheetWithProgress(sheetType, defaultTitle, isWebApp = false)
                         }
                     }
                     1 -> {
-                        openExternalUrl(webAppUrl)
+                        if (!finalSheetUrl.isNullOrBlank()) {
+                            openExternalUrl(webAppUrl)
+                        } else {
+                            openSheetWithProgress(sheetType, defaultTitle, isWebApp = true)
+                        }
                     }
                 }
             }
             .setNegativeButton("닫기", null)
             .show()
+    }
+
+    /**
+     * 캐시가 없을 때 프로그레스 다이얼로그를 표시하고 구글 시트를 확인/생성한 즉시 자동으로 열어줌 (v2.1.5)
+     */
+    private fun openSheetWithProgress(sheetType: String, defaultTitle: String, isWebApp: Boolean) {
+        val userEmail = prefs.userEmail
+        if (!prefs.isPaired || userEmail.isNullOrBlank()) {
+            Toast.makeText(this, "먼저 상단에서 시트봇 계정 연동을 완료해 주세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val folderName = when (sheetType) {
+            "RECORDING" -> prefs.callRecordingDriveFolder
+            "FILE_UPLOAD" -> prefs.fileUploadDriveFolder
+            else -> null
+        }
+
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("📊 구글 스프레드시트 대장 준비 중")
+            .setMessage("구글 드라이브에서 '${defaultTitle}'을(를) 확인하고 있습니다...\n\n준비되는 즉시 자동으로 열립니다. 잠시만 기다려주세요.")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        activityScope.launch {
+            try {
+                val result = ApiClient.provisionSheet(
+                    userEmail = userEmail,
+                    sheetType = sheetType,
+                    sheetTitle = defaultTitle,
+                    folderName = folderName
+                )
+                withContext(Dispatchers.Main) {
+                    if (progressDialog.isShowing) {
+                        progressDialog.dismiss()
+                    }
+                    if (result.success && !result.spreadsheetUrl.isNullOrBlank()) {
+                        prefs.setSheetUrl(sheetType, result.spreadsheetUrl)
+                        if (!result.spreadsheetId.isNullOrBlank()) {
+                            prefs.setSheetId(sheetType, result.spreadsheetId)
+                        }
+                        if (!result.folderUrl.isNullOrBlank()) {
+                            prefs.setFolderUrl(sheetType, result.folderUrl)
+                        }
+
+                        Toast.makeText(this@MainActivity, "🎉 대장 시트가 준비되었습니다!", Toast.LENGTH_SHORT).show()
+
+                        if (isWebApp) {
+                            val webAppUrl = "https://sheetbot.cloud/m/${sheetType.lowercase()}?email=${Uri.encode(userEmail)}"
+                            openExternalUrl(webAppUrl)
+                        } else {
+                            openExternalUrl(result.spreadsheetUrl)
+                        }
+                    } else {
+                        val errMsg = result.error ?: result.message ?: "구글 시트 대장을 연결할 수 없습니다."
+                        AlertDialog.Builder(this@MainActivity)
+                            .setTitle("⚠️ 대장 시트 연결 실패")
+                            .setMessage("구글 스프레드시트를 준비하는 중 오류가 발생했습니다.\n\n원인: $errMsg\n\n구글 계정 연동 상태를 확인해 주세요.")
+                            .setPositiveButton("확인", null)
+                            .show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    if (progressDialog.isShowing) {
+                        progressDialog.dismiss()
+                    }
+                    Toast.makeText(this@MainActivity, "통신 오류가 발생했습니다: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     private fun openExternalUrl(url: String) {
@@ -1970,8 +2107,61 @@ class MainActivity : AppCompatActivity() {
 
     private fun openDriveFolder(sheetType: String, defaultFolderName: String) {
         val cachedFolderUrl = prefs.getFolderUrl(sheetType)
-        val finalUrl = cachedFolderUrl ?: "https://drive.google.com/drive/search?q=${Uri.encode(defaultFolderName)}"
-        openExternalUrl(finalUrl)
+        if (!cachedFolderUrl.isNullOrBlank()) {
+            openExternalUrl(cachedFolderUrl)
+            return
+        }
+
+        val userEmail = prefs.userEmail
+        if (!prefs.isPaired || userEmail.isNullOrBlank()) {
+            val fallbackUrl = "https://drive.google.com/drive/search?q=${Uri.encode(defaultFolderName)}"
+            openExternalUrl(fallbackUrl)
+            return
+        }
+
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("📁 구글 드라이브 폴더 확인 중")
+            .setMessage("구글 드라이브에서 '${defaultFolderName}' 폴더를 확인하고 있습니다...\n\n준비되는 즉시 자동으로 열립니다.")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        activityScope.launch {
+            try {
+                val result = ApiClient.provisionSheet(
+                    userEmail = userEmail,
+                    sheetType = sheetType,
+                    sheetTitle = "[SheetBot] $defaultFolderName 대장",
+                    folderName = defaultFolderName
+                )
+                withContext(Dispatchers.Main) {
+                    if (progressDialog.isShowing) {
+                        progressDialog.dismiss()
+                    }
+                    if (result.success && !result.folderUrl.isNullOrBlank()) {
+                        prefs.setFolderUrl(sheetType, result.folderUrl)
+                        if (!result.spreadsheetUrl.isNullOrBlank()) {
+                            prefs.setSheetUrl(sheetType, result.spreadsheetUrl)
+                        }
+                        if (!result.spreadsheetId.isNullOrBlank()) {
+                            prefs.setSheetId(sheetType, result.spreadsheetId)
+                        }
+                        openExternalUrl(result.folderUrl)
+                    } else {
+                        val fallbackUrl = "https://drive.google.com/drive/search?q=${Uri.encode(defaultFolderName)}"
+                        openExternalUrl(fallbackUrl)
+                    }
+                }
+            } catch (_: Exception) {
+                withContext(Dispatchers.Main) {
+                    if (progressDialog.isShowing) {
+                        progressDialog.dismiss()
+                    }
+                    val fallbackUrl = "https://drive.google.com/drive/search?q=${Uri.encode(defaultFolderName)}"
+                    openExternalUrl(fallbackUrl)
+                }
+            }
+        }
     }
 
     private fun getAppVersionName(): String {

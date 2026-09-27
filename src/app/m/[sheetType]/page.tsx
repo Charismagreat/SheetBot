@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState, useMemo, Suspense } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 
@@ -87,8 +88,7 @@ function MobileSheetWebAppContent() {
     }
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/user/sheets/data?email=${encodeURIComponent(userEmail)}&sheetType=${encodeURIComponent(sheetTypeParam)}`
+      const res = await apiFetch(`/api/user/sheets/data?email=${encodeURIComponent(userEmail)}&sheetType=${encodeURIComponent(sheetTypeParam)}`
       );
       const json: SheetDataResponse = await res.json();
       setData(json);
