@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUserSpreadsheet, SheetBindingType } from "@/lib/sheet-binding-helper";
@@ -10,7 +11,7 @@ interface CachedSheetData {
   timestamp: number;
 }
 const sheetDataCache = new Map<string, CachedSheetData>();
-const CACHE_TTL_MS = 15_000; // 15초 인메모리 캐시
+const CACHE_TTL_MS = 30_000; // 30초 인메모리 캐시
 
 /**
  * GET /api/user/sheets/data?email=...&sheetType=...
