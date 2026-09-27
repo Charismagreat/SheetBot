@@ -1,4 +1,4 @@
-﻿package cloud.sheetbot.agent.user
+package cloud.sheetbot.agent.user
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -120,7 +120,7 @@ object DepositQueueManager {
                 if (result.success) {
                     successCount++
                     Log.i(TAG, "✅ [오프라인 큐 전송 성공] ID=${item.id}, 발신=${item.sender}")
-                    // 0원 영수증 SMS 자동 회신
+                    // 영수증 문자 자동 전송
                     if (prefsManager.isReceiptSmsEnabled && !result.replySmsPhone.isNullOrBlank() && !result.replySmsText.isNullOrBlank()) {
                         SmsSenderUtil.sendSms(context, result.replySmsPhone, result.replySmsText)
                     }

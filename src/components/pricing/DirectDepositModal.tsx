@@ -383,7 +383,7 @@ export default function DirectDepositModal({
                   <div>
                     <label className="text-[10px] font-bold text-slate-600 flex items-center justify-between mb-1">
                       <span>영수증 수신 번호 <span className="text-indigo-600 font-medium">(선택)</span></span>
-                      <span className="text-[9px] text-emerald-600 font-extrabold">⚡ 입금 즉시 0원 영수증 SMS 자동 발송</span>
+                      <span className="text-[9px] text-emerald-600 font-extrabold">⚡ 입금 즉시 영수증 문자 자동 전송</span>
                     </label>
                     <input
                       type="tel"

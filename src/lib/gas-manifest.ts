@@ -1329,7 +1329,7 @@ function getTokenRechargeModalHtml() {
           '<div>' +
             '<label for="receiptPhoneInput" class="text-[9.5px] font-bold text-slate-600 flex items-center justify-between mb-0.5">' +
               '<span>영수증 수신 번호 <span class="text-indigo-600 font-medium">(선택)</span></span>' +
-              '<span class="text-[8.5px] text-emerald-600 font-extrabold">⚡ 입금 즉시 0원 영수증 SMS 자동 발송</span>' +
+              '<span class="text-[8.5px] text-emerald-600 font-extrabold">⚡ 입금 즉시 영수증 문자 자동 전송</span>' +
             '</label>' +
             '<input type="tel" id="receiptPhoneInput" placeholder="010-0000-0000 (미입력 시 SMS 발송 생략)" class="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs placeholder:text-slate-400" />' +
           '</div>' +

@@ -1,4 +1,4 @@
-﻿package cloud.sheetbot.agent.user
+package cloud.sheetbot.agent.user
 
 import android.content.Context
 import android.os.Build
@@ -8,7 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * 0원 영수증 SMS 발송 및 미발송 대기열 처리 전용 유틸리티
+ * 영수증 문자 전송 및 미발송 대기열 처리 전용 유틸리티
  */
 object SmsSenderUtil {
     private const val TAG = "SmsSenderUtil"
