@@ -41,9 +41,8 @@ function mapNotificationDevice(d: any) {
     createdAt: d.created_at,
   };
 }
-import { useSession } from "next-auth/react";
+import { useAuthAdmin } from "@/contexts/AuthAdminContext";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/hooks/useAuth";
 import {
   Smartphone,
   Sparkles,
@@ -89,14 +88,20 @@ const NotificationsGuideTab = dynamic(
 );
 
 export default function NotificationsPage() {
-  const { data: session, status } = useSession();
-  const { user, isLoggedIn, isLoading: isAuthLoading } = useAuth();
+  const { user, userEmail, isLoggedIn, isLoading: isAuthLoading } = useAuthAdmin();
   const router = useRouter();
 
   const effectiveEmail =
+    userEmail ||
     user?.email ||
-    session?.user?.email ||
     (typeof window !== "undefined" ? localStorage.getItem("sheetbot_user_email") || "" : "");
+
+  const effectiveEmailRef = useRef(effectiveEmail);
+  useEffect(() => {
+    effectiveEmailRef.current = effectiveEmail;
+  }, [effectiveEmail]);
+
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const [activeTab, setActiveTab] = useState<"devices" | "rules" | "logs" | "guide">("devices");
 
@@ -115,7 +120,7 @@ export default function NotificationsPage() {
 
   // SheetBot Agent2 페어링 정보 클라이언트 즉시 생성 (네트워크 왕복 및 지연 0초)
   const fetchAgent2Pairing = useCallback(async () => {
-    const email = effectiveEmail;
+    const email = effectiveEmailRef.current || effectiveEmail;
     if (!email) return;
     try {
       const cleanEmail = email.toLowerCase().trim();
@@ -248,7 +253,7 @@ export default function NotificationsPage() {
   const isFetchingBootstrapRef = useRef(false);
 
   const fetchBootstrapData = useCallback(async (isSilent = false) => {
-    const email = effectiveEmail;
+    const email = effectiveEmailRef.current || effectiveEmail;
     if (!email) return;
 
     if (!isSilent) {
@@ -257,7 +262,12 @@ export default function NotificationsPage() {
       setLoadingLogs(true);
     }
 
+    // 이미 진행 중인 요청이 있다면 브라우저 소켓 pending 방지를 위해 이전 요청 취소(Abort) 후 진행
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
     const abortCtrl = new AbortController();
+    abortControllerRef.current = abortCtrl;
     const timeoutId = setTimeout(() => abortCtrl.abort(), 6000);
 
     try {
@@ -316,13 +326,13 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     if (isAuthLoading) return;
-    if (!isLoggedIn && status === "unauthenticated" && !effectiveEmail) {
+    if (!isLoggedIn && !effectiveEmail) {
       router.push("/login");
     } else if (effectiveEmail || isLoggedIn) {
       fetchBootstrapData();
       fetchAgent2Pairing();
     }
-  }, [isLoggedIn, isAuthLoading, status, effectiveEmail, router, fetchBootstrapData, fetchAgent2Pairing]);
+  }, [isLoggedIn, isAuthLoading, effectiveEmail, router, fetchBootstrapData, fetchAgent2Pairing]);
 
   // ⚡ [0초 실시간 감시] 이지데스크 DB 왓처 실시간 스트림 연동 (SMS 및 기기 변경 자동 감지)
   const [isRealtimeLive, setIsRealtimeLive] = useState(false);
