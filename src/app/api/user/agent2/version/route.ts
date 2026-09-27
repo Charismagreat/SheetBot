@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 23,
-      latestVersionName: "2.1.2",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.2/SheetBotAgent.apk",
+      latestVersionCode: 24,
+      latestVersionName: "2.1.3",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.3/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.2 정식 릴리스\n• 🛡️ 신규 설치 시 기능 기본 꺼짐(Default OFF) 전환으로 완전한 사용자 주도권(Opt-in) 보장\n• ⚡ 기능 스위치 ON 시 구글 스프레드시트 대장 및 헤더 즉시 자동 생성(Eager Provisioning)\n• 👥 문자/통화녹음 기록 대상 주소록(연락처) 선택 및 대상 관리(개별 제외/전체 해제) 다이얼로그 탑재",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.3 정식 릴리스\n• ⚡ 모든 기능 스위치 ON 시 구글 드라이브 전용 폴더 및 대응 시트 대장 즉시 선제 자동 생성\n  - '[SheetBot] 통화 녹음' 폴더 및 통화 녹음 대장\n  - '[SheetBot] 파일 보관함' 폴더 및 파일 업로드 대장\n  - '[SheetBot] 모바일 명함 발송 대장'\n  - '[SheetBot] 매장 결제 및 매출 대장'\n  - '[SheetBot] 고객 영수증 문자 발송 대장'\n• 🏷️ 상단 및 코파일럿 버전 표기 실시간 동적 바인딩(v2.1.3)\n• 📁 파일 보관함 전용 ON/OFF 제어 스위치 탑재",
     },
     {
       headers: {
