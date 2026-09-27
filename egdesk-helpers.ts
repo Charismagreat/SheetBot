@@ -3426,11 +3426,10 @@ export async function listDriveFiles(
     query?: string;
     pageSize?: number;
     pageToken?: string;
-    preferOAuth?: boolean;
   } = {},
   callOptions: WorkspaceVisitorCallOptions = {},
 ) {
-  const preferOAuth = options.preferOAuth ?? callOptions.preferOAuth ?? true;
+  const preferOAuth = callOptions.preferOAuth ?? true;
   return callDriveTool('drive_list_files', { ...options, preferOAuth }, { ...callOptions, preferOAuth });
 }
 

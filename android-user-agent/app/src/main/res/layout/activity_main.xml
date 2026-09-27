@@ -766,13 +766,63 @@
                 android:padding="10dp"
                 android:layout_marginBottom="12dp">
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="🎯 업로드 대상 번호/이름 (쉼표 구분, 빈칸은 전체):"
-                    android:textColor="#94A3B8"
-                    android:textSize="11sp"
-                    android:layout_marginBottom="4dp" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="4dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🎯 업로드 대상 번호/이름 (빈칸은 전체):"
+                        android:textColor="#94A3B8"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/tvRecordingTargetCountBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_badge_version"
+                        android:paddingHorizontal="6dp"
+                        android:paddingVertical="1dp"
+                        android:text="전체 업로드"
+                        android:textColor="#38BDF8"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="6dp">
+
+                    <Button
+                        android:id="@+id/btnPickRecordingContact"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#2563EB"
+                        android:text="👥 연락처에서 추가"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btnManageRecordingTargets"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#334155"
+                        android:text="📋 등록 대상 확인 / 제외"
+                        android:textColor="#F1F5F9"
+                        android:textSize="11sp"
+                        android:layout_marginStart="4dp" />
+                </LinearLayout>
 
                 <EditText
                     android:id="@+id/etRecordingTargetFilter"
@@ -780,7 +830,7 @@
                     android:layout_height="38dp"
                     android:background="#1E293B"
                     android:paddingHorizontal="10dp"
-                    android:hint="예: 010-7523-5071, 홍길동, 거래처"
+                    android:hint="직접 입력 시 쉼표(,) 구분 (예: 010-1234-5678, 거래처)"
                     android:textColorHint="#64748B"
                     android:textColor="#FFFFFF"
                     android:textSize="11.5sp"
@@ -1032,15 +1082,17 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:layout_marginBottom="6dp">
+                android:background="#0F172A"
+                android:padding="10dp"
+                android:layout_marginBottom="12dp">
 
                 <TextView
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="스크랩 대장 시트 이름"
+                    android:text="📊 구글 스프레드시트 대장명:"
                     android:textColor="#94A3B8"
-                    android:textSize="10.5sp"
-                    android:layout_marginBottom="3dp" />
+                    android:textSize="11sp"
+                    android:layout_marginBottom="4dp" />
 
                 <EditText
                     android:id="@+id/etLinkScrapSheet"
@@ -1052,7 +1104,7 @@
                     android:textColorHint="#64748B"
                     android:textColor="#FFFFFF"
                     android:textSize="11.5sp"
-                    android:layout_marginBottom="6dp" />
+                    android:layout_marginBottom="8dp" />
 
                 <TextView
                     android:layout_width="match_parent"
@@ -1061,7 +1113,7 @@
                     android:textColor="#64748B"
                     android:textSize="10.5sp"
                     android:gravity="center"
-                    android:layout_marginBottom="4dp" />
+                    android:layout_marginBottom="6dp" />
 
                 <TextView
                     android:layout_width="match_parent"
@@ -1112,13 +1164,63 @@
                 android:padding="10dp"
                 android:layout_marginBottom="12dp">
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="🎯 기록 대상 번호/이름 (쉼표 구분, 빈칸은 전체):"
-                    android:textColor="#94A3B8"
-                    android:textSize="11sp"
-                    android:layout_marginBottom="4dp" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="4dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🎯 기록 대상 번호/이름 (빈칸은 전체):"
+                        android:textColor="#94A3B8"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/tvSmsTargetCountBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_badge_version"
+                        android:paddingHorizontal="6dp"
+                        android:paddingVertical="1dp"
+                        android:text="전체 기록"
+                        android:textColor="#38BDF8"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="6dp">
+
+                    <Button
+                        android:id="@+id/btnPickSmsContact"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#2563EB"
+                        android:text="👥 연락처에서 추가"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btnManageSmsTargets"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#334155"
+                        android:text="📋 등록 대상 확인 / 제외"
+                        android:textColor="#F1F5F9"
+                        android:textSize="11sp"
+                        android:layout_marginStart="4dp" />
+                </LinearLayout>
 
                 <EditText
                     android:id="@+id/etSmsTargetFilter"
@@ -1126,7 +1228,7 @@
                     android:layout_height="38dp"
                     android:background="#1E293B"
                     android:paddingHorizontal="10dp"
-                    android:hint="예: 010-7523-5071, 홍길동, 거래처"
+                    android:hint="직접 입력 시 쉼표(,) 구분 (예: 010-1234-5678, 거래처)"
                     android:textColorHint="#64748B"
                     android:textColor="#FFFFFF"
                     android:textSize="11.5sp"
@@ -1202,13 +1304,43 @@
                 android:padding="10dp"
                 android:layout_marginBottom="12dp">
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="🎯 기록 대상 채팅방/발신자 (쉼표 구분, 빈칸은 전체):"
-                    android:textColor="#94A3B8"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="4dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🎯 기록 대상 채팅방/발신자 (빈칸은 전체):"
+                        android:textColor="#94A3B8"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/tvKakaoTargetCountBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_badge_version"
+                        android:paddingHorizontal="6dp"
+                        android:paddingVertical="1dp"
+                        android:text="전체 기록"
+                        android:textColor="#38BDF8"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btnManageKakaoTargets"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:backgroundTint="#334155"
+                    android:text="📋 등록 대상 확인 / 제외"
+                    android:textColor="#F1F5F9"
                     android:textSize="11sp"
-                    android:layout_marginBottom="4dp" />
+                    android:layout_marginBottom="6dp" />
 
                 <EditText
                     android:id="@+id/etKakaoTargetFilter"
@@ -1216,7 +1348,7 @@
                     android:layout_height="38dp"
                     android:background="#1E293B"
                     android:paddingHorizontal="10dp"
-                    android:hint="예: [주문방], 거래처, 고객상담, 홍길동"
+                    android:hint="직접 입력 시 쉼표(,) 구분 (예: [주문방], 거래처, 고객상담)"
                     android:textColorHint="#64748B"
                     android:textColor="#FFFFFF"
                     android:textSize="11.5sp"
