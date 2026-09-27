@@ -1003,13 +1003,20 @@ export async function GET() {
     </div>
   </div>
 
+  <?
+    var _initBal = (typeof initialBalance !== 'undefined' && initialBalance !== null) ? Number(initialBalance) : 2495439;
+    var _initTier = (typeof initialTier !== 'undefined' && initialTier) ? initialTier : 'PRO';
+    var _initEmail = (typeof currentUserEmail !== 'undefined' && currentUserEmail) ? currentUserEmail : 'chachogreat@gmail.com';
+    var _formattedBal = _initBal.toLocaleString();
+  ?>
+
   <!-- [1-1] 스마트 하이브리드 지갑 미니 스트립 (평상시 슬림 표시 & 마스킹) -->
   <div class="wallet-mini-strip" id="wallet-mini-strip">
     <div class="wallet-mini-left" onclick="toggleWalletCard()" title="클릭하여 지갑 상세 카드 열기/닫기">
       <span class="wallet-mini-icon">🪙</span>
       <span class="wallet-mini-label">토큰</span>
-      <span class="wallet-mini-amount" id="token-amount-mini">동기화 중...</span>
-      <span class="wallet-mini-tier" id="tier-badge-mini">PRO</span>
+      <span class="wallet-mini-amount" id="token-amount-mini"><?= _formattedBal ?> T</span>
+      <span class="wallet-mini-tier" id="tier-badge-mini"><?= _initTier ?></span>
       <span class="wallet-toggle-arrow" id="wallet-toggle-arrow">▼</span>
     </div>
     <div class="wallet-mini-right">
@@ -1022,8 +1029,8 @@ export async function GET() {
   <div class="wallet-card" id="wallet-card-details" style="display: none;">
     <div class="wallet-top-row">
       <div style="display: flex; align-items: center; gap: 6px;">
-        <span class="tier-badge" id="tier-badge">PRO</span>
-        <span class="user-email-text" id="token-user">계정 동기화 중...</span>
+        <span class="tier-badge" id="tier-badge"><?= _initTier ?></span>
+        <span class="user-email-text" id="token-user"><?= _initEmail ?></span>
       </div>
       <div style="display: flex; align-items: center; gap: 4px;">
         <button class="refresh-icon-btn" onclick="refreshBalance()" title="실시간 잔액 새로고침">
@@ -1037,7 +1044,7 @@ export async function GET() {
 
     <div class="wallet-balance-row">
       <div class="balance-num-box">
-        <span class="balance-val" id="token-amount">동기화 중...</span>
+        <span class="balance-val" id="token-amount"><?= _formattedBal ?></span>
         <span class="balance-unit" id="balance-unit">Token</span>
       </div>
     </div>
@@ -1250,8 +1257,8 @@ export async function GET() {
   </footer>
 
   <script>
-    var currentEmail = 'chachogreat@gmail.com';
-    var currentBalance = 0;
+    var currentEmail = '<?= _initEmail ?>';
+    var currentBalance = <?= _initBal ?>;
     var isMasked = false;
     var isDetailsOpen = false;
 
@@ -1259,7 +1266,9 @@ export async function GET() {
       isMasked = localStorage.getItem('sheetbot_wallet_masked') === 'true';
     } catch(e) {}
 
-    // 사이드바 로드 즉시 브라우저에서 0.1초 만에 1차 잔액 직접 동기화
+    applyBalanceDisplay(currentBalance);
+
+    // 사이드바 로드 즉시 브라우저에서 최신 잔액 백그라운드 갱신
     setTimeout(function() {
       fetchDirectWallet(currentEmail);
     }, 20);
@@ -1415,12 +1424,7 @@ export async function GET() {
     }
 
     function refreshBalance() {
-      var amountEl = document.getElementById('token-amount');
-      var miniEl = document.getElementById('token-amount-mini');
-      if (amountEl && !isMasked) amountEl.innerText = '동기화 중...';
-      if (miniEl && !isMasked) miniEl.innerText = '동기화 중...';
-
-      // 1. ⚡ 브라우저 직접 fetch를 즉시 우선 실행 (0.1초 즉시 동기화!)
+      // 1. ⚡ 브라우저 직접 fetch를 즉시 우선 실행 (조용한 백그라운드 SWR 갱신)
       fetchDirectWallet(currentEmail);
 
       // 2. Apps Script 백엔드 함수 병렬 실행
