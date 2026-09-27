@@ -8,18 +8,46 @@ export interface DefaultFaqItem {
 
 export const DEFAULT_FAQS: DefaultFaqItem[] = [
   {
+    id: "faq_website_sentinel_1",
+    category: "Apps Script/기능",
+    question: "내 웹사이트나 쇼핑몰이 다운되었을 때 스마트폰으로 비상 알람을 받을 수 있나요? (Website Uptime Sentinel)",
+    answer: "네, 완벽하게 지원합니다! 시트봇 모바일 에이전트 v2.1.6부터 '내 웹사이트 실시간 장애 감시 (Website Uptime Sentinel)' 기능이 기본 탑재되었습니다. 앱 메인 화면에서 감시할 쇼핑몰/홈페이지 URL을 등록해 두면 3분 주기로 서버 상태를 자동 점검하며, 서버 다운이나 HTTP 502/504 장애가 발생하면 꺼진 스마트폰 화면을 켜고 전체화면 비상 카드와 사이렌 소리(TTS)로 즉시 깨워주어 새벽 장애를 1초 만에 인지하고 조치할 수 있습니다.",
+    sort_order: 1,
+  },
+  {
+    id: "faq_website_sentinel_2",
+    category: "Apps Script/기능",
+    question: "지하철이나 음영 지역에서 스마트폰 인터넷이 끊겼을 때도 웹사이트가 죽었다고 가짜 알람(오탐)이 울리나요?",
+    answer: "아닙니다! 시트봇은 철저한 '2단계 교차 검증(Cross-Check)' 오탐 방지 기술을 적용했습니다. 대상 웹사이트 접속 실패 시 즉시 구글 기준 서버(generate_204) 등에 핑을 날려 '휴대폰 자체의 외부 인터넷은 정상인데 대상 사이트만 죽어있는 상태'인지를 먼저 확인합니다. 스마트폰 인터넷 자체가 끊긴 상황에서는 알람을 유예하므로 불필요한 가짜 알람(False Alarm)이 전혀 발생하지 않습니다.",
+    sort_order: 2,
+  },
+  {
+    id: "faq_sheet_autolaunch_1",
+    category: "시작하기",
+    question: "모바일 에이전트 앱에서 [대장 시트 열기]를 누를 때 왜 대기 시간 없이 0초 만에 열리나요?",
+    answer: "시트봇 모바일 에이전트 v2.1.5+부터 '대장 시트 자동 실행(Auto-Launch)' 및 '백그라운드 사전 캐싱(Preload Caching)' 아키텍처가 적용되었습니다. 앱이 켜질 때 활성화된 대장 시트 URL을 백그라운드에서 선제 동기화해 두므로, 사용자가 버튼을 눌렀을 때 생성 대기 지연 없이 확인 즉시 브라우저나 스마트 모바일 웹앱이 0초 만에 바로 열립니다. 또한 인메모리 뮤텍스와 자가 치유(Self-Healing) 기술로 구글 드라이브 내에 시트나 폴더가 중복 생성되는 문제를 원천 차단했습니다.",
+    sort_order: 3,
+  },
+  {
+    id: "faq_server_silent_mode_1",
+    category: "보안/계정",
+    question: "시트봇 서버가 점검 중이거나 일시 지연될 때 제 스마트폰에서 비상 사이렌이 울리지 않나요?",
+    answer: "네, 절대 울리지 않습니다! v2.1.6 개편을 통해 시트봇 서버 점검이나 일시적 네트워크 지연 시에는 사용자를 방해하는 전체화면이나 사이렌을 일체 울리지 않는 '조용한 오프라인 모드(Graceful Offline Mode)'로 전환되었습니다. 상단 알림바에 '🟡 오프라인 모드'로만 조용히 표시되며, 네트워크가 복구되면 백그라운드에서 자동으로 정상 연결됩니다. 비상 사이렌은 오직 사용자가 직접 등록하고 허용한 '내 웹사이트 실시간 장애 감시' 기능에서만 안전하게 작동합니다.",
+    sort_order: 4,
+  },
+  {
     id: "faq_seed_1",
     category: "시작하기",
     question: "Google Apps Script 코딩 경험이 전혀 없어도 이용할 수 있나요?",
     answer: "네, 완전히 가능합니다! SheetBot은 복잡한 자바스크립트 문법 대신 '매일 특정 시트에 합산해줘'와 같은 자연어 명령만 입력하면 AI가 실행 가능한 완전한 코드를 생성하고, 구글 클라우드와 터널을 통해 대상 시트에 원클릭으로 주입해 줍니다.",
-    sort_order: 1,
+    sort_order: 5,
   },
   {
     id: "faq_seed_2",
     category: "시작하기",
     question: "자동화하려는 구글 시트의 권한은 어떻게 주어야 하나요?",
     answer: "로그인하신 구글 계정에 편집 권한이 있는 시트라면 별도의 복잡한 공유 설정 없이 시트 URL만 등록하면 됩니다. 브라우저 주소창의 'https://docs.google.com/spreadsheets/d/...' URL을 그대로 복사하여 프로젝트 생성창에 붙여넣으시면 됩니다.",
-    sort_order: 2,
+    sort_order: 6,
   },
   {
     id: "faq_seed_3",

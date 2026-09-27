@@ -252,19 +252,19 @@ export default function GuidePage() {
           </div>
         </div>
 
-        {/* 5단계 시작 가이드 */}
+        {/* 단계별 시작 가이드 */}
         <section className="space-y-6">
           <div className="text-center max-w-2xl mx-auto space-y-2">
             <span className="text-xs font-extrabold text-emerald-600 uppercase tracking-wider">Step-by-Step Roadmap</span>
             <h2 className="text-2xl font-black text-slate-900 tracking-tight break-keep">
-              누구나 3분 만에 마스터하는 5단계 자동화 여정
+              누구나 3분 만에 마스터하는 {steps.length}대 핵심 자동화 여정
             </h2>
             <p className="text-xs text-slate-500 break-keep">
-              구글 계정 로그인부터 안티그라비티 원터치 연동, 시트봇 모바일 에이전트까지 직관적인 단계로 구성되어 있습니다.
+              구글 계정 로그인부터 안티그라비티 연동, 시트봇 모바일 에이전트 및 24시간 웹사이트 실시간 감시(Uptime Sentinel)까지 완벽하게 준비되어 있습니다.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {steps.map((s, idx) => (
               <div
                 key={idx}
