@@ -681,7 +681,7 @@ class MainActivity : AppCompatActivity() {
         val email = prefs.userEmail
 
         if (isPaired && !email.isNullOrBlank()) {
-            binding.cardStatus.setBackgroundResource(R.drawable.bg_card_paired)
+            binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
             binding.tvStatusTitle.text = "✅ 연동 완료 (${email})"
             binding.tvStatusDesc.text = "구글 시트봇과 실시간 연동 중입니다."
             binding.layoutPairedControls.visibility = View.VISIBLE
@@ -715,7 +715,7 @@ class MainActivity : AppCompatActivity() {
                 binding.tvWalletBalance.text = formattedBalance
                 binding.tvWalletTier.text = result.tier
                 val estQueries = (result.balanceTokens / 200).coerceAtLeast(0)
-                binding.tvWalletUsageGuide.text = "💡 AI 코파일럿 & 구글 시트 자동화 약 ${NumberFormat.getNumberInstance().format(estQueries)}회 질의 가능"
+                binding.tvWalletUsageGuide.text = "💡 AI 코파일럿 & 구글 시트 자동화 약 ${NumberFormat.getNumberInstance().format(estQueries.toLong())}회 질의 가능"
                 if (isManualRefresh) {
                     Toast.makeText(this@MainActivity, "토큰 잔액이 갱신되었습니다.", Toast.LENGTH_SHORT).show()
                 }

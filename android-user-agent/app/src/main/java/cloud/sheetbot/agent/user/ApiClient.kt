@@ -855,86 +855,6 @@ object ApiClient {
         }
         false
     }
-}
-
-data class PairResult(
-    val success: Boolean,
-    val userEmail: String? = null,
-    val deviceToken: String? = null,
-    val webhookUrl: String? = null,
-    val fallbackWebhookUrl: String? = null,
-    val heartbeatUrl: String? = null,
-    val fallbackHeartbeatUrl: String? = null,
-    val message: String? = null,
-    val error: String? = null
-)
-
-data class WebhookResult(
-    val statusCode: Int,
-    val success: Boolean,
-    val message: String,
-    val replySmsPhone: String? = null,
-    val replySmsText: String? = null,
-    val ttsText: String? = null
-)
-
-data class VersionInfo(
-    val latestVersionCode: Int,
-    val latestVersionName: String,
-    val apkUrl: String,
-    val fallbackApkUrl: String,
-    val releaseNotes: String
-)
-
-data class PendingReceipt(
-    val id: Long,
-    val recipientPhone: String,
-    val depositorName: String,
-    val amountKrw: Int,
-    val tokensToCredit: Int,
-    val message: String
-)
-
-data class PingResult(
-    val isOnline: Boolean,
-    val latencyMs: Long = 0,
-    val connectedHost: String = "",
-    val error: String? = null
-)
-
-data class UploadRecordingResult(
-    val success: Boolean,
-    val fileId: String? = null,
-    val fileName: String? = null,
-    val webViewLink: String? = null,
-    val spreadsheetUrl: String? = null,
-    val error: String? = null
-)
-
-data class UploadGenericFileResult(
-    val success: Boolean,
-    val fileId: String? = null,
-    val fileName: String? = null,
-    val folderName: String? = null,
-    val webViewLink: String? = null,
-    val spreadsheetUrl: String? = null,
-    val message: String? = null,
-    val error: String? = null,
-    val ocrType: String? = null,
-    val ocrData: JSONObject? = null
-)
-
-data class BookmarkResult(
-    val success: Boolean,
-    val category: String = "🌐 웹사이트",
-    val title: String? = null,
-    val url: String? = null,
-    val siteName: String? = null,
-    val aiSummary: String? = null,
-    val spreadsheetUrl: String? = null,
-    val message: String? = null,
-    val error: String? = null
-)
 
     /**
      * 회원 토큰 지갑 잔액 및 등급 실시간 조회 (v1.9.0)
@@ -1047,6 +967,87 @@ data class BookmarkResult(
         DepositSessionResult(success = false, error = lastError)
     }
 }
+
+
+data class PairResult(
+    val success: Boolean,
+    val userEmail: String? = null,
+    val deviceToken: String? = null,
+    val webhookUrl: String? = null,
+    val fallbackWebhookUrl: String? = null,
+    val heartbeatUrl: String? = null,
+    val fallbackHeartbeatUrl: String? = null,
+    val message: String? = null,
+    val error: String? = null
+)
+
+data class WebhookResult(
+    val statusCode: Int,
+    val success: Boolean,
+    val message: String,
+    val replySmsPhone: String? = null,
+    val replySmsText: String? = null,
+    val ttsText: String? = null
+)
+
+data class VersionInfo(
+    val latestVersionCode: Int,
+    val latestVersionName: String,
+    val apkUrl: String,
+    val fallbackApkUrl: String,
+    val releaseNotes: String
+)
+
+data class PendingReceipt(
+    val id: Long,
+    val recipientPhone: String,
+    val depositorName: String,
+    val amountKrw: Int,
+    val tokensToCredit: Int,
+    val message: String
+)
+
+data class PingResult(
+    val isOnline: Boolean,
+    val latencyMs: Long = 0,
+    val connectedHost: String = "",
+    val error: String? = null
+)
+
+data class UploadRecordingResult(
+    val success: Boolean,
+    val fileId: String? = null,
+    val fileName: String? = null,
+    val webViewLink: String? = null,
+    val spreadsheetUrl: String? = null,
+    val error: String? = null
+)
+
+data class UploadGenericFileResult(
+    val success: Boolean,
+    val fileId: String? = null,
+    val fileName: String? = null,
+    val folderName: String? = null,
+    val webViewLink: String? = null,
+    val spreadsheetUrl: String? = null,
+    val message: String? = null,
+    val error: String? = null,
+    val ocrType: String? = null,
+    val ocrData: JSONObject? = null
+)
+
+data class BookmarkResult(
+    val success: Boolean,
+    val category: String = "🌐 웹사이트",
+    val title: String? = null,
+    val url: String? = null,
+    val siteName: String? = null,
+    val aiSummary: String? = null,
+    val spreadsheetUrl: String? = null,
+    val message: String? = null,
+    val error: String? = null
+)
+
 
 data class WalletBalanceResult(
     val success: Boolean,
