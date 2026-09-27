@@ -64,6 +64,20 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_status_details_hidden", false)
         set(value) = prefs.edit().putBoolean("is_status_details_hidden", value).apply()
 
+    // 토큰 잔액 및 회원 등급 로컬 캐시 (네트워크 지연 시 0원 노출 방지)
+    var lastBalanceTokens: Long
+        get() = prefs.getLong("last_balance_tokens", -1L)
+        set(value) = prefs.edit().putLong("last_balance_tokens", value).apply()
+
+    var lastTier: String
+        get() = prefs.getString("last_tier", "FREE") ?: "FREE"
+        set(value) = prefs.edit().putString("last_tier", value).apply()
+
+    // AI 토큰 안내 상세 접기/펼치기 상태
+    var isTokenNoticeDismissed: Boolean
+        get() = prefs.getBoolean("is_token_notice_dismissed", false)
+        set(value) = prefs.edit().putBoolean("is_token_notice_dismissed", value).apply()
+
     // 통화 녹음 파일 구글 드라이브 자동 백업 관련 설정
     var isCallRecordingSyncEnabled: Boolean
         get() = prefs.getBoolean("is_call_recording_sync_enabled", true)
