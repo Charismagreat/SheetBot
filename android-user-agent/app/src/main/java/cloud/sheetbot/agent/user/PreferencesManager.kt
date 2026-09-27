@@ -215,6 +215,30 @@ class PreferencesManager(context: Context) {
         }
     }
 
+    fun setSheetUrl(sheetType: String, url: String) {
+        prefs.edit().putString("sheet_url_${sheetType.uppercase()}", url).apply()
+    }
+
+    fun getSheetUrl(sheetType: String): String? {
+        return prefs.getString("sheet_url_${sheetType.uppercase()}", null)
+    }
+
+    fun setFolderUrl(sheetType: String, url: String) {
+        prefs.edit().putString("folder_url_${sheetType.uppercase()}", url).apply()
+    }
+
+    fun getFolderUrl(sheetType: String): String? {
+        return prefs.getString("folder_url_${sheetType.uppercase()}", null)
+    }
+
+    fun setSheetId(sheetType: String, id: String) {
+        prefs.edit().putString("sheet_id_${sheetType.uppercase()}", id).apply()
+    }
+
+    fun getSheetId(sheetType: String): String? {
+        return prefs.getString("sheet_id_${sheetType.uppercase()}", null)
+    }
+
     fun clear() {
         prefs.edit().clear().apply()
     }

@@ -1117,8 +1117,11 @@ object ApiClient {
                     return@withContext ProvisionSheetResult(
                         success = true,
                         isNew = isNew,
-                        spreadsheetId = resJson.optString("spreadsheetId", ""),
-                        spreadsheetUrl = spreadsheetUrl,
+                        spreadsheetId = resJson.optString("spreadsheetId", "").takeIf { it.isNotBlank() },
+                        spreadsheetUrl = spreadsheetUrl.takeIf { it.isNotBlank() },
+                        folderId = resJson.optString("folderId", "").takeIf { it.isNotBlank() },
+                        folderUrl = resJson.optString("folderUrl", "").takeIf { it.isNotBlank() },
+                        folderName = resJson.optString("folderName", "").takeIf { it.isNotBlank() },
                         title = title,
                         message = resJson.optString("message", "구글 스프레드시트 대장이 준비되었습니다.")
                     )
@@ -1278,6 +1281,8 @@ data class ProvisionSheetResult(
     val isNew: Boolean = false,
     val spreadsheetId: String? = null,
     val spreadsheetUrl: String? = null,
+    val folderId: String? = null,
+    val folderUrl: String? = null,
     val folderName: String? = null,
     val title: String? = null,
     val message: String? = null,

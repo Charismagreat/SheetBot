@@ -488,12 +488,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.btnOpenPaymentPushSheet.setOnClickListener {
+            showOpenSheetChooserDialog("PAYMENT_PUSH", "[SheetBot] 매장 결제 및 매출 대장")
+        }
+        binding.btnOpenReceiptSmsSheet.setOnClickListener {
+            showOpenSheetChooserDialog("RECEIPT_SMS", "[SheetBot] 고객 영수증 문자 발송 대장")
+        }
+
         // 통화 녹음 구글 드라이브 자동 백업 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchCallRecording.isChecked = prefs.isCallRecordingSyncEnabled
         binding.layoutCallRecordingSettings.visibility = if (prefs.isCallRecordingSyncEnabled) View.VISIBLE else View.GONE
         binding.etRecordingTargetFilter.setText(prefs.callRecordingTargetFilter)
-        binding.etRecordingDriveFolder.setText(prefs.callRecordingDriveFolder)
-        binding.switchRecordingSheet.isChecked = prefs.isCallRecordingSheetEnabled
 
         binding.switchCallRecording.setOnCheckedChangeListener { _, isChecked ->
             prefs.isCallRecordingSyncEnabled = isChecked
@@ -516,14 +521,12 @@ class MainActivity : AppCompatActivity() {
             prefs.callRecordingTargetFilter = it?.toString()?.trim() ?: ""
             updateTargetBadges()
         }
-        binding.etRecordingDriveFolder.doAfterTextChanged {
-            prefs.callRecordingDriveFolder = it?.toString()?.trim()?.takeIf { s -> s.isNotBlank() } ?: "[SheetBot] 통화 녹음"
+
+        binding.btnOpenRecordingSheet.setOnClickListener {
+            showOpenSheetChooserDialog("RECORDING", "[SheetBot] 통화 녹음 대장")
         }
-        binding.switchRecordingSheet.setOnCheckedChangeListener { _, isChecked ->
-            prefs.isCallRecordingSheetEnabled = isChecked
-            if (isChecked) {
-                provisionSheetAsync("RECORDING", "[SheetBot] 통화 녹음 대장", prefs.callRecordingDriveFolder)
-            }
+        binding.btnOpenRecordingFolder.setOnClickListener {
+            openDriveFolder("RECORDING", prefs.callRecordingDriveFolder)
         }
 
         binding.btnSyncRecordingsNow.setOnClickListener {
@@ -548,8 +551,6 @@ class MainActivity : AppCompatActivity() {
         // 사진 및 문서 파일 구글 드라이브 업로드 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchFileUploadSync.isChecked = prefs.isFileUploadSyncEnabled
         binding.layoutFileUploadSettings.visibility = if (prefs.isFileUploadSyncEnabled) View.VISIBLE else View.GONE
-        binding.etFileUploadDriveFolder.setText(prefs.fileUploadDriveFolder)
-        binding.switchFileUploadSheet.isChecked = prefs.isFileUploadSheetEnabled
 
         binding.switchFileUploadSync.setOnCheckedChangeListener { _, isChecked ->
             prefs.isFileUploadSyncEnabled = isChecked
@@ -561,20 +562,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        binding.etFileUploadDriveFolder.doAfterTextChanged {
-            prefs.fileUploadDriveFolder = it?.toString()?.trim()?.takeIf { s -> s.isNotBlank() } ?: "[SheetBot] 파일 보관함"
+        binding.btnOpenFileSheet.setOnClickListener {
+            showOpenSheetChooserDialog("FILE_UPLOAD", "[SheetBot] 파일 업로드 대장")
         }
-        binding.switchFileUploadSheet.setOnCheckedChangeListener { _, isChecked ->
-            prefs.isFileUploadSheetEnabled = isChecked
-            if (isChecked) {
-                provisionSheetAsync("FILE_UPLOAD", "[SheetBot] 파일 업로드 대장", prefs.fileUploadDriveFolder)
-            }
+        binding.btnOpenFileFolder.setOnClickListener {
+            openDriveFolder("FILE_UPLOAD", prefs.fileUploadDriveFolder)
         }
 
         // 웹 링크 & 유튜브 영상 AI 자동 스크랩 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchLinkScrap.isChecked = prefs.isLinkScrapEnabled
         binding.layoutLinkScrapSettings.visibility = if (prefs.isLinkScrapEnabled) View.VISIBLE else View.GONE
-        binding.etLinkScrapSheet.setText(prefs.linkScrapDriveSheetTitle)
 
         binding.switchLinkScrap.setOnCheckedChangeListener { _, isChecked ->
             prefs.isLinkScrapEnabled = isChecked
@@ -586,9 +583,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        binding.etLinkScrapSheet.doAfterTextChanged {
-            prefs.linkScrapDriveSheetTitle = it?.toString()?.trim()?.takeIf { s -> s.isNotBlank() }
-                ?: "[SheetBot] 웹 링크 & 유튜브 스크랩 대장"
+        binding.btnOpenLinkScrapSheet.setOnClickListener {
+            showOpenSheetChooserDialog("LINK_BOOKMARK", prefs.linkScrapDriveSheetTitle)
         }
 
         // 자연어 AI 시트 코파일럿 UI 리스너 (v1.7)
@@ -641,7 +637,6 @@ class MainActivity : AppCompatActivity() {
         binding.switchSmsSync.isChecked = prefs.isSmsSheetSyncEnabled
         binding.layoutSmsSyncSettings.visibility = if (prefs.isSmsSheetSyncEnabled) View.VISIBLE else View.GONE
         binding.etSmsTargetFilter.setText(prefs.smsTargetFilter)
-        binding.etSmsDriveSheet.setText(prefs.smsDriveSheetTitle)
 
         binding.switchSmsSync.setOnCheckedChangeListener { _, isChecked ->
             prefs.isSmsSheetSyncEnabled = isChecked
@@ -664,16 +659,15 @@ class MainActivity : AppCompatActivity() {
             prefs.smsTargetFilter = it?.toString()?.trim() ?: ""
             updateTargetBadges()
         }
-        binding.etSmsDriveSheet.doAfterTextChanged {
-            prefs.smsDriveSheetTitle = it?.toString()?.trim()?.takeIf { s -> s.isNotBlank() }
-                ?: "[SheetBot] 스마트폰 문자(SMS) 송수신 대장"
+
+        binding.btnOpenSmsSheet.setOnClickListener {
+            showOpenSheetChooserDialog("SMS", prefs.smsDriveSheetTitle)
         }
 
         // 카카오톡 수신 메시지 구글 시트 동기화 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchKakaoSync.isChecked = prefs.isKakaoSheetSyncEnabled
         binding.layoutKakaoSyncSettings.visibility = if (prefs.isKakaoSheetSyncEnabled) View.VISIBLE else View.GONE
         binding.etKakaoTargetFilter.setText(prefs.kakaoTargetFilter)
-        binding.etKakaoDriveSheet.setText(prefs.kakaoDriveSheetTitle)
 
         binding.switchKakaoSync.setOnCheckedChangeListener { _, isChecked ->
             prefs.isKakaoSheetSyncEnabled = isChecked
@@ -693,16 +687,15 @@ class MainActivity : AppCompatActivity() {
             prefs.kakaoTargetFilter = it?.toString()?.trim() ?: ""
             updateTargetBadges()
         }
-        binding.etKakaoDriveSheet.doAfterTextChanged {
-            prefs.kakaoDriveSheetTitle = it?.toString()?.trim()?.takeIf { s -> s.isNotBlank() }
-                ?: "[SheetBot] 카카오톡 메시지 대장"
+
+        binding.btnOpenKakaoSheet.setOnClickListener {
+            showOpenSheetChooserDialog("KAKAO", prefs.kakaoDriveSheetTitle)
         }
 
         // 부재중 전화(Missed Call) 0원 스마트 자동 회신 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchMissedCall.isChecked = prefs.isMissedCallAutoReplyEnabled
         binding.layoutMissedCallSettings.visibility = if (prefs.isMissedCallAutoReplyEnabled) View.VISIBLE else View.GONE
         binding.etMissedCallReply.setText(prefs.missedCallReplyTemplate)
-        binding.etMissedCallSheet.setText(prefs.missedCallDriveSheetTitle)
 
         binding.switchMissedCall.setOnCheckedChangeListener { _, isChecked ->
             prefs.isMissedCallAutoReplyEnabled = isChecked
@@ -717,9 +710,9 @@ class MainActivity : AppCompatActivity() {
         binding.etMissedCallReply.doAfterTextChanged {
             prefs.missedCallReplyTemplate = it?.toString()?.trim() ?: ""
         }
-        binding.etMissedCallSheet.doAfterTextChanged {
-            prefs.missedCallDriveSheetTitle = it?.toString()?.trim()?.takeIf { s -> s.isNotBlank() }
-                ?: "[SheetBot] 부재중 전화 대장"
+
+        binding.btnOpenMissedCallSheet.setOnClickListener {
+            showOpenSheetChooserDialog("MISSED_CALL", prefs.missedCallDriveSheetTitle)
         }
 
         // 통화 종료 직후 모바일 명함 원터치 발송 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
@@ -770,6 +763,10 @@ class MainActivity : AppCompatActivity() {
             if (isChecked) {
                 provisionSheetAsync("CALL_ENDED_CARD", "[SheetBot] 모바일 명함 발송 대장")
             }
+        }
+
+        binding.btnOpenCallEndedCardSheet.setOnClickListener {
+            showOpenSheetChooserDialog("CALL_ENDED_CARD", "[SheetBot] 모바일 명함 발송 대장")
         }
 
         binding.btnCheckUpdate.setOnClickListener {
@@ -891,8 +888,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateUiState() {
-        binding.tvAppVersionBadge.text = "v${BuildConfig.VERSION_NAME}"
-        binding.tvCopilotVersionBadge.text = "v${BuildConfig.VERSION_NAME}"
+        val verName = getAppVersionName()
+        binding.tvAppVersionBadge.text = "v$verName"
+        binding.tvCopilotVersionBadge.text = "v$verName"
 
         val isPaired = prefs.isPaired
         val email = prefs.userEmail
@@ -1899,10 +1897,89 @@ class MainActivity : AppCompatActivity() {
                     val msg = "📊 ${result.title ?: sheetTitle}\n$statusPrefix (구글 드라이브에 준비되었습니다)$folderSuffix"
                     Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
                     addLogItem("대장 준비", "${result.title ?: sheetTitle} 확인 완료", true)
+
+                    // URL 및 ID 로컬 캐시 (시트 원본 및 모바일 웹앱 원터치 열기 지원)
+                    if (!result.spreadsheetUrl.isNullOrBlank()) {
+                        prefs.setSheetUrl(sheetType, result.spreadsheetUrl)
+                    }
+                    if (!result.spreadsheetId.isNullOrBlank()) {
+                        prefs.setSheetId(sheetType, result.spreadsheetId)
+                    }
+                    if (!result.folderUrl.isNullOrBlank()) {
+                        prefs.setFolderUrl(sheetType, result.folderUrl)
+                    }
                 }
             } catch (e: Exception) {
                 android.util.Log.w("MainActivity", "시트/폴더 선제 생성 통신 예외: ${e.message}")
             }
+        }
+    }
+
+    /**
+     * 구글 시트 원본 vs 모바일 스마트 웹앱 선택 다이얼로그 (v2.1.4)
+     */
+    private fun showOpenSheetChooserDialog(sheetType: String, defaultTitle: String) {
+        val userEmail = prefs.userEmail
+        val cachedUrl = prefs.getSheetUrl(sheetType)
+        val cachedId = prefs.getSheetId(sheetType)
+
+        val finalSheetUrl = cachedUrl ?: if (!cachedId.isNullOrBlank()) {
+            "https://docs.google.com/spreadsheets/d/$cachedId/edit"
+        } else null
+
+        val webAppUrl = if (!userEmail.isNullOrBlank()) {
+            "https://sheetbot.cloud/m/${sheetType.lowercase()}?email=${Uri.encode(userEmail)}"
+        } else {
+            "https://sheetbot.cloud/m/${sheetType.lowercase()}"
+        }
+
+        val items = arrayOf(
+            "📊 구글 스프레드시트 원본 열기",
+            "🌐 모바일 스마트 웹앱 열기 (모바일 최적화)"
+        )
+
+        AlertDialog.Builder(this)
+            .setTitle(defaultTitle)
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> {
+                        if (!finalSheetUrl.isNullOrBlank()) {
+                            openExternalUrl(finalSheetUrl)
+                        } else {
+                            Toast.makeText(this, "대장 시트를 생성하는 중입니다. 잠시 후 다시 열어주세요.", Toast.LENGTH_SHORT).show()
+                            provisionSheetAsync(sheetType, defaultTitle)
+                        }
+                    }
+                    1 -> {
+                        openExternalUrl(webAppUrl)
+                    }
+                }
+            }
+            .setNegativeButton("닫기", null)
+            .show()
+    }
+
+    private fun openExternalUrl(url: String) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "브라우저를 열 수 없습니다: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun openDriveFolder(sheetType: String, defaultFolderName: String) {
+        val cachedFolderUrl = prefs.getFolderUrl(sheetType)
+        val finalUrl = cachedFolderUrl ?: "https://drive.google.com/drive/search?q=${Uri.encode(defaultFolderName)}"
+        openExternalUrl(finalUrl)
+    }
+
+    private fun getAppVersionName(): String {
+        return try {
+            val pInfo = packageManager.getPackageInfo(packageName, 0)
+            pInfo.versionName ?: BuildConfig.VERSION_NAME
+        } catch (_: Exception) {
+            BuildConfig.VERSION_NAME
         }
     }
 
