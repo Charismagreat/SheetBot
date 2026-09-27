@@ -270,7 +270,7 @@ object ApiClient {
             if (!fallbackHeartbeatUrl.isNullOrBlank() && fallbackHeartbeatUrl != heartbeatUrl) {
                 add(fallbackHeartbeatUrl)
             } else if (!heartbeatUrl.contains(FALLBACK_HOST)) {
-                add("$FALLBACK_HOST/api/wallet/agent/heartbeat")
+                add("$FALLBACK_HOST/api/user/agent2/heartbeat")
             }
         }
 

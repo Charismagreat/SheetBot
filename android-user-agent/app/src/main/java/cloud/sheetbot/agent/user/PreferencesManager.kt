@@ -12,20 +12,21 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putString("user_email", value).apply()
 
     var webhookUrl: String
-        get() = prefs.getString("webhook_url", "https://sheetbot.cloud/api/wallet/bank-webhook") ?: "https://sheetbot.cloud/api/wallet/bank-webhook"
+        get() = prefs.getString("webhook_url", "https://sheetbot.cloud/api/user/agent2/inbound-sms") ?: "https://sheetbot.cloud/api/user/agent2/inbound-sms"
         set(value) = prefs.edit().putString("webhook_url", value).apply()
 
     var fallbackWebhookUrl: String
-        get() = prefs.getString("fallback_webhook_url", "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/bank-webhook") ?: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/bank-webhook"
+        get() = prefs.getString("fallback_webhook_url", "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/user/agent2/inbound-sms") ?: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/user/agent2/inbound-sms"
         set(value) = prefs.edit().putString("fallback_webhook_url", value).apply()
 
     var heartbeatUrl: String
-        get() = prefs.getString("heartbeat_url", "https://sheetbot.cloud/api/wallet/agent/heartbeat") ?: "https://sheetbot.cloud/api/wallet/agent/heartbeat"
+        get() = prefs.getString("heartbeat_url", "https://sheetbot.cloud/api/user/agent2/heartbeat") ?: "https://sheetbot.cloud/api/user/agent2/heartbeat"
         set(value) = prefs.edit().putString("heartbeat_url", value).apply()
 
     var fallbackHeartbeatUrl: String
-        get() = prefs.getString("fallback_heartbeat_url", "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/agent/heartbeat") ?: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/agent/heartbeat"
+        get() = prefs.getString("fallback_heartbeat_url", "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/user/agent2/heartbeat") ?: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/user/agent2/heartbeat"
         set(value) = prefs.edit().putString("fallback_heartbeat_url", value).apply()
+
 
     var deviceToken: String?
         get() = prefs.getString("device_token", null)

@@ -22,27 +22,34 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
 
     const existing = await queryTable("sheetbot_user_devices", {
-      filters: { user_email: cleanEmail, pairing_mode: "agent2" },
-      limit: 1,
+      filters: { user_email: cleanEmail },
+      limit: 10,
     }).catch(() => ({ rows: [] }));
 
-    if (existing.rows && existing.rows.length > 0) {
-      const dev = existing.rows[0];
-      await updateRows(
-        "sheetbot_user_devices",
-        {
-          status: "CONNECTED",
-          last_connected_at: now,
-          updated_at: now,
-        },
-        { filters: { id: dev.id } }
-      ).catch(() => {});
+    const validRows = (existing.rows || []).filter((r: any) => !r.deleted_at);
+
+    if (validRows.length > 0) {
+      for (const dev of validRows) {
+        await updateRows(
+          "sheetbot_user_devices",
+          {
+            status: "CONNECTED",
+            last_connected_at: now,
+            last_ping: now,
+            battery_level: battery !== undefined ? Number(battery) : dev.battery_level,
+            network_type: networkType || dev.network_type,
+            updated_at: now,
+          },
+          { filters: { id: dev.id } }
+        ).catch(() => {});
+      }
     }
 
     return NextResponse.json({
       success: true,
       status: "CONNECTED",
       timestamp: now,
+
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
