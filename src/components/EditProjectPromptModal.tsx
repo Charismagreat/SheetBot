@@ -16,6 +16,8 @@ import {
   Send,
   ArrowLeft,
   ShieldCheck,
+  ExternalLink,
+  Check,
 } from "lucide-react";
 
 interface EditProjectPromptModalProps {
@@ -73,6 +75,74 @@ export default function EditProjectPromptModal({
   } | null>(null);
   const [mergeMode, setMergeMode] = useState<"MERGE" | "OVERWRITE">("MERGE");
   const [showCodePreview, setShowCodePreview] = useState(false);
+
+  // 🚀 안티그라비티 원터치 핸드오프 상태
+  const [handoffLoading, setHandoffLoading] = useState(false);
+  const [handoffSuccess, setHandoffSuccess] = useState(false);
+
+  // 🚀 안티그라비티 원터치 핸드오프: 현재 요구사항+시트URL+기존코드보존 컨텍스트 자동 조립 & 클립보드 복사 & antigravity:// 실행
+  const handleHandoffToAntigravity = async () => {
+    setHandoffLoading(true);
+    try {
+      let finalBridgeUrl = "";
+      if (project?.id) {
+        try {
+          const res = await apiFetch("/api/projects/bridge-token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ projectId: project.id }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (data?.success && data?.bridgeUrl) {
+            finalBridgeUrl = data.bridgeUrl;
+          }
+        } catch {}
+      }
+
+      const curSheetUrl = project?.spreadsheetUrl || project?.spreadsheet_url || "";
+      const pName = projectName.trim() || project?.name || "시트봇 자동화 프로젝트";
+      const curPrompt = prompt.trim();
+      const isMerge = mergeMode === "MERGE";
+      const existingFns = existingGasInfo?.functionNames || [];
+
+      let promptText = `[SheetBot ↔ Antigravity Handoff: ${pName}]\n`;
+      promptText += `• 구글 스프레드시트 URL: ${curSheetUrl}\n`;
+      if (finalBridgeUrl) {
+        promptText += `• 래핑 브릿지 주소: ${finalBridgeUrl}\n`;
+      }
+      promptText += `• 코드 보존 모드: ${isMerge ? `기존 함수(${existingFns.length}개) 안전 보존(Merge)` : "전체 새로 작성(Overwrite)"}\n`;
+      if (isMerge && existingFns.length > 0) {
+        promptText += `• 보존 대상 주요 함수: ${existingFns.slice(0, 8).join("(), ")}()\n`;
+      }
+
+      if (analyzedSchema?.planSummary) {
+        promptText += `\n[시트봇 AI 사전 분석 계획 요약]\n${analyzedSchema.planSummary}\n`;
+      }
+
+      if (feedbackHistory && feedbackHistory.length > 0) {
+        promptText += `\n[조율 대화 내역]\n`;
+        feedbackHistory.forEach((h) => {
+          promptText += `${h.role === "user" ? "사용자" : "시트봇 AI"}: ${h.message}\n`;
+        });
+      }
+
+      promptText += `\n[수정 및 추가 요구사항]\n${curPrompt || "구글 시트 구조에 맞추어 맞춤형 자동화 기능 구현 및 사이드바 메뉴 주입"}\n\n`;
+      promptText += `위 구글 스프레드시트의 기존 구조와 코드를 점검하고, 나와 단계별로 대화하면서 요구사항을 정밀하게 구현해줘.`;
+
+      await navigator.clipboard.writeText(promptText);
+
+      if (typeof window !== "undefined") {
+        window.open("antigravity://", "_blank");
+      }
+
+      setHandoffSuccess(true);
+      setTimeout(() => setHandoffSuccess(false), 5000);
+    } catch (err: any) {
+      console.error("Handoff to Antigravity warning:", err);
+    } finally {
+      setHandoffLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (project && isOpen) {
@@ -419,14 +489,35 @@ export default function EditProjectPromptModal({
             )}
 
             {/* 자연어 프롬프트 수정 */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
                 <label className="font-bold text-slate-700 block">
                   자동화 기능 요구사항 (자연어 수정 및 기능 추가) *
                 </label>
-                <span className="text-[11px] text-slate-400">
-                  기존 내용을 수정하거나 새 요구사항을 덧붙이세요
-                </span>
+                <button
+                  type="button"
+                  onClick={handleHandoffToAntigravity}
+                  disabled={handoffLoading}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer active:scale-95 shadow-2xs ${
+                    handoffSuccess
+                      ? "bg-slate-900 text-purple-300 border border-purple-400"
+                      : "text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200/80"
+                  }`}
+                  title="복잡한 작업인가요? 클릭 시 입력 중인 요구사항과 시트 정보가 복사되며 안티그라비티가 즉시 실행됩니다."
+                >
+                  {handoffSuccess ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-purple-400 stroke-[3]" />
+                      <span>프롬프트 복사 & 안티그라비티 실행됨!</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-xs">🚀</span>
+                      <span>안티그라비티에서 대화형으로 작업하기</span>
+                      <ExternalLink className="w-3 h-3 opacity-70" />
+                    </>
+                  )}
+                </button>
               </div>
               <textarea
                 rows={6}
@@ -639,33 +730,75 @@ export default function EditProjectPromptModal({
               </div>
             ) : null}
 
-            {/* 모달 버튼 */}
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            {/* 안티그라비티 원클릭 실행 시 안내 배너 */}
+            {handoffSuccess && (
+              <div className="p-3 bg-purple-50 border border-purple-200 rounded-2xl flex items-center justify-between gap-2 text-purple-900 text-xs font-bold animate-in fade-in duration-200 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-600 shrink-0" />
+                  <span>
+                    ✨ 프롬프트가 복사되고 안티그라비티가 실행되었습니다! 안티그라비티 채팅창에서 <strong>[Ctrl + V]</strong>로 붙여넣으세요.
+                  </span>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-200 text-purple-800 font-black shrink-0">
+                  복사 완료
+                </span>
+              </div>
+            )}
+
+            {/* 모달 버튼: 좌측 안티그라비티 핸드오프 / 우측 취소 및 재분석 */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-slate-100">
               <button
                 type="button"
-                onClick={onClose}
-                disabled={analyzing}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all cursor-pointer"
+                onClick={handleHandoffToAntigravity}
+                disabled={handoffLoading || analyzing}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-xs ${
+                  handoffSuccess
+                    ? "bg-slate-900 text-purple-300 border border-purple-400"
+                    : "bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 text-white shadow-purple-500/20"
+                }`}
+                title="복잡한 작업이나 여러 차례 대화가 필요한 경우, 안티그라비티로 모든 작업 맥락을 전달해 이어서 작업합니다."
               >
-                취소
-              </button>
-              <button
-                type="submit"
-                disabled={analyzing}
-                className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-md shadow-indigo-500/20 cursor-pointer active:scale-95 disabled:opacity-50"
-              >
-                {analyzing ? (
+                {handoffSuccess ? (
                   <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>시트 구조 및 요구사항 재분석 중...</span>
+                    <Check className="w-3.5 h-3.5 text-purple-300 stroke-[3]" />
+                    <span>프롬프트 복사 & 안티그라비티 열림!</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>🔍 AI 시트 재분석 및 계획 수립</span>
+                    <span>🚀</span>
+                    <span>안티그라비티로 가져가서 계속하기</span>
+                    <ExternalLink className="w-3.5 h-3.5 opacity-80" />
                   </>
                 )}
               </button>
+
+              <div className="flex items-center gap-2 ml-auto">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={analyzing}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all cursor-pointer text-xs"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={analyzing}
+                  className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-md shadow-indigo-500/20 cursor-pointer active:scale-95 disabled:opacity-50 text-xs"
+                >
+                  {analyzing ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>시트 구조 및 요구사항 재분석 중...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>🔍 AI 시트 재분석 및 계획 수립</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </form>
         )}
@@ -848,35 +981,62 @@ export default function EditProjectPromptModal({
             </div>
 
             {/* Step 2 액션 버튼 */}
-            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setStep(1)}
                 disabled={loading || analyzing}
-                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer text-xs"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>이전 (요구사항 재입력)</span>
               </button>
 
-              <button
-                type="button"
-                onClick={handleFinalDeploy}
-                disabled={loading || analyzing}
-                className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>조율된 계획으로 구글 시트에 코드 재배포 중...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>🚀 계획 승인 및 AI 코드 재배포 실행</span>
-                  </>
-                )}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleHandoffToAntigravity}
+                  disabled={handoffLoading || loading || analyzing}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-2xs ${
+                    handoffSuccess
+                      ? "bg-slate-900 text-purple-300 border border-purple-400"
+                      : "bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200"
+                  }`}
+                  title="조율된 계획과 대화 내역을 안티그라비티로 가져가서 계속 개발합니다."
+                >
+                  {handoffSuccess ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-purple-400 stroke-[3]" />
+                      <span>복사 & 실행됨!</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>🚀</span>
+                      <span>안티그라비티로 이어하기</span>
+                      <ExternalLink className="w-3 h-3 opacity-70" />
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleFinalDeploy}
+                  disabled={loading || analyzing}
+                  className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer disabled:opacity-50 text-xs"
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>조율된 계획으로 구글 시트에 코드 재배포 중...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>🚀 계획 승인 및 AI 코드 재배포 실행</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
