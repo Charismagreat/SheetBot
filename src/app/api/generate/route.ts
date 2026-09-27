@@ -794,28 +794,36 @@ function getAiCopilotSidebarHtml() {
     '<style>body{font-family:sans-serif;background:#f8fafc;color:#0f172a;padding:10px 6px;}</style>' +
     '</head><body>' +
     '<div class="space-y-3">' +
-      '<div class="p-3.5 bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 rounded-xl text-white shadow-sm space-y-2.5 border border-indigo-800/40">' +
+      '<!-- [1-1] 스마트 하이브리드 미니 스트립 -->' +
+      '<div class="flex items-center justify-between p-2.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-xl text-white shadow-xs border border-indigo-800/40">' +
+        '<div onclick="toggleWalletCard()" class="flex items-center gap-1.5 cursor-pointer select-none" title="지갑 상세 열기/닫기">' +
+          '<span class="text-xs">🪙</span>' +
+          '<span class="text-[11px] font-bold text-slate-300">토큰</span>' +
+          '<span id="copilotBalanceMini" class="text-xs font-black text-cyan-400">조회 중...</span>' +
+          '<span id="copilotTierBadge" class="px-1 py-0.2 text-[8px] font-black rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">PRO</span>' +
+          '<span id="walletToggleArrow" class="text-[9px] text-slate-400">▼</span>' +
+        '</div>' +
+        '<div class="flex items-center gap-1">' +
+          '<button onclick="toggleMaskWallet(event)" id="copilotMaskBtn" class="px-1.5 py-0.5 text-[10px] bg-white/10 hover:bg-white/20 text-slate-200 rounded cursor-pointer transition-colors" title="프라이버시 잔액 숨김">👁️</button>' +
+          '<button onclick="openTokenRechargeModal()" class="px-2 py-0.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] rounded shadow-xs cursor-pointer">+ 충전</button>' +
+        '</div>' +
+      '</div>' +
+      '<div id="copilotWalletDetails" style="display:none;" class="p-3 bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 rounded-xl text-white shadow-sm space-y-2 border border-indigo-800/40">' +
         '<div class="flex items-center justify-between">' +
-          '<div class="flex items-center gap-1.5">' +
-            '<span class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-300">SheetBot Wallet</span>' +
-            '<span id="copilotTierBadge" class="px-1.5 py-0.2 text-[9px] font-black rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">PRO</span>' +
-          '</div>' +
-          '<button onclick="refreshWallet()" title="잔액 새로고침" class="text-[10px] text-slate-400 hover:text-white transition-colors cursor-pointer">🔄</button>' +
+          '<div class="text-[10px] text-slate-400 font-medium">보유 토큰 잔액</div>' +
+          '<button onclick="toggleWalletCard()" class="text-[10px] text-slate-400 hover:text-white cursor-pointer">▲ 접기</button>' +
         '</div>' +
         '<div class="flex items-baseline justify-between">' +
-          '<div>' +
-            '<div class="text-[10px] text-slate-400 font-medium">보유 토큰 잔액</div>' +
-            '<div class="text-lg font-black text-emerald-400 tracking-tight flex items-baseline gap-1">' +
-              '<span id="copilotBalanceTxt">조회 중...</span>' +
-              '<span class="text-[11px] text-slate-300 font-normal">토큰</span>' +
-            '</div>' +
+          '<div class="text-base font-black text-emerald-400 tracking-tight flex items-baseline gap-1">' +
+            '<span id="copilotBalanceTxt">조회 중...</span>' +
+            '<span class="text-[10px] text-slate-300 font-normal">토큰</span>' +
           '</div>' +
-          '<button onclick="openTokenRechargeModal()" class="px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-extrabold text-xs rounded-lg shadow-xs transition-transform active:scale-95 cursor-pointer">💳 즉시 충전</button>' +
+          '<button onclick="openTokenRechargeModal()" class="px-2.5 py-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 text-white font-bold text-xs rounded-lg shadow-xs cursor-pointer">💳 즉시 충전</button>' +
         '</div>' +
         '<div class="pt-1.5 border-t border-slate-800">' +
-          '<a href="https://sheetbot.cloud/use-cases" target="_blank" class="text-[11px] text-indigo-300 hover:text-indigo-200 flex items-center justify-between font-semibold py-0.5 transition-colors">' +
+          '<a href="https://sheetbot.cloud/use-cases" target="_blank" class="text-[10px] text-indigo-300 hover:text-indigo-200 flex items-center justify-between font-semibold py-0.5">' +
             '<span>📖 40+ 실무 활용사례 및 가이드</span>' +
-            '<span class="text-xs font-bold">→</span>' +
+            '<span class="text-xs">→</span>' +
           '</a>' +
         '</div>' +
       '</div>' +
@@ -880,24 +888,62 @@ function getAiCopilotSidebarHtml() {
       '</a>' +
     '</div>' +
     '<script>' +
+      'var isWalletMasked = false;' +
+      'var currentWalletBal = 20000;' +
+      'try { isWalletMasked = localStorage.getItem("sheetbot_wallet_masked") === "true"; } catch(e){}' +
+      'function toggleWalletCard() {' +
+        'var d = document.getElementById("copilotWalletDetails");' +
+        'var a = document.getElementById("walletToggleArrow");' +
+        'if (!d) return;' +
+        'var open = d.style.display !== "none";' +
+        'd.style.display = open ? "none" : "block";' +
+        'if (a) a.innerText = open ? "▼" : "▲";' +
+      '}' +
+      'function toggleMaskWallet(e) {' +
+        'if (e && e.stopPropagation) e.stopPropagation();' +
+        'isWalletMasked = !isWalletMasked;' +
+        'try { localStorage.setItem("sheetbot_wallet_masked", isWalletMasked ? "true" : "false"); } catch(e){}' +
+        'applyWalletDisplay();' +
+      '}' +
+      'function applyWalletDisplay() {' +
+        'var mini = document.getElementById("copilotBalanceMini");' +
+        'var full = document.getElementById("copilotBalanceTxt");' +
+        'var btn = document.getElementById("copilotMaskBtn");' +
+        'if (isWalletMasked) {' +
+          'if (mini) mini.innerText = "••••• T";' +
+          'if (full) full.innerText = "•••••";' +
+          'if (btn) btn.innerText = "🔒";' +
+        '} else {' +
+          'var str = Number(currentWalletBal || 0).toLocaleString();' +
+          'if (mini) mini.innerText = str + " T";' +
+          'if (full) full.innerText = str;' +
+          'if (btn) btn.innerText = "👁️";' +
+        '}' +
+      '}' +
       'function refreshWallet() {' +
         'var bTxt = document.getElementById("copilotBalanceTxt");' +
+        'var bMini = document.getElementById("copilotBalanceMini");' +
         'var tBadge = document.getElementById("copilotTierBadge");' +
-        'if (bTxt) bTxt.innerText = "조회 중...";' +
+        'if (bTxt && !isWalletMasked) bTxt.innerText = "조회 중...";' +
+        'if (bMini && !isWalletMasked) bMini.innerText = "조회 중...";' +
         'google.script.run' +
           '.withSuccessHandler(function(res){' +
             'if (res && res.success) {' +
-              'if (bTxt) bTxt.innerText = Number(res.balance || 0).toLocaleString();' +
-              'if (tBadge) tBadge.innerText = res.tier || "STANDARD";' +
+              'currentWalletBal = Number(res.balance || 0);' +
+              'applyWalletDisplay();' +
+              'if (tBadge) tBadge.innerText = res.tier || "PRO";' +
             '} else {' +
-              'if (bTxt) bTxt.innerText = "20,000";' +
+              'currentWalletBal = 20000;' +
+              'applyWalletDisplay();' +
             '}' +
           '})' +
           '.withFailureHandler(function(err){' +
-            'if (bTxt) bTxt.innerText = "20,000";' +
+            'currentWalletBal = 20000;' +
+            'applyWalletDisplay();' +
           '})' +
           '.getUserTokenBalanceData();' +
       '}' +
+      'setTimeout(applyWalletDisplay, 50);' +
       'function refreshStatus() {' +
         'var dot = document.getElementById("tunnelDot");' +
         'var txt = document.getElementById("tunnelText");' +
