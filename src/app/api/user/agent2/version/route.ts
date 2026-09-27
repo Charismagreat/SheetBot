@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 27,
-      latestVersionName: "2.1.6",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.6/SheetBotAgent.apk",
+      latestVersionCode: 28,
+      latestVersionName: "2.1.7",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.7/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.6 릴리스\n• 🌐 [웹사이트 실시간 장애 감시 (Uptime Sentinel)] 내 홈페이지/쇼핑몰 다운타임 실시간 감지 & 새벽 긴급 비상 경보 탑재\n• 🛡️ [오탐 방지 교차 검증] 스마트폰 인터넷 정상 여부 자동 확인으로 가짜 알람 원천 차단\n• 🔕 [조용한 오프라인 전환] 시트봇 서버 점검/지연 시 불필요한 비상 사이렌 제거 및 조용한 오프라인 모드 적용\n• ⚡ [즉시 점검] 등록한 웹사이트 응답 속도 및 HTTP 상태 실시간 원터치 점검 지원",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.7 릴리스\n• 📊 [웹사이트 장애 대장 시트 자동 생성] 감시 스위치 ON 즉시 구글 시트에 [웹사이트 모니터링 & 장애 대장] 자동 바인딩\n• ⚡ [대장 시트 즉시 열기] 앱 화면에서 원클릭으로 구글 시트 원본 또는 모바일 스마트 웹앱 즉시 열기\n• 📝 [장애/복구 이력 자동 기록] 서버 다운 및 정상 복구 시각, 응답 속도, HTTP 상태 실시간 로깅\n• 🛡️ [오탐 방지 교차 검증] 폰 인터넷 정상 확인 후 실제 다운타임만 감지",
     },
     {
       headers: {

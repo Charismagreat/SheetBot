@@ -355,6 +355,43 @@ object ApiClient {
     }
 
     /**
+     * 웹사이트 다운타임 감시 결과 및 장애/복구 이력을 구글 시트에 자동 기록
+     */
+    suspend fun logWebsiteMonitorStatus(
+        userEmail: String,
+        targetUrl: String,
+        statusCode: Int,
+        responseTimeMs: Long,
+        statusMessage: String,
+        isCrossCheckOk: Boolean = true
+    ): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            val endpoint = "$host/api/user/website-monitor/log"
+            try {
+                val json = JSONObject().apply {
+                    put("userEmail", userEmail)
+                    put("targetUrl", targetUrl)
+                    put("statusCode", statusCode)
+                    put("responseTimeMs", responseTimeMs)
+                    put("statusMessage", statusMessage)
+                    put("isCrossCheckOk", isCrossCheckOk)
+                    put("deviceModel", "${Build.MANUFACTURER} ${Build.MODEL}")
+                }
+                val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+                val request = Request.Builder().url(endpoint).post(body).build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    return@withContext true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "웹사이트 모니터링 시트 로깅 실패 ($host): ${e.message}")
+            }
+        }
+        false
+    }
+
+    /**
      * 백그라운드 생존 신호(Heartbeat) 전송 (1차 실패 시 2차 폴백)
      */
     suspend fun sendHeartbeat(

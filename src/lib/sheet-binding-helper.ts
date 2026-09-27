@@ -21,7 +21,8 @@ export type SheetBindingType =
   | "LINK_BOOKMARK"
   | "CALL_ENDED_CARD"
   | "PAYMENT_PUSH"
-  | "RECEIPT_SMS";
+  | "RECEIPT_SMS"
+  | "WEBSITE_MONITOR";
 
 export interface ResolveSheetOptions {
   userEmail: string;

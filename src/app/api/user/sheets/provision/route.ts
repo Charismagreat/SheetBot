@@ -59,6 +59,11 @@ export const SHEET_DEFINITIONS: Record<string, SheetDefinition> = {
     headers: ["발송 일시", "수신 번호", "고객/입금자명", "결제 금액(원)", "발송 영수증 내용", "발송 상태", "기기명"],
     range: "A1:G1",
   },
+  WEBSITE_MONITOR: {
+    defaultTitle: "[SheetBot] 웹사이트 모니터링 & 장애 대장",
+    headers: ["점검/감지 일시", "대상 URL", "상태 코드", "응답 속도", "상태/장애 내용", "교차 검증 결과", "기기명"],
+    range: "A1:G1",
+  },
 };
 
 /**
