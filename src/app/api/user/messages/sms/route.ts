@@ -11,6 +11,8 @@ import { setupDatabase } from "@/lib/setup-db";
 import { realtimeHub } from "@/lib/realtime-hub";
 import { maskPhoneNumber, formatZeroRetentionContent } from "@/lib/privacy";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
+import { parseBankDepositSms } from "@/lib/bank-sms-parser";
+import { recordPaymentToGoogleSheet } from "@/lib/payment-sheet-sync";
 
 /**
  * POST /api/user/messages/sms
@@ -118,6 +120,26 @@ export async function POST(req: NextRequest) {
         }
       } catch (sheetErr: any) {
         console.warn("[SmsSync] Sheet auto-record warning:", sheetErr.message);
+      }
+    }
+
+    // 1-1. 수신 문자(INBOUND)가 은행 입금 또는 결제 승인 문자일 경우 [SheetBot] 매장 결제 및 매출 대장 시트에도 자동 동기화
+    if (!isOutbound) {
+      try {
+        const parsedBank = parseBankDepositSms(message);
+        if (parsedBank.amountKrw && parsedBank.amountKrw > 0) {
+          recordPaymentToGoogleSheet({
+            userEmail: cleanEmail,
+            paymentTime: nowStr,
+            channelOrBank: parsedBank.bankName || "카드/은행 결제",
+            customerName: parsedBank.depositorName || displayName || "고객",
+            amount: parsedBank.amountKrw,
+            memoOrRawText: message.slice(0, 200),
+            deviceId: deviceId || "SheetBot Agent",
+          }).catch((err) => console.warn("[SmsSync] Payment sheet sync error:", err));
+        }
+      } catch (bankErr: any) {
+        console.warn("[SmsSync] Bank deposit parse warning:", bankErr?.message);
       }
     }
 

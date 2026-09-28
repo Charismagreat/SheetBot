@@ -1,4 +1,4 @@
-﻿package cloud.sheetbot.agent.user
+package cloud.sheetbot.agent.user
 
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -65,26 +65,32 @@ object BankPushParser {
      * 금융사 푸시 알림을 서버 웹훅에서 100% 매칭 가능한 표준 SMS 텍스트로 변환
      */
     fun convertToSimulatedSms(packageName: String, title: String?, text: String?): String {
-        val bankName = SUPPORTED_BANK_PACKAGES[packageName] ?: (title ?: "은행")
-        val content = text ?: ""
+        val bankName = SUPPORTED_BANK_PACKAGES[packageName] ?: (title?.takeIf { it.isNotBlank() } ?: "은행")
+        val combined = "${title ?: ""} ${text ?: ""}".trim()
         val now = SimpleDateFormat("MM/dd HH:mm", Locale.KOREA).format(Date())
 
-        // 1. 금액 추출 (예: 5,000원 -> 5,000원)
-        val amountMatch = Regex("([0-9,]{3,})\\s*원").find(content)
+        // 1. 금액 추출 (예: 5,000원 -> 5,000원) - 제목이나 본문 어디서든 추출
+        val amountMatch = Regex("([0-9,]{3,})\\s*원").find(combined)
         val amountStr = amountMatch?.groupValues?.get(1) ?: "0"
 
         // 2. 입금자명 추출 시도
         // 패턴 A: "홍길동님이 ... 보냈어요"
         // 패턴 B: "입금 5,000원 홍길동"
         // 패턴 C: "[입금] 5,000원 홍길동"
+        // 패턴 D: "(홍길동)"
         var depositorName = ""
-        val tossMatch = Regex("([가-힣a-zA-Z0-9]{2,10})님(?:이|께서)").find(content)
+        val tossMatch = Regex("([가-힣a-zA-Z0-9]{2,10})님(?:이|께서)").find(combined)
         if (tossMatch != null) {
             depositorName = tossMatch.groupValues[1]
         } else {
-            val normalMatch = Regex("(?:입금|받음)\\s*[0-9,]+\\s*원?\\s+([가-힣a-zA-Z0-9]{2,10})").find(content)
-            if (normalMatch != null) {
-                depositorName = normalMatch.groupValues[1]
+            val parenMatch = Regex("\\(([가-힣a-zA-Z0-9]{2,10})\\)").find(combined)
+            if (parenMatch != null && !parenMatch.groupValues[1].contains("잔액")) {
+                depositorName = parenMatch.groupValues[1]
+            } else {
+                val normalMatch = Regex("(?:입금|받음)\\s*[0-9,]+\\s*원?\\s+([가-힣a-zA-Z0-9]{2,10})").find(combined)
+                if (normalMatch != null) {
+                    depositorName = normalMatch.groupValues[1]
+                }
             }
         }
 
@@ -96,7 +102,7 @@ object BankPushParser {
             if (depositorName.isNotBlank()) {
                 appendLine(depositorName)
             } else {
-                appendLine(content.take(30))
+                appendLine((text ?: title ?: "").take(30))
             }
             appendLine("잔액 99,999,999원")
         }

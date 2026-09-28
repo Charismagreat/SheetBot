@@ -2,6 +2,7 @@ import {
   callSheetsTool,
   listDriveFiles,
 } from "@/lib/egdesk-helpers";
+import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 
 export interface RecordPaymentParams {
   userEmail: string;
@@ -51,30 +52,49 @@ export async function recordPaymentToGoogleSheet(
     let targetSpreadsheetId: string | null = null;
     let spreadsheetUrl = "";
 
-    // 1. 드라이브 내 대장 시트 검색
-    const queryStr = `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${sheetTitle}' and trashed = false`;
-    const sheetSearch = await (listDriveFiles as any)({
-      query: queryStr,
-      preferOAuth: true,
-    }).catch(() => ({ files: [] }));
-
-    const foundSheets = sheetSearch?.files || [];
-    if (foundSheets.length > 0) {
-      targetSpreadsheetId = foundSheets[0].id;
-      spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
-    } else {
-      // 2. 대장 시트 신규 생성
-      const createRes = await callSheetsTool("sheets_create_spreadsheet", {
-        title: sheetTitle,
+    // 1. 회원별 대장 고유 ID 영구 바인딩 및 0초 즉각 조회
+    try {
+      const resolved = await resolveUserSpreadsheet({
+        userEmail,
+        sheetType: "PAYMENT_PUSH",
+        defaultTitle: "[SheetBot] 매장 결제 및 매출 대장",
+        requestedTitle: sheetTitle,
         preferOAuth: true,
-      }).catch((err: any) => {
-        console.warn("[PaymentSheetSync] sheets_create_spreadsheet warning:", err.message);
-        return null;
       });
+      if (resolved?.spreadsheetId) {
+        targetSpreadsheetId = resolved.spreadsheetId;
+        spreadsheetUrl = resolved.spreadsheetUrl;
+      }
+    } catch (resolveErr: any) {
+      console.warn("[PaymentSheetSync] resolveUserSpreadsheet fallback:", resolveErr?.message);
+    }
 
-      targetSpreadsheetId = createRes?.spreadsheetId || createRes?.id || null;
-      if (targetSpreadsheetId) {
+    // 2. 바인딩 조회가 없을 경우 드라이브 검색 폴백
+    if (!targetSpreadsheetId) {
+      const queryStr = `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${sheetTitle}' and trashed = false`;
+      const sheetSearch = await (listDriveFiles as any)({
+        query: queryStr,
+        preferOAuth: true,
+      }).catch(() => ({ files: [] }));
+
+      const foundSheets = sheetSearch?.files || [];
+      if (foundSheets.length > 0) {
+        targetSpreadsheetId = foundSheets[0].id;
         spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
+      } else {
+        // 대장 시트 신규 생성
+        const createRes = await callSheetsTool("sheets_create_spreadsheet", {
+          title: sheetTitle,
+          preferOAuth: true,
+        }).catch((err: any) => {
+          console.warn("[PaymentSheetSync] sheets_create_spreadsheet warning:", err.message);
+          return null;
+        });
+
+        targetSpreadsheetId = createRes?.spreadsheetId || createRes?.id || null;
+        if (targetSpreadsheetId) {
+          spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
+        }
       }
     }
 
