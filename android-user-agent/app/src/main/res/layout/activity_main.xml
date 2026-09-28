@@ -40,7 +40,7 @@
                     android:background="@drawable/bg_badge_version"
                     android:paddingHorizontal="10dp"
                     android:paddingVertical="4dp"
-                    android:text="v2.1.10"
+                    android:text="v2.1.11"
                     android:textColor="#10B981"
                     android:textSize="12sp"
                     android:textStyle="bold" />
@@ -1310,6 +1310,18 @@
                     android:textColor="#FFFFFF"
                     android:textSize="11.5sp"
                     android:layout_marginBottom="8dp" />
+
+                <!-- 카카오톡 대화 내용 내보내기(.txt) 파일 일괄 업로드 버튼 (v2.1.11) -->
+                <Button
+                    android:id="@+id/btnImportKakaoChat"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:backgroundTint="#D97706"
+                    android:text="💬 카톡 대화 파일 가져오기"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="6dp" />
 
                 <!-- 시트 열기 바로가기 뱃지 -->
                 <Button
