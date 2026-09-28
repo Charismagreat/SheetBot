@@ -139,9 +139,7 @@ async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: stri
     "sheets_format_headers",
     {
       spreadsheetId,
-      tabName: primaryTabName,
-      headerBgColor: "#0f172a", // Slate 900
-      headerTextColor: "#ffffff",
+      sheetName: primaryTabName,
       preferOAuth: true,
     },
     { preferOAuth: true }
@@ -153,7 +151,7 @@ async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: stri
     "sheets_create_tab",
     {
       spreadsheetId,
-      tabName: logTabName,
+      title: logTabName,
       preferOAuth: true,
     },
     { preferOAuth: true }
@@ -177,9 +175,7 @@ async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: stri
     "sheets_format_headers",
     {
       spreadsheetId,
-      tabName: logTabName,
-      headerBgColor: "#1e3a8a", // Blue 900
-      headerTextColor: "#ffffff",
+      sheetName: logTabName,
       preferOAuth: true,
     },
     { preferOAuth: true }
@@ -191,7 +187,7 @@ async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: stri
     "sheets_create_tab",
     {
       spreadsheetId,
-      tabName: templateTabName,
+      title: templateTabName,
       preferOAuth: true,
     },
     { preferOAuth: true }
@@ -232,9 +228,7 @@ async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: stri
     "sheets_format_headers",
     {
       spreadsheetId,
-      tabName: templateTabName,
-      headerBgColor: "#047857", // Emerald 700
-      headerTextColor: "#ffffff",
+      sheetName: templateTabName,
       preferOAuth: true,
     },
     { preferOAuth: true }
@@ -349,9 +343,7 @@ export async function POST(req: NextRequest) {
             "sheets_format_headers",
             {
               spreadsheetId: targetSpreadsheetId,
-              tabName: primaryTabName,
-              headerBgColor: "#1e293b",
-              headerTextColor: "#ffffff",
+              sheetName: primaryTabName,
               preferOAuth: true,
             },
             { preferOAuth: true }

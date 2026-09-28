@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
       });
 
       if (resolved.spreadsheetId) {
-        const rangeRes = await callSheetsTool(
+        let rangeRes = await callSheetsTool(
           "sheets_get_range",
           {
             spreadsheetId: resolved.spreadsheetId,
@@ -62,6 +62,18 @@ export async function GET(req: NextRequest) {
           },
           { preferOAuth: true }
         ).catch(() => null);
+
+        if (!rangeRes?.values || rangeRes.values.length === 0) {
+          rangeRes = await callSheetsTool(
+            "sheets_get_range",
+            {
+              spreadsheetId: resolved.spreadsheetId,
+              range: "시트1!A2:H100",
+              preferOAuth: true,
+            },
+            { preferOAuth: true }
+          ).catch(() => null);
+        }
 
         if (rangeRes?.values && rangeRes.values.length > 0) {
           catalogItems = rangeRes.values

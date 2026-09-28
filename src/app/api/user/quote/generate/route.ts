@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
 
       // 2. 단가표 탭에서 실시간 상품 목록 조회
       if (spreadsheetId) {
-        const rangeRes = await callSheetsTool(
+        let rangeRes = await callSheetsTool(
           "sheets_get_range",
           {
             spreadsheetId,
@@ -79,6 +79,18 @@ export async function POST(req: NextRequest) {
           },
           { preferOAuth: true }
         ).catch(() => null);
+
+        if (!rangeRes?.values || rangeRes.values.length === 0) {
+          rangeRes = await callSheetsTool(
+            "sheets_get_range",
+            {
+              spreadsheetId,
+              range: "시트1!A2:H100",
+              preferOAuth: true,
+            },
+            { preferOAuth: true }
+          ).catch(() => null);
+        }
 
         if (rangeRes?.values && rangeRes.values.length > 0) {
           catalogItems = rangeRes.values
