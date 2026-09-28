@@ -256,10 +256,17 @@ export default function NotificationsPage() {
 
   // ⚡ 통합 서버 부트스트랩 API 호출 (소켓 점유 0, 브라우저 프록시 무한 pending 원천 차단)
   const isFetchingBootstrapRef = useRef(false);
+  const inFlightBootstrapPromiseRef = useRef<Promise<void> | null>(null);
+  const lastRequestedBootstrapEmailRef = useRef<string>("");
 
   const fetchBootstrapData = useCallback(async (isSilent = false) => {
     const email = effectiveEmailRef.current || effectiveEmail;
     if (!email) return;
+
+    // 이미 같은 이메일로 요청이 진행 중인 경우 중복 발사 방지 (In-Flight 재사용 및 캔슬 방지)
+    if (inFlightBootstrapPromiseRef.current && lastRequestedBootstrapEmailRef.current === email) {
+      return inFlightBootstrapPromiseRef.current;
+    }
 
     if (!isSilent) {
       setLoadingDevices(true);
@@ -267,20 +274,22 @@ export default function NotificationsPage() {
       setLoadingLogs(true);
     }
 
-    // 이미 진행 중인 요청이 있다면 브라우저 소켓 pending 방지를 위해 이전 요청 취소(Abort) 후 진행
-    if (abortControllerRef.current) {
+    // 다른 이메일로 변경된 경우에만 이전 요청 취소(Abort) 후 진행
+    if (abortControllerRef.current && lastRequestedBootstrapEmailRef.current !== email) {
       abortControllerRef.current.abort();
     }
     const abortCtrl = new AbortController();
     abortControllerRef.current = abortCtrl;
+    lastRequestedBootstrapEmailRef.current = email;
     const timeoutId = setTimeout(() => abortCtrl.abort(), 6000);
 
-    try {
-      isFetchingBootstrapRef.current = true;
-      const res = await apiFetch(`/api/user/notifications/bootstrap?userEmail=${encodeURIComponent(email)}`, {
-        headers: { "Cache-Control": "no-cache" },
-        signal: abortCtrl.signal,
-      });
+    const bootstrapPromise = (async () => {
+      try {
+        isFetchingBootstrapRef.current = true;
+        const res = await apiFetch(`/api/user/notifications/bootstrap?userEmail=${encodeURIComponent(email)}`, {
+          headers: { "Cache-Control": "no-cache" },
+          signal: abortCtrl.signal,
+        });
 
       if (!res.ok) {
         throw new Error(`Bootstrap HTTP error: ${res.status}`);
@@ -324,8 +333,13 @@ export default function NotificationsPage() {
       setLoadingRules(false);
       setLoadingLogs(false);
       setHasInitialLoaded(true);
+      inFlightBootstrapPromiseRef.current = null;
     }
-  }, [effectiveEmail]);
+  })();
+
+  inFlightBootstrapPromiseRef.current = bootstrapPromise;
+  return bootstrapPromise;
+}, [effectiveEmail]);
 
   // 하위 호환 및 탭 컴포넌트 갱신 호환 래퍼
   const fetchDevices = useCallback((isSilent = false) => fetchBootstrapData(isSilent), [fetchBootstrapData]);
