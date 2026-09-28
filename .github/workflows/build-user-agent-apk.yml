@@ -83,9 +83,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: user-v2.1.13
-          name: "SheetBot Mobile Agent (이용자용) v2.1.13"
-          body: "시트봇 모바일 에이전트 v2.1.13 릴리스\n• 📑 [AI 스마트 견적 & 단가표 대장 연동 스위치 탑재] 메인 화면에서 원클릭으로 구글 시트 단가표 및 견적발급대장 생성 연동\n• 💡 [7대 추천 실전 자동화 시나리오 반영] 고객 문자 견적 문의 ➔ AI 단가표 매칭 & 모바일 견적서 0원 회신 시나리오 추가\n• 🔗 [모바일 웹 관제 센터 딥링크 고도화] 규칙 탭 다이렉트 전환 지원"
+          tag_name: user-v2.1.14
+          name: "SheetBot Mobile Agent (이용자용) v2.1.14"
+          body: "시트봇 모바일 에이전트 v2.1.14 긴급 안정화 패치\n• 🛡️ [글로벌 크래시 방어벽 구축] SheetBotApp Application 클래스 신설 및 전역 UncaughtExceptionHandler 탑재로 앱 비정상 종료 완벽 차단\n• ⚡ [코루틴 스코프 안전성 강화] SupervisorJob 및 CoroutineExceptionHandler 적용으로 비동기 통신 오류 시 프로세스 크래시 원천 방지\n• 🔄 [라이프사이클 전방위 보호] onResume, onDestroy 및 백그라운드 구글 시트 URL 사전 캐싱 전면 안전 가드 적용\n• 📑 [AI 스마트 견적 & 단가표 대장 연동 스위치 완벽 보호] 메인 화면에서 안전하게 구글 시트 단가표 및 견적발급대장 연동"
           files: release-apk/SheetBotAgent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
