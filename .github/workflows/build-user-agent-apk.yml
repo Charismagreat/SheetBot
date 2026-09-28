@@ -57,13 +57,10 @@ jobs:
           cd android-user-agent
           gradle assembleRelease --stacktrace
 
-      - name: Copy APK to artifacts and public
+      - name: Copy APK to artifacts
         run: |
           mkdir -p release-apk
           find android-user-agent/app/build/outputs/apk/release/ -name "*.apk" -exec cp {} release-apk/SheetBotAgent.apk \;
-          mkdir -p public/downloads
-          cp release-apk/SheetBotAgent.apk public/downloads/SheetBotAgent.apk
-          cp release-apk/SheetBotAgent.apk public/downloads/SheetBotAgent2.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -72,13 +69,13 @@ jobs:
           path: release-apk/*.apk
           retention-days: 30
 
-      - name: Commit and Push Keystore and APK back to Main
+      - name: Commit and Push Keystore back to Main
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add android-user-agent/keystore/sheetbot-agent.jks public/downloads/SheetBotAgent.apk public/downloads/SheetBotAgent2.apk
+          git add android-user-agent/keystore/sheetbot-agent.jks
           if ! git diff --staged --quiet; then
-            git commit -m "build(user-agent): bundle release apk v2.1.8"
+            git commit -m "build(user-agent): update keystore"
             git push origin main
           fi
 
@@ -86,9 +83,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: user-v2.1.8
-          name: "SheetBot Mobile Agent (이용자용) v2.1.8"
-          body: "시트봇 모바일 에이전트 v2.1.8 릴리스\n• 📊 [구글 시트 헤더 및 다크 서식 완벽 반영] 시트 생성 시 1행 7개 헤더 및 다크 서식 100% 자동 주입\n• 🚀 [대장 열기 무한 대기 방어] 프로비저닝 응답 대기 시 다이얼로그 닫기 지원 및 25초 타임아웃 안전망 구축\n• ⚡ [0초 즉시 오픈 강화] SharedPreferences 캐시 즉시 연동 및 구글 드라이브 바인딩 안정화\n• 🛡️ [웹사이트 장애 감시 센티널] 24시간 실시간 무중단 장애 감시 및 시트 자동 로깅"
+          tag_name: user-v2.1.9
+          name: "SheetBot Mobile Agent (이용자용) v2.1.9"
+          body: "시트봇 모바일 에이전트 v2.1.9 릴리스\n• 📜 [실시간 감지 로그 전용 부드러운 독립 스크롤 탑재] 부모 화면 간섭 없이 로그창 내부만 매끄럽게 상하 스크롤 지원\n• 💾 [최대 1,000건 로컬 영구 보관] 앱 재시작 후에도 이전 감지 로그 100% 안전 유지\n• 🗑️ [원클릭 로그 비우기] 확인 팝업을 거친 안전한 초기화 지원"
           files: release-apk/SheetBotAgent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
