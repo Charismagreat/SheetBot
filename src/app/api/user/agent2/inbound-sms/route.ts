@@ -64,8 +64,9 @@ export async function POST(req: NextRequest) {
       recordPaymentToGoogleSheet({
         userEmail: cleanEmail,
         paymentTime: nowIso.replace("T", " ").slice(0, 19),
+        transactionType: parsedBank.transactionType || "입금",
         channelOrBank: detectedBankName,
-        customerName: parsedBank.depositorName || "고객",
+        customerName: parsedBank.depositorName || (parsedBank.transactionType === "출금" ? "가맹점/출금처" : "고객"),
         amount: parsedBank.amountKrw,
         memoOrRawText: message.slice(0, 200),
         deviceId: deviceId || "SheetBot Agent",

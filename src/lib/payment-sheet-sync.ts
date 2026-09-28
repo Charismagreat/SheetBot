@@ -7,6 +7,7 @@ import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 export interface RecordPaymentParams {
   userEmail: string;
   paymentTime?: string;
+  transactionType?: "입금" | "출금"; // 입금 또는 출금
   channelOrBank: string;
   customerName?: string;
   amount: number;
@@ -36,10 +37,11 @@ export interface RecordPaymentResult {
 }
 
 /**
- * 매장 결제 및 은행 입금 내역을 구글 드라이브 [SheetBot] 매장 결제 및 매출 대장 시트에 실시간 자동 기록
- * - 시트가 없으면 1순위로 자동 생성
- * - Self-Healing 헤더 보장 (1행 헤더 누락 시 자동 주입 및 에메랄드 테마 서식)
- * - 금액 열(D열)은 순수 숫자(Number)로 저장하여 =SUM() 등 엑셀/Apps Script 수식 연산 100% 보장
+ * 매장 결제, 은행 입출금, 카드 승인 내역을 구글 드라이브 [SheetBot] 매장 결제 및 매출 대장 시트에 실시간 자동 기록
+ * - [구분] 열(입금 / 출금)을 지원하여 매출과 지출을 명확히 분류
+ * - 시트가 없으면 1순위로 자동 생성 및 7열 에메랄드 테마 서식 보장
+ * - Self-Healing 헤더 보장 (1행 헤더 누락 또는 6열 구버전 시 7열 신규 규격으로 자동 마이그레이션)
+ * - 금액 열(E열)은 순수 숫자(Number)로 저장하여 =SUM(), =SUMIF() 등 엑셀/Apps Script 수식 연산 100% 보장
  * - 90초 스마트 디바운싱: 앱 푸시와 SMS 동시 수신 시 2중 중복 기록 원천 차단
  */
 export async function recordPaymentToGoogleSheet(
@@ -49,8 +51,9 @@ export async function recordPaymentToGoogleSheet(
     const {
       userEmail,
       paymentTime,
+      transactionType = "입금",
       channelOrBank,
-      customerName = "미확인",
+      customerName: rawCustomerName,
       amount,
       memoOrRawText,
       deviceId = "SheetBot Agent",
@@ -61,13 +64,16 @@ export async function recordPaymentToGoogleSheet(
       return { success: false, error: "userEmail이 누락되었습니다." };
     }
 
+    const defaultName = transactionType === "출금" ? "가맹점/출금처" : "고객";
+    const customerName = rawCustomerName && rawCustomerName.trim().length > 0 ? rawCustomerName.trim() : defaultName;
+
     const cleanEmail = userEmail.toLowerCase().trim();
     const cleanAmount = Number(amount) || 0;
     const cleanBank = (channelOrBank || "").replace(/PUSH:/i, "").trim();
-    const cleanName = (customerName || "").replace(/미확인|고객/g, "").trim();
+    const cleanName = customerName.replace(/미확인|고객|가맹점\/출금처|출금처|가맹점/g, "").trim();
 
-    // 🛡️ [90초 스마트 중복 방지 필터]: 앱 푸시와 SMS가 연속으로 도달할 때 1건만 안전하게 기록
-    const dedupeKey = `${cleanEmail}_${cleanBank}_${cleanAmount}${cleanName ? `_${cleanName}` : ""}`;
+    // 🛡️ [90초 스마트 중복 방지 필터]: 앱 푸시와 SMS가 연속으로 도달할 때 1건만 안전하게 기록 (입금/출금 구분 포함)
+    const dedupeKey = `${cleanEmail}_${transactionType}_${cleanBank}_${cleanAmount}${cleanName ? `_${cleanName}` : ""}`;
     const nowMs = Date.now();
     const lastRecordedAt = recentPaymentDedupeMap.get(dedupeKey);
 
@@ -77,7 +83,7 @@ export async function recordPaymentToGoogleSheet(
       return {
         success: true,
         duplicated: true,
-        message: "동일 결제 건이 이미 대장에 기록되어 중복 처리가 방지되었습니다.",
+        message: "동일 거래 내역이 이미 대장에 기록되어 중복 처리가 방지되었습니다.",
       };
     }
 
@@ -146,26 +152,26 @@ export async function recordPaymentToGoogleSheet(
       return { success: false, error: "스프레드시트를 생성하거나 찾을 수 없습니다." };
     }
 
-    // 3. 자가 치유(Self-Healing) 헤더 검사 및 보장
+    // 3. 자가 치유(Self-Healing) 헤더 검사 및 보장 (7열 신규 표준 헤더)
     const headerValues = [
-      ["결제 일시", "결제 채널/금융사", "입금/고객명", "결제 금액(원)", "주문/결제 내용", "수신 기기"],
+      ["일시", "구분", "금융사/채널", "입금/고객/가맹점명", "금액(원)", "거래/결제 내용", "수신 기기"],
     ];
 
     const firstRowCheck = await callSheetsTool("sheets_get_range", {
       spreadsheetId: targetSpreadsheetId,
-      range: "A1:A1",
+      range: "A1:G1",
       preferOAuth: true,
     }).catch(() => null);
 
-    const hasHeaderOrData =
-      firstRowCheck?.values &&
-      firstRowCheck.values.length > 0 &&
-      firstRowCheck.values[0]?.[0];
+    const firstRowValues = firstRowCheck?.values?.[0] || [];
+    const hasHeaderOrData = firstRowValues.length > 0 && Boolean(firstRowValues[0]);
+    // 만약 기존 6열 헤더이거나 헤더가 없는 경우 신규 7열 헤더로 스마트 업데이트
+    const isLegacySixCols = hasHeaderOrData && firstRowValues[1] !== "구분";
 
-    if (!hasHeaderOrData) {
+    if (!hasHeaderOrData || isLegacySixCols) {
       await callSheetsTool("sheets_update_range", {
         spreadsheetId: targetSpreadsheetId,
-        range: "A1:F1",
+        range: "A1:G1",
         values: headerValues,
         preferOAuth: true,
       }).catch(() => {});
@@ -180,14 +186,14 @@ export async function recordPaymentToGoogleSheet(
       }).catch(() => {});
     }
 
-    // 4. 새 결제/매출 내역 행 추가 (D열 금액은 숫자 타입으로 유지)
+    // 4. 새 결제/입출금 내역 행 추가 (E열 금액은 순수 숫자 타입 유지)
     const newRowValues = [
-      [nowStr, channelOrBank, customerName, Number(amount) || 0, memoOrRawText, deviceId],
+      [nowStr, transactionType, channelOrBank, customerName, Number(amount) || 0, memoOrRawText, deviceId],
     ];
 
     await callSheetsTool("sheets_append_values", {
       spreadsheetId: targetSpreadsheetId,
-      range: "A:F",
+      range: "A:G",
       values: newRowValues,
       preferOAuth: true,
     }).catch((err: any) => {
