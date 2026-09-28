@@ -401,7 +401,7 @@ export default function GuidePage() {
                 <h4 className="font-extrabold text-xs text-slate-900 break-keep">프로젝트별 브릿지 URL 복사 &amp; 주입</h4>
               </div>
               <p className="text-[11px] text-slate-500 leading-relaxed break-keep">
-                이미 생성된 프로젝트가 있다면 카드 우측의 <strong>[🤖 AI 연동 주소 복사]</strong>를 눌러 고유 브릿지 웹 주소(gas-bridge?token=...)를 AI 채팅창에 전달하여 대화형으로 코드를 수정하고 주입할 수 있습니다.
+                이미 생성된 프로젝트가 있다면 카드 우측의 <strong>[🤖 래핑 링크 복사]</strong>를 눌러 고유 브릿지 웹 주소(gas-bridge?token=...)를 AI 채팅창에 전달하여 대화형으로 코드를 수정하고 주입할 수 있습니다.
               </p>
             </div>
           </div>
