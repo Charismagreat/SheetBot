@@ -48,6 +48,16 @@ export default function LandingPage() {
   const [refCode, setRefCode] = useState<string | null>(null);
   const [showInviteBanner, setShowInviteBanner] = useState<boolean>(true);
 
+  // [0단계] 카카오톡 인앱 브라우저 감지 시 스마트폰 기본 브라우저(크롬/삼성인터넷/사파리)로 자동 전환
+  useEffect(() => {
+    if (typeof window !== "undefined" && typeof navigator !== "undefined") {
+      const ua = navigator.userAgent || "";
+      if (/KAKAOTALK/i.test(ua)) {
+        window.location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(window.location.href)}`;
+      }
+    }
+  }, []);
+
   // [1단계] 추천인 코드(?ref=...) 감지 및 보존
   useEffect(() => {
     if (typeof window !== "undefined") {
