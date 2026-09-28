@@ -1316,7 +1316,7 @@ export default function DashboardPage() {
                         title="안티그라비티/외부 AI에 전달하여 코드를 자동 주입할 웹 주소를 복사합니다."
                       >
                         <Bot className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                        <span>{Boolean(copyingBridgeProjectId && p.id && copyingBridgeProjectId === p.id) ? "주소 생성 중..." : "AI 연동 주소 복사"}</span>
+                        <span>{Boolean(copyingBridgeProjectId && p.id && copyingBridgeProjectId === p.id) ? "링크 생성 중..." : "래핑 링크 복사"}</span>
                         <Copy className="w-3 h-3 text-purple-600/70 shrink-0" />
                       </button>
                     </div>
