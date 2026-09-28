@@ -414,7 +414,8 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!isAuthLoading && !authAdminEmail) {
       const savedEmail = typeof window !== "undefined" ? localStorage.getItem("sheetbot_user_email") : null;
-      if (!savedEmail) {
+      const visitorSession = typeof window !== "undefined" ? localStorage.getItem("egdesk_visitor_session") : null;
+      if (!savedEmail && !visitorSession) {
         const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
         const match = currentPath.match(/^(\/t\/[^\/]+\/p\/[^\/]+)/);
         const prefix = match ? match[1] : "";

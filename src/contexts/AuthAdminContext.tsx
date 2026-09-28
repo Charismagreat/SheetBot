@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { apiFetch } from "@/lib/api";
+import { getVisitorGoogleStatus } from "@/egdesk-visitor-google";
 
 export interface AuthAdminUser {
   email: string;
@@ -149,6 +150,55 @@ export function AuthAdminProvider({ children }: { children: React.ReactNode }) {
         }
         setIsLoading(false);
       } else {
+        // 방문자 세션(egdesk_visitor_session)이 존재하는지 확인하여 즉시 자동 연동
+        const visitorSession =
+          typeof window !== "undefined"
+            ? localStorage.getItem("egdesk_visitor_session")
+            : null;
+
+        if (visitorSession) {
+          (async () => {
+            try {
+              const statusRes = await getVisitorGoogleStatus();
+              if (statusRes?.connected && statusRes?.email) {
+                const email = statusRes.email.toLowerCase().trim();
+                const name = (statusRes as any).name || email.split("@")[0];
+                const image =
+                  (statusRes as any).picture ||
+                  "https://lh3.googleusercontent.com/a/default-user=s96-c";
+
+                setUser({ email, name, image });
+                if (typeof window !== "undefined") {
+                  try {
+                    localStorage.setItem("sheetbot_user_email", email);
+                    localStorage.setItem("sheetbot_user_name", name);
+                    localStorage.setItem("sheetbot_user_image", image);
+                  } catch {}
+                }
+
+                // NextAuth 세션 쿠키 발급
+                await apiFetch("/api/auth/google/session", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ email, name, image, visitorSessionId: visitorSession }),
+                }).catch(() => {});
+
+                if (KNOWN_ADMINS.includes(email)) {
+                  setIsAdmin(true);
+                }
+                setIsLoading(false);
+                return;
+              }
+            } catch (vErr) {
+              console.warn("Visitor session auto-resolution note:", vErr);
+            }
+            setUser(null);
+            setIsAdmin(false);
+            setIsLoading(false);
+          })();
+          return;
+        }
+
         // 실제 비로그인 게스트인 경우에만 null 처리
         setUser(null);
         setIsAdmin(false);
