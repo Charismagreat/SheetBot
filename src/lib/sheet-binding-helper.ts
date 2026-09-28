@@ -135,6 +135,8 @@ async function doResolveUserSpreadsheet(
     const queryRes = await queryTable("sheetbot_user_sheet_bindings", {
       filters: { user_email: cleanEmail, sheet_type: normalizedType },
       limit: 1,
+      orderBy: "id",
+      orderDirection: "DESC",
     });
     if (queryRes?.rows && queryRes.rows.length > 0) {
       boundRecord = queryRes.rows[0];
@@ -237,9 +239,9 @@ async function doResolveUserSpreadsheet(
   // 5. 확정된 spreadsheetId를 My DB에 영구 바인딩(Upsert)
   const nowStr = new Date().toISOString().replace("T", " ").slice(0, 19);
   try {
-    if (boundRecord) {
+    if (boundRecord?.id) {
       await updateRows("sheetbot_user_sheet_bindings", {
-        filters: { id: bindingId },
+        filters: { id: boundRecord.id },
         updates: {
           spreadsheet_id: targetSpreadsheetId,
           spreadsheet_url: spreadsheetUrl,
@@ -251,9 +253,9 @@ async function doResolveUserSpreadsheet(
     } else {
       await insertRows("sheetbot_user_sheet_bindings", [
         {
-          id: bindingId,
+          id: Date.now(),
           user_email: cleanEmail,
-          sheet_type: sheetType,
+          sheet_type: normalizedType,
           spreadsheet_id: targetSpreadsheetId,
           spreadsheet_url: spreadsheetUrl,
           sheet_title: targetTitle,
