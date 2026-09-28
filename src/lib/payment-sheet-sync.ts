@@ -11,6 +11,7 @@ export interface RecordPaymentParams {
   paymentTime?: string;
   transactionType?: FinancialTransactionType | string;
   channelOrBank: string;
+  accountOrCardNumber?: string;
   customerName?: string;
   amount: number;
   memoOrRawText: string;
@@ -41,9 +42,10 @@ export interface RecordPaymentResult {
 /**
  * 매장 결제, 은행 입출금, 카드 승인 내역을 구글 드라이브 [SheetBot] 매장 결제 및 매출 대장 시트에 실시간 자동 기록
  * - [구분] 열(매출(계좌) / 매출(카드) / 지출(계좌) / 지출(카드))을 지원하여 수입과 지출을 명확히 분류
- * - 시트가 없으면 1순위로 자동 생성 및 7열 에메랄드 테마 서식 보장
- * - Self-Healing 헤더 보장 (1행 헤더 누락 또는 6열 구버전 시 7열 신규 규격으로 자동 마이그레이션)
- * - 금액 열(E열)은 순수 숫자(Number)로 저장하여 =SUM(), =SUMIF() 등 엑셀/Apps Script 수식 연산 100% 보장
+ * - [계좌/카드번호] 독립 열을 제공하여 계좌 뒷자리 또는 카드 마스킹 번호 자동 기록
+ * - 시트가 없으면 1순위로 자동 생성 및 8열 에메랄드 테마 서식 보장
+ * - Self-Healing 헤더 보장 (1행 헤더 누락 또는 6열/7열 구버전 시 8열 신규 규격으로 자동 마이그레이션)
+ * - 금액 열(F열)은 순수 숫자(Number)로 저장하여 =SUM(), =SUMIF() 등 엑셀/Apps Script 수식 연산 100% 보장
  * - 90초 스마트 디바운싱: 앱 푸시와 SMS 동시 수신 시 2중 중복 기록 원천 차단
  */
 export async function recordPaymentToGoogleSheet(
@@ -55,6 +57,7 @@ export async function recordPaymentToGoogleSheet(
       paymentTime,
       transactionType = "매출(계좌)",
       channelOrBank,
+      accountOrCardNumber = "-",
       customerName: rawCustomerName,
       amount,
       memoOrRawText,
@@ -155,26 +158,28 @@ export async function recordPaymentToGoogleSheet(
       return { success: false, error: "스프레드시트를 생성하거나 찾을 수 없습니다." };
     }
 
-    // 3. 자가 치유(Self-Healing) 헤더 검사 및 보장 (7열 신규 표준 헤더)
+    // 3. 자가 치유(Self-Healing) 헤더 검사 및 보장 (8열 신규 표준 헤더)
     const headerValues = [
-      ["일시", "구분", "금융사/채널", "입금/고객/가맹점명", "금액(원)", "거래/결제 내용", "수신 기기"],
+      ["일시", "구분", "금융사/채널", "계좌/카드번호", "고객/가맹점명", "금액(원)", "거래/결제 내용", "수신 기기"],
     ];
 
     const firstRowCheck = await callSheetsTool("sheets_get_range", {
       spreadsheetId: targetSpreadsheetId,
-      range: "A1:G1",
+      range: "A1:H1",
       preferOAuth: true,
     }).catch(() => null);
 
     const firstRowValues = firstRowCheck?.values?.[0] || [];
     const hasHeaderOrData = firstRowValues.length > 0 && Boolean(firstRowValues[0]);
-    // 만약 기존 6열 헤더이거나 헤더가 없는 경우 신규 7열 헤더로 스마트 업데이트
-    const isLegacySixCols = hasHeaderOrData && firstRowValues[1] !== "구분";
+    // 만약 기존 6열/7열 헤더이거나 헤더가 없는 경우 신규 8열 헤더로 스마트 업데이트
+    const isLegacyFormat =
+      hasHeaderOrData &&
+      (firstRowValues[1] !== "구분" || firstRowValues[3] !== "계좌/카드번호" || firstRowValues.length < 8);
 
-    if (!hasHeaderOrData || isLegacySixCols) {
+    if (!hasHeaderOrData || isLegacyFormat) {
       await callSheetsTool("sheets_update_range", {
         spreadsheetId: targetSpreadsheetId,
-        range: "A1:G1",
+        range: "A1:H1",
         values: headerValues,
         preferOAuth: true,
       }).catch(() => {});
@@ -189,14 +194,14 @@ export async function recordPaymentToGoogleSheet(
       }).catch(() => {});
     }
 
-    // 4. 새 결제/입출금 내역 행 추가 (E열 금액은 순수 숫자 타입 유지)
+    // 4. 새 결제/입출금 내역 행 추가 (F열 금액은 순수 숫자 타입 유지)
     const newRowValues = [
-      [nowStr, transactionType, channelOrBank, customerName, Number(amount) || 0, memoOrRawText, deviceId],
+      [nowStr, transactionType, channelOrBank, accountOrCardNumber || "-", customerName, Number(amount) || 0, memoOrRawText, deviceId],
     ];
 
     await callSheetsTool("sheets_append_values", {
       spreadsheetId: targetSpreadsheetId,
-      range: "A:G",
+      range: "A:H",
       values: newRowValues,
       preferOAuth: true,
     }).catch((err: any) => {
