@@ -85,10 +85,18 @@ const nextConfig: any = {
     ];
   },
   async rewrites() {
-    const egdeskApiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || "http://localhost:8080";
+    const defaultTunnelUrl = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1";
+    const egdeskApiUrl =
+      process.env.NEXT_PUBLIC_EGDESK_API_URL ||
+      process.env.NEXT_PUBLIC_EGDESK_TUNNEL_URL ||
+      (process.env.NODE_ENV === "development" ? "http://localhost:8080" : defaultTunnelUrl);
     return [
       {
         source: "/t/:tunnel/p/:project/:path*",
+        destination: "/:path*",
+      },
+      {
+        source: "/t/:tunnel/:path*",
         destination: "/:path*",
       },
       {
