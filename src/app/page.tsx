@@ -197,7 +197,7 @@ export default function LandingPage() {
                 </Link>
 
                 <a
-                  href="/downloads/SheetBotAgent.apk"
+                  href="https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.8/SheetBotAgent.apk"
                   className="w-full py-3.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs sm:text-sm rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all text-center"
                 >
                   <Download className="w-4 h-4 text-emerald-400 shrink-0" />

@@ -18,12 +18,26 @@ export async function GET(
 
     const publicPath = path.join(process.cwd(), "public", "downloads", safeFilename);
 
-    // 1. 로컬 public/downloads/ 에 실제 파일이 존재할 경우 직접 서빙
+    // 1. APK 파일의 경우: 프록시/Next.js 라우트의 UTF-8 텍스트 오염(Binary Corruption)을 원천 차단하기 위해
+    // GitHub Releases 고속 CDN 직통 링크로 즉시 302 리다이렉트
+    if (safeFilename.toLowerCase().endsWith(".apk")) {
+      let cdnUrl = `https://github.com/Charismagreat/SheetBot/releases/latest/download/${safeFilename}`;
+
+      if (safeFilename.toLowerCase().includes("sheetbotagent")) {
+        // 일반 회원용 시트봇 에이전트 최신 v2.1.8 정본 APK
+        cdnUrl = "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.8/SheetBotAgent.apk";
+      } else if (safeFilename.toLowerCase().includes("deposit")) {
+        // 관리자용 시트봇 에이전트 M 최신 v1.5.2 정본 APK
+        cdnUrl = "https://github.com/Charismagreat/SheetBot/releases/download/v1.5.2/sheetbot-deposit-agent.apk";
+      }
+
+      return NextResponse.redirect(cdnUrl, 302);
+    }
+
+    // 2. 비-APK 파일(설정 json 등)의 경우 로컬 public/downloads/ 직접 서빙
     if (fs.existsSync(publicPath)) {
       const fileBuffer = fs.readFileSync(publicPath);
-      const contentType = safeFilename.endsWith(".apk")
-        ? "application/vnd.android.package-archive"
-        : safeFilename.endsWith(".json")
+      const contentType = safeFilename.endsWith(".json")
         ? "application/json"
         : "application/octet-stream";
 
@@ -35,13 +49,6 @@ export async function GET(
           "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
         },
       });
-    }
-
-    // 2. APK 파일인데 아직 서버 로컬에 바이너리가 없는 경우:
-    // GitHub Releases 최신 다운로드 링크 또는 안내로 리다이렉트
-    if (safeFilename.endsWith(".apk")) {
-      const githubReleaseUrl = `https://github.com/Charismagreat/SheetBot/releases/latest/download/${safeFilename}`;
-      return NextResponse.redirect(githubReleaseUrl, 302);
     }
 
     return NextResponse.json(
