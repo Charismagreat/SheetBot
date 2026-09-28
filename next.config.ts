@@ -60,6 +60,30 @@ const nextConfig: any = {
     }
   },
   reactStrictMode: true,
+  async redirects() {
+    return [
+      {
+        source: "/downloads/SheetBotAgent.apk",
+        destination: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.8/SheetBotAgent.apk",
+        permanent: false,
+      },
+      {
+        source: "/downloads/SheetBotAgent2.apk",
+        destination: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.8/SheetBotAgent.apk",
+        permanent: false,
+      },
+      {
+        source: "/download/SheetBotAgent.apk",
+        destination: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.8/SheetBotAgent.apk",
+        permanent: false,
+      },
+      {
+        source: "/downloads/sheetbot-deposit-agent.apk",
+        destination: "https://github.com/Charismagreat/SheetBot/releases/download/v1.5.2/sheetbot-deposit-agent.apk",
+        permanent: false,
+      },
+    ];
+  },
   async rewrites() {
     const egdeskApiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || "http://localhost:8080";
     return [
