@@ -181,9 +181,6 @@ function MobileSheetWebAppContent() {
               <h1 className="text-base font-bold text-white tracking-tight">
                 {data?.title || meta.title}
               </h1>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                WEB APP
-              </span>
             </div>
             <p className="text-[11px] text-slate-400 truncate max-w-[200px]">
               {userEmail || "계정 미확인"}
@@ -197,9 +194,11 @@ function MobileSheetWebAppContent() {
               href={data.spreadsheetUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-semibold rounded-lg flex items-center space-x-1 shadow transition"
+              className="p-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-sm rounded-lg flex items-center justify-center shadow transition"
+              title="구글 스프레드시트 원본 열기"
+              aria-label="구글 스프레드시트 원본 열기"
             >
-              <span>📊 시트 원본</span>
+              <span>📊</span>
             </a>
           )}
           <button
