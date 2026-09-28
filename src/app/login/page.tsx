@@ -30,6 +30,16 @@ export default function LoginPage() {
   const [isChecking, setIsChecking] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
+  // 카카오톡 인앱 브라우저 감지 시 스마트폰 기본 브라우저(크롬/삼성인터넷/사파리)로 자동 전환
+  useEffect(() => {
+    if (typeof window !== "undefined" && typeof navigator !== "undefined") {
+      const ua = navigator.userAgent || "";
+      if (/KAKAOTALK/i.test(ua)) {
+        window.location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(window.location.href)}`;
+      }
+    }
+  }, []);
+
   // 현재 브라우저에 저장된 방문자(Visitor) 구글 세션 상태 확인 및 래핑 시트 주소, 추천인 코드 확인
   useEffect(() => {
     if (typeof window !== "undefined") {

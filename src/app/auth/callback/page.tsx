@@ -14,46 +14,113 @@
  */
 
 import { useEffect, useState } from 'react';
-import { exchangeVisitorAuthCode, resolveVisitorAppPath } from '@/egdesk-visitor-google';
+import { exchangeVisitorAuthCode, getVisitorGoogleStatus, resolveVisitorAppPath } from '@/egdesk-visitor-google';
+import { apiFetch } from '@/lib/api';
 
 export default function VisitorAuthCallbackPage() {
-  const [message, setMessage] = useState('Finishing sign-in…');
+  const [message, setMessage] = useState('Google 계정 인증 및 토큰 지갑 설정 중…');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
-    const next = params.get('next') || '/';
+    const next = params.get('next') || '/dashboard';
     if (!code) {
-      setMessage('Missing login code. Close this page and try Sign in with Google again.');
+      setMessage('인증 코드가 없습니다. 다시 로그인해 주세요.');
       return;
     }
     let finished = false;
     const timer = window.setTimeout(() => {
       if (finished) return;
       finished = true;
-      setMessage('Sign-in timed out. Close this page and try Sign in with Google again.');
-    }, 20000);
-    void exchangeVisitorAuthCode(code)
-      .then(() => {
+      setMessage('로그인 응답 시간이 초과되었습니다. 다시 시도해 주세요.');
+    }, 25000);
+
+    (async () => {
+      try {
+        // 1. Visitor Auth Code 교환
+        const result = await exchangeVisitorAuthCode(code);
+        const visitorSessionId = result?.sessionId;
+
+        // 2. 로그인된 Google 계정 이메일 및 프로필 조회
+        let email: string | null = null;
+        let name: string = '';
+        let image: string = '';
+
+        try {
+          const status = await getVisitorGoogleStatus();
+          if (status?.connected && status?.email) {
+            email = status.email;
+            name = (status as any).name || (status as any).user?.name || email.split('@')[0];
+            image = (status as any).picture || (status as any).image || (status as any).user?.image || '';
+          }
+        } catch (statusErr) {
+          console.warn('getVisitorGoogleStatus error:', statusErr);
+        }
+
+        // 3. Status에서 이메일을 못 가져온 경우 API 폴백 확인
+        if (!email) {
+          try {
+            const fallbackRes = await apiFetch('/api/auth/google/status').then((r) => r.json());
+            if (fallbackRes?.connected && fallbackRes?.email) {
+              email = fallbackRes.email;
+              name = fallbackRes.name || email.split('@')[0];
+            }
+          } catch {}
+        }
+
+        // 4. 세션 생성 API (/api/auth/google/session) 호출 -> NextAuth JWT 쿠키 & 회원/지갑 등록
+        if (email) {
+          const cleanEmail = email.toLowerCase().trim();
+          try {
+            await apiFetch('/api/auth/google/session', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: cleanEmail,
+                name: name || cleanEmail.split('@')[0],
+                image: image || 'https://lh3.googleusercontent.com/a/default-user=s96-c',
+                visitorSessionId: visitorSessionId || '',
+              }),
+            });
+          } catch (sessionErr) {
+            console.warn('Session API error:', sessionErr);
+          }
+
+          // 5. 로컬스토리지 동기화 (대시보드 즉시 통과 보장)
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('sheetbot_user_email', cleanEmail);
+              if (name) localStorage.setItem('sheetbot_user_name', name);
+              if (image) localStorage.setItem('sheetbot_user_image', image);
+            } catch {}
+          }
+        }
+
         if (finished) return;
         finished = true;
         window.clearTimeout(timer);
-        const dest = resolveVisitorAppPath(next.startsWith('/') ? next : '/');
+
+        const dest = resolveVisitorAppPath(next.startsWith('/') ? next : '/dashboard');
         window.location.replace(dest);
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (finished) return;
         finished = true;
         window.clearTimeout(timer);
         const text = err instanceof Error ? err.message : String(err);
-        setMessage('Sign-in failed: ' + text);
-      });
+        setMessage('로그인 처리 중 오류가 발생했습니다: ' + text);
+      }
+    })();
+
     return () => window.clearTimeout(timer);
   }, []);
 
   return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: 24 }}>
-      <p>{message}</p>
+    <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-slate-50 text-slate-800 font-sans">
+      <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-200 text-center max-w-sm w-full space-y-4">
+        <div className="w-12 h-12 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin mx-auto" />
+        <h2 className="text-base font-bold text-slate-900">{message}</h2>
+        <p className="text-xs text-slate-500">잠시만 기다려주시면 대시보드로 안전하게 이동합니다.</p>
+      </div>
     </main>
   );
 }
