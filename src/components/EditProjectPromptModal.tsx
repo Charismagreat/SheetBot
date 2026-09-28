@@ -1,6 +1,7 @@
 "use client";
 
 import { apiFetch } from "@/lib/api";
+import { usePricingCost } from "@/lib/usePricingCost";
 import React, { useState, useEffect } from "react";
 import {
   X,
@@ -50,10 +51,13 @@ export default function EditProjectPromptModal({
     Array<{ role: "user" | "ai"; message: string }>
   >([]);
 
-  // AI 엔진 모델 선택 관련 상태
-  const [selectedModel, setSelectedModel] = useState("gemini-3.8-flash");
-  const [pricingModels, setPricingModels] = useState<any[]>([]);
-  const [allowUserSelection, setAllowUserSelection] = useState(true);
+  // AI 엔진 모델 선택 관련 상태 (⚡ 공유 훅 usePricingCost 적용)
+  const {
+    pricingModels,
+    allowUserSelection,
+    selectedModel,
+    setSelectedModel,
+  } = usePricingCost(isOpen && Boolean(project));
   const [includeCopilotSidebar, setIncludeCopilotSidebar] = useState(true);
   const [enableSqliteSync, setEnableSqliteSync] = useState(true);
   const [sqliteFolderName, setSqliteFolderName] = useState("SheetBot_Databases");
@@ -204,21 +208,6 @@ export default function EditProjectPromptModal({
             setIsDetectingGas(false);
           });
       }
-
-      apiFetch("/api/admin/pricing-cost")
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && data.config) {
-            setPricingModels(data.config.models || []);
-            setAllowUserSelection(data.config.allowUserModelSelection !== false);
-            const targetDefault = data.config.defaultModel || "gemini-3.8-flash";
-            const def =
-              data.config.models?.find((m: any) => m.id === targetDefault) ||
-              data.config.models?.[0];
-            if (def) setSelectedModel(def.id);
-          }
-        })
-        .catch(() => {});
     }
   }, [project, isOpen]);
 

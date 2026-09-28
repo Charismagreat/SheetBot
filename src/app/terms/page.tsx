@@ -1,26 +1,13 @@
 "use client";
 
-import { apiFetch } from '@/lib/api';
-import React, { useState, useEffect } from "react";
+import React from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 import { FileText, Shield, CreditCard, ChevronRight } from "lucide-react";
-import { DEFAULT_FOOTER, FooterInfo } from "@/lib/default-footer";
+import { useFooterInfo } from "@/lib/useFooterInfo";
 
 export default function TermsPage() {
-  const [footerInfo, setFooterInfo] = useState<FooterInfo>(DEFAULT_FOOTER);
-
-  useEffect(() => {
-    apiFetch("/api/footer")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.footer) {
-          setFooterInfo(data.footer);
-        }
-      })
-      .catch(() => {});
-  }, []);
+  const footerInfo = useFooterInfo();
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-between">
@@ -196,8 +183,6 @@ export default function TermsPage() {
           </div>
         </main>
       </div>
-
-      <Footer />
     </div>
   );
 }

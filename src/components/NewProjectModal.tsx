@@ -1,6 +1,7 @@
 "use client";
 
 import { apiFetch } from '@/lib/api';
+import { usePricingCost } from '@/lib/usePricingCost';
 import React, { useState, useEffect } from "react";
 import {
   X,
@@ -134,10 +135,13 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
   const [submittingInquiry, setSubmittingInquiry] = useState(false);
   const [inquirySuccess, setInquirySuccess] = useState(false);
 
-  // AI 엔진 모델 선택 관련 상태
-  const [selectedModel, setSelectedModel] = useState("gemini-3.8-flash");
-  const [pricingModels, setPricingModels] = useState<any[]>([]);
-  const [allowUserSelection, setAllowUserSelection] = useState(true);
+  // AI 엔진 모델 선택 관련 상태 (⚡ 공유 훅 usePricingCost 적용으로 중복 fetch 100% 방지)
+  const {
+    pricingModels,
+    allowUserSelection,
+    selectedModel,
+    setSelectedModel,
+  } = usePricingCost(isOpen);
 
   // 구글 드라이브/시트 권한 상태 및 안내 팝업 상태
   const [scopeStatus, setScopeStatus] = useState<"loading" | "granted" | "needed">("loading");
@@ -197,20 +201,6 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
   useEffect(() => {
     if (isOpen) {
       void checkGoogleScopes();
-
-      // 원가 및 사용 가능 모델 설정 로드
-      apiFetch("/api/admin/pricing-cost")
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && data.config) {
-            setPricingModels(data.config.models || []);
-            setAllowUserSelection(data.config.allowUserModelSelection !== false);
-            const targetDefault = data.config.defaultModel || "gemini-3.8-flash";
-            const def = data.config.models?.find((m: any) => m.id === targetDefault) || data.config.models?.[0];
-            if (def) setSelectedModel(def.id);
-          }
-        })
-        .catch(() => {});
     }
   }, [isOpen]);
 
