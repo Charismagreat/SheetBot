@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -45,7 +46,7 @@ export default function QuoteSelectPage() {
     async function loadCatalog() {
       try {
         setLoading(true);
-        const res = await fetch(`/api/user/quote/catalog?quoteId=${encodeURIComponent(quoteId)}`);
+        const res = await apiFetch(`/api/user/quote/catalog?quoteId=${encodeURIComponent(quoteId)}`);
         const data = await res.json();
 
         if (data.success) {
@@ -143,7 +144,7 @@ export default function QuoteSelectPage() {
 
     try {
       setSubmitting(true);
-      const res = await fetch("/api/user/quote/generate", {
+      const res = await apiFetch("/api/user/quote/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
