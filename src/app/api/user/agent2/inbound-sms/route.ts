@@ -16,11 +16,15 @@ export async function POST(req: NextRequest) {
   try {
     await setupDatabase();
     const body = await req.json().catch(() => ({}));
-    const { userEmail, sender, message, receivedAt, deviceId } = body;
+    const userEmail = body.userEmail || body.user_email || body.email || "";
+    const sender = body.sender || body.originatingAddress || body.phone || body.from || "알 수 없음";
+    const message = body.message || body.smsText || body.text || body.content || body.msg || "";
+    const receivedAt = body.receivedAt || body.timestamp || new Date().toISOString();
+    const deviceId = body.deviceId || body.device_id || "SheetBot Agent";
 
-    if (!userEmail || !sender || !message) {
+    if (!userEmail || !message) {
       return NextResponse.json(
-        { success: false, error: "필수 파라미터(userEmail, sender, message)가 누락되었습니다." },
+        { success: false, error: "필수 파라미터(userEmail, message)가 누락되었습니다." },
         { status: 400 }
       );
     }
@@ -29,29 +33,38 @@ export async function POST(req: NextRequest) {
     const nowIso = receivedAt || new Date().toISOString();
     const logId = Date.now();
 
+    // 발신자 표시 형식 정제 (PUSH 푸시인 경우 그대로 유지, 전화번호인 경우 마스킹)
+    const isPushNotification = sender.startsWith("PUSH:") || sender.includes("푸시");
+    const displayRecipient = isPushNotification ? sender : maskPhoneNumber(sender);
+    const ruleName = isPushNotification ? `🔔 ${sender.replace("PUSH:", "")} 입금/결제 푸시` : "📱 스마트폰 고객 문자 수신";
+
     // 1. 회원의 스마트 알림 발송/수신 이력 대장에 INBOUND로 기록 (Zero-Retention: 고객 전화번호 마스킹 및 본문 서버 미보관 정책 준수)
     await insertRows("sheetbot_user_dispatch_logs", [
       {
         id: logId,
         user_email: cleanEmail,
-        rule_id: "INBOUND_SMS",
-        rule_name: "📱 스마트폰 고객 문자 수신",
+        rule_id: isPushNotification ? "INBOUND_PUSH" : "INBOUND_SMS",
+        rule_name: ruleName,
         device_id: deviceId || "SheetBot Agent",
-        recipient: maskPhoneNumber(sender), // 마스킹된 발신자 번호
-        content: formatZeroRetentionContent("수신 문자", message.length),
+        recipient: displayRecipient,
+        content: formatZeroRetentionContent(isPushNotification ? "금융 푸시" : "수신 문자", message.length),
         status: "INBOUND", // 수신 상태
         error_message: null,
         created_at: nowIso,
       },
     ]);
 
-    // 1-1. 은행/결제/배달앱 승인 문자일 경우 [SheetBot] 매장 결제 및 매출 대장 시트에 실시간 자동 기록
+    // 1-1. 은행/결제/배달앱 승인 문자 및 푸시일 경우 [SheetBot] 매장 결제 및 매출 대장 시트에 실시간 자동 기록
     const parsedBank = parseBankDepositSms(message);
     if (parsedBank.amountKrw && parsedBank.amountKrw > 0) {
+      const detectedBankName = parsedBank.bankName !== "알 수 없음" && parsedBank.bankName !== "시중은행 (일반)"
+        ? parsedBank.bankName
+        : (isPushNotification ? sender.replace("PUSH:", "") : "카드/은행 결제");
+
       recordPaymentToGoogleSheet({
         userEmail: cleanEmail,
         paymentTime: nowIso.replace("T", " ").slice(0, 19),
-        channelOrBank: parsedBank.bankName || "카드/은행 결제",
+        channelOrBank: detectedBankName,
         customerName: parsedBank.depositorName || "고객",
         amount: parsedBank.amountKrw,
         memoOrRawText: message.slice(0, 200),

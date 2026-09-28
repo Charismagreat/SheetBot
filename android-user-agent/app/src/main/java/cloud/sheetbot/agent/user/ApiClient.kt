@@ -191,6 +191,7 @@ object ApiClient {
                 val json = JSONObject().apply {
                     put("sender", sender)
                     put("smsText", smsText)
+                    put("message", smsText)
                     put("userEmail", userEmail)
                     put("source", "android_native_agent")
                     put("deviceModel", "${Build.MANUFACTURER} ${Build.MODEL}")
