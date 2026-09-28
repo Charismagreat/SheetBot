@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Sparkles,
   FileSpreadsheet,
+  Gift,
 } from "lucide-react";
 import {
   startVisitorGoogleLogin,
@@ -25,15 +26,18 @@ import {
 export default function LoginPage() {
   const [visitorEmail, setVisitorEmail] = useState<string | null>(null);
   const [pendingSheetUrl, setPendingSheetUrl] = useState<string | null>(null);
+  const [refCode, setRefCode] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
-  // 현재 브라우저에 저장된 방문자(Visitor) 구글 세션 상태 확인 및 래핑 시트 주소 확인
+  // 현재 브라우저에 저장된 방문자(Visitor) 구글 세션 상태 확인 및 래핑 시트 주소, 추천인 코드 확인
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const cb = params.get("callbackUrl");
       const localSheet = localStorage.getItem("pending_sheet_url");
+      const ref = params.get("ref") || localStorage.getItem("pending_ref");
+      if (ref) setRefCode(ref.trim());
       if (localSheet) {
         setPendingSheetUrl(localSheet);
       } else if (cb && cb.includes("sheetUrl=")) {
@@ -185,6 +189,24 @@ export default function LoginPage() {
               Google 계정으로 로그인하여<br />스프레드시트 Apps Script 자동화를 시작하세요.
             </p>
           </div>
+
+          {/* 🎁 특별 초대 혜택 안내 배너 */}
+          {refCode && (
+            <div className="p-4 bg-gradient-to-br from-amber-50 via-emerald-50 to-teal-50 border-2 border-emerald-400/80 rounded-2xl text-left space-y-1.5 shadow-xs animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 font-black text-xs text-emerald-950">
+                  <Gift className="w-4 h-4 text-emerald-600 animate-pulse" />
+                  <span>특별 초대 혜택 적용됨</span>
+                </span>
+                <span className="text-[10px] font-black bg-emerald-600 text-white px-2 py-0.5 rounded-full shadow-2xs">
+                  10,000 토큰 선물 🎁
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-700 leading-relaxed break-keep">
+                추천인 코드(<strong>{refCode}</strong>)가 적용되었습니다. Google 1초 로그인 완료 시 지갑으로 <strong>10,000 보너스 토큰</strong>이 즉시 자동 충전됩니다.
+              </p>
+            </div>
+          )}
 
           {/* 🌟 1초 래핑 대기 중인 시트 안내 배너 */}
           {pendingSheetUrl && (

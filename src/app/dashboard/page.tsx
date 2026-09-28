@@ -190,6 +190,40 @@ export default function DashboardPage() {
           }
         })();
       }
+
+      // 🎁 [추천인 초대 보너스 자동 수령]: pending_ref 감지 시 양방향 10,000 보너스 토큰 즉시 자동 지급
+      try {
+        const pendingRef = localStorage.getItem("pending_ref");
+        const currentEmail = authAdminEmail || authAdminUser?.email || localStorage.getItem("sheetbot_user_email");
+        if (pendingRef && currentEmail && currentEmail.includes("@")) {
+          (async () => {
+            try {
+              const claimRes = await apiFetch("/api/wallet/referral/claim", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  inviteeEmail: currentEmail,
+                  referralCode: pendingRef,
+                  channel: "WEB_INVITE",
+                }),
+              });
+              const claimData = await claimRes.json();
+              if (claimData.success) {
+                localStorage.removeItem("pending_ref");
+                showAlert({
+                  type: "success",
+                  text: `🎉 초대 보너스 10,000 토큰이 지갑에 성공적으로 충전되었습니다! (추천인: ${pendingRef})`,
+                });
+                void fetchBootstrapData();
+              } else if (claimData.error === "ALREADY_CLAIMED" || claimData.error === "SELF_REFERRAL_FORBIDDEN") {
+                localStorage.removeItem("pending_ref");
+              }
+            } catch (claimErr) {
+              console.warn("Referral claim error:", claimErr);
+            }
+          })();
+        }
+      } catch (e) {}
     }
   }, [isAuthLoading]);
 
