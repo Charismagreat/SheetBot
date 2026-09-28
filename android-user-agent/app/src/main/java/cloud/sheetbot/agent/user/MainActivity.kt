@@ -42,9 +42,12 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -60,11 +63,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var prefs: PreferencesManager
     private lateinit var logManager: LocalLogManager
-    private val activityScope = CoroutineScope(Dispatchers.Main)
+
+    // 코루틴 내 미처리 예외 안전 흡수 핸들러 (크래시 차단)
+    private val coroutineExceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        android.util.Log.e("MainActivity", "🚨 [COROUTINE DEFENDER] 비동기 예외 안전 포착: ${throwable.message}", throwable)
+    }
+    private val activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob() + coroutineExceptionHandler)
+
     private var aodJob: Job? = null
     private var serverMonitorJob: Job? = null
     private lateinit var aodGestureDetector: GestureDetector
     private var smsSentObserver: SmsSentObserver? = null
+    private var isDepositReceiverRegistered = false
 
     // 입금 감지 시 실시간 화면 갱신 리시버
     private val depositUpdateReceiver = object : BroadcastReceiver() {
@@ -316,14 +326,19 @@ class MainActivity : AppCompatActivity() {
             }
 
             // 실시간 고객 SMS 수신 및 입금 감지 브로드캐스트 리시버 등록
-            val filter = IntentFilter().apply {
-                addAction(SmsReceiver.ACTION_SMS_RECEIVED)
-                addAction(SmsReceiver.ACTION_DEPOSIT_DETECTED)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                registerReceiver(depositUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-            } else {
-                registerReceiver(depositUpdateReceiver, filter)
+            try {
+                val filter = IntentFilter().apply {
+                    addAction(SmsReceiver.ACTION_SMS_RECEIVED)
+                    addAction(SmsReceiver.ACTION_DEPOSIT_DETECTED)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    registerReceiver(depositUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+                } else {
+                    registerReceiver(depositUpdateReceiver, filter)
+                }
+                isDepositReceiverRegistered = true
+            } catch (e: Throwable) {
+                android.util.Log.w("MainActivity", "depositUpdateReceiver 등록 예외: ${e.message}")
             }
         } catch (e: Throwable) {
             android.util.Log.e("MainActivity", "onCreate 초기화 중 오류 방어: ${e.message}", e)
@@ -339,28 +354,55 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        checkNotificationListenerPermission()
-        checkAndRequestBatteryOptimization()
-        startServerMonitorLoop()
-        preloadActiveSheetUrls()
-        updateWebsiteMonitorStatusText()
+        try {
+            checkNotificationListenerPermission()
+        } catch (e: Throwable) {
+            android.util.Log.w("MainActivity", "checkNotificationListenerPermission 방어: ${e.message}")
+        }
+        try {
+            checkAndRequestBatteryOptimization()
+        } catch (e: Throwable) {
+            android.util.Log.w("MainActivity", "checkAndRequestBatteryOptimization 방어: ${e.message}")
+        }
+        try {
+            startServerMonitorLoop()
+        } catch (e: Throwable) {
+            android.util.Log.w("MainActivity", "startServerMonitorLoop 방어: ${e.message}")
+        }
+        try {
+            preloadActiveSheetUrls()
+        } catch (e: Throwable) {
+            android.util.Log.w("MainActivity", "preloadActiveSheetUrls 방어: ${e.message}")
+        }
+        try {
+            updateWebsiteMonitorStatusText()
+        } catch (e: Throwable) {
+            android.util.Log.w("MainActivity", "updateWebsiteMonitorStatusText 방어: ${e.message}")
+        }
     }
 
     override fun onPause() {
         super.onPause()
-        serverMonitorJob?.cancel()
+        try {
+            serverMonitorJob?.cancel()
+        } catch (_: Throwable) {}
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        aodJob?.cancel()
-        serverMonitorJob?.cancel()
+        try { aodJob?.cancel() } catch (_: Throwable) {}
+        try { serverMonitorJob?.cancel() } catch (_: Throwable) {}
+        try { activityScope.coroutineContext.cancelChildren() } catch (_: Throwable) {}
         try {
             smsSentObserver?.let { contentResolver.unregisterContentObserver(it) }
-        } catch (_: Exception) {}
+            smsSentObserver = null
+        } catch (_: Throwable) {}
         try {
-            unregisterReceiver(depositUpdateReceiver)
-        } catch (_: Exception) {}
+            if (isDepositReceiverRegistered) {
+                unregisterReceiver(depositUpdateReceiver)
+                isDepositReceiverRegistered = false
+            }
+        } catch (_: Throwable) {}
     }
 
     private fun setupListeners() {
@@ -2142,66 +2184,74 @@ class MainActivity : AppCompatActivity() {
      * 활성화된 기능들의 구글 시트 URL을 백그라운드에서 사전 캐싱 (v2.1.5)
      */
     private fun preloadActiveSheetUrls() {
-        val userEmail = prefs.userEmail
-        if (!prefs.isPaired || userEmail.isNullOrBlank()) return
+        try {
+            val userEmail = prefs.userEmail
+            if (!prefs.isPaired || userEmail.isNullOrBlank()) return
 
-        activityScope.launch(Dispatchers.IO) {
-            val targets = mutableListOf<Triple<String, String, String?>>()
-            if (prefs.isSmsSheetSyncEnabled && prefs.getSheetUrl("SMS").isNullOrBlank()) {
-                targets.add(Triple("SMS", prefs.smsDriveSheetTitle, null))
-            }
-            if (prefs.isKakaoSheetSyncEnabled && prefs.getSheetUrl("KAKAO").isNullOrBlank()) {
-                targets.add(Triple("KAKAO", prefs.kakaoDriveSheetTitle, null))
-            }
-            if (prefs.isMissedCallAutoReplyEnabled && prefs.getSheetUrl("MISSED_CALL").isNullOrBlank()) {
-                targets.add(Triple("MISSED_CALL", prefs.missedCallDriveSheetTitle, null))
-            }
-            if (prefs.isCallRecordingSyncEnabled && prefs.getSheetUrl("RECORDING").isNullOrBlank()) {
-                targets.add(Triple("RECORDING", "[SheetBot] 통화 녹음 대장", prefs.callRecordingDriveFolder))
-            }
-            if (prefs.isFileUploadSyncEnabled && prefs.getSheetUrl("FILE_UPLOAD").isNullOrBlank()) {
-                targets.add(Triple("FILE_UPLOAD", "[SheetBot] 파일 업로드 대장", prefs.fileUploadDriveFolder))
-            }
-            if (prefs.isLinkScrapEnabled && prefs.getSheetUrl("LINK_BOOKMARK").isNullOrBlank()) {
-                targets.add(Triple("LINK_BOOKMARK", prefs.linkScrapDriveSheetTitle, null))
-            }
-            if (prefs.isCallEndedCardPromptEnabled && prefs.getSheetUrl("CALL_ENDED_CARD").isNullOrBlank()) {
-                targets.add(Triple("CALL_ENDED_CARD", "[SheetBot] 모바일 명함 발송 대장", null))
-            }
-            if (prefs.isPushDetectionEnabled && prefs.getSheetUrl("PAYMENT_PUSH").isNullOrBlank()) {
-                targets.add(Triple("PAYMENT_PUSH", "[SheetBot] 매장 결제 및 매출 대장", null))
-            }
-            if (prefs.isReceiptSmsEnabled && prefs.getSheetUrl("RECEIPT_SMS").isNullOrBlank()) {
-                targets.add(Triple("RECEIPT_SMS", "[SheetBot] 고객 영수증 문자 발송 대장", null))
-            }
-            if (prefs.isWebsiteMonitorEnabled && prefs.getSheetUrl("WEBSITE_MONITOR").isNullOrBlank()) {
-                targets.add(Triple("WEBSITE_MONITOR", "[SheetBot] 웹사이트 모니터링 & 장애 대장", null))
-            }
-            if (prefs.isQuoteSheetSyncEnabled && prefs.getSheetUrl("QUOTE").isNullOrBlank()) {
-                targets.add(Triple("QUOTE", prefs.quoteDriveSheetTitle, null))
-            }
-
-            for ((sheetType, title, folder) in targets) {
+            activityScope.launch(Dispatchers.IO) {
                 try {
-                    val result = ApiClient.provisionSheet(
-                        userEmail = userEmail,
-                        sheetType = sheetType,
-                        sheetTitle = title,
-                        folderName = folder
-                    )
-                    if (result.success) {
-                        if (!result.spreadsheetUrl.isNullOrBlank()) {
-                            prefs.setSheetUrl(sheetType, result.spreadsheetUrl)
-                        }
-                        if (!result.spreadsheetId.isNullOrBlank()) {
-                            prefs.setSheetId(sheetType, result.spreadsheetId)
-                        }
-                        if (!result.folderUrl.isNullOrBlank()) {
-                            prefs.setFolderUrl(sheetType, result.folderUrl)
-                        }
+                    val targets = mutableListOf<Triple<String, String, String?>>()
+                    if (prefs.isSmsSheetSyncEnabled && prefs.getSheetUrl("SMS").isNullOrBlank()) {
+                        targets.add(Triple("SMS", prefs.smsDriveSheetTitle, null))
                     }
-                } catch (_: Exception) {}
+                    if (prefs.isKakaoSheetSyncEnabled && prefs.getSheetUrl("KAKAO").isNullOrBlank()) {
+                        targets.add(Triple("KAKAO", prefs.kakaoDriveSheetTitle, null))
+                    }
+                    if (prefs.isMissedCallAutoReplyEnabled && prefs.getSheetUrl("MISSED_CALL").isNullOrBlank()) {
+                        targets.add(Triple("MISSED_CALL", prefs.missedCallDriveSheetTitle, null))
+                    }
+                    if (prefs.isCallRecordingSyncEnabled && prefs.getSheetUrl("RECORDING").isNullOrBlank()) {
+                        targets.add(Triple("RECORDING", "[SheetBot] 통화 녹음 대장", prefs.callRecordingDriveFolder))
+                    }
+                    if (prefs.isFileUploadSyncEnabled && prefs.getSheetUrl("FILE_UPLOAD").isNullOrBlank()) {
+                        targets.add(Triple("FILE_UPLOAD", "[SheetBot] 파일 업로드 대장", prefs.fileUploadDriveFolder))
+                    }
+                    if (prefs.isLinkScrapEnabled && prefs.getSheetUrl("LINK_BOOKMARK").isNullOrBlank()) {
+                        targets.add(Triple("LINK_BOOKMARK", prefs.linkScrapDriveSheetTitle, null))
+                    }
+                    if (prefs.isCallEndedCardPromptEnabled && prefs.getSheetUrl("CALL_ENDED_CARD").isNullOrBlank()) {
+                        targets.add(Triple("CALL_ENDED_CARD", "[SheetBot] 모바일 명함 발송 대장", null))
+                    }
+                    if (prefs.isPushDetectionEnabled && prefs.getSheetUrl("PAYMENT_PUSH").isNullOrBlank()) {
+                        targets.add(Triple("PAYMENT_PUSH", "[SheetBot] 매장 결제 및 매출 대장", null))
+                    }
+                    if (prefs.isReceiptSmsEnabled && prefs.getSheetUrl("RECEIPT_SMS").isNullOrBlank()) {
+                        targets.add(Triple("RECEIPT_SMS", "[SheetBot] 고객 영수증 문자 발송 대장", null))
+                    }
+                    if (prefs.isWebsiteMonitorEnabled && prefs.getSheetUrl("WEBSITE_MONITOR").isNullOrBlank()) {
+                        targets.add(Triple("WEBSITE_MONITOR", "[SheetBot] 웹사이트 모니터링 & 장애 대장", null))
+                    }
+                    if (prefs.isQuoteSheetSyncEnabled && prefs.getSheetUrl("QUOTE").isNullOrBlank()) {
+                        targets.add(Triple("QUOTE", prefs.quoteDriveSheetTitle, null))
+                    }
+
+                    for ((sheetType, title, folder) in targets) {
+                        try {
+                            val result = ApiClient.provisionSheet(
+                                userEmail = userEmail,
+                                sheetType = sheetType,
+                                sheetTitle = title,
+                                folderName = folder
+                            )
+                            if (result.success) {
+                                if (!result.spreadsheetUrl.isNullOrBlank()) {
+                                    prefs.setSheetUrl(sheetType, result.spreadsheetUrl)
+                                }
+                                if (!result.spreadsheetId.isNullOrBlank()) {
+                                    prefs.setSheetId(sheetType, result.spreadsheetId)
+                                }
+                                if (!result.folderUrl.isNullOrBlank()) {
+                                    prefs.setFolderUrl(sheetType, result.folderUrl)
+                                }
+                            }
+                        } catch (_: Throwable) {}
+                    }
+                } catch (e: Throwable) {
+                    android.util.Log.w("MainActivity", "preloadActiveSheetUrls 비동기 루프 방어: ${e.message}")
+                }
             }
+        } catch (e: Throwable) {
+            android.util.Log.w("MainActivity", "preloadActiveSheetUrls 방어: ${e.message}")
         }
     }
 
@@ -2729,37 +2779,42 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateWebsiteMonitorStatusText() {
-        if (!prefs.isWebsiteMonitorEnabled) {
-            binding.tvWebsiteMonitorStatus.text = "상태: 감시 꺼짐 (스위치를 켜면 활성화됩니다)"
-            binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#94A3B8"))
-            return
-        }
+        try {
+            if (!::binding.isInitialized) return
+            if (!prefs.isWebsiteMonitorEnabled) {
+                binding.tvWebsiteMonitorStatus.text = "상태: 감시 꺼짐 (스위치를 켜면 활성화됩니다)"
+                binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#94A3B8"))
+                return
+            }
 
-        val url = prefs.targetWebsiteUrl
-        if (url.isBlank()) {
-            binding.tvWebsiteMonitorStatus.text = "상태: URL 미등록 (감시할 웹사이트 주소를 입력하세요)"
-            binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#FBBF24"))
-            return
-        }
+            val url = prefs.targetWebsiteUrl
+            if (url.isBlank()) {
+                binding.tvWebsiteMonitorStatus.text = "상태: URL 미등록 (감시할 웹사이트 주소를 입력하세요)"
+                binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#FBBF24"))
+                return
+            }
 
-        val lastStatus = prefs.lastWebsiteCheckStatus
-        val lastCode = prefs.lastWebsiteCheckStatusCode
-        val lastTime = prefs.lastWebsiteCheckTime
+            val lastStatus = prefs.lastWebsiteCheckStatus
+            val lastCode = prefs.lastWebsiteCheckStatusCode
+            val lastTime = prefs.lastWebsiteCheckTime
 
-        val timeStr = if (lastTime > 0) {
-            val sdf = SimpleDateFormat("HH:mm:ss", Locale.KOREA)
-            " (최근 점검: ${sdf.format(Date(lastTime))})"
-        } else ""
+            val timeStr = if (lastTime > 0) {
+                val sdf = SimpleDateFormat("HH:mm:ss", Locale.KOREA)
+                " (최근 점검: ${sdf.format(Date(lastTime))})"
+            } else ""
 
-        if (lastCode in 200..399 || lastStatus.contains("정상")) {
-            binding.tvWebsiteMonitorStatus.text = "🟢 $lastStatus$timeStr"
-            binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#34D399"))
-        } else if (lastStatus == "미설정") {
-            binding.tvWebsiteMonitorStatus.text = "🟡 3분 주기 감시 대기 중$timeStr"
-            binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#FBBF24"))
-        } else {
-            binding.tvWebsiteMonitorStatus.text = "🔴 $lastStatus$timeStr"
-            binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#F87171"))
+            if (lastCode in 200..399 || lastStatus.contains("정상")) {
+                binding.tvWebsiteMonitorStatus.text = "🟢 $lastStatus$timeStr"
+                binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#34D399"))
+            } else if (lastStatus == "미설정") {
+                binding.tvWebsiteMonitorStatus.text = "🟡 3분 주기 감시 대기 중$timeStr"
+                binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#FBBF24"))
+            } else {
+                binding.tvWebsiteMonitorStatus.text = "🔴 $lastStatus$timeStr"
+                binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#F87171"))
+            }
+        } catch (e: Throwable) {
+            android.util.Log.w("MainActivity", "updateWebsiteMonitorStatusText 방어: ${e.message}")
         }
     }
 
