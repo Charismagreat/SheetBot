@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { sendPhoneSms, queryTable, insertRows, updateRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { recordDispatchToGoogleSheet } from "@/lib/dispatch-sheet-sync";
 
 /**
  * POST /api/user/devices/test
@@ -77,12 +78,23 @@ export async function POST(req: NextRequest) {
         await updateRows(
           "sheetbot_user_dispatch_logs",
           { status: "SUCCESS", updated_at: new Date().toISOString() },
-          { filters: { id: logId } }
+          { filters: { id: String(logId) } }
         ).catch(() => {});
       }
     } catch {
       // egdesk-phone 미연동 시 스마트폰 앱의 대기열(KeepAliveService) 폴링으로 자연스럽게 위임됨
     }
+
+    // 🛡️ [Zero-Retention 실현] 이용자의 구글 시트 [SheetBot] 고객 알림 발송 및 수신 대장에 직접 실시간 1행 기록
+    recordDispatchToGoogleSheet({
+      userEmail: cleanEmail,
+      direction: "발신(SMS)",
+      ruleName: "기기 연동 테스트 발송",
+      recipient,
+      content: sendContent,
+      status: directSent ? "SUCCESS" : "PENDING",
+      deviceId: deviceId || "SheetBot Agent",
+    }).catch((err) => console.warn("[UserDevicesTest] Dispatch sheet sync error:", err));
 
     return NextResponse.json({
       success: true,

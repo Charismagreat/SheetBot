@@ -83,9 +83,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: user-v2.1.11
-          name: "SheetBot Mobile Agent (이용자용) v2.1.11"
-          body: "시트봇 모바일 에이전트 v2.1.11 릴리스\n• 💬 [카톡 대화 파일 가져오기 버튼 신설] 앱 내에서 바로 카카오톡 대화 내용 내보내기(.txt) 파일을 선택하여 구글 시트 [SheetBot] 카카오톡 메시지 대장에 1초 만에 구간 덮어쓰기 동기화\n• 🛡️ [앱 실행 즉각 크래시 긴급 차단 및 100% 정상화] 순수 TextView 내장 스크롤 엔진 적용으로 안정성 극대화\n• 📜 [부드러운 전용 스크롤 유지] 부모 화면 간섭 없이 실시간 감지 로그 영역만 매끄럽게 상하 스크롤 보장\n• 💾 [최대 1,000건 로컬 영구 보관] 앱 재시작 후에도 이전 감지 로그 100% 안전 유지"
+          tag_name: user-v2.1.12
+          name: "SheetBot Mobile Agent (이용자용) v2.1.12"
+          body: "시트봇 모바일 에이전트 v2.1.12 릴리스\n• 🌐 [웹 관제 센터 원터치 바로가기 신설] 앱 내에서 바로 크롬 브라우저로 시트봇 웹 관제 센터를 열어 실시간 발송 이력과 AI 스마트 규칙 설정 가능\n• 🛡️ [Zero-Retention 고객 알림 대장 100% 구글 시트 직통 기록] 서버 무보관 원칙에 따라 고객 알림 발송/수신 내역을 회원 본인의 구글 스프레드시트에 실시간 안전 기록\n• 🧹 [주소록 의존성 및 복잡한 UI 정리] 불특정 고객 대상 자동화 원칙에 맞추어 주소록 선택 UI를 정리하여 앱 경량화 및 직관성 향상\n• 💬 [카톡 대화 파일 가져오기 지원] 카카오톡 내보내기(.txt) 파일 1초 구글 시트 구간 덮어쓰기 지원"
           files: release-apk/SheetBotAgent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

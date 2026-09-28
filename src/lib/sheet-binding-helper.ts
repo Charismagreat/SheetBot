@@ -22,7 +22,8 @@ export type SheetBindingType =
   | "CALL_ENDED_CARD"
   | "PAYMENT_PUSH"
   | "RECEIPT_SMS"
-  | "WEBSITE_MONITOR";
+  | "WEBSITE_MONITOR"
+  | "DISPATCH_LOG";
 
 export interface ResolveSheetOptions {
   userEmail: string;

@@ -7,6 +7,7 @@ import { realtimeHub } from "@/lib/realtime-hub";
 import { maskPhoneNumber, formatZeroRetentionContent } from "@/lib/privacy";
 import { parseBankDepositSms } from "@/lib/bank-sms-parser";
 import { recordPaymentToGoogleSheet } from "@/lib/payment-sheet-sync";
+import { recordDispatchToGoogleSheet } from "@/lib/dispatch-sheet-sync";
 
 /**
  * POST /api/user/agent2/inbound-sms
@@ -53,6 +54,18 @@ export async function POST(req: NextRequest) {
         created_at: nowIso,
       },
     ]);
+
+    // 1-0. 🛡️ [Zero-Retention 실현] 이용자의 구글 시트 [SheetBot] 고객 알림 발송 및 수신 대장에 직접 실시간 1행 기록
+    recordDispatchToGoogleSheet({
+      userEmail: cleanEmail,
+      dispatchTime: nowIso.replace("T", " ").slice(0, 19),
+      direction: isPushNotification ? "결제푸시" : "수신(SMS)",
+      ruleName,
+      recipient: sender, // 마스킹 없는 온전한 원본 발신자 번호/채널명 기록
+      content: message, // 온전한 수신 메시지 전문 보존
+      status: "INBOUND",
+      deviceId: deviceId || "SheetBot Agent",
+    }).catch((err) => console.warn("[InboundSms] Dispatch sheet sync error:", err));
 
     // 1-1. 은행/결제/배달앱 승인 문자 및 푸시일 경우 [SheetBot] 매장 결제 및 매출 대장 시트에 실시간 자동 기록
     const parsedBank = parseBankDepositSms(message);
