@@ -761,6 +761,24 @@ class MainActivity : AppCompatActivity() {
             showOpenSheetChooserDialog("KAKAO", prefs.kakaoDriveSheetTitle)
         }
 
+        // 📑 AI 스마트 견적 및 단가표 대장 연동 UI 바인딩 및 자동 저장 (Auto-Save)
+        binding.switchQuoteSync.isChecked = prefs.isQuoteSheetSyncEnabled
+        binding.layoutQuoteSyncSettings.visibility = if (prefs.isQuoteSheetSyncEnabled) View.VISIBLE else View.GONE
+
+        binding.switchQuoteSync.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isQuoteSheetSyncEnabled = isChecked
+            binding.layoutQuoteSyncSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
+            val msg = if (isChecked) "스마트 견적 및 단가표 대장 연동이 켜졌습니다." else "스마트 견적 대장 연동이 꺼졌습니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            if (isChecked) {
+                provisionSheetAsync("QUOTE", prefs.quoteDriveSheetTitle)
+            }
+        }
+
+        binding.btnOpenQuoteSheet.setOnClickListener {
+            showOpenSheetChooserDialog("QUOTE", prefs.quoteDriveSheetTitle)
+        }
+
         // 부재중 전화(Missed Call) 0원 스마트 자동 회신 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchMissedCall.isChecked = prefs.isMissedCallAutoReplyEnabled
         binding.layoutMissedCallSettings.visibility = if (prefs.isMissedCallAutoReplyEnabled) View.VISIBLE else View.GONE
@@ -2158,6 +2176,9 @@ class MainActivity : AppCompatActivity() {
             }
             if (prefs.isWebsiteMonitorEnabled && prefs.getSheetUrl("WEBSITE_MONITOR").isNullOrBlank()) {
                 targets.add(Triple("WEBSITE_MONITOR", "[SheetBot] 웹사이트 모니터링 & 장애 대장", null))
+            }
+            if (prefs.isQuoteSheetSyncEnabled && prefs.getSheetUrl("QUOTE").isNullOrBlank()) {
+                targets.add(Triple("QUOTE", prefs.quoteDriveSheetTitle, null))
             }
 
             for ((sheetType, title, folder) in targets) {

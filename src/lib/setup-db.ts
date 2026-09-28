@@ -703,7 +703,7 @@ export async function setupDatabase(force = false): Promise<void> {
       [
         { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
         { name: 'user_email', type: 'TEXT', notNull: true },
-        { name: 'sheet_type', type: 'TEXT', notNull: true }, // 'SMS' | 'KAKAO' | 'MISSED_CALL' | 'RECORDING' | 'FILE_UPLOAD' | 'LINK_BOOKMARK'
+        { name: 'sheet_type', type: 'TEXT', notNull: true }, // 'SMS' | 'KAKAO' | 'MISSED_CALL' | 'RECORDING' | 'FILE_UPLOAD' | 'LINK_BOOKMARK' | 'QUOTE'
         { name: 'spreadsheet_id', type: 'TEXT', notNull: true },
         { name: 'spreadsheet_url', type: 'TEXT' },
         { name: 'sheet_title', type: 'TEXT' },
@@ -712,6 +712,27 @@ export async function setupDatabase(force = false): Promise<void> {
         { name: 'created_at', type: 'TEXT' },
       ],
       { tableName: 'sheetbot_user_sheet_bindings' }
+    );
+
+    // 23. sheetbot_quotes 테이블 생성 (AI 견적서 발급 관리 대장)
+    await safeCreateTable(
+      'SheetBot AI 견적서 발급 관리 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true }, // quote_id (예: q_xxxx)
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'customer_name', type: 'TEXT' },
+        { name: 'customer_phone', type: 'TEXT' },
+        { name: 'inquiry_text', type: 'TEXT' }, // 고객의 원본 문의 텍스트
+        { name: 'items_json', type: 'TEXT' }, // [{ category, name, spec, unitPrice, quantity, amount }]
+        { name: 'supply_amount', type: 'INTEGER' }, // 공급가액
+        { name: 'vat_amount', type: 'INTEGER' }, // 부가세 (10%)
+        { name: 'total_amount', type: 'INTEGER' }, // 총 합계
+        { name: 'status', type: 'TEXT' }, // 'DRAFT', 'SENT', 'VIEWED', 'ACCEPTED', 'REJECTED'
+        { name: 'spreadsheet_id', type: 'TEXT' }, // 연동된 구글 시트 ID
+        { name: 'viewed_at', type: 'TEXT' }, // 고객 열람 일시
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_quotes' }
     );
 
     // 23. 기본 추천 프롬프트 시딩

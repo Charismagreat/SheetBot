@@ -143,6 +143,15 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("kakao_drive_sheet_title", "[SheetBot] 카카오톡 메시지 대장") ?: "[SheetBot] 카카오톡 메시지 대장"
         set(value) = prefs.edit().putString("kakao_drive_sheet_title", value).apply()
 
+    // AI 스마트 견적 및 단가표 구글 시트 연동 설정 (신규 설치 시 기본 꺼짐: false)
+    var isQuoteSheetSyncEnabled: Boolean
+        get() = prefs.getBoolean("is_quote_sheet_sync_enabled", false)
+        set(value) = prefs.edit().putBoolean("is_quote_sheet_sync_enabled", value).apply()
+
+    var quoteDriveSheetTitle: String
+        get() = prefs.getString("quote_drive_sheet_title", "[SheetBot] 스마트 견적 및 단가표 대장") ?: "[SheetBot] 스마트 견적 및 단가표 대장"
+        set(value) = prefs.edit().putString("quote_drive_sheet_title", value).apply()
+
     // 부재중 전화(Missed Call) 감지 시 0원 스마트 안내 문자 자동 회신 설정 (신규 설치 시 기본 꺼짐: false)
     var isMissedCallAutoReplyEnabled: Boolean
         get() = prefs.getBoolean("is_missed_call_auto_reply_enabled", false)

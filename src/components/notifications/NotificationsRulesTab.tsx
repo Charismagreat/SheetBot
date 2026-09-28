@@ -80,6 +80,17 @@ export const OFFICIAL_SCENARIOS: ScenarioTemplate[] = [
     description: "퇴근길이나 자택에서도 매장 결산 내역을 사장님 스마트폰으로 즉시 요약 보고받습니다.",
     benefit: "퇴근길 원격 결산 / 매출 브리핑",
   },
+  {
+    id: "auto_quote",
+    category: "스마트 견적",
+    badgeBg: "bg-teal-50 border-teal-200 text-teal-700",
+    badgeText: "📑 스마트 견적",
+    icon: "📑",
+    title: "고객 문의 수신 ➔ AI 단가표 매칭 & 모바일 견적서 자동 회신",
+    prompt: "고객이 문자로 상품/서비스 견적을 문의하면 시트의 단가표를 AI로 자동 조회하여 맞춤형 견적서 링크를 고객 번호로 0원 회신해줘",
+    description: "고객의 자연어 문의를 AI가 분석하여 단가표와 매칭하고, 고화질 모바일 견적서 뷰어 링크를 10초 만에 고객에게 회신합니다.",
+    benefit: "상담 응대 시간 90% 단축 / 견적서 자동 발급",
+  },
 ];
 
 interface NotificationsRulesTabProps {

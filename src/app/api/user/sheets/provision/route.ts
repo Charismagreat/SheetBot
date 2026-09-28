@@ -64,6 +64,11 @@ export const SHEET_DEFINITIONS: Record<string, SheetDefinition> = {
     headers: ["점검/감지 일시", "대상 URL", "상태 코드", "응답 속도", "상태/장애 내용", "교차 검증 결과", "기기명"],
     range: "A1:G1",
   },
+  QUOTE: {
+    defaultTitle: "[SheetBot] 스마트 견적 및 단가표 대장",
+    headers: ["카테고리", "품목코드", "품목명", "규격/단위", "기본단가(원)", "할인가(원)", "옵션구분", "비고/설명"],
+    range: "A1:H1",
+  },
 };
 
 /**
@@ -98,6 +103,144 @@ async function ensureDriveFolder(folderName: string): Promise<string | null> {
     console.warn(`[ProvisionSheet] Failed to ensure folder ${folderName}:`, err.message);
     return null;
   }
+}
+
+/**
+ * 스마트 견적 대장 (QUOTE) 전용 3종 탭 및 초기 서식/데이터 자동 주입 함수
+ */
+async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: string): Promise<void> {
+  console.log(`[ProvisionSheet] Setting up full QUOTE spreadsheet layout for ${spreadsheetId}...`);
+
+  // 1. 첫 번째 탭: '단가표' 데이터 주입
+  const catalogHeaders = [
+    "카테고리", "품목코드", "품목명", "규격/단위", "기본단가(원)", "할인가(원)", "옵션구분", "비고/설명"
+  ];
+  const sampleCatalogRows = [
+    catalogHeaders,
+    ["에어컨 세척", "AC-001", "스탠드 에어컨 분해세척", "1대", 150000, 140000, "메인", "필터 및 열교환기 고압 살균"],
+    ["에어컨 세척", "AC-002", "벽걸이 에어컨 분해세척", "1대", 80000, 80000, "메인", "가정용/원룸 기준"],
+    ["에어컨 세척", "AC-003", "천장형 시스템 에어컨 (4WAY)", "1대", 130000, 120000, "메인", "사무실/상가 천장형"],
+    ["추가 옵션", "OPT-001", "실외기 고압 세척", "1대", 30000, 30000, "옵션", "실외기 오염물 제거"],
+    ["추가 옵션", "OPT-002", "피톤치드 연무 살균 소독", "1식", 0, 0, "옵션", "무료 서비스 이벤트 (기본 제공)"],
+  ];
+
+  await callSheetsTool(
+    "sheets_update_range",
+    {
+      spreadsheetId,
+      range: `${primaryTabName}!A1:H6`,
+      values: sampleCatalogRows,
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch((err: any) => console.warn(`[ProvisionQuote] Catalog insert warning:`, err.message));
+
+  await callSheetsTool(
+    "sheets_format_headers",
+    {
+      spreadsheetId,
+      tabName: primaryTabName,
+      headerBgColor: "#0f172a", // Slate 900
+      headerTextColor: "#ffffff",
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch(() => {});
+
+  // 2. 두 번째 탭: '견적발급대장' 생성 및 헤더 주입
+  const logTabName = "견적발급대장";
+  await callSheetsTool(
+    "sheets_create_tab",
+    {
+      spreadsheetId,
+      tabName: logTabName,
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch((err: any) => console.warn(`[ProvisionQuote] Create log tab warning:`, err.message));
+
+  const logHeaders = [
+    ["견적번호", "발급일시", "고객명", "연락처", "견적품목요약", "공급가액", "부가세", "합계금액(원)", "견적서링크", "발송상태", "고객열람"]
+  ];
+  await callSheetsTool(
+    "sheets_update_range",
+    {
+      spreadsheetId,
+      range: `${logTabName}!A1:K1`,
+      values: logHeaders,
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch(() => {});
+
+  await callSheetsTool(
+    "sheets_format_headers",
+    {
+      spreadsheetId,
+      tabName: logTabName,
+      headerBgColor: "#1e3a8a", // Blue 900
+      headerTextColor: "#ffffff",
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch(() => {});
+
+  // 3. 세 번째 탭: '견적서출력서식' 생성 및 공식 견적 양식 주입
+  const templateTabName = "견적서출력서식";
+  await callSheetsTool(
+    "sheets_create_tab",
+    {
+      spreadsheetId,
+      tabName: templateTabName,
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch((err: any) => console.warn(`[ProvisionQuote] Create template tab warning:`, err.message));
+
+  const todayStr = new Date().toISOString().split("T")[0];
+  const templateRows = [
+    ["견        적        서", "", "", "", "", "", ""],
+    ["견적일자: " + todayStr, "", "", "공급자", "상호: 시트봇 공식 대리점", "", ""],
+    ["고 객 명: 고객님 귀하", "", "", "", "대표자: 대표자명 (인)", "", ""],
+    ["연 락 처: 010-0000-0000", "", "", "", "사업자등록번호: 000-00-00000", "", ""],
+    ["합계금액: 일금 이십삼만원정 (\\230,000)", "", "", "", "사업장 소재지: 서울특별시 강남구", "", ""],
+    ["", "", "", "", "연락처: 02-0000-0000", "", ""],
+    ["No.", "품목명", "규격/단위", "수량", "단가(원)", "공급가액(원)", "세액(원)"],
+    [1, "스탠드 에어컨 분해세척", "1대", 1, 150000, 150000, 15000],
+    [2, "벽걸이 에어컨 분해세척", "1대", 1, 80000, 80000, 8000],
+    ["", "합계 (VAT 포함)", "", "", "", "=SUM(F8:F9)", "=SUM(G8:G9)"],
+    ["", "총 결제 예상 금액", "", "", "", "", "=F10+G10"],
+    ["", "", "", "", "", "", ""],
+    ["[안내 및 유의사항]", "", "", "", "", "", ""],
+    ["• 본 견적서는 발행일로부터 14일간 유효합니다.", "", "", "", "", "", ""],
+    ["• 작업 일정 및 추가 옵션은 현장 상황에 따라 조율될 수 있습니다.", "", "", "", "", "", ""],
+    ["• 문의 및 상담: 시트봇 고객센터 또는 문자 회신", "", "", "", "", "", ""]
+  ];
+
+  await callSheetsTool(
+    "sheets_update_range",
+    {
+      spreadsheetId,
+      range: `${templateTabName}!A1:G16`,
+      values: templateRows,
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch(() => {});
+
+  await callSheetsTool(
+    "sheets_format_headers",
+    {
+      spreadsheetId,
+      tabName: templateTabName,
+      headerBgColor: "#047857", // Emerald 700
+      headerTextColor: "#ffffff",
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch(() => {});
+
+  console.log(`[ProvisionQuote] ✅ Successfully initialized 3 tabs for QUOTE spreadsheet.`);
 }
 
 /**
@@ -186,32 +329,36 @@ export async function POST(req: NextRequest) {
         firstRowCheck.values[0]?.[0];
 
       if (!hasHeaderOrData) {
-        const updateRange = `${primaryTabName}!${def.range}`;
-        console.log(`[ProvisionSheet] Injecting headers to ${updateRange} for ${typeKey}...`);
-        await callSheetsTool(
-          "sheets_update_range",
-          {
-            spreadsheetId: targetSpreadsheetId,
-            range: updateRange,
-            values: [def.headers],
-            preferOAuth: true,
-          },
-          { preferOAuth: true }
-        );
+        if (typeKey === "QUOTE") {
+          await setupQuoteSpreadsheet(targetSpreadsheetId, primaryTabName);
+        } else {
+          const updateRange = `${primaryTabName}!${def.range}`;
+          console.log(`[ProvisionSheet] Injecting headers to ${updateRange} for ${typeKey}...`);
+          await callSheetsTool(
+            "sheets_update_range",
+            {
+              spreadsheetId: targetSpreadsheetId,
+              range: updateRange,
+              values: [def.headers],
+              preferOAuth: true,
+            },
+            { preferOAuth: true }
+          );
 
-        await callSheetsTool(
-          "sheets_format_headers",
-          {
-            spreadsheetId: targetSpreadsheetId,
-            tabName: primaryTabName,
-            headerBgColor: "#1e293b",
-            headerTextColor: "#ffffff",
-            preferOAuth: true,
-          },
-          { preferOAuth: true }
-        ).catch((fmtErr: any) => {
-          console.warn(`[ProvisionSheet] sheets_format_headers warning:`, fmtErr.message);
-        });
+          await callSheetsTool(
+            "sheets_format_headers",
+            {
+              spreadsheetId: targetSpreadsheetId,
+              tabName: primaryTabName,
+              headerBgColor: "#1e293b",
+              headerTextColor: "#ffffff",
+              preferOAuth: true,
+            },
+            { preferOAuth: true }
+          ).catch((fmtErr: any) => {
+            console.warn(`[ProvisionSheet] sheets_format_headers warning:`, fmtErr.message);
+          });
+        }
       }
     } catch (fmtErr: any) {
       console.warn(`[ProvisionSheet] Header format warning:`, fmtErr.message);
