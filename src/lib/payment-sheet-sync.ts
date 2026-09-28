@@ -15,15 +15,36 @@ export interface RecordPaymentParams {
   sheetTitle?: string;
 }
 
+// 90초 이내 푸시/SMS 중복 수신 방지를 위한 인메모리 디바운싱 맵
+const recentPaymentDedupeMap = new Map<string, number>();
+
+function cleanOldDedupeEntries() {
+  const cutoff = Date.now() - 5 * 60 * 1000; // 5분 지난 키 메모리 정리
+  for (const [key, timestamp] of recentPaymentDedupeMap.entries()) {
+    if (timestamp < cutoff) {
+      recentPaymentDedupeMap.delete(key);
+    }
+  }
+}
+
+export interface RecordPaymentResult {
+  success: boolean;
+  spreadsheetUrl?: string;
+  duplicated?: boolean;
+  message?: string;
+  error?: string;
+}
+
 /**
  * 매장 결제 및 은행 입금 내역을 구글 드라이브 [SheetBot] 매장 결제 및 매출 대장 시트에 실시간 자동 기록
  * - 시트가 없으면 1순위로 자동 생성
  * - Self-Healing 헤더 보장 (1행 헤더 누락 시 자동 주입 및 에메랄드 테마 서식)
  * - 금액 열(D열)은 순수 숫자(Number)로 저장하여 =SUM() 등 엑셀/Apps Script 수식 연산 100% 보장
+ * - 90초 스마트 디바운싱: 앱 푸시와 SMS 동시 수신 시 2중 중복 기록 원천 차단
  */
 export async function recordPaymentToGoogleSheet(
   params: RecordPaymentParams
-): Promise<{ success: boolean; spreadsheetUrl?: string; error?: string }> {
+): Promise<RecordPaymentResult> {
   try {
     const {
       userEmail,
@@ -39,6 +60,29 @@ export async function recordPaymentToGoogleSheet(
     if (!userEmail) {
       return { success: false, error: "userEmail이 누락되었습니다." };
     }
+
+    const cleanEmail = userEmail.toLowerCase().trim();
+    const cleanAmount = Number(amount) || 0;
+    const cleanBank = (channelOrBank || "").replace(/PUSH:/i, "").trim();
+    const cleanName = (customerName || "").replace(/미확인|고객/g, "").trim();
+
+    // 🛡️ [90초 스마트 중복 방지 필터]: 앱 푸시와 SMS가 연속으로 도달할 때 1건만 안전하게 기록
+    const dedupeKey = `${cleanEmail}_${cleanBank}_${cleanAmount}${cleanName ? `_${cleanName}` : ""}`;
+    const nowMs = Date.now();
+    const lastRecordedAt = recentPaymentDedupeMap.get(dedupeKey);
+
+    if (lastRecordedAt && (nowMs - lastRecordedAt) < 90 * 1000) {
+      const elapsedSec = Math.round((nowMs - lastRecordedAt) / 1000);
+      console.log(`🛡️ [PaymentSheetSync] 90초 이내 중복 결제 감지(푸시/SMS 동시 수신) - 시트 중복 삽입 방어 완료: ${dedupeKey} (${elapsedSec}초 전 최초 기록됨)`);
+      return {
+        success: true,
+        duplicated: true,
+        message: "동일 결제 건이 이미 대장에 기록되어 중복 처리가 방지되었습니다.",
+      };
+    }
+
+    recentPaymentDedupeMap.set(dedupeKey, nowMs);
+    cleanOldDedupeEntries();
 
     let sheetTitle = rawSheetTitle.trim();
     if (!sheetTitle.startsWith("[SheetBot]")) {
