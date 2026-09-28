@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable } from "@/lib/egdesk-helpers";
+import { getDispatchSheetUrl } from "@/lib/dispatch-sheet-sync";
 
 function mapNotificationDevice(d: any) {
   const rawLast = d.last_connected_at || d.last_ping || d.updated_at || d.created_at;
@@ -83,8 +84,8 @@ export async function GET(request: Request) {
       return Promise.race([promise, timeout]);
     };
 
-    // 3개 필수 쿼리 완전 병렬 실행 (최대 4초 가드)
-    const [devicesRes, rulesRes, logsRes] = await Promise.all([
+    // 4개 필수 쿼리 완전 병렬 실행 (최대 4초 가드)
+    const [devicesRes, rulesRes, logsRes, dispatchSheetUrl] = await Promise.all([
       // 1. 디바이스 목록
       timeoutRace(
         queryTable("sheetbot_user_devices", {
@@ -120,6 +121,13 @@ export async function GET(request: Request) {
         { rows: [] },
         4000
       ),
+
+      // 4. 구글 시트 고객 알림 발송 대장 URL
+      timeoutRace(
+        getDispatchSheetUrl(cleanEmail),
+        null,
+        3000
+      ),
     ]);
 
     // 1. 디바이스 필터링 & 가공
@@ -134,16 +142,20 @@ export async function GET(request: Request) {
     // 3. 로그 필터링
     const validLogs = (logsRes.rows || []).filter((r: any) => !r.deleted_at);
 
+    const sheetUrl = (dispatchSheetUrl as string) || null;
+
     return NextResponse.json(
       {
         success: true,
         devices: agentDevices,
         rules: validRules,
         logs: validLogs,
+        dispatchSheetUrl: sheetUrl,
         data: {
           devices: agentDevices,
           rules: validRules,
           logs: validLogs,
+          dispatchSheetUrl: sheetUrl,
         },
       },
       {

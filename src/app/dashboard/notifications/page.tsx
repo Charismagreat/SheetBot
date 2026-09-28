@@ -113,6 +113,7 @@ export default function NotificationsPage() {
   const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false);
   const [isKakaoImportModalOpen, setIsKakaoImportModalOpen] = useState(false);
+  const [dispatchSheetUrl, setDispatchSheetUrl] = useState<string | null>(null);
   const [agent2PairData, setAgent2PairData] = useState<any>(null);
   const [loadingAgent2Pair, setLoadingAgent2Pair] = useState(false);
 
@@ -247,6 +248,7 @@ export default function NotificationsPage() {
         if (parsed?.devices && Array.isArray(parsed.devices)) setDevices(parsed.devices);
         if (parsed?.rules && Array.isArray(parsed.rules)) setRules(parsed.rules);
         if (parsed?.logs && Array.isArray(parsed.logs)) setLogs(parsed.logs);
+        if (parsed?.dispatchSheetUrl) setDispatchSheetUrl(parsed.dispatchSheetUrl);
         setHasInitialLoaded(true);
       }
     } catch {}
@@ -290,10 +292,12 @@ export default function NotificationsPage() {
         const rawDevices = (payload.devices || []).map(mapNotificationDevice);
         const validRules = payload.rules || [];
         const validLogs = payload.logs || [];
+        const sheetUrl = payload.dispatchSheetUrl || resJson.dispatchSheetUrl || null;
 
         setDevices(rawDevices);
         setRules(validRules);
         setLogs(validLogs);
+        if (sheetUrl) setDispatchSheetUrl(sheetUrl);
 
         // 빠른 재진입을 위한 sessionStorage 캐싱
         try {
@@ -303,6 +307,7 @@ export default function NotificationsPage() {
               devices: rawDevices,
               rules: validRules,
               logs: validLogs,
+              dispatchSheetUrl: sheetUrl,
               timestamp: Date.now(),
             })
           );
@@ -983,6 +988,7 @@ export default function NotificationsPage() {
             logs={logs}
             loadingLogs={loadingLogs}
             onRefresh={fetchLogs}
+            dispatchSheetUrl={dispatchSheetUrl}
           />
         )}
 

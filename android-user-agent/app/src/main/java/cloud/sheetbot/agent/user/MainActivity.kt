@@ -461,6 +461,19 @@ class MainActivity : AppCompatActivity() {
             checkServerAndQueueStatus(showToast = true)
         }
 
+        // 4-1. 🌐 시트봇 웹 관제 센터 원터치 바로가기 (기본 브라우저로 0초 열기)
+        binding.btnOpenWebDashboard.setOnClickListener {
+            try {
+                val dashboardUrl = "https://sheetbot.cloud/dashboard/notifications"
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(dashboardUrl)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(this, "웹 브라우저를 열 수 없습니다: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         // 5. 계정 삭제 버튼 (화면 최하단 Danger Zone)
         binding.btnUnlink.setOnClickListener {
             AlertDialog.Builder(this)
