@@ -10,11 +10,11 @@ import { setupDatabase } from "@/lib/setup-db";
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { quoteId: string } }
+  context: { params: Promise<{ quoteId: string }> }
 ) {
   try {
     await setupDatabase();
-    const quoteId = params.quoteId;
+    const { quoteId } = await context.params;
 
     if (!quoteId) {
       return NextResponse.json({ success: false, error: "견적 ID가 필요합니다." }, { status: 400 });
