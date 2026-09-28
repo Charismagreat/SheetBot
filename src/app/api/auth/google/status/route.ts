@@ -2,14 +2,20 @@ import { NextResponse } from "next/server";
 
 export async function GET() {
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || "http://localhost:8080";
+    const defaultTunnel = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1";
+    const apiUrl =
+      process.env.NEXT_PUBLIC_EGDESK_API_URL ||
+      process.env.NEXT_PUBLIC_EGDESK_TUNNEL_URL ||
+      defaultTunnel;
+    const apiKey =
+      process.env.NEXT_PUBLIC_EGDESK_API_KEY || "a67ddc0f-7e2b-4997-9a0b-9667a74c89d0";
 
     // 1. drive_auth_status 도구 호출
     let driveStatus: any = null;
     try {
       const res = await fetch(`${apiUrl}/drive/tools/call`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Api-Key": apiKey },
         body: JSON.stringify({
           tool: "drive_auth_status",
           arguments: {},
@@ -31,7 +37,7 @@ export async function GET() {
     try {
       const res = await fetch(`${apiUrl}/sheets/tools/call`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Api-Key": apiKey },
         body: JSON.stringify({
           tool: "sheets_auth_status",
           arguments: {},

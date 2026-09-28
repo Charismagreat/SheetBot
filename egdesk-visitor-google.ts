@@ -196,10 +196,11 @@ export function resolveEgdeskPublicUrl(): string {
     (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_TUNNEL_URL) ||
     ''
   ).replace(/\/$/, '');
-  const preferred = configured || tunnelUrl;
+  const DEFAULT_PROD_TUNNEL = 'https://tunneling-service.onrender.com/t/mcp-server-fxkud1';
+  const preferred = configured || tunnelUrl || DEFAULT_PROD_TUNNEL;
 
   if (typeof window === 'undefined') {
-    return preferred || 'http://localhost:8080';
+    return preferred;
   }
 
   const hostname = window.location.hostname;
