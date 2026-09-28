@@ -798,12 +798,15 @@ class MainActivity : AppCompatActivity() {
             enterAodMode()
         }
 
-        // 9. 실시간 감지 로그 (최대 1,000건 로컬 영구 보관 + 부드러운 스크롤 + 비우기)
-        binding.tvLogs.movementMethod = ScrollingMovementMethod.getInstance()
-        binding.tvLogs.setOnTouchListener { v, event ->
-            v.parent.requestDisallowInterceptTouchEvent(true)
-            if ((event.action and MotionEvent.ACTION_MASK) == MotionEvent.ACTION_UP) {
-                v.parent.requestDisallowInterceptTouchEvent(false)
+        // 9. 실시간 감지 로그 (최대 1,000건 로컬 영구 보관 + 부드러운 전용 스크롤 + 비우기)
+        binding.scrollLogs.setOnTouchListener { v, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                    v.parent.requestDisallowInterceptTouchEvent(true)
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    v.parent.requestDisallowInterceptTouchEvent(false)
+                }
             }
             false
         }
@@ -818,6 +821,7 @@ class MainActivity : AppCompatActivity() {
                 .setPositiveButton("비우기") { _, _ ->
                     logManager.clearLogs()
                     binding.tvLogs.text = logManager.getFormattedLogs()
+                    binding.scrollLogs.scrollTo(0, 0)
                     updateLogCount()
                     Toast.makeText(this, "로그가 모두 비워졌습니다.", Toast.LENGTH_SHORT).show()
                 }
@@ -1439,6 +1443,9 @@ class MainActivity : AppCompatActivity() {
     private fun addLogItem(sender: String, body: String, success: Boolean) {
         val formatted = logManager.addLog(sender, body, success)
         binding.tvLogs.text = formatted
+        binding.scrollLogs.post {
+            binding.scrollLogs.scrollTo(0, 0)
+        }
         updateLogCount()
     }
 

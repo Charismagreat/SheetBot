@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 29,
-      latestVersionName: "2.1.8",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.8/SheetBotAgent.apk",
+      latestVersionCode: 30,
+      latestVersionName: "2.1.9",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.9/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.8 릴리스\n• 📊 [구글 시트 헤더 및 다크 서식 완벽 반영] 시트 생성 시 1행 7개 헤더 및 다크 서식 100% 자동 주입\n• 🚀 [대장 열기 무한 대기 방어] 프로비저닝 응답 대기 시 다이얼로그 닫기 지원 및 25초 타임아웃 안전망 구축\n• ⚡ [0초 즉시 오픈 강화] SharedPreferences 캐시 즉시 연동 및 구글 드라이브 바인딩 안정화\n• 🛡️ [웹사이트 장애 감시 센티널] 24시간 실시간 무중단 장애 감시 및 시트 자동 로깅",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.9 릴리스\n• 📜 [실시간 감지 로그 전용 부드러운 독립 스크롤 탑재] 부모 화면 간섭 없이 로그창 내부만 매끄럽게 상하 스크롤 지원\n• 💾 [최대 1,000건 로컬 영구 보관] 앱 재시작 후에도 이전 감지 로그 100% 안전 유지\n• 🗑️ [원클릭 로그 비우기] 확인 팝업을 거친 안전한 초기화 지원",
     },
     {
       headers: {
