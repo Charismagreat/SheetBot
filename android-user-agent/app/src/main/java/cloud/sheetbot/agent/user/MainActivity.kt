@@ -132,6 +132,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 카카오톡 대화 내용 내보내기(.txt) 파일 선택 런처 (v2.1.11)
+    private val kakaoChatPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            importKakaoChatFile(uri)
+        }
+    }
+
     // 자연어 AI 시트 코파일럿 음성 인식 런처 (v1.7)
     private val speechRecognizerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -702,6 +711,22 @@ class MainActivity : AppCompatActivity() {
         binding.etKakaoTargetFilter.doAfterTextChanged {
             prefs.kakaoTargetFilter = it?.toString()?.trim() ?: ""
             updateTargetBadges()
+        }
+
+        binding.btnImportKakaoChat.setOnClickListener {
+            if (!prefs.isPaired || prefs.userEmail.isNullOrBlank()) {
+                Toast.makeText(this, "먼저 시트봇 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            try {
+                kakaoChatPickerLauncher.launch("*/*")
+            } catch (_: Exception) {
+                try {
+                    kakaoChatPickerLauncher.launch("text/*")
+                } catch (e: Exception) {
+                    Toast.makeText(this, "파일 탐색기를 열 수 없습니다: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
 
         binding.btnOpenKakaoSheet.setOnClickListener {
@@ -1742,6 +1767,89 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 binding.progressBar.visibility = View.GONE
                 Toast.makeText(this@MainActivity, "명함 처리 예외: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /**
+     * 카카오톡 대화 내용 내보내기(.txt) 파일을 읽어 구글 시트 [SheetBot] 카카오톡 메시지 대장에 구간 덮어쓰기 (v2.1.11)
+     */
+    private fun importKakaoChatFile(uri: Uri) {
+        val email = prefs.userEmail
+        if (!prefs.isPaired || email.isNullOrBlank()) {
+            Toast.makeText(this, "⚠️ 시트봇 계정 연동 후 이용할 수 있습니다.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        binding.progressBar.visibility = View.VISIBLE
+        Toast.makeText(this, "💬 카톡 대화 파일을 분석 중입니다...", Toast.LENGTH_SHORT).show()
+
+        activityScope.launch {
+            try {
+                var fileName = "KakaoTalkChats.txt"
+                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val nameIdx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIdx >= 0 && cursor.moveToFirst()) {
+                        fileName = cursor.getString(nameIdx) ?: "KakaoTalkChats.txt"
+                    }
+                }
+
+                val textContent = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(uri)?.use { stream ->
+                        val bytes = stream.readBytes()
+                        try {
+                            String(bytes, Charsets.UTF_8)
+                        } catch (_: Exception) {
+                            String(bytes, java.nio.charset.Charset.forName("EUC-KR"))
+                        }
+                    } ?: ""
+                }
+
+                if (textContent.isBlank()) {
+                    binding.progressBar.visibility = View.GONE
+                    Toast.makeText(this@MainActivity, "파일 내용이 비어있거나 읽을 수 없습니다.", Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+
+                val result = ApiClient.importKakaoChat(
+                    userEmail = email,
+                    textContent = textContent,
+                    fileName = fileName,
+                    sheetTitle = prefs.kakaoDriveSheetTitle
+                )
+
+                binding.progressBar.visibility = View.GONE
+
+                if (result.success) {
+                    val countFormatted = NumberFormat.getNumberInstance(Locale.KOREA).format(result.insertedCount)
+                    val periodMsg = if (!result.startDate.isNullOrBlank() && !result.endDate.isNullOrBlank()) {
+                        "\n• 기간: ${result.startDate} ~ ${result.endDate}"
+                    } else ""
+                    val roomMsg = if (!result.chatRoomName.isNullOrBlank()) {
+                        "• 채팅방: ${result.chatRoomName}\n"
+                    } else ""
+
+                    addLogItem("💬 카톡 가져오기", "${result.chatRoomName ?: "채팅방"} ${countFormatted}건 시트 동기화 완료", true)
+
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("🎉 카톡 대화 파일 가져오기 완료!")
+                        .setMessage("${roomMsg}• 동기화 대화: 총 ${countFormatted}건${periodMsg}\n\n구글 시트 [${prefs.kakaoDriveSheetTitle}]에 구간 덮어쓰기되었습니다.")
+                        .setPositiveButton("시트 열기") { _, _ ->
+                            showOpenSheetChooserDialog("KAKAO", prefs.kakaoDriveSheetTitle)
+                        }
+                        .setNegativeButton("닫기", null)
+                        .show()
+                } else {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("가져오기 실패")
+                        .setMessage(result.error ?: "카카오톡 대화 내용 인식에 실패했습니다.\n카카오톡 [대화 내용 내보내기]로 생성된 .txt 파일인지 확인해 주세요.")
+                        .setPositiveButton("확인", null)
+                        .show()
+                }
+            } catch (e: Exception) {
+                binding.progressBar.visibility = View.GONE
+                android.util.Log.e("MainActivity", "카톡 대화 파일 가져오기 실패: ${e.message}", e)
+                Toast.makeText(this@MainActivity, "파일 처리 중 오류: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
             }
         }
     }

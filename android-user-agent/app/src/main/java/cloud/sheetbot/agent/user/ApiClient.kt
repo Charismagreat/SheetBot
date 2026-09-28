@@ -956,6 +956,68 @@ object ApiClient {
     }
 
     /**
+     * 카카오톡 대화 내용 내보내기(.txt) 파일 일괄 파싱 및 구글 시트 구간 덮어쓰기 (v2.1.11)
+     */
+    suspend fun importKakaoChat(
+        userEmail: String,
+        textContent: String,
+        fileName: String = "KakaoTalkChats.txt",
+        sheetTitle: String = "[SheetBot] 카카오톡 메시지 대장"
+    ): KakaoImportResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("textContent", textContent)
+            put("fileName", fileName)
+            put("sheetTitle", sheetTitle)
+        }
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/messages/kakao/import"
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(body)
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .build()
+                val response = longTimeoutClient.newCall(request).execute()
+                val resBody = response.body?.string() ?: ""
+                if (response.isSuccessful && resBody.isNotBlank()) {
+                    val resJson = JSONObject(resBody)
+                    val isSuccess = resJson.optBoolean("success", false)
+                    if (isSuccess) {
+                        return@withContext KakaoImportResult(
+                            success = true,
+                            chatRoomName = resJson.optString("chatRoomName", ""),
+                            totalCount = resJson.optInt("totalCount", 0),
+                            insertedCount = resJson.optInt("insertedCount", 0),
+                            startDate = resJson.optString("startDate", ""),
+                            endDate = resJson.optString("endDate", ""),
+                            sheetUrl = resJson.optString("sheetUrl", ""),
+                            message = resJson.optString("message", "")
+                        )
+                    } else {
+                        return@withContext KakaoImportResult(
+                            success = false,
+                            error = resJson.optString("error", "카카오톡 대화 파싱에 실패했습니다.")
+                        )
+                    }
+                } else if (!response.isSuccessful && resBody.isNotBlank()) {
+                    val errJson = JSONObject(resBody)
+                    return@withContext KakaoImportResult(
+                        success = false,
+                        error = errJson.optString("error", "HTTP ${response.code}")
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "카카오톡 대화 가져오기 예외 ($host): ${e.message}")
+            }
+        }
+        KakaoImportResult(success = false, error = "서버와의 통신에 실패했습니다. 네트워크를 확인해 주세요.")
+    }
+
+    /**
      * 부재중 전화(Missed Call) 감지 및 자동 회신 내역 구글 시트 실시간 자동 기록
      */
     suspend fun sendMissedCallSync(
@@ -1425,6 +1487,18 @@ data class WebsiteCheckResult(
     val responseTimeMs: Long,
     val errorMessage: String? = null,
     val checkedUrl: String = ""
+)
+
+data class KakaoImportResult(
+    val success: Boolean,
+    val chatRoomName: String? = null,
+    val totalCount: Int = 0,
+    val insertedCount: Int = 0,
+    val startDate: String? = null,
+    val endDate: String? = null,
+    val sheetUrl: String? = null,
+    val message: String? = null,
+    val error: String? = null
 )
 
 
