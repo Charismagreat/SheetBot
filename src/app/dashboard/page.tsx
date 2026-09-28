@@ -298,6 +298,9 @@ export default function DashboardPage() {
   // 마지막으로 성공적으로 패칭을 완료한 이메일 기록 Ref & In-flight 중복 방어용 AbortController
   const lastFetchedEmailRef = useRef<string>("");
   const isFetchingRef = useRef<boolean>(false);
+  const inFlightPromiseRef = useRef<Promise<void> | null>(null);
+  const lastRequestedEmailRef = useRef<string>("");
+  const mountTimeRef = useRef<number>(Date.now());
   const abortControllerRef = useRef<AbortController | null>(null);
   const authAdminEmailRef = useRef<string>(authAdminEmail);
   authAdminEmailRef.current = authAdminEmail;
@@ -319,17 +322,23 @@ export default function DashboardPage() {
       return;
     }
 
-    // 이미 같은 이메일로 데이터 조회가 완료되었고 force가 아닌 경우 중복 호출 스킵
+    // 1. 이미 같은 이메일로 데이터 조회가 완료되었고 force가 아닌 경우 중복 호출 스킵
     if (!force && lastFetchedEmailRef.current === effectiveEmail) {
       return;
     }
 
-    // 이미 진행 중인 요청이 있다면 브라우저 소켓 pending 방지를 위해 이전 요청 취소(Abort) 후 진행
-    if (abortControllerRef.current) {
+    // 2. 이미 같은 이메일로 요청이 진행 중인 경우 중복 발사 방지 (In-Flight 재사용 및 캔슬 방지)
+    if (inFlightPromiseRef.current && lastRequestedEmailRef.current === effectiveEmail && !force) {
+      return inFlightPromiseRef.current;
+    }
+
+    // 3. 다른 이메일로 전환되거나 강제 새로고침(force) 시에만 이전 요청 정리
+    if (abortControllerRef.current && (lastRequestedEmailRef.current !== effectiveEmail || force)) {
       abortControllerRef.current.abort();
     }
     const abortCtrl = new AbortController();
     abortControllerRef.current = abortCtrl;
+    lastRequestedEmailRef.current = effectiveEmail;
     isFetchingRef.current = true;
 
     // SWR 캐시가 없는 경우에만 로딩 스피너 표출
@@ -337,70 +346,76 @@ export default function DashboardPage() {
       setLoading(true);
     }
 
-    try {
-      // 🚀 [서버 단일 통합 부트스트랩 API 호출: 브라우저 동시 소켓 점유 0, 5개 쿼리 병렬 일괄 수신]
-      const res = await apiFetch(`/api/dashboard/bootstrap?userEmail=${encodeURIComponent(effectiveEmail)}`, {
-        headers: { "Cache-Control": "no-cache" },
-        signal: abortCtrl.signal,
-      });
-      const resData = await res.json().catch(() => null);
+    const fetchPromise = (async () => {
+      try {
+        // 🚀 [서버 단일 통합 부트스트랩 API 호출: 브라우저 동시 소켓 점유 0, 5개 쿼리 병렬 일괄 수신]
+        const res = await apiFetch(`/api/dashboard/bootstrap?userEmail=${encodeURIComponent(effectiveEmail)}`, {
+          headers: { "Cache-Control": "no-cache" },
+          signal: abortCtrl.signal,
+        });
+        const resData = await res.json().catch(() => null);
 
-      if (resData?.success && resData.data) {
-        const d = resData.data;
+        if (resData?.success && resData.data) {
+          const d = resData.data;
 
-        // 1. 프로젝트 동기화 (활성 프로젝트 & 휴지통 분리 표출)
-        const active = d.projects || [];
-        setProjects(active);
-        try { sessionStorage.setItem("sheetbot_cache_projects", JSON.stringify(active)); } catch {}
+          // 1. 프로젝트 동기화 (활성 프로젝트 & 휴지통 분리 표출)
+          const active = d.projects || [];
+          setProjects(active);
+          try { sessionStorage.setItem("sheetbot_cache_projects", JSON.stringify(active)); } catch {}
 
-        const trashed = d.trashedProjects || [];
-        setTrashedProjects(trashed);
+          const trashed = d.trashedProjects || [];
+          setTrashedProjects(trashed);
 
-        // 2. 지갑 잔액 동기화 (실제 보유 잔액 우선 표출)
-        if (d.wallet) {
-          const walletData = {
-            balanceTokens: Number(d.wallet.balanceTokens ?? 2495439),
-            totalPurchasedTokens: Number(d.wallet.totalPurchasedTokens ?? 2500000),
-            totalUsedTokens: Number(d.wallet.totalUsedTokens ?? 4561),
-            tier: d.wallet.tier || "PRO",
-          };
-          setWallet(walletData);
-          try { sessionStorage.setItem("sheetbot_cache_wallet", JSON.stringify(walletData)); } catch {}
+          // 2. 지갑 잔액 동기화 (실제 보유 잔액 우선 표출)
+          if (d.wallet) {
+            const walletData = {
+              balanceTokens: Number(d.wallet.balanceTokens ?? 2495439),
+              totalPurchasedTokens: Number(d.wallet.totalPurchasedTokens ?? 2500000),
+              totalUsedTokens: Number(d.wallet.totalUsedTokens ?? 4561),
+              tier: d.wallet.tier || "PRO",
+            };
+            setWallet(walletData);
+            try { sessionStorage.setItem("sheetbot_cache_wallet", JSON.stringify(walletData)); } catch {}
+          }
+
+          // 3. 스케줄 동기화
+          const activeScheds = d.schedules || [];
+          setSchedules(activeScheds);
+          try { sessionStorage.setItem("sheetbot_cache_schedules", JSON.stringify(activeScheds)); } catch {}
+
+          // 4. 연동 기기 수
+          setDeviceCount(d.devicesCount || 0);
+
+          // 5. AI 모델 설정
+          if (d.currentModel) setCurrentModel(d.currentModel);
+
+          // 6. 당월 AI 사용량 동기화
+          if (d.aiUsage) {
+            setUsageTokens(Number(d.aiUsage.totalTokens || 0));
+            setUsageCalls(Number(d.aiUsage.totalCalls || 0));
+            setUsageCostKrw(Math.round(Number(d.aiUsage.totalCostKrw || 0)));
+          }
+
+          lastFetchedEmailRef.current = effectiveEmail;
+          hasCachedDataRef.current = true;
         }
-
-        // 3. 스케줄 동기화
-        const activeScheds = d.schedules || [];
-        setSchedules(activeScheds);
-        try { sessionStorage.setItem("sheetbot_cache_schedules", JSON.stringify(activeScheds)); } catch {}
-
-        // 4. 연동 기기 수
-        setDeviceCount(d.devicesCount || 0);
-
-        // 5. AI 모델 설정
-        if (d.currentModel) setCurrentModel(d.currentModel);
-
-        // 6. 당월 AI 사용량 동기화
-        if (d.aiUsage) {
-          setUsageTokens(Number(d.aiUsage.totalTokens || 0));
-          setUsageCalls(Number(d.aiUsage.totalCalls || 0));
-          setUsageCostKrw(Math.round(Number(d.aiUsage.totalCostKrw || 0)));
+      } catch (err: any) {
+        if (err?.name === "AbortError") {
+          return; // 정상 취소된 요청은 조용히 무시
         }
+        console.warn("Dashboard bootstrap fetch warning:", err);
+      } finally {
+        if (abortControllerRef.current === abortCtrl) {
+          setLoading(false);
+          isFetchingRef.current = false;
+          abortControllerRef.current = null;
+          inFlightPromiseRef.current = null;
+        }
+      }
+    })();
 
-        lastFetchedEmailRef.current = effectiveEmail;
-        hasCachedDataRef.current = true;
-      }
-    } catch (err: any) {
-      if (err?.name === "AbortError") {
-        return; // 정상 취소된 요청은 조용히 무시
-      }
-      console.warn("Dashboard bootstrap fetch warning:", err);
-    } finally {
-      if (abortControllerRef.current === abortCtrl) {
-        setLoading(false);
-        isFetchingRef.current = false;
-        abortControllerRef.current = null;
-      }
-    }
+    inFlightPromiseRef.current = fetchPromise;
+    return fetchPromise;
   }, []);
 
   // ⚡ 사용자 이메일이 확정되면 단 1회만 패칭 (마운트 중복 및 다중 호출 원천 차단)
@@ -424,7 +439,7 @@ export default function DashboardPage() {
     }
   }, [isAuthLoading, authAdminEmail]);
 
-  // ⚡ [0초 실시간 감시] 이지데스크 공식 onUserDataChanged 브라우저 네이티브 SSE 연동
+  // ⚡ [0초 실시간 감시] 이지데스크 공식 onUserDataChanged 브라우저 네이티브 SSE 연동 (300ms 디바운스 및 초기 마운트 안정화)
   const [isRealtimeLive, setIsRealtimeLive] = useState(true);
   const fetchDataRef = useRef(fetchData);
   useEffect(() => {
@@ -434,9 +449,17 @@ export default function DashboardPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    let sseDebounceTimer: NodeJS.Timeout | null = null;
+
     // 공식 헬퍼스로 My DB 실시간 변경 감시 (프로젝트/스케줄/지갑/입금 등)
     const unsub = onUserDataChanged((event) => {
       setIsRealtimeLive(true);
+
+      // 마운트 직후 2초 동안은 초기 bootstrap이 처리하므로 SSE 초기 연결 이벤트에 의한 중복 호출 방어
+      if (Date.now() - mountTimeRef.current < 2000) {
+        return;
+      }
+
       const relevantTables = [
         "sheetbot_projects",
         "sheetbot_schedules",
@@ -446,14 +469,19 @@ export default function DashboardPage() {
         "sheetbot_user_devices",
         "sheetbot_ai_usage_logs",
       ];
-      if (!event.tableName || relevantTables.includes(event.tableName)) {
-        fetchDataRef.current(true);
+
+      if (event.tableName && relevantTables.includes(event.tableName)) {
+        if (sseDebounceTimer) clearTimeout(sseDebounceTimer);
+        sseDebounceTimer = setTimeout(() => {
+          fetchDataRef.current(true);
+        }, 300);
       }
     });
 
     setIsRealtimeLive(true);
 
     return () => {
+      if (sseDebounceTimer) clearTimeout(sseDebounceTimer);
       unsub();
     };
   }, []);
@@ -685,7 +713,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
               {/* 실시간 DB 왓처 동기화 뱃지 (클릭 시 수동 즉시 동기화 통합) */}
               <button
-                onClick={fetchData}
+                onClick={() => void fetchData(true)}
                 disabled={loading}
                 suppressHydrationWarning
                 className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100/90 active:bg-slate-200/70 border border-slate-200/90 rounded-xl text-xs font-bold whitespace-nowrap shadow-2xs transition-all cursor-pointer group"
