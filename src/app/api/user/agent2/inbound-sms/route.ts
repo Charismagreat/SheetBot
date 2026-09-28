@@ -61,12 +61,13 @@ export async function POST(req: NextRequest) {
         ? parsedBank.bankName
         : (isPushNotification ? sender.replace("PUSH:", "") : "카드/은행 결제");
 
+      const isExpense = (parsedBank.transactionType || "").includes("지출");
       recordPaymentToGoogleSheet({
         userEmail: cleanEmail,
         paymentTime: nowIso.replace("T", " ").slice(0, 19),
-        transactionType: parsedBank.transactionType || "입금",
+        transactionType: parsedBank.transactionType || "매출(계좌)",
         channelOrBank: detectedBankName,
-        customerName: parsedBank.depositorName || (parsedBank.transactionType === "출금" ? "가맹점/출금처" : "고객"),
+        customerName: parsedBank.depositorName || (isExpense ? "가맹점/출금처" : "고객"),
         amount: parsedBank.amountKrw,
         memoOrRawText: message.slice(0, 200),
         deviceId: deviceId || "SheetBot Agent",

@@ -4,10 +4,12 @@ import {
 } from "@/lib/egdesk-helpers";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 
+import { FinancialTransactionType } from "@/lib/bank-sms-parser";
+
 export interface RecordPaymentParams {
   userEmail: string;
   paymentTime?: string;
-  transactionType?: "입금" | "출금"; // 입금 또는 출금
+  transactionType?: FinancialTransactionType | string;
   channelOrBank: string;
   customerName?: string;
   amount: number;
@@ -38,7 +40,7 @@ export interface RecordPaymentResult {
 
 /**
  * 매장 결제, 은행 입출금, 카드 승인 내역을 구글 드라이브 [SheetBot] 매장 결제 및 매출 대장 시트에 실시간 자동 기록
- * - [구분] 열(입금 / 출금)을 지원하여 매출과 지출을 명확히 분류
+ * - [구분] 열(매출(계좌) / 매출(카드) / 지출(계좌) / 지출(카드))을 지원하여 수입과 지출을 명확히 분류
  * - 시트가 없으면 1순위로 자동 생성 및 7열 에메랄드 테마 서식 보장
  * - Self-Healing 헤더 보장 (1행 헤더 누락 또는 6열 구버전 시 7열 신규 규격으로 자동 마이그레이션)
  * - 금액 열(E열)은 순수 숫자(Number)로 저장하여 =SUM(), =SUMIF() 등 엑셀/Apps Script 수식 연산 100% 보장
@@ -51,7 +53,7 @@ export async function recordPaymentToGoogleSheet(
     const {
       userEmail,
       paymentTime,
-      transactionType = "입금",
+      transactionType = "매출(계좌)",
       channelOrBank,
       customerName: rawCustomerName,
       amount,
@@ -64,7 +66,8 @@ export async function recordPaymentToGoogleSheet(
       return { success: false, error: "userEmail이 누락되었습니다." };
     }
 
-    const defaultName = transactionType === "출금" ? "가맹점/출금처" : "고객";
+    const isExpense = transactionType.includes("지출") || transactionType.includes("출금");
+    const defaultName = isExpense ? "가맹점/출금처" : "고객";
     const customerName = rawCustomerName && rawCustomerName.trim().length > 0 ? rawCustomerName.trim() : defaultName;
 
     const cleanEmail = userEmail.toLowerCase().trim();

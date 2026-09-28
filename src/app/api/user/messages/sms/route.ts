@@ -128,12 +128,13 @@ export async function POST(req: NextRequest) {
       try {
         const parsedBank = parseBankDepositSms(message);
         if (parsedBank.amountKrw && parsedBank.amountKrw > 0) {
+          const isExpense = (parsedBank.transactionType || "").includes("지출");
           recordPaymentToGoogleSheet({
             userEmail: cleanEmail,
             paymentTime: nowStr,
-            transactionType: parsedBank.transactionType || "입금",
+            transactionType: parsedBank.transactionType || "매출(계좌)",
             channelOrBank: parsedBank.bankName || "카드/은행 결제",
-            customerName: parsedBank.depositorName || displayName || (parsedBank.transactionType === "출금" ? "가맹점/출금처" : "고객"),
+            customerName: parsedBank.depositorName || displayName || (isExpense ? "가맹점/출금처" : "고객"),
             amount: parsedBank.amountKrw,
             memoOrRawText: message.slice(0, 200),
             deviceId: deviceId || "SheetBot Agent",

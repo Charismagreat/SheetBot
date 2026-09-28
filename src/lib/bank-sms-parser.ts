@@ -1,12 +1,20 @@
 /**
- * 🏦 금융(은행/카드사) 입출금 및 결제 알림 SMS/RCS 초고속 파서 (bank-sms-parser.ts)
- * 대한민국 주요 시중은행, 인터넷은행, 카드사의 입금 및 출금(체크/신용카드 승인) 문자에서
- * 거래 구분(입금/출금), 금액(KRW), 입금자/가맹점명을 초고속(0.01ms)으로 정밀 추출합니다.
+ * 🏦 금융(은행/카드사/POS) 입출금 및 결제 알림 SMS/RCS 초고속 파서 (bank-sms-parser.ts)
+ * 대한민국 주요 시중은행, 인터넷은행, 카드사, POS 결제앱의 입금 및 출금(체크/신용카드 승인) 문자에서
+ * 거래 구분(매출(계좌)/매출(카드)/지출(계좌)/지출(카드)), 금액(KRW), 입금자/가맹점명을 초고속(0.01ms)으로 정밀 추출합니다.
  */
+
+export type FinancialTransactionType =
+  | "매출(계좌)"
+  | "매출(카드)"
+  | "지출(계좌)"
+  | "지출(카드)"
+  | "매출"
+  | "지출";
 
 export interface ParsedDepositSms {
   success: boolean;
-  transactionType: "입금" | "출금"; // 입금 또는 출금
+  transactionType: FinancialTransactionType;
   bankName: string;
   amountKrw: number;
   depositCode: string;
@@ -16,7 +24,7 @@ export interface ParsedDepositSms {
 }
 
 // 주요 시중은행 및 카드사 공식 대표 발신번호 프리셋
-export const BANK_ORIGIN_NUMBERS: Record<string, { name: string; number: string; type: "bank" | "card" }> = {
+export const BANK_ORIGIN_NUMBERS: Record<string, { name: string; number: string; type: "bank" | "card" | "pos" }> = {
   // 인터넷 및 시중은행
   kakaobank: { name: "카카오뱅크", number: "1599-3333", type: "bank" },
   tossbank: { name: "토스뱅크", number: "1661-7654", type: "bank" },
@@ -55,7 +63,7 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
   if (!clean) {
     return {
       success: false,
-      transactionType: "입금",
+      transactionType: "매출(계좌)",
       bankName: "알 수 없음",
       amountKrw: 0,
       depositCode: "",
@@ -68,7 +76,7 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
   if (SPAM_EXCLUDE_KEYWORDS.some((kw) => clean.includes(kw))) {
     return {
       success: false,
-      transactionType: "입금",
+      transactionType: "매출(계좌)",
       bankName: "스팸/광고 제외",
       amountKrw: 0,
       depositCode: "",
@@ -78,7 +86,45 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
   }
 
   // ==========================================
-  // [A] 출금 및 카드 결제 승인 패턴 우선 검사
+  // [A] POS / 결제단말기 매장 매출 알림 판별 (고객 카드 결제)
+  // 예: [페이히어] 15,000원 결제완료 (카드승인)
+  // 예: [토스플레이스] 25,000원 결제 완료
+  // 예: [배민사장님] 주문 32,000원 결제
+  // ==========================================
+  const isPosOrMerchantSales =
+    clean.includes("페이히어") ||
+    clean.includes("토스플레이스") ||
+    clean.includes("토스페이먼츠") ||
+    clean.includes("이지포스") ||
+    clean.includes("포스") ||
+    clean.includes("배민") ||
+    clean.includes("요기요") ||
+    clean.includes("쿠팡이츠") ||
+    clean.includes("가맹점 정산") ||
+    clean.includes("결제대금 입금") ||
+    clean.includes("카드매출");
+
+  if (isPosOrMerchantSales && (clean.includes("결제") || clean.includes("승인") || clean.includes("주문") || clean.includes("입금"))) {
+    const posAmount = clean.match(/([\d,]+)원/);
+    if (posAmount) {
+      const amt = parseInt(posAmount[1].replace(/,/g, ""), 10);
+      const bankHeadMatch = clean.match(/\[([가-힣A-Za-z0-9]+)\]/);
+      const channel = bankHeadMatch ? bankHeadMatch[1] : "매장 POS/결제";
+      return {
+        success: true,
+        transactionType: "매출(카드)",
+        bankName: channel,
+        amountKrw: amt,
+        depositCode: "고객(매장카드)",
+        depositorName: "고객(매장카드)",
+        rawText: clean,
+        matchedRule: "POS_MERCHANT_CARD_SALES",
+      };
+    }
+  }
+
+  // ==========================================
+  // [B] 출금 및 사장님 카드 결제(지출) 패턴 검사
   // ==========================================
   const isWithdrawOrApproval =
     clean.includes("출금") ||
@@ -98,7 +144,7 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
       const merchant = cardMatchA[3].replace(/누적|잔액|일시불/g, "").trim();
       return {
         success: true,
-        transactionType: "출금",
+        transactionType: "지출(카드)",
         bankName: cardMatchA[1],
         amountKrw: amt,
         depositCode: merchant || "가맹점",
@@ -115,7 +161,7 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
       const merchant = cardMatchB[3].replace(/누적[\s\S]*|잔액[\s\S]*|일시불/g, "").trim();
       return {
         success: true,
-        transactionType: "출금",
+        transactionType: "지출(카드)",
         bankName: cardMatchB[1],
         amountKrw: amt,
         depositCode: merchant || "가맹점",
@@ -125,14 +171,14 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
       };
     }
 
-    // 2. 은행 출금 패턴 1: [은행명] 09/28 10:10 출금 15,000원(수취인) 잔액 ...
+    // 2-A. 은행 출금 패턴 1: [은행명] 09/28 10:10 출금 15,000원(수취인) 잔액 ...
     const bankWithdrawMatch1 = clean.match(/\[?([가-힣A-Za-z0-9]+(?:은행|뱅크|금고|신협|우체국|농협))\]?[\s\S]*?출금\s*([\d,]+)원(?:\s*\(([^)]+)\)|\s+([A-Za-z0-9가-힣]+))?/i);
     if (bankWithdrawMatch1) {
       const amt = parseInt(bankWithdrawMatch1[2].replace(/,/g, ""), 10);
       const recipient = (bankWithdrawMatch1[3] || bankWithdrawMatch1[4] || "").replace(/잔액[\s\S]*|통장/g, "").trim();
       return {
         success: true,
-        transactionType: "출금",
+        transactionType: "지출(계좌)",
         bankName: bankWithdrawMatch1[1],
         amountKrw: amt,
         depositCode: recipient || "출금처",
@@ -142,14 +188,14 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
       };
     }
 
-    // 2-2. 은행 출금 패턴 2: [은행명] 금액원 출금 가맹점/수취인 (예: [NH농협] 55,000원 출금 GS25)
+    // 2-B. 은행 출금 패턴 2: [은행명] 금액원 출금 가맹점/수취인 (예: [NH농협] 55,000원 출금 GS25)
     const bankWithdrawMatch2 = clean.match(/\[?([가-힣A-Za-z0-9]+(?:은행|뱅크|금고|신협|우체국|농협))\]?[\s\S]*?([\d,]+)원\s*출금\s*([A-Za-z0-9가-힣]+)?/i);
     if (bankWithdrawMatch2) {
       const amt = parseInt(bankWithdrawMatch2[2].replace(/,/g, ""), 10);
       const recipient = (bankWithdrawMatch2[3] || "").replace(/잔액[\s\S]*|통장/g, "").trim();
       return {
         success: true,
-        transactionType: "출금",
+        transactionType: "지출(계좌)",
         bankName: bankWithdrawMatch2[1],
         amountKrw: amt,
         depositCode: recipient || "출금처",
@@ -165,17 +211,17 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
       const rawAmt = generalWithdrawMatch[1] || generalWithdrawMatch[2];
       const amt = parseInt(rawAmt.replace(/,/g, ""), 10);
 
-      // 금융사/가맹점명 추출 시도
       const bankHeadMatch = clean.match(/\[([가-힣A-Za-z0-9]+)\]/);
       const bankFound = bankHeadMatch ? bankHeadMatch[1] : "카드/금융사";
 
+      const isCard = bankFound.includes("카드") || clean.includes("카드") || clean.includes("승인");
       const parenMatch = clean.match(/\(([^)]+)\)/);
       const nameCand = parenMatch && !parenMatch[1].includes("잔액") ? parenMatch[1].trim() : "가맹점/출금처";
 
       if (amt > 0) {
         return {
           success: true,
-          transactionType: "출금",
+          transactionType: isCard ? "지출(카드)" : "지출(계좌)",
           bankName: bankFound,
           amountKrw: amt,
           depositCode: nameCand,
@@ -188,7 +234,7 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
   }
 
   // ==========================================
-  // [B] 입금 알림 패턴 검사
+  // [C] 은행 계좌 입금 패턴 검사 ➡️ 매출(계좌)
   // ==========================================
 
   // 1. 카카오뱅크 패턴 1: [카카오뱅크] 09/17 15:10 입금 12,000원(C670) 잔액 ...
@@ -196,7 +242,7 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
   if (kakaoMatch) {
     return {
       success: true,
-      transactionType: "입금",
+      transactionType: "매출(계좌)",
       bankName: "카카오뱅크",
       amountKrw: parseInt(kakaoMatch[1].replace(/,/g, ""), 10),
       depositCode: kakaoMatch[2].trim(),
@@ -211,7 +257,7 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
   if (kakaoMatch2) {
     return {
       success: true,
-      transactionType: "입금",
+      transactionType: "매출(계좌)",
       bankName: "카카오뱅크",
       amountKrw: parseInt(kakaoMatch2[1].replace(/,/g, ""), 10),
       depositCode: kakaoMatch2[2].trim(),
@@ -226,7 +272,7 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
   if (tossMatch1) {
     return {
       success: true,
-      transactionType: "입금",
+      transactionType: "매출(계좌)",
       bankName: "토스뱅크",
       amountKrw: parseInt(tossMatch1[2].replace(/,/g, ""), 10),
       depositCode: tossMatch1[1].trim(),
@@ -239,7 +285,7 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
   if (tossMatch2) {
     return {
       success: true,
-      transactionType: "입금",
+      transactionType: "매출(계좌)",
       bankName: "토스뱅크",
       amountKrw: parseInt(tossMatch2[1].replace(/,/g, ""), 10),
       depositCode: tossMatch2[2].trim(),
@@ -254,7 +300,7 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
   if (kbMatch) {
     return {
       success: true,
-      transactionType: "입금",
+      transactionType: "매출(계좌)",
       bankName: "KB국민은행",
       amountKrw: parseInt(kbMatch[2].replace(/,/g, ""), 10),
       depositCode: kbMatch[1].trim(),
@@ -269,7 +315,7 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
   if (shinhanMatch) {
     return {
       success: true,
-      transactionType: "입금",
+      transactionType: "매출(계좌)",
       bankName: "신한은행",
       amountKrw: parseInt(shinhanMatch[1].replace(/,/g, ""), 10),
       depositCode: shinhanMatch[2].trim(),
@@ -284,7 +330,7 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
   if (wooriMatch) {
     return {
       success: true,
-      transactionType: "입금",
+      transactionType: "매출(계좌)",
       bankName: "우리은행",
       amountKrw: parseInt(wooriMatch[1].replace(/,/g, ""), 10),
       depositCode: wooriMatch[2].trim(),
@@ -299,7 +345,7 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
   if (nhMatch) {
     return {
       success: true,
-      transactionType: "입금",
+      transactionType: "매출(계좌)",
       bankName: "NH농협은행",
       amountKrw: parseInt(nhMatch[1].replace(/,/g, ""), 10),
       depositCode: nhMatch[2].trim(),
@@ -317,18 +363,17 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
     const depositor = (otherBanksMatch[3] || otherBanksMatch[4] || "").replace(/잔액|통장/g, "").trim();
     return {
       success: true,
-      transactionType: "입금",
+      transactionType: "매출(계좌)",
       bankName: otherBanksMatch[1],
       amountKrw: amountVal,
-      depositCode: depositor || "입금자",
-      depositorName: depositor || "입금자",
+      depositCode: depositor || "고객",
+      depositorName: depositor || "고객",
       rawText: clean,
       matchedRule: "OTHER_BANKS_EXACT",
     };
   }
 
   // 8. 스마트 범용 폴백 입금 패턴:
-  // "입금" 단어와 "XXXX원"이 있고, (입금자명) 또는 금액 뒤/앞의 한글 성명 및 코드 탐색
   const generalAmount = clean.match(/([\d,]+)원\s*입금|입금\s*([\d,]+)원/i);
   if (generalAmount) {
     const rawAmt = generalAmount[1] || generalAmount[2];
@@ -356,11 +401,11 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
     if (amountVal > 0) {
       return {
         success: true,
-        transactionType: "입금",
+        transactionType: "매출(계좌)",
         bankName: foundBankName,
         amountKrw: amountVal,
-        depositCode: extractedName || "AUTO",
-        depositorName: extractedName || undefined,
+        depositCode: extractedName || "고객",
+        depositorName: extractedName || "고객",
         rawText: clean,
         matchedRule: extractedName ? "GENERAL_SMART_REGEX" : "GENERAL_AMOUNT_ONLY",
       };
@@ -369,7 +414,7 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
 
   return {
     success: false,
-    transactionType: "입금",
+    transactionType: "매출(계좌)",
     bankName: "알 수 없음",
     amountKrw: 0,
     depositCode: "",

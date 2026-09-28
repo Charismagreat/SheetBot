@@ -41,7 +41,13 @@ object BankPushParser {
         "com.bccard.mobilecard" to "BC카드",
         "com.hanaskcard.paycla" to "하나카드",
         "kr.co.bccard.wooricard" to "우리카드",
-        "nh.smart.nhallonepay" to "NH농협카드"
+        "nh.smart.nhallonepay" to "NH농협카드",
+
+        // 매장 POS 및 배달앱
+        "com.payhere.pos" to "페이히어",
+        "team.freeapp.pos" to "토스플레이스",
+        "com.woowahan.baemin" to "배민사장님",
+        "com.kicc.pos" to "이지포스"
     )
 
     // 스팸/광고/대출 등 무관한 푸시 제외 키워드
@@ -103,9 +109,10 @@ object BankPushParser {
         val combined = "${title ?: ""} ${text ?: ""}".trim()
         val now = SimpleDateFormat("MM/dd HH:mm", Locale.KOREA).format(Date())
 
-        // 1. 거래 구분 판별 (출금/승인 여부 확인)
-        val isWithdraw = WITHDRAW_KEYWORDS.any { combined.contains(it) } && !combined.contains("입금")
-        val actionType = if (isWithdraw) "출금" else "입금"
+        // 1. 거래 구분 판별 (POS 매장 매출인지, 은행 출금/카드 지출인지, 계좌 입금인지)
+        val isPosApp = packageName in listOf("com.payhere.pos", "team.freeapp.pos", "com.woowahan.baemin", "com.kicc.pos")
+        val isWithdraw = !isPosApp && WITHDRAW_KEYWORDS.any { combined.contains(it) } && !combined.contains("입금")
+        val actionType = if (isPosApp) "결제" else (if (isWithdraw) "출금" else "입금")
 
         // 2. 금액 추출 (예: 5,000원 -> 5,000원) - 제목이나 본문 어디서든 추출
         val amountMatch = Regex("([0-9,]{3,})\\s*원").find(combined)
