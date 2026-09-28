@@ -131,6 +131,16 @@ export default function NotificationsGuideTab() {
             <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
               <CheckCircle2 className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
               <div>
+                <strong className="text-slate-900">3단계 안심 파이프라인 &amp; 로컬 큐 (Zero Data-Loss):</strong>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  [스마트폰 감지 센서] ➔ [시트봇 서버 정제] ➔ [구글 시트 자동 기록]으로 안전 처리됩니다. 서버 점검 시에는 스마트폰 로컬 큐에 안전 보관되었다가 복구 즉시 자동 재전송됩니다.
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+              <CheckCircle2 className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
+              <div>
                 <strong className="text-slate-900">스마트 후속 자동화 연계:</strong>
                 <div className="text-[11px] text-slate-500 mt-0.5">기록과 동시에 재고 차감이나 감사 이메일 발송 등 연쇄 파이프라인이 즉시 작동합니다.</div>
               </div>
