@@ -474,6 +474,21 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // 4-2. 💡 추천 자동화 시나리오 클릭 시 웹 관제 센터 규칙 탭 직통 열기
+        val openRulesAction = {
+            try {
+                val rulesUrl = "https://sheetbot.cloud/dashboard/notifications?tab=rules"
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(rulesUrl)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(this, "웹 브라우저를 열 수 없습니다: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+        binding.cardRecommendedScenarios.setOnClickListener { openRulesAction() }
+        binding.btnViewAllScenarios.setOnClickListener { openRulesAction() }
+
         // 5. 계정 삭제 버튼 (화면 최하단 Danger Zone)
         binding.btnUnlink.setOnClickListener {
             AlertDialog.Builder(this)
