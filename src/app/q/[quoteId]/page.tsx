@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -54,7 +55,7 @@ export default function QuoteViewerPage() {
     async function loadQuote() {
       try {
         setLoading(true);
-        const res = await fetch(`/api/user/quote/${quoteId}`);
+        const res = await apiFetch(`/api/user/quote/${quoteId}`);
         const data = await res.json();
 
         if (data.success && data.quote) {
@@ -86,7 +87,7 @@ export default function QuoteViewerPage() {
   const handleAcceptQuote = async () => {
     if (!quote) return;
     try {
-      const res = await fetch(`/api/user/quote/${quote.id}/accept`, {
+      const res = await apiFetch(`/api/user/quote/${quote.id}/accept`, {
         method: "POST",
       });
       const data = await res.json();

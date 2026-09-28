@@ -218,6 +218,7 @@ ${catalogSummary}
     const quoteId = `q_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
     const baseUrl = process.env.NEXTAUTH_URL || "https://sheetbot.cloud";
     const quoteUrl = `${baseUrl}/q/${quoteId}`;
+    const selectUrl = `${baseUrl}/q/select/${quoteId}`;
 
     const itemsSummary = finalItems
       .map((item) => `${item.name}(${item.quantity}${item.spec})`)
@@ -225,6 +226,8 @@ ${catalogSummary}
 
     const now = new Date().toISOString();
     const todayFormatted = now.replace("T", " ").substring(0, 19);
+
+    const initialStatus = isClear ? "ISSUED" : "NEEDS_SELECTION";
 
     // 6. sheetbot_quotes DB 저장
     const quoteRow = {
@@ -237,7 +240,7 @@ ${catalogSummary}
       supply_amount: supplyAmount,
       vat_amount: vatAmount,
       total_amount: totalAmount,
-      status: "ISSUED",
+      status: initialStatus,
       spreadsheet_id: spreadsheetId,
       viewed_at: null,
       created_at: now,
@@ -255,12 +258,12 @@ ${catalogSummary}
           todayFormatted,
           customerName,
           customerPhone,
-          itemsSummary,
+          isClear ? itemsSummary : `[옵션선택대기] ${itemsSummary}`,
           supplyAmount,
           vatAmount,
           totalAmount,
-          quoteUrl,
-          "발급완료",
+          isClear ? quoteUrl : selectUrl,
+          isClear ? "발급완료" : "선택대기",
           "미열람",
         ];
 
@@ -281,18 +284,27 @@ ${catalogSummary}
       }
     }
 
-    // 8. 고객 회신용 표준 메시지 템플릿 생성
-    const defaultSmsMessage = `[SheetBot 견적] ${customerName}님, 요청하신 견적서가 발급되었습니다.
+    // 8. 고객 회신용 표준 메시지 템플릿 생성 (명확한 견적 vs 셀프 선택기 분기)
+    let defaultSmsMessage = "";
+    if (isClear) {
+      defaultSmsMessage = `[SheetBot 견적] ${customerName}님, 요청하신 견적서가 발급되었습니다.
 • 총 예상 견적: ${totalAmount.toLocaleString()}원 (VAT 포함)
 • 견적 품목: ${itemsSummary}
 
 아래 링크를 터치하시면 고화질 견적서 확인 및 이미지 저장이 가능합니다.
 ▶ 견적서 바로보기: ${quoteUrl}`;
+    } else {
+      defaultSmsMessage = `[SheetBot 견적] ${customerName}님, 문의 감사드립니다!
+문의하신 내용은 모델 및 규격에 따라 비용이 달라집니다.
+아래 10초 셀프 견적 링크에서 모델과 수량을 선택하시면 정식 맞춤 견적서가 즉시 발급됩니다.
+▶ 10초 맞춤 견적 선택하기: ${selectUrl}`;
+    }
 
     return NextResponse.json({
       success: true,
       quoteId,
       quoteUrl,
+      selectUrl,
       isClear,
       missingReason,
       customerName,
