@@ -8,9 +8,10 @@ interface KakaoChatImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: (result: any) => void;
+  userEmail?: string;
 }
 
-export function KakaoChatImportModal({ isOpen, onClose, onSuccess }: KakaoChatImportModalProps) {
+export function KakaoChatImportModal({ isOpen, onClose, onSuccess, userEmail }: KakaoChatImportModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [myName, setMyName] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -38,15 +39,23 @@ export function KakaoChatImportModal({ isOpen, onClose, onSuccess }: KakaoChatIm
     setResult(null);
 
     try {
+      const effectiveEmail =
+        userEmail ||
+        (typeof window !== "undefined" ? localStorage.getItem("sheetbot_user_email") || "" : "");
+
       const formData = new FormData();
       formData.append("file", file);
       if (myName.trim()) {
         formData.append("myName", myName.trim());
       }
+      if (effectiveEmail.trim()) {
+        formData.append("userEmail", effectiveEmail.trim());
+      }
 
       const res = await apiFetch("/api/user/messages/kakao/import", {
         method: "POST",
         body: formData,
+        headers: effectiveEmail ? { "x-sheetbot-user-email": effectiveEmail } : undefined,
       });
 
       const data = await res.json();

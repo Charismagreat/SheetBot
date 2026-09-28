@@ -3,6 +3,7 @@
 import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState, useMemo, Suspense } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import { KakaoChatImportModal } from "@/components/KakaoChatImportModal";
 
 interface SheetDataResponse {
   success: boolean;
@@ -96,6 +97,9 @@ function MobileSheetWebAppContent() {
   const [data, setData] = useState<SheetDataResponse | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRow, setSelectedRow] = useState<string[] | null>(null);
+  const [isKakaoImportOpen, setIsKakaoImportOpen] = useState(false);
+
+  const isKakaoSheet = sheetTypeParam.toLowerCase() === "kakao";
 
   const meta = TYPE_NAMES[sheetTypeParam.toLowerCase()] || {
     title: "스마트 대장",
@@ -189,6 +193,17 @@ function MobileSheetWebAppContent() {
         </div>
 
         <div className="flex items-center space-x-2">
+          {isKakaoSheet && (
+            <button
+              onClick={() => setIsKakaoImportOpen(true)}
+              className="px-2.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 active:scale-95 border border-amber-500/40 text-amber-300 font-bold text-xs rounded-lg flex items-center space-x-1 shadow-xs transition"
+              title="카카오톡 대화 내용 내보내기(.txt) 파일 가져오기"
+            >
+              <span>💬</span>
+              <span className="hidden xs:inline text-[11px]">카톡 가져오기</span>
+            </button>
+          )}
+
           {data?.spreadsheetUrl && (
             <a
               href={data.spreadsheetUrl}
@@ -226,6 +241,31 @@ function MobileSheetWebAppContent() {
 
       {/* 2. 본문 컨테이너 */}
       <main className="flex-1 p-4 max-w-lg w-full mx-auto space-y-4">
+        {/* 카카오톡 대화 가져오기 배너 (카카오톡 대장일 때 상단 원터치 노출) */}
+        {isKakaoSheet && (
+          <div className="bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-slate-900 border border-amber-500/40 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-md">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-300 shrink-0 text-base">
+                💬
+              </div>
+              <div className="truncate">
+                <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <span>대화 내보내기(.txt) 가져오기</span>
+                  <span className="text-[10px] px-1.5 py-0.2 bg-amber-500/20 text-amber-300 rounded font-semibold">구간 덮어쓰기</span>
+                </div>
+                <div className="text-[11px] text-slate-400 truncate">
+                  카톡 채팅방 ➔ 설정 ➔ 대화 내보내기 파일 반영
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsKakaoImportOpen(true)}
+              className="shrink-0 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl transition shadow"
+            >
+              가져오기
+            </button>
+          </div>
+        )}
         {/* 검색 및 요약 바 */}
         <div className="space-y-2">
           <div className="relative">
@@ -445,6 +485,16 @@ function MobileSheetWebAppContent() {
           </div>
         </div>
       )}
+
+      {/* 3-1. 카카오톡 대화 내용 내보내기 가져오기 모달 */}
+      <KakaoChatImportModal
+        isOpen={isKakaoImportOpen}
+        onClose={() => setIsKakaoImportOpen(false)}
+        userEmail={userEmail}
+        onSuccess={() => {
+          fetchData();
+        }}
+      />
 
       {/* 4. 하단 보증 푸터 */}
       <footer className="mt-auto border-t border-slate-800/60 bg-slate-950 py-3 text-center text-[10px] text-slate-500 space-y-0.5">
