@@ -40,7 +40,7 @@
                     android:background="@drawable/bg_badge_version"
                     android:paddingHorizontal="10dp"
                     android:paddingVertical="4dp"
-                    android:text="v2.1.9"
+                    android:text="v2.1.10"
                     android:textColor="#10B981"
                     android:textSize="12sp"
                     android:textStyle="bold" />
@@ -1861,28 +1861,20 @@
                 android:focusable="true" />
         </LinearLayout>
 
-        <!-- 실시간 감지 로그 전용 독립 스크롤 컨테이너 -->
-        <androidx.core.widget.NestedScrollView
-            android:id="@+id/scrollLogs"
+        <!-- 실시간 입금 감지 로그 창 (최대 1,000건 로컬 영구 보관 + 부드러운 텍스트뷰 내장 스크롤) -->
+        <TextView
+            android:id="@+id/tvLogs"
             android:layout_width="match_parent"
             android:layout_height="180dp"
             android:background="#020617"
-            android:fillViewport="true"
+            android:padding="12dp"
+            android:textColor="#10B981"
+            android:textSize="10.5sp"
+            android:fontFamily="monospace"
             android:scrollbars="vertical"
             android:fadeScrollbars="false"
             android:overScrollMode="always"
-            android:nestedScrollingEnabled="true">
-
-            <TextView
-                android:id="@+id/tvLogs"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:padding="12dp"
-                android:textColor="#10B981"
-                android:textSize="10.5sp"
-                android:fontFamily="monospace"
-                android:text="대기 중... 은행 입금 알림, 결제 푸시, 고객 SMS가 수신되면 실시간 기록됩니다.\n" />
-        </androidx.core.widget.NestedScrollView>
+            android:text="대기 중... 은행 입금 알림, 결제 푸시, 고객 SMS가 수신되면 실시간 기록됩니다.\n" />
 
         <!-- 계정 연동 해제 (실수 터치 방지 최하단 배치) -->
         <LinearLayout
