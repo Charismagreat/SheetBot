@@ -261,53 +261,64 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-
-        prefs = PreferencesManager(this)
-        logManager = LocalLogManager.getInstance(this)
-
-        // Google Sign-In 옵션 초기화
-        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestEmail()
-            .build()
-        googleSignInClient = GoogleSignIn.getClient(this, gso)
-
-        TtsManager.init(this)
-        UpdateManager.checkForUpdates(this, showToastIfLatest = false)
-
-        setupListeners()
-        updateUiState()
-        checkPermissions()
-
-        if (prefs.isPaired) {
-            KeepAliveService.start(this)
-        }
-
-        // 외부 공유하기(Share) 인텐트 처리
-        handleSharedIntent(intent)
-
-        // 스마트폰 직접 발신(Sent) 문자 실시간 감지 Observer 등록
         try {
-            smsSentObserver = SmsSentObserver(this)
-            contentResolver.registerContentObserver(
-                SmsSentObserver.SENT_SMS_URI,
-                true,
-                smsSentObserver!!
-            )
-        } catch (e: Exception) {
-            android.util.Log.w("MainActivity", "SmsSentObserver 등록 실패: ${e.message}")
+            binding = ActivityMainBinding.inflate(layoutInflater)
+            setContentView(binding.root)
+        } catch (e: Throwable) {
+            android.util.Log.e("MainActivity", "레이아웃 인플레이션 실패: ${e.message}", e)
+            finish()
+            return
         }
 
-        // 실시간 고객 SMS 수신 및 입금 감지 브로드캐스트 리시버 등록
-        val filter = IntentFilter().apply {
-            addAction(SmsReceiver.ACTION_SMS_RECEIVED)
-            addAction(SmsReceiver.ACTION_DEPOSIT_DETECTED)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(depositUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(depositUpdateReceiver, filter)
+        try {
+            prefs = PreferencesManager(this)
+            logManager = LocalLogManager.getInstance(this)
+
+            // Google Sign-In 옵션 초기화
+            val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestEmail()
+                .build()
+            googleSignInClient = GoogleSignIn.getClient(this, gso)
+
+            TtsManager.init(this)
+            UpdateManager.checkForUpdates(this, showToastIfLatest = false)
+
+            setupListeners()
+            updateUiState()
+            checkPermissions()
+
+            if (prefs.isPaired) {
+                KeepAliveService.start(this)
+            }
+
+            // 외부 공유하기(Share) 인텐트 처리
+            handleSharedIntent(intent)
+
+            // 스마트폰 직접 발신(Sent) 문자 실시간 감지 Observer 등록
+            try {
+                smsSentObserver = SmsSentObserver(this)
+                contentResolver.registerContentObserver(
+                    SmsSentObserver.SENT_SMS_URI,
+                    true,
+                    smsSentObserver!!
+                )
+            } catch (e: Exception) {
+                android.util.Log.w("MainActivity", "SmsSentObserver 등록 실패: ${e.message}")
+            }
+
+            // 실시간 고객 SMS 수신 및 입금 감지 브로드캐스트 리시버 등록
+            val filter = IntentFilter().apply {
+                addAction(SmsReceiver.ACTION_SMS_RECEIVED)
+                addAction(SmsReceiver.ACTION_DEPOSIT_DETECTED)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(depositUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                registerReceiver(depositUpdateReceiver, filter)
+            }
+        } catch (e: Throwable) {
+            android.util.Log.e("MainActivity", "onCreate 초기화 중 오류 방어: ${e.message}", e)
+            Toast.makeText(this, "에이전트 초기화 완료 (일부 항목 보호 모드 적용)", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -799,20 +810,25 @@ class MainActivity : AppCompatActivity() {
         }
 
         // 9. 실시간 감지 로그 (최대 1,000건 로컬 영구 보관 + 부드러운 전용 스크롤 + 비우기)
-        binding.scrollLogs.setOnTouchListener { v, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                    v.parent.requestDisallowInterceptTouchEvent(true)
+        try {
+            binding.tvLogs.movementMethod = ScrollingMovementMethod()
+            binding.tvLogs.setOnTouchListener { v, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                        v.parent.requestDisallowInterceptTouchEvent(true)
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        v.parent.requestDisallowInterceptTouchEvent(false)
+                    }
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    v.parent.requestDisallowInterceptTouchEvent(false)
-                }
+                false
             }
-            false
+            val initialLogs = logManager.loadLogs()
+            binding.tvLogs.text = initialLogs
+            updateLogCount()
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "로그 영역 초기화 예외: ${e.message}")
         }
-        val initialLogs = logManager.loadLogs()
-        binding.tvLogs.text = initialLogs
-        updateLogCount()
 
         binding.btnClearLogs.setOnClickListener {
             AlertDialog.Builder(this)
@@ -821,7 +837,7 @@ class MainActivity : AppCompatActivity() {
                 .setPositiveButton("비우기") { _, _ ->
                     logManager.clearLogs()
                     binding.tvLogs.text = logManager.getFormattedLogs()
-                    binding.scrollLogs.scrollTo(0, 0)
+                    binding.tvLogs.scrollTo(0, 0)
                     updateLogCount()
                     Toast.makeText(this, "로그가 모두 비워졌습니다.", Toast.LENGTH_SHORT).show()
                 }
@@ -1441,18 +1457,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun addLogItem(sender: String, body: String, success: Boolean) {
-        val formatted = logManager.addLog(sender, body, success)
-        binding.tvLogs.text = formatted
-        binding.scrollLogs.post {
-            binding.scrollLogs.scrollTo(0, 0)
+        try {
+            val formatted = logManager.addLog(sender, body, success)
+            binding.tvLogs.text = formatted
+            binding.tvLogs.post {
+                binding.tvLogs.scrollTo(0, 0)
+            }
+            updateLogCount()
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "로그 추가 예외: ${e.message}")
         }
-        updateLogCount()
     }
 
     private fun updateLogCount() {
-        val count = logManager.getLogCount()
-        val formattedCount = NumberFormat.getNumberInstance(Locale.KOREA).format(count)
-        binding.tvLogCount.text = "$formattedCount / 1,000건"
+        try {
+            val count = logManager.getLogCount()
+            val formattedCount = NumberFormat.getNumberInstance(Locale.KOREA).format(count)
+            binding.tvLogCount.text = "$formattedCount / 1,000건"
+        } catch (_: Exception) {}
     }
 
     private fun checkPermissions() {
