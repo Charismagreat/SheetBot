@@ -23,7 +23,8 @@ export type SheetBindingType =
   | "PAYMENT_PUSH"
   | "RECEIPT_SMS"
   | "WEBSITE_MONITOR"
-  | "DISPATCH_LOG";
+  | "DISPATCH_LOG"
+  | "QUOTE";
 
 export interface ResolveSheetOptions {
   userEmail: string;

@@ -88,7 +88,9 @@ export async function POST(req: NextRequest) {
 2. 배달 주문(배민, 쿠팡이츠 등) ➔ trigger_event: "delivery_push", target_recipient: "sheet_append"
 3. 입금완료/배송/예약확정 등 고객 안내 ➔ trigger_event: "sheet_edit", target_recipient: "column_phone", recipient_column: "연락처"
 4. 재고 부족/위험 경고 ➔ trigger_event: "sheet_edit", target_recipient: "self"
-5. 마감 요약/브리핑 ➔ trigger_event: "daily_summary", target_recipient: "self"`;
+5. 마감 요약/브리핑 ➔ trigger_event: "daily_summary", target_recipient: "self"
+6. 예약 확정 리마인드 ➔ trigger_event: "sheet_edit", target_recipient: "column_phone", recipient_column: "연락처"
+7. 고객 견적 문의 ➔ trigger_event: "inbound_sms", target_recipient: "quote_reply", message_template: "[SheetBot] {{고객명}}님 요청하신 견적서가 발급되었습니다. 링크: {{견적서링크}}"`;
 
     let parsedRule: any = {
       name: prompt.slice(0, 24),

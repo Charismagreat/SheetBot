@@ -316,7 +316,7 @@
                         android:id="@+id/btnViewAllScenarios"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="전체 6선 보기 ↗"
+                        android:text="전체 7선 보기 ↗"
                         android:textColor="#94A3B8"
                         android:textSize="11sp"
                         android:textStyle="bold" />
@@ -326,6 +326,14 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="• 📑 고객 견적 문의 ➔ AI 단가표 매칭 &amp; 견적서 링크 0원 회신"
+                        android:textColor="#5EEAD4"
+                        android:textSize="11sp"
+                        android:layout_marginBottom="4dp" />
 
                     <TextView
                         android:layout_width="match_parent"
@@ -1468,6 +1476,65 @@
                     android:textSize="11.5sp"
                     android:textStyle="bold"
                     android:layout_marginTop="2dp" />
+            </LinearLayout>
+
+            <!-- 📑 스마트 견적 & 단가표 대장 연동 섹션 (NEW) -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="📑 AI 스마트 견적 &amp; 단가표 대장 연동"
+                    android:textColor="#2DD4BF"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchQuoteSync"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="false" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutQuoteSyncSettings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0F172A"
+                android:padding="10dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="고객이 문자로 견적 문의 시 등록된 단가표를 AI가 분석하여 고화질 견적서 링크를 자동 생성합니다."
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="6dp" />
+
+                <Button
+                    android:id="@+id/btnOpenQuoteSheet"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:backgroundTint="#134E4A"
+                    android:text="📊 스마트 견적 및 단가표 대장 열기 ↗"
+                    android:textColor="#5EEAD4"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
             <!-- 부재중 전화(Missed Call) 0원 스마트 자동 회신 섹션 -->
