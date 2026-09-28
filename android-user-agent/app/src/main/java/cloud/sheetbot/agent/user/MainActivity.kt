@@ -52,12 +52,14 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.text.SimpleDateFormat
 import java.util.Date
+import android.text.method.ScrollingMovementMethod
 import java.util.Locale
 import kotlin.random.Random
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var prefs: PreferencesManager
+    private lateinit var logManager: LocalLogManager
     private val activityScope = CoroutineScope(Dispatchers.Main)
     private var aodJob: Job? = null
     private var serverMonitorJob: Job? = null
@@ -263,6 +265,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         prefs = PreferencesManager(this)
+        logManager = LocalLogManager.getInstance(this)
 
         // Google Sign-In 옵션 초기화
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
@@ -793,6 +796,33 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnEnterAod.setOnClickListener {
             enterAodMode()
+        }
+
+        // 9. 실시간 감지 로그 (최대 1,000건 로컬 영구 보관 + 부드러운 스크롤 + 비우기)
+        binding.tvLogs.movementMethod = ScrollingMovementMethod.getInstance()
+        binding.tvLogs.setOnTouchListener { v, event ->
+            v.parent.requestDisallowInterceptTouchEvent(true)
+            if ((event.action and MotionEvent.ACTION_MASK) == MotionEvent.ACTION_UP) {
+                v.parent.requestDisallowInterceptTouchEvent(false)
+            }
+            false
+        }
+        val initialLogs = logManager.loadLogs()
+        binding.tvLogs.text = initialLogs
+        updateLogCount()
+
+        binding.btnClearLogs.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("실시간 감지 로그 비우기")
+                .setMessage("스마트폰에 보관된 감지 로그(최대 1,000건)를 모두 비우시겠습니까?\n(구글 스프레드시트에 기록된 대장 내역은 안전하게 보존됩니다)")
+                .setPositiveButton("비우기") { _, _ ->
+                    logManager.clearLogs()
+                    binding.tvLogs.text = logManager.getFormattedLogs()
+                    updateLogCount()
+                    Toast.makeText(this, "로그가 모두 비워졌습니다.", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("취소", null)
+                .show()
         }
     }
 
@@ -1407,10 +1437,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun addLogItem(sender: String, body: String, success: Boolean) {
-        val timeStr = SimpleDateFormat("HH:mm:ss", Locale.KOREA).format(Date())
-        val statusIcon = if (success) "🟢" else "🔴"
-        val logLine = "$statusIcon [$timeStr] $sender: ${body.replace("\n", " ").take(40)}...\n"
-        binding.tvLogs.text = logLine + binding.tvLogs.text
+        val formatted = logManager.addLog(sender, body, success)
+        binding.tvLogs.text = formatted
+        updateLogCount()
+    }
+
+    private fun updateLogCount() {
+        val count = logManager.getLogCount()
+        val formattedCount = NumberFormat.getNumberInstance(Locale.KOREA).format(count)
+        binding.tvLogCount.text = "$formattedCount / 1,000건"
     }
 
     private fun checkPermissions() {

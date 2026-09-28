@@ -1818,15 +1818,48 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- 실시간 입금 감지 로그 창 -->
-        <TextView
-            android:layout_width="wrap_content"
+        <!-- 실시간 입금 감지 로그 창 (최대 1,000건 로컬 영구 보관 + 부드러운 스크롤) -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="실시간 감지 로그"
-            android:textColor="#64748B"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="6dp" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="실시간 감지 로그"
+                android:textColor="#64748B"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvLogCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0 / 1,000건"
+                android:textColor="#10B981"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:layout_marginEnd="10dp" />
+
+            <TextView
+                android:id="@+id/btnClearLogs"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🗑️ 비우기"
+                android:textColor="#94A3B8"
+                android:textSize="11sp"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/tvLogs"
@@ -1837,7 +1870,9 @@
             android:textColor="#10B981"
             android:textSize="10.5sp"
             android:fontFamily="monospace"
-            android:text="대기 중... 은행 입금 문자가 오면 자동으로 웹훅 전송됩니다.\n" />
+            android:scrollbars="vertical"
+            android:fadeScrollbars="false"
+            android:text="대기 중... 은행 입금 알림, 결제 푸시, 고객 SMS가 수신되면 실시간 기록됩니다.\n" />
 
         <!-- 계정 연동 해제 (실수 터치 방지 최하단 배치) -->
         <LinearLayout
