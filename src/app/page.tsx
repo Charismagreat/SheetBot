@@ -25,7 +25,10 @@ import {
   CreditCard,
   ShieldCheck,
   Clock,
-  ArrowRight
+  ArrowRight,
+  Gift,
+  Download,
+  X
 } from "lucide-react";import nextDynamic from 'next/dynamic';
 import Navbar from "@/components/Navbar";
 import { SheetBotIcon } from "@/components/SheetBotLogo";
@@ -42,6 +45,8 @@ export default function LandingPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isWrapping, setIsWrapping] = useState(false);
+  const [refCode, setRefCode] = useState<string | null>(null);
+  const [showInviteBanner, setShowInviteBanner] = useState<boolean>(true);
 
   // [1단계] 추천인 코드(?ref=...) 감지 및 보존
   useEffect(() => {
@@ -49,8 +54,17 @@ export default function LandingPage() {
       const params = new URLSearchParams(window.location.search);
       const ref = params.get("ref");
       if (ref) {
+        setRefCode(ref.trim());
+        setShowInviteBanner(true);
         try {
-          localStorage.setItem("pending_ref", ref);
+          localStorage.setItem("pending_ref", ref.trim());
+        } catch (e) {}
+      } else {
+        try {
+          const savedRef = localStorage.getItem("pending_ref");
+          if (savedRef) {
+            setRefCode(savedRef.trim());
+          }
         } catch (e) {}
       }
     }
@@ -134,11 +148,88 @@ export default function LandingPage() {
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-slate-50 via-white to-slate-50">
       <Navbar />
 
-      <main className="flex-1 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 flex flex-col items-center text-center space-y-16 sm:space-y-20">
+      <main className="flex-1 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 flex flex-col items-center text-center space-y-12 sm:space-y-16">
+        {/* =========================================================================
+            🎁 [초대 환영 스마트 배너]: 추천인 코드(?ref=...)로 유입된 방문자 전용
+           ========================================================================= */}
+        {refCode && showInviteBanner && !session?.user && (
+          <div className="w-full max-w-3xl bg-gradient-to-br from-amber-500/10 via-emerald-500/10 to-teal-500/15 border-2 border-emerald-400/80 rounded-3xl p-5 sm:p-7 shadow-xl shadow-emerald-500/10 text-left relative overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
+            {/* 우측 상단 닫기 버튼 */}
+            <button
+              onClick={() => setShowInviteBanner(false)}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200/60 transition cursor-pointer"
+              title="배너 닫기"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="space-y-4">
+              {/* 상단 추천인 배지 */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-600 text-white text-xs font-black shadow-xs">
+                  <Gift className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                  <span>특별 초대 혜택 적용됨</span>
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-slate-900/5 border border-slate-300/80 text-[11px] font-bold text-slate-700">
+                  추천인: <code className="text-emerald-700 font-extrabold">{refCode}</code>
+                </span>
+              </div>
+
+              {/* 메인 카피 */}
+              <div className="space-y-1.5">
+                <h2 className="text-lg sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <span>가입 즉시 10,000 보너스 토큰이 선물됩니다!</span>
+                  <span className="text-xl">🎁</span>
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                  초대 링크로 오신 것을 환영합니다! Google 계정으로 1초 만에 로그인하시면 즉시 <strong>10,000 토큰</strong>이 지갑에 충전되며, 스마트폰 요금제 기반 <strong>0원 무제한 문자 발송 &amp; 실시간 매장 결제 자동 장부</strong>를 무료로 이용하실 수 있습니다.
+                </p>
+              </div>
+
+              {/* 2대 핵심 CTA 버튼 (스마트폰 최적화) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <Link
+                  href={`/login?callbackUrl=${encodeURIComponent("/dashboard")}`}
+                  className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm rounded-2xl shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 active:scale-95 transition-all text-center"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
+                  <span>Google 1초 로그인 &amp; 10,000 토큰 받기</span>
+                </Link>
+
+                <a
+                  href="/downloads/SheetBotAgent.apk"
+                  className="w-full py-3.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs sm:text-sm rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all text-center"
+                >
+                  <Download className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>시트봇 에이전트 앱(.apk) 다운로드</span>
+                </a>
+              </div>
+
+              {/* 3대 핵심 혜택 안내 칩 */}
+              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-emerald-500/20 text-[11px] font-bold text-slate-600">
+                <span className="flex items-center gap-1 text-emerald-800">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  10,000 토큰 즉시 충전 (유효기간 평생)
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="flex items-center gap-1 text-slate-700">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  스마트폰 0원 문자 무제한 발송
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="flex items-center gap-1 text-slate-700">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  포스·배달앱 결제 실시간 시트 기록
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* =========================================================================
             1. HERO 섹션: Google 검색창 스타일 시트 주소 래퍼 & 숏컷
            ========================================================================= */}
-        <div className="w-full max-w-3xl space-y-8 pt-2 sm:pt-6">
+        <div className="w-full max-w-3xl space-y-8 pt-2 sm:pt-4">
           {/* 구글 감성의 SheetBot 로고 & 타이틀 */}
           <div className="space-y-4">
             {/* 상단 킬러 슬로건 뱃지 */}
