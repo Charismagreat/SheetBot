@@ -285,6 +285,81 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
+            <!-- 💡 실전 추천 4대 자동화 시나리오 안내 카드 (v2.1.12 NEW) -->
+            <LinearLayout
+                android:id="@+id/cardRecommendedScenarios"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingVertical="11dp"
+                android:paddingHorizontal="14dp"
+                android:background="@drawable/bg_card_scenario"
+                android:layout_marginBottom="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="💡 대표 추천 자동화 시나리오"
+                        android:textColor="#38BDF8"
+                        android:textSize="12.5sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/btnViewAllScenarios"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="전체 6선 보기 ↗"
+                        android:textColor="#94A3B8"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="• 💳 POS 결제 승인 ➔ 구글 시트 매출 장부 실시간 자동 기입"
+                        android:textColor="#E2E8F0"
+                        android:textSize="11sp"
+                        android:layout_marginBottom="4dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="• 💰 시트 입금완료 ➔ 고객 번호로 감사 문자 통신비 0원 발송"
+                        android:textColor="#E2E8F0"
+                        android:textSize="11sp"
+                        android:layout_marginBottom="4dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="• 🛵 배민·쿠팡이츠 주문 ➔ 배달 관리 시트 자동 전표화"
+                        android:textColor="#E2E8F0"
+                        android:textSize="11sp"
+                        android:layout_marginBottom="4dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="• 📦 안전 재고 5개 미만 ➔ 사장님 폰 긴급 발주 알림 문자"
+                        android:textColor="#E2E8F0"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </LinearLayout>
+
             <!-- 토큰 지갑 카드 (v1.9 NEW, 연동 시 상시 노출) -->
             <LinearLayout
                 android:id="@+id/layoutWalletCard"

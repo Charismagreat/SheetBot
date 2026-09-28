@@ -107,6 +107,16 @@ export default function NotificationsPage() {
 
   const [activeTab, setActiveTab] = useState<"devices" | "rules" | "logs" | "guide">("devices");
 
+  // 🌐 모바일 앱 바로가기 또는 외부 링크의 ?tab=rules 지원
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const tabParam = new URLSearchParams(window.location.search).get("tab");
+      if (tabParam === "rules" || tabParam === "logs" || tabParam === "guide" || tabParam === "devices") {
+        setActiveTab(tabParam as "devices" | "rules" | "logs" | "guide");
+      }
+    }
+  }, []);
+
   // 디바이스 상태 (시트봇 에이전트 전용)
   const [devices, setDevices] = useState<any[]>([]);
   const [loadingDevices, setLoadingDevices] = useState(false);

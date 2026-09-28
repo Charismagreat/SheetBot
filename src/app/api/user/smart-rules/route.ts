@@ -73,15 +73,22 @@ export async function POST(req: NextRequest) {
 
     // AI Caller를 통한 자연어 규칙 파싱
     const systemPrompt = `당신은 Google 스프레드시트 업무 자동화, SMS 알림 및 스마트폰 포스(POS)/배달앱 결제 감지 규칙을 설계하는 AI 엔지니어입니다.
-사용자가 입력한 자연어 발송/수신 조건을 분석하여 반드시 다음 JSON 형식으로만 응답하세요. 백틱이나 다른 설명은 일체 추가하지 마세요:
+사용자가 입력한 자연어 발송/수신 조건을 분석하여 반드시 다음 JSON 형식으로만 응답하세요. 백틱이나 마크다운 설명은 일체 추가하지 마세요:
 {
-  "name": "규칙의 직관적인 요약 제목 (예: 페이히어 결제 승인 시 매출 시트 자동 기록 또는 결제 완료 시 고객 감사 문자 발송)",
-  "trigger_event": "pos_payment_push" (페이히어, 오케이포스, 나이스포스, 배민, 쿠팡이츠 등 결제 승인 푸시 감지) 또는 "inbound_sms" (수신 문자 감지) 또는 "sheet_edit" 또는 "row_added" 또는 "status_change" 또는 "daily_summary" 또는 "custom",
-  "target_recipient": "sheet_append" (포스 알림/수신 내용을 시트 행으로 기록) 또는 "self" (회원 본인 폰으로 알림) 또는 "column_phone" (시트 내 고객 전화번호 열로 발송) 또는 "custom_number" (고정된 번호),
-  "recipient_column": "시트 내에서 전화번호가 적힌 열 이름 (예: 연락처, 핸드폰, 고객전화, 없으면 '')",
+  "name": "규칙의 직관적인 요약 제목 (예: 페이히어 결제 승인 ➔ 매출 시트 자동 기록 또는 입금 완료 ➔ 고객 감사 문자 발송)",
+  "trigger_event": "pos_payment_push" (페이히어, 오케이포스, 나이스포스, 카드 승인 푸시) 또는 "delivery_push" (배민, 쿠팡이츠, 요기요 등 배달 주문 푸시) 또는 "inbound_sms" (수신 문자 감지) 또는 "sheet_edit" (시트 셀 수정) 또는 "row_added" (새 행 추가) 또는 "daily_summary" (시간 스케줄 마감 요약) 또는 "custom",
+  "target_recipient": "sheet_append" (포스/배달 알림이나 수신 내용을 시트 행으로 기록) 또는 "self" (회원 본인 휴대폰으로 알림) 또는 "column_phone" (시트 내 고객 전화번호 열로 발송) 또는 "custom_number" (고정된 번호),
+  "recipient_column": "시트 내에서 전화번호가 적힌 열 이름 (예: 연락처, 고객번호, 핸드폰, 없으면 '')",
   "custom_phone": "고정 번호가 명시된 경우 전화번호, 없으면 ''",
-  "message_template": "발송될 문자 내용 또는 시트 기록 템플릿 (예: [매출기록] {{승인일시}} | {{결제수단}} | {{금액}}원 | {{가맹점명}})"
-}`;
+  "message_template": "발송될 문자 내용 또는 시트 기록 템플릿 (예: [매출기록] {{승인일시}} | {{결제수단}} | {{금액}}원 | {{가맹점명}} 또는 [시트봇샵] 입금이 확인되었습니다.)"
+}
+
+[6대 공식 시나리오 파싱 기준]:
+1. POS 결제(페이히어, 오케이포스 등) ➔ trigger_event: "pos_payment_push", target_recipient: "sheet_append"
+2. 배달 주문(배민, 쿠팡이츠 등) ➔ trigger_event: "delivery_push", target_recipient: "sheet_append"
+3. 입금완료/배송/예약확정 등 고객 안내 ➔ trigger_event: "sheet_edit", target_recipient: "column_phone", recipient_column: "연락처"
+4. 재고 부족/위험 경고 ➔ trigger_event: "sheet_edit", target_recipient: "self"
+5. 마감 요약/브리핑 ➔ trigger_event: "daily_summary", target_recipient: "self"`;
 
     let parsedRule: any = {
       name: prompt.slice(0, 24),
