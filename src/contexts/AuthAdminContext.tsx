@@ -126,10 +126,34 @@ export function AuthAdminProvider({ children }: { children: React.ReactNode }) {
       }
       setIsLoading(false);
     } else {
-      // 로그아웃 상태이거나 비로그인 게스트
-      setUser(null);
-      setIsAdmin(false);
-      setIsLoading(false);
+      // NextAuth 세션이 아직 동기화되지 않았더라도 로컬스토리지에 유효한 회원 정보가 있으면 안전하게 유지
+      let fallbackEmail: string | null = null;
+      if (typeof window !== "undefined") {
+        try {
+          fallbackEmail = localStorage.getItem("sheetbot_user_email");
+        } catch {}
+      }
+
+      if (fallbackEmail && fallbackEmail.includes("@")) {
+        const email = fallbackEmail.toLowerCase().trim();
+        const name =
+          (typeof window !== "undefined" && localStorage.getItem("sheetbot_user_name")) ||
+          email.split("@")[0];
+        const image =
+          (typeof window !== "undefined" && localStorage.getItem("sheetbot_user_image")) ||
+          "https://lh3.googleusercontent.com/a/default-user=s96-c";
+
+        setUser({ email, name, image });
+        if (KNOWN_ADMINS.includes(email)) {
+          setIsAdmin(true);
+        }
+        setIsLoading(false);
+      } else {
+        // 실제 비로그인 게스트인 경우에만 null 처리
+        setUser(null);
+        setIsAdmin(false);
+        setIsLoading(false);
+      }
     }
   }, [session, status, refreshAdminStatus]);
 
