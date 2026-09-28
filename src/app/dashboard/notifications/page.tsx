@@ -556,27 +556,48 @@ export default function NotificationsPage() {
         {/* 상단 헤더 카드 */}
         <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden border border-indigo-500/20">
           <div className="absolute right-0 top-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="relative z-10 space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-400/20 text-emerald-300 text-xs font-bold border border-emerald-400/30">
-                <Smartphone className="w-3.5 h-3.5" />
-                <span>📱 시트봇 모바일 에이전트 허브</span>
+          <div className="relative z-10 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-400/20 text-emerald-300 text-xs font-bold border border-emerald-400/30">
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span>📱 시트봇 모바일 에이전트 허브</span>
+                </div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-400/20 text-teal-300 text-xs font-bold border border-teal-400/30 shadow-2xs">
+                  <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
+                  <span>🛡️ Zero-Retention 프라이버시 안심 (서버 무보관 · 100% 구글 드라이브 저장)</span>
+                </div>
               </div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-400/20 text-teal-300 text-xs font-bold border border-teal-400/30 shadow-2xs">
-                <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
-                <span>🛡️ Zero-Retention 프라이버시 안심 (서버 무보관 · 100% 구글 드라이브 저장)</span>
-              </div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
+                시트봇 모바일 에이전트
+              </h1>
+              <p className="text-emerald-400 font-extrabold text-sm sm:text-base">
+                구글 시트 ↔ 스마트폰 양방향 자동화
+              </p>
+              <p className="text-slate-300 text-xs sm:text-sm max-w-2xl leading-relaxed">
+                본인의 스마트폰에 <strong>시트봇 에이전트(SheetBot Agent)</strong> 앱을 설치하고 0초 QR 페어링하면,
+                <strong>통신 비용 0원</strong>으로 고객 알림 문자를 자동 발송하고 포스 결제 알림 및 수신 문자를 구글 시트에 실시간 자동 기록할 수 있습니다.
+              </p>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-              시트봇 모바일 에이전트
-            </h1>
-            <p className="text-emerald-400 font-extrabold text-sm sm:text-base">
-              구글 시트 ↔ 스마트폰 양방향 자동화
-            </p>
-            <p className="text-slate-300 text-xs sm:text-sm max-w-2xl leading-relaxed">
-              본인의 스마트폰에 <strong>시트봇 에이전트(SheetBot Agent)</strong> 앱을 설치하고 0초 QR 페어링하면,
-              <strong>통신 비용 0원</strong>으로 고객 알림 문자를 자동 발송하고 포스 결제 알림 및 수신 문자를 구글 시트에 실시간 자동 기록할 수 있습니다.
-            </p>
+
+            {/* 실시간 DB 왓처 연결 뱃지 (상단 우측 배치, 클릭 시 수동 새로고침 겸용) */}
+            <div className="shrink-0 self-start md:self-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  fetchBootstrapData();
+                  fetchAgent2Pairing();
+                }}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-bold transition-all bg-white/10 hover:bg-white/20 active:scale-95 border-white/20 text-white cursor-pointer shadow-xs backdrop-blur-xs"
+                title="클릭 시 즉시 데이터 동기화 및 스트림 상태 확인"
+              >
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isRealtimeLive ? "bg-emerald-400 animate-pulse ring-2 ring-emerald-400/40" : "bg-slate-400"}`} />
+                <span className={isRealtimeLive ? "text-emerald-300 font-extrabold" : "text-slate-300"}>
+                  {isRealtimeLive ? "⚡ DB 왓처 0초 실시간 감시 중" : "스트림 연결 중..."}
+                </span>
+                <RefreshCw className={`w-3.5 h-3.5 text-white/70 transition-transform shrink-0 ${loadingDevices || loadingRules || loadingLogs ? "animate-spin text-emerald-300" : ""}`} />
+              </button>
+            </div>
           </div>
 
           {/* 4개 탭 네비게이션 */}
@@ -635,23 +656,7 @@ export default function NotificationsPage() {
               title="카카오톡 대화 내용 내보내기(.txt) 파일을 업로드하여 수신/발신 대화를 구글 시트에 구간 덮어쓰기 반영합니다."
             >
               <MessageSquare className="w-4 h-4 text-amber-400" />
-              <span>💬 카톡 대화내보내기(.txt) 가져오기</span>
-            </button>
-
-            {/* 실시간 DB 왓처 연결 뱃지 (클릭 시 수동 새로고침 겸용) */}
-            <button
-              onClick={() => {
-                fetchBootstrapData();
-                fetchAgent2Pairing();
-              }}
-              className="ml-auto hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-bold transition-all bg-white/10 hover:bg-white/20 active:scale-95 border-white/20 text-white cursor-pointer shadow-xs"
-              title="클릭 시 즉시 데이터 동기화 및 스트림 상태 확인"
-            >
-              <span className={`w-2 h-2 rounded-full ${isRealtimeLive ? "bg-emerald-400 animate-pulse ring-2 ring-emerald-400/40" : "bg-slate-400"}`} />
-              <span className={isRealtimeLive ? "text-emerald-300 font-extrabold" : "text-slate-300"}>
-                {isRealtimeLive ? "⚡ DB 왓처 0초 실시간 감시 중" : "스트림 연결 중..."}
-              </span>
-              <RefreshCw className={`w-3 h-3 text-white/70 transition-transform ${loadingDevices || loadingRules || loadingLogs ? "animate-spin text-emerald-300" : ""}`} />
+              <span>💬 카톡 대화 파일 가져오기</span>
             </button>
           </div>
         </div>
