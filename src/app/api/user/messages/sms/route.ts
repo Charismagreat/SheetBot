@@ -134,6 +134,7 @@ export async function POST(req: NextRequest) {
             paymentTime: nowStr,
             transactionType: parsedBank.transactionType || "매출(계좌)",
             channelOrBank: parsedBank.bankName || "카드/은행 결제",
+            accountOrCardNumber: parsedBank.accountOrCardNumber || "-",
             customerName: parsedBank.depositorName || displayName || (isExpense ? "가맹점/출금처" : "고객"),
             amount: parsedBank.amountKrw,
             memoOrRawText: message.slice(0, 200),

@@ -67,6 +67,7 @@ export async function POST(req: NextRequest) {
         paymentTime: nowIso.replace("T", " ").slice(0, 19),
         transactionType: parsedBank.transactionType || "매출(계좌)",
         channelOrBank: detectedBankName,
+        accountOrCardNumber: parsedBank.accountOrCardNumber || "-",
         customerName: parsedBank.depositorName || (isExpense ? "가맹점/출금처" : "고객"),
         amount: parsedBank.amountKrw,
         memoOrRawText: message.slice(0, 200),
