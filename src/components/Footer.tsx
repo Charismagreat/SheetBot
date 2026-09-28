@@ -12,74 +12,18 @@ import {
   MapPin,
   HelpCircle,
 } from "lucide-react";
-import { DEFAULT_FOOTER, FooterInfo } from "@/lib/default-footer";
+import { FooterInfo } from "@/lib/default-footer";
 import { SnsIcon } from "@/components/SnsIcons";
 import SheetBotLogo from "@/components/SheetBotLogo";
+import { useFooterInfo } from "@/lib/useFooterInfo";
 
-let memoryFooterCache: FooterInfo | null = null;
+interface FooterProps {
+  info?: FooterInfo;
+}
 
-export default function Footer() {
+export default function Footer({ info }: FooterProps = {}) {
   const pathname = usePathname();
-  const [footerInfo, setFooterInfo] = useState<FooterInfo>(() => {
-    if (memoryFooterCache) return memoryFooterCache;
-    if (typeof window !== "undefined") {
-      try {
-        const cached = sessionStorage.getItem("sb_footer_info");
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          memoryFooterCache = parsed;
-          return parsed;
-        }
-      } catch {}
-    }
-    return DEFAULT_FOOTER;
-  });
-
-  const fetchFooter = async (force = false) => {
-    if (!force && memoryFooterCache) {
-      setFooterInfo(memoryFooterCache);
-      return;
-    }
-    try {
-      const res = await apiFetch("/api/footer");
-      const data = await res.json();
-      if (data.success && data.footer) {
-        memoryFooterCache = data.footer;
-        setFooterInfo(data.footer);
-        try {
-          if (typeof window !== "undefined") {
-            sessionStorage.setItem("sb_footer_info", JSON.stringify(data.footer));
-          }
-        } catch {}
-      }
-    } catch (e) {
-      console.warn("Failed to fetch dynamic footer, using default", e);
-    }
-  };
-
-  useEffect(() => {
-    if (pathname === "/marketplace") return;
-
-    // ⚡ 초기 마운트 시 메인 대시보드 네트워크 소켓을 100% 보존하기 위해 캐시가 있으면 네트워크 0건, 없을 때만 5초 지연 백그라운드 로드
-    let idleTimer: NodeJS.Timeout | null = null;
-    if (!memoryFooterCache) {
-      idleTimer = setTimeout(() => {
-        void fetchFooter();
-      }, 5000);
-    }
-
-    const handleUpdate = () => {
-      void fetchFooter(true);
-    };
-
-    if (typeof window !== "undefined") {
-      window.addEventListener("sheetbot-footer-updated", handleUpdate);
-      return () => {
-        if (idleTimer) clearTimeout(idleTimer);
-        window.removeEventListener("sheetbot-footer-updated", handleUpdate);
-      };
-    }
-  }, [pathname]);
+  const footerInfo = useFooterInfo(info);
 
   if (pathname === "/marketplace" || pathname?.startsWith("/m/") || pathname === "/m") {
     return null;

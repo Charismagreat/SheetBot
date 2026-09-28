@@ -117,6 +117,7 @@ export default function DirectDepositModal({
   const [finalTokens, setFinalTokens] = useState<number>(userBalance);
 
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pollCountRef = useRef<number>(0);
 
   // 이메일 앞자리 추출하여 기본 송금자명 힌트 제공
   const defaultHintName = userEmail ? userEmail.split("@")[0].replace(/[^a-zA-Z0-9가-힣]/g, "") : "홍길동";
@@ -160,6 +161,7 @@ export default function DirectDepositModal({
           },
           qrImageUrl: data.qrImageUrl || `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent("은행명:카카오뱅크 / 계좌번호:3333-12-1695965")}`,
         });
+        pollCountRef.current = 0;
         setIsUnlocked(true);
       } else {
         alert(data.error || "입금 계좌 발급에 실패했습니다. 다시 시도해 주세요.");
@@ -172,18 +174,32 @@ export default function DirectDepositModal({
   };
 
   // 2. 입금 상태 확인 (폴링 및 수동 확인)
-  const checkDepositStatus = async (manual = false) => {
-    if (!sessionData?.requestId) return;
+  const checkDepositStatus = async (manual = false): Promise<boolean> => {
+    if (!sessionData?.requestId) return false;
     if (manual) setIsCheckingStatus(true);
 
     try {
       const res = await apiFetch(`/api/wallet/direct-deposit?id=${sessionData.requestId}`);
       const data = await res.json();
 
-      if (data.success && data.status === "COMPLETED") {
-        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      const status = data.status || "";
+      const isTerminal = status === "COMPLETED" || status === "FAILED" || status === "EXPIRED" || status === "CANCELLED";
+
+      if (data.success && status === "COMPLETED") {
+        if (pollTimerRef.current) {
+          clearTimeout(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
         setIsCompleted(true);
         setFinalTokens(data.finalBalance || userBalance + 150000);
+        return true;
+      } else if (isTerminal) {
+        if (pollTimerRef.current) {
+          clearTimeout(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+        if (manual) alert(`입금 상태: ${status}`);
+        return true;
       } else if (manual) {
         alert("아직 입금이 확인되지 않았습니다. 송금 후 약 5~10초 내외로 자동 감지됩니다.");
       }
@@ -192,18 +208,78 @@ export default function DirectDepositModal({
     } finally {
       if (manual) setIsCheckingStatus(false);
     }
+    return false;
   };
 
-  // 3. 잠금 해제 후 주기적 폴링 시작
+  // 3. 잠금 해제 후 지수 백오프 폴링 (4s -> 8s -> 15s) & 탭 숨김 일시정지 (Visibility Pause)
   useEffect(() => {
-    if (isUnlocked && sessionData?.requestId && !isCompleted) {
-      pollTimerRef.current = setInterval(() => {
-        checkDepositStatus(false);
-      }, 4000);
+    if (!isUnlocked || !sessionData?.requestId || isCompleted) {
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+      return;
     }
 
+    let isMounted = true;
+
+    // 지수 백오프 간격 계산: 0회차=4s, 1회차=8s, 2회차 이상=15s
+    const getNextDelay = (count: number) => {
+      if (count === 0) return 4000;
+      if (count === 1) return 8000;
+      return 15000;
+    };
+
+    const scheduleNextPoll = () => {
+      if (!isMounted || isCompleted) return;
+      if (typeof document !== "undefined" && document.hidden) {
+        // 탭이 숨겨진 경우 폴링을 일시 정지하고 대기
+        return;
+      }
+
+      const delay = getNextDelay(pollCountRef.current);
+      pollTimerRef.current = setTimeout(async () => {
+        if (!isMounted || isCompleted) return;
+        const isTerminal = await checkDepositStatus(false);
+        if (!isTerminal && isMounted) {
+          pollCountRef.current += 1;
+          scheduleNextPoll();
+        }
+      }, delay);
+    };
+
+    // 최초 스케줄 가동
+    scheduleNextPoll();
+
+    // 탭 활성화/비활성화 감지 (document.hidden 일시정지 및 복귀 시 즉시 1회 확인)
+    const handleVisibilityChange = () => {
+      if (typeof document === "undefined") return;
+      if (document.hidden) {
+        if (pollTimerRef.current) {
+          clearTimeout(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+      } else {
+        // 탭 복귀 시 즉시 1회 체크 후 스케줄 재개
+        void (async () => {
+          if (!isMounted || isCompleted) return;
+          const isTerminal = await checkDepositStatus(false);
+          if (!isTerminal && isMounted) {
+            scheduleNextPoll();
+          }
+        })();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      isMounted = false;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
     };
   }, [isUnlocked, sessionData?.requestId, isCompleted]);
 

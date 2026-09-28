@@ -441,30 +441,32 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const fetchPhoneDevices = async () => {
-    try {
-      const res = await apiFetch("/api/admin/sms");
-      const data = await res.json();
-      if (data.success && data.devices) {
-        setPhoneDevices(data.devices);
+  // ⚡ /api/admin/sms 단일 호출로 smsSettings와 phoneDevices 동시 갱신 및 중복 방지
+  let inFlightSmsFetch: Promise<void> | null = null;
+
+  const fetchSmsSettingsAndDevices = async () => {
+    if (inFlightSmsFetch) return inFlightSmsFetch;
+
+    inFlightSmsFetch = (async () => {
+      try {
+        const res = await apiFetch("/api/admin/sms");
+        const data = await res.json();
+        if (data.success) {
+          if (data.settings) setSmsSettings(data.settings);
+          if (data.devices) setPhoneDevices(data.devices);
+        }
+      } catch (e) {
+        console.warn("Failed to fetch sms settings and devices", e);
+      } finally {
+        inFlightSmsFetch = null;
       }
-    } catch (e) {
-      console.warn("Failed to fetch phone devices", e);
-    }
+    })();
+
+    return inFlightSmsFetch;
   };
 
-  const fetchSmsSettings = async () => {
-    try {
-      const res = await apiFetch("/api/admin/sms");
-      const data = await res.json();
-      if (data.success) {
-        if (data.settings) setSmsSettings(data.settings);
-        if (data.devices) setPhoneDevices(data.devices);
-      }
-    } catch (e) {
-      console.warn("Failed to fetch sms settings", e);
-    }
-  };
+  const fetchPhoneDevices = fetchSmsSettingsAndDevices;
+  const fetchSmsSettings = fetchSmsSettingsAndDevices;
 
   const handleSaveSmsSettings = async (e: React.FormEvent) => {
     e.preventDefault();
