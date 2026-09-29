@@ -140,6 +140,16 @@ export default function SelfOrderPage() {
     return selectedItems.reduce((acc, cur) => acc + cur.quantity, 0);
   }, [selectedItems]);
 
+  // 상호명 표시 안전화 (이메일 아이디 노출 원천 차단)
+  const displayBusinessName = useMemo(() => {
+    const raw = merchant.businessName?.trim();
+    const emailPrefix = merchant.email?.split("@")[0]?.toLowerCase();
+    if (!raw || (emailPrefix && raw.toLowerCase() === emailPrefix)) {
+      return "스마트 견적 & 주문 센터";
+    }
+    return raw;
+  }, [merchant.businessName, merchant.email]);
+
   // 4. 필터링된 카탈로그 목록
   const filteredCatalog = useMemo(() => {
     if (selectedCategory === "ALL") return catalog;
@@ -243,7 +253,7 @@ export default function SelfOrderPage() {
             </div>
             <div className="flex justify-between text-slate-400">
               <span>담당 업체</span>
-              <span className="text-slate-200 font-medium">{merchant.businessName}</span>
+              <span className="text-slate-200 font-medium">{displayBusinessName}</span>
             </div>
             {orderResult.preferredDate && (
               <div className="flex justify-between text-slate-400">
@@ -292,7 +302,7 @@ export default function SelfOrderPage() {
               <Calculator className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-base font-bold text-white tracking-tight">{merchant.businessName}</h1>
+              <h1 className="text-base font-bold text-white tracking-tight">{displayBusinessName}</h1>
               <p className="text-[11px] font-medium text-emerald-400 flex items-center gap-1">
                 <Sparkles className="w-3 h-3" />
                 실시간 셀프 견적 & 간편 주문

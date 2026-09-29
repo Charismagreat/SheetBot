@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { queryTable, callSheetsTool } from "@/lib/egdesk-helpers";
+import { queryTable, updateRows, insertRows, callSheetsTool } from "@/lib/egdesk-helpers";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { setupDatabase } from "@/lib/setup-db";
 
@@ -56,20 +56,46 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 사장님 프로필/상호 정보 조회
-    let businessName = "시트봇 공식 파트너";
+    // 사장님 프로필/상호 정보 조회 (멀티 레이어 조회)
+    let businessName = "";
     let merchantPhone = "";
+
+    // 1. sheetbot_settings 키-값 저장소 우선 확인
     try {
-      const userRes = await queryTable("sheetbot_users", {
-        filters: { email: targetEmail },
+      const settingRes = await queryTable("sheetbot_settings", {
+        filters: { key: `quote_profile_${targetEmail}` },
         limit: 1,
       }).catch(() => ({ rows: [] }));
-      if (userRes.rows && userRes.rows.length > 0) {
-        const u = userRes.rows[0];
-        businessName = u.business_name || u.name || businessName;
-        merchantPhone = u.phone || "";
+      if (settingRes.rows && settingRes.rows.length > 0) {
+        const val = JSON.parse(settingRes.rows[0].value || "{}");
+        if (val.businessName && val.businessName.trim()) {
+          businessName = val.businessName.trim();
+        }
+        if (val.phone) merchantPhone = val.phone;
       }
     } catch (_) {}
+
+    // 2. sheetbot_users 테이블 확인
+    if (!businessName) {
+      try {
+        const userRes = await queryTable("sheetbot_users", {
+          filters: { email: targetEmail },
+          limit: 1,
+        }).catch(() => ({ rows: [] }));
+        if (userRes.rows && userRes.rows.length > 0) {
+          const u = userRes.rows[0];
+          if (u.business_name && u.business_name.trim()) {
+            businessName = u.business_name.trim();
+          }
+          if (!merchantPhone && u.phone) merchantPhone = u.phone;
+        }
+      } catch (_) {}
+    }
+
+    // 3. 아직 상호명이 없으면 기본 품격 있는 상호명 채택 (개인 이메일 아이디 노출 100% 방지)
+    if (!businessName) {
+      businessName = "스마트 견적 & 주문 센터";
+    }
 
     let catalogItems = [];
 
@@ -148,3 +174,62 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
+/**
+ * POST /api/user/quote/catalog
+ * 셀프 견적 웹앱 상호명 및 연락처 실시간 업데이트
+ */
+export async function POST(req: NextRequest) {
+  try {
+    await setupDatabase();
+    const body = await req.json().catch(() => ({}));
+    const targetEmail = (body.email || "").toLowerCase().trim();
+    const businessName = (body.businessName ?? body.business_name ?? "").trim();
+    const phone = (body.phone ?? "").trim();
+
+    if (!targetEmail) {
+      return NextResponse.json({ success: false, error: "이메일 정보가 필요합니다." }, { status: 400 });
+    }
+
+    const now = new Date().toISOString();
+    const payload = JSON.stringify({ businessName, phone, updatedAt: now });
+    const settingKey = `quote_profile_${targetEmail}`;
+
+    // 1. sheetbot_settings 영구 저장
+    try {
+      const settingRes = await queryTable("sheetbot_settings", {
+        filters: { key: settingKey },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+
+      if (settingRes.rows && settingRes.rows.length > 0) {
+        await updateRows("sheetbot_settings", { value: payload, updated_at: now }, { filters: { key: settingKey } });
+      } else {
+        await insertRows("sheetbot_settings", [
+          {
+            id: `set_${Date.now()}`,
+            key: settingKey,
+            value: payload,
+            description: `견적 프로필 (${targetEmail})`,
+            created_at: now,
+          },
+        ]);
+      }
+    } catch (_) {}
+
+    // 2. sheetbot_users 동시 저장
+    try {
+      await updateRows("sheetbot_users", { business_name: businessName, phone, updated_at: now }, { filters: { email: targetEmail } });
+    } catch (_) {}
+
+    return NextResponse.json({
+      success: true,
+      email: targetEmail,
+      businessName,
+      phone,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
