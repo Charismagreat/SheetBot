@@ -1326,7 +1326,78 @@ object ApiClient {
         }
         ProvisionSheetResult(success = false, error = lastError)
     }
+
+    /**
+     * 사장님 상호명/프로필 조회
+     */
+    suspend fun getBusinessProfile(email: String): BusinessProfileResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastError = "프로필 조회 실패"
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/profile?email=$email"
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .get()
+                    .build()
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext BusinessProfileResult(
+                        success = true,
+                        businessName = resJson.optString("businessName", ""),
+                        phone = resJson.optString("phone", "")
+                    )
+                } else {
+                    lastError = resJson.optString("error", "HTTP ${response.code}")
+                }
+            } catch (e: Exception) {
+                lastError = e.localizedMessage ?: "통신 오류"
+            }
+        }
+        BusinessProfileResult(success = false, error = lastError)
+    }
+
+    /**
+     * 사장님 상호명/프로필 실시간 업데이트
+     */
+    suspend fun updateBusinessProfile(email: String, businessName: String, phone: String = ""): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            val endpoint = "$host/api/user/profile"
+            try {
+                val json = JSONObject().apply {
+                    put("email", email)
+                    put("businessName", businessName)
+                    if (phone.isNotBlank()) put("phone", phone)
+                }
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(json.toString().toRequestBody(JSON_MEDIA_TYPE))
+                    .build()
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    Log.i(TAG, "🏢 [상호명 업데이트 성공] $businessName ($email)")
+                    return@withContext true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "[$host] 상호명 업데이트 예외: ${e.message}")
+            }
+        }
+        false
+    }
 }
+
+data class BusinessProfileResult(
+    val success: Boolean,
+    val businessName: String = "",
+    val phone: String = "",
+    val error: String? = null
+)
 
 
 data class PairResult(

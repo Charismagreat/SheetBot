@@ -818,6 +818,48 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // 🏢 상호명/브랜드명 실시간 자동 저장 및 서버 동기화 (v2.1.16)
+        binding.etQuoteBusinessName.setText(prefs.quoteBusinessName)
+        binding.etQuoteBusinessName.doAfterTextChanged {
+            val newName = it?.toString()?.trim() ?: ""
+            prefs.quoteBusinessName = newName
+            binding.tvBusinessNameStatus.text = "저장 중..."
+            binding.tvBusinessNameStatus.setTextColor(Color.parseColor("#F59E0B"))
+            val email = prefs.userEmail
+            if (!email.isNullOrBlank()) {
+                activityScope.launch {
+                    val ok = ApiClient.updateBusinessProfile(email, newName)
+                    withContext(Dispatchers.Main) {
+                        if (ok) {
+                            binding.tvBusinessNameStatus.text = "실시간 반영됨 ✓"
+                            binding.tvBusinessNameStatus.setTextColor(Color.parseColor("#34D399"))
+                        } else {
+                            binding.tvBusinessNameStatus.text = "자동 저장됨"
+                            binding.tvBusinessNameStatus.setTextColor(Color.parseColor("#94A3B8"))
+                        }
+                    }
+                }
+            }
+        }
+
+        // 서버 프로필 로드하여 로컬 상호명이 비어있을 시 자동 채우기
+        val currentEmail = prefs.userEmail
+        if (!currentEmail.isNullOrBlank()) {
+            activityScope.launch {
+                try {
+                    val profile = ApiClient.getBusinessProfile(currentEmail)
+                    if (profile.success && profile.businessName.isNotBlank()) {
+                        withContext(Dispatchers.Main) {
+                            if (prefs.quoteBusinessName.isBlank()) {
+                                prefs.quoteBusinessName = profile.businessName
+                                binding.etQuoteBusinessName.setText(profile.businessName)
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
         binding.btnOpenQuoteSheet.setOnClickListener {
             showOpenSheetChooserDialog("QUOTE", prefs.quoteDriveSheetTitle)
         }
