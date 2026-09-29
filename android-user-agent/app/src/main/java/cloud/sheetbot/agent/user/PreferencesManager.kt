@@ -149,7 +149,7 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putBoolean("is_quote_sheet_sync_enabled", value).apply()
 
     var quoteDriveSheetTitle: String
-        get() = prefs.getString("quote_drive_sheet_title", "[SheetBot] 스마트 견적 및 단가표 대장") ?: "[SheetBot] 스마트 견적 및 단가표 대장"
+        get() = prefs.getString("quote_drive_sheet_title", "[SheetBot] 스마트 간편 주문 및 품목 대장") ?: "[SheetBot] 스마트 간편 주문 및 품목 대장"
         set(value) = prefs.edit().putString("quote_drive_sheet_title", value).apply()
 
     var quoteBusinessName: String

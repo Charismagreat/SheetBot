@@ -83,9 +83,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: user-v2.1.18
-          name: "SheetBot Mobile Agent (이용자용) v2.1.18"
-          body: "시트봇 모바일 에이전트 v2.1.18 릴리즈\n• 📷 [카톡 공유 대표 이미지 등록] 카카오톡 카드 상단에 노출될 매장 로고 및 대표 사진을 스마트폰 갤러리에서 바로 선택하여 업로드 및 실시간 연동\n• 🌐 [웹+모바일 양방향 동기화] PC 웹 대시보드와 스마트폰 앱 양쪽에서 대표 썸네일 이미지 및 상호명 실시간 관리 지원\n• ✨ [공유 카드 비주얼 최적화] 카카오톡 미리보기 카드에 사장님 지정 상호명([상호명]) 및 전용 대표 썸네일 자동 연동"
+          tag_name: user-v2.1.19
+          name: "SheetBot Mobile Agent (이용자용) v2.1.19"
+          body: "시트봇 모바일 에이전트 v2.1.19 릴리즈\n• 🛍️ [스마트 간편 주문 & 품목 대장 전면 개편] 단순 견적 시스템에서 실시간 모바일 간편 주문 시스템으로 전면 전환\n• 🖼️ [품목 대표사진 & 품절 표시 연동] 구글 시트의 품목 대장에 등록된 대표사진, 상세이미지, 품절 여부가 모바일 주문 웹에 실시간 연동\n• 🧾 [모바일 전자 주문확인서 탑재] 주문 완료 즉시 웹 화면에 영수증 형태의 전자 주문확인서(인쇄, PDF, 주문내역 복사) 제공 및 구글 시트 주문접수대장 10개 열 자동 기록\n• 📱 [앱 UI 최적화] 스마트 간편 주문 및 품목 대장 연동 메뉴 및 토스트 안내 반영"
           files: release-apk/SheetBotAgent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
