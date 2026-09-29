@@ -192,13 +192,13 @@ export default function QuoteWebappSettingsModal({
           </div>
           <div>
             <h3 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-              셀프 견적 웹앱 &amp; 카톡 미리보기 설정
+              모바일 간편 주문 웹앱 &amp; 카톡 미리보기 설정
               <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
                 0초 실시간 연동
               </span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              카카오톡이나 SNS로 견적 링크 공유 시 노출되는 대표 이미지와 상호명을 지정합니다.
+              카카오톡이나 SNS로 주문 링크 공유 시 노출되는 대표 이미지와 상호명을 지정합니다.
             </p>
           </div>
         </div>

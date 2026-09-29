@@ -820,7 +820,7 @@ class MainActivity : AppCompatActivity() {
         binding.switchQuoteSync.setOnCheckedChangeListener { _, isChecked ->
             prefs.isQuoteSheetSyncEnabled = isChecked
             binding.layoutQuoteSyncSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
-            val msg = if (isChecked) "스마트 견적 및 단가표 대장 연동이 켜졌습니다." else "스마트 견적 대장 연동이 꺼졌습니다."
+            val msg = if (isChecked) "스마트 간편 주문 및 품목 대장 연동이 켜졌습니다." else "스마트 간편 주문 대장 연동이 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             if (isChecked) {
                 provisionSheetAsync("QUOTE", prefs.quoteDriveSheetTitle)

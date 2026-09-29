@@ -6,11 +6,71 @@ import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { setupDatabase } from "@/lib/setup-db";
 
 const DEFAULT_CATALOG = [
-  { code: "AC-001", category: "에어컨 세척", name: "스탠드 에어컨 분해세척", spec: "1대", unitPrice: 150000, discountPrice: 140000, optionType: "메인", note: "필터 및 열교환기 고압 살균" },
-  { code: "AC-002", category: "에어컨 세척", name: "벽걸이 에어컨 분해세척", spec: "1대", unitPrice: 80000, discountPrice: 80000, optionType: "메인", note: "가정용/원룸 기준" },
-  { code: "AC-003", category: "에어컨 세척", name: "천장형 시스템 에어컨 (4WAY)", spec: "1대", unitPrice: 130000, discountPrice: 120000, optionType: "메인", note: "사무실/상가 천장형" },
-  { code: "OPT-001", category: "추가 옵션", name: "실외기 고압 세척", spec: "1대", unitPrice: 30000, discountPrice: 30000, optionType: "옵션", note: "실외기 오염물 제거" },
-  { code: "OPT-002", category: "추가 옵션", name: "피톤치드 연무 살균 소독", spec: "1식", unitPrice: 0, discountPrice: 0, optionType: "옵션", note: "무료 서비스 이벤트 (기본 제공)" },
+  {
+    code: "AC-001",
+    category: "에어컨 세척",
+    name: "스탠드 에어컨 분해세척",
+    spec: "1대",
+    unitPrice: 150000,
+    discountPrice: 140000,
+    photoUrl: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=500",
+    detailPhotoUrl: "",
+    isSoldOut: false,
+    optionType: "메인",
+    note: "필터 및 열교환기 고압 살균"
+  },
+  {
+    code: "AC-002",
+    category: "에어컨 세척",
+    name: "벽걸이 에어컨 분해세척",
+    spec: "1대",
+    unitPrice: 80000,
+    discountPrice: 80000,
+    photoUrl: "https://images.unsplash.com/photo-1585338107529-13afc5f02586?w=500",
+    detailPhotoUrl: "",
+    isSoldOut: false,
+    optionType: "메인",
+    note: "가정용/원룸 기준"
+  },
+  {
+    code: "AC-003",
+    category: "에어컨 세척",
+    name: "천장형 시스템 에어컨 (4WAY)",
+    spec: "1대",
+    unitPrice: 130000,
+    discountPrice: 120000,
+    photoUrl: "https://images.unsplash.com/photo-1545259741-2ea3ebf61fa3?w=500",
+    detailPhotoUrl: "",
+    isSoldOut: false,
+    optionType: "메인",
+    note: "사무실/상가 천장형"
+  },
+  {
+    code: "OPT-001",
+    category: "추가 옵션",
+    name: "실외기 고압 세척",
+    spec: "1대",
+    unitPrice: 30000,
+    discountPrice: 30000,
+    photoUrl: "",
+    detailPhotoUrl: "",
+    isSoldOut: false,
+    optionType: "옵션",
+    note: "실외기 오염물 제거"
+  },
+  {
+    code: "OPT-002",
+    category: "이벤트/서비스",
+    name: "피톤치드 연무 살균 소독",
+    spec: "1식",
+    unitPrice: 10000,
+    discountPrice: 0,
+    photoUrl: "",
+    detailPhotoUrl: "",
+    isSoldOut: true,
+    optionType: "옵션",
+    note: "현재 피톤치드 용액 소진 (품절 예시)"
+  },
 ];
 
 import { resolveUserEmailFromKey } from "@/lib/user-key-helper";
@@ -111,26 +171,41 @@ export async function GET(req: NextRequest) {
       const resolved = await resolveUserSpreadsheet({
         userEmail: targetEmail,
         sheetType: "QUOTE",
-        defaultTitle: "[SheetBot] 스마트 견적 및 단가표 대장",
+        defaultTitle: "[SheetBot] 스마트 간편 주문 및 품목 대장",
       });
 
       if (resolved.spreadsheetId) {
+        // 1순위: 개편된 '품목' 탭 조회 (10개 열)
         let rangeRes = await callSheetsTool(
           "sheets_get_range",
           {
             spreadsheetId: resolved.spreadsheetId,
-            range: "단가표!A2:H100",
+            range: "품목!A2:J200",
             preferOAuth: true,
           },
           { preferOAuth: true }
         ).catch(() => null);
 
+        // 2순위: 기존 '단가표' 탭 폴백 조회
         if (!rangeRes?.values || rangeRes.values.length === 0) {
           rangeRes = await callSheetsTool(
             "sheets_get_range",
             {
               spreadsheetId: resolved.spreadsheetId,
-              range: "시트1!A2:H100",
+              range: "단가표!A2:J200",
+              preferOAuth: true,
+            },
+            { preferOAuth: true }
+          ).catch(() => null);
+        }
+
+        // 3순위: 기본 '시트1' 폴백 조회
+        if (!rangeRes?.values || rangeRes.values.length === 0) {
+          rangeRes = await callSheetsTool(
+            "sheets_get_range",
+            {
+              spreadsheetId: resolved.spreadsheetId,
+              range: "시트1!A2:J200",
               preferOAuth: true,
             },
             { preferOAuth: true }
@@ -140,16 +215,33 @@ export async function GET(req: NextRequest) {
         if (rangeRes?.values && rangeRes.values.length > 0) {
           catalogItems = rangeRes.values
             .filter((row: any[]) => row && row[2])
-            .map((row: any[], idx: number) => ({
-              category: String(row[0] || "기본").trim(),
-              code: String(row[1] || `ITEM-${idx + 1}`).trim(),
-              name: String(row[2] || "").trim(),
-              spec: String(row[3] || "1개").trim(),
-              unitPrice: parseInt(String(row[4] || "0").replace(/[^0-9]/g, ""), 10) || 0,
-              discountPrice: parseInt(String(row[5] || "0").replace(/[^0-9]/g, ""), 10) || 0,
-              optionType: String(row[6] || "메인").trim(),
-              note: String(row[7] || "").trim(),
-            }));
+            .map((row: any[], idx: number) => {
+              const rawSoldOut = String(row[8] || "").trim().toUpperCase();
+              const isSoldOut = ["Y", "YES", "품절", "TRUE", "1", "매진", "SOLDOUT"].includes(rawSoldOut);
+
+              // 6번째 열이 이미지 URL인지 옵션구분인지 자동 판별
+              const col6 = String(row[6] || "").trim();
+              const isCol6Image = col6.startsWith("http://") || col6.startsWith("https://") || col6.startsWith("data:image");
+              const photoUrl = isCol6Image ? col6 : "";
+              const optionType = !isCol6Image && col6 ? col6 : "메인";
+
+              const col7 = String(row[7] || "").trim();
+              const detailPhotoUrl = (col7.startsWith("http://") || col7.startsWith("https://")) ? col7 : "";
+
+              return {
+                category: String(row[0] || "기본").trim(),
+                code: String(row[1] || `ITEM-${idx + 1}`).trim(),
+                name: String(row[2] || "").trim(),
+                spec: String(row[3] || "1개").trim(),
+                unitPrice: parseInt(String(row[4] || "0").replace(/[^0-9]/g, ""), 10) || 0,
+                discountPrice: parseInt(String(row[5] || "0").replace(/[^0-9]/g, ""), 10) || 0,
+                photoUrl,
+                detailPhotoUrl,
+                isSoldOut,
+                optionType,
+                note: String(row[9] || (isCol6Image ? "" : row[7]) || "").trim(),
+              };
+            });
         }
       }
     } catch (err: any) {
