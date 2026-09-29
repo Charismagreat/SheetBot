@@ -166,6 +166,7 @@ export async function GET(req: NextRequest) {
     }
 
     let catalogItems = [];
+    let businessInfo: Record<string, string> = {};
 
     try {
       const resolved = await resolveUserSpreadsheet({
@@ -243,6 +244,45 @@ export async function GET(req: NextRequest) {
               };
             });
         }
+
+        // 사업자정보 탭 조회 및 파싱 (10대 항목)
+        let sheetBizInfo: Record<string, string> = {};
+        try {
+          const infoRes = await callSheetsTool(
+            "sheets_get_range",
+            {
+              spreadsheetId: resolved.spreadsheetId,
+              range: "사업자정보!A1:B15",
+              preferOAuth: true,
+            },
+            { preferOAuth: true }
+          ).catch(() => null);
+
+          if (infoRes?.values && infoRes.values.length > 0) {
+            for (const row of infoRes.values) {
+              if (row && row[0]) {
+                const k = String(row[0]).trim();
+                const v = String(row[1] || "").trim();
+                if (k.includes("회사명") || k.includes("상호")) sheetBizInfo.companyName = v;
+                else if (k.includes("대표자")) sheetBizInfo.ownerName = v;
+                else if (k.includes("사업자등록번호") || k.includes("사업자번호")) sheetBizInfo.bizNumber = v;
+                else if (k.includes("주소")) sheetBizInfo.address = v;
+                else if (k.includes("연락처") || k.includes("전화")) sheetBizInfo.phone = v;
+                else if (k.includes("메일")) sheetBizInfo.email = v;
+                else if (k.includes("홈페이지") || k.includes("SNS")) sheetBizInfo.website = v;
+                else if (k.includes("결제")) sheetBizInfo.paymentNotice = v;
+                else if (k.includes("배송")) sheetBizInfo.shippingNotice = v;
+                else if (k.includes("환불") || k.includes("취소")) sheetBizInfo.refundNotice = v;
+                else if (k.includes("기타")) sheetBizInfo.extraNotice = v;
+              }
+            }
+          }
+        } catch (_) {}
+
+        // 시트에 입력된 정보가 있으면 최우선 반영
+        if (sheetBizInfo.companyName) businessName = sheetBizInfo.companyName;
+        if (sheetBizInfo.phone) merchantPhone = sheetBizInfo.phone;
+        businessInfo = sheetBizInfo;
       }
     } catch (err: any) {
       console.warn("[QuoteCatalog] Sheet fetch warning, using default:", err.message);
@@ -267,6 +307,7 @@ export async function GET(req: NextRequest) {
         email: targetEmail,
         imageUrl: merchantImage,
       },
+      businessInfo: businessInfo || {},
       categories,
       catalog: catalogItems,
     });

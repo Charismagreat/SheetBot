@@ -158,20 +158,68 @@ export async function POST(req: NextRequest) {
       console.warn("[QuoteOrder] No spreadsheetId resolved, skipping sheet append.");
     }
 
-    // 7. 사장님 프로필/상호 정보 조회 (전자 주문확인서에 표출)
+    // 7. 사장님 프로필/상호 및 시트 사업자정보 조회 (전자 주문확인서에 표출)
     let businessName = "스마트 간편 주문 센터";
     let merchantPhone = "";
+    let sheetBizInfo: Record<string, string> = {};
+
     try {
-      const settingRes = await queryTable("sheetbot_settings", {
-        filters: { key: `quote_profile_${targetEmail}` },
-        limit: 1,
-      }).catch(() => ({ rows: [] }));
-      if (settingRes.rows && settingRes.rows.length > 0) {
-        const val = JSON.parse(settingRes.rows[0].value || "{}");
-        if (val.businessName && val.businessName.trim()) businessName = val.businessName.trim();
-        if (val.phone) merchantPhone = val.phone;
+      if (spreadsheetId) {
+        const infoRes = await callSheetsTool(
+          "sheets_get_range",
+          {
+            spreadsheetId,
+            range: "사업자정보!A1:B15",
+            preferOAuth: true,
+          },
+          { preferOAuth: true }
+        ).catch(() => null);
+
+        if (infoRes?.values && infoRes.values.length > 0) {
+          for (const row of infoRes.values) {
+            if (row && row[0]) {
+              const k = String(row[0]).trim();
+              const v = String(row[1] || "").trim();
+              if (k.includes("회사명") || k.includes("상호")) sheetBizInfo.companyName = v;
+              else if (k.includes("대표자")) sheetBizInfo.ownerName = v;
+              else if (k.includes("사업자등록번호") || k.includes("사업자번호")) sheetBizInfo.bizNumber = v;
+              else if (k.includes("주소")) sheetBizInfo.address = v;
+              else if (k.includes("연락처") || k.includes("전화")) sheetBizInfo.phone = v;
+              else if (k.includes("메일")) sheetBizInfo.email = v;
+              else if (k.includes("홈페이지") || k.includes("SNS")) sheetBizInfo.website = v;
+              else if (k.includes("결제")) sheetBizInfo.paymentNotice = v;
+              else if (k.includes("배송")) sheetBizInfo.shippingNotice = v;
+              else if (k.includes("환불") || k.includes("취소")) sheetBizInfo.refundNotice = v;
+              else if (k.includes("기타")) sheetBizInfo.extraNotice = v;
+            }
+          }
+        }
       }
     } catch (_) {}
+
+    // 시트 사업자정보 1순위 반영
+    if (sheetBizInfo.companyName) {
+      businessName = sheetBizInfo.companyName;
+    }
+    if (sheetBizInfo.phone) {
+      merchantPhone = sheetBizInfo.phone;
+    }
+
+    if (!sheetBizInfo.companyName || !sheetBizInfo.phone) {
+      try {
+        const settingRes = await queryTable("sheetbot_settings", {
+          filters: { key: `quote_profile_${targetEmail}` },
+          limit: 1,
+        }).catch(() => ({ rows: [] }));
+        if (settingRes.rows && settingRes.rows.length > 0) {
+          const val = JSON.parse(settingRes.rows[0].value || "{}");
+          if (!businessName || businessName === "스마트 간편 주문 센터") {
+            if (val.businessName && val.businessName.trim()) businessName = val.businessName.trim();
+          }
+          if (!merchantPhone && val.phone) merchantPhone = val.phone;
+        }
+      } catch (_) {}
+    }
 
     return NextResponse.json({
       success: true,
@@ -191,6 +239,7 @@ export async function POST(req: NextRequest) {
         phone: merchantPhone,
         email: targetEmail,
       },
+      businessInfo: sheetBizInfo,
       viewUrl: `https://sheetbot.cloud/q/${orderId}`,
       createdAt: todayFormatted,
       message: "주문이 성공적으로 접수되었습니다.",

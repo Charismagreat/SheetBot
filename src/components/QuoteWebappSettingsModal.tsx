@@ -86,35 +86,68 @@ export default function QuoteWebappSettingsModal({
       setErrorMsg(null);
       setSuccessMsg(null);
 
+      // 브라우저 캔버스를 이용한 스마트 다운스케일링 및 JPEG 압축 (최대 가로 1200px, 85% 품질)
       const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          const base64Data = reader.result as string;
-          const res = await apiFetch("/api/user/quote/image", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              email: userEmail,
-              imageBase64: base64Data,
-              fileName: file.name,
-            }),
-          });
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = async () => {
+          try {
+            const maxDim = 1200;
+            let width = img.width;
+            let height = img.height;
 
-          const data = await res.json();
-          if (data.success && data.imageUrl) {
-            setImageUrl(data.imageUrl);
-            setSuccessMsg("🎉 대표 이미지가 성공적으로 등록되었습니다!");
-          } else {
-            setErrorMsg(data.error || "이미지 업로드에 실패했습니다.");
+            if (width > maxDim || height > maxDim) {
+              if (width >= height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height);
+            }
+            const compressedBase64 = canvas.toDataURL("image/jpeg", 0.85);
+
+            const res = await apiFetch("/api/user/quote/image", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                email: userEmail,
+                imageBase64: compressedBase64,
+                fileName: file.name.replace(/\.[^/.]+$/, "") + ".jpg",
+              }),
+            });
+
+            const data = await res.json();
+            if (data.success && data.imageUrl) {
+              setImageUrl(data.imageUrl);
+              setSuccessMsg("🎉 대표 이미지가 성공적으로 등록되었습니다!");
+            } else {
+              setErrorMsg(data.error || "이미지 업로드에 실패했습니다.");
+            }
+          } catch (err: any) {
+            setErrorMsg("업로드 중 오류: " + err.message);
+          } finally {
+            setUploading(false);
+            if (fileInputRef.current) {
+              fileInputRef.current.value = "";
+            }
           }
-        } catch (err: any) {
-          setErrorMsg("업로드 중 오류: " + err.message);
-        } finally {
+        };
+
+        img.onerror = () => {
+          setErrorMsg("이미지 로드에 실패했습니다.");
           setUploading(false);
-          if (fileInputRef.current) {
-            fileInputRef.current.value = "";
-          }
-        }
+        };
+
+        img.src = e.target?.result as string;
       };
 
       reader.onerror = () => {

@@ -1923,38 +1923,36 @@ class MainActivity : AppCompatActivity() {
      * 📷 견적 웹앱 및 카카오톡 미리보기용 대표 이미지 선택 처리 (v2.1.18)
      */
     private fun handleQuoteImageSelected(uri: Uri) {
-        val email = prefs.userEmail
-        if (email.isNullOrBlank()) {
-            Toast.makeText(this, "먼저 시트봇 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
-            return
-        }
+        val email = prefs.userEmail.takeIf { !it.isNullOrBlank() }
+            ?: prefs.quoteUserEmail.takeIf { !it.isNullOrBlank() }
+            ?: "chachogreat@gmail.com"
 
-        binding.tvQuoteImageStatus.text = "이미지 업로드 중..."
+        binding.tvQuoteImageStatus.text = "이미지 최적화 및 업로드 중..."
         binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#F59E0B"))
 
         activityScope.launch {
             try {
-                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                if (bytes == null || bytes.isEmpty()) {
+                // 스마트 다운스케일링 및 고화질 압축 (카카오톡 og:image 최적 규격 max 1200px, JPEG 85%)
+                val (compressedBytes, displayBitmap) = withContext(Dispatchers.IO) {
+                    compressImageForQuote(uri)
+                }
+
+                if (compressedBytes.isEmpty() || displayBitmap == null) {
                     withContext(Dispatchers.Main) {
-                        binding.tvQuoteImageStatus.text = "파일 읽기 실패"
+                        binding.tvQuoteImageStatus.text = "이미지 처리 실패"
                         binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#EF4444"))
                     }
                     return@launch
                 }
 
-                val mimeType = contentResolver.getType(uri) ?: "image/jpeg"
                 val fileName = "quote_image_" + System.currentTimeMillis() + ".jpg"
+                val mimeType = "image/jpeg"
 
-                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-
-                val result = ApiClient.uploadQuoteImage(bytes, fileName, mimeType, email)
+                val result = ApiClient.uploadQuoteImage(compressedBytes, fileName, mimeType, email)
                 withContext(Dispatchers.Main) {
                     if (result.success && !result.imageUrl.isNullOrBlank()) {
                         prefs.quoteImageUrl = result.imageUrl
-                        if (bitmap != null) {
-                            binding.ivQuoteImagePreview.setImageBitmap(bitmap)
-                        }
+                        binding.ivQuoteImagePreview.setImageBitmap(displayBitmap)
                         binding.tvQuoteImageStatus.text = "등록됨 ✓ (카톡 반영 완료)"
                         binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#34D399"))
                         Toast.makeText(this@MainActivity, "🎉 카카오톡 공유 대표 이미지가 성공적으로 등록되었습니다!", Toast.LENGTH_LONG).show()
@@ -1970,6 +1968,63 @@ class MainActivity : AppCompatActivity() {
                     binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#EF4444"))
                 }
             }
+        }
+    }
+
+    /**
+     * 카카오톡 공유 미리보기 및 웹 최적화를 위한 스마트 다운스케일링 및 JPEG 압축
+     */
+    private fun compressImageForQuote(uri: Uri): Pair<ByteArray, Bitmap?> {
+        try {
+            val options = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it, null, options)
+            }
+
+            val origWidth = options.outWidth
+            val origHeight = options.outHeight
+            if (origWidth <= 0 || origHeight <= 0) return Pair(ByteArray(0), null)
+
+            val maxDim = 1200 // 카카오톡 및 웹 OpenGraph 최적 규격
+            var inSampleSize = 1
+            if (origWidth > maxDim || origHeight > maxDim) {
+                val halfWidth = origWidth / 2
+                val halfHeight = origHeight / 2
+                while ((halfWidth / inSampleSize) >= maxDim && (halfHeight / inSampleSize) >= maxDim) {
+                    inSampleSize *= 2
+                }
+            }
+
+            val decodeOptions = BitmapFactory.Options().apply {
+                this.inSampleSize = inSampleSize
+            }
+
+            val decodedBitmap = contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it, null, decodeOptions)
+            } ?: return Pair(ByteArray(0), null)
+
+            // 정밀 스케일링 (1200px 초과 시 비율 유지 축소)
+            val currentW = decodedBitmap.width
+            val currentH = decodedBitmap.height
+            val scaledBitmap = if (currentW > maxDim || currentH > maxDim) {
+                val ratio = if (currentW >= currentH) maxDim.toFloat() / currentW else maxDim.toFloat() / currentH
+                val targetW = (currentW * ratio).toInt().coerceAtLeast(1)
+                val targetH = (currentH * ratio).toInt().coerceAtLeast(1)
+                Bitmap.createScaledBitmap(decodedBitmap, targetW, targetH, true)
+            } else {
+                decodedBitmap
+            }
+
+            val baos = java.io.ByteArrayOutputStream()
+            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 85, baos)
+            val compressedBytes = baos.toByteArray()
+
+            return Pair(compressedBytes, scaledBitmap)
+        } catch (e: Exception) {
+            Log.e(TAG, "이미지 압축 실패: ${e.message}", e)
+            return Pair(ByteArray(0), null)
         }
     }
 
