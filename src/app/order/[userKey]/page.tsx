@@ -18,6 +18,7 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { userKey } = await params;
   let businessName = "스마트 견적 & 주문 센터";
+  let ogImageUrl = "https://sheetbot.cloud/favicon.svg";
 
   try {
     await setupDatabase();
@@ -34,11 +35,13 @@ export async function generateMetadata(
           if (val.businessName && val.businessName.trim()) {
             businessName = val.businessName.trim();
           }
+          if (val.ogImageUrl) ogImageUrl = val.ogImageUrl;
+          else if (val.imageUrl) ogImageUrl = val.imageUrl;
         }
       } catch (_) {}
 
       // 2. sheetbot_users 사용자 정보 확인
-      if (businessName === "스마트 견적 & 주문 센터") {
+      if (businessName === "스마트 견적 & 주문 센터" || ogImageUrl === "https://sheetbot.cloud/favicon.svg") {
         try {
           const userRes = await queryTable("sheetbot_users", {
             filters: { email },
@@ -46,8 +49,11 @@ export async function generateMetadata(
           }).catch(() => ({ rows: [] }));
           if (userRes.rows && userRes.rows.length > 0) {
             const u = userRes.rows[0];
-            if (u.business_name && u.business_name.trim()) {
+            if (businessName === "스마트 견적 & 주문 센터" && u.business_name && u.business_name.trim()) {
               businessName = u.business_name.trim();
+            }
+            if (ogImageUrl === "https://sheetbot.cloud/favicon.svg" && u.quote_image_url) {
+              ogImageUrl = u.quote_image_url;
             }
           }
         } catch (_) {}
@@ -72,18 +78,18 @@ export async function generateMetadata(
       locale: "ko_KR",
       images: [
         {
-          url: "https://sheetbot.cloud/favicon.svg",
-          width: 512,
-          height: 512,
-          alt: `${businessName} 셀프 견적 및 간편 주문`,
+          url: ogImageUrl,
+          width: 800,
+          height: 400,
+          alt: `${businessName} 대표 이미지`,
         },
       ],
     },
     twitter: {
-      card: "summary",
+      card: "summary_large_image",
       title,
       description,
-      images: ["https://sheetbot.cloud/favicon.svg"],
+      images: [ogImageUrl],
     },
   };
 }

@@ -83,9 +83,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: user-v2.1.17
-          name: "SheetBot Mobile Agent (이용자용) v2.1.17"
-          body: "시트봇 모바일 에이전트 v2.1.17 릴리즈\n• 🛡️ [고객 웹앱 환경 최적화] 고객 전용 견적/주문 페이지(/order/*)에서 내부 관리용 시트봇 AI 챗봇 및 푸터 노출 완벽 차단\n• 🏢 [상호명 실시간 반영 강화] 상호명 입력창 옆 [저장] 전용 버튼 및 키보드 엔터 즉시 저장 탑재, 이메일 아이디 노출 100% 원천 방어\n• ⚡ [멀티 티어 저장소 동기화] sheetbot_settings와 sheetbot_users 2중 보존으로 상호명 누락 없는 즉시 반영 보장"
+          tag_name: user-v2.1.18
+          name: "SheetBot Mobile Agent (이용자용) v2.1.18"
+          body: "시트봇 모바일 에이전트 v2.1.18 릴리즈\n• 📷 [카톡 공유 대표 이미지 등록] 카카오톡 카드 상단에 노출될 매장 로고 및 대표 사진을 스마트폰 갤러리에서 바로 선택하여 업로드 및 실시간 연동\n• 🌐 [웹+모바일 양방향 동기화] PC 웹 대시보드와 스마트폰 앱 양쪽에서 대표 썸네일 이미지 및 상호명 실시간 관리 지원\n• ✨ [공유 카드 비주얼 최적화] 카카오톡 미리보기 카드에 사장님 지정 상호명([상호명]) 및 전용 대표 썸네일 자동 연동"
           files: release-apk/SheetBotAgent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

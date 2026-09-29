@@ -33,6 +33,7 @@ interface MerchantInfo {
   businessName: string;
   phone: string;
   email: string;
+  imageUrl?: string;
 }
 
 export default function OrderClientPage({ userKey: propUserKey }: { userKey?: string }) {
@@ -46,6 +47,7 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
     businessName: "스마트 견적 & 주문 센터",
     phone: "",
     email: "",
+    imageUrl: "",
   });
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -298,9 +300,17 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
       <header className="sticky top-0 z-20 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-3.5">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-900/30">
-              <Calculator className="w-5 h-5 text-white" />
-            </div>
+            {merchant.imageUrl && merchant.imageUrl !== "https://sheetbot.cloud/favicon.svg" ? (
+              <img
+                src={merchant.imageUrl}
+                alt={displayBusinessName}
+                className="w-9 h-9 rounded-xl object-cover border border-slate-700/80 shadow-md shadow-emerald-950/40"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-900/30">
+                <Calculator className="w-5 h-5 text-white" />
+              </div>
+            )}
             <div>
               <h1 className="text-base font-bold text-white tracking-tight">{displayBusinessName}</h1>
               <p className="text-[11px] font-medium text-emerald-400 flex items-center gap-1">

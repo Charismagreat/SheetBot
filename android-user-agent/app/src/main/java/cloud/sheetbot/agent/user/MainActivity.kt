@@ -143,6 +143,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 📷 견적 웹앱 및 카카오톡 미리보기용 대표 이미지 선택 런처 (v2.1.18)
+    private val quoteImagePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            handleQuoteImageSelected(uri)
+        }
+    }
+
     // 카카오톡 대화 내용 내보내기(.txt) 파일 선택 런처 (v2.1.11)
     private val kakaoChatPickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
@@ -818,6 +827,20 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // 📷 카톡 미리보기 및 웹앱 대표 썸네일 등록 (v2.1.18)
+        binding.btnSelectQuoteImage.setOnClickListener {
+            val email = prefs.userEmail
+            if (email.isNullOrBlank()) {
+                Toast.makeText(this, "먼저 시트봇 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
+            } else {
+                quoteImagePickerLauncher.launch("image/*")
+            }
+        }
+
+        if (prefs.quoteImageUrl.isNotBlank()) {
+            loadQuoteImageThumbnail(prefs.quoteImageUrl)
+        }
+
         // 🏢 상호명/브랜드명 실시간 자동 저장 및 서버 동기화 (v2.1.17)
         binding.etQuoteBusinessName.setText(prefs.quoteBusinessName)
 
@@ -874,17 +897,21 @@ class MainActivity : AppCompatActivity() {
             saveBusinessNameAction(false)
         }
 
-        // 서버 프로필 로드하여 로컬 상호명이 비어있을 시 자동 채우기
+        // 서버 프로필 로드하여 로컬 상호명 및 대표 이미지 자동 동기화
         val currentEmail = prefs.userEmail
         if (!currentEmail.isNullOrBlank()) {
             activityScope.launch {
                 try {
                     val profile = ApiClient.getBusinessProfile(currentEmail)
-                    if (profile.success && profile.businessName.isNotBlank()) {
+                    if (profile.success) {
                         withContext(Dispatchers.Main) {
-                            if (prefs.quoteBusinessName.isBlank()) {
+                            if (profile.businessName.isNotBlank() && prefs.quoteBusinessName.isBlank()) {
                                 prefs.quoteBusinessName = profile.businessName
                                 binding.etQuoteBusinessName.setText(profile.businessName)
+                            }
+                            if (profile.imageUrl.isNotBlank() && profile.imageUrl != "https://sheetbot.cloud/favicon.svg") {
+                                prefs.quoteImageUrl = profile.imageUrl
+                                loadQuoteImageThumbnail(profile.imageUrl)
                             }
                         }
                     }
@@ -1889,6 +1916,84 @@ class MainActivity : AppCompatActivity() {
                 binding.progressBar.visibility = View.GONE
                 Toast.makeText(this@MainActivity, "업로드 처리 중 예외 발생: ${e.message}", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    /**
+     * 📷 견적 웹앱 및 카카오톡 미리보기용 대표 이미지 선택 처리 (v2.1.18)
+     */
+    private fun handleQuoteImageSelected(uri: Uri) {
+        val email = prefs.userEmail
+        if (email.isNullOrBlank()) {
+            Toast.makeText(this, "먼저 시트봇 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        binding.tvQuoteImageStatus.text = "이미지 업로드 중..."
+        binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#F59E0B"))
+
+        activityScope.launch {
+            try {
+                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                if (bytes == null || bytes.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        binding.tvQuoteImageStatus.text = "파일 읽기 실패"
+                        binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#EF4444"))
+                    }
+                    return@launch
+                }
+
+                val mimeType = contentResolver.getType(uri) ?: "image/jpeg"
+                val fileName = "quote_image_" + System.currentTimeMillis() + ".jpg"
+
+                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+
+                val result = ApiClient.uploadQuoteImage(bytes, fileName, mimeType, email)
+                withContext(Dispatchers.Main) {
+                    if (result.success && !result.imageUrl.isNullOrBlank()) {
+                        prefs.quoteImageUrl = result.imageUrl
+                        if (bitmap != null) {
+                            binding.ivQuoteImagePreview.setImageBitmap(bitmap)
+                        }
+                        binding.tvQuoteImageStatus.text = "등록됨 ✓ (카톡 반영 완료)"
+                        binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#34D399"))
+                        Toast.makeText(this@MainActivity, "🎉 카카오톡 공유 대표 이미지가 성공적으로 등록되었습니다!", Toast.LENGTH_LONG).show()
+                    } else {
+                        binding.tvQuoteImageStatus.text = "업로드 실패: ${result.error ?: "오류"}"
+                        binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#EF4444"))
+                        Toast.makeText(this@MainActivity, "이미지 업로드 실패: ${result.error}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    binding.tvQuoteImageStatus.text = "오류 발생: ${e.message}"
+                    binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#EF4444"))
+                }
+            }
+        }
+    }
+
+    /**
+     * 대표 썸네일 이미지 비동기 로드 및 표시
+     */
+    private fun loadQuoteImageThumbnail(url: String) {
+        if (url.isBlank() || url == "https://sheetbot.cloud/favicon.svg") return
+        activityScope.launch(Dispatchers.IO) {
+            try {
+                val conn = java.net.URL(url).openConnection()
+                conn.connectTimeout = 5000
+                conn.readTimeout = 5000
+                val inputStream = conn.getInputStream()
+                val bmp = BitmapFactory.decodeStream(inputStream)
+                inputStream.close()
+                if (bmp != null) {
+                    withContext(Dispatchers.Main) {
+                        binding.ivQuoteImagePreview.setImageBitmap(bmp)
+                        binding.tvQuoteImageStatus.text = "등록됨 ✓"
+                        binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#34D399"))
+                    }
+                }
+            } catch (_: Exception) {}
         }
     }
 

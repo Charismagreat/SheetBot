@@ -470,6 +470,7 @@ export async function setupDatabase(force = false): Promise<void> {
         { name: 'role', type: 'TEXT' }, // 'USER', 'ADMIN'
         { name: 'business_name', type: 'TEXT' }, // 상호명 / 업체명 / 브랜드명
         { name: 'phone', type: 'TEXT' }, // 대표 연락처
+        { name: 'quote_image_url', type: 'TEXT' }, // 견적 웹앱 대표 썸네일/로고 이미지 URL
         { name: 'status', type: 'TEXT' }, // 'ACTIVE', 'SUSPENDED'
         { name: 'tier', type: 'TEXT' }, // 'FREE', 'PRO', 'ENTERPRISE'
         { name: 'note', type: 'TEXT' },
@@ -480,7 +481,7 @@ export async function setupDatabase(force = false): Promise<void> {
       { tableName: 'sheetbot_users' }
     );
 
-    // sheetbot_users에 visitor_session_id, business_name, phone 컬럼 마이그레이션 보장
+    // sheetbot_users에 visitor_session_id, business_name, phone, quote_image_url 컬럼 마이그레이션 보장
     try {
       await executeSQL(`ALTER TABLE sheetbot_users ADD COLUMN visitor_session_id TEXT;`);
     } catch {}
@@ -489,6 +490,9 @@ export async function setupDatabase(force = false): Promise<void> {
     } catch {}
     try {
       await executeSQL(`ALTER TABLE sheetbot_users ADD COLUMN phone TEXT;`);
+    } catch {}
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_users ADD COLUMN quote_image_url TEXT;`);
     } catch {}
 
     // 12. sheetbot_dispatch_logs 테이블 생성 (알림 발송 이력 대장)

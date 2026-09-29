@@ -1348,7 +1348,8 @@ object ApiClient {
                     return@withContext BusinessProfileResult(
                         success = true,
                         businessName = resJson.optString("businessName", ""),
-                        phone = resJson.optString("phone", "")
+                        phone = resJson.optString("phone", ""),
+                        imageUrl = resJson.optString("imageUrl", resJson.optString("quoteImageUrl", ""))
                     )
                 } else {
                     lastError = resJson.optString("error", "HTTP ${response.code}")
@@ -1393,12 +1394,73 @@ object ApiClient {
         }
         false
     }
+
+    /**
+     * 견적 웹앱 및 카카오톡 미리보기용 대표 이미지 파일 업로드
+     */
+    suspend fun uploadQuoteImage(
+        fileBytes: ByteArray,
+        fileName: String,
+        mimeType: String,
+        userEmail: String
+    ): UploadQuoteImageResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val mediaType = (mimeType.takeIf { it.isNotBlank() } ?: "image/jpeg").toMediaType()
+        val requestFile = fileBytes.toRequestBody(mediaType)
+
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("email", userEmail)
+            .addFormDataPart("userEmail", userEmail)
+            .addFormDataPart("file", fileName, requestFile)
+            .build()
+
+        var lastError = "이미지 업로드 실패"
+        for (host in hosts) {
+            val endpoint = "$host/api/user/quote/image"
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(requestBody)
+                    .build()
+                val response = longTimeoutClient.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val imageUrl = resJson.optString("imageUrl", "")
+                    val bName = resJson.optString("businessName", "")
+                    Log.i(TAG, "📷 [견적 대표 이미지 업로드 성공] $imageUrl")
+                    return@withContext UploadQuoteImageResult(
+                        success = true,
+                        imageUrl = imageUrl,
+                        businessName = bName,
+                        message = resJson.optString("message", "대표 이미지가 등록되었습니다.")
+                    )
+                } else {
+                    lastError = resJson.optString("error", "HTTP ${response.code}")
+                }
+            } catch (e: Exception) {
+                lastError = e.localizedMessage ?: "네트워크 통신 오류"
+                Log.w(TAG, "[$endpoint] 견적 이미지 업로드 예외: ${e.message}")
+            }
+        }
+        UploadQuoteImageResult(success = false, error = lastError)
+    }
 }
+
+data class UploadQuoteImageResult(
+    val success: Boolean,
+    val imageUrl: String? = null,
+    val businessName: String? = null,
+    val message: String? = null,
+    val error: String? = null
+)
 
 data class BusinessProfileResult(
     val success: Boolean,
     val businessName: String = "",
     val phone: String = "",
+    val imageUrl: String = "",
     val error: String? = null
 )
 
