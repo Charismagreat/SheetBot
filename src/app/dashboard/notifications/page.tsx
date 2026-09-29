@@ -1003,6 +1003,7 @@ export default function NotificationsPage() {
             onDeleteRule={handleDeleteRule}
             onRefresh={fetchRules}
             samplePrompts={SAMPLE_PROMPTS}
+            userEmail={effectiveEmail}
           />
         )}
 

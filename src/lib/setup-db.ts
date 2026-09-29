@@ -722,12 +722,16 @@ export async function setupDatabase(force = false): Promise<void> {
         { name: 'user_email', type: 'TEXT', notNull: true },
         { name: 'customer_name', type: 'TEXT' },
         { name: 'customer_phone', type: 'TEXT' },
+        { name: 'customer_address', type: 'TEXT' }, // 서비스/배송 주소
+        { name: 'preferred_date', type: 'TEXT' }, // 희망 방문/시공 일시
+        { name: 'notes', type: 'TEXT' }, // 고객 요청사항 메모
+        { name: 'source', type: 'TEXT' }, // 'SELF_ORDER', 'SMS_INQUIRY', 'DIRECT'
         { name: 'inquiry_text', type: 'TEXT' }, // 고객의 원본 문의 텍스트
         { name: 'items_json', type: 'TEXT' }, // [{ category, name, spec, unitPrice, quantity, amount }]
         { name: 'supply_amount', type: 'INTEGER' }, // 공급가액
         { name: 'vat_amount', type: 'INTEGER' }, // 부가세 (10%)
         { name: 'total_amount', type: 'INTEGER' }, // 총 합계
-        { name: 'status', type: 'TEXT' }, // 'DRAFT', 'SENT', 'VIEWED', 'ACCEPTED', 'REJECTED'
+        { name: 'status', type: 'TEXT' }, // 'DRAFT', 'SENT', 'VIEWED', 'ACCEPTED', 'ORDERED'
         { name: 'spreadsheet_id', type: 'TEXT' }, // 연동된 구글 시트 ID
         { name: 'viewed_at', type: 'TEXT' }, // 고객 열람 일시
         { name: 'created_at', type: 'TEXT' },
