@@ -329,7 +329,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 smsSentObserver = SmsSentObserver(this)
                 contentResolver.registerContentObserver(
-                    SmsSentObserver.SENT_SMS_URI,
+                    SmsSentObserver.SMS_CONTENT_URI,
                     true,
                     smsSentObserver!!
                 )
@@ -752,6 +752,9 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             if (isChecked) {
                 provisionSheetAsync("SMS", prefs.smsDriveSheetTitle)
+                if (!isNotificationListenerEnabled()) {
+                    requestNotificationListenerPermission()
+                }
             }
         }
 
@@ -1788,7 +1791,7 @@ class MainActivity : AppCompatActivity() {
     private fun requestNotificationListenerPermission() {
         AlertDialog.Builder(this)
             .setTitle("🔔 알림 접근 권한 필요")
-            .setMessage("토스, 카카오뱅크, 국민/신한/우리/하나 등 은행 공식 앱의 입금 푸시 알림을 0원으로 실시간 감지하기 위해 '알림 접근 권한'을 허용해 주세요.\n\n[설정으로 이동]을 누른 후 'SheetBot Agent M'을 켜주시면 됩니다.")
+            .setMessage("구글 메시지(RCS 채팅 포함), 카카오톡 및 은행 입금 푸시 알림을 0원으로 실시간 감지하여 구글 시트에 자동 기록하기 위해 '알림 접근 권한'을 허용해 주세요.\n\n[설정으로 이동]을 누른 후 'SheetBot Agent'를 활성화해 주시면 됩니다.")
             .setPositiveButton("설정으로 이동") { _, _ ->
                 try {
                     val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)

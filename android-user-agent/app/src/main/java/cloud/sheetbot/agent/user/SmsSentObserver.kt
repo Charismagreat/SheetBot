@@ -24,6 +24,7 @@ class SmsSentObserver(
     companion object {
         private const val TAG = "SmsSentObserver"
         val SENT_SMS_URI: Uri = Telephony.Sms.Sent.CONTENT_URI
+        val SMS_CONTENT_URI: Uri = Telephony.Sms.CONTENT_URI
     }
 
     private val prefs = PreferencesManager(context)
@@ -37,6 +38,9 @@ class SmsSentObserver(
 
         scope.launch {
             try {
+                // 구글 메시지 비동기 DB 커밋 대기 (300ms)
+                kotlinx.coroutines.delay(300)
+
                 // 발신함(Sent) 최신 레코드 1건 조회
                 val projection = arrayOf(
                     Telephony.Sms._ID,
@@ -46,13 +50,29 @@ class SmsSentObserver(
                     Telephony.Sms.TYPE
                 )
 
-                val cursor = context.contentResolver.query(
-                    SENT_SMS_URI,
-                    projection,
-                    null,
-                    null,
-                    "${Telephony.Sms.DATE} DESC"
-                )
+                // 1순위: Sent URI 조회, 2순위: SMS 전체 URI 중 type=2 조회
+                var cursor = try {
+                    context.contentResolver.query(
+                        SENT_SMS_URI,
+                        projection,
+                        null,
+                        null,
+                        "${Telephony.Sms.DATE} DESC"
+                    )
+                } catch (_: Exception) { null }
+
+                if (cursor == null || !cursor.moveToFirst()) {
+                    cursor?.close()
+                    cursor = try {
+                        context.contentResolver.query(
+                            SMS_CONTENT_URI,
+                            projection,
+                            "${Telephony.Sms.TYPE} = ?",
+                            arrayOf(Telephony.Sms.MESSAGE_TYPE_SENT.toString()),
+                            "${Telephony.Sms.DATE} DESC"
+                        )
+                    } catch (_: Exception) { null }
+                }
 
                 cursor?.use { c ->
                     if (c.moveToFirst()) {

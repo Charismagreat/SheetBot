@@ -54,6 +54,12 @@ class BankNotificationListener : NotificationListenerService() {
             return
         }
 
+        // 구글 메시지(Google Messages) 및 삼성 메시지 (RCS & SMS) 알림 감지 및 구글 시트 동기화
+        if (packageName == "com.google.android.apps.messaging" || packageName == "com.samsung.android.messaging") {
+            handleMessageNotification(sbn)
+            return
+        }
+
         // 1. 지원 금융 앱 여부 확인
         if (!BankPushParser.isSupportedBank(packageName)) {
             return
@@ -300,6 +306,102 @@ class BankNotificationListener : NotificationListenerService() {
         for (kw in keywords) {
             val cleanKw = kw.replace(" ", "").lowercase()
             if (cleanRoom.contains(cleanKw) || cleanSender.contains(cleanKw) || chatRoomName.contains(kw) || sender.contains(kw)) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * 구글 메시지(Google Messages) 및 삼성 메시지 알림 정밀 감지 (RCS 및 SMS 완벽 지원)
+     */
+    private fun handleMessageNotification(sbn: StatusBarNotification) {
+        if (!prefs.isPaired || !prefs.isSmsSheetSyncEnabled) return
+        val userEmail = prefs.userEmail ?: return
+
+        try {
+            val extras = sbn.notification.extras ?: return
+            val rawTitle = extras.getString(Notification.EXTRA_TITLE)
+                ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+            val rawText = extras.getString(Notification.EXTRA_TEXT)
+                ?: extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+                ?: extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
+
+            if (rawText.isBlank()) return
+
+            val sender = rawTitle.trim()
+            val message = rawText.trim()
+
+            // 5초 이내 동일 알림 중복 감지 방어 (SmsReceiver와 중복 기록 방지)
+            val dedupeKey = "msg_noti:$sender:$message"
+            val now = System.currentTimeMillis()
+            val lastSeen = recentCache[dedupeKey] ?: 0L
+            if (now - lastSeen < 8000L) {
+                return
+            }
+            recentCache[dedupeKey] = now
+
+            // 주소록 매칭 및 필터 검사
+            val isPureNumber = sender.replace("-", "").replace(" ", "").all { it.isDigit() }
+            val contactName = if (isPureNumber) {
+                ContactHelper.getContactName(this, sender)
+            } else {
+                sender // 타이틀이 이미 연락처 이름인 경우
+            }
+            val filter = prefs.smsTargetFilter.trim()
+            if (!matchesSmsFilter(sender, contactName, filter)) {
+                Log.d(TAG, "메시지 필터 제외: $sender / $contactName")
+                return
+            }
+
+            Log.i(TAG, "💬 [구글/기본 메시지 알림 감지] 발신: $sender / 본문: ${message.take(40)}...")
+
+            serviceScope.launch {
+                try {
+                    val isSynced = ApiClient.sendSmsSync(
+                        userEmail = userEmail,
+                        direction = "INBOUND",
+                        phoneNumber = sender,
+                        contactName = contactName,
+                        message = message,
+                        sheetTitle = prefs.smsDriveSheetTitle
+                    )
+
+                    if (isSynced) {
+                        val who = if (contactName != null && contactName != sender) "$contactName($sender)" else sender
+                        Log.i(TAG, "✅ [구글 메시지/RCS 시트 동기화 완료] $who")
+                        if (prefs.isTtsEnabled) {
+                            val voiceWho = contactName ?: "고객"
+                            TtsManager.speak(this@BankNotificationListener, "${voiceWho}님의 새 메시지가 구글 시트에 기록되었습니다.")
+                        }
+
+                        // UI 로그 갱신용 브로드캐스트 발송
+                        val updateIntent = Intent(SmsReceiver.ACTION_SMS_RECEIVED).apply {
+                            putExtra("smsBody", "[수신] ${contactName?.let { "$it: " } ?: ""}$message")
+                            putExtra("sender", contactName ?: sender)
+                            putExtra("success", true)
+                            setPackage(packageName)
+                        }
+                        sendBroadcast(updateIntent)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "구글 메시지 동기화 오류", e)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "handleMessageNotification 파싱 오류", e)
+        }
+    }
+
+    private fun matchesSmsFilter(sender: String, contactName: String?, filter: String): Boolean {
+        if (filter.isBlank()) return true
+        val keywords = filter.split(",", ";", " ").map { it.trim() }.filter { it.isNotBlank() }
+        val cleanSender = sender.replace("-", "").replace(" ", "").lowercase()
+        val cleanName = (contactName ?: "").replace(" ", "").lowercase()
+
+        for (kw in keywords) {
+            val cleanKw = kw.replace("-", "").replace(" ", "").lowercase()
+            if (cleanSender.contains(cleanKw) || cleanName.contains(cleanKw) || (contactName != null && contactName.contains(kw))) {
                 return true
             }
         }
