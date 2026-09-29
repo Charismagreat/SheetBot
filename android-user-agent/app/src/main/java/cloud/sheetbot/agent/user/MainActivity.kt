@@ -2091,7 +2091,8 @@ class MainActivity : AppCompatActivity() {
                 if (result.success) {
                     val ocr = result.ocrData
                     val merchant = ocr?.optString("merchantName", "영수증") ?: "영수증"
-                    val amount = ocr?.optString("amount")?.let { "${it}원" } ?: ""
+                    val rawAmt = ocr?.optString("amount")
+                    val amount = if (!rawAmt.isNullOrBlank()) "${rawAmt}원" else ""
                     Toast.makeText(
                         this@MainActivity,
                         "🎉 [영수증 장부화 완료] $merchant $amount\n구글 시트에 자동 기록되었습니다!",
@@ -2130,7 +2131,8 @@ class MainActivity : AppCompatActivity() {
                 if (result.success) {
                     val ocr = result.ocrData
                     val name = ocr?.optString("name", "명함") ?: "명함"
-                    val comp = ocr?.optString("company")?.let { "($it)" } ?: ""
+                    val rawComp = ocr?.optString("company")
+                    val comp = if (!rawComp.isNullOrBlank()) "($rawComp)" else ""
                     Toast.makeText(
                         this@MainActivity,
                         "🎉 [명함 등록 완료] $name $comp\n인맥 관리 대장에 자동 기록되었습니다!",

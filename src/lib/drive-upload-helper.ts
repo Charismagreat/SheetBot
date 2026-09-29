@@ -1,4 +1,4 @@
-import { callDriveTool, fsUploadFile } from "@/lib/egdesk-helpers";
+import { callDriveTool, uploadFile } from "@/lib/egdesk-helpers";
 import fs from "fs";
 import path from "path";
 
@@ -37,7 +37,7 @@ export async function uploadDriveFileWithBridge(options: {
       const safeBasename = path.basename(fileName).replace(/[/\\?%*:|"<>]/g, "_");
       const uniqueBasename = `sb_${Date.now()}_${safeBasename}`;
 
-      const fsRes = await fsUploadFile(uniqueBasename, base64Content, "base64");
+      const fsRes = await uploadFile(uniqueBasename, base64Content, "base64");
 
       // fsRes 텍스트에서 호스트 PC의 절대 경로 추출 (Windows: C:\... 또는 Unix: /Users/... or /home/...)
       const fsText = typeof fsRes === "string"

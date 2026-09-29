@@ -12,7 +12,7 @@ import path from "path";
 function getUploadDirectories() {
   const dirs = [
     path.join(process.cwd(), "public", "uploads", "quote-images"),
-    path.join("C:", "dev", "SheetBot", "public", "uploads", "quote-images"),
+
   ];
   for (const d of dirs) {
     try {
