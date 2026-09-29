@@ -1,23 +1,75 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, updateRows, insertRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { resolveUserEmailFromKey } from "@/lib/user-key-helper";
 import fs from "fs";
 import path from "path";
 
+function getUploadDirectories() {
+  const dirs = [
+    path.join(process.cwd(), "public", "uploads", "quote-images"),
+    path.join("C:", "dev", "SheetBot", "public", "uploads", "quote-images"),
+  ];
+  for (const d of dirs) {
+    try {
+      if (!fs.existsSync(d)) {
+        fs.mkdirSync(d, { recursive: true });
+      }
+    } catch (_) {}
+  }
+  return dirs;
+}
+
 /**
- * GET /api/user/quote/image?userKey=xxx 또는 ?email=xxx
- * 견적 웹앱 대표 썸네일 이미지 URL 조회
+ * GET /api/user/quote/image
+ * 1. ?file=quote_xxx.png : 이미지 바이너리 직접 스트리밍 (카카오톡 및 브라우저 전용 0초 로드)
+ * 2. ?userKey=xxx 또는 ?email=xxx : 프로필 및 대표 이미지 URL JSON 메타데이터 반환
  */
 export async function GET(req: NextRequest) {
   try {
-    await setupDatabase();
-    const session = await getServerSession(authOptions).catch(() => null);
     const url = new URL(req.url);
+    const fileName = url.searchParams.get("file");
+
+    // 1. 이미지 파일 직접 스트리밍
+    if (fileName) {
+      const sanitizedFile = path.basename(fileName);
+      const dirs = getUploadDirectories();
+
+      let foundPath: string | null = null;
+      for (const d of dirs) {
+        const p = path.join(d, sanitizedFile);
+        if (fs.existsSync(p)) {
+          foundPath = p;
+          break;
+        }
+      }
+
+      if (foundPath) {
+        const buffer = fs.readFileSync(foundPath);
+        const ext = path.extname(sanitizedFile).toLowerCase().replace(".", "");
+        let mime = "image/jpeg";
+        if (ext === "png") mime = "image/png";
+        else if (ext === "webp") mime = "image/webp";
+        else if (ext === "gif") mime = "image/gif";
+
+        return new NextResponse(buffer, {
+          status: 200,
+          headers: {
+            "Content-Type": mime,
+            "Cache-Control": "public, max-age=86400, s-maxage=86400",
+          },
+        });
+      }
+
+      return NextResponse.json({ success: false, error: "Image not found" }, { status: 404 });
+    }
+
+    // 2. 프로필 및 대표 이미지 정보 JSON 반환
+    await setupDatabase();
+    const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
     const userKey = url.searchParams.get("userKey") || url.searchParams.get("u");
     const emailParam = url.searchParams.get("email");
 
@@ -26,8 +78,8 @@ export async function GET(req: NextRequest) {
       targetEmail = (await resolveUserEmailFromKey(userKey)) || "";
     } else if (emailParam) {
       targetEmail = emailParam.toLowerCase().trim();
-    } else if (session?.user?.email) {
-      targetEmail = session.user.email.toLowerCase().trim();
+    } else if (sessionEmail) {
+      targetEmail = sessionEmail.toLowerCase().trim();
     }
 
     if (!targetEmail) {
@@ -89,7 +141,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     await setupDatabase();
-    const session = await getServerSession(authOptions).catch(() => null);
+    const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
@@ -98,7 +150,7 @@ export async function POST(req: NextRequest) {
 
     const targetEmail = (
       directEmail ||
-      session?.user?.email ||
+      sessionEmail ||
       headerEmail ||
       ""
     ).toLowerCase().trim();
@@ -111,41 +163,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "업로드할 이미지 파일이 없습니다." }, { status: 400 });
     }
 
-    // 파일 형식 및 크기 검증 (최대 10MB)
-    const mimeType = file.type || "image/jpeg";
-    if (!mimeType.startsWith("image/")) {
-      return NextResponse.json({ success: false, error: "이미지 파일만 업로드할 수 있습니다." }, { status: 400 });
-    }
-
+    // 파일 크기 검증 (최대 10MB)
     if (file.size > 10 * 1024 * 1024) {
       return NextResponse.json({ success: false, error: "이미지 파일 크기는 10MB 이하여야 합니다." }, { status: 400 });
     }
 
-    // 저장 디렉터리 준비 (public/uploads/quote-images)
-    const publicDir = path.join(process.cwd(), "public");
-    const uploadDir = path.join(publicDir, "uploads", "quote-images");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
     // 확장자 추출
-    let ext = "png";
-    if (mimeType.includes("jpeg") || mimeType.includes("jpg")) ext = "jpg";
+    const mimeType = file.type || "image/jpeg";
+    let ext = "jpg";
+    if (mimeType.includes("png")) ext = "png";
     else if (mimeType.includes("webp")) ext = "webp";
     else if (mimeType.includes("gif")) ext = "gif";
     else if (file.name && file.name.includes(".")) {
-      ext = file.name.split(".").pop()?.toLowerCase() || "png";
+      ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
     }
 
     const safeEmail = targetEmail.replace(/[^a-zA-Z0-9]/g, "_");
     const fileName = `quote_${safeEmail}_${Date.now()}.${ext}`;
-    const filePath = path.join(uploadDir, fileName);
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    fs.writeFileSync(filePath, buffer);
 
-    const imageUrl = `https://sheetbot.cloud/uploads/quote-images/${fileName}`;
+    // 디렉터리 다중 저장 (프로덕션 런타임 및 개발 소스 폴더 모두 저장)
+    const dirs = getUploadDirectories();
+    for (const d of dirs) {
+      try {
+        fs.writeFileSync(path.join(d, fileName), buffer);
+      } catch (_) {}
+    }
+
+    // 직통 스트리밍 URL 생성 (터널 및 프록시 환경에서도 무결점 서빙)
+    const imageUrl = `https://sheetbot.cloud/api/user/quote/image?file=${fileName}`;
     const now = new Date().toISOString();
 
     // 1. sheetbot_settings 동기화
@@ -207,7 +255,7 @@ export async function POST(req: NextRequest) {
           {
             id: Math.floor(Date.now() / 1000),
             email: targetEmail,
-            name: session?.user?.name || targetEmail.split("@")[0],
+            name: targetEmail.split("@")[0],
             business_name: businessName,
             quote_image_url: imageUrl,
             role: "USER",
