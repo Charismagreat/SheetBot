@@ -1365,27 +1365,30 @@ object ApiClient {
      */
     suspend fun updateBusinessProfile(email: String, businessName: String, phone: String = ""): Boolean = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val endpoints = listOf("/api/user/profile", "/api/user/quote/catalog")
         for (host in hosts) {
-            val endpoint = "$host/api/user/profile"
-            try {
-                val json = JSONObject().apply {
-                    put("email", email)
-                    put("businessName", businessName)
-                    if (phone.isNotBlank()) put("phone", phone)
+            for (path in endpoints) {
+                val endpoint = "$host$path"
+                try {
+                    val json = JSONObject().apply {
+                        put("email", email)
+                        put("businessName", businessName)
+                        if (phone.isNotBlank()) put("phone", phone)
+                    }
+                    val request = Request.Builder()
+                        .url(endpoint)
+                        .post(json.toString().toRequestBody(JSON_MEDIA_TYPE))
+                        .build()
+                    val response = client.newCall(request).execute()
+                    val resStr = response.body?.string() ?: ""
+                    val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                    if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                        Log.i(TAG, "🏢 [상호명 업데이트 성공] $businessName ($email via $path)")
+                        return@withContext true
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "[$endpoint] 상호명 업데이트 예외: ${e.message}")
                 }
-                val request = Request.Builder()
-                    .url(endpoint)
-                    .post(json.toString().toRequestBody(JSON_MEDIA_TYPE))
-                    .build()
-                val response = client.newCall(request).execute()
-                val resStr = response.body?.string() ?: ""
-                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
-                if (response.isSuccessful && resJson.optBoolean("success", false)) {
-                    Log.i(TAG, "🏢 [상호명 업데이트 성공] $businessName ($email)")
-                    return@withContext true
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "[$host] 상호명 업데이트 예외: ${e.message}")
             }
         }
         false

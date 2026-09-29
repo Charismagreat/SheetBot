@@ -818,10 +818,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 🏢 상호명/브랜드명 실시간 자동 저장 및 서버 동기화 (v2.1.16)
+        // 🏢 상호명/브랜드명 실시간 자동 저장 및 서버 동기화 (v2.1.17)
         binding.etQuoteBusinessName.setText(prefs.quoteBusinessName)
-        binding.etQuoteBusinessName.doAfterTextChanged {
-            val newName = it?.toString()?.trim() ?: ""
+
+        val saveBusinessNameAction: (Boolean) -> Unit = { showToast ->
+            val newName = binding.etQuoteBusinessName.text?.toString()?.trim() ?: ""
             prefs.quoteBusinessName = newName
             binding.tvBusinessNameStatus.text = "저장 중..."
             binding.tvBusinessNameStatus.setTextColor(Color.parseColor("#F59E0B"))
@@ -833,13 +834,44 @@ class MainActivity : AppCompatActivity() {
                         if (ok) {
                             binding.tvBusinessNameStatus.text = "실시간 반영됨 ✓"
                             binding.tvBusinessNameStatus.setTextColor(Color.parseColor("#34D399"))
+                            if (showToast) {
+                                Toast.makeText(this@MainActivity, "🎉 상호명이 '$newName'(으)로 고객 견적 웹앱에 반영되었습니다!", Toast.LENGTH_SHORT).show()
+                            }
                         } else {
-                            binding.tvBusinessNameStatus.text = "자동 저장됨"
+                            binding.tvBusinessNameStatus.text = "로컬 저장됨"
                             binding.tvBusinessNameStatus.setTextColor(Color.parseColor("#94A3B8"))
+                            if (showToast) {
+                                Toast.makeText(this@MainActivity, "상호명이 저장되었습니다 (서버 동기화 대기 중)", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     }
                 }
+            } else {
+                binding.tvBusinessNameStatus.text = "로컬 저장됨"
+                binding.tvBusinessNameStatus.setTextColor(Color.parseColor("#94A3B8"))
+                if (showToast) {
+                    Toast.makeText(this@MainActivity, "먼저 시트봇 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
+                }
             }
+        }
+
+        binding.btnSaveBusinessName.setOnClickListener {
+            saveBusinessNameAction(true)
+        }
+
+        binding.etQuoteBusinessName.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                saveBusinessNameAction(true)
+                true
+            } else {
+                false
+            }
+        }
+
+        binding.etQuoteBusinessName.doAfterTextChanged {
+            val newName = it?.toString()?.trim() ?: ""
+            prefs.quoteBusinessName = newName
+            saveBusinessNameAction(false)
         }
 
         // 서버 프로필 로드하여 로컬 상호명이 비어있을 시 자동 채우기

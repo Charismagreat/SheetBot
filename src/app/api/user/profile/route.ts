@@ -68,42 +68,69 @@ export async function POST(req: NextRequest) {
 
     const businessName = (body.businessName ?? body.business_name ?? "").trim();
     const phone = (body.phone ?? "").trim();
-
-    // 1. 기존 유저 존재 여부 확인
-    const userRes = await queryTable("sheetbot_users", {
-      filters: { email: targetEmail },
-      limit: 1,
-    }).catch(() => ({ rows: [] }));
-
     const now = new Date().toISOString();
 
-    if (userRes.rows && userRes.rows.length > 0) {
-      // 2. 기존 유저 정보 업데이트
-      await updateRows(
-        "sheetbot_users",
-        {
-          business_name: businessName,
-          ...(phone ? { phone } : {}),
-          updated_at: now,
-        },
-        { filters: { email: targetEmail } }
-      );
-    } else {
-      // 3. 신규 유저 레코드 생성
-      await insertRows("sheetbot_users", [
-        {
-          id: `usr_${Date.now()}`,
-          email: targetEmail,
-          name: session?.user?.name || targetEmail.split("@")[0],
-          business_name: businessName,
-          phone: phone,
-          role: "USER",
-          status: "ACTIVE",
-          tier: "FREE",
-          created_at: now,
-          updated_at: now,
-        },
-      ]);
+    // 1. sheetbot_settings 키-값 저장소에 영구 보존
+    try {
+      const settingKey = `quote_profile_${targetEmail}`;
+      const payload = JSON.stringify({ businessName, phone, updatedAt: now });
+      const settingRes = await queryTable("sheetbot_settings", {
+        filters: { key: settingKey },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+
+      if (settingRes.rows && settingRes.rows.length > 0) {
+        await updateRows("sheetbot_settings", { value: payload, updated_at: now }, { filters: { key: settingKey } });
+      } else {
+        await insertRows("sheetbot_settings", [
+          {
+            id: `set_${Date.now()}`,
+            key: settingKey,
+            value: payload,
+            description: `견적 프로필 (${targetEmail})`,
+            created_at: now,
+          },
+        ]);
+      }
+    } catch (sErr: any) {
+      console.warn("[Profile POST] sheetbot_settings save warning:", sErr?.message);
+    }
+
+    // 2. sheetbot_users 테이블 동시 업데이트
+    try {
+      const userRes = await queryTable("sheetbot_users", {
+        filters: { email: targetEmail },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+
+      if (userRes.rows && userRes.rows.length > 0) {
+        await updateRows(
+          "sheetbot_users",
+          {
+            business_name: businessName,
+            ...(phone ? { phone } : {}),
+            updated_at: now,
+          },
+          { filters: { email: targetEmail } }
+        );
+      } else {
+        await insertRows("sheetbot_users", [
+          {
+            id: `usr_${Date.now()}`,
+            email: targetEmail,
+            name: session?.user?.name || targetEmail.split("@")[0],
+            business_name: businessName,
+            phone: phone,
+            role: "USER",
+            status: "ACTIVE",
+            tier: "FREE",
+            created_at: now,
+            updated_at: now,
+          },
+        ]);
+      }
+    } catch (uErr: any) {
+      console.warn("[Profile POST] sheetbot_users save warning:", uErr?.message);
     }
 
     return NextResponse.json({

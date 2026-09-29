@@ -25,7 +25,13 @@ export default function Footer({ info }: FooterProps = {}) {
   const pathname = usePathname();
   const footerInfo = useFooterInfo(info);
 
-  if (pathname === "/marketplace" || pathname?.startsWith("/m/") || pathname === "/m") {
+  if (
+    pathname === "/marketplace" ||
+    pathname?.startsWith("/m/") ||
+    pathname === "/m" ||
+    pathname?.startsWith("/order") ||
+    pathname?.startsWith("/quote")
+  ) {
     return null;
   }
 

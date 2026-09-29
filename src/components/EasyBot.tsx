@@ -1025,8 +1025,13 @@ export default function EasyBot() {
 
   if (!mounted) return null;
 
-  // 모바일 전용 스마트 웹앱(/m/*) 화면에서는 시트봇 AI 플로팅 단추 숨김
-  if (pathname?.startsWith("/m/") || pathname === "/m") {
+  // 고객용 셀프 견적/주문(/order/*, /quote/*) 및 모바일 전용 웹앱(/m/*) 화면에서는 시트봇 AI 플로팅 단추 숨김
+  if (
+    pathname?.startsWith("/order") ||
+    pathname?.startsWith("/quote") ||
+    pathname?.startsWith("/m/") ||
+    pathname === "/m"
+  ) {
     return null;
   }
 
