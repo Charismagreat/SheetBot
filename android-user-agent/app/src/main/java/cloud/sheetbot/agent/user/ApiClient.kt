@@ -1442,6 +1442,7 @@ object ApiClient {
                 lastError = e.localizedMessage ?: "네트워크 통신 오류"
                 Log.w(TAG, "[$endpoint] 견적 이미지 업로드 예외: ${e.message}")
             }
+        }
         UploadQuoteImageResult(success = false, error = lastError)
     }
 }
