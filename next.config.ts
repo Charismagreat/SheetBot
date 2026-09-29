@@ -28,11 +28,6 @@ const getLocalIPs = () => {
 };
 
 const nextConfig: any = {
-  eslint: {
-    // Always skip ESLint errors to prevent blocking on auto-generated files
-    ignoreDuringBuilds: true,
-  },
-
   // Only use basePath in production mode, not in dev mode
   basePath: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
   assetPrefix: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
@@ -42,7 +37,10 @@ const nextConfig: any = {
     // Always skip TypeScript errors to prevent blocking on auto-generated files
     ignoreBuildErrors: true,
   },
-
+  eslint: {
+    // Always skip ESLint errors to prevent blocking on auto-generated files
+    ignoreDuringBuilds: true,
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb',
