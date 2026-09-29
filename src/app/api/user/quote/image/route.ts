@@ -142,47 +142,78 @@ export async function POST(req: NextRequest) {
   try {
     await setupDatabase();
     const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
-
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    const directEmail = (formData.get("email") || formData.get("userEmail")) as string | null;
     const headerEmail = req.headers.get("x-sheetbot-user-email");
+    const contentType = req.headers.get("content-type") || "";
 
-    const targetEmail = (
-      directEmail ||
-      sessionEmail ||
-      headerEmail ||
-      ""
-    ).toLowerCase().trim();
+    let targetEmail = "";
+    let buffer: Buffer;
+    let fileName = "";
+    let ext = "jpg";
+
+    if (contentType.includes("application/json")) {
+      const body = await req.json().catch(() => ({}));
+      targetEmail = (body.email || body.userEmail || sessionEmail || headerEmail || "").toLowerCase().trim();
+      const imageBase64 = body.imageBase64 || body.image || "";
+      if (!imageBase64) {
+        return NextResponse.json({ success: false, error: "이미지 데이터(base64)가 필요합니다." }, { status: 400 });
+      }
+
+      // data:image/png;base64,... 프리픽스 제거
+      let cleanBase64 = imageBase64;
+      if (cleanBase64.includes(",")) {
+        const parts = cleanBase64.split(",");
+        cleanBase64 = parts[1];
+        if (parts[0].includes("png")) ext = "png";
+        else if (parts[0].includes("webp")) ext = "webp";
+        else if (parts[0].includes("gif")) ext = "gif";
+      }
+
+      buffer = Buffer.from(cleanBase64, "base64");
+      const safeEmail = targetEmail.replace(/[^a-zA-Z0-9]/g, "_");
+      fileName = `quote_${safeEmail}_${Date.now()}.${ext}`;
+    } else {
+      const formData = await req.formData();
+      const file = formData.get("file") as File | null;
+      const directEmail = (formData.get("email") || formData.get("userEmail")) as string | null;
+
+      targetEmail = (
+        directEmail ||
+        sessionEmail ||
+        headerEmail ||
+        ""
+      ).toLowerCase().trim();
+
+      if (!file) {
+        return NextResponse.json({ success: false, error: "업로드할 이미지 파일이 없습니다." }, { status: 400 });
+      }
+
+      const mimeType = file.type || "image/jpeg";
+      if (mimeType.includes("png")) ext = "png";
+      else if (mimeType.includes("webp")) ext = "webp";
+      else if (mimeType.includes("gif")) ext = "gif";
+      else if (file.name && file.name.includes(".")) {
+        ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      }
+
+      const safeEmail = targetEmail.replace(/[^a-zA-Z0-9]/g, "_");
+      fileName = `quote_${safeEmail}_${Date.now()}.${ext}`;
+
+      const arrayBuffer = await file.arrayBuffer();
+      buffer = Buffer.from(arrayBuffer);
+    }
 
     if (!targetEmail) {
       return NextResponse.json({ success: false, error: "이메일 정보가 필요합니다." }, { status: 400 });
     }
 
-    if (!file) {
-      return NextResponse.json({ success: false, error: "업로드할 이미지 파일이 없습니다." }, { status: 400 });
+    if (!buffer || buffer.length === 0) {
+      return NextResponse.json({ success: false, error: "유효한 이미지 데이터가 없습니다." }, { status: 400 });
     }
 
     // 파일 크기 검증 (최대 10MB)
-    if (file.size > 10 * 1024 * 1024) {
+    if (buffer.length > 10 * 1024 * 1024) {
       return NextResponse.json({ success: false, error: "이미지 파일 크기는 10MB 이하여야 합니다." }, { status: 400 });
     }
-
-    // 확장자 추출
-    const mimeType = file.type || "image/jpeg";
-    let ext = "jpg";
-    if (mimeType.includes("png")) ext = "png";
-    else if (mimeType.includes("webp")) ext = "webp";
-    else if (mimeType.includes("gif")) ext = "gif";
-    else if (file.name && file.name.includes(".")) {
-      ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-    }
-
-    const safeEmail = targetEmail.replace(/[^a-zA-Z0-9]/g, "_");
-    const fileName = `quote_${safeEmail}_${Date.now()}.${ext}`;
-
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
 
     // 디렉터리 다중 저장 (프로덕션 런타임 및 개발 소스 폴더 모두 저장)
     const dirs = getUploadDirectories();
