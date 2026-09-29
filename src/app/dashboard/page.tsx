@@ -59,6 +59,15 @@ import {
 import Navbar from "@/components/Navbar";
 import nextDynamic from "next/dynamic";
 
+// 프로젝트 ID 표시 정제 헬퍼 (스프레드시트 ID 우선 및 부동소수점 .0 오염 정수화)
+function getProjectDisplayId(proj: any): string {
+  if (proj?.scriptId) return String(proj.scriptId);
+  if (proj?.gasProjectId) return String(proj.gasProjectId);
+  if (proj?.spreadsheetId) return String(proj.spreadsheetId);
+  const raw = String(proj?.id || "");
+  return raw.endsWith(".0") ? raw.slice(0, -2) : raw;
+}
+
 // 날짜 및 시각 표시 헬퍼 (YYYY.MM.DD HH:mm)
 function formatDateTime(dateStr?: string | null): string {
   if (!dateStr) return "-";
@@ -295,10 +304,11 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // 마지막으로 성공적으로 패칭을 완료한 이메일 기록 Ref & In-flight 중복 방어용 AbortController
+  // 마지막으로 성공적으로 패칭을 완료한 이메일 기록 Ref & In-flight 동시성 단일화(Coalescing) 방어용 Ref
   const lastFetchedEmailRef = useRef<string>("");
   const isFetchingRef = useRef<boolean>(false);
   const inFlightPromiseRef = useRef<Promise<void> | null>(null);
+  const pendingRefetchRef = useRef<boolean>(false);
   const lastRequestedEmailRef = useRef<string>("");
   const mountTimeRef = useRef<number>(Date.now());
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -309,7 +319,7 @@ export default function DashboardPage() {
     hasCachedDataRef.current = true;
   }
 
-  // 데이터 로드 (⚡ 단일 통합 부트스트랩: 단 1회의 HTTP 왕복으로 0.5초 만에 전 데이터 일괄 수신)
+  // 데이터 로드 (⚡ 단일 통합 부트스트랩: 단 1회의 HTTP 왕복으로 0.5초 만에 전 데이터 일괄 수신 및 비동기 큐 직렬화)
   const fetchData = useCallback(async (force = false) => {
     let effectiveEmail = authAdminEmailRef.current || "";
     if (!effectiveEmail && typeof window !== "undefined") {
@@ -322,18 +332,22 @@ export default function DashboardPage() {
       return;
     }
 
-    // 1. 이미 같은 이메일로 데이터 조회가 완료되었고 force가 아닌 경우 중복 호출 스킵
+    // 1. 이미 같은 이메일로 조회가 완료되었고 force가 아니면 스킵
     if (!force && lastFetchedEmailRef.current === effectiveEmail) {
       return;
     }
 
-    // 2. 이미 같은 이메일로 요청이 진행 중인 경우 중복 발사 방지 (In-Flight 재사용 및 캔슬 방지)
-    if (inFlightPromiseRef.current && lastRequestedEmailRef.current === effectiveEmail && !force) {
+    // 2. ⚡ [동시성 단일화 / Coalescing]: 이미 요청이 진행 중인 경우 이전 요청을 abort로 죽이지 않고,
+    // 현재 요청이 끝난 뒤 딱 1회 후속 패칭(Trailing Edge)하도록 예약하여 (canceled) 및 (pending) 원천 차단
+    if (isFetchingRef.current) {
+      if (force) {
+        pendingRefetchRef.current = true;
+      }
       return inFlightPromiseRef.current;
     }
 
-    // 3. 다른 이메일로 전환되거나 강제 새로고침(force) 시에만 이전 요청 정리
-    if (abortControllerRef.current && (lastRequestedEmailRef.current !== effectiveEmail || force)) {
+    // 3. 사용자 이메일 계정이 실제로 바뀐 경우에만 이전 요청 정리
+    if (abortControllerRef.current && lastRequestedEmailRef.current !== effectiveEmail) {
       abortControllerRef.current.abort();
     }
     const abortCtrl = new AbortController();
@@ -348,7 +362,7 @@ export default function DashboardPage() {
 
     const fetchPromise = (async () => {
       try {
-        // 🚀 [서버 단일 통합 부트스트랩 API 호출: 브라우저 동시 소켓 점유 0, 5개 쿼리 병렬 일괄 수신]
+        // 🚀 [서버 단일 통합 부트스트랩 API 호출: 브라우저 동시 소켓 1개 유지, 큐 직렬화]
         const res = await apiFetch(`/api/dashboard/bootstrap?userEmail=${encodeURIComponent(effectiveEmail)}`, {
           headers: { "Cache-Control": "no-cache" },
           signal: abortCtrl.signal,
@@ -410,6 +424,14 @@ export default function DashboardPage() {
           isFetchingRef.current = false;
           abortControllerRef.current = null;
           inFlightPromiseRef.current = null;
+
+          // ⚡ 대기 중이던 후속 변경 요청이 있으면 딱 1회 추가 실행 (Trailing Refetch)
+          if (pendingRefetchRef.current) {
+            pendingRefetchRef.current = false;
+            setTimeout(() => {
+              void fetchData(true);
+            }, 50);
+          }
         }
       }
     })();
@@ -455,8 +477,8 @@ export default function DashboardPage() {
     const unsub = onUserDataChanged((event) => {
       setIsRealtimeLive(true);
 
-      // 마운트 직후 2초 동안은 초기 bootstrap이 처리하므로 SSE 초기 연결 이벤트에 의한 중복 호출 방어
-      if (Date.now() - mountTimeRef.current < 2000) {
+      // 마운트 직후 3초 동안은 초기 bootstrap이 처리하므로 SSE 초기 연결 이벤트에 의한 중복 호출 방어
+      if (Date.now() - mountTimeRef.current < 3000) {
         return;
       }
 
@@ -474,7 +496,7 @@ export default function DashboardPage() {
         if (sseDebounceTimer) clearTimeout(sseDebounceTimer);
         sseDebounceTimer = setTimeout(() => {
           fetchDataRef.current(true);
-        }, 300);
+        }, 800);
       }
     });
 
@@ -977,9 +999,11 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
-              <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-slate-500 bg-white/80 px-2.5 py-1.5 rounded-xl border border-emerald-200/60">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="font-bold text-emerald-700">모바일 에이전트 활성</span>
+              <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-slate-500 bg-white/80 px-2.5 py-1.5 rounded-xl border border-slate-200/80">
+                <span className={`w-2 h-2 rounded-full ${deviceCount > 0 ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
+                <span className={`font-bold ${deviceCount > 0 ? "text-emerald-700" : "text-slate-500"}`}>
+                  {deviceCount > 0 ? "모바일 에이전트 활성" : "에이전트 미연동"}
+                </span>
               </div>
 
               <Link
@@ -1107,7 +1131,7 @@ export default function DashboardPage() {
                             {p.name}
                           </h5>
                           <div className="text-[10px] text-slate-400 font-mono truncate">
-                            ID: {p.scriptId || p.gasProjectId || p.id}
+                            ID: {getProjectDisplayId(p)}
                           </div>
                           {/* 📅 생성일자 및 삭제일시 */}
                           <div className="flex items-center gap-2.5 text-[10px] text-slate-400 pt-0.5 flex-wrap">
@@ -1209,16 +1233,16 @@ export default function DashboardPage() {
                         <span className="shrink-0 font-bold text-slate-500">ID:</span>
                         <span
                           className="truncate max-w-[200px] sm:max-w-[280px] select-all cursor-pointer hover:text-slate-600 transition-colors"
-                          title={`전체 ID: ${p.scriptId || p.gasProjectId || p.id} (클릭 시 복사)`}
+                          title={`전체 ID: ${getProjectDisplayId(p)} (클릭 시 복사)`}
                           onClick={() => {
-                            const fullId = p.scriptId || p.gasProjectId || p.id;
+                            const fullId = getProjectDisplayId(p);
                             if (fullId) {
                               navigator.clipboard.writeText(fullId);
                               showAlert({ type: "success", text: "프로젝트 ID가 클립보드에 복사되었습니다." });
                             }
                           }}
                         >
-                          {p.scriptId || p.gasProjectId || p.id}
+                          {getProjectDisplayId(p)}
                         </span>
                       </div>
 

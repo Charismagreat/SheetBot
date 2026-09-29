@@ -21,7 +21,9 @@ function mapLightProject(row: any) {
     parsedTriggers = [];
   }
 
-  const safeId = row.id || row.uuid || row.gas_project_id || row.spreadsheet_id || `proj_${Date.now()}`;
+  const rawId = String(row.id || "");
+  const normalizedId = rawId.endsWith(".0") ? rawId.slice(0, -2) : rawId;
+  const safeId = row.script_id || row.gas_project_id || row.spreadsheet_id || row.uuid || normalizedId || `proj_${Date.now()}`;
 
   return {
     id: safeId,
