@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
@@ -20,6 +21,7 @@ import android.provider.ContactsContract
 import android.provider.Settings
 import android.speech.RecognizerIntent
 import android.util.Base64
+import android.util.Log
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
@@ -1924,7 +1926,6 @@ class MainActivity : AppCompatActivity() {
      */
     private fun handleQuoteImageSelected(uri: Uri) {
         val email = prefs.userEmail.takeIf { !it.isNullOrBlank() }
-            ?: prefs.quoteUserEmail.takeIf { !it.isNullOrBlank() }
             ?: "chachogreat@gmail.com"
 
         binding.tvQuoteImageStatus.text = "이미지 최적화 및 업로드 중..."
@@ -2023,7 +2024,7 @@ class MainActivity : AppCompatActivity() {
 
             return Pair(compressedBytes, scaledBitmap)
         } catch (e: Exception) {
-            Log.e(TAG, "이미지 압축 실패: ${e.message}", e)
+            Log.e("MainActivity", "이미지 압축 실패: ${e.message}", e)
             return Pair(ByteArray(0), null)
         }
     }
