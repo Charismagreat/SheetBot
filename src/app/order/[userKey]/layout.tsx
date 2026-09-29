@@ -56,8 +56,8 @@ export async function generateMetadata(
     }
   } catch (_) {}
 
-  const title = `[${businessName}] 실시간 셀프 견적 & 간편 주문`;
-  const description = `${businessName}의 스마트 단가표를 실시간 확인하고 원하는 품목과 옵션을 선택하여 1초 만에 간편 예약/주문하세요.`;
+  const title = `[${businessName}]`;
+  const description = `실시간 셀프 견적 및 간편 주문 • ${businessName}`;
   const pageUrl = `https://sheetbot.cloud/order/${userKey}`;
 
   return {
