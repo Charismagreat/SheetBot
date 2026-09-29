@@ -19,6 +19,7 @@ import android.os.PowerManager
 import android.provider.ContactsContract
 import android.provider.Settings
 import android.speech.RecognizerIntent
+import android.util.Base64
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
@@ -819,6 +820,42 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnOpenQuoteSheet.setOnClickListener {
             showOpenSheetChooserDialog("QUOTE", prefs.quoteDriveSheetTitle)
+        }
+
+        // 📱 고객 주도형 모바일 셀프 견적 & 1초 주문 웹앱 바로가기 및 링크 복사
+        binding.btnOpenSelfOrderWeb.setOnClickListener {
+            val email = prefs.userEmail
+            if (email.isNullOrBlank()) {
+                Toast.makeText(this, "먼저 시트봇 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val slug = Base64.encodeToString(email.toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+            val url = "https://sheetbot.cloud/order/$slug"
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(this, "웹 브라우저를 열 수 없습니다: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        binding.btnCopySelfOrderLink.setOnClickListener {
+            val email = prefs.userEmail
+            if (email.isNullOrBlank()) {
+                Toast.makeText(this, "먼저 시트봇 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val slug = Base64.encodeToString(email.toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+            val url = "https://sheetbot.cloud/order/$slug"
+            try {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("SheetBot Self Order Link", url))
+                Toast.makeText(this, "고객 주문 링크가 복사되었습니다! 카톡이나 문자로 전송하세요.", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "클립보드 복사 실패: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
         }
 
         // 부재중 전화(Missed Call) 0원 스마트 자동 회신 UI 바인딩 및 실시간 자동 저장 (Auto-Save)

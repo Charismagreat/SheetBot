@@ -82,14 +82,14 @@ export const OFFICIAL_SCENARIOS: ScenarioTemplate[] = [
   },
   {
     id: "auto_quote",
-    category: "스마트 견적",
+    category: "스마트 견적 & 셀프 주문",
     badgeBg: "bg-teal-50 border-teal-200 text-teal-700",
-    badgeText: "📑 스마트 견적",
+    badgeText: "📑 셀프 견적 & 주문",
     icon: "📑",
-    title: "고객 문의 수신 ➔ AI 단가표 매칭 & 모바일 견적서 자동 회신",
-    prompt: "고객이 문자로 상품/서비스 견적을 문의하면 시트의 단가표를 AI로 자동 조회하여 맞춤형 견적서 링크를 고객 번호로 0원 회신해줘",
-    description: "고객의 자연어 문의를 AI가 분석하여 단가표와 매칭하고, 고화질 모바일 견적서 뷰어 링크를 10초 만에 고객에게 회신합니다.",
-    benefit: "상담 응대 시간 90% 단축 / 견적서 자동 발급",
+    title: "고객 문의 수신 ➔ 실시간 셀프 견적 & 1초 간편 주문 링크 자동 회신",
+    prompt: "고객이 상품/서비스 가격이나 견적을 문의하면 시트의 단가표를 실시간 반영한 모바일 셀프 견적 웹링크를 고객 번호로 0원 자동 회신해줘",
+    description: "고객이 스마트폰에서 수량과 옵션을 직접 선택하며 실시간 견적을 뽑고 즉시 주문 접수할 수 있는 대화형 셀프 견적 웹페이지를 자동 전송합니다.",
+    benefit: "전화 상담 80% 절감 / 24시간 자율 견적 주문 접수",
   },
 ];
 
@@ -103,6 +103,7 @@ interface NotificationsRulesTabProps {
   onToggleRule: (rule: any) => void;
   onDeleteRule: (rule: any) => void;
   onRefresh: () => void;
+  userEmail?: string;
   samplePrompts?: string[];
 }
 
@@ -116,9 +117,35 @@ export default function NotificationsRulesTab({
   onToggleRule,
   onDeleteRule,
   onRefresh,
+  userEmail,
 }: NotificationsRulesTabProps) {
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
   const [isScenarioGuideOpen, setIsScenarioGuideOpen] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const getOrderUrl = () => {
+    const email = userEmail || "chachogreat@gmail.com";
+    try {
+      const slug = btoa(unescape(encodeURIComponent(email.toLowerCase().trim())))
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+      const origin = typeof window !== "undefined" ? window.location.origin : "https://sheetbot.cloud";
+      return `${origin}/order/${slug}`;
+    } catch {
+      return `https://sheetbot.cloud/order/${encodeURIComponent(email)}`;
+    }
+  };
+
+  const handleCopyOrderLink = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = getOrderUrl();
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(url);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
+  };
 
   const handleSelectScenario = (sc: ScenarioTemplate) => {
     setSelectedScenarioId(sc.id);
@@ -187,6 +214,26 @@ export default function NotificationsRulesTab({
                       </div>
                       <h4 className="text-xs font-black text-slate-900 leading-snug">{sc.title}</h4>
                       <p className="text-[11px] text-slate-500 leading-relaxed">{sc.description}</p>
+
+                      {sc.id === "auto_quote" && (
+                        <div className="pt-2 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <a
+                            href={getOrderUrl()}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[10.5px] font-bold transition"
+                          >
+                            <span>📱 견적 웹앱 미리보기</span>
+                          </a>
+                          <button
+                            type="button"
+                            onClick={handleCopyOrderLink}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10.5px] font-bold transition"
+                          >
+                            <span>{copiedLink ? "✓ 복사됨" : "🔗 링크 복사"}</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] font-bold text-indigo-600">

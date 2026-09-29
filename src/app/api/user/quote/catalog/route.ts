@@ -13,20 +13,33 @@ const DEFAULT_CATALOG = [
   { code: "OPT-002", category: "추가 옵션", name: "피톤치드 연무 살균 소독", spec: "1식", unitPrice: 0, discountPrice: 0, optionType: "옵션", note: "무료 서비스 이벤트 (기본 제공)" },
 ];
 
+import { resolveUserEmailFromKey } from "@/lib/user-key-helper";
+
 /**
- * GET /api/user/quote/catalog?quoteId=xxxx
- * 셀프 견적기(선택 폼)에서 해당 사장님의 구글 시트 단가표 목록 및 세션 정보 조회
+ * GET /api/user/quote/catalog?quoteId=xxxx 또는 ?userKey=xxxx
+ * 셀프 견적기(선택 폼)에서 해당 사장님의 구글 시트 단가표 목록 및 상호 정보 조회
  */
 export async function GET(req: NextRequest) {
   try {
     await setupDatabase();
     const url = new URL(req.url);
     const quoteId = url.searchParams.get("quoteId");
+    const userKey = url.searchParams.get("userKey") || url.searchParams.get("u");
+    const directEmail = url.searchParams.get("email");
 
     let targetEmail = "chachogreat@gmail.com";
-    let customerName = "고객님";
+    let customerName = "";
     let customerPhone = "";
     let inquiryText = "";
+
+    if (userKey) {
+      const resolvedEmail = await resolveUserEmailFromKey(userKey);
+      if (resolvedEmail) {
+        targetEmail = resolvedEmail;
+      }
+    } else if (directEmail) {
+      targetEmail = directEmail.toLowerCase().trim();
+    }
 
     if (quoteId) {
       const qRes = await queryTable("sheetbot_quotes", {
@@ -42,6 +55,21 @@ export async function GET(req: NextRequest) {
         inquiryText = q.inquiry_text || inquiryText;
       }
     }
+
+    // 사장님 프로필/상호 정보 조회
+    let businessName = "시트봇 공식 파트너";
+    let merchantPhone = "";
+    try {
+      const userRes = await queryTable("sheetbot_users", {
+        filters: { email: targetEmail },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+      if (userRes.rows && userRes.rows.length > 0) {
+        const u = userRes.rows[0];
+        businessName = u.business_name || u.name || businessName;
+        merchantPhone = u.phone || "";
+      }
+    } catch (_) {}
 
     let catalogItems = [];
 
@@ -107,6 +135,11 @@ export async function GET(req: NextRequest) {
       customerName,
       customerPhone,
       inquiryText,
+      merchant: {
+        businessName,
+        phone: merchantPhone,
+        email: targetEmail,
+      },
       categories,
       catalog: catalogItems,
     });
