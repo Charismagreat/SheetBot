@@ -78,14 +78,17 @@ object SmsSenderUtil {
             val isSent = sendSms(context, receipt.recipientPhone, receipt.message)
             if (isSent) {
                 ApiClient.markReceiptSent(receipt.id, true)
-                ApiClient.sendReceiptSmsSync(
-                    userEmail = prefs.userEmail,
-                    recipientPhone = receipt.recipientPhone,
-                    customerName = receipt.depositorName,
-                    amount = receipt.amountKrw.toLong(),
-                    receiptContent = receipt.message,
-                    status = "전송 완료"
-                )
+                val email = prefs.userEmail
+                if (!email.isNullOrBlank()) {
+                    ApiClient.sendReceiptSmsSync(
+                        userEmail = email,
+                        recipientPhone = receipt.recipientPhone,
+                        customerName = receipt.depositorName,
+                        amount = receipt.amountKrw.toLong(),
+                        receiptContent = receipt.message,
+                        status = "전송 완료"
+                    )
+                }
                 sentCount++
                 Log.i(TAG, "🎉 [대기열 영수증 회신 완료] ID: ${receipt.id}, 입금자: ${receipt.depositorName}, 수신: ${receipt.recipientPhone}")
             } else {
