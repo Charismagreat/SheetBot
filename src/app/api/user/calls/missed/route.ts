@@ -11,6 +11,7 @@ import { setupDatabase } from "@/lib/setup-db";
 import { realtimeHub } from "@/lib/realtime-hub";
 import { maskPhoneNumber, formatZeroRetentionContent } from "@/lib/privacy";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
+import { getKoreanTimeString } from "@/lib/date-utils";
 
 /**
  * POST /api/user/calls/missed
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
       userEmail: bodyEmail,
       callerPhone,
       contactName,
-      callTime = new Date().toISOString().replace("T", " ").slice(0, 19),
+      callTime = getKoreanTimeString(),
       autoReplied = true,
       replyMessage = "",
       deviceId = "SheetBot Agent",
@@ -124,7 +125,7 @@ export async function POST(req: NextRequest) {
         content: formatZeroRetentionContent(`부재중 통화 (${replyStatusLabel})`, replyMessage.length),
         status: autoReplied ? "SUCCESS" : "INBOUND",
         error_message: null,
-        created_at: new Date().toISOString(),
+        created_at: getKoreanTimeString(),
       },
     ]).catch((err) => console.warn("[MissedCalls] DB log insert warning:", err.message));
 

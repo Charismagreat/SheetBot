@@ -78,6 +78,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var aodGestureDetector: GestureDetector
     private var smsSentObserver: SmsSentObserver? = null
     private var isDepositReceiverRegistered = false
+    private var lastHandledShareUrl: String? = null
+    private var lastHandledShareTime: Long = 0L
 
     // 입금 감지 시 실시간 화면 갱신 리시버
     private val depositUpdateReceiver = object : BroadcastReceiver() {
@@ -1835,6 +1837,7 @@ class MainActivity : AppCompatActivity() {
     private fun handleSharedIntent(intent: Intent?) {
         if (intent == null) return
         val action = intent.action
+        if (action == null) return
 
         if (Intent.ACTION_SEND == action) {
             val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
@@ -1851,12 +1854,18 @@ class MainActivity : AppCompatActivity() {
             val urlRegex = Regex("https?://[a-zA-Z0-9.-]+(?:/[^\\s]*)?")
             val matchedUrlInText = if (!sharedText.isNullOrBlank()) urlRegex.find(sharedText)?.value else null
             val isWebUri = clipUri?.scheme in listOf("http", "https")
+            val targetUrl = matchedUrlInText ?: (if (isWebUri && clipUri != null) clipUri.toString() else null)
 
             // 1순위: 텍스트에 웹 링크가 포함되어 있거나 clipUri가 웹 주소인 경우 -> 웹 링크 & 유튜브 자동 스크랩
-            if (matchedUrlInText != null) {
-                bookmarkSharedUrl(matchedUrlInText, sharedText)
-            } else if (isWebUri && clipUri != null) {
-                bookmarkSharedUrl(clipUri.toString(), sharedText)
+            if (targetUrl != null) {
+                val now = System.currentTimeMillis()
+                if (targetUrl == lastHandledShareUrl && (now - lastHandledShareTime) < 10000) {
+                    android.util.Log.d("MainActivity", "동일 URL 10초 이내 중복 공유 무시: $targetUrl")
+                } else {
+                    lastHandledShareUrl = targetUrl
+                    lastHandledShareTime = now
+                    bookmarkSharedUrl(targetUrl, sharedText)
+                }
             } else {
                 // 2순위: 실제 로컬 파일(content:// 또는 file://) 스트림인 경우 -> 구글 드라이브 파일 업로드
                 val fileUri = streamUri ?: clipUri?.takeIf { it.scheme in listOf("content", "file") }
@@ -1879,6 +1888,12 @@ class MainActivity : AppCompatActivity() {
                 uploadFiles(validFileUris, "스마트폰 공유하기(Share) 다중 연동")
             }
         }
+
+        // 인텐트 중복 소비 방지 (소진 처리)
+        intent.action = null
+        try {
+            setIntent(Intent())
+        } catch (_: Throwable) {}
     }
 
     /**

@@ -15,6 +15,8 @@ import {
 import { setupDatabase } from "@/lib/setup-db";
 import { getAiModelSettings } from "@/lib/ai-settings";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
+import { uploadDriveFileWithBridge } from "@/lib/drive-upload-helper";
+import { getKoreanTimeString } from "@/lib/date-utils";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -114,14 +116,16 @@ export async function POST(req: NextRequest) {
       console.warn("[FilesUpload] Folder resolve warning:", folderErr.message);
     }
 
-    // 5. 구글 드라이브로 파일 업로드
+    // 5. 구글 드라이브로 파일 업로드 (원격/로컬 무손실 브릿지 전송)
     let driveFileId: string | null = null;
     let webViewLink = "";
     try {
-      const uploadRes = await uploadDriveFile({
-        filePath: tempFilePath,
+      const uploadRes = await uploadDriveFileWithBridge({
+        buffer,
+        fileName: targetFileName,
         folderId: targetFolderId || undefined,
-        destName: targetFileName,
+        mimeType,
+        tempFilePath,
         preferOAuth: true,
       });
 
@@ -227,9 +231,9 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // 7-3. 시트에 신규 기록 행 추가
+        // 7-3. 시트에 신규 기록 행 추가 (한국 표준시 KST 적용)
         if (targetSpreadsheetId) {
-          const nowStr = new Date().toISOString().replace("T", " ").slice(0, 19);
+          const nowStr = getKoreanTimeString();
 
           if (ocrType === "RECEIPT") {
             const data = ocrResultData || {};
@@ -322,7 +326,7 @@ export async function POST(req: NextRequest) {
         content: contentSummary,
         status: "SUCCESS",
         error_message: null,
-        created_at: new Date().toISOString(),
+        created_at: getKoreanTimeString(),
       },
     ]).catch((err) => console.warn("[FilesUpload] DB log insert warning:", err.message));
 

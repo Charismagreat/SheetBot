@@ -13,6 +13,7 @@ import { maskPhoneNumber, formatZeroRetentionContent } from "@/lib/privacy";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { parseBankDepositSms } from "@/lib/bank-sms-parser";
 import { recordPaymentToGoogleSheet } from "@/lib/payment-sheet-sync";
+import { getKoreanTimeString } from "@/lib/date-utils";
 
 /**
  * POST /api/user/messages/sms
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
     const isOutbound = direction.toUpperCase() === "OUTBOUND";
     const directionLabel = isOutbound ? "발신" : "수신";
     const displayName = contactName && contactName.trim().length > 0 ? contactName.trim() : "미등록 연락처";
-    const nowStr = timestamp || new Date().toISOString().replace("T", " ").slice(0, 19);
+    const nowStr = timestamp || getKoreanTimeString();
 
     // [SheetBot] 표준 네이밍 원칙 준수
     let sheetTitle = rawSheetTitle.trim();
@@ -159,7 +160,7 @@ export async function POST(req: NextRequest) {
         content: formatZeroRetentionContent(`문자(${directionLabel})`, message.length),
         status: isOutbound ? "SUCCESS" : "INBOUND",
         error_message: null,
-        created_at: new Date().toISOString(),
+        created_at: getKoreanTimeString(),
       },
     ]).catch((err) => console.warn("[SmsSync] DB log insert warning:", err.message));
 
