@@ -84,10 +84,13 @@ export async function POST(req: NextRequest) {
       const resolvedSheet = await resolveUserSpreadsheet({
         userEmail: targetEmail,
         sheetType: "QUOTE",
-        defaultTitle: "[SheetBot] 스마트 견적 및 단가표 대장",
+        defaultTitle: "[SheetBot] 스마트 간편 주문 및 품목 대장",
       });
       spreadsheetId = resolvedSheet.spreadsheetId || "";
-    } catch (_) {}
+      console.log(`[QuoteOrder] Resolved spreadsheetId: "${spreadsheetId}" for user: ${targetEmail}`);
+    } catch (resolveErr: any) {
+      console.warn(`[QuoteOrder] resolveUserSpreadsheet error:`, resolveErr.message);
+    }
 
     // 5. sheetbot_quotes DB 저장
     const quoteRow = {
@@ -99,7 +102,7 @@ export async function POST(req: NextRequest) {
       preferred_date: preferredDate,
       notes: notes,
       source: "SELF_ORDER",
-      inquiry_text: `[고객 셀프 주문] ${itemsSummary}`,
+      inquiry_text: `[간편 주문] ${itemsSummary}`,
       items_json: JSON.stringify(validItems),
       supply_amount: supplyAmount,
       vat_amount: vatAmount,
@@ -114,49 +117,61 @@ export async function POST(req: NextRequest) {
       console.warn("[QuoteOrder] DB insert warning:", err.message);
     });
 
-    // 6. 구글 시트 '견적발급대장' (또는 주문대장)에 실시간 행 추가
+    // 6. 구글 시트 '주문접수대장'에 실시간 행 추가 (10개 열 표준)
+    // [주문번호, 주문일시, 고객명, 연락처, 배송/방문주소, 요청사항, 주문내역(품목/수량), 총결제금액(원), 주문상태, 처리일시]
     if (spreadsheetId) {
       try {
+        const fullNotes = [
+          notes ? `요청: ${notes}` : "",
+          preferredDate ? `희망일시: ${preferredDate}` : "",
+        ].filter(Boolean).join(" | ");
+
         const appendRow = [
           orderId,
           todayFormatted,
           customerName,
           customerPhone,
-          `[셀프주문] ${itemsSummary}` + (customerAddress ? ` | 배송/주소: ${customerAddress}` : "") + (preferredDate ? ` | 희망일시: ${preferredDate}` : ""),
-          supplyAmount,
-          vatAmount,
+          customerAddress || "",
+          fullNotes,
+          itemsSummary,
           totalAmount,
-          `https://sheetbot.cloud/q/${orderId}`,
-          "신규주문접수",
-          "열람완료",
+          "접수",
+          "",
         ];
 
-        await callSheetsTool(
+        console.log(`[QuoteOrder] Attempting sheets_append_values to spreadsheetId: ${spreadsheetId}...`);
+        const appendRes = await callSheetsTool(
           "sheets_append_values",
           {
             spreadsheetId,
-            range: "견적발급대장!A:K",
+            range: "주문접수대장!A:J",
             values: [appendRow],
             preferOAuth: true,
           },
           { preferOAuth: true }
-        ).catch(async () => {
-          // 견적발급대장이 없을 경우 기본 탭 추가 시도
-          await callSheetsTool(
-            "sheets_append_values",
-            {
-              spreadsheetId,
-              range: "A:K",
-              values: [appendRow],
-              preferOAuth: true,
-            },
-            { preferOAuth: true }
-          ).catch(() => {});
-        });
+        );
+        console.log(`[QuoteOrder] sheets_append_values success:`, JSON.stringify(appendRes));
       } catch (sheetErr: any) {
         console.warn("[QuoteOrder] Sheet append error:", sheetErr.message);
       }
+    } else {
+      console.warn("[QuoteOrder] No spreadsheetId resolved, skipping sheet append.");
     }
+
+    // 7. 사장님 프로필/상호 정보 조회 (전자 주문확인서에 표출)
+    let businessName = "스마트 간편 주문 센터";
+    let merchantPhone = "";
+    try {
+      const settingRes = await queryTable("sheetbot_settings", {
+        filters: { key: `quote_profile_${targetEmail}` },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+      if (settingRes.rows && settingRes.rows.length > 0) {
+        const val = JSON.parse(settingRes.rows[0].value || "{}");
+        if (val.businessName && val.businessName.trim()) businessName = val.businessName.trim();
+        if (val.phone) merchantPhone = val.phone;
+      }
+    } catch (_) {}
 
     return NextResponse.json({
       success: true,
@@ -165,14 +180,20 @@ export async function POST(req: NextRequest) {
       customerPhone,
       customerAddress,
       preferredDate,
+      notes,
       items: validItems,
       supplyAmount,
       vatAmount,
       totalAmount,
       itemsSummary,
+      merchant: {
+        businessName,
+        phone: merchantPhone,
+        email: targetEmail,
+      },
       viewUrl: `https://sheetbot.cloud/q/${orderId}`,
       createdAt: todayFormatted,
-      message: "주문 및 견적 신청이 성공적으로 접수되었습니다.",
+      message: "주문이 성공적으로 접수되었습니다.",
     });
   } catch (error: any) {
     console.error("[QuoteOrder] Error:", error);

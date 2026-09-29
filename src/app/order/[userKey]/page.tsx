@@ -63,7 +63,7 @@ export async function generateMetadata(
 
   // 사용자의 요청: 상호명만 [상호명] 형태로 타이틀에 표출 (예: [chachogreat몰])
   const title = `[${businessName}]`;
-  const description = `실시간 셀프 견적 및 간편 주문 • ${businessName}`;
+  const description = `실시간 모바일 간편 주문 • ${businessName}`;
   const pageUrl = `https://sheetbot.cloud/order/${userKey}`;
 
   return {

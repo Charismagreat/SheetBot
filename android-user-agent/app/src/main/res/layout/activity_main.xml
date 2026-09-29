@@ -1497,7 +1497,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="📑 AI 스마트 견적 &amp; 단가표 대장 연동"
+                    android:text="📑 AI 스마트 간편 주문 &amp; 품목 대장 연동"
                     android:textColor="#2DD4BF"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -1521,7 +1521,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="고객 문의 시 시트 단가표를 실시간 반영한 모바일 셀프 견적 및 1초 주문 링크를 0원 자동 전송합니다."
+                    android:text="고객 문의 시 시트 품목을 실시간 반영한 모바일 간편 주문 링크를 0원 자동 전송합니다."
                     android:textColor="#94A3B8"
                     android:textSize="11sp"
                     android:layout_marginBottom="6dp" />
@@ -1646,7 +1646,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:backgroundTint="#134E4A"
-                    android:text="📊 스마트 견적 및 단가표 대장 열기 ↗"
+                    android:text="📊 스마트 간편 주문 및 품목 대장 열기 ↗"
                     android:textColor="#5EEAD4"
                     android:textSize="11.5sp"
                     android:textStyle="bold" />
@@ -1663,7 +1663,7 @@
                         android:layout_weight="1"
                         android:layout_height="38dp"
                         android:backgroundTint="#065F46"
-                        android:text="📱 내 견적 웹앱 열기"
+                        android:text="📱 내 주문 웹앱 열기"
                         android:textColor="#34D399"
                         android:textSize="11sp"
                         android:textStyle="bold"

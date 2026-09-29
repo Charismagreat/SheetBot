@@ -4,9 +4,6 @@ import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  Calculator,
-  CheckCircle,
-  Phone,
   ShoppingCart,
   Plus,
   Minus,
@@ -16,6 +13,14 @@ import {
   FileText,
   X,
   ArrowRight,
+  Phone,
+  Printer,
+  Copy,
+  Check,
+  PackageCheck,
+  AlertCircle,
+  Eye,
+  Store,
 } from "lucide-react";
 
 interface CatalogItem {
@@ -25,8 +30,11 @@ interface CatalogItem {
   spec: string;
   unitPrice: number;
   discountPrice: number;
-  optionType: string;
-  note: string;
+  photoUrl?: string;
+  detailPhotoUrl?: string;
+  isSoldOut?: boolean;
+  optionType?: string;
+  note?: string;
 }
 
 interface MerchantInfo {
@@ -44,7 +52,7 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [merchant, setMerchant] = useState<MerchantInfo>({
-    businessName: "스마트 견적 & 주문 센터",
+    businessName: "스마트 간편 주문 센터",
     phone: "",
     email: "",
     imageUrl: "",
@@ -56,6 +64,9 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
   // 품목별 선택 수량: { [code]: quantity }
   const [quantities, setQuantities] = useState<Record<string, number>>({});
 
+  // 상세 이미지 모달 팝업
+  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
+
   // 주문 접수 모달 상태
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [customerName, setCustomerName] = useState("");
@@ -65,10 +76,11 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // 주문 완료 상태
+  // 주문 완료 상태 (전자 주문확인서 렌더링용)
   const [orderResult, setOrderResult] = useState<any>(null);
+  const [copied, setCopied] = useState(false);
 
-  // 1. 단가표 및 사장님 정보 로드
+  // 1. 단가표(품목 목록) 및 상호 정보 로드
   useEffect(() => {
     async function loadCatalog() {
       try {
@@ -82,7 +94,7 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
             setMerchant(data.merchant);
           }
         } else {
-          setError(data.error || "단가표를 불러올 수 없습니다.");
+          setError(data.error || "품목 정보를 불러올 수 없습니다.");
         }
       } catch (err: any) {
         setError("네트워크 오류가 발생했습니다.");
@@ -96,7 +108,11 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
   }, [userKey]);
 
   // 2. 수량 증감 핸들러
-  const handleQuantityChange = (code: string, delta: number) => {
+  const handleQuantityChange = (code: string, delta: number, isSoldOut?: boolean) => {
+    if (isSoldOut && delta > 0) {
+      alert("해당 품목은 현재 품절 상태입니다.");
+      return;
+    }
     setQuantities((prev) => {
       const current = prev[code] || 0;
       const next = Math.max(0, current + delta);
@@ -147,12 +163,12 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
     const raw = merchant.businessName?.trim();
     const emailPrefix = merchant.email?.split("@")[0]?.toLowerCase();
     if (!raw || (emailPrefix && raw.toLowerCase() === emailPrefix)) {
-      return "스마트 견적 & 주문 센터";
+      return "스마트 간편 주문 센터";
     }
     return raw;
   }, [merchant.businessName, merchant.email]);
 
-  // 4. 필터링된 카탈로그 목록
+  // 4. 카테고리 필터링
   const filteredCatalog = useMemo(() => {
     if (selectedCategory === "ALL") return catalog;
     return catalog.filter((item) => item.category === selectedCategory);
@@ -166,7 +182,7 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
       return;
     }
     if (selectedItems.length === 0) {
-      alert("선택된 품목이 없습니다.");
+      alert("선택된 주문 품목이 없습니다.");
       return;
     }
 
@@ -211,11 +227,41 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
     }
   };
 
+  // 주문내역 텍스트 클립보드 복사
+  const handleCopyOrderSummary = () => {
+    if (!orderResult) return;
+    const lines = [
+      `[${displayBusinessName}] 주문확인서`,
+      `주문번호: ${orderResult.orderId}`,
+      `주문일시: ${orderResult.createdAt}`,
+      `주문자명: ${orderResult.customerName} (${orderResult.customerPhone})`,
+      orderResult.customerAddress ? `배송/주소: ${orderResult.customerAddress}` : "",
+      orderResult.preferredDate ? `희망일시: ${orderResult.preferredDate}` : "",
+      orderResult.notes ? `요청사항: ${orderResult.notes}` : "",
+      `--------------------------`,
+      `[주문 내역]`,
+      ...orderResult.items.map(
+        (it: any) => `• ${it.name} (${it.quantity}${it.spec}) - ${it.amount.toLocaleString()}원`
+      ),
+      `--------------------------`,
+      `공급가액: ${orderResult.supplyAmount.toLocaleString()}원`,
+      `부가세(10%): ${orderResult.vatAmount.toLocaleString()}원`,
+      `총 결제금액: ${orderResult.totalAmount.toLocaleString()}원`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    navigator.clipboard.writeText(lines).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    });
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-100 p-4">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mb-4"></div>
-        <p className="text-sm font-medium text-slate-400">실시간 단가표 및 견적기를 불러오는 중...</p>
+        <p className="text-sm font-medium text-slate-400">실시간 품목 및 주문 정보를 불러오는 중...</p>
       </div>
     );
   }
@@ -226,74 +272,204 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
         <div className="w-16 h-16 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center mb-4">
           <X className="w-8 h-8" />
         </div>
-        <h2 className="text-xl font-bold mb-2">견적기를 열 수 없습니다</h2>
+        <h2 className="text-xl font-bold mb-2">주문 페이지를 열 수 없습니다</h2>
         <p className="text-slate-400 text-sm max-w-sm mb-6">{error}</p>
       </div>
     );
   }
 
-  // 주문 완료 화면
+  // ==========================================================
+  // [주문 완료 화면: 모바일 전자 주문확인서 (HTML 영수증)]
+  // ==========================================================
   if (orderResult) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 py-10 px-4 flex flex-col items-center justify-center">
-        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl text-center">
-          <div className="w-20 h-20 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-4">
-            <CheckCircle className="w-12 h-12" />
+      <div className="min-h-screen bg-slate-950 text-slate-100 py-6 px-3 sm:px-6 flex flex-col items-center justify-center print:bg-white print:text-black print:p-0">
+        <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-2xl print:border-none print:shadow-none print:bg-white print:p-4">
+          {/* 상단 축하/안내 뱃지 */}
+          <div className="text-center mb-6 print:mb-3">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3 print:hidden">
+              <PackageCheck className="w-10 h-10" />
+            </div>
+            <span className="inline-block px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full text-xs font-semibold mb-2 print:border print:border-emerald-600">
+              ✓ 주문 접수 완료 • 구글 시트 실시간 등록
+            </span>
+            <h1 className="text-2xl font-black text-white tracking-tight print:text-black">
+              전자 주문확인서
+            </h1>
+            <p className="text-xs text-slate-400 mt-1 print:text-gray-600">
+              고객님의 주문이 사장님께 안전하게 전달되었습니다.
+            </p>
           </div>
-          <span className="inline-block px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full text-xs font-semibold mb-2">
-            접수 완료 • 구글 시트 실시간 연동
-          </span>
-          <h1 className="text-2xl font-bold text-white mb-2">주문 및 견적 신청 완료</h1>
-          <p className="text-slate-400 text-sm mb-6">
-            <strong className="text-slate-200">{orderResult.customerName}</strong>님, 요청하신 견적과 주문이 사장님께 실시간 전달되었습니다.
-          </p>
 
-          <div className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-4 text-left space-y-2.5 mb-6 text-sm">
-            <div className="flex justify-between text-slate-400">
-              <span>접수 번호</span>
-              <span className="font-mono text-slate-200 font-semibold">{orderResult.orderId}</span>
-            </div>
-            <div className="flex justify-between text-slate-400">
-              <span>담당 업체</span>
-              <span className="text-slate-200 font-medium">{displayBusinessName}</span>
-            </div>
-            {orderResult.preferredDate && (
-              <div className="flex justify-between text-slate-400">
-                <span>희망 일시</span>
-                <span className="text-slate-200">{orderResult.preferredDate}</span>
+          {/* 영수증 카드 본체 */}
+          <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 text-xs sm:text-sm print:bg-white print:border-gray-300 print:text-black">
+            {/* 기본 주문 메타 정보 */}
+            <div className="flex justify-between items-start pb-3 border-b border-slate-800/80 print:border-gray-200">
+              <div>
+                <span className="text-[11px] text-slate-500 uppercase tracking-wider block">판매점</span>
+                <span className="font-bold text-white text-sm sm:text-base print:text-black">{displayBusinessName}</span>
               </div>
-            )}
-            <div className="border-t border-slate-800 pt-2 flex justify-between items-center">
-              <span className="font-medium text-slate-300">총 예상 견적 (VAT포함)</span>
-              <span className="text-lg font-bold text-emerald-400">
-                {orderResult.totalAmount.toLocaleString()}원
+              <div className="text-right">
+                <span className="text-[11px] text-slate-500 uppercase tracking-wider block">주문번호</span>
+                <span className="font-mono text-emerald-400 font-bold print:text-black">{orderResult.orderId}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-slate-400 print:text-gray-600 text-xs">
+              <div>
+                <span className="block text-[11px] text-slate-500">주문일시</span>
+                <span className="text-slate-200 font-medium print:text-black">{orderResult.createdAt}</span>
+              </div>
+              <div>
+                <span className="block text-[11px] text-slate-500">주문자 성함</span>
+                <span className="text-slate-200 font-medium print:text-black">
+                  {orderResult.customerName} ({orderResult.customerPhone})
+                </span>
+              </div>
+              {orderResult.customerAddress && (
+                <div className="col-span-2">
+                  <span className="block text-[11px] text-slate-500">배송 / 방문 주소</span>
+                  <span className="text-slate-200 font-medium print:text-black">{orderResult.customerAddress}</span>
+                </div>
+              )}
+              {orderResult.preferredDate && (
+                <div>
+                  <span className="block text-[11px] text-slate-500">희망 일시</span>
+                  <span className="text-slate-200 font-medium print:text-black">{orderResult.preferredDate}</span>
+                </div>
+              )}
+              {orderResult.notes && (
+                <div className="col-span-2">
+                  <span className="block text-[11px] text-slate-500">배송/주문 요청사항</span>
+                  <span className="text-slate-200 font-medium print:text-black">{orderResult.notes}</span>
+                </div>
+              )}
+            </div>
+
+            {/* 품목 내역 테이블 */}
+            <div className="pt-2">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2 print:text-black">
+                주문 품목 내역 ({orderResult.items?.length || 0}종)
               </span>
+              <div className="border border-slate-800 rounded-xl overflow-hidden print:border-gray-300">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="bg-slate-900 text-slate-400 font-semibold print:bg-gray-100 print:text-black">
+                    <tr>
+                      <th className="py-2 px-3">품목명</th>
+                      <th className="py-2 px-2 text-center">수량</th>
+                      <th className="py-2 px-3 text-right">금액</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/80 print:divide-gray-200">
+                    {orderResult.items?.map((it: any, idx: number) => (
+                      <tr key={idx} className="text-slate-200 print:text-black">
+                        <td className="py-2.5 px-3">
+                          <div className="font-semibold text-white print:text-black">{it.name}</div>
+                          <div className="text-[10px] text-slate-400 print:text-gray-500">{it.spec} • {it.category}</div>
+                        </td>
+                        <td className="py-2.5 px-2 text-center font-mono">
+                          {it.quantity}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-medium">
+                          {it.amount.toLocaleString()}원
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 결제 금액 합계 요약 */}
+            <div className="border-t border-slate-800 pt-3 space-y-1.5 text-xs print:border-gray-200">
+              <div className="flex justify-between text-slate-400 print:text-gray-600">
+                <span>공급가액</span>
+                <span className="font-mono text-slate-200 print:text-black">{orderResult.supplyAmount.toLocaleString()}원</span>
+              </div>
+              <div className="flex justify-between text-slate-400 print:text-gray-600">
+                <span>부가세 (10%)</span>
+                <span className="font-mono text-slate-200 print:text-black">{orderResult.vatAmount.toLocaleString()}원</span>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-slate-800/80 text-sm font-bold print:border-gray-300">
+                <span className="text-white print:text-black">총 결제예정금액</span>
+                <span className="text-emerald-400 text-lg font-black print:text-black">
+                  {orderResult.totalAmount.toLocaleString()}원
+                </span>
+              </div>
+            </div>
+
+            {/* 안내 문구 */}
+            <div className="bg-slate-900/80 rounded-xl p-3 text-[11px] text-slate-400 space-y-1 border border-slate-800/60 print:border-gray-200 print:bg-gray-50 print:text-gray-600">
+              <p className="flex items-center gap-1 font-semibold text-slate-300 print:text-black">
+                <AlertCircle className="w-3.5 h-3.5 text-emerald-400" />
+                안내사항
+              </p>
+              <p>• 주문 내역이 사장님의 스프레드시트 대장에 실시간 기록되었습니다.</p>
+              <p>• 배송 및 입금 관련 세부 안내는 기재해주신 연락처로 판매점에서 직접 안내드립니다.</p>
             </div>
           </div>
 
-          <div className="space-y-3">
-            <a
-              href={orderResult.viewUrl}
-              className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-900/30"
-            >
-              <FileText className="w-5 h-5" />
-              공식 디지털 견적서 확인하기
-            </a>
+          {/* 하단 제어 버튼 모음 (인쇄 모드에서는 숨김) */}
+          <div className="mt-5 space-y-2.5 print:hidden">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => window.print()}
+                className="py-3 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition border border-slate-700/60"
+              >
+                <Printer className="w-4 h-4 text-emerald-400" />
+                확인서 인쇄 / PDF
+              </button>
+              <button
+                onClick={handleCopyOrderSummary}
+                className="py-3 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition border border-slate-700/60"
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span className="text-emerald-400">복사 완료!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 text-slate-400" />
+                    주문내역 복사
+                  </>
+                )}
+              </button>
+            </div>
+
             {merchant.phone && (
               <a
                 href={`tel:${merchant.phone}`}
-                className="w-full py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-medium flex items-center justify-center gap-2 transition"
+                className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-950/40"
               >
-                <Phone className="w-4 h-4 text-slate-400" />
-                업체로 직접 전화 문의 ({merchant.phone})
+                <Phone className="w-4 h-4" />
+                사장님께 전화 문의 ({merchant.phone})
               </a>
             )}
+
+            <button
+              onClick={() => {
+                setOrderResult(null);
+                setQuantities({});
+                setCustomerName("");
+                setCustomerPhone("");
+                setCustomerAddress("");
+                setPreferredDate("");
+                setNotes("");
+              }}
+              className="w-full py-2.5 text-xs text-slate-500 hover:text-slate-300 font-medium transition text-center"
+            >
+              + 새로운 주문 작성하기
+            </button>
           </div>
         </div>
       </div>
     );
   }
 
+  // ==========================================================
+  // [메인 화면: 모바일 간편 주문 & 품목 목록]
+  // ==========================================================
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-36">
       {/* 1. 상단 브랜드 헤더 */}
@@ -308,14 +484,14 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
               />
             ) : (
               <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-900/30">
-                <Calculator className="w-5 h-5 text-white" />
+                <Store className="w-5 h-5 text-white" />
               </div>
             )}
             <div>
               <h1 className="text-base font-bold text-white tracking-tight">{displayBusinessName}</h1>
               <p className="text-[11px] font-medium text-emerald-400 flex items-center gap-1">
                 <Sparkles className="w-3 h-3" />
-                실시간 셀프 견적 & 간편 주문
+                실시간 간편 주문
               </p>
             </div>
           </div>
@@ -343,7 +519,7 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
                   : "bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800"
               }`}
             >
-              전체 보기 ({catalog.length})
+              전체 ({catalog.length})
             </button>
             {categories.map((cat) => (
               <button
@@ -362,16 +538,16 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
         </div>
       )}
 
-      {/* 3. 메인 상품 카탈로그 카드 리스트 */}
+      {/* 3. 메인 품목 카드 리스트 */}
       <main className="max-w-2xl mx-auto px-4 py-5 space-y-3.5">
         <div className="bg-slate-900/60 border border-slate-800/60 rounded-2xl p-3.5 flex items-start gap-3">
           <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 shrink-0">
             <ShoppingCart className="w-5 h-5" />
           </div>
           <div className="text-xs text-slate-300 leading-relaxed">
-            <strong className="text-white font-semibold">장바구니 담듯 수량을 선택해 보세요!</strong>
+            <strong className="text-white font-semibold">원하시는 품목을 골라 담아보세요!</strong>
             <p className="text-slate-400 mt-0.5">
-              원하시는 품목의 <span className="text-emerald-400 font-semibold">[+] 버튼</span>을 누르면 견적 금액이 실시간으로 자동 계산됩니다.
+              품목의 <span className="text-emerald-400 font-semibold">[+] 버튼</span>을 누르면 수량과 총 결제금액이 실시간 자동 계산됩니다.
             </p>
           </div>
         </div>
@@ -381,81 +557,136 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
           const isSelected = qty > 0;
           const isDiscounted = item.discountPrice > 0 && item.discountPrice < item.unitPrice;
           const price = isDiscounted ? item.discountPrice : item.unitPrice;
+          const isSoldOut = Boolean(item.isSoldOut);
 
           return (
             <div
               key={item.code}
-              className={`p-4 rounded-2xl border transition-all ${
-                isSelected
+              className={`p-3.5 sm:p-4 rounded-2xl border transition-all ${
+                isSoldOut
+                  ? "bg-slate-900/20 border-slate-800/50 opacity-70"
+                  : isSelected
                   ? "bg-slate-900/90 border-emerald-500/60 shadow-lg shadow-emerald-950/30"
                   : "bg-slate-900/40 border-slate-800/80 hover:border-slate-700"
               }`}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
+              <div className="flex items-start gap-3.5">
+                {/* 대표 사진 썸네일 (있는 경우) */}
+                {item.photoUrl ? (
+                  <div className="relative shrink-0 w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-slate-950 border border-slate-800 group">
+                    <img
+                      src={item.photoUrl}
+                      alt={item.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                      onError={(e: any) => {
+                        e.target.style.display = 'none';
+                      }}
+                    />
+                    {item.detailPhotoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewImage({ url: item.detailPhotoUrl!, title: item.name })}
+                        className="absolute bottom-1 right-1 p-1 bg-black/70 hover:bg-black text-white rounded-md text-[10px] flex items-center gap-0.5"
+                        title="상세사진 보기"
+                      >
+                        <Eye className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                ) : null}
+
+                {/* 품목 정보 */}
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="px-2 py-0.5 rounded-md bg-slate-800 text-[10px] font-semibold text-slate-400">
                       {item.category}
                     </span>
-                    {item.optionType === "옵션" && (
-                      <span className="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400 text-[10px] font-semibold border border-purple-500/20">
-                        선택옵션
+                    {isSoldOut && (
+                      <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-400 text-[10px] font-bold border border-rose-500/30">
+                        품절
                       </span>
                     )}
-                    {isDiscounted && (
+                    {isDiscounted && !isSoldOut && (
                       <span className="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 text-[10px] font-bold">
                         할인특가
                       </span>
                     )}
+                    {item.detailPhotoUrl && !item.photoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewImage({ url: item.detailPhotoUrl!, title: item.name })}
+                        className="text-[10px] text-emerald-400 hover:underline flex items-center gap-0.5"
+                      >
+                        <Eye className="w-3 h-3" /> 상세사진
+                      </button>
+                    )}
                   </div>
-                  <h3 className="text-base font-bold text-white tracking-tight">{item.name}</h3>
-                  {item.note && <p className="text-xs text-slate-400">{item.note}</p>}
-                  <p className="text-xs text-slate-500">기준: {item.spec}</p>
-                </div>
 
-                {/* 가격 정보 */}
-                <div className="text-right shrink-0">
-                  {isDiscounted && (
-                    <div className="text-xs text-slate-500 line-through">
-                      {item.unitPrice.toLocaleString()}원
-                    </div>
+                  <h3 className="text-sm sm:text-base font-bold text-white tracking-tight truncate">
+                    {item.name}
+                  </h3>
+
+                  {item.note && (
+                    <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                      {item.note}
+                    </p>
                   )}
-                  <div className="text-base font-extrabold text-emerald-400">
-                    {price.toLocaleString()}원
+
+                  <div className="flex items-baseline gap-2 pt-0.5">
+                    <span className="text-xs text-slate-500 font-medium">단위: {item.spec}</span>
+                    {isDiscounted && (
+                      <span className="text-xs text-slate-500 line-through">
+                        {item.unitPrice.toLocaleString()}원
+                      </span>
+                    )}
+                    <span className="text-sm sm:text-base font-extrabold text-emerald-400 font-mono">
+                      {price.toLocaleString()}원
+                    </span>
                   </div>
                 </div>
               </div>
 
-              {/* 하단 수량 컨트롤러 */}
-              <div className="mt-4 pt-3 border-t border-slate-800/60 flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-400">
-                  {isSelected ? (
-                    <span className="text-emerald-400 font-semibold">
+              {/* 하단 수량 조절 컨트롤러 */}
+              <div className="mt-3 pt-2.5 border-t border-slate-800/60 flex items-center justify-between">
+                <div>
+                  {isSoldOut ? (
+                    <span className="text-xs text-rose-400 font-medium">현재 품절된 상품입니다</span>
+                  ) : isSelected ? (
+                    <span className="text-xs font-semibold text-emerald-400">
                       소계: {(price * qty).toLocaleString()}원
                     </span>
                   ) : (
-                    "수량 선택"
+                    <span className="text-xs text-slate-500">수량을 선택해 주세요</span>
                   )}
-                </span>
+                </div>
 
-                <div className="flex items-center gap-3 bg-slate-950 border border-slate-800 rounded-xl p-1">
+                <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl p-1">
                   <button
-                    onClick={() => handleQuantityChange(item.code, -1)}
-                    disabled={qty === 0}
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition ${
-                      qty > 0
+                    type="button"
+                    onClick={() => handleQuantityChange(item.code, -1, isSoldOut)}
+                    disabled={qty === 0 || isSoldOut}
+                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition ${
+                      qty > 0 && !isSoldOut
                         ? "bg-slate-800 text-slate-200 hover:bg-slate-700 active:scale-95"
                         : "text-slate-600 cursor-not-allowed"
                     }`}
                   >
-                    <Minus className="w-4 h-4" />
+                    <Minus className="w-3.5 h-3.5" />
                   </button>
-                  <span className="w-7 text-center font-bold text-sm text-white font-mono">{qty}</span>
+                  <span className="w-6 text-center font-bold text-xs sm:text-sm text-white font-mono">
+                    {qty}
+                  </span>
                   <button
-                    onClick={() => handleQuantityChange(item.code, 1)}
-                    className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center hover:bg-emerald-500 active:scale-95 transition shadow-sm"
+                    type="button"
+                    onClick={() => handleQuantityChange(item.code, 1, isSoldOut)}
+                    disabled={isSoldOut}
+                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition shadow-sm ${
+                      isSoldOut
+                        ? "bg-slate-800 text-slate-600 cursor-not-allowed"
+                        : "bg-emerald-600 text-white hover:bg-emerald-500 active:scale-95"
+                    }`}
                   >
-                    <Plus className="w-4 h-4" />
+                    <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
@@ -464,7 +695,7 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
         })}
       </main>
 
-      {/* 4. 하단 고정 실시간 견적 플로팅 바 */}
+      {/* 4. 하단 고정 실시간 주문 플로팅 바 */}
       <div className="fixed bottom-0 inset-x-0 z-30 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800 p-4 shadow-2xl">
         <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
           <div>
@@ -474,9 +705,9 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
               <span className="text-slate-600">|</span>
               <span>VAT 10% 포함</span>
             </div>
-            <div className="text-xl font-extrabold text-emerald-400 tracking-tight">
+            <div className="text-xl font-extrabold text-emerald-400 tracking-tight font-mono">
               {totalAmount.toLocaleString()}
-              <span className="text-xs font-semibold text-slate-300 ml-1">원</span>
+              <span className="text-xs font-semibold text-slate-300 ml-1 font-sans">원</span>
             </div>
           </div>
 
@@ -489,20 +720,20 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
                 : "bg-slate-800 text-slate-500 cursor-not-allowed"
             }`}
           >
-            <span>예약/주문 신청하기</span>
+            <span>주문서 작성하기</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* 5. 간편 주문/예약 신청 모달 (바텀 시트) */}
+      {/* 5. 주문서 작성 모달 (바텀 시트) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="w-full max-w-lg bg-slate-900 border-t sm:border border-slate-800 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
               <div>
-                <h2 className="text-lg font-bold text-white">견적 확정 및 예약/주문 신청</h2>
-                <p className="text-xs text-slate-400 mt-0.5">사장님의 구글 시트로 실시간 안전하게 접수됩니다.</p>
+                <h2 className="text-lg font-bold text-white">주문서 작성 및 접수</h2>
+                <p className="text-xs text-slate-400 mt-0.5">사장님의 구글 시트 주문접수대장으로 실시간 기록됩니다.</p>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -512,20 +743,20 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
               </button>
             </div>
 
-            {/* 선택 내역 요약 박스 */}
+            {/* 주문 품목 요약 */}
             <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800 mb-5 space-y-2 text-xs">
-              <span className="text-slate-400 font-semibold block mb-1">선택하신 견적 내역 ({totalItemCount}건)</span>
+              <span className="text-slate-400 font-semibold block mb-1">담으신 주문 품목 ({totalItemCount}개)</span>
               {selectedItems.map((it) => (
                 <div key={it.code} className="flex justify-between text-slate-300">
-                  <span>
+                  <span className="truncate pr-2">
                     {it.name} × {it.quantity}{it.spec}
                   </span>
-                  <span className="font-mono">{it.amount.toLocaleString()}원</span>
+                  <span className="font-mono shrink-0">{it.amount.toLocaleString()}원</span>
                 </div>
               ))}
               <div className="border-t border-slate-800 pt-2 flex justify-between font-bold text-sm text-white">
-                <span>총 견적 합계 (VAT 포함)</span>
-                <span className="text-emerald-400">{totalAmount.toLocaleString()}원</span>
+                <span>총 결제금액 (VAT 포함)</span>
+                <span className="text-emerald-400 font-mono">{totalAmount.toLocaleString()}원</span>
               </div>
             </div>
 
@@ -533,7 +764,7 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
             <form onSubmit={handleSubmitOrder} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  고객 성함 <span className="text-rose-400">*</span>
+                  주문자 성함 <span className="text-rose-400">*</span>
                 </label>
                 <input
                   type="text"
@@ -562,11 +793,11 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1">
                   <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                  서비스 방문지 주소 (또는 설치 주소)
+                  배송지 주소 (또는 방문 장소)
                 </label>
                 <input
                   type="text"
-                  placeholder="예: 서울 강남구 테헤란로 123 101동 202호"
+                  placeholder="예: 서울시 강남구 테헤란로 123 101동 202호"
                   value={customerAddress}
                   onChange={(e) => setCustomerAddress(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-white text-sm outline-none transition"
@@ -576,11 +807,11 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                  희망 방문/시공 일시
+                  희망 수령 / 방문 일시
                 </label>
                 <input
                   type="text"
-                  placeholder="예: 10월 5일 오후 2시 이후"
+                  placeholder="예: 10월 5일 오후 2시 이후 / 빠른 배송"
                   value={preferredDate}
                   onChange={(e) => setPreferredDate(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-white text-sm outline-none transition"
@@ -588,10 +819,10 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">요청사항 및 메모</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">배송/주문 요청사항</label>
                 <textarea
                   rows={2}
-                  placeholder="현장 특이사항이나 추가 문의사항을 적어주세요."
+                  placeholder="문 앞 보관, 배송 전 연락 등 특이사항을 적어주세요."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-white text-sm outline-none transition resize-none"
@@ -607,14 +838,38 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
                   {submitting ? (
                     <>
                       <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                      <span>구글 시트 접수 처리 중...</span>
+                      <span>주문 접수 및 시트 기록 중...</span>
                     </>
                   ) : (
-                    <span>이 견적으로 주문 및 예약 확정 접수</span>
+                    <span>총 {totalAmount.toLocaleString()}원 주문 접수하기</span>
                   )}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 6. 상세 이미지 팝업 모달 */}
+      {previewImage && (
+        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4">
+          <div className="relative max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between p-3 border-b border-slate-800">
+              <span className="text-xs font-semibold text-slate-200 truncate">{previewImage.title} 상세 이미지</span>
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="max-h-[70vh] overflow-y-auto p-2 bg-slate-950 flex items-center justify-center">
+              <img
+                src={previewImage.url}
+                alt={previewImage.title}
+                className="w-full h-auto object-contain rounded-lg"
+              />
+            </div>
           </div>
         </div>
       )}
