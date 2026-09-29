@@ -59,22 +59,54 @@ const nextConfig: any = {
       ]
     }
   },
-  reactStrictMode: true,
+  compress: true,
+  poweredByHeader: false,
+  async headers() {
+    return [
+      {
+        source: "/_next/static/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/_next/image/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=86400, stale-while-revalidate=604800",
+          },
+        ],
+      },
+      {
+        source: "/(favicon.svg|icon.svg|logo.*)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=86400, stale-while-revalidate=604800",
+          },
+        ],
+      },
+    ];
+  },
   async redirects() {
     return [
       {
         source: "/downloads/SheetBotAgent.apk",
-        destination: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.12/SheetBotAgent.apk",
+        destination: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.23/SheetBotAgent.apk",
         permanent: false,
       },
       {
         source: "/downloads/SheetBotAgent2.apk",
-        destination: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.12/SheetBotAgent.apk",
+        destination: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.23/SheetBotAgent.apk",
         permanent: false,
       },
       {
         source: "/download/SheetBotAgent.apk",
-        destination: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.12/SheetBotAgent.apk",
+        destination: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.23/SheetBotAgent.apk",
         permanent: false,
       },
       {

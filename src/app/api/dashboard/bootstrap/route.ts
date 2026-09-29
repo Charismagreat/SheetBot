@@ -51,6 +51,10 @@ function mapLightProject(row: any) {
   };
 }
 
+// ⚡ [초고속 SWR 메모리 캐시] 3초 이내 중복 호출 시 My DB 6개 쿼리를 생략하고 0ms 즉시 응답
+const bootstrapCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL_MS = 3000;
+
 /**
  * OPTIONS /api/dashboard/bootstrap
  * 브라우저 CORS 프리플라이트 대응
@@ -75,6 +79,7 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const queryEmail = url.searchParams.get("userEmail") || url.searchParams.get("email");
+    const isForce = url.searchParams.get("force") === "true";
     let userEmail: string | null = (queryEmail && queryEmail.includes("@")) ? queryEmail.toLowerCase().trim() : null;
 
     if (!userEmail) {
@@ -86,6 +91,25 @@ export async function GET(request: Request) {
     }
 
     const cleanEmail = userEmail.toLowerCase().trim();
+
+    // ⚡ 캐시 적중 검사 (force가 아니고 3초 이내 캐시 존재 시 즉시 반환)
+    const cached = bootstrapCache.get(cleanEmail);
+    if (!isForce && cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+      return NextResponse.json({
+        success: true,
+        userEmail: cleanEmail,
+        elapsedMs: Date.now() - startTime,
+        data: cached.data,
+        cached: true,
+      }, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+          "Access-Control-Allow-Origin": "*",
+        }
+      });
+    }
 
     // ⚡ 각 쿼리에 4초 타임아웃 레이스를 두어 터널 락/무한 행을 물리적으로 원천 차단
     const timeoutRace = <T>(promise: Promise<T>, fallback: T, ms = 4000): Promise<T> => {
@@ -239,25 +263,30 @@ export async function GET(request: Request) {
 
     const elapsedMs = Date.now() - startTime;
 
+    const responseData = {
+      projects: activeProjects,
+      trashedProjects,
+      trashedCount,
+      wallet: resolvedWallet,
+      schedules: validSchedules,
+      devicesCount: validDevices.length,
+      rulesCount: 0,
+      currentModel: defaultModel,
+      aiUsage: {
+        totalTokens,
+        totalCalls,
+        totalCostKrw,
+      },
+    };
+
+    // ⚡ 캐시 갱신
+    bootstrapCache.set(cleanEmail, { data: responseData, timestamp: Date.now() });
+
     return NextResponse.json({
       success: true,
       userEmail: cleanEmail,
       elapsedMs,
-      data: {
-        projects: activeProjects,
-        trashedProjects,
-        trashedCount,
-        wallet: resolvedWallet,
-        schedules: validSchedules,
-        devicesCount: validDevices.length,
-        rulesCount: 0,
-        currentModel: defaultModel,
-        aiUsage: {
-          totalTokens,
-          totalCalls,
-          totalCostKrw,
-        },
-      },
+      data: responseData,
     }, {
       status: 200,
       headers: {
