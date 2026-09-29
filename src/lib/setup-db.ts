@@ -196,6 +196,12 @@ export async function setupDatabase(force = false): Promise<void> {
           const checkPromise = queryTable('sheetbot_projects', { limit: 1 }).catch(() => ({ rows: [] }));
           const quickCheck = await Promise.race([checkPromise, timeoutPromise]);
           if (quickCheck && Array.isArray(quickCheck.rows)) {
+            try {
+              await executeSQL('ALTER TABLE sheetbot_users ADD COLUMN business_name TEXT;');
+            } catch {}
+            try {
+              await executeSQL('ALTER TABLE sheetbot_users ADD COLUMN phone TEXT;');
+            } catch {}
             isDbInitialized = true;
             return;
           }
