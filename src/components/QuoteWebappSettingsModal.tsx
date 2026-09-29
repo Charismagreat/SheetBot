@@ -86,29 +86,46 @@ export default function QuoteWebappSettingsModal({
       setErrorMsg(null);
       setSuccessMsg(null);
 
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("email", userEmail);
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const base64Data = reader.result as string;
+          const res = await apiFetch("/api/user/quote/image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: userEmail,
+              imageBase64: base64Data,
+              fileName: file.name,
+            }),
+          });
 
-      const res = await apiFetch("/api/user/quote/image", {
-        method: "POST",
-        body: formData,
-      });
+          const data = await res.json();
+          if (data.success && data.imageUrl) {
+            setImageUrl(data.imageUrl);
+            setSuccessMsg("🎉 대표 이미지가 성공적으로 등록되었습니다!");
+          } else {
+            setErrorMsg(data.error || "이미지 업로드에 실패했습니다.");
+          }
+        } catch (err: any) {
+          setErrorMsg("업로드 중 오류: " + err.message);
+        } finally {
+          setUploading(false);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+          }
+        }
+      };
 
-      const data = await res.json();
-      if (data.success && data.imageUrl) {
-        setImageUrl(data.imageUrl);
-        setSuccessMsg("🎉 대표 이미지가 성공적으로 등록되었습니다!");
-      } else {
-        setErrorMsg(data.error || "이미지 업로드에 실패했습니다.");
-      }
+      reader.onerror = () => {
+        setErrorMsg("파일 읽기 실패");
+        setUploading(false);
+      };
+
+      reader.readAsDataURL(file);
     } catch (err: any) {
       setErrorMsg("업로드 중 오류: " + err.message);
-    } finally {
       setUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
     }
   };
 

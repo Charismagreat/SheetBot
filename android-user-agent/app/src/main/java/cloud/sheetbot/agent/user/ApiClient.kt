@@ -1405,15 +1405,14 @@ object ApiClient {
         userEmail: String
     ): UploadQuoteImageResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
-        val mediaType = (mimeType.takeIf { it.isNotBlank() } ?: "image/jpeg").toMediaType()
-        val requestFile = fileBytes.toRequestBody(mediaType)
-
-        val requestBody = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart("email", userEmail)
-            .addFormDataPart("userEmail", userEmail)
-            .addFormDataPart("file", fileName, requestFile)
-            .build()
+        val base64Str = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)
+        val json = JSONObject().apply {
+            put("email", userEmail)
+            put("userEmail", userEmail)
+            put("fileName", fileName)
+            put("imageBase64", "data:$mimeType;base64,$base64Str")
+        }
+        val requestBody = json.toString().toRequestBody(JSON_MEDIA_TYPE)
 
         var lastError = "이미지 업로드 실패"
         for (host in hosts) {
@@ -1443,7 +1442,6 @@ object ApiClient {
                 lastError = e.localizedMessage ?: "네트워크 통신 오류"
                 Log.w(TAG, "[$endpoint] 견적 이미지 업로드 예외: ${e.message}")
             }
-        }
         UploadQuoteImageResult(success = false, error = lastError)
     }
 }
