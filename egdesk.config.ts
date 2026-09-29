@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-29T10:07:43.434Z
+ * Generated at: 2026-09-29T11:32:06.599Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -201,7 +201,7 @@ export const TABLES = {
   table25: {
     name: 'sheetbot_user_dispatch_logs',
     displayName: 'SheetBot 회원 알림 발송 이력 대장',
-    rowCount: 7,
+    rowCount: 8,
     columnCount: 18,
     columns: ['id', '_version', 'user_email', 'rule_id', 'rule_name', 'device_id', 'recipient', 'content', 'status', 'error_message', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
