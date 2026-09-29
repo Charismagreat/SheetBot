@@ -27,6 +27,7 @@ class KeepAliveService : Service() {
     private var receiptQueueJob: Job? = null
     private var recordingSyncJob: Job? = null
     private var websiteMonitorJob: Job? = null
+    private var smsSentObserver: SmsSentObserver? = null
     private lateinit var prefs: PreferencesManager
 
     companion object {
@@ -60,6 +61,7 @@ class KeepAliveService : Service() {
         startReceiptQueueLoop()
         startRecordingSyncLoop()
         startWebsiteMonitorLoop()
+        registerSmsSentObserver()
         Log.i(TAG, "KeepAliveService created with SMS, Heartbeat, Call Recording, and Website Monitor Watchdog.")
     }
 
@@ -75,7 +77,36 @@ class KeepAliveService : Service() {
         receiptQueueJob?.cancel()
         recordingSyncJob?.cancel()
         websiteMonitorJob?.cancel()
+        unregisterSmsSentObserver()
         Log.w(TAG, "KeepAliveService destroyed.")
+    }
+
+    private fun registerSmsSentObserver() {
+        try {
+            if (smsSentObserver == null) {
+                smsSentObserver = SmsSentObserver(this)
+                contentResolver.registerContentObserver(
+                    SmsSentObserver.SMS_CONTENT_URI,
+                    true,
+                    smsSentObserver!!
+                )
+                Log.i(TAG, "📤 [KeepAliveService] 24시간 발신 SMS 감지 Observer 등록 완료")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "KeepAliveService SmsSentObserver 등록 실패: ${e.message}")
+        }
+    }
+
+    private fun unregisterSmsSentObserver() {
+        try {
+            smsSentObserver?.let {
+                contentResolver.unregisterContentObserver(it)
+                smsSentObserver = null
+                Log.i(TAG, "KeepAliveService SmsSentObserver 해제 완료")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "KeepAliveService SmsSentObserver 해제 실패: ${e.message}")
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
