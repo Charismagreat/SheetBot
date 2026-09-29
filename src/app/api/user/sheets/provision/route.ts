@@ -35,8 +35,9 @@ export const SHEET_DEFINITIONS: Record<string, SheetDefinition> = {
   },
   LINK_BOOKMARK: {
     defaultTitle: "[SheetBot] 웹 링크 & 유튜브 스크랩 대장",
-    headers: ["등록 일시", "구분", "제목", "웹 링크(URL)", "AI 핵심 3줄 요약", "출처"],
-    range: "A1:F1",
+    headers: ["등록 일시", "구분", "제목", "웹 링크(URL)", "출처(채널명)", "AI 핵심 3줄 요약", "수집 메모", "등록 기기"],
+    range: "A1:H1",
+    defaultFolder: "[SheetBot] 스크랩 보관함",
   },
   FILE_UPLOAD: {
     defaultTitle: "[SheetBot] 파일 업로드 대장",

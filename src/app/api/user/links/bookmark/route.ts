@@ -182,7 +182,7 @@ export async function POST(req: NextRequest) {
     if (resolved.isNew && targetSpreadsheetId) {
       // 헤더 8열 서식 기입
       const headers = [
-        ["스크랩일시", "구분", "제목 / 콘텐츠명", "원본 URL 링크", "채널 / 출처", "AI 핵심 요약 (3줄)", "공유 메모", "등록 기기"]
+        ["등록 일시", "구분", "제목", "웹 링크(URL)", "출처(채널명)", "AI 핵심 3줄 요약", "수집 메모", "등록 기기"]
       ];
       await callSheetsTool("sheets_update_range", {
         spreadsheetId: targetSpreadsheetId,
