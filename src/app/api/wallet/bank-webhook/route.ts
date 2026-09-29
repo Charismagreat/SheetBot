@@ -9,6 +9,8 @@ import { setupDatabase } from "@/lib/setup-db";
 import { parseBankDepositSms } from "@/lib/bank-sms-parser";
 import { emitDepositEvent } from "@/lib/deposit-events";
 import { recordPaymentToGoogleSheet } from "@/lib/payment-sheet-sync";
+import { recordReceiptSmsToGoogleSheet } from "@/lib/receipt-sms-sync";
+import { getKoreanTimeString } from "@/lib/date-utils";
 
 /**
  * POST /api/wallet/bank-webhook
@@ -479,6 +481,19 @@ export async function POST(request: Request) {
           message: `[SheetBot] ${matched.depositor_name || matched.user_name || "회원"}님, ${Number(matched.amount_krw).toLocaleString()}원 입금이 확인되어 ${Number(matched.tokens_to_credit).toLocaleString()} 토큰이 정상 충전되었습니다. 감사합니다.`,
         }
       : null;
+
+    if (replySms && matched?.user_email) {
+      recordReceiptSmsToGoogleSheet({
+        userEmail: matched.user_email,
+        sentTime: getKoreanTimeString(),
+        recipientPhone: replySms.recipientPhone,
+        customerName: matched.depositor_name || matched.user_name || "회원",
+        amount: Number(matched.amount_krw) || 0,
+        receiptContent: replySms.message,
+        status: "전송 완료",
+        deviceId: body?.deviceModel || "SheetBot Agent",
+      }).catch((err) => console.warn("[Bank-Webhook] Receipt SMS sheet sync error:", err));
+    }
 
     const ttsText = `${matched.depositor_name || "회원"}님 ${Number(matched.amount_krw).toLocaleString()}원 입금, ${Number(matched.tokens_to_credit).toLocaleString()} 토큰 자동 충전 완료되었습니다.`;
 

@@ -3,7 +3,7 @@ import {
   listDriveFiles,
 } from "@/lib/egdesk-helpers";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
-
+import { getKoreanTimeString } from "@/lib/date-utils";
 import { FinancialTransactionType } from "@/lib/bank-sms-parser";
 
 export interface RecordPaymentParams {
@@ -101,9 +101,7 @@ export async function recordPaymentToGoogleSheet(
       sheetTitle = `[SheetBot] ${sheetTitle}`;
     }
 
-    const nowStr =
-      paymentTime ||
-      new Date().toISOString().replace("T", " ").slice(0, 19);
+    const nowStr = paymentTime || getKoreanTimeString();
 
     let targetSpreadsheetId: string | null = null;
     let spreadsheetUrl = "";
