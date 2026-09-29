@@ -17,6 +17,8 @@ import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { recordAiUsageLog } from "@/lib/ai-usage";
 import { getAiModelSettings } from "@/lib/ai-settings";
+import { uploadDriveFileWithBridge } from "@/lib/drive-upload-helper";
+import { getKoreanTimeString } from "@/lib/date-utils";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -96,14 +98,15 @@ export async function POST(req: NextRequest) {
       console.warn("[RecordingsUpload] Folder resolve warning:", folderErr.message);
     }
 
-    // 5. 구글 드라이브로 파일 업로드
+    // 5. 구글 드라이브로 파일 업로드 (원격/로컬 무손실 브릿지 전송)
     let driveFileId: string | null = null;
     let webViewLink = "";
     try {
-      const uploadRes = await uploadDriveFile({
-        filePath: tempFilePath,
+      const uploadRes = await uploadDriveFileWithBridge({
+        buffer,
+        fileName: targetFileName,
         folderId: targetFolderId || undefined,
-        destName: targetFileName,
+        tempFilePath,
         preferOAuth: true,
       });
 
@@ -114,7 +117,6 @@ export async function POST(req: NextRequest) {
       throw new Error(`구글 드라이브 파일 업로드에 실패했습니다: ${uploadErr.message}`);
     }
 
-    // 6. 구글 시트 대장 자동 생성 및 행 기록 (autoRecordSheet == true)
     // 6. 구글 스프레드시트 대장 고유 ID 영구 바인딩 및 행 기록
     let spreadsheetUrl = "";
     if (autoRecordSheet) {
@@ -155,25 +157,34 @@ export async function POST(req: NextRequest) {
 
         // 6-3. 시트에 신규 통화 기록 행 추가
         if (targetSpreadsheetId) {
+          let targetRowIndex: number | null = null;
+          try {
+            const rangeRes = await callSheetsTool("sheets_get_range", {
+              spreadsheetId: targetSpreadsheetId,
+              range: "시트1!A:A",
+              preferOAuth: true,
+            });
+            const currentRows = rangeRes?.values?.length || 1;
+            targetRowIndex = currentRows + 1;
+          } catch {
+            targetRowIndex = null;
+          }
+
           const initialRowValues = [
             [callTime, contactName, targetFileName, fileSizeMb, "⏳ AI 분석 준비 중...", "⏳ AI 분석 준비 중...", "⏳ 음성 전사 준비 중...", webViewLink]
           ];
-          const appendRes = await callSheetsTool("sheets_append_values", {
+          await callSheetsTool("sheets_append_values", {
             spreadsheetId: targetSpreadsheetId,
             range: "A:H",
             values: initialRowValues,
             preferOAuth: true,
           }).catch((err: any) => {
             console.warn("[RecordingsUpload] append_values warning:", err.message);
-            return null;
           });
 
           // 6-4. 비동기 백그라운드 AI 음성 전사(STT) 및 3줄 요약 실행
           const base64Audio = buffer.toString("base64");
           const targetSpreadsheetIdCopy = targetSpreadsheetId;
-          const updatedRange = appendRes?.updates?.updatedRange || "";
-          const targetRowIndexMatch = updatedRange.match(/A(\d+)/);
-          const targetRowIndex = targetRowIndexMatch ? parseInt(targetRowIndexMatch[1], 10) : null;
 
           triggerAiAudioAnalysis(
             base64Audio,
@@ -201,7 +212,7 @@ export async function POST(req: NextRequest) {
         content: `[통화녹음 업로드] ${targetFileName} (${fileSizeMb}) -> ${targetFolderName}`,
         status: "SUCCESS",
         error_message: null,
-        created_at: new Date().toISOString(),
+        created_at: getKoreanTimeString(),
       },
     ]).catch((err) => console.warn("[RecordingsUpload] DB log insert warning:", err.message));
 

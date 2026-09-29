@@ -8,7 +8,6 @@ import {
   callAiCaller,
   listDriveFiles,
   createDriveFolder,
-  moveDriveFile,
   insertRows,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
@@ -16,6 +15,23 @@ import { getAiModelSettings } from "@/lib/ai-settings";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { recordAiUsageLog } from "@/lib/ai-usage";
+import { getKoreanTimeString } from "@/lib/date-utils";
+
+/**
+ * 60초 이내 동일 URL 중복 스크랩 방지 캐시 (Idempotency)
+ */
+const recentScraps = new Map<string, number>();
+
+function cleanHtmlEntities(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
 
 /**
  * POST /api/user/links/bookmark
@@ -49,6 +65,28 @@ export async function POST(req: NextRequest) {
 
     const cleanEmail = userEmail.toLowerCase().trim();
 
+    // 0. 중복 요청(Deduplication) 방지 (동일 사용자 + 동일 URL 60초 이내 연속 수신 차단)
+    const dedupKey = `${cleanEmail}:${rawUrl}`;
+    const nowTs = Date.now();
+    const lastScrapTime = recentScraps.get(dedupKey);
+    if (lastScrapTime && nowTs - lastScrapTime < 60000) {
+      console.log(`[LinkBookmark] Duplicate request ignored within 60s: ${rawUrl}`);
+      return NextResponse.json({
+        success: true,
+        message: "이미 스크랩 접수된 링크입니다. (중복 방지)",
+        url: rawUrl,
+        isDuplicate: true,
+      });
+    }
+    recentScraps.set(dedupKey, nowTs);
+
+    // 주기적으로 10분 지난 캐시 정리
+    if (recentScraps.size > 200) {
+      for (const [k, v] of recentScraps.entries()) {
+        if (nowTs - v > 600000) recentScraps.delete(k);
+      }
+    }
+
     // 1. 링크 종류 식별 (유튜브 vs 일반 웹사이트)
     const isYouTube = /(?:youtube\.com|youtu\.be)/i.test(rawUrl);
     const category = isYouTube ? "🔴 유튜브" : "🌐 웹사이트";
@@ -65,7 +103,7 @@ export async function POST(req: NextRequest) {
         const oembedRes = await fetch(oembedUrl, { signal: AbortSignal.timeout(3000) });
         if (oembedRes.ok) {
           const oembedJson = await oembedRes.json();
-          title = oembedJson.title || "";
+          title = cleanHtmlEntities(oembedJson.title || "");
           siteName = oembedJson.author_name ? `${oembedJson.author_name} (YouTube)` : "YouTube";
         }
       } catch (oeErr: any) {
@@ -93,11 +131,11 @@ export async function POST(req: NextRequest) {
           const ogDescMatch = htmlText.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i)
             || htmlText.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i);
 
-          if (ogTitleMatch) title = ogTitleMatch[1];
-          else if (titleMatch) title = titleMatch[1];
+          if (ogTitleMatch) title = cleanHtmlEntities(ogTitleMatch[1]);
+          else if (titleMatch) title = cleanHtmlEntities(titleMatch[1]);
 
-          if (ogSiteMatch && !siteName) siteName = ogSiteMatch[1];
-          if (ogDescMatch) description = ogDescMatch[1];
+          if (ogSiteMatch && !siteName) siteName = cleanHtmlEntities(ogSiteMatch[1]);
+          if (ogDescMatch) description = cleanHtmlEntities(ogDescMatch[1]);
         }
       } catch (htmlErr: any) {
         console.warn("[LinkBookmark] HTML metadata fetch error:", htmlErr.message);
@@ -115,7 +153,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!title) {
-      title = rawText.replace(rawUrl, "").trim() || rawUrl;
+      title = cleanHtmlEntities(rawText.replace(rawUrl, "").trim()) || rawUrl;
     }
 
     // 3. 구글 드라이브 폴더 및 구글 스프레드시트 탐색/생성 ([SheetBot] 네이밍 규칙 준수)
@@ -167,41 +205,42 @@ export async function POST(req: NextRequest) {
       await callSheetsTool("sheets_format_headers", {
         spreadsheetId: targetSpreadsheetId,
         tabName: "시트1",
-        headerBgColor: "#991b1b", // 유튜브 레드/버건디 테마
+        headerBgColor: "#991b1b",
         headerTextColor: "#ffffff",
         preferOAuth: true,
       }).catch(() => {});
     }
 
-    // 4. [1단계: 선행 즉시 기록] 대장에 먼저 즉시 추가 (0.1초 체감 UX)
+    // 4. [1단계: 선행 즉시 기록] 한국 시간(KST)으로 즉시 시트에 추가 (0.1초 체감 UX)
     const initialSummary = "⏳ AI 3줄 요약 분석 중...";
-    let rowNum: number | null = null;
+    let targetRow: number | null = null;
 
     if (targetSpreadsheetId) {
-      const nowStr = new Date().toISOString().replace("T", " ").slice(0, 19);
+      // 정확한 삽입 행 번호 파악을 위해 현재 행 수 확인
+      try {
+        const rangeRes = await callSheetsTool("sheets_get_range", {
+          spreadsheetId: targetSpreadsheetId,
+          range: "시트1!A:A",
+          preferOAuth: true,
+        });
+        const currentCount = rangeRes?.values?.length || 1;
+        targetRow = currentCount + 1;
+      } catch {
+        targetRow = null;
+      }
+
+      // 한국 표준시(KST, UTC+9) 적용
+      const nowStr = getKoreanTimeString();
       const newRowValues = [
         [nowStr, category, title, rawUrl, siteName, initialSummary, memo, deviceId]
       ];
-      try {
-        const appendRes = await callSheetsTool("sheets_append_values", {
-          spreadsheetId: targetSpreadsheetId,
-          range: "A:H",
-          values: newRowValues,
-          preferOAuth: true,
-        });
 
-        // 추가된 행 번호 추출 (예: '시트1'!A4:H4 -> 4)
-        const updatedRange =
-          (appendRes as any)?.updatedRange ||
-          (appendRes as any)?.updates?.updatedRange ||
-          "";
-        const rangeMatch = updatedRange.match(/!?[A-Z]+(\d+):/i) || updatedRange.match(/(\d+)/);
-        if (rangeMatch) {
-          rowNum = parseInt(rangeMatch[1], 10);
-        }
-      } catch (err: any) {
-        console.warn("[LinkBookmark] append_values warning:", err.message);
-      }
+      await callSheetsTool("sheets_append_values", {
+        spreadsheetId: targetSpreadsheetId,
+        range: "A:H",
+        values: newRowValues,
+        preferOAuth: true,
+      }).catch((err: any) => console.warn("[LinkBookmark] append_values warning:", err.message));
     }
 
     // 5. SQLite 감사 대장 기록 (INTEGER id 규격 준수)
@@ -217,13 +256,13 @@ export async function POST(req: NextRequest) {
         content: `[${category}] ${title} (${siteName}) -> ${sheetTitle}`,
         status: "SUCCESS",
         error_message: null,
-        created_at: new Date().toISOString(),
+        created_at: getKoreanTimeString(),
       },
     ]).catch((err) => console.warn("[LinkBookmark] DB log insert warning:", err.message));
 
     // 6. [2단계: 백그라운드 비동기 AI 분석 및 인플레이스 셀 갱신]
-    if (targetSpreadsheetId && rowNum) {
-      const targetRow = rowNum;
+    if (targetSpreadsheetId && targetRow) {
+      const rowToUpdate = targetRow;
       void (async () => {
         try {
           const aiSettings = await getAiModelSettings();
@@ -235,7 +274,7 @@ export async function POST(req: NextRequest) {
             const noTokenMsg = "⚠️ 잔여 토큰 부족으로 AI 요약이 생략되었습니다. (충전 후 정상 생성)";
             await callSheetsTool("sheets_update_range", {
               spreadsheetId: targetSpreadsheetId,
-              range: `시트1!F${targetRow}:F${targetRow}`,
+              range: `시트1!F${rowToUpdate}:F${rowToUpdate}`,
               values: [[noTokenMsg]],
               preferOAuth: true,
             });
@@ -284,17 +323,17 @@ export async function POST(req: NextRequest) {
           // 4. 해당 행의 F열(AI 핵심 3줄 요약) 핀포인트 갱신
           await callSheetsTool("sheets_update_range", {
             spreadsheetId: targetSpreadsheetId,
-            range: `시트1!F${targetRow}:F${targetRow}`,
+            range: `시트1!F${rowToUpdate}:F${rowToUpdate}`,
             values: [[finalSummary]],
             preferOAuth: true,
           });
-          console.log(`[LinkBookmark] Row ${targetRow} AI summary updated & ${usedTokens} tokens deducted.`);
+          console.log(`[LinkBookmark] Row ${rowToUpdate} AI summary updated & ${usedTokens} tokens deducted.`);
         } catch (aiErr: any) {
-          console.warn(`[LinkBookmark] Row ${targetRow} background AI summary error:`, aiErr.message);
+          console.warn(`[LinkBookmark] Row ${rowToUpdate} background AI summary error:`, aiErr.message);
           if (description) {
             await callSheetsTool("sheets_update_range", {
               spreadsheetId: targetSpreadsheetId,
-              range: `시트1!F${targetRow}:F${targetRow}`,
+              range: `시트1!F${rowToUpdate}:F${rowToUpdate}`,
               values: [[description.slice(0, 200)]],
               preferOAuth: true,
             }).catch(() => {});

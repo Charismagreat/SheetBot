@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 42,
-      latestVersionName: "2.1.21",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.21/SheetBotAgent.apk",
+      latestVersionCode: 43,
+      latestVersionName: "2.1.22",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.22/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.21 릴리즈\n• 💬 [구글 메시지(Google Messages) RCS/SMS 완벽 감지] 구글 메시지 기본 앱 사용 시 발생하는 RCS 채팅(데이터 문자) 및 SMS를 알림 리스너와 최적화된 리시버를 통해 100% 실시간 캐치하여 구글 시트에 자동 기록\n• 📤 [24시간 발신 문자 상시 감지] KeepAlive 백그라운드 서비스에 SmsSentObserver를 영구 등록하여 앱이 닫혀있어도 기본 메시지 앱에서 발신한 문자를 구글 시트에 즉시 기록\n• 📷 [카톡 미리보기 대표 사진 등록 최적화] 스마트폰 고화질 카메라 사진(수십 MB) 자동 다운스케일링 및 고화질 압축 전송 (HTTP 500 오류 완전 해결)\n• 🛍️ [스마트 간편 주문 & 사업자정보 연동] 구글 시트 3대 탭(품목, 주문접수대장, 사업자정보) 및 모바일 전자 주문확인서 실시간 동기화",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.22 릴리즈\n• 🛡️ [공유하기 중복 등록 원천 차단] 웹 링크 및 유튜브 공유 시 10초 이내 중복 전송 방지 및 인텐트 소진(Deduplication)\n• ⏰ [한국 표준시(KST) 100% 일치] 모든 대장 등록 시간을 한국 시간(UTC+9)으로 정확하게 기록\n• ⚡ [2단계 비동기 분석 보장] 0.1초 즉시 시트 선행 기록 후 AI 3줄 요약 정확한 행(F열) 인플레이스 자동 갱신\n• 📁 [무손실 구글 드라이브 파일 업로드 브릿지] 원격 및 로컬 환경 파일 업로드 전송 오류 완전 해결",
     },
     {
       headers: {
