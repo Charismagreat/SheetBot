@@ -64,7 +64,35 @@ export async function POST(req: NextRequest) {
       ? `HTTP ${statusCode} (${statusMessage})`
       : statusMessage;
 
-    // 3. 구글 시트에 행 추가 (A열~G열)
+    // 3. 자가 치유(Self-Healing) 헤더 검사 및 보장
+    const firstRowCheck = await callSheetsTool("sheets_get_range", {
+      spreadsheetId,
+      range: "A1:A1",
+      preferOAuth: true,
+    }, { preferOAuth: true }).catch(() => null);
+
+    const hasHeaderOrData = firstRowCheck?.values && firstRowCheck.values.length > 0 && firstRowCheck.values[0]?.[0];
+    if (!hasHeaderOrData) {
+      const headerValues = [
+        ["점검/감지 일시", "대상 URL", "상태 코드", "응답 속도", "상태/장애 내용", "교차 검증 결과", "기기명"]
+      ];
+      await callSheetsTool("sheets_update_range", {
+        spreadsheetId,
+        range: "A1:G1",
+        values: headerValues,
+        preferOAuth: true,
+      }, { preferOAuth: true }).catch(() => {});
+
+      await callSheetsTool("sheets_format_headers", {
+        spreadsheetId,
+        tabName: "시트1",
+        headerBgColor: "#0f172a", // Slate 900
+        headerTextColor: "#f8fafc",
+        preferOAuth: true,
+      }, { preferOAuth: true }).catch(() => {});
+    }
+
+    // 4. 구글 시트에 행 추가 (A열~G열)
     // headers: ["점검/감지 일시", "대상 URL", "상태 코드", "응답 속도", "상태/장애 내용", "교차 검증 결과", "기기명"]
     const rowValues = [
       kstTime,

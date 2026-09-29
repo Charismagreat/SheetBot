@@ -913,6 +913,88 @@ object ApiClient {
             }
         }
         false
+    /**
+     * 통화 종료 후 발송된 모바일 명함 구글 드라이브 [SheetBot] 모바일 명함 발송 대장 시트 실시간 기록
+     */
+    suspend fun sendBusinessCardSync(
+        userEmail: String,
+        recipientPhone: String,
+        contactName: String?,
+        sendMode: String = "스마트 웹 명함(0원)",
+        cardContentOrUrl: String,
+        status: String = "전송 완료",
+        deviceId: String? = null,
+        sheetTitle: String = "[SheetBot] 모바일 명함 발송 대장"
+    ): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("recipientPhone", recipientPhone)
+            put("contactName", contactName ?: "미등록 연락처")
+            put("sendMode", sendMode)
+            put("cardContentOrUrl", cardContentOrUrl)
+            put("status", status)
+            put("deviceId", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL} (SheetBot Agent)")
+            put("sheetTitle", sheetTitle)
+        }
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/messages/business-card"
+            try {
+                val request = Request.Builder().url(endpoint).post(body).build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    Log.i(TAG, "✅ [모바일 명함 대장 시트 동기화 성공] 상대방: $recipientPhone, 호스트: $host")
+                    return@withContext true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "모바일 명함 대장 시트 동기화 예외 ($host): ${e.message}")
+            }
+        }
+        false
+    }
+
+    /**
+     * 고객 영수증 문자 발송 내역 구글 드라이브 [SheetBot] 고객 영수증 문자 발송 대장 시트 실시간 기록
+     */
+    suspend fun sendReceiptSmsSync(
+        userEmail: String,
+        recipientPhone: String,
+        customerName: String = "고객",
+        amount: Long = 0L,
+        receiptContent: String,
+        status: String = "전송 완료",
+        deviceId: String? = null,
+        sheetTitle: String = "[SheetBot] 고객 영수증 문자 발송 대장"
+    ): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("recipientPhone", recipientPhone)
+            put("customerName", customerName)
+            put("amount", amount)
+            put("receiptContent", receiptContent)
+            put("status", status)
+            put("deviceId", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL} (SheetBot Agent)")
+            put("sheetTitle", sheetTitle)
+        }
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/messages/receipt-sms"
+            try {
+                val request = Request.Builder().url(endpoint).post(body).build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    Log.i(TAG, "✅ [고객 영수증 문자 대장 시트 동기화 성공] 수신: $recipientPhone, 호스트: $host")
+                    return@withContext true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "고객 영수증 문자 대장 시트 동기화 예외 ($host): ${e.message}")
+            }
+        }
+        false
     }
 
     /**

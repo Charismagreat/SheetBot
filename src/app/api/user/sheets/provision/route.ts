@@ -52,8 +52,8 @@ export const SHEET_DEFINITIONS: Record<string, SheetDefinition> = {
   },
   PAYMENT_PUSH: {
     defaultTitle: "[SheetBot] 매장 결제 및 매출 대장",
-    headers: ["결제 일시", "결제 채널/금융사", "입금/고객명", "결제 금액(원)", "주문/결제 내용", "수신 기기"],
-    range: "A1:F1",
+    headers: ["일시", "구분", "금융사/채널", "계좌/카드번호", "고객/가맹점명", "금액(원)", "거래/결제 내용", "수신 기기"],
+    range: "A1:H1",
   },
   RECEIPT_SMS: {
     defaultTitle: "[SheetBot] 고객 영수증 문자 발송 대장",

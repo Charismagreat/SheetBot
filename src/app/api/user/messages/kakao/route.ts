@@ -11,6 +11,7 @@ import { setupDatabase } from "@/lib/setup-db";
 import { realtimeHub } from "@/lib/realtime-hub";
 import { maskRecipient, formatZeroRetentionContent } from "@/lib/privacy";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
+import { getKoreanTimeString } from "@/lib/date-utils";
 
 /**
  * POST /api/user/messages/kakao
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
     const roomTypeLabel = isGroupChat ? "단체 단톡방" : "1:1 채팅";
     const roomName = chatRoomName && chatRoomName.trim().length > 0 ? chatRoomName.trim() : (sender || "미지정 방");
     const senderName = sender && sender.trim().length > 0 ? sender.trim() : roomName;
-    const nowStr = timestamp || new Date().toISOString().replace("T", " ").slice(0, 19);
+    const nowStr = timestamp || getKoreanTimeString();
 
     // [SheetBot] 표준 네이밍 원칙 준수
     let sheetTitle = rawSheetTitle.trim();

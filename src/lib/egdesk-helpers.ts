@@ -29,18 +29,7 @@ export async function callAiCaller(
   prompt: string,
   options: AiCallerOptions = {}
 ): Promise<AiCallerResponse> {
-  let apiUrl =
-    (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-    'http://localhost:8080';
-
-  if (
-    typeof process !== 'undefined' &&
-    (process.env?.VERCEL === '1' || process.env?.NODE_ENV === 'production')
-  ) {
-    if (!process.env?.NEXT_PUBLIC_EGDESK_API_URL || apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1')) {
-      apiUrl = 'https://tunneling-service.onrender.com/t/mcp-server-fxkud1';
-    }
-  }
+  const apiUrl = getServerEgdeskApiUrl();
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -114,9 +103,7 @@ export async function callVisitorWorkspaceTool(
   visitorSessionId?: string | null,
   siteOrigin: string = 'http://localhost:4003'
 ) {
-  const apiUrl =
-    (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-    'http://localhost:8080';
+  const apiUrl = getServerEgdeskApiUrl();
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

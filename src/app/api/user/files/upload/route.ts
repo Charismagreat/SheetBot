@@ -16,6 +16,8 @@ import { setupDatabase } from "@/lib/setup-db";
 import { getAiModelSettings } from "@/lib/ai-settings";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { uploadDriveFileWithBridge } from "@/lib/drive-upload-helper";
+import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
+import { recordAiUsageLog } from "@/lib/ai-usage";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import fs from "fs";
 import path from "path";
@@ -136,14 +138,40 @@ export async function POST(req: NextRequest) {
       throw new Error(`구글 드라이브 파일 업로드에 실패했습니다: ${uploadErr.message}`);
     }
 
-    // 6. AI OCR 분석 실행 (영수증 또는 명함인 경우 사이트 설정 AI 모델로 분석)
+    // 6. AI OCR 분석 실행 (영수증 또는 명함인 경우 사이트 설정 AI 모델로 분석 및 토큰 차감)
     let ocrResultData: any = null;
     if (ocrType === "RECEIPT" || ocrType === "BUSINESS_CARD") {
       try {
-        const aiSettings = await getAiModelSettings();
-        const configuredModel = aiSettings.defaultModel;
-        const base64File = buffer.toString("base64");
-        ocrResultData = await performAiOcr(base64File, targetFileName, mimeType, ocrType, configuredModel);
+        const balanceCheck = await checkTokenBalance(cleanEmail, 300);
+        if (balanceCheck.allowed) {
+          const aiSettings = await getAiModelSettings();
+          const configuredModel = aiSettings.defaultModel;
+          const base64File = buffer.toString("base64");
+          ocrResultData = await performAiOcr(base64File, targetFileName, mimeType, ocrType, configuredModel);
+
+          if (ocrResultData) {
+            // OCR 이미지 분석 가중치 기본 600 + 모델 배율 적용
+            const multiplier = aiSettings.tokenMultiplier || 1.0;
+            const usedTokens = Math.round(600 * multiplier);
+
+            await deductTokens(cleanEmail, usedTokens);
+
+            void recordAiUsageLog({
+              userEmail: cleanEmail,
+              caller: "sheetbot-ai-ocr",
+              purpose: `${ocrType === "RECEIPT" ? "영수증" : "명함"} AI OCR 장부화 (${configuredModel || "gemini-3.8-flash"} / ${multiplier}x)`,
+              model: configuredModel || "gemini-3.8-flash",
+              promptTokens: 400,
+              completionTokens: 200,
+              totalTokens: usedTokens,
+              promptText: `OCR 분석: ${targetFileName} (${mimeType})`,
+              responseText: JSON.stringify(ocrResultData).slice(0, 300),
+            });
+            console.log(`[FilesUpload] AI OCR completed & ${usedTokens} tokens deducted for ${cleanEmail}`);
+          }
+        } else {
+          console.warn(`[FilesUpload] Insufficient token balance for AI OCR: ${cleanEmail}`);
+        }
       } catch (ocrErr: any) {
         console.warn(`[FilesUpload] AI OCR analysis warning (${ocrType}):`, ocrErr.message);
       }

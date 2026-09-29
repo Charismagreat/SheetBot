@@ -250,7 +250,19 @@ class PhoneCallReceiver : BroadcastReceiver() {
                     TtsManager.speak(context, "상대방에게 모바일 명함이 성공적으로 발송되었습니다.")
                 }
 
-                // 구글 시트에 발신 기록 동기화
+                // [SheetBot] 모바일 명함 발송 대장에 실시간 기록
+                if (!userEmail.isNullOrBlank()) {
+                    ApiClient.sendBusinessCardSync(
+                        userEmail = userEmail,
+                        recipientPhone = phoneNumber,
+                        contactName = contactName,
+                        sendMode = "스마트 웹 명함(0원)",
+                        cardContentOrUrl = finalMessage,
+                        status = "전송 완료"
+                    )
+                }
+
+                // 구글 시트 일반 문자 대장에도 발신 기록 동기화
                 if (!userEmail.isNullOrBlank() && prefs.isSmsSheetSyncEnabled) {
                     ApiClient.sendSmsSync(
                         userEmail = userEmail,
