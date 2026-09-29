@@ -185,7 +185,55 @@ async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: stri
     { preferOAuth: true }
   ).catch(() => {});
 
-  console.log(`[ProvisionQuote] ✅ Successfully initialized 2 tabs (품목, 주문접수대장) for ORDER spreadsheet.`);
+  // 3. 세 번째 탭: '사업자정보' 생성 및 설정 항목 주입
+  const infoTabName = "사업자정보";
+  await callSheetsTool(
+    "sheets_create_tab",
+    {
+      spreadsheetId,
+      title: infoTabName,
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch((err: any) => console.warn(`[ProvisionQuote] Create info tab warning:`, err.message));
+
+  const sampleInfoRows = [
+    ["설정항목", "안내내용 및 설정값 (자유롭게 수정 가능)"],
+    ["회사명(상호)", "chachogreat몰"],
+    ["대표자명", "차호석"],
+    ["사업자등록번호", "123-45-67890"],
+    ["사업장 주소", "서울특별시 서초구 반포대로 10, 3층"],
+    ["고객센터 연락처", "010-7216-5884"],
+    ["대표 e메일", "chachogreat@gmail.com"],
+    ["홈페이지/SNS", "https://sheetbot.cloud"],
+    ["결제관련안내", "국민은행 123456-04-111111 (예금주: 차호석) / 주문 접수 후 24시간 이내 입금 시 배송 준비가 진행됩니다."],
+    ["배송관련안내", "평일 오후 2시 이전 주문 시 당일 출고 / 기본 배송비 무료 (도서산간 3,000원 추가)"],
+    ["환불관련안내", "상품 수령 후 7일 이내 교환 및 반품이 가능합니다. (단순 변심 시 왕복 배송비 고객 부담)"],
+    ["기타 안내사항", "대량 주문 및 세금계산서 발급 문의는 고객센터로 연락 부탁드립니다."],
+  ];
+
+  await callSheetsTool(
+    "sheets_update_range",
+    {
+      spreadsheetId,
+      range: `${infoTabName}!A1:B12`,
+      values: sampleInfoRows,
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch(() => {});
+
+  await callSheetsTool(
+    "sheets_format_headers",
+    {
+      spreadsheetId,
+      sheetName: infoTabName,
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch(() => {});
+
+  console.log(`[ProvisionQuote] ✅ Successfully initialized 3 tabs (품목, 주문접수대장, 사업자정보) for ORDER spreadsheet.`);
 }
 
 /**

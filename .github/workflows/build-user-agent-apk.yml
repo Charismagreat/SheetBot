@@ -83,9 +83,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: user-v2.1.19
-          name: "SheetBot Mobile Agent (이용자용) v2.1.19"
-          body: "시트봇 모바일 에이전트 v2.1.19 릴리즈\n• 🛍️ [스마트 간편 주문 & 품목 대장 전면 개편] 단순 견적 시스템에서 실시간 모바일 간편 주문 시스템으로 전면 전환\n• 🖼️ [품목 대표사진 & 품절 표시 연동] 구글 시트의 품목 대장에 등록된 대표사진, 상세이미지, 품절 여부가 모바일 주문 웹에 실시간 연동\n• 🧾 [모바일 전자 주문확인서 탑재] 주문 완료 즉시 웹 화면에 영수증 형태의 전자 주문확인서(인쇄, PDF, 주문내역 복사) 제공 및 구글 시트 주문접수대장 10개 열 자동 기록\n• 📱 [앱 UI 최적화] 스마트 간편 주문 및 품목 대장 연동 메뉴 및 토스트 안내 반영"
+          tag_name: user-v2.1.20
+          name: "SheetBot Mobile Agent (이용자용) v2.1.20"
+          body: "시트봇 모바일 에이전트 v2.1.20 릴리즈\n• 📷 [카톡 미리보기 대표 사진 등록 완벽 지원] 스마트폰 고화질 카메라 사진(수십 MB) 선택 시 카카오톡/웹 최적 규격으로 자동 다운스케일링 및 고화질 JPEG 스마트 압축 전송 (HTTP 500 오류 및 메모리 초과 완전 해결)\n• 🛍️ [스마트 간편 주문 & 품목 대장 연동] 대표사진, 상세이미지, 품절 표시 및 전자 주문확인서 실시간 동기화\n• 🏢 [시트 사업자정보 연동] 구글 시트의 사업자정보 탭(계좌번호, 배송/환불 안내 등)과 모바일 영수증 100% 연동"
           files: release-apk/SheetBotAgent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

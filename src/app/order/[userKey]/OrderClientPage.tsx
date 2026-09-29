@@ -21,6 +21,13 @@ import {
   AlertCircle,
   Eye,
   Store,
+  CreditCard,
+  Truck,
+  RotateCcw,
+  Building2,
+  Globe,
+  Mail,
+  HelpCircle,
 } from "lucide-react";
 
 interface CatalogItem {
@@ -44,6 +51,20 @@ interface MerchantInfo {
   imageUrl?: string;
 }
 
+interface BusinessInfo {
+  companyName?: string;
+  ownerName?: string;
+  bizNumber?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  paymentNotice?: string;
+  shippingNotice?: string;
+  refundNotice?: string;
+  extraNotice?: string;
+}
+
 export default function OrderClientPage({ userKey: propUserKey }: { userKey?: string }) {
   const params = useParams();
   const router = useRouter();
@@ -57,6 +78,7 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
     email: "",
     imageUrl: "",
   });
+  const [businessInfo, setBusinessInfo] = useState<BusinessInfo>({});
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
@@ -79,8 +101,9 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
   // 주문 완료 상태 (전자 주문확인서 렌더링용)
   const [orderResult, setOrderResult] = useState<any>(null);
   const [copied, setCopied] = useState(false);
+  const [accountCopied, setAccountCopied] = useState(false);
 
-  // 1. 단가표(품목 목록) 및 상호 정보 로드
+  // 1. 단가표(품목 목록), 상호 및 시트 사업자정보 로드
   useEffect(() => {
     async function loadCatalog() {
       try {
@@ -92,6 +115,9 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
           setCategories(data.categories || []);
           if (data.merchant) {
             setMerchant(data.merchant);
+          }
+          if (data.businessInfo) {
+            setBusinessInfo(data.businessInfo);
           }
         } else {
           setError(data.error || "품목 정보를 불러올 수 없습니다.");
@@ -158,15 +184,18 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
     return selectedItems.reduce((acc, cur) => acc + cur.quantity, 0);
   }, [selectedItems]);
 
-  // 상호명 표시 안전화 (이메일 아이디 노출 원천 차단)
+  // 상호명 표시 안전화 (시트 사업자정보 1순위 반영, 이메일 노출 방지)
   const displayBusinessName = useMemo(() => {
+    if (businessInfo.companyName && businessInfo.companyName.trim()) {
+      return businessInfo.companyName.trim();
+    }
     const raw = merchant.businessName?.trim();
     const emailPrefix = merchant.email?.split("@")[0]?.toLowerCase();
     if (!raw || (emailPrefix && raw.toLowerCase() === emailPrefix)) {
       return "스마트 간편 주문 센터";
     }
     return raw;
-  }, [merchant.businessName, merchant.email]);
+  }, [businessInfo.companyName, merchant.businessName, merchant.email]);
 
   // 4. 카테고리 필터링
   const filteredCatalog = useMemo(() => {
@@ -216,6 +245,9 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
       const data = await res.json();
       if (data.success) {
         setOrderResult(data);
+        if (data.businessInfo) {
+          setBusinessInfo(data.businessInfo);
+        }
         setIsModalOpen(false);
       } else {
         alert(data.error || "주문 접수에 실패했습니다.");
@@ -230,8 +262,9 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
   // 주문내역 텍스트 클립보드 복사
   const handleCopyOrderSummary = () => {
     if (!orderResult) return;
+    const info = orderResult.businessInfo || businessInfo;
     const lines = [
-      `[${displayBusinessName}] 주문확인서`,
+      `[${displayBusinessName}] 전자 주문확인서`,
       `주문번호: ${orderResult.orderId}`,
       `주문일시: ${orderResult.createdAt}`,
       `주문자명: ${orderResult.customerName} (${orderResult.customerPhone})`,
@@ -239,7 +272,7 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
       orderResult.preferredDate ? `희망일시: ${orderResult.preferredDate}` : "",
       orderResult.notes ? `요청사항: ${orderResult.notes}` : "",
       `--------------------------`,
-      `[주문 내역]`,
+      `[주문 품목 내역]`,
       ...orderResult.items.map(
         (it: any) => `• ${it.name} (${it.quantity}${it.spec}) - ${it.amount.toLocaleString()}원`
       ),
@@ -247,6 +280,9 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
       `공급가액: ${orderResult.supplyAmount.toLocaleString()}원`,
       `부가세(10%): ${orderResult.vatAmount.toLocaleString()}원`,
       `총 결제금액: ${orderResult.totalAmount.toLocaleString()}원`,
+      info.paymentNotice ? `--------------------------\n[결제/입금 안내]\n${info.paymentNotice}` : "",
+      info.shippingNotice ? `[배송 안내]\n${info.shippingNotice}` : "",
+      info.phone ? `고객센터: ${info.phone}` : "",
     ]
       .filter(Boolean)
       .join("\n");
@@ -254,6 +290,14 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
     navigator.clipboard.writeText(lines).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
+    });
+  };
+
+  // 계좌번호 복사 헬퍼
+  const handleCopyAccount = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setAccountCopied(true);
+      setTimeout(() => setAccountCopied(false), 2000);
     });
   };
 
@@ -282,6 +326,9 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
   // [주문 완료 화면: 모바일 전자 주문확인서 (HTML 영수증)]
   // ==========================================================
   if (orderResult) {
+    const activeInfo = orderResult.businessInfo || businessInfo;
+    const contactPhone = activeInfo.phone || merchant.phone;
+
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 py-6 px-3 sm:px-6 flex flex-col items-center justify-center print:bg-white print:text-black print:p-0">
         <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-2xl print:border-none print:shadow-none print:bg-white print:p-4">
@@ -398,14 +445,101 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
               </div>
             </div>
 
-            {/* 안내 문구 */}
-            <div className="bg-slate-900/80 rounded-xl p-3 text-[11px] text-slate-400 space-y-1 border border-slate-800/60 print:border-gray-200 print:bg-gray-50 print:text-gray-600">
-              <p className="flex items-center gap-1 font-semibold text-slate-300 print:text-black">
-                <AlertCircle className="w-3.5 h-3.5 text-emerald-400" />
-                안내사항
-              </p>
-              <p>• 주문 내역이 사장님의 스프레드시트 대장에 실시간 기록되었습니다.</p>
-              <p>• 배송 및 입금 관련 세부 안내는 기재해주신 연락처로 판매점에서 직접 안내드립니다.</p>
+            {/* [1] 결제 및 입금 안내 (시트 '사업자정보' 탭 연동) */}
+            {activeInfo.paymentNotice && (
+              <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-3.5 space-y-1.5 print:bg-gray-50 print:border-gray-300">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 font-bold text-emerald-400 text-xs print:text-black">
+                    <CreditCard className="w-4 h-4 text-emerald-400" />
+                    결제 / 입금 계좌 안내
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyAccount(activeInfo.paymentNotice!)}
+                    className="px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[10px] font-semibold transition print:hidden"
+                  >
+                    {accountCopied ? "복사됨!" : "계좌 복사"}
+                  </button>
+                </div>
+                <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-line font-medium print:text-black">
+                  {activeInfo.paymentNotice}
+                </p>
+              </div>
+            )}
+
+            {/* [2] 배송 / 환불 및 기타 안내 (시트 '사업자정보' 탭 연동) */}
+            <div className="bg-slate-900/80 rounded-xl p-3.5 text-xs text-slate-300 space-y-2 border border-slate-800/80 print:border-gray-200 print:bg-gray-50 print:text-gray-800">
+              {activeInfo.shippingNotice && (
+                <div className="space-y-0.5">
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider print:text-black">
+                    <Truck className="w-3.5 h-3.5 text-teal-400" />
+                    배송 관련 안내
+                  </span>
+                  <p className="text-[11px] text-slate-300 leading-relaxed whitespace-pre-line pl-4 print:text-black">
+                    {activeInfo.shippingNotice}
+                  </p>
+                </div>
+              )}
+
+              {activeInfo.refundNotice && (
+                <div className="space-y-0.5 pt-1 border-t border-slate-800/60 print:border-gray-200">
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider print:text-black">
+                    <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                    환불 / 취소 안내
+                  </span>
+                  <p className="text-[11px] text-slate-300 leading-relaxed whitespace-pre-line pl-4 print:text-black">
+                    {activeInfo.refundNotice}
+                  </p>
+                </div>
+              )}
+
+              {activeInfo.extraNotice && (
+                <div className="space-y-0.5 pt-1 border-t border-slate-800/60 print:border-gray-200">
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider print:text-black">
+                    <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
+                    기타 안내사항
+                  </span>
+                  <p className="text-[11px] text-slate-300 leading-relaxed whitespace-pre-line pl-4 print:text-black">
+                    {activeInfo.extraNotice}
+                  </p>
+                </div>
+              )}
+
+              {!activeInfo.shippingNotice && !activeInfo.refundNotice && (
+                <p className="text-[11px] text-slate-400">
+                  • 주문 내역이 사장님의 스프레드시트 대장에 실시간 기록되었습니다.<br />
+                  • 배송 및 입금 관련 세부 안내는 기재해주신 연락처로 판매점에서 직접 안내드립니다.
+                </p>
+              )}
+            </div>
+
+            {/* [3] 사업자 정보 공식 푸터 (시트 '사업자정보' 탭 연동) */}
+            <div className="pt-3 border-t border-slate-800 text-[10px] sm:text-[11px] text-slate-400 space-y-1 print:border-gray-300 print:text-gray-600">
+              <div className="font-semibold text-slate-300 flex items-center gap-1 print:text-black">
+                <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                <span>사업자 정보</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-0.5">
+                <div>상호(회사명): <span className="text-slate-300 font-medium print:text-black">{activeInfo.companyName || displayBusinessName}</span></div>
+                {activeInfo.ownerName && <div>대표자: <span className="text-slate-300 font-medium print:text-black">{activeInfo.ownerName}</span></div>}
+                {activeInfo.bizNumber && <div>사업자등록번호: <span className="text-slate-300 font-medium print:text-black">{activeInfo.bizNumber}</span></div>}
+                {contactPhone && <div>고객센터: <span className="text-slate-300 font-medium print:text-black">{contactPhone}</span></div>}
+                {activeInfo.address && <div className="sm:col-span-2">사업장 주소: <span className="text-slate-300 font-medium print:text-black">{activeInfo.address}</span></div>}
+                {activeInfo.email && <div>대표 이메일: <span className="text-slate-300 font-medium print:text-black">{activeInfo.email}</span></div>}
+                {activeInfo.website && (
+                  <div>
+                    홈페이지:{" "}
+                    <a
+                      href={activeInfo.website.startsWith("http") ? activeInfo.website : `https://${activeInfo.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-emerald-400 hover:underline print:text-black"
+                    >
+                      {activeInfo.website}
+                    </a>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -437,13 +571,13 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
               </button>
             </div>
 
-            {merchant.phone && (
+            {contactPhone && (
               <a
-                href={`tel:${merchant.phone}`}
+                href={`tel:${contactPhone}`}
                 className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-950/40"
               >
                 <Phone className="w-4 h-4" />
-                사장님께 전화 문의 ({merchant.phone})
+                사장님께 전화 문의 ({contactPhone})
               </a>
             )}
 
@@ -470,6 +604,8 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
   // ==========================================================
   // [메인 화면: 모바일 간편 주문 & 품목 목록]
   // ==========================================================
+  const contactPhone = businessInfo.phone || merchant.phone;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-36">
       {/* 1. 상단 브랜드 헤더 */}
@@ -495,9 +631,9 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
               </p>
             </div>
           </div>
-          {merchant.phone && (
+          {contactPhone && (
             <a
-              href={`tel:${merchant.phone}`}
+              href={`tel:${contactPhone}`}
               className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/80 hover:bg-slate-800 text-xs font-semibold text-slate-200 flex items-center gap-1.5 transition"
             >
               <Phone className="w-3.5 h-3.5 text-emerald-400" />

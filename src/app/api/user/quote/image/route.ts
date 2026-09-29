@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
