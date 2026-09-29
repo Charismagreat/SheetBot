@@ -75,6 +75,7 @@ import {
 import Navbar from "@/components/Navbar";
 import dynamic from "next/dynamic";
 import { KakaoChatImportModal } from "@/components/KakaoChatImportModal";
+import QuoteWebappSettingsModal from "@/components/QuoteWebappSettingsModal";
 
 const NotificationsRulesTab = dynamic(
   () => import("@/components/notifications/NotificationsRulesTab"),
@@ -123,6 +124,7 @@ export default function NotificationsPage() {
   const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false);
   const [isKakaoImportModalOpen, setIsKakaoImportModalOpen] = useState(false);
+  const [isQuoteSettingsOpen, setIsQuoteSettingsOpen] = useState(false);
   const [dispatchSheetUrl, setDispatchSheetUrl] = useState<string | null>(null);
   const [agent2PairData, setAgent2PairData] = useState<any>(null);
   const [loadingAgent2Pair, setLoadingAgent2Pair] = useState(false);
@@ -686,6 +688,14 @@ export default function NotificationsPage() {
             >
               <MessageSquare className="w-4 h-4 text-amber-400" />
               <span>💬 카톡 대화 파일 가져오기</span>
+            </button>
+
+            <button
+              onClick={() => setIsQuoteSettingsOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all cursor-pointer font-bold"
+              title="고객 전용 견적 웹앱의 상호명 및 카카오톡 공유 미리보기 대표 이미지를 설정합니다."
+            >
+              <span>🛍️ 견적 웹앱 &amp; 카톡 미리보기 설정</span>
             </button>
           </div>
         </div>
@@ -1280,6 +1290,13 @@ export default function NotificationsPage() {
         onSuccess={(res) => {
           showAlert("success", `'${res.chatRoomName}' 카톡 대화 ${res.totalCount}건(수신 ${res.inboundCount}, 발신 ${res.outboundCount})이 구글 시트에 덮어쓰기 반영되었습니다!`);
         }}
+      />
+
+      {/* 실시간 셀프 견적 웹앱 & 카카오톡 미리보기 대표 이미지 설정 모달 */}
+      <QuoteWebappSettingsModal
+        isOpen={isQuoteSettingsOpen}
+        onClose={() => setIsQuoteSettingsOpen(false)}
+        userEmail={effectiveEmail}
       />
     </div>
   );

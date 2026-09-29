@@ -27,14 +27,30 @@ export async function GET(req: NextRequest) {
       limit: 1,
     }).catch(() => ({ rows: [] }));
 
+    let customImageUrl = "";
+    try {
+      const settingRes = await queryTable("sheetbot_settings", {
+        filters: { key: `quote_profile_${targetEmail}` },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+      if (settingRes.rows && settingRes.rows.length > 0) {
+        const val = JSON.parse(settingRes.rows[0].value || "{}");
+        if (val.ogImageUrl) customImageUrl = val.ogImageUrl;
+        else if (val.imageUrl) customImageUrl = val.imageUrl;
+      }
+    } catch (_) {}
+
     if (userRes.rows && userRes.rows.length > 0) {
       const u = userRes.rows[0];
+      if (!customImageUrl && u.quote_image_url) customImageUrl = u.quote_image_url;
       return NextResponse.json({
         success: true,
         email: targetEmail,
         businessName: u.business_name || u.name || "",
         phone: u.phone || "",
         name: u.name || "",
+        imageUrl: customImageUrl || "https://sheetbot.cloud/favicon.svg",
+        quoteImageUrl: customImageUrl || "https://sheetbot.cloud/favicon.svg",
       });
     }
 
@@ -44,6 +60,8 @@ export async function GET(req: NextRequest) {
       businessName: "",
       phone: "",
       name: "",
+      imageUrl: customImageUrl || "https://sheetbot.cloud/favicon.svg",
+      quoteImageUrl: customImageUrl || "https://sheetbot.cloud/favicon.svg",
     });
   } catch (error: any) {
     console.error("[Profile GET] Error:", error);
@@ -68,17 +86,33 @@ export async function POST(req: NextRequest) {
 
     const businessName = (body.businessName ?? body.business_name ?? "").trim();
     const phone = (body.phone ?? "").trim();
+    const imageUrl = (body.imageUrl ?? body.ogImageUrl ?? body.quoteImageUrl ?? "").trim();
     const now = new Date().toISOString();
 
     // 1. sheetbot_settings 키-값 저장소에 영구 보존
     try {
       const settingKey = `quote_profile_${targetEmail}`;
-      const payload = JSON.stringify({ businessName, phone, updatedAt: now });
       const settingRes = await queryTable("sheetbot_settings", {
         filters: { key: settingKey },
         limit: 1,
       }).catch(() => ({ rows: [] }));
 
+      let existingVal: any = {};
+      if (settingRes.rows && settingRes.rows.length > 0) {
+        try {
+          existingVal = JSON.parse(settingRes.rows[0].value || "{}");
+        } catch (_) {}
+      }
+
+      existingVal.businessName = businessName || existingVal.businessName || "";
+      if (phone) existingVal.phone = phone;
+      if (imageUrl) {
+        existingVal.imageUrl = imageUrl;
+        existingVal.ogImageUrl = imageUrl;
+      }
+      existingVal.updatedAt = now;
+
+      const payload = JSON.stringify(existingVal);
       if (settingRes.rows && settingRes.rows.length > 0) {
         await updateRows("sheetbot_settings", { value: payload, updated_at: now }, { filters: { key: settingKey } });
       } else {
@@ -109,6 +143,7 @@ export async function POST(req: NextRequest) {
           {
             business_name: businessName,
             ...(phone ? { phone } : {}),
+            ...(imageUrl ? { quote_image_url: imageUrl } : {}),
             updated_at: now,
           },
           { filters: { email: targetEmail } }
@@ -120,6 +155,7 @@ export async function POST(req: NextRequest) {
             email: targetEmail,
             name: session?.user?.name || targetEmail.split("@")[0],
             business_name: businessName,
+            quote_image_url: imageUrl || "",
             phone: phone,
             role: "USER",
             status: "ACTIVE",

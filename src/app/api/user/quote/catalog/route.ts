@@ -59,6 +59,7 @@ export async function GET(req: NextRequest) {
     // 사장님 프로필/상호 정보 조회 (멀티 레이어 조회)
     let businessName = "";
     let merchantPhone = "";
+    let merchantImage = "";
 
     // 1. sheetbot_settings 키-값 저장소 우선 확인
     try {
@@ -72,11 +73,13 @@ export async function GET(req: NextRequest) {
           businessName = val.businessName.trim();
         }
         if (val.phone) merchantPhone = val.phone;
+        if (val.ogImageUrl) merchantImage = val.ogImageUrl;
+        else if (val.imageUrl) merchantImage = val.imageUrl;
       }
     } catch (_) {}
 
     // 2. sheetbot_users 테이블 확인
-    if (!businessName) {
+    if (!businessName || !merchantImage) {
       try {
         const userRes = await queryTable("sheetbot_users", {
           filters: { email: targetEmail },
@@ -84,12 +87,17 @@ export async function GET(req: NextRequest) {
         }).catch(() => ({ rows: [] }));
         if (userRes.rows && userRes.rows.length > 0) {
           const u = userRes.rows[0];
-          if (u.business_name && u.business_name.trim()) {
+          if (!businessName && u.business_name && u.business_name.trim()) {
             businessName = u.business_name.trim();
           }
           if (!merchantPhone && u.phone) merchantPhone = u.phone;
+          if (!merchantImage && u.quote_image_url) merchantImage = u.quote_image_url;
         }
       } catch (_) {}
+    }
+
+    if (!merchantImage) {
+      merchantImage = "https://sheetbot.cloud/favicon.svg";
     }
 
     // 3. 아직 상호명이 없으면 기본 품격 있는 상호명 채택 (개인 이메일 아이디 노출 100% 방지)
@@ -165,6 +173,7 @@ export async function GET(req: NextRequest) {
         businessName,
         phone: merchantPhone,
         email: targetEmail,
+        imageUrl: merchantImage,
       },
       categories,
       catalog: catalogItems,
@@ -186,13 +195,13 @@ export async function POST(req: NextRequest) {
     const targetEmail = (body.email || "").toLowerCase().trim();
     const businessName = (body.businessName ?? body.business_name ?? "").trim();
     const phone = (body.phone ?? "").trim();
+    const imageUrl = (body.imageUrl ?? body.ogImageUrl ?? "").trim();
 
     if (!targetEmail) {
       return NextResponse.json({ success: false, error: "이메일 정보가 필요합니다." }, { status: 400 });
     }
 
     const now = new Date().toISOString();
-    const payload = JSON.stringify({ businessName, phone, updatedAt: now });
     const settingKey = `quote_profile_${targetEmail}`;
 
     // 1. sheetbot_settings 영구 저장
@@ -202,6 +211,22 @@ export async function POST(req: NextRequest) {
         limit: 1,
       }).catch(() => ({ rows: [] }));
 
+      let existingVal: any = {};
+      if (settingRes.rows && settingRes.rows.length > 0) {
+        try {
+          existingVal = JSON.parse(settingRes.rows[0].value || "{}");
+        } catch (_) {}
+      }
+
+      existingVal.businessName = businessName || existingVal.businessName || "";
+      if (phone) existingVal.phone = phone;
+      if (imageUrl) {
+        existingVal.imageUrl = imageUrl;
+        existingVal.ogImageUrl = imageUrl;
+      }
+      existingVal.updatedAt = now;
+
+      const payload = JSON.stringify(existingVal);
       if (settingRes.rows && settingRes.rows.length > 0) {
         await updateRows("sheetbot_settings", { value: payload, updated_at: now }, { filters: { key: settingKey } });
       } else {
@@ -219,7 +244,10 @@ export async function POST(req: NextRequest) {
 
     // 2. sheetbot_users 동시 저장
     try {
-      await updateRows("sheetbot_users", { business_name: businessName, phone, updated_at: now }, { filters: { email: targetEmail } });
+      const updateData: any = { business_name: businessName, updated_at: now };
+      if (phone) updateData.phone = phone;
+      if (imageUrl) updateData.quote_image_url = imageUrl;
+      await updateRows("sheetbot_users", updateData, { filters: { email: targetEmail } });
     } catch (_) {}
 
     return NextResponse.json({
@@ -227,6 +255,7 @@ export async function POST(req: NextRequest) {
       email: targetEmail,
       businessName,
       phone,
+      imageUrl,
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
