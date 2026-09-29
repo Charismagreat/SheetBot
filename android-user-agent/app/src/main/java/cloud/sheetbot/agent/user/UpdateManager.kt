@@ -1,4 +1,4 @@
-﻿package cloud.sheetbot.agent.user
+package cloud.sheetbot.agent.user
 
 import android.app.Activity
 import android.app.AlertDialog
@@ -138,7 +138,7 @@ object UpdateManager {
             )
 
             var downloadSuccess = false
-            val apkFile = File(activity.cacheDir, "sheetbot_agent_m_update.apk")
+            val apkFile = File(activity.cacheDir, "sheetbot_user_agent_update.apk")
             if (apkFile.exists()) {
                 apkFile.delete()
             }

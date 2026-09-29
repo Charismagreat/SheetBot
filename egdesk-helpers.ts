@@ -59,27 +59,6 @@ export async function apiFetch(path: string, options?: RequestInit): Promise<Res
   return fetch(url, options);
 }
 
-/**
- * Resolve EGDesk API URL for server-side direct calls.
- * Automatically falls back to the public tunnel in Vercel/Production environments
- * when localhost is unreachable.
- */
-export function getServerEgdeskApiUrl(): string {
-  let apiUrl =
-    (typeof process !== 'undefined' && (process.env?.EGDESK_API_URL || process.env?.NEXT_PUBLIC_EGDESK_API_URL)) ||
-    EGDESK_CONFIG.apiUrl;
-
-  if (
-    typeof process !== 'undefined' &&
-    (process.env?.VERCEL === '1' || process.env?.NODE_ENV === 'production')
-  ) {
-    if (!apiUrl || apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1')) {
-      apiUrl = EGDESK_CONFIG.tunnelUrl || 'https://tunneling-service.onrender.com/t/mcp-server-fxkud1';
-    }
-  }
-  return apiUrl;
-}
-
 /** Build EGDesk routing headers (project-id + env) for server-side direct calls. */
 function buildServerEgdeskHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -184,7 +163,9 @@ async function callWorkspaceMcpTool(
   const visitorHeaders = buildWorkspaceVisitorHeaders(options);
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}${path}`, {
       method: 'POST',
       headers: { ...buildServerEgdeskHeaders(), ...visitorHeaders },
@@ -315,7 +296,9 @@ export async function callEgdeskHttp(
   const isServer = typeof window === 'undefined';
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     const base = apiUrl.endsWith('/') ? apiUrl : `${apiUrl}/`;
     const url = new URL(pathname.startsWith('/') ? pathname.slice(1) : pathname, base);
     for (const [key, value] of Object.entries(query)) {
@@ -361,7 +344,9 @@ export async function callUserDataTool(
   let response: Response;
   if (isServer) {
     // API routes: call Egdesk directly (relative URL is invalid in Node)
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/user-data/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -926,7 +911,7 @@ export function onUserDataChanged(
     return () => {};
   }
 
-  const apiUrl = getServerEgdeskApiUrl();
+  const apiUrl = EGDESK_CONFIG.apiUrl || '';
   const apiKey = EGDESK_CONFIG.apiKey || '';
   const projectId =
     (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_PROJECT_ID) || '';
@@ -992,7 +977,9 @@ export async function callKakaoTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/kakao/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -1178,7 +1165,9 @@ export async function callFinanceHubTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/financehub/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -1514,7 +1503,9 @@ export async function callBusinessIdentityTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/business-identity/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -1598,7 +1589,9 @@ export async function callCompanyResearchTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/company-research/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -1744,7 +1737,9 @@ export async function callBrowserRecordingTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/browser-recording/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -2153,7 +2148,9 @@ export async function callAICenterTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/ai-center/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -2427,7 +2424,9 @@ export async function callKoreanLawTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/korean-law/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -2651,7 +2650,9 @@ export async function callSeoTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/seo/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -2714,7 +2715,9 @@ export async function callHostingCodingTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/hosting-coding/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -2853,7 +2856,9 @@ export async function callLocalAgentTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/local-agent/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -2928,7 +2933,9 @@ export async function callAiCallerTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/ai-caller/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -3239,7 +3246,9 @@ export async function callPageIndexTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/pageindex/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -4020,7 +4029,9 @@ export async function callKnowledgeWikiTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/knowledge-wiki/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -4130,7 +4141,9 @@ export async function callEgdeskConfigTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/egdesk-config/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -4246,7 +4259,9 @@ export async function callPhoneTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/phone/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -4507,7 +4522,9 @@ export async function callInstagramTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/instagram/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -4840,7 +4857,9 @@ export async function callBlogTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/blog/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -5122,7 +5141,9 @@ export async function callYouTubeTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
+    const apiUrl =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/youtube/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -5331,44 +5352,3 @@ export async function listYouTubeHistory(options: {
 } = {}) {
   return callYouTubeTool('youtube_list_history', options);
 }
-
-// ==========================================
-// EGDesk Filesystem (MCP)
-// ==========================================
-
-export async function callFilesystemTool(
-  toolName: string,
-  args: Record<string, any> = {}
-): Promise<any> {
-  const body = JSON.stringify({ tool: toolName, arguments: args });
-  const isServer = typeof window === 'undefined';
-  let response: Response;
-  if (isServer) {
-    const apiUrl = getServerEgdeskApiUrl();
-    response = await fetch(`${apiUrl}/filesystem/tools/call`, {
-      method: 'POST',
-      headers: buildServerEgdeskHeaders(),
-      body,
-    });
-  } else {
-    response = await apiFetch('/__filesystem_proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    });
-  }
-  return parseEgdeskMcpToolResponse(response);
-}
-
-/**
- * Upload a file (base64 or text) to the host PC Downloads folder via filesystem MCP.
- * Returns the absolute Downloads path.
- */
-export async function fsUploadFile(
-  filename: string,
-  content: string,
-  encoding: 'base64' | 'utf8' = 'base64'
-): Promise<any> {
-  return callFilesystemTool('fs_upload_file', { filename, content, encoding });
-}
-
