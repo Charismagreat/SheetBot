@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
       } else {
         await insertRows("sheetbot_settings", [
           {
-            id: `set_${Date.now()}`,
+            id: Math.floor(Date.now() / 1000),
             key: settingKey,
             value: payload,
             description: `견적 프로필 (${targetEmail})`,
@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
       } else {
         await insertRows("sheetbot_users", [
           {
-            id: `usr_${Date.now()}`,
+            id: Math.floor(Date.now() / 1000),
             email: targetEmail,
             name: session?.user?.name || targetEmail.split("@")[0],
             business_name: businessName,
