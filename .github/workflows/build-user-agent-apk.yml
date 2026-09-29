@@ -83,9 +83,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: user-v2.1.15
-          name: "SheetBot Mobile Agent (이용자용) v2.1.15"
-          body: "시트봇 모바일 에이전트 v2.1.15 릴리즈\n• 📱 [고객 주도형 스마트 셀프 견적 & 1초 주문 웹앱 연동] 메인 화면 [내 견적 웹앱 열기] 및 [주문 링크 복사] 원터치 버튼 탑재\n• 🔗 [원클릭 고객 공유] 카카오톡 및 문자로 고객 전용 주문 링크를 1초 만에 전송하여 모바일에서 실시간 견적 산출 및 자동 예약 접수 지원\n• ⚡ [실시간 연동] 고객 주문 접수 시 구글 시트 견적발급대장 자동 기록 및 스마트폰 알림 연동"
+          tag_name: user-v2.1.16
+          name: "SheetBot Mobile Agent (이용자용) v2.1.16"
+          body: "시트봇 모바일 에이전트 v2.1.16 릴리즈\n• 🏢 [상호명/브랜드명 실시간 변경 지원] 스마트 견적 대장 연동 카드에서 사장님 상호명 입력 시 모바일 고객 견적/주문 웹앱 상단 헤더에 0초 만에 실시간 반영\n• 📱 [스마트 셀프 견적 & 1초 주문 웹앱 최적화] 고객이 견적 링크 확인 시 정식 상호명 노출로 신뢰도 극대화\n• 🔄 [양방향 동기화] 스마트폰 앱과 시트봇 클라우드 간 상호명 자동 동기화 탑재"
           files: release-apk/SheetBotAgent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

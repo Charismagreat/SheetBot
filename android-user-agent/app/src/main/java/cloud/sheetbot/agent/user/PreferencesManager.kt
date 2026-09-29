@@ -152,6 +152,10 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("quote_drive_sheet_title", "[SheetBot] 스마트 견적 및 단가표 대장") ?: "[SheetBot] 스마트 견적 및 단가표 대장"
         set(value) = prefs.edit().putString("quote_drive_sheet_title", value).apply()
 
+    var quoteBusinessName: String
+        get() = prefs.getString("quote_business_name", "") ?: ""
+        set(value) = prefs.edit().putString("quote_business_name", value).apply()
+
     // 부재중 전화(Missed Call) 감지 시 0원 스마트 안내 문자 자동 회신 설정 (신규 설치 시 기본 꺼짐: false)
     var isMissedCallAutoReplyEnabled: Boolean
         get() = prefs.getBoolean("is_missed_call_auto_reply_enabled", false)
