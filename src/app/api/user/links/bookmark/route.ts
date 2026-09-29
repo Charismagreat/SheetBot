@@ -14,6 +14,8 @@ import {
 import { setupDatabase } from "@/lib/setup-db";
 import { getAiModelSettings } from "@/lib/ai-settings";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
+import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
+import { recordAiUsageLog } from "@/lib/ai-usage";
 
 /**
  * POST /api/user/links/bookmark
@@ -116,37 +118,7 @@ export async function POST(req: NextRequest) {
       title = rawText.replace(rawUrl, "").trim() || rawUrl;
     }
 
-    // 3. 사이트 설정 AI 모델 기반 핵심 3줄 요약 생성
-    let aiSummary = "1. 원본 링크 참조\n2. 주요 콘텐츠 확인 완료\n3. 후속 검토 요망";
-    try {
-      const aiSettings = await getAiModelSettings();
-      const targetModel = aiSettings.defaultModel;
-
-      const prompt = `당신은 웹 콘텐츠 및 유튜브 영상 스크랩 분석 비서입니다.
-다음 수신된 링크 콘텐츠 정보를 분석하여 바쁜 직장인을 위한 핵심 3줄 요약(각 줄 머리에 1., 2., 3. 번호 부여)을 작성해 주세요. 불필요한 서두나 마크다운 없이 순수 텍스트 3줄로만 답변하세요:
-
-- 제목: ${title}
-- 출처/채널: ${siteName}
-- 설명/발췌: ${description || rawText}
-- URL: ${rawUrl}`;
-
-      const aiRes = await callAiCaller(prompt, {
-        model: targetModel || undefined,
-        temperature: 0.2,
-      });
-
-      const summaryText = (aiRes.text || aiRes.content || "").trim();
-      if (summaryText.length > 5) {
-        aiSummary = summaryText;
-      }
-    } catch (aiErr: any) {
-      console.warn("[LinkBookmark] AI summary warning:", aiErr.message);
-      if (description) {
-        aiSummary = description.slice(0, 200);
-      }
-    }
-
-    // 4. 구글 드라이브 폴더 및 구글 스프레드시트 탐색/생성 ([SheetBot] 네이밍 규칙 준수)
+    // 3. 구글 드라이브 폴더 및 구글 스프레드시트 탐색/생성 ([SheetBot] 네이밍 규칙 준수)
     const folderName = "[SheetBot] 스크랩 보관함";
     const sheetTitle = "[SheetBot] 웹 링크 & 유튜브 스크랩 대장";
 
@@ -167,7 +139,7 @@ export async function POST(req: NextRequest) {
       console.warn("[LinkBookmark] Folder resolve warning:", fErr.message);
     }
 
-    // 4-1. 고유 ID 영구 바인딩 및 시트 탐색/생성
+    // 3-1. 고유 ID 영구 바인딩 및 시트 탐색/생성
     const resolved = await resolveUserSpreadsheet({
       userEmail: cleanEmail,
       sheetType: "LINK_BOOKMARK",
@@ -201,21 +173,38 @@ export async function POST(req: NextRequest) {
       }).catch(() => {});
     }
 
-    // 5. 시트에 신규 스크랩 행 추가
+    // 4. [1단계: 선행 즉시 기록] 대장에 먼저 즉시 추가 (0.1초 체감 UX)
+    const initialSummary = "⏳ AI 3줄 요약 분석 중...";
+    let rowNum: number | null = null;
+
     if (targetSpreadsheetId) {
       const nowStr = new Date().toISOString().replace("T", " ").slice(0, 19);
       const newRowValues = [
-        [nowStr, category, title, rawUrl, siteName, aiSummary, memo, deviceId]
+        [nowStr, category, title, rawUrl, siteName, initialSummary, memo, deviceId]
       ];
-      await callSheetsTool("sheets_append_values", {
-        spreadsheetId: targetSpreadsheetId,
-        range: "A:H",
-        values: newRowValues,
-        preferOAuth: true,
-      }).catch((err: any) => console.warn("[LinkBookmark] append_values warning:", err.message));
+      try {
+        const appendRes = await callSheetsTool("sheets_append_values", {
+          spreadsheetId: targetSpreadsheetId,
+          range: "A:H",
+          values: newRowValues,
+          preferOAuth: true,
+        });
+
+        // 추가된 행 번호 추출 (예: '시트1'!A4:H4 -> 4)
+        const updatedRange =
+          (appendRes as any)?.updatedRange ||
+          (appendRes as any)?.updates?.updatedRange ||
+          "";
+        const rangeMatch = updatedRange.match(/!?[A-Z]+(\d+):/i) || updatedRange.match(/(\d+)/);
+        if (rangeMatch) {
+          rowNum = parseInt(rangeMatch[1], 10);
+        }
+      } catch (err: any) {
+        console.warn("[LinkBookmark] append_values warning:", err.message);
+      }
     }
 
-    // 6. SQLite 감사 대장 기록 (INTEGER id 규격 준수)
+    // 5. SQLite 감사 대장 기록 (INTEGER id 규격 준수)
     const logId = Date.now();
     await insertRows("sheetbot_user_dispatch_logs", [
       {
@@ -232,14 +221,97 @@ export async function POST(req: NextRequest) {
       },
     ]).catch((err) => console.warn("[LinkBookmark] DB log insert warning:", err.message));
 
+    // 6. [2단계: 백그라운드 비동기 AI 분석 및 인플레이스 셀 갱신]
+    if (targetSpreadsheetId && rowNum) {
+      const targetRow = rowNum;
+      void (async () => {
+        try {
+          const aiSettings = await getAiModelSettings();
+          const targetModel = aiSettings.defaultModel;
+
+          // 1. 잔여 토큰 사전 점검 (최소 200 토큰)
+          const balanceCheck = await checkTokenBalance(cleanEmail, 200);
+          if (!balanceCheck.allowed) {
+            const noTokenMsg = "⚠️ 잔여 토큰 부족으로 AI 요약이 생략되었습니다. (충전 후 정상 생성)";
+            await callSheetsTool("sheets_update_range", {
+              spreadsheetId: targetSpreadsheetId,
+              range: `시트1!F${targetRow}:F${targetRow}`,
+              values: [[noTokenMsg]],
+              preferOAuth: true,
+            });
+            return;
+          }
+
+          const prompt = `당신은 웹 콘텐츠 및 유튜브 영상 스크랩 분석 비서입니다.
+다음 수신된 링크 콘텐츠 정보를 분석하여 바쁜 직장인을 위한 핵심 3줄 요약(각 줄 머리에 1., 2., 3. 번호 부여)을 작성해 주세요. 불필요한 서두나 마크다운 없이 순수 텍스트 3줄로만 답변하세요:
+
+- 제목: ${title}
+- 출처/채널: ${siteName}
+- 설명/발췌: ${description || rawText}
+- URL: ${rawUrl}`;
+
+          const aiRes = await callAiCaller(prompt, {
+            caller: "sheetbot-link-scraper",
+            model: targetModel || undefined,
+            temperature: 0.2,
+          });
+
+          const summaryText = (aiRes.text || aiRes.content || "").trim();
+          const finalSummary = summaryText.length > 5 ? summaryText : (description ? description.slice(0, 200) : "1. 원본 링크 참조\n2. 주요 콘텐츠 확인 완료\n3. 후속 검토 요망");
+
+          // 2. 사용 토큰 계산 및 실제 차감
+          const promptLen = prompt.length;
+          const respLen = finalSummary.length;
+          const rawTokens = Math.max(300, Math.ceil((promptLen + respLen) / 2.5));
+          const multiplier = aiSettings.tokenMultiplier || 1.0;
+          const usedTokens = Math.round(rawTokens * multiplier);
+
+          await deductTokens(cleanEmail, usedTokens);
+
+          // 3. AI 사용량 감사 로그 적재
+          void recordAiUsageLog({
+            userEmail: cleanEmail,
+            caller: "sheetbot-link-scraper",
+            purpose: `${category} 링크 스크랩 AI 3줄 요약 (${targetModel || "default"} / ${multiplier}x)`,
+            model: targetModel || "default",
+            promptTokens: Math.ceil(promptLen / 2.5),
+            completionTokens: Math.ceil(respLen / 2.5),
+            totalTokens: usedTokens,
+            promptText: `링크 요약: ${title} (${rawUrl})`,
+            responseText: finalSummary,
+          });
+
+          // 4. 해당 행의 F열(AI 핵심 3줄 요약) 핀포인트 갱신
+          await callSheetsTool("sheets_update_range", {
+            spreadsheetId: targetSpreadsheetId,
+            range: `시트1!F${targetRow}:F${targetRow}`,
+            values: [[finalSummary]],
+            preferOAuth: true,
+          });
+          console.log(`[LinkBookmark] Row ${targetRow} AI summary updated & ${usedTokens} tokens deducted.`);
+        } catch (aiErr: any) {
+          console.warn(`[LinkBookmark] Row ${targetRow} background AI summary error:`, aiErr.message);
+          if (description) {
+            await callSheetsTool("sheets_update_range", {
+              spreadsheetId: targetSpreadsheetId,
+              range: `시트1!F${targetRow}:F${targetRow}`,
+              values: [[description.slice(0, 200)]],
+              preferOAuth: true,
+            }).catch(() => {});
+          }
+        }
+      })();
+    }
+
+    // 클라이언트에는 0.1초 만에 즉시 성공 응답 반환
     return NextResponse.json({
       success: true,
-      message: `${category} '${title}' 링크가 성공적으로 구글 시트에 스크랩되었습니다.`,
+      message: `${category} '${title}' 링크가 구글 시트에 즉시 기록되었습니다. (AI 요약 분석 중)`,
       category,
       title,
       url: rawUrl,
       siteName,
-      aiSummary,
+      aiSummary: initialSummary,
       spreadsheetUrl,
     });
   } catch (err: any) {

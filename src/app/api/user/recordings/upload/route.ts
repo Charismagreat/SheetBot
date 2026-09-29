@@ -14,6 +14,9 @@ import {
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
+import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
+import { recordAiUsageLog } from "@/lib/ai-usage";
+import { getAiModelSettings } from "@/lib/ai-settings";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -236,6 +239,26 @@ async function triggerAiAudioAnalysis(
   userEmail: string
 ) {
   try {
+    const cleanEmail = userEmail.toLowerCase().trim();
+
+    // 1. 잔여 토큰 사전 점검 (음성 STT 및 분석용 최소 500 토큰)
+    const balanceCheck = await checkTokenBalance(cleanEmail, 500);
+    if (!balanceCheck.allowed) {
+      const noTokenMsg = "⚠️ 잔여 토큰 부족으로 AI 음성 분석이 생략되었습니다. (충전 후 정상 분석)";
+      if (spreadsheetId && rowIndex && rowIndex > 1) {
+        await callSheetsTool("sheets_update_range", {
+          spreadsheetId,
+          range: `E${rowIndex}:G${rowIndex}`,
+          values: [[noTokenMsg, "-", "-"]],
+          preferOAuth: true,
+        }).catch(() => {});
+      }
+      return;
+    }
+
+    const aiSettings = await getAiModelSettings().catch(() => ({ defaultModel: "gemini-3.8-flash", tokenMultiplier: 1.0 }));
+    const targetModel = aiSettings.defaultModel || "gemini-3.8-flash";
+
     const prompt = `당신은 비즈니스 통화 녹음 분석 전문 AI입니다.
 첨부된 통화 녹음 파일("${fileName}")의 음성을 정밀하게 분석하여 다음 JSON 포맷으로만 답변하세요. 마크다운 따옴표나 기타 텍스트 없이 순수 JSON만 반환하세요:
 {
@@ -245,7 +268,8 @@ async function triggerAiAudioAnalysis(
 }`;
 
     const aiRes = await callAiCaller(prompt, {
-      model: "gemini-3.8-flash",
+      caller: "sheetbot-voice-intelligence",
+      model: targetModel,
       temperature: 0.1,
       files: [
         {
@@ -280,7 +304,29 @@ async function triggerAiAudioAnalysis(
       }
     }
 
-    // 구글 시트 행 업데이트 (E열: 3줄 요약, F열: Action Items, G열: 전사 텍스트)
+    // 2. 사용 토큰 계산 및 실제 차감 (오디오 STT 가중치 기본 500 + 입출력 토큰)
+    const promptLen = prompt.length;
+    const respLen = rawText.length;
+    const rawTokens = Math.max(800, Math.ceil((promptLen + respLen) / 2.5) + 500);
+    const multiplier = aiSettings.tokenMultiplier || 1.0;
+    const usedTokens = Math.round(rawTokens * multiplier);
+
+    await deductTokens(cleanEmail, usedTokens);
+
+    // 3. AI 사용량 감사 로그 적재
+    void recordAiUsageLog({
+      userEmail: cleanEmail,
+      caller: "sheetbot-voice-intelligence",
+      purpose: `통화 녹음 AI STT 및 3줄 요약/Action Items (${targetModel} / ${multiplier}x)`,
+      model: targetModel,
+      promptTokens: Math.ceil(promptLen / 2.5) + 500,
+      completionTokens: Math.ceil(respLen / 2.5),
+      totalTokens: usedTokens,
+      promptText: `음성 분석: ${fileName}`,
+      responseText: summary,
+    });
+
+    // 4. 구글 시트 행 업데이트 (E열: 3줄 요약, F열: Action Items, G열: 전사 텍스트)
     if (spreadsheetId && rowIndex && rowIndex > 1) {
       await callSheetsTool("sheets_update_range", {
         spreadsheetId,
@@ -289,6 +335,8 @@ async function triggerAiAudioAnalysis(
         preferOAuth: true,
       }).catch((e: any) => console.warn("[AiAudioAnalysis] Sheet update warning:", e.message));
     }
+
+    console.log(`[AiAudioAnalysis] Audio ${fileName} analyzed & ${usedTokens} tokens deducted for ${cleanEmail}.`);
   } catch (err: any) {
     console.warn("[AiAudioAnalysis] Background audio analysis failed:", err.message);
   }
