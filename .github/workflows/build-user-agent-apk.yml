@@ -79,13 +79,19 @@ jobs:
             git push origin main
           fi
 
+      - name: Extract Version from Gradle
+        id: get_version
+        run: |
+          VERSION_NAME=$(grep 'versionName =' android-user-agent/app/build.gradle.kts | head -n1 | cut -d'"' -f2)
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_OUTPUT
+
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: user-v2.1.23
-          name: "SheetBot Mobile Agent (이용자용) v2.1.23"
-          body: "시트봇 모바일 에이전트 v2.1.23 릴리즈\n• 🌐 [Vercel 클라우드 전면 복구] 공용 터널 자동 라우팅으로 잔액 조회·웹링크 스크랩·문자/카톡 동기화 0.1초 즉시 응답\n• 📁 [무손실 구글 드라이브 파일 업로드 브릿지] 명함·영수증·통화녹음 파일 완벽 업로드 및 AI OCR 토큰 차감 연동\n• 💼 [모바일 명함 발송 대장 연동] 통화 종료 후 명함 발송 시 [SheetBot] 모바일 명함 발송 대장 시트 실시간 자동 기록\n• 🧾 [고객 영수증 문자 발송 대장 연동] 결제 후 영수증 SMS 발송 시 [SheetBot] 고객 영수증 문자 발송 대장 시트 실시간 자동 기록\n• 🖥️ [웹사이트 모니터링 & 매장 결제 대장 강화] Self-Healing 헤더 보장 및 8열 표준 규격 동기화"
+          tag_name: user-v${{ steps.get_version.outputs.VERSION_NAME }}
+          name: "SheetBot Mobile Agent (이용자용) v${{ steps.get_version.outputs.VERSION_NAME }}"
+          body: "시트봇 모바일 에이전트 v${{ steps.get_version.outputs.VERSION_NAME }} 릴리즈\n• 📊 [스마트 간편 주문 대장 연동 정상화] 주문접수대장 탭(gid=1021826080) 직행 및 구버전 시트 캐시 자동 무효화\n• 🖼️ [대표 사진 로고 무결점 지원] 상대 경로 정규화 및 이미지 엑박 방지 폴백 탑재\n• 🌐 [공용 터널 및 실시간 동기화 안정화] 0초 반응형 스프레드시트 양방향 연동"
           files: release-apk/SheetBotAgent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
