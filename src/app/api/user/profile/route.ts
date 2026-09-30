@@ -169,6 +169,32 @@ export async function POST(req: NextRequest) {
       console.warn("[Profile POST] sheetbot_users save warning:", uErr?.message);
     }
 
+    // 3. 연동된 구글 스프레드시트 '사업자정보' 탭 회사명(B2) 실시간 자동 동기화
+    if (businessName) {
+      try {
+        const { resolveUserSpreadsheet } = await import("@/lib/sheet-binding-helper");
+        const { callSheetsTool } = await import("@/lib/egdesk-helpers");
+        const resolved = await resolveUserSpreadsheet({
+          userEmail: targetEmail,
+          sheetType: "QUOTE",
+        });
+        if (resolved.spreadsheetId) {
+          await callSheetsTool(
+            "sheets_update_range",
+            {
+              spreadsheetId: resolved.spreadsheetId,
+              range: "사업자정보!B2",
+              values: [[businessName]],
+              preferOAuth: true,
+            },
+            { preferOAuth: true }
+          ).catch((e: any) => console.warn("[Profile POST] sheets_update_range error:", e?.message));
+        }
+      } catch (sheetErr: any) {
+        console.warn("[Profile POST] Sheet sync warning:", sheetErr?.message);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       email: targetEmail,

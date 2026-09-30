@@ -24,10 +24,12 @@ export async function generateMetadata(
     await setupDatabase();
     const email = await resolveUserEmailFromKey(userKey);
     if (email) {
-      // 1. sheetbot_settings 설정 확인
+      // 1. sheetbot_settings 설정 확인 (최신 등록 우선)
       try {
         const settingRes = await queryTable("sheetbot_settings", {
           filters: { key: `quote_profile_${email}` },
+          orderBy: "id",
+          orderDirection: "DESC",
           limit: 1,
         }).catch(() => ({ rows: [] }));
         if (settingRes.rows && settingRes.rows.length > 0) {
