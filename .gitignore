@@ -40,3 +40,7 @@ next-env.d.ts
 *.egdesk-backup
 scratch/
 scratch*.gs
+*.sqlite
+*.db
+test_image.jpg
+public/uploads/

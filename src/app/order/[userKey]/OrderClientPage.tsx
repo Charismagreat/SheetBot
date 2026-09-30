@@ -65,12 +65,17 @@ interface BusinessInfo {
   extraNotice?: string;
 }
 
-// 이미지 URL 상대경로 정규화 (터널/도메인/로컬 환경 무관 100% 로드 보장)
+// 이미지 URL 정규화 (절대 URL 100% 보존, 도메인/터널 무관 안전 로드)
 function normalizeImageUrl(url?: string | null): string | null {
   if (!url) return null;
-  const match = url.match(/\/api\/user\/quote\/image\?file=[^&]+/);
+  // http나 https로 시작하는 절대 URL은 그대로 유지 (sheetbot.cloud 등 전역 서빙)
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url;
+  }
+  // 파일명만 들어왔거나 상대경로인 경우 sheetbot.cloud 전역 엔드포인트로 정규화
+  const match = url.match(/quote_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
   if (match) {
-    return match[0];
+    return `https://sheetbot.cloud/api/user/quote/image?file=${match[0]}`;
   }
   return url;
 }
@@ -119,6 +124,7 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
     async function loadCatalog() {
       try {
         setLoading(true);
+        setLogoError(false);
         const res = await apiFetch(`/api/user/quote/catalog?userKey=${encodeURIComponent(userKey)}`);
         const data = await res.json();
         if (data.success) {
@@ -126,6 +132,7 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
           setCategories(data.categories || []);
           if (data.merchant) {
             setMerchant(data.merchant);
+            setLogoError(false);
           }
           if (data.businessInfo) {
             setBusinessInfo(data.businessInfo);
@@ -195,17 +202,27 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
     return selectedItems.reduce((acc, cur) => acc + cur.quantity, 0);
   }, [selectedItems]);
 
-  // 상호명 표시 안전화 (시트 사업자정보 1순위 반영, 이메일 노출 방지)
+  // 상호명 표시 안전화 (모바일 앱 설정값 1순위 반영, 시트 사업자정보 2순위, 이메일 노출 방지)
   const displayBusinessName = useMemo(() => {
+    const raw = merchant.businessName?.trim();
+    const emailPrefix = merchant.email?.split("@")[0]?.toLowerCase();
+    const isDefaultSystemName =
+      !raw ||
+      raw === "스마트 간편 주문 센터" ||
+      raw === "스마트 견적 & 주문 센터" ||
+      (emailPrefix && raw.toLowerCase() === emailPrefix);
+
+    // 1순위: 모바일 앱에서 직접 설정한 유효한 상호명이 있으면 최우선 반영
+    if (!isDefaultSystemName && raw) {
+      return raw;
+    }
+
+    // 2순위: 구글 시트 '사업자정보' 탭의 상호명 반영
     if (businessInfo.companyName && businessInfo.companyName.trim()) {
       return businessInfo.companyName.trim();
     }
-    const raw = merchant.businessName?.trim();
-    const emailPrefix = merchant.email?.split("@")[0]?.toLowerCase();
-    if (!raw || (emailPrefix && raw.toLowerCase() === emailPrefix)) {
-      return "스마트 간편 주문 센터";
-    }
-    return raw;
+
+    return raw || "스마트 간편 주문 센터";
   }, [businessInfo.companyName, merchant.businessName, merchant.email]);
 
   // 4. 카테고리 필터링

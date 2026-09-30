@@ -121,10 +121,12 @@ export async function GET(req: NextRequest) {
     let merchantPhone = "";
     let merchantImage = "";
 
-    // 1. sheetbot_settings 키-값 저장소 우선 확인
+    // 1. sheetbot_settings 키-값 저장소 우선 확인 (최신 등록 레코드 우선)
     try {
       const settingRes = await queryTable("sheetbot_settings", {
         filters: { key: `quote_profile_${targetEmail}` },
+        orderBy: "id",
+        orderDirection: "DESC",
         limit: 1,
       }).catch(() => ({ rows: [] }));
       if (settingRes.rows && settingRes.rows.length > 0) {
