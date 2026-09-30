@@ -65,6 +65,16 @@ interface BusinessInfo {
   extraNotice?: string;
 }
 
+// 이미지 URL 상대경로 정규화 (터널/도메인/로컬 환경 무관 100% 로드 보장)
+function normalizeImageUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const match = url.match(/\/api\/user\/quote\/image\?file=[^&]+/);
+  if (match) {
+    return match[0];
+  }
+  return url;
+}
+
 export default function OrderClientPage({ userKey: propUserKey }: { userKey?: string }) {
   const params = useParams();
   const router = useRouter();
@@ -78,6 +88,7 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
     email: "",
     imageUrl: "",
   });
+  const [logoError, setLogoError] = useState(false);
   const [businessInfo, setBusinessInfo] = useState<BusinessInfo>({});
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -612,10 +623,11 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
       <header className="sticky top-0 z-20 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-3.5">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            {merchant.imageUrl && merchant.imageUrl !== "https://sheetbot.cloud/favicon.svg" ? (
+            {merchant.imageUrl && merchant.imageUrl !== "https://sheetbot.cloud/favicon.svg" && !logoError ? (
               <img
-                src={merchant.imageUrl}
+                src={normalizeImageUrl(merchant.imageUrl) || merchant.imageUrl}
                 alt={displayBusinessName}
+                onError={() => setLogoError(true)}
                 className="w-9 h-9 rounded-xl object-cover border border-slate-700/80 shadow-md shadow-emerald-950/40"
               />
             ) : (

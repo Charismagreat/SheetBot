@@ -61,6 +61,7 @@ const KNOWN_DEFAULT_BINDINGS: Record<string, Partial<Record<SheetBindingType, st
     MISSED_CALL: "1DqUqEECRjE2luuLoBuyV8RXYLccqRpbSSD2SZvTOAXo",
     PAYMENT_PUSH: "1CSxsEJEpiBXisqw8yAqz3paTqcraH2kzW6RCpQ07vx8",
     RECEIPT_SMS: "1Hi-hYZAGcmWDSSBpUhgEl6_Utc6iIguUiFClqEqas9I",
+    QUOTE: "1XCQMxao3uIhbXGh5kYlnXE5g9vH5mFBQ0cohJGyMl1U",
   },
 };
 
@@ -83,9 +84,12 @@ export async function resolveUserSpreadsheet(
   // 0-2. 사전 정의된 기바인딩 프리셋 확인 (0ms)
   const knownId = KNOWN_DEFAULT_BINDINGS[cleanEmail]?.[normalizedType];
   if (knownId) {
+    const finalUrl = normalizedType === "QUOTE"
+      ? `https://docs.google.com/spreadsheets/d/${knownId}/edit#gid=1021826080`
+      : `https://docs.google.com/spreadsheets/d/${knownId}/edit`;
     const result: ResolveSheetResult = {
       spreadsheetId: knownId,
-      spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${knownId}/edit`,
+      spreadsheetUrl: finalUrl,
       isNew: false,
     };
     resolvedBindingCache.set(bindingKey, result);
@@ -155,9 +159,14 @@ async function doResolveUserSpreadsheet(
   // 2. 바인딩된 고유 ID가 있으면 구글 드라이브 추가 왕복 없이 즉시 반환 (0초 응답 보장)
   if (boundRecord?.spreadsheet_id) {
     const existingId = boundRecord.spreadsheet_id;
-    const url =
-      boundRecord.spreadsheet_url ||
-      `https://docs.google.com/spreadsheets/d/${existingId}/edit`;
+    let url = boundRecord.spreadsheet_url;
+    if (!url) {
+      url = normalizedType === "QUOTE"
+        ? `https://docs.google.com/spreadsheets/d/${existingId}/edit#gid=1021826080`
+        : `https://docs.google.com/spreadsheets/d/${existingId}/edit`;
+    } else if (normalizedType === "QUOTE" && !url.includes("gid=")) {
+      url = `${url}#gid=1021826080`;
+    }
 
     return {
       spreadsheetId: existingId,
