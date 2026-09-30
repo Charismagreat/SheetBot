@@ -10,9 +10,11 @@ import fs from "fs";
 import path from "path";
 
 function getUploadDirectories() {
+  const userHome = process.env.USERPROFILE || process.env.HOME || "C:\\Users\\CHARISMA";
   const dirs = [
     path.join(process.cwd(), "public", "uploads", "quote-images"),
-
+    path.join("C:\\dev\\SheetBot", "public", "uploads", "quote-images"),
+    path.join(userHome, ".egdesk", "uploads", "quote-images"),
   ];
   for (const d of dirs) {
     try {
@@ -46,6 +48,24 @@ export async function GET(req: NextRequest) {
           foundPath = p;
           break;
         }
+      }
+
+      // 이전 배포 폴더들 폴백 탐색
+      if (!foundPath) {
+        try {
+          const userHome = process.env.USERPROFILE || process.env.HOME || "C:\\Users\\CHARISMA";
+          const deployBase = path.join(userHome, ".egdesk", "deployments", "SheetBot");
+          if (fs.existsSync(deployBase)) {
+            const subs = fs.readdirSync(deployBase);
+            for (const sub of subs) {
+              const checkP = path.join(deployBase, sub, "public", "uploads", "quote-images", sanitizedFile);
+              if (fs.existsSync(checkP)) {
+                foundPath = checkP;
+                break;
+              }
+            }
+          }
+        } catch (_) {}
       }
 
       if (foundPath) {

@@ -927,6 +927,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnOpenQuoteSheet.setOnClickListener {
+            // 과거 잘못된 구버전 시트 URL 캐시(1feIe5...)가 남아있다면 강제 무효화하여 최신 바인딩(1XCQMxao...) 동기화
+            val currentQuoteUrl = prefs.getSheetUrl("QUOTE")
+            val currentQuoteId = prefs.getSheetId("QUOTE")
+            if (currentQuoteUrl?.contains("1feIe5") == true || currentQuoteId?.contains("1feIe5") == true) {
+                prefs.setSheetUrl("QUOTE", "")
+                prefs.setSheetId("QUOTE", "")
+            }
             showOpenSheetChooserDialog("QUOTE", prefs.quoteDriveSheetTitle)
         }
 
@@ -2513,7 +2520,8 @@ class MainActivity : AppCompatActivity() {
                     if (prefs.isWebsiteMonitorEnabled && prefs.getSheetUrl("WEBSITE_MONITOR").isNullOrBlank()) {
                         targets.add(Triple("WEBSITE_MONITOR", "[SheetBot] 웹사이트 모니터링 & 장애 대장", null))
                     }
-                    if (prefs.isQuoteSheetSyncEnabled && prefs.getSheetUrl("QUOTE").isNullOrBlank()) {
+                    val quoteUrl = prefs.getSheetUrl("QUOTE")
+                    if (prefs.isQuoteSheetSyncEnabled && (quoteUrl.isNullOrBlank() || quoteUrl.contains("1feIe5"))) {
                         targets.add(Triple("QUOTE", prefs.quoteDriveSheetTitle, null))
                     }
 
@@ -2552,12 +2560,25 @@ class MainActivity : AppCompatActivity() {
      */
     private fun showOpenSheetChooserDialog(sheetType: String, defaultTitle: String) {
         val userEmail = prefs.userEmail
-        val cachedUrl = prefs.getSheetUrl(sheetType)
-        val cachedId = prefs.getSheetId(sheetType)
+        var cachedUrl = prefs.getSheetUrl(sheetType)
+        var cachedId = prefs.getSheetId(sheetType)
 
-        val finalSheetUrl = cachedUrl ?: if (!cachedId.isNullOrBlank()) {
+        // 구버전 캐시(1feIe5...) 감지 시 강제 제거하여 최신 바인딩(1XCQMxao...) 동기화 유도
+        if (sheetType == "QUOTE" && (cachedUrl?.contains("1feIe5") == true || cachedId?.contains("1feIe5") == true)) {
+            cachedUrl = null
+            cachedId = null
+            prefs.setSheetUrl("QUOTE", "")
+            prefs.setSheetId("QUOTE", "")
+        }
+
+        var finalSheetUrl = cachedUrl ?: if (!cachedId.isNullOrBlank()) {
             "https://docs.google.com/spreadsheets/d/$cachedId/edit"
         } else null
+
+        // 주문 대장의 경우 주문접수대장 탭(gid=1021826080)으로 직행 보장
+        if (sheetType == "QUOTE" && finalSheetUrl != null && !finalSheetUrl.contains("gid=")) {
+            finalSheetUrl = "$finalSheetUrl#gid=1021826080"
+        }
 
         val webAppUrl = buildString {
             append("https://sheetbot.cloud/m/${sheetType.lowercase()}")
