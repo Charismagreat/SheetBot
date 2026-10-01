@@ -89,7 +89,6 @@ export async function GET(req: NextRequest) {
     }
 
     // 2. 프로필 및 대표 이미지 정보 JSON 반환
-    await setupDatabase();
     const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
     const userKey = url.searchParams.get("userKey") || url.searchParams.get("u");
     const emailParam = url.searchParams.get("email");

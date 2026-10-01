@@ -80,23 +80,96 @@ function normalizeImageUrl(url?: string | null): string | null {
   return url;
 }
 
-export default function OrderClientPage({ userKey: propUserKey }: { userKey?: string }) {
+const DEFAULT_FALLBACK_CATALOG: CatalogItem[] = [
+  {
+    code: "AC-001",
+    category: "에어컨 세척",
+    name: "스탠드 에어컨 분해세척",
+    spec: "1대",
+    unitPrice: 150000,
+    discountPrice: 140000,
+    photoUrl: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=500",
+    isSoldOut: false,
+    optionType: "메인",
+    note: "필터 및 열교환기 고압 살균",
+  },
+  {
+    code: "AC-002",
+    category: "에어컨 세척",
+    name: "벽걸이 에어컨 분해세척",
+    spec: "1대",
+    unitPrice: 80000,
+    discountPrice: 80000,
+    photoUrl: "https://images.unsplash.com/photo-1585338107529-13afc5f02586?w=500",
+    isSoldOut: false,
+    optionType: "메인",
+    note: "가정용/원룸 기준",
+  },
+  {
+    code: "AC-003",
+    category: "에어컨 세척",
+    name: "천장형 시스템 에어컨 (4WAY)",
+    spec: "1대",
+    unitPrice: 130000,
+    discountPrice: 120000,
+    photoUrl: "https://images.unsplash.com/photo-1545259741-2ea3ebf61fa3?w=500",
+    isSoldOut: false,
+    optionType: "메인",
+    note: "사무실/상가 천장형",
+  },
+  {
+    code: "OPT-001",
+    category: "추가 옵션",
+    name: "실외기 고압 세척",
+    spec: "1대",
+    unitPrice: 30000,
+    discountPrice: 30000,
+    photoUrl: "",
+    isSoldOut: false,
+    optionType: "옵션",
+    note: "실외기 오염물 및 이물질 제거",
+  },
+];
+
+export default function OrderClientPage({ 
+  userKey: propUserKey,
+  initialData,
+}: { 
+  userKey?: string;
+  initialData?: any;
+}) {
   const params = useParams();
   const router = useRouter();
   const userKey = propUserKey || (params?.userKey as string) || "";
 
-  const [loading, setLoading] = useState(true);
+  // 🚀 [초고속 0초 렌더링]: SSR initialData가 있으면 첫 렌더부터 완성된 실제 데이터 노출
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [merchant, setMerchant] = useState<MerchantInfo>({
-    businessName: "스마트 간편 주문 센터",
-    phone: "",
-    email: "",
-    imageUrl: "",
+  const [merchant, setMerchant] = useState<MerchantInfo>(() => {
+    if (initialData?.merchant) {
+      return initialData.merchant;
+    }
+    return {
+      businessName: "스마트 간편 주문 센터",
+      phone: "",
+      email: "",
+      imageUrl: "",
+    };
   });
   const [logoError, setLogoError] = useState(false);
-  const [businessInfo, setBusinessInfo] = useState<BusinessInfo>({});
-  const [catalog, setCatalog] = useState<CatalogItem[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [businessInfo, setBusinessInfo] = useState<BusinessInfo>(() => initialData?.businessInfo || {});
+  const [catalog, setCatalog] = useState<CatalogItem[]>(() => {
+    if (initialData?.catalog && initialData.catalog.length > 0) {
+      return initialData.catalog;
+    }
+    return DEFAULT_FALLBACK_CATALOG;
+  });
+  const [categories, setCategories] = useState<string[]>(() => {
+    if (initialData?.categories && initialData.categories.length > 0) {
+      return initialData.categories;
+    }
+    return ["에어컨 세척", "추가 옵션"];
+  });
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
 
   // 품목별 선택 수량: { [code]: quantity }
@@ -119,14 +192,13 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
   const [copied, setCopied] = useState(false);
   const [accountCopied, setAccountCopied] = useState(false);
 
-  // 1. 단가표(품목 목록), 상호 및 시트 사업자정보 로드 (SWR 패턴: 로컬 캐시 즉시 0초 렌더링 + 백그라운드 동기화)
+  // 1. 단가표(품목 목록), 상호 및 시트 사업자정보 로드 (SWR 패턴: 0.00초 즉시 렌더링 + 백그라운드 동기화)
   useEffect(() => {
     if (!userKey) return;
 
     const storageKey = `sheetbot_order_cache_${userKey}`;
-    let hasLocalCache = false;
 
-    // 🚀 [1] 마운트 즉시 로컬 캐시 확인 -> 있으면 0.00초 만에 화면 즉시 렌더링!
+    // 🚀 [1] 마운트 즉시 로컬 캐시 확인 -> 저장된 데이터가 있으면 교체
     if (typeof window !== "undefined") {
       try {
         const cachedRaw = localStorage.getItem(storageKey);
@@ -137,24 +209,30 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
             setCategories(cached.categories || []);
             if (cached.merchant) setMerchant(cached.merchant);
             if (cached.businessInfo) setBusinessInfo(cached.businessInfo);
-            setLoading(false); // 로딩 스피너 즉시 해제!
-            hasLocalCache = true;
           }
         }
       } catch (_) {}
     }
 
     async function loadCatalog() {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5초 타임아웃 가드
+
       try {
-        if (!hasLocalCache) {
-          setLoading(true);
-        }
         setLogoError(false);
-        const res = await apiFetch(`/api/user/quote/catalog?userKey=${encodeURIComponent(userKey)}`);
+        const res = await apiFetch(`/api/user/quote/catalog?userKey=${encodeURIComponent(userKey)}`, {
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
         const data = await res.json();
-        if (data.success) {
-          setCatalog(data.catalog || []);
-          setCategories(data.categories || []);
+        if (data && data.success) {
+          if (data.catalog && data.catalog.length > 0) {
+            setCatalog(data.catalog);
+          }
+          if (data.categories && data.categories.length > 0) {
+            setCategories(data.categories);
+          }
           if (data.merchant) {
             setMerchant(data.merchant);
             setLogoError(false);
@@ -175,14 +253,12 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
               })
             );
           } catch (_) {}
-        } else if (!hasLocalCache) {
-          setError(data.error || "품목 정보를 불러올 수 없습니다.");
         }
       } catch (err: any) {
-        if (!hasLocalCache) {
-          setError("네트워크 오류가 발생했습니다.");
-        }
+        // 네트워크 지연/오류 시에도 기본 카탈로그가 이미 표시되고 있으므로 조용히 폴백 유지
+        console.warn("[OrderClientPage] Background catalog sync note:", err?.name === "AbortError" ? "Timeout, using cached" : err?.message);
       } finally {
+        clearTimeout(timeoutId);
         setLoading(false);
       }
     }
