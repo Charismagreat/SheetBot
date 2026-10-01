@@ -27,10 +27,13 @@ const getLocalIPs = () => {
   }
 };
 
+const DEFAULT_TUNNEL_BASE_PATH = '/t/mcp-server-fxkud1/p/SheetBot';
+const activeBasePath = process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || DEFAULT_TUNNEL_BASE_PATH);
+
 const nextConfig: any = {
   // Only use basePath in production mode, not in dev mode
-  basePath: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
-  assetPrefix: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
+  basePath: activeBasePath,
+  assetPrefix: activeBasePath,
   // Allow LAN/IP access to the dev server (Next.js 15+)
   allowedDevOrigins: getLocalIPs(),
   typescript: {
