@@ -1,11 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import SessionWrapper from "@/components/SessionWrapper";
-import nextDynamic from "next/dynamic";
-
-const LazyAIHelpManager = nextDynamic(() => import("@/components/AIHelpManager"));
-const LazyEasyBot = nextDynamic(() => import("@/components/EasyBot"));
-import Footer from "@/components/Footer";
+import GlobalWidgetGate from "@/components/GlobalWidgetGate";
 
 export const metadata: Metadata = {
   title: "SheetBot - AI 기반 Google Apps Script 자동화 SaaS",
@@ -29,9 +25,8 @@ export default function RootLayout({
           <div className="flex-1 flex flex-col">
             {children}
           </div>
-          <Footer />
-          <LazyAIHelpManager />
-          <LazyEasyBot />
+          {/* 고객 포털(/order, /q)에서는 숨겨지고, 서비스 페이지에서만 안전하게 노출되는 위젯 게이트 */}
+          <GlobalWidgetGate />
         </SessionWrapper>
       </body>
     </html>
