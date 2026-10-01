@@ -1,114 +1,14 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { queryTable, updateRows, insertRows, callSheetsTool } from "@/lib/egdesk-helpers";
-import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
+import { queryTable, updateRows, insertRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
-
-const DEFAULT_CATALOG = [
-  {
-    code: "AC-001",
-    category: "에어컨 세척",
-    name: "스탠드 에어컨 분해세척",
-    spec: "1대",
-    unitPrice: 150000,
-    discountPrice: 140000,
-    photoUrl: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=500",
-    detailPhotoUrl: "",
-    isSoldOut: false,
-    optionType: "메인",
-    note: "필터 및 열교환기 고압 살균"
-  },
-  {
-    code: "AC-002",
-    category: "에어컨 세척",
-    name: "벽걸이 에어컨 분해세척",
-    spec: "1대",
-    unitPrice: 80000,
-    discountPrice: 80000,
-    photoUrl: "https://images.unsplash.com/photo-1585338107529-13afc5f02586?w=500",
-    detailPhotoUrl: "",
-    isSoldOut: false,
-    optionType: "메인",
-    note: "가정용/원룸 기준"
-  },
-  {
-    code: "AC-003",
-    category: "에어컨 세척",
-    name: "천장형 시스템 에어컨 (4WAY)",
-    spec: "1대",
-    unitPrice: 130000,
-    discountPrice: 120000,
-    photoUrl: "https://images.unsplash.com/photo-1545259741-2ea3ebf61fa3?w=500",
-    detailPhotoUrl: "",
-    isSoldOut: false,
-    optionType: "메인",
-    note: "사무실/상가 천장형"
-  },
-  {
-    code: "OPT-001",
-    category: "추가 옵션",
-    name: "실외기 고압 세척",
-    spec: "1대",
-    unitPrice: 30000,
-    discountPrice: 30000,
-    photoUrl: "",
-    detailPhotoUrl: "",
-    isSoldOut: false,
-    optionType: "옵션",
-    note: "실외기 오염물 제거"
-  },
-  {
-    code: "OPT-002",
-    category: "이벤트/서비스",
-    name: "피톤치드 연무 살균 소독",
-    spec: "1식",
-    unitPrice: 10000,
-    discountPrice: 0,
-    photoUrl: "",
-    detailPhotoUrl: "",
-    isSoldOut: true,
-    optionType: "옵션",
-    note: "현재 피톤치드 용액 소진 (품절 예시)"
-  },
-];
-
-import { resolveUserEmailFromKey } from "@/lib/user-key-helper";
-
-// ----------------------------------------------------
-// 초고속 인메모리 캐시 (In-Memory SWR, TTL: 5분)
-// 캐시 히트 시 0.003초(3ms) 만에 즉시 응답!
-// ----------------------------------------------------
-interface CatalogCacheEntry {
-  data: any;
-  timestamp: number;
-}
-const catalogCache = new Map<string, CatalogCacheEntry>();
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5분 (300초)
-
-let isDbSetupDone = false;
-async function ensureDbSetupOnce() {
-  if (!isDbSetupDone) {
-    await setupDatabase();
-    isDbSetupDone = true;
-  }
-}
-
-// 구글 API 지연 대비 타임아웃 가드 (최대 4초)
-async function safeSheetCall(fn: () => Promise<any>, timeoutMs = 4000) {
-  try {
-    return await Promise.race([
-      fn(),
-      new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs)),
-    ]);
-  } catch {
-    return null;
-  }
-}
+import { getOrderCatalogData, clearCatalogCache } from "@/lib/order-catalog-helper";
 
 /**
  * GET /api/user/quote/catalog?quoteId=xxxx 또는 ?userKey=xxxx
  * 셀프 견적기(선택 폼)에서 해당 사장님의 구글 시트 단가표 목록 및 상호 정보 조회
+ * 🚀 공용 헬퍼(getOrderCatalogData)를 통해 SSR 및 API 모두 0.001초 인메모리 캐시 공유
  */
 export async function GET(req: NextRequest) {
   try {
@@ -118,261 +18,14 @@ export async function GET(req: NextRequest) {
     const directEmail = url.searchParams.get("email");
     const isRefresh = url.searchParams.get("refresh") === "true";
 
-    let targetEmail = "chachogreat@gmail.com";
-    let customerName = "";
-    let customerPhone = "";
-    let inquiryText = "";
-
-    if (userKey) {
-      const resolvedEmail = await resolveUserEmailFromKey(userKey);
-      if (resolvedEmail) {
-        targetEmail = resolvedEmail;
-      }
-    } else if (directEmail) {
-      targetEmail = directEmail.toLowerCase().trim();
-    }
-
-    // 🚀 [1] 캐시 확인: 유효한 캐시가 있으면 즉시(0.005초) 반환
-    const cacheKey = `${targetEmail}_${quoteId || "default"}`;
-    if (!isRefresh) {
-      const cached = catalogCache.get(cacheKey);
-      if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-        return NextResponse.json({
-          ...cached.data,
-          cached: true,
-          cachedAt: new Date(cached.timestamp).toISOString(),
-        });
-      }
-    }
-
-    await ensureDbSetupOnce();
-
-    if (quoteId) {
-      const qRes = await queryTable("sheetbot_quotes", {
-        filters: { id: quoteId },
-        limit: 1,
-      }).catch(() => ({ rows: [] }));
-
-      if (qRes.rows && qRes.rows.length > 0) {
-        const q = qRes.rows[0];
-        targetEmail = q.user_email || targetEmail;
-        customerName = q.customer_name || customerName;
-        customerPhone = q.customer_phone || customerPhone;
-        inquiryText = q.inquiry_text || inquiryText;
-      }
-    }
-
-    // 사장님 프로필/상호 정보 조회 (멀티 레이어 조회)
-    let businessName = "";
-    let merchantPhone = "";
-    let merchantImage = "";
-
-    // 1. sheetbot_settings 키-값 저장소 우선 확인 (최신 등록 레코드 우선)
-    try {
-      const settingRes = await queryTable("sheetbot_settings", {
-        filters: { key: `quote_profile_${targetEmail}` },
-        orderBy: "id",
-        orderDirection: "DESC",
-        limit: 1,
-      }).catch(() => ({ rows: [] }));
-      if (settingRes.rows && settingRes.rows.length > 0) {
-        const val = JSON.parse(settingRes.rows[0].value || "{}");
-        if (val.businessName && val.businessName.trim()) {
-          businessName = val.businessName.trim();
-        }
-        if (val.phone) merchantPhone = val.phone;
-        if (val.ogImageUrl) merchantImage = val.ogImageUrl;
-        else if (val.imageUrl) merchantImage = val.imageUrl;
-      }
-    } catch (_) {}
-
-    // 2. sheetbot_users 테이블 확인
-    if (!businessName || !merchantImage) {
-      try {
-        const userRes = await queryTable("sheetbot_users", {
-          filters: { email: targetEmail },
-          limit: 1,
-        }).catch(() => ({ rows: [] }));
-        if (userRes.rows && userRes.rows.length > 0) {
-          const u = userRes.rows[0];
-          if (!businessName && u.business_name && u.business_name.trim()) {
-            businessName = u.business_name.trim();
-          }
-          if (!merchantPhone && u.phone) merchantPhone = u.phone;
-          if (!merchantImage && u.quote_image_url) merchantImage = u.quote_image_url;
-        }
-      } catch (_) {}
-    }
-
-    if (!merchantImage) {
-      merchantImage = "https://sheetbot.cloud/favicon.svg";
-    }
-
-    // 3. 아직 상호명이 없으면 기본 품격 있는 상호명 채택 (개인 이메일 아이디 노출 100% 방지)
-    if (!businessName) {
-      businessName = "스마트 견적 & 주문 센터";
-    }
-
-    let catalogItems = [];
-    let businessInfo: Record<string, string> = {};
-
-    try {
-      const resolved = await resolveUserSpreadsheet({
-        userEmail: targetEmail,
-        sheetType: "QUOTE",
-        defaultTitle: "[SheetBot] 스마트 간편 주문 및 품목 대장",
-      });
-
-      if (resolved.spreadsheetId) {
-        // 🚀 [2] MCP 소켓 락 방지를 위해 안전한 순차 호출 + 타임아웃 가드 적용
-        let rangeRes = await safeSheetCall(() =>
-          callSheetsTool(
-            "sheets_get_range",
-            {
-              spreadsheetId: resolved.spreadsheetId,
-              range: "품목!A2:J200",
-              preferOAuth: true,
-            },
-            { preferOAuth: true }
-          )
-        );
-
-        // 2순위: 기존 '단가표' 탭 폴백 조회
-        if (!rangeRes?.values || rangeRes.values.length === 0) {
-          rangeRes = await callSheetsTool(
-            "sheets_get_range",
-            {
-              spreadsheetId: resolved.spreadsheetId,
-              range: "단가표!A2:J200",
-              preferOAuth: true,
-            },
-            { preferOAuth: true }
-          ).catch(() => null);
-        }
-
-        // 3순위: 기본 '시트1' 폴백 조회
-        if (!rangeRes?.values || rangeRes.values.length === 0) {
-          rangeRes = await callSheetsTool(
-            "sheets_get_range",
-            {
-              spreadsheetId: resolved.spreadsheetId,
-              range: "시트1!A2:J200",
-              preferOAuth: true,
-            },
-            { preferOAuth: true }
-          ).catch(() => null);
-        }
-
-        if (rangeRes?.values && rangeRes.values.length > 0) {
-          catalogItems = rangeRes.values
-            .filter((row: any[]) => row && row[2])
-            .map((row: any[], idx: number) => {
-              const rawSoldOut = String(row[8] || "").trim().toUpperCase();
-              const isSoldOut = ["Y", "YES", "품절", "TRUE", "1", "매진", "SOLDOUT"].includes(rawSoldOut);
-
-              // 6번째 열이 이미지 URL인지 옵션구분인지 자동 판별
-              const col6 = String(row[6] || "").trim();
-              const isCol6Image = col6.startsWith("http://") || col6.startsWith("https://") || col6.startsWith("data:image");
-              const photoUrl = isCol6Image ? col6 : "";
-              const optionType = !isCol6Image && col6 ? col6 : "메인";
-
-              const col7 = String(row[7] || "").trim();
-              const detailPhotoUrl = (col7.startsWith("http://") || col7.startsWith("https://")) ? col7 : "";
-
-              return {
-                category: String(row[0] || "기본").trim(),
-                code: String(row[1] || `ITEM-${idx + 1}`).trim(),
-                name: String(row[2] || "").trim(),
-                spec: String(row[3] || "1개").trim(),
-                unitPrice: parseInt(String(row[4] || "0").replace(/[^0-9]/g, ""), 10) || 0,
-                discountPrice: parseInt(String(row[5] || "0").replace(/[^0-9]/g, ""), 10) || 0,
-                photoUrl,
-                detailPhotoUrl,
-                isSoldOut,
-                optionType,
-                note: String(row[9] || (isCol6Image ? "" : row[7]) || "").trim(),
-              };
-            });
-        }
-
-        // 사업자정보 탭 순차 안전 조회 및 파싱 (10대 항목)
-        let sheetBizInfo: Record<string, string> = {};
-        const infoRes = await safeSheetCall(() =>
-          callSheetsTool(
-            "sheets_get_range",
-            {
-              spreadsheetId: resolved.spreadsheetId,
-              range: "사업자정보!A1:B15",
-              preferOAuth: true,
-            },
-            { preferOAuth: true }
-          )
-        );
-        if (infoRes?.values && infoRes.values.length > 0) {
-          for (const row of infoRes.values) {
-            if (row && row[0]) {
-              const k = String(row[0]).trim();
-              const v = String(row[1] || "").trim();
-              if (k.includes("회사명") || k.includes("상호")) sheetBizInfo.companyName = v;
-              else if (k.includes("대표자")) sheetBizInfo.ownerName = v;
-              else if (k.includes("사업자등록번호") || k.includes("사업자번호")) sheetBizInfo.bizNumber = v;
-              else if (k.includes("주소")) sheetBizInfo.address = v;
-              else if (k.includes("연락처") || k.includes("전화")) sheetBizInfo.phone = v;
-              else if (k.includes("메일")) sheetBizInfo.email = v;
-              else if (k.includes("홈페이지") || k.includes("SNS")) sheetBizInfo.website = v;
-              else if (k.includes("결제")) sheetBizInfo.paymentNotice = v;
-              else if (k.includes("배송")) sheetBizInfo.shippingNotice = v;
-              else if (k.includes("환불") || k.includes("취소")) sheetBizInfo.refundNotice = v;
-              else if (k.includes("기타")) sheetBizInfo.extraNotice = v;
-            }
-          }
-        }
-
-        // 모바일 앱 설정 상호명이 우선, 없을 때만 시트 상호명 채택
-        const isDefaultAppName = !businessName || businessName === "스마트 견적 & 주문 센터" || businessName === "스마트 간편 주문 센터";
-        if (isDefaultAppName && sheetBizInfo.companyName) {
-          businessName = sheetBizInfo.companyName;
-        }
-        if (sheetBizInfo.phone && !merchantPhone) {
-          merchantPhone = sheetBizInfo.phone;
-        }
-        businessInfo = sheetBizInfo;
-      }
-    } catch (err: any) {
-      console.warn("[QuoteCatalog] Sheet fetch warning, using default:", err.message);
-    }
-
-    if (catalogItems.length === 0) {
-      catalogItems = DEFAULT_CATALOG;
-    }
-
-    // 카테고리 목록 추출
-    const categories = Array.from(new Set(catalogItems.map((c: any) => c.category)));
-
-    const responsePayload = {
-      success: true,
+    const result = await getOrderCatalogData({
+      userKey,
       quoteId,
-      customerName,
-      customerPhone,
-      inquiryText,
-      merchant: {
-        businessName,
-        phone: merchantPhone,
-        email: targetEmail,
-        imageUrl: merchantImage,
-      },
-      businessInfo: businessInfo || {},
-      categories,
-      catalog: catalogItems,
-    };
-
-    // 🚀 [3] 인메모리 캐시에 저장 (60초간 0초 즉시 응답)
-    catalogCache.set(cacheKey, {
-      data: responsePayload,
-      timestamp: Date.now(),
+      directEmail,
+      isRefresh,
     });
 
-    return NextResponse.json(responsePayload);
+    return NextResponse.json(result);
   } catch (error: any) {
     console.error("[QuoteCatalog] Error:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -445,13 +98,8 @@ export async function POST(req: NextRequest) {
       await updateRows("sheetbot_users", updateData, { filters: { email: targetEmail } });
     } catch (_) {}
 
-    // 3. 인메모리 캐시 무효화 (실시간 즉시 반영)
-    catalogCache.delete(`${targetEmail}_default`);
-    for (const k of Array.from(catalogCache.keys())) {
-      if (k.startsWith(targetEmail)) {
-        catalogCache.delete(k);
-      }
-    }
+    // 3. 인메모리 캐시 즉시 무효화
+    clearCatalogCache(targetEmail);
 
     return NextResponse.json({
       success: true,
@@ -464,4 +112,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
-
