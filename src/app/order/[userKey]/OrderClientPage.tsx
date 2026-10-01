@@ -786,7 +786,10 @@ export default function OrderClientPage({
   const contactPhone = businessInfo.phone || merchant.phone;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 pb-36">
+    <div 
+      className="min-h-screen bg-slate-950 text-slate-100 pb-36"
+      style={{ backgroundColor: "#020617", color: "#f8fafc", minHeight: "100vh" }}
+    >
       {/* 1. 상단 브랜드 헤더 */}
       <header className="sticky top-0 z-20 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-3.5">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
