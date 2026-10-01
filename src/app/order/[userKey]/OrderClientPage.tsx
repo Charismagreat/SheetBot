@@ -119,11 +119,36 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
   const [copied, setCopied] = useState(false);
   const [accountCopied, setAccountCopied] = useState(false);
 
-  // 1. 단가표(품목 목록), 상호 및 시트 사업자정보 로드
+  // 1. 단가표(품목 목록), 상호 및 시트 사업자정보 로드 (SWR 패턴: 로컬 캐시 즉시 0초 렌더링 + 백그라운드 동기화)
   useEffect(() => {
+    if (!userKey) return;
+
+    const storageKey = `sheetbot_order_cache_${userKey}`;
+    let hasLocalCache = false;
+
+    // 🚀 [1] 마운트 즉시 로컬 캐시 확인 -> 있으면 0.00초 만에 화면 즉시 렌더링!
+    if (typeof window !== "undefined") {
+      try {
+        const cachedRaw = localStorage.getItem(storageKey);
+        if (cachedRaw) {
+          const cached = JSON.parse(cachedRaw);
+          if (cached && cached.catalog && cached.catalog.length > 0) {
+            setCatalog(cached.catalog);
+            setCategories(cached.categories || []);
+            if (cached.merchant) setMerchant(cached.merchant);
+            if (cached.businessInfo) setBusinessInfo(cached.businessInfo);
+            setLoading(false); // 로딩 스피너 즉시 해제!
+            hasLocalCache = true;
+          }
+        }
+      } catch (_) {}
+    }
+
     async function loadCatalog() {
       try {
-        setLoading(true);
+        if (!hasLocalCache) {
+          setLoading(true);
+        }
         setLogoError(false);
         const res = await apiFetch(`/api/user/quote/catalog?userKey=${encodeURIComponent(userKey)}`);
         const data = await res.json();
@@ -137,18 +162,32 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
           if (data.businessInfo) {
             setBusinessInfo(data.businessInfo);
           }
-        } else {
+          // 최신 데이터를 로컬 캐시에 저장
+          try {
+            localStorage.setItem(
+              storageKey,
+              JSON.stringify({
+                catalog: data.catalog || [],
+                categories: data.categories || [],
+                merchant: data.merchant,
+                businessInfo: data.businessInfo,
+                savedAt: Date.now(),
+              })
+            );
+          } catch (_) {}
+        } else if (!hasLocalCache) {
           setError(data.error || "품목 정보를 불러올 수 없습니다.");
         }
       } catch (err: any) {
-        setError("네트워크 오류가 발생했습니다.");
+        if (!hasLocalCache) {
+          setError("네트워크 오류가 발생했습니다.");
+        }
       } finally {
         setLoading(false);
       }
     }
-    if (userKey) {
-      loadCatalog();
-    }
+
+    loadCatalog();
   }, [userKey]);
 
   // 2. 수량 증감 핸들러
@@ -331,9 +370,45 @@ export default function OrderClientPage({ userKey: propUserKey }: { userKey?: st
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-100 p-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mb-4"></div>
-        <p className="text-sm font-medium text-slate-400">실시간 품목 및 주문 정보를 불러오는 중...</p>
+      <div className="min-h-screen bg-slate-950 text-slate-100 pb-20">
+        {/* 상단 헤더 스켈레톤 */}
+        <header className="sticky top-0 z-20 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-3.5">
+          <div className="max-w-2xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-slate-800 animate-pulse" />
+              <div className="space-y-1.5">
+                <div className="h-4 w-28 bg-slate-800 rounded animate-pulse" />
+                <div className="h-3 w-16 bg-slate-800/60 rounded animate-pulse" />
+              </div>
+            </div>
+            <div className="h-7 w-20 bg-slate-800 rounded-lg animate-pulse" />
+          </div>
+        </header>
+
+        {/* 카테고리 탭 스켈레톤 */}
+        <div className="border-b border-slate-800/50 px-4 py-2.5 max-w-2xl mx-auto flex gap-2 overflow-hidden">
+          <div className="h-7 w-16 bg-slate-800 rounded-full animate-pulse" />
+          <div className="h-7 w-20 bg-slate-800/70 rounded-full animate-pulse" />
+          <div className="h-7 w-20 bg-slate-800/50 rounded-full animate-pulse" />
+        </div>
+
+        {/* 품목 카드 리스트 스켈레톤 */}
+        <main className="max-w-2xl mx-auto p-4 space-y-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 flex gap-3.5 items-center animate-pulse"
+            >
+              <div className="w-20 h-20 bg-slate-800 rounded-xl shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 w-3/4 bg-slate-800 rounded" />
+                <div className="h-3 w-1/2 bg-slate-800/60 rounded" />
+                <div className="h-4 w-24 bg-slate-800 rounded mt-2" />
+              </div>
+              <div className="h-9 w-24 bg-slate-800 rounded-xl shrink-0" />
+            </div>
+          ))}
+        </main>
       </div>
     );
   }
