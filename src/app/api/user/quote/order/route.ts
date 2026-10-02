@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { insertRows, callSheetsTool } from "@/lib/egdesk-helpers";
+import { insertRows, callSheetsTool, queryTable } from "@/lib/egdesk-helpers";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { resolveUserEmailFromKey } from "@/lib/user-key-helper";
 import { setupDatabase } from "@/lib/setup-db";
@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
     const supplyAmount = validItems.reduce((acc: number, cur: any) => acc + cur.amount, 0);
     const vatAmount = Math.round(supplyAmount * 0.1);
     const totalAmount = supplyAmount + vatAmount;
+    const totalQuantity = validItems.reduce((acc: number, cur: any) => acc + cur.quantity, 0);
 
     // 3. 접수 번호 및 일시 생성
     const orderId = existingQuoteId || `ord_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
@@ -75,7 +76,11 @@ export async function POST(req: NextRequest) {
     const todayFormatted = now.replace("T", " ").substring(0, 19);
 
     const itemsSummary = validItems
-      .map((item: any) => `${item.name}(${item.quantity}${item.spec})`)
+      .map((item: any) => {
+        const rawSpec = (item.spec || "").trim();
+        const unit = rawSpec.replace(/^\d+\s*/, "") || rawSpec || "개";
+        return `${item.name}(${item.quantity}${unit})`;
+      })
       .join(", ");
 
     // 4. 사장님 구글 시트 바인딩 확인
@@ -117,8 +122,8 @@ export async function POST(req: NextRequest) {
       console.warn("[QuoteOrder] DB insert warning:", err.message);
     });
 
-    // 6. 구글 시트 '주문접수대장'에 실시간 행 추가 (10개 열 표준)
-    // [주문번호, 주문일시, 고객명, 연락처, 배송/방문주소, 요청사항, 주문내역(품목/수량), 총결제금액(원), 주문상태, 처리일시]
+    // 6. 구글 시트 '주문접수대장'에 실시간 행 추가 (11개 열 표준)
+    // [주문번호, 주문일시, 고객명, 연락처, 배송/방문주소, 요청사항, 주문내역(품목/수량), 총수량, 총결제금액(원), 주문상태, 처리일시]
     if (spreadsheetId) {
       try {
         const fullNotes = [
@@ -134,6 +139,7 @@ export async function POST(req: NextRequest) {
           customerAddress || "",
           fullNotes,
           itemsSummary,
+          totalQuantity,
           totalAmount,
           "접수",
           "",
@@ -144,7 +150,7 @@ export async function POST(req: NextRequest) {
           "sheets_append_values",
           {
             spreadsheetId,
-            range: "주문접수대장!A:J",
+            range: "주문접수대장!A:K",
             values: [appendRow],
             preferOAuth: true,
           },

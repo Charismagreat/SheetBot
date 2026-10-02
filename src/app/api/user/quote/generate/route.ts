@@ -233,7 +233,11 @@ ${catalogSummary}
     const selectUrl = `${baseUrl}/q/select/${quoteId}`;
 
     const itemsSummary = finalItems
-      .map((item) => `${item.name}(${item.quantity}${item.spec})`)
+      .map((item) => {
+        const rawSpec = (item.spec || "").trim();
+        const unit = rawSpec.replace(/^\d+\s*/, "") || rawSpec || "개";
+        return `${item.name}(${item.quantity}${unit})`;
+      })
       .join(", ");
 
     const now = new Date().toISOString();

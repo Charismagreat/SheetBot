@@ -28,7 +28,17 @@ import {
   Globe,
   Mail,
   HelpCircle,
+  Clock,
 } from "lucide-react";
+
+/** 배송/주문 요청사항 원터치 퀵 선택 문구 목록 */
+const QUICK_REQUEST_NOTES = [
+  "방문 전 미리 연락 부탁드립니다",
+  "부재 시 문 앞에 놓아주세요",
+  "경비실에 맡겨주세요",
+  "당일 방문 30분 전 전화 주세요",
+  "최대한 빠른 방문 희망합니다",
+];
 
 interface CatalogItem {
   code: string;
@@ -186,6 +196,83 @@ export default function OrderClientPage({
   const [orderResult, setOrderResult] = useState<any>(null);
   const [copied, setCopied] = useState(false);
   const [accountCopied, setAccountCopied] = useState(false);
+
+  // 💾 [실시간 임시저장 및 복원]: 다른 앱 전환/새로고침 시 입력 내용 100% 무손실 복원
+  const [draftLoaded, setDraftLoaded] = useState(false);
+
+  // 1-1. 마운트 시 저장된 임시 주문서 데이터 자동 복원
+  useEffect(() => {
+    if (!userKey || typeof window === "undefined") return;
+    const draftKey = `sheetbot_order_draft_${userKey}`;
+    try {
+      const saved = localStorage.getItem(draftKey);
+      if (saved) {
+        const draft = JSON.parse(saved);
+        if (draft.quantities && Object.keys(draft.quantities).length > 0) {
+          setQuantities(draft.quantities);
+        }
+        if (draft.customerName) setCustomerName(draft.customerName);
+        if (draft.customerPhone) setCustomerPhone(draft.customerPhone);
+        if (draft.customerAddress) setCustomerAddress(draft.customerAddress);
+        if (draft.preferredDate) setPreferredDate(draft.preferredDate);
+        if (draft.notes) setNotes(draft.notes);
+        if (draft.isModalOpen) setIsModalOpen(true);
+      }
+    } catch (_) {}
+    setDraftLoaded(true);
+  }, [userKey]);
+
+  // 1-2. 입력 내용 변경 시 localStorage 실시간 자동 백업 (Autosave)
+  useEffect(() => {
+    if (!userKey || !draftLoaded || typeof window === "undefined") return;
+    const draftKey = `sheetbot_order_draft_${userKey}`;
+
+    if (orderResult) {
+      localStorage.removeItem(draftKey);
+      return;
+    }
+
+    const hasData =
+      Object.keys(quantities).length > 0 ||
+      customerName ||
+      customerPhone ||
+      customerAddress ||
+      preferredDate ||
+      notes ||
+      isModalOpen;
+
+    if (hasData) {
+      try {
+        localStorage.setItem(
+          draftKey,
+          JSON.stringify({
+            quantities,
+            customerName,
+            customerPhone,
+            customerAddress,
+            preferredDate,
+            notes,
+            isModalOpen,
+          })
+        );
+      } catch (_) {}
+    } else {
+      try {
+        localStorage.removeItem(draftKey);
+      } catch (_) {}
+    }
+  }, [
+    userKey,
+    draftLoaded,
+    quantities,
+    customerName,
+    customerPhone,
+    customerAddress,
+    preferredDate,
+    notes,
+    isModalOpen,
+    orderResult,
+  ]);
 
   // 1. 단가표(품목 목록), 상호 및 시트 사업자정보 로드 (SWR 패턴: 0.00초 즉시 렌더링 + 백그라운드 동기화)
   useEffect(() => {
@@ -387,6 +474,17 @@ export default function OrderClientPage({
           setBusinessInfo(data.businessInfo);
         }
         setIsModalOpen(false);
+        if (typeof window !== "undefined" && userKey) {
+          try {
+            localStorage.removeItem(`sheetbot_order_draft_${userKey}`);
+          } catch (_) {}
+        }
+        setCustomerName("");
+        setCustomerPhone("");
+        setCustomerAddress("");
+        setPreferredDate("");
+        setNotes("");
+        setQuantities({});
       } else {
         alert(data.error || "주문 접수에 실패했습니다.");
       }
@@ -411,9 +509,10 @@ export default function OrderClientPage({
       orderResult.notes ? `요청사항: ${orderResult.notes}` : "",
       `--------------------------`,
       `[주문 품목 내역]`,
-      ...orderResult.items.map(
-        (it: any) => `• ${it.name} (${it.quantity}${it.spec}) - ${it.amount.toLocaleString()}원`
-      ),
+      ...orderResult.items.map((it: any) => {
+        const unit = (it.spec || "").trim().replace(/^\d+\s*/, "") || it.spec || "개";
+        return `• ${it.name} (${it.quantity}${unit}) - ${it.amount.toLocaleString()}원`;
+      }),
       `--------------------------`,
       `공급가액: ${orderResult.supplyAmount.toLocaleString()}원`,
       `부가세(10%): ${orderResult.vatAmount.toLocaleString()}원`,
@@ -1063,7 +1162,7 @@ export default function OrderClientPage({
               {selectedItems.map((it) => (
                 <div key={it.code} className="flex justify-between text-slate-300">
                   <span className="truncate pr-2">
-                    {it.name} × {it.quantity}{it.spec}
+                    {it.name} × {it.quantity}{(it.spec || "").trim().replace(/^\d+\s*/, "") || it.spec || "개"}
                   </span>
                   <span className="font-mono shrink-0">{it.amount.toLocaleString()}원</span>
                 </div>
@@ -1119,10 +1218,36 @@ export default function OrderClientPage({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                  희망 수령 / 방문 일시
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                    희망 수령 / 방문 일시
+                  </label>
+                  <label className="cursor-pointer text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-medium bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded-lg border border-emerald-500/30 transition">
+                    <Clock className="w-3 h-3" />
+                    📅 달력/시간 선택
+                    <input
+                      type="datetime-local"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val) {
+                          const d = new Date(val);
+                          if (!isNaN(d.getTime())) {
+                            const month = d.getMonth() + 1;
+                            const date = d.getDate();
+                            const hours = d.getHours();
+                            const minutes = d.getMinutes().toString().padStart(2, "0");
+                            const ampm = hours >= 12 ? "오후" : "오전";
+                            const hour12 = hours % 12 || 12;
+                            const formatted = `${month}월 ${date}일 ${ampm} ${hour12}:${minutes}`;
+                            setPreferredDate(formatted);
+                          }
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
                 <input
                   type="text"
                   placeholder="예: 10월 5일 오후 2시 이후 / 빠른 배송"
@@ -1133,7 +1258,41 @@ export default function OrderClientPage({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">배송/주문 요청사항</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-300">배송/주문 요청사항</label>
+                  <span className="text-[10px] text-slate-500">자주 쓰는 문구 탭 선택</span>
+                </div>
+                {/* 자주 쓰이는 요청사항 퀵 선택 칩 */}
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {QUICK_REQUEST_NOTES.map((phrase) => {
+                    const isSelected = notes.includes(phrase);
+                    return (
+                      <button
+                        key={phrase}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            const updated = notes
+                              .split(" / ")
+                              .filter((p) => p.trim() !== phrase)
+                              .join(" / ");
+                            setNotes(updated);
+                          } else {
+                            setNotes(notes ? `${notes} / ${phrase}` : phrase);
+                          }
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition flex items-center gap-1 ${
+                          isSelected
+                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                            : "bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800"
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3 h-3 text-emerald-400" />}
+                        {phrase}
+                      </button>
+                    );
+                  })}
+                </div>
                 <textarea
                   rows={2}
                   placeholder="문 앞 보관, 배송 전 연락 등 특이사항을 적어주세요."
