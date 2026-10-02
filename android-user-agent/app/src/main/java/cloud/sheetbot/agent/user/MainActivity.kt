@@ -399,6 +399,11 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Throwable) {
             android.util.Log.w("MainActivity", "refreshQuoteImageUi 방어: ${e.message}")
         }
+        try {
+            refreshBusinessCardUi()
+        } catch (e: Throwable) {
+            android.util.Log.w("MainActivity", "refreshBusinessCardUi 방어: ${e.message}")
+        }
     }
 
     override fun onPause() {
@@ -1030,19 +1035,8 @@ class MainActivity : AppCompatActivity() {
         binding.switchCallEndedCard.isChecked = prefs.isCallEndedCardPromptEnabled
         binding.layoutCallEndedCardSettings.visibility = if (prefs.isCallEndedCardPromptEnabled) View.VISIBLE else View.GONE
 
-        // 1. 발송 방식 라디오 버튼 초기화 (WEB_LINK vs MMS_IMAGE) 및 실시간 자동 저장
-        val isWebLinkMode = prefs.businessCardSendMode == "WEB_LINK"
-        binding.rbModeWebLink.isChecked = isWebLinkMode
-        binding.rbModeMmsImage.isChecked = !isWebLinkMode
-        binding.layoutModeWebLink.visibility = if (isWebLinkMode) View.VISIBLE else View.GONE
-        binding.layoutModeMmsImage.visibility = if (isWebLinkMode) View.GONE else View.VISIBLE
-
-        binding.rgBusinessCardMode.setOnCheckedChangeListener { _, checkedId ->
-            val isWeb = checkedId == binding.rbModeWebLink.id
-            binding.layoutModeWebLink.visibility = if (isWeb) View.VISIBLE else View.GONE
-            binding.layoutModeMmsImage.visibility = if (isWeb) View.GONE else View.VISIBLE
-            prefs.businessCardSendMode = if (isWeb) "WEB_LINK" else "MMS_IMAGE"
-        }
+        // 1. 발송 방식 라디오 버튼 초기화 (WEB_LINK vs MMS_IMAGE) 및 실시간 동기화
+        refreshBusinessCardUi()
 
         // 2. 값 설정 및 텍스트 변경 실시간 자동 저장
         binding.etBusinessCardWebUrl.setText(prefs.businessCardWebLink)
@@ -2478,8 +2472,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             prefs.businessCardImagePath = targetFile.absolutePath
-            renderBusinessCardImagePreview()
-            Toast.makeText(this, "🖼️ 명함/포스터 이미지가 등록되었습니다.", Toast.LENGTH_SHORT).show()
+            prefs.businessCardSendMode = "MMS_IMAGE"
+            refreshBusinessCardUi()
+            Toast.makeText(this, "🖼️ 명함/포스터 이미지가 등록되었습니다. (방안 2로 자동 전환)", Toast.LENGTH_SHORT).show()
             addLogItem("명함이미지", "이미지 등록 완료 (${targetFile.length() / 1024} KB)", true)
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "명함 이미지 저장 실패", e)
@@ -2500,12 +2495,36 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             prefs.businessCardImagePath = ""
-            renderBusinessCardImagePreview()
+            refreshBusinessCardUi()
             Toast.makeText(this, "🗑️ 등록된 이미지가 삭제되었습니다.", Toast.LENGTH_SHORT).show()
             addLogItem("명함이미지", "이미지 삭제 완료", true)
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "이미지 삭제 실패", e)
         }
+    }
+
+    /**
+     * 통화 종료 모바일 명함 발송 UI 상태 실시간 동기화 (방안 1 vs 방안 2 및 이미지 미리보기)
+     */
+    private fun refreshBusinessCardUi() {
+        val isWebLinkMode = prefs.businessCardSendMode == "WEB_LINK"
+        binding.rgBusinessCardMode.setOnCheckedChangeListener(null)
+        if (isWebLinkMode) {
+            binding.rgBusinessCardMode.check(binding.rbModeWebLink.id)
+            binding.layoutModeWebLink.visibility = View.VISIBLE
+            binding.layoutModeMmsImage.visibility = View.GONE
+        } else {
+            binding.rgBusinessCardMode.check(binding.rbModeMmsImage.id)
+            binding.layoutModeWebLink.visibility = View.GONE
+            binding.layoutModeMmsImage.visibility = View.VISIBLE
+        }
+        binding.rgBusinessCardMode.setOnCheckedChangeListener { _, checkedId ->
+            val isWeb = checkedId == binding.rbModeWebLink.id
+            binding.layoutModeWebLink.visibility = if (isWeb) View.VISIBLE else View.GONE
+            binding.layoutModeMmsImage.visibility = if (isWeb) View.GONE else View.VISIBLE
+            prefs.businessCardSendMode = if (isWeb) "WEB_LINK" else "MMS_IMAGE"
+        }
+        renderBusinessCardImagePreview()
     }
 
     /**

@@ -1943,7 +1943,6 @@
                         android:text="🌐 [방안 1] 스마트 웹 명함 링크 (0원 무료 · 미리보기 카드)"
                         android:textColor="#E2E8F0"
                         android:textSize="11.5sp"
-                        android:checked="true"
                         android:buttonTint="#38BDF8"
                         android:paddingVertical="4dp" />
 
