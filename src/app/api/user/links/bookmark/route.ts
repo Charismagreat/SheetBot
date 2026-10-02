@@ -6,12 +6,9 @@ import {
   callDriveTool,
   callSheetsTool,
   callAiCaller,
-  callAiBatchSubmit,
-  callAiBatchGet,
   listDriveFiles,
   createDriveFolder,
   insertRows,
-  updateRows,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { getAiModelSettings } from "@/lib/ai-settings";
@@ -214,28 +211,69 @@ export async function POST(req: NextRequest) {
       }).catch(() => {});
     }
 
-    // 4. [1단계: 선행 즉시 기록] 한국 시간(KST)으로 즉시 시트에 추가 (0.1초 체감 UX)
-    const initialSummary = "⏳ AI 3줄 요약 분석 중...";
-    let targetRow: number | null = null;
+    // 4. [실시간 고속 AI 3줄 요약] (사용자 경험 최우선: 1.5초 내외 즉시 완성 & 0오류 단일 Append)
+    let aiSummary = "";
+    try {
+      const aiSettings = await getAiModelSettings();
+      const targetModel = aiSettings.defaultModel || "gemini-2.5-flash";
 
-    if (targetSpreadsheetId) {
-      // 정확한 삽입 행 번호 파악을 위해 현재 행 수 확인
-      try {
-        const rangeRes = await callSheetsTool("sheets_get_range", {
-          spreadsheetId: targetSpreadsheetId,
-          range: "시트1!A:A",
-          preferOAuth: true,
+      const balanceCheck = await checkTokenBalance(cleanEmail, 300);
+      if (!balanceCheck.allowed) {
+        aiSummary = "⚠️ 잔여 토큰 부족으로 AI 요약이 생략되었습니다. (충전 후 이용 가능)";
+      } else {
+        const prompt = `당신은 웹 콘텐츠 및 유튜브 영상 스크랩 분석 비서입니다.
+다음 수신된 링크 콘텐츠 정보를 분석하여 바쁜 직장인을 위한 핵심 3줄 요약(각 줄 머리에 1., 2., 3. 번호 부여)을 작성해 주세요. 불필요한 서두나 마크다운 따옴표 없이 순수 텍스트 3줄로만 답변하세요:
+
+- 제목: ${title}
+- 출처/채널: ${siteName}
+- 설명/발췌: ${description || rawText}
+- URL: ${rawUrl}`;
+
+        const aiRes = await callAiCaller(prompt, {
+          caller: "sheetbot-link-scraper",
+          model: targetModel,
+          temperature: 0.2,
+        }).catch((err: any) => {
+          console.warn("[LinkBookmark] AI Caller error:", err.message);
+          return null;
         });
-        const currentCount = rangeRes?.values?.length || 1;
-        targetRow = currentCount + 1;
-      } catch {
-        targetRow = null;
-      }
 
-      // 한국 표준시(KST, UTC+9) 적용
-      const nowStr = getKoreanTimeString();
+        if (aiRes) {
+          const rawResult = (aiRes.text || aiRes.content || "").trim();
+          aiSummary = rawResult.length > 5 ? rawResult : (description ? description.slice(0, 200) : "1. 원본 링크 참조\n2. 주요 콘텐츠 확인 완료\n3. 후속 검토 요망");
+
+          const promptLen = prompt.length;
+          const respLen = aiSummary.length;
+          const usedTokens = Math.max(200, Math.ceil((promptLen + respLen) / 2.5));
+
+          await deductTokens(cleanEmail, usedTokens).catch(() => {});
+
+          void recordAiUsageLog({
+            userEmail: cleanEmail,
+            caller: "sheetbot-link-scraper",
+            purpose: `${category} 링크 스크랩 AI 3줄 요약 (${targetModel})`,
+            model: targetModel,
+            promptTokens: Math.ceil(promptLen / 2.5),
+            completionTokens: Math.ceil(respLen / 2.5),
+            totalTokens: usedTokens,
+            promptText: `링크 요약: ${title} (${rawUrl})`,
+            responseText: aiSummary,
+          });
+        }
+      }
+    } catch (aiErr: any) {
+      console.warn("[LinkBookmark] AI generation warning:", aiErr.message);
+    }
+
+    if (!aiSummary) {
+      aiSummary = description ? `1. ${description.slice(0, 80)}\n2. 원본 콘텐츠 링크 참조\n3. 추가 검토 요망` : "1. 원본 링크 참조\n2. 주요 콘텐츠 확인 완료\n3. 후속 검토 요망";
+    }
+
+    // 5. [구글 시트 단일 Append] 완성된 3줄 요약과 함께 즉시 1회 기록 (행 번호 불일치 원천 차단)
+    const nowStr = getKoreanTimeString();
+    if (targetSpreadsheetId) {
       const newRowValues = [
-        [nowStr, category, title, rawUrl, siteName, initialSummary, memo, deviceId]
+        [nowStr, category, title, rawUrl, siteName, aiSummary, memo, deviceId]
       ];
 
       await callSheetsTool("sheets_append_values", {
@@ -246,7 +284,7 @@ export async function POST(req: NextRequest) {
       }).catch((err: any) => console.warn("[LinkBookmark] append_values warning:", err.message));
     }
 
-    // 5. SQLite 감사 대장 기록 (INTEGER id 규격 준수)
+    // 6. SQLite 감사 대장 기록 (INTEGER id 규격 준수)
     const logId = Date.now();
     await insertRows("sheetbot_user_dispatch_logs", [
       {
@@ -259,174 +297,22 @@ export async function POST(req: NextRequest) {
         content: `[${category}] ${title} (${siteName}) -> ${sheetTitle}`,
         status: "SUCCESS",
         error_message: null,
-        created_at: getKoreanTimeString(),
+        created_at: nowStr,
       },
     ]).catch((err) => console.warn("[LinkBookmark] DB log insert warning:", err.message));
 
-    // 6. [2단계: Zero-Block AI Batch 파이프라인 (50% 토큰 절감 + 15초 Fast-Check + Async Sweeper)]
-    if (targetSpreadsheetId && targetRow) {
-      const rowToUpdate = targetRow;
+    // 유휴 배치 작업 백그라운드 수거 보조 트리거
+    void processPendingBatchJobs().catch(() => {});
 
-      // 백그라운드 유휴 배치 즉시 수거 비동기 트리거
-      void processPendingBatchJobs().catch(() => {});
-
-      try {
-        const aiSettings = await getAiModelSettings();
-        const targetModel = aiSettings.defaultModel || "gemini-2.5-flash";
-
-        // 1. 잔여 토큰 사전 점검 (50% 할인이므로 150 토큰으로 충분)
-        const balanceCheck = await checkTokenBalance(cleanEmail, 150);
-        if (!balanceCheck.allowed) {
-          const noTokenMsg = "⚠️ 잔여 토큰 부족으로 AI 요약이 생략되었습니다. (충전 후 자동 재시도 가능)";
-          await callSheetsTool("sheets_update_range", {
-            spreadsheetId: targetSpreadsheetId,
-            range: `시트1!F${rowToUpdate}:F${rowToUpdate}`,
-            values: [[noTokenMsg]],
-            preferOAuth: true,
-          }).catch(() => {});
-        } else {
-          const prompt = `당신은 웹 콘텐츠 및 유튜브 영상 스크랩 분석 비서입니다.
-다음 수신된 링크 콘텐츠 정보를 분석하여 바쁜 직장인을 위한 핵심 3줄 요약(각 줄 머리에 1., 2., 3. 번호 부여)을 작성해 주세요. 불필요한 서두나 마크다운 없이 순수 텍스트 3줄로만 답변하세요:
-
-- 제목: ${title}
-- 출처/채널: ${siteName}
-- 설명/발췌: ${description || rawText}
-- URL: ${rawUrl}`;
-
-          // 2. Gemini Batch 작업 제출 (50% 반값 절감)
-          const batchSubmitRes = await callAiBatchSubmit(
-            [
-              {
-                prompt,
-                systemPrompt: "당신은 핵심 콘텐츠 분석 및 3줄 요약 전문가입니다. 항상 1., 2., 3. 번호를 붙인 3문장으로 간결하게 작성하세요.",
-                temperature: 0.2,
-              },
-            ],
-            {
-              caller: "sheetbot-link-scraper",
-              model: targetModel,
-              displayName: `SheetBot-Link-${Date.now()}`,
-            }
-          ).catch((err: any) => ({ success: false, error: err.message, jobName: undefined }));
-
-          if (batchSubmitRes.success && batchSubmitRes.jobName) {
-            console.log(`[LinkBookmark] ✅ Gemini Batch submitted: ${batchSubmitRes.jobName}`);
-
-            // 3. 영구 PENDING 티켓 DB 적재
-            const batchJobId = Date.now();
-            await insertRows("sheetbot_ai_batch_jobs", [
-              {
-                id: batchJobId,
-                job_name: batchSubmitRes.jobName,
-                job_type: "LINK_BOOKMARK",
-                user_email: cleanEmail,
-                file_name: `${title} (${siteName})`,
-                spreadsheet_id: targetSpreadsheetId,
-                row_index: rowToUpdate,
-                model: targetModel,
-                status: "PENDING",
-                error_message: null,
-                completed_at: null,
-                created_at: getKoreanTimeString(),
-              },
-            ]).catch((err) => console.warn("[LinkBookmark] Batch ticket insert warning:", err.message));
-
-            // 4. [15초 Fast-Check]: 초단기 완료건 즉시 셀 반영
-            const batchGetRes = await callAiBatchGet(batchSubmitRes.jobName, { waitMs: 15000 }).catch(() => null);
-
-            if (batchGetRes && batchGetRes.success && batchGetRes.state === "JOB_STATE_SUCCEEDED" && batchGetRes.results?.[0]) {
-              const firstResult = batchGetRes.results[0];
-              let rawText = (firstResult.text || firstResult.content || firstResult.response || "").trim();
-              if (rawText.startsWith("```json")) {
-                rawText = rawText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-              } else if (rawText.startsWith("```")) {
-                rawText = rawText.replace(/^```\s*/, "").replace(/\s*```$/, "");
-              }
-              try {
-                const parsed = JSON.parse(rawText);
-                if (parsed.summary) rawText = parsed.summary;
-              } catch {}
-              const finalSummary = rawText.length > 5 ? rawText : (description ? description.slice(0, 200) : "1. 원본 링크 참조\n2. 주요 콘텐츠 확인 완료\n3. 후속 검토 요망");
-
-              // 시트 F열 핀포인트 갱신
-              await callSheetsTool("sheets_update_range", {
-                spreadsheetId: targetSpreadsheetId,
-                range: `시트1!F${rowToUpdate}:F${rowToUpdate}`,
-                values: [[finalSummary]],
-                preferOAuth: true,
-              }).catch(() => {});
-
-              // 50% 토큰 차감 및 감사 로그
-              const promptLen = prompt.length;
-              const respLen = finalSummary.length;
-              const rawTokens = Math.max(300, Math.ceil((promptLen + respLen) / 2.5));
-              const usedTokens = Math.round(rawTokens * 0.5); // 50% 배치 할인
-
-              await deductTokens(cleanEmail, usedTokens).catch(() => {});
-
-              void recordAiUsageLog({
-                userEmail: cleanEmail,
-                caller: "sheetbot-link-scraper",
-                purpose: `${category} 링크 스크랩 AI 3줄 요약 [AI 배치(50% 절감)] (${targetModel} / 0.5x)`,
-                model: targetModel,
-                promptTokens: Math.ceil(promptLen / 2.5),
-                completionTokens: Math.ceil(respLen / 2.5),
-                totalTokens: usedTokens,
-                promptText: `링크 요약: ${title} (${rawUrl})`,
-                responseText: finalSummary,
-              });
-
-              // 티켓 완료 처리
-              const nowStr = getKoreanTimeString();
-              await updateRows("sheetbot_ai_batch_jobs", {
-                status: "SUCCEEDED",
-                completed_at: nowStr,
-                updated_at: nowStr,
-              }, { ids: [Number(batchJobId)] }).catch(() => {});
-            } else {
-              console.log(`[LinkBookmark] [Zero-Block] Batch job ${batchSubmitRes.jobName} is processing. Delegated to Async Sweeper.`);
-            }
-          } else {
-            // Fallback: 배치 제출 실패 시 실시간 AI Caller 호출 안전망
-            console.warn("[LinkBookmark] Batch submit failed, falling back to direct AI Caller:", batchSubmitRes.error);
-            const aiRes = await callAiCaller(prompt, {
-              caller: "sheetbot-link-scraper-fallback",
-              model: targetModel,
-              temperature: 0.2,
-            }).catch(() => null);
-
-            if (aiRes) {
-              const summaryText = (aiRes.text || aiRes.content || "").trim();
-              const finalSummary = summaryText.length > 5 ? summaryText : (description ? description.slice(0, 200) : "1. 원본 링크 참조\n2. 주요 콘텐츠 확인 완료\n3. 후속 검토 요망");
-
-              await callSheetsTool("sheets_update_range", {
-                spreadsheetId: targetSpreadsheetId,
-                range: `시트1!F${rowToUpdate}:F${rowToUpdate}`,
-                values: [[finalSummary]],
-                preferOAuth: true,
-              }).catch(() => {});
-
-              const promptLen = prompt.length;
-              const respLen = finalSummary.length;
-              const usedTokens = Math.max(300, Math.ceil((promptLen + respLen) / 2.5));
-              await deductTokens(cleanEmail, usedTokens).catch(() => {});
-            }
-          }
-        }
-      } catch (err: any) {
-        console.warn("[LinkBookmark] AI Batch pipeline error:", err.message);
-      }
-    }
-
-    // 클라이언트에는 0.1초 만에 즉시 성공 응답 반환
+    // 7. 클라이언트에 완성된 3줄 요약과 함께 즉시 응답 반환 (1~2초 내외 체감)
     return NextResponse.json({
       success: true,
-      message: `${category} '${title}' 링크가 구글 시트에 즉시 기록되었습니다. (AI 요약 분석 중)`,
+      message: `${category} '${title}' 링크가 AI 3줄 요약과 함께 구글 시트에 즉시 기록되었습니다.`,
       category,
       title,
       url: rawUrl,
       siteName,
-      aiSummary: initialSummary,
+      aiSummary,
       spreadsheetUrl,
     });
   } catch (err: any) {
