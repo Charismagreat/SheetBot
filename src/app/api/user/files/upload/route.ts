@@ -227,54 +227,164 @@ export async function POST(req: NextRequest) {
       throw new Error(`구글 드라이브 파일 업로드에 실패했습니다: ${uploadErr.message}`);
     }
 
-    // ★ [Fast-Return 원칙] 구글 드라이브 파일 업로드 완료 즉시 스마트폰에 200 반환 (타임아웃 및 중복 업로드 원천 차단)
-    const capturedDriveFileId = driveFileId;
-    const capturedWebViewLink = webViewLink;
-    const capturedTargetFolderId = targetFolderId;
-    const capturedTargetFolderName = targetFolderName;
-    const capturedTargetFileName = targetFileName;
-    const capturedMemo = memo;
-    const capturedMimeType = mimeType;
-    const capturedFileSizeMb = fileSizeMb;
-    const capturedDeviceId = deviceId;
-    const capturedOcrType = ocrType;
+    // ★ [Fast-Return vs Realtime AI 분리 원칙]
+    let cardOcrResult: any = null;
+    let cardSpreadsheetUrl: string | null = null;
 
-    // ★ [Zero-Block AI Batch 파이프라인] 백그라운드 즉시 수거 워커 트리거
-    void processPendingBatchJobs().catch(() => {});
-
-    // 백그라운드 AI OCR 분석 및 구글 시트 대장 기록, DB 감사 로그 파이프라인
-    void (async () => {
+    if (ocrType === "BUSINESS_CARD" && autoRecordSheet) {
+      // 🪪 명함: 2~3초 초고속 실시간 AI이므로 동기 실행하여 클라이언트에 ocrData를 즉시 반환 (Instant CRM)
       try {
         const aiSettings = await getAiModelSettings();
         const configuredModel = aiSettings.defaultModel || "gemini-2.5-flash";
 
-        let targetSpreadsheetId: string | null = null;
-        let targetRow: number | null = null;
+        const resolved = await resolveUserSpreadsheet({
+          userEmail: cleanEmail,
+          sheetType: "BUSINESS_CARD",
+          defaultTitle: defaultSheetTitle,
+          folderId: targetFolderId,
+          preferOAuth: true,
+        });
 
-        // 1. 구글 시트 대상 시트 확인 및 선행 즉시 행 등록 (0.1초 체감 UX)
-        if (autoRecordSheet) {
-          try {
-            const sheetTitle = defaultSheetTitle;
-            const bindingType = capturedOcrType === "RECEIPT"
-              ? "RECEIPT"
-              : (capturedOcrType === "BUSINESS_CARD" ? "BUSINESS_CARD" : "FILE_UPLOAD");
+        const targetSpreadsheetId = resolved.spreadsheetId;
+        cardSpreadsheetUrl = resolved.spreadsheetUrl;
 
-            const resolved = await resolveUserSpreadsheet({
-              userEmail: cleanEmail,
-              sheetType: bindingType,
-              defaultTitle: sheetTitle,
-              folderId: capturedTargetFolderId,
+        if (targetSpreadsheetId) {
+          const nowStr = getKoreanTimeString();
+
+          // 최초 1회 생성 시 헤더 서식 자동 주입
+          if (resolved.isNew) {
+            const cardHeaders = [
+              ["등록 일시", "성함", "직함/직책", "회사명", "휴대폰", "이메일", "유선전화", "회사 주소", "상세정보", "명함 보기", "등록 기기"]
+            ];
+            await callSheetsTool("sheets_update_range", {
+              spreadsheetId: targetSpreadsheetId,
+              range: "시트1!A1:K1",
+              values: cardHeaders,
               preferOAuth: true,
+            }).catch(() => {});
+            await callSheetsTool("sheets_format_headers", {
+              spreadsheetId: targetSpreadsheetId,
+              tabName: "시트1",
+              headerBgColor: "#1e3a8a",
+              headerTextColor: "#ffffff",
+              preferOAuth: true,
+            }).catch(() => {});
+          }
+
+          // 초고속 실시간 AI OCR 수행 (2~3초)
+          const base64File = buffer.toString("base64");
+          const ocrResult = await performAiOcr(
+            base64File,
+            targetFileName,
+            mimeType,
+            "BUSINESS_CARD",
+            configuredModel
+          );
+
+          if (ocrResult) {
+            cardOcrResult = ocrResult;
+            const newCardRow = [
+              [
+                nowStr,
+                ocrResult.name || "확인 불가",
+                ocrResult.title || "미기재",
+                ocrResult.company || "미기재",
+                ocrResult.mobile || "미기재",
+                ocrResult.email || "미기재",
+                ocrResult.tel || "미기재",
+                ocrResult.address || "미기재",
+                ocrResult.details || "-",
+                webViewLink ? `=HYPERLINK("${webViewLink}", "🪪 명함 보기")` : "-",
+                deviceId
+              ]
+            ];
+
+            await callSheetsTool("sheets_append_values", {
+              spreadsheetId: targetSpreadsheetId,
+              range: "시트1!A:K",
+              values: newCardRow,
+              preferOAuth: true,
+            }).catch(() => {});
+
+            const usedTokens = 700;
+            await deductTokens(cleanEmail, usedTokens).catch(() => {});
+
+            void recordAiUsageLog({
+              userEmail: cleanEmail,
+              caller: "sheetbot-card-realtime",
+              purpose: `명함 실시간 AI 인맥 등록 [초고속 실시간] (${configuredModel})`,
+              model: configuredModel,
+              promptTokens: 450,
+              completionTokens: 250,
+              totalTokens: usedTokens,
+              promptText: `실시간 명함 분석: ${targetFileName}`,
+              responseText: JSON.stringify(ocrResult).slice(0, 300),
             });
 
-            targetSpreadsheetId = resolved.spreadsheetId;
+            // 감사 로그 적재
+            const logId = Date.now();
+            await insertRows("sheetbot_user_dispatch_logs", [
+              {
+                id: logId,
+                user_email: cleanEmail,
+                rule_id: "BUSINESS_CARD_OCR",
+                rule_name: "🪪 명함 AI OCR 인맥 등록",
+                device_id: deviceId,
+                recipient: "Google Drive / Sheet",
+                content: `[명함 OCR] ${targetFileName} -> ${defaultSheetTitle}`,
+                status: "SUCCESS",
+                error_message: null,
+                created_at: getKoreanTimeString(),
+              },
+            ]).catch(() => {});
+            console.log(`[FilesUpload] ✅ Realtime Business Card OCR & Sheet append completed for: ${ocrResult.name}`);
+          }
+        }
+      } catch (cardErr: any) {
+        console.warn("[FilesUpload] Realtime Business Card OCR error:", cardErr.message);
+      }
+    } else {
+      // 🧾 영수증(AI 배치) 및 일반 파일: 백그라운드 파이프라인으로 안전하게 위임 (Zero-Block)
+      const capturedDriveFileId = driveFileId;
+      const capturedWebViewLink = webViewLink;
+      const capturedTargetFolderId = targetFolderId;
+      const capturedTargetFolderName = targetFolderName;
+      const capturedTargetFileName = targetFileName;
+      const capturedMemo = memo;
+      const capturedMimeType = mimeType;
+      const capturedFileSizeMb = fileSizeMb;
+      const capturedDeviceId = deviceId;
+      const capturedOcrType = ocrType;
 
-            if (targetSpreadsheetId) {
-              const nowStr = getKoreanTimeString();
+      void processPendingBatchJobs().catch(() => {});
 
-              // 신규 시트인 경우 표준 헤더 서식 자동 주입
-              if (resolved.isNew) {
-                if (capturedOcrType === "RECEIPT") {
+      void (async () => {
+        try {
+          const aiSettings = await getAiModelSettings();
+          const configuredModel = aiSettings.defaultModel || "gemini-2.5-flash";
+
+          let targetSpreadsheetId: string | null = null;
+          let targetRow: number | null = null;
+
+          if (autoRecordSheet) {
+            try {
+              const sheetTitle = defaultSheetTitle;
+              const bindingType = capturedOcrType === "RECEIPT" ? "RECEIPT" : "FILE_UPLOAD";
+
+              const resolved = await resolveUserSpreadsheet({
+                userEmail: cleanEmail,
+                sheetType: bindingType,
+                defaultTitle: sheetTitle,
+                folderId: capturedTargetFolderId,
+                preferOAuth: true,
+              });
+
+              targetSpreadsheetId = resolved.spreadsheetId;
+
+              if (targetSpreadsheetId) {
+                const nowStr = getKoreanTimeString();
+
+                if (resolved.isNew && capturedOcrType === "RECEIPT") {
                   const receiptHeaders = [
                     ["등록 일시", "구분", "결제 일시", "상호명", "사업자번호", "결제금액", "부가세", "카드사", "카드번호", "승인번호", "상세내역", "영수증 보기", "등록 기기"]
                   ];
@@ -291,203 +401,86 @@ export async function POST(req: NextRequest) {
                     headerTextColor: "#ffffff",
                     preferOAuth: true,
                   }).catch(() => {});
-                } else if (capturedOcrType === "BUSINESS_CARD") {
-                  const cardHeaders = [
-                    ["등록 일시", "성함", "직함/직책", "회사명", "휴대폰", "이메일", "유선전화", "회사 주소", "상세정보", "명함 보기", "등록 기기"]
+                }
+
+                if (capturedOcrType === "RECEIPT") {
+                  try {
+                    const rangeRes = await callSheetsTool("sheets_get_range", {
+                      spreadsheetId: targetSpreadsheetId,
+                      range: "시트1!A:A",
+                      preferOAuth: true,
+                    });
+                    targetRow = (rangeRes?.values?.length || 1) + 1;
+                  } catch {
+                    targetRow = null;
+                  }
+
+                  const initialRow = [
+                    [
+                      nowStr,
+                      "신용카드 영수증",
+                      nowStr,
+                      "⏳ AI 영수증 분석 중...",
+                      "-",
+                      "0",
+                      "0",
+                      "-",
+                      "-",
+                      "-",
+                      "⏳ AI 영수증 상세 분석 중...",
+                      capturedWebViewLink ? `=HYPERLINK("${capturedWebViewLink}", "🧾 영수증 보기")` : "-",
+                      capturedDeviceId
+                    ]
                   ];
-                  await callSheetsTool("sheets_update_range", {
+                  await callSheetsTool("sheets_append_values", {
                     spreadsheetId: targetSpreadsheetId,
-                    range: "시트1!A1:K1",
-                    values: cardHeaders,
+                    range: "A:M",
+                    values: initialRow,
                     preferOAuth: true,
                   }).catch(() => {});
-                  await callSheetsTool("sheets_format_headers", {
+                } else {
+                  // 일반 파일
+                  let category = "일반 파일";
+                  if (capturedMimeType.startsWith("image/")) category = "사진";
+                  else if (capturedMimeType.includes("pdf")) category = "PDF 문서";
+                  else if (capturedMimeType.includes("sheet") || capturedMimeType.includes("excel")) category = "엑셀 문서";
+                  else if (capturedMimeType.includes("word")) category = "워드 문서";
+
+                  const linkFormula = capturedWebViewLink ? `=HYPERLINK("${capturedWebViewLink}", "📁 바로보기")` : "-";
+                  const newRowValues = [
+                    [nowStr, category, capturedTargetFileName, capturedFileSizeMb, linkFormula, capturedMemo]
+                  ];
+                  await callSheetsTool("sheets_append_values", {
                     spreadsheetId: targetSpreadsheetId,
-                    tabName: "시트1",
-                    headerBgColor: "#1e3a8a",
-                    headerTextColor: "#ffffff",
+                    range: "A:F",
+                    values: newRowValues,
                     preferOAuth: true,
-                  }).catch(() => {});
+                  }).catch((e: any) => console.warn("[FilesUpload] append_values error:", e.message));
                 }
               }
-
-              // 행 번호 계산
-              try {
-                const rangeRes = await callSheetsTool("sheets_get_range", {
-                  spreadsheetId: targetSpreadsheetId,
-                  range: "시트1!A:A",
-                  preferOAuth: true,
-                });
-                targetRow = (rangeRes?.values?.length || 1) + 1;
-              } catch {
-                targetRow = null;
-              }
-
-              // 선행 즉시 행 등록
-              if (capturedOcrType === "RECEIPT") {
-                const initialRow = [
-                  [
-                    nowStr,
-                    "신용카드 영수증",
-                    nowStr,
-                    "⏳ AI 영수증 분석 중...",
-                    "-",
-                    "0",
-                    "0",
-                    "-",
-                    "-",
-                    "-",
-                    "⏳ AI 영수증 상세 분석 중...",
-                    capturedWebViewLink ? `=HYPERLINK("${capturedWebViewLink}", "🧾 영수증 보기")` : "-",
-                    capturedDeviceId
-                  ]
-                ];
-                await callSheetsTool("sheets_append_values", {
-                  spreadsheetId: targetSpreadsheetId,
-                  range: "A:M",
-                  values: initialRow,
-                  preferOAuth: true,
-                }).catch(() => {});
-              } else if (capturedOcrType === "BUSINESS_CARD") {
-                const initialRow = [
-                  [
-                    nowStr,
-                    "⏳ AI 명함 분석 중...",
-                    "-",
-                    "-",
-                    "-",
-                    "-",
-                    "-",
-                    "-",
-                    "⏳ AI 명함 상세 정보 분석 중...",
-                    capturedWebViewLink ? `=HYPERLINK("${capturedWebViewLink}", "🪪 명함 보기")` : "-",
-                    capturedDeviceId
-                  ]
-                ];
-                await callSheetsTool("sheets_append_values", {
-                  spreadsheetId: targetSpreadsheetId,
-                  range: "A:K",
-                  values: initialRow,
-                  preferOAuth: true,
-                }).catch(() => {});
-              } else {
-                // 일반 파일: 즉시 기입
-                let category = "일반 파일";
-                if (capturedMimeType.startsWith("image/")) category = "사진";
-                else if (capturedMimeType.includes("pdf")) category = "PDF 문서";
-                else if (capturedMimeType.includes("sheet") || capturedMimeType.includes("excel")) category = "엑셀 문서";
-                else if (capturedMimeType.includes("word")) category = "워드 문서";
-
-                const linkFormula = capturedWebViewLink ? `=HYPERLINK("${capturedWebViewLink}", "📁 바로보기")` : "-";
-                const newRowValues = [
-                  [nowStr, category, capturedTargetFileName, capturedFileSizeMb, linkFormula, capturedMemo]
-                ];
-                await callSheetsTool("sheets_append_values", {
-                  spreadsheetId: targetSpreadsheetId,
-                  range: "A:F",
-                  values: newRowValues,
-                  preferOAuth: true,
-                }).catch((e: any) => console.warn("[FilesUpload] append_values error:", e.message));
-              }
+            } catch (sheetErr: any) {
+              console.warn("[FilesUpload] Background sheet record warning:", sheetErr.message);
             }
-          } catch (sheetErr: any) {
-            console.warn("[FilesUpload] Background sheet record warning:", sheetErr.message);
           }
-        }
 
-        // 2-1. [초고속 실시간 AI 파이프라인] 명함 OCR (Instant CRM - 현장 즉시성 보장 / 3~5초 체감 UX)
-        if (capturedOcrType === "BUSINESS_CARD" && targetSpreadsheetId && targetRow) {
-          const rowToUpdate = targetRow;
-          const balanceCheck = await checkTokenBalance(cleanEmail, 300);
+          // 영수증 Zero-Block AI 배치 파이프라인
+          if (capturedOcrType === "RECEIPT" && targetSpreadsheetId && targetRow) {
+            const rowToUpdate = targetRow;
+            const balanceCheck = await checkTokenBalance(cleanEmail, 300);
 
-          if (!balanceCheck.allowed) {
-            const noTokenMsg = "⚠️ 잔여 토큰 부족으로 AI 분석이 생략되었습니다. (충전 후 재시도 가능)";
-            await callSheetsTool("sheets_update_range", {
-              spreadsheetId: targetSpreadsheetId,
-              range: `시트1!B${rowToUpdate}:B${rowToUpdate}`,
-              values: [[noTokenMsg]],
-              preferOAuth: true,
-            }).catch(() => {});
-          } else {
-            const base64File = buffer.toString("base64");
-            const ocrResult = await performAiOcr(
-              base64File,
-              capturedTargetFileName,
-              capturedMimeType,
-              "BUSINESS_CARD",
-              configuredModel
-            );
-
-            if (ocrResult) {
-              // 🛡️ 지능형 행 핑거프린트 가드 (사용자가 처리 중 행을 임의 삭제/이동한 경우 오염 차단)
-              let safeRowToUpdate: number | null = rowToUpdate;
-              if (targetSpreadsheetId && rowToUpdate > 1) {
-                const guardRes = await resolveSafeTargetRow({
-                  spreadsheetId: targetSpreadsheetId,
-                  expectedRow: rowToUpdate,
-                  fileName: capturedTargetFileName,
-                  fileUrl: capturedWebViewLink,
-                });
-                safeRowToUpdate = guardRes.safeRow;
-                if (!safeRowToUpdate) {
-                  console.warn(`[FilesUpload] 🛑 Business Card OCR aborted: Row deleted by user (${guardRes.reason}).`);
-                  return;
-                }
-              }
-
+            if (!balanceCheck.allowed) {
+              const noTokenMsg = "⚠️ 잔여 토큰 부족으로 AI 분석이 생략되었습니다. (충전 후 재시도 가능)";
               await callSheetsTool("sheets_update_range", {
                 spreadsheetId: targetSpreadsheetId,
-                range: `시트1!B${safeRowToUpdate}:I${safeRowToUpdate}`,
-                values: [[
-                  ocrResult.name || "확인 불가",
-                  ocrResult.title || "미기재",
-                  ocrResult.company || "미기재",
-                  ocrResult.mobile || "미기재",
-                  ocrResult.email || "미기재",
-                  ocrResult.tel || "미기재",
-                  ocrResult.address || "미기재",
-                  ocrResult.details || "-",
-                ]],
+                range: `시트1!D${rowToUpdate}:D${rowToUpdate}`,
+                values: [[noTokenMsg]],
                 preferOAuth: true,
               }).catch(() => {});
-
-              const usedTokens = 700;
-              await deductTokens(cleanEmail, usedTokens).catch(() => {});
-
-              void recordAiUsageLog({
-                userEmail: cleanEmail,
-                caller: "sheetbot-card-realtime",
-                purpose: `명함 실시간 AI 인맥 등록 [초고속 실시간] (${configuredModel})`,
-                model: configuredModel,
-                promptTokens: 450,
-                completionTokens: 250,
-                totalTokens: usedTokens,
-                promptText: `실시간 명함 분석: ${capturedTargetFileName}`,
-                responseText: JSON.stringify(ocrResult).slice(0, 300),
-              });
-              console.log(`[FilesUpload] ✅ Realtime Business Card OCR completed for row ${safeRowToUpdate}`);
+              return;
             }
-          }
-        }
 
-        // 2-2. [Zero-Block AI Batch 파이프라인] 영수증 OCR (대량 결산 적재 - 50% 토큰 절감 + 15초 Fast-Check + Async Sweeper)
-        else if (capturedOcrType === "RECEIPT" && targetSpreadsheetId && targetRow) {
-          const rowToUpdate = targetRow;
-          const balanceCheck = await checkTokenBalance(cleanEmail, 300);
-
-          if (!balanceCheck.allowed) {
-            const noTokenMsg = "⚠️ 잔여 토큰 부족으로 AI 분석이 생략되었습니다. (충전 후 재시도 가능)";
-            await callSheetsTool("sheets_update_range", {
-              spreadsheetId: targetSpreadsheetId,
-              range: `시트1!D${rowToUpdate}:D${rowToUpdate}`,
-              values: [[noTokenMsg]],
-              preferOAuth: true,
-            }).catch(() => {});
-            return;
-          }
-
-          const base64File = buffer.toString("base64");
-          const ocrPrompt = `당신은 대한민국 영수증 및 증빙 전표 분석 전문 AI 공인회계사입니다.
+            const base64File = buffer.toString("base64");
+            const ocrPrompt = `당신은 대한민국 영수증 및 증빙 전표 분석 전문 AI 공인회계사입니다.
 첨부된 영수증/전표/거래 확인 문서 이미지("${capturedTargetFileName}")를 정밀 분석하여 다음 JSON 포맷으로만 답변하세요. 마크다운 따옴표나 서두 없이 순수 JSON만 반환하세요:
 {
   "receiptType": "영수증 구분 (반드시 다음 중 하나: '신용카드 영수증' | '현금영수증' | '간이영수증' | '일반인정영수증(입금표·거래명세서·주문확인서 등)')",
@@ -502,198 +495,190 @@ export async function POST(req: NextRequest) {
   "details": "상세내역 (구매 품목별 이름, 단가, 수량, 할인금액, 봉사료, 포인트 사용 등 영수증에 적힌 모든 세부 거래 내역을 간결하고 명확하게 정리)"
 }`;
 
-          // Gemini Batch 제출 (50% 반값 절감)
-          const batchSubmitRes = await callAiBatchSubmit(
-            [
+            const batchSubmitRes = await callAiBatchSubmit(
+              [
+                {
+                  prompt: ocrPrompt,
+                  systemPrompt: "당신은 고정밀 비즈니스 문서 OCR 분석 전문가입니다. 항상 요청된 JSON 스키마를 엄격히 준수하여 순수 JSON만 반환하세요.",
+                  temperature: 0.1,
+                  files: [
+                    {
+                      name: capturedTargetFileName,
+                      content: base64File,
+                      encoding: "base64",
+                      mimeType: capturedMimeType.startsWith("image/") || capturedMimeType === "application/pdf" ? capturedMimeType : "image/jpeg",
+                    },
+                  ],
+                },
+              ],
               {
-                prompt: ocrPrompt,
-                systemPrompt: "당신은 고정밀 비즈니스 문서 OCR 분석 전문가입니다. 항상 요청된 JSON 스키마를 엄격히 준수하여 순수 JSON만 반환하세요.",
-                temperature: 0.1,
-                files: [
-                  {
-                    name: capturedTargetFileName,
-                    content: base64File,
-                    encoding: "base64",
-                    mimeType: capturedMimeType.startsWith("image/") || capturedMimeType === "application/pdf" ? capturedMimeType : "image/jpeg",
-                  },
-                ],
-              },
-            ],
-            {
-              caller: "sheetbot-receipt-ocr",
-              model: configuredModel,
-              displayName: `SheetBot-RECEIPT-${Date.now()}`,
-            }
-          ).catch((err: any) => ({ success: false, error: err.message, jobName: undefined }));
-
-          if (batchSubmitRes.success && batchSubmitRes.jobName) {
-            console.log(`[FilesUpload] ✅ Gemini Batch submitted: ${batchSubmitRes.jobName}`);
-
-            // 영구 PENDING 티켓 DB 적재
-            const batchJobId = Date.now();
-            await insertRows("sheetbot_ai_batch_jobs", [
-              {
-                id: batchJobId,
-                job_name: batchSubmitRes.jobName,
-                job_type: "RECEIPT",
-                user_email: cleanEmail,
-                file_name: capturedTargetFileName,
-                spreadsheet_id: targetSpreadsheetId,
-                row_index: rowToUpdate,
+                caller: "sheetbot-receipt-ocr",
                 model: configuredModel,
-                status: "PENDING",
-                error_message: null,
-                completed_at: null,
-                created_at: getKoreanTimeString(),
-              },
-            ]).catch((err) => console.warn("[FilesUpload] Batch ticket insert warning:", err.message));
-
-            // [15초 Fast-Check]: 초단기 완료건 즉시 셀 반영
-            const batchGetRes = await callAiBatchGet(batchSubmitRes.jobName, { waitMs: 15000 }).catch(() => null);
-
-            if (batchGetRes && batchGetRes.success && batchGetRes.state === "JOB_STATE_SUCCEEDED" && batchGetRes.results?.[0]) {
-              const firstResult = batchGetRes.results[0];
-              let rawText = (firstResult.text || firstResult.content || firstResult.response || "").trim();
-              if (rawText.startsWith("```json")) {
-                rawText = rawText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-              } else if (rawText.startsWith("```")) {
-                rawText = rawText.replace(/^```\s*/, "").replace(/\s*```$/, "");
+                displayName: `SheetBot-RECEIPT-${Date.now()}`,
               }
+            ).catch((err: any) => ({ success: false, error: err.message, jobName: undefined }));
 
-              let ocrData: any = {};
-              try {
-                ocrData = JSON.parse(rawText);
-              } catch {
-                ocrData = {};
-              }
+            if (batchSubmitRes.success && batchSubmitRes.jobName) {
+              console.log(`[FilesUpload] ✅ Gemini Batch submitted: ${batchSubmitRes.jobName}`);
 
-              // 🛡️ 지능형 행 핑거프린트 가드 (사용자가 15초 내에 행을 삭제/이동한 경우 오염 차단)
-              let safeRowToUpdate: number | null = rowToUpdate;
-              if (targetSpreadsheetId && rowToUpdate > 1) {
-                const guardRes = await resolveSafeTargetRow({
-                  spreadsheetId: targetSpreadsheetId,
-                  expectedRow: rowToUpdate,
-                  fileName: capturedTargetFileName,
-                  fileUrl: capturedWebViewLink,
-                });
-                safeRowToUpdate = guardRes.safeRow;
-                if (!safeRowToUpdate) {
-                  console.warn(`[FilesUpload] 🛑 Fast-Check aborted: Row was deleted by user (${guardRes.reason}). Skipping sheet update.`);
-                  return;
+              const batchJobId = Date.now();
+              await insertRows("sheetbot_ai_batch_jobs", [
+                {
+                  id: batchJobId,
+                  job_name: batchSubmitRes.jobName,
+                  job_type: "RECEIPT",
+                  user_email: cleanEmail,
+                  file_name: capturedTargetFileName,
+                  spreadsheet_id: targetSpreadsheetId,
+                  row_index: rowToUpdate,
+                  model: configuredModel,
+                  status: "PENDING",
+                  error_message: null,
+                  completed_at: null,
+                  created_at: getKoreanTimeString(),
+                },
+              ]).catch((err) => console.warn("[FilesUpload] Batch ticket insert warning:", err.message));
+
+              const batchGetRes = await callAiBatchGet(batchSubmitRes.jobName, { waitMs: 15000 }).catch(() => null);
+
+              if (batchGetRes && batchGetRes.success && batchGetRes.state === "JOB_STATE_SUCCEEDED" && batchGetRes.results?.[0]) {
+                const firstResult = batchGetRes.results[0];
+                let rawText = (firstResult.text || firstResult.content || firstResult.response || "").trim();
+                if (rawText.startsWith("```json")) {
+                  rawText = rawText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+                } else if (rawText.startsWith("```")) {
+                  rawText = rawText.replace(/^```\s*/, "").replace(/\s*```$/, "");
                 }
+
+                let ocrData: any = {};
+                try {
+                  ocrData = JSON.parse(rawText);
+                } catch {
+                  ocrData = {};
+                }
+
+                let safeRowToUpdate: number | null = rowToUpdate;
+                if (targetSpreadsheetId && rowToUpdate > 1) {
+                  const guardRes = await resolveSafeTargetRow({
+                    spreadsheetId: targetSpreadsheetId,
+                    expectedRow: rowToUpdate,
+                    fileName: capturedTargetFileName,
+                    fileUrl: capturedWebViewLink,
+                  });
+                  safeRowToUpdate = guardRes.safeRow;
+                  if (!safeRowToUpdate) {
+                    console.warn(`[FilesUpload] 🛑 Fast-Check aborted: Row was deleted by user (${guardRes.reason}). Skipping sheet update.`);
+                    return;
+                  }
+                }
+
+                const bNum = formatBusinessNumber(ocrData.businessNumber);
+                const amt = ocrData.amount ? Number(String(ocrData.amount).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
+                const vat = ocrData.vat ? Number(String(ocrData.vat).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
+
+                await callSheetsTool("sheets_update_range", {
+                  spreadsheetId: targetSpreadsheetId,
+                  range: `시트1!B${safeRowToUpdate}:K${safeRowToUpdate}`,
+                  values: [[
+                    ocrData.receiptType || "신용카드 영수증",
+                    ocrData.paidAt || getKoreanTimeString(),
+                    ocrData.merchantName || "확인 불가",
+                    bNum,
+                    amt,
+                    vat,
+                    ocrData.cardIssuer || "-",
+                    ocrData.cardNumber || "-",
+                    ocrData.approvalNumber || "-",
+                    ocrData.details || "-",
+                  ]],
+                  preferOAuth: true,
+                }).catch(() => {});
+
+                const usedTokens = Math.round(1200 * 0.5);
+                await deductTokens(cleanEmail, usedTokens).catch(() => {});
+
+                void recordAiUsageLog({
+                  userEmail: cleanEmail,
+                  caller: "sheetbot-receipt-batch-fast",
+                  purpose: `영수증 AI 장부화 [AI 배치(50% 절감)] (${configuredModel} / 0.5x)`,
+                  model: configuredModel,
+                  promptTokens: 400,
+                  completionTokens: 200,
+                  totalTokens: usedTokens,
+                  promptText: `Fast-Check 영수증 분석: ${capturedTargetFileName}`,
+                  responseText: JSON.stringify(ocrData).slice(0, 300),
+                });
+
+                const nowStr = getKoreanTimeString();
+                await updateRows("sheetbot_ai_batch_jobs", {
+                  status: "SUCCEEDED",
+                  completed_at: nowStr,
+                  updated_at: nowStr,
+                }, { ids: [Number(batchJobId)] }).catch(() => {});
+              } else {
+                console.log(`[FilesUpload] [Zero-Block] Batch job ${batchSubmitRes.jobName} is processing. Delegated to Async Sweeper.`);
               }
-
-              const bNum = formatBusinessNumber(ocrData.businessNumber);
-              const amt = ocrData.amount ? Number(String(ocrData.amount).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
-              const vat = ocrData.vat ? Number(String(ocrData.vat).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
-
-              await callSheetsTool("sheets_update_range", {
-                spreadsheetId: targetSpreadsheetId,
-                range: `시트1!B${safeRowToUpdate}:K${safeRowToUpdate}`,
-                values: [[
-                  ocrData.receiptType || "신용카드 영수증",
-                  ocrData.paidAt || getKoreanTimeString(),
-                  ocrData.merchantName || "확인 불가",
-                  bNum,
-                  amt,
-                  vat,
-                  ocrData.cardIssuer || "-",
-                  ocrData.cardNumber || "-",
-                  ocrData.approvalNumber || "-",
-                  ocrData.details || "-",
-                ]],
-                preferOAuth: true,
-              }).catch(() => {});
-
-              const usedTokens = Math.round(1200 * 0.5);
-              await deductTokens(cleanEmail, usedTokens).catch(() => {});
-
-              void recordAiUsageLog({
-                userEmail: cleanEmail,
-                caller: "sheetbot-receipt-batch-fast",
-                purpose: `영수증 AI 장부화 [AI 배치(50% 절감)] (${configuredModel} / 0.5x)`,
-                model: configuredModel,
-                promptTokens: 400,
-                completionTokens: 200,
-                totalTokens: usedTokens,
-                promptText: `Fast-Check 영수증 분석: ${capturedTargetFileName}`,
-                responseText: JSON.stringify(ocrData).slice(0, 300),
-              });
-
-              const nowStr = getKoreanTimeString();
-              await updateRows("sheetbot_ai_batch_jobs", {
-                status: "SUCCEEDED",
-                completed_at: nowStr,
-                updated_at: nowStr,
-              }, { ids: [Number(batchJobId)] }).catch(() => {});
             } else {
-              console.log(`[FilesUpload] [Zero-Block] Batch job ${batchSubmitRes.jobName} is processing. Delegated to Async Sweeper.`);
-            }
-          } else {
-            // Fallback: 배치 제출 실패 시 실시간 AI Caller 호출 안전망
-            console.warn("[FilesUpload] Batch submit failed, falling back to direct AI Caller:", batchSubmitRes.error);
-            const fallbackResult = await performAiOcr(base64File, capturedTargetFileName, capturedMimeType, "RECEIPT", configuredModel);
-            if (fallbackResult) {
-              const bNum = formatBusinessNumber(fallbackResult.businessNumber);
-              const amt = fallbackResult.amount ? Number(String(fallbackResult.amount).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
-              const vat = fallbackResult.vat ? Number(String(fallbackResult.vat).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
-              await callSheetsTool("sheets_update_range", {
-                spreadsheetId: targetSpreadsheetId,
-                range: `시트1!B${rowToUpdate}:K${rowToUpdate}`,
-                values: [[
-                  fallbackResult.receiptType || "신용카드 영수증",
-                  fallbackResult.paidAt || getKoreanTimeString(),
-                  fallbackResult.merchantName || "확인 불가",
-                  bNum,
-                  amt,
-                  vat,
-                  fallbackResult.cardIssuer || "-",
-                  fallbackResult.cardNumber || "-",
-                  fallbackResult.approvalNumber || "-",
-                  fallbackResult.details || "-",
-                ]],
-                preferOAuth: true,
-              }).catch(() => {});
-              const usedTokens = Math.round(1200);
-              await deductTokens(cleanEmail, usedTokens).catch(() => {});
+              console.warn("[FilesUpload] Batch submit failed, falling back to direct AI Caller:", batchSubmitRes.error);
+              const fallbackResult = await performAiOcr(base64File, capturedTargetFileName, capturedMimeType, "RECEIPT", configuredModel);
+              if (fallbackResult) {
+                const bNum = formatBusinessNumber(fallbackResult.businessNumber);
+                const amt = fallbackResult.amount ? Number(String(fallbackResult.amount).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
+                const vat = fallbackResult.vat ? Number(String(fallbackResult.vat).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
+                await callSheetsTool("sheets_update_range", {
+                  spreadsheetId: targetSpreadsheetId,
+                  range: `시트1!B${rowToUpdate}:K${rowToUpdate}`,
+                  values: [[
+                    fallbackResult.receiptType || "신용카드 영수증",
+                    fallbackResult.paidAt || getKoreanTimeString(),
+                    fallbackResult.merchantName || "확인 불가",
+                    bNum,
+                    amt,
+                    vat,
+                    fallbackResult.cardIssuer || "-",
+                    fallbackResult.cardNumber || "-",
+                    fallbackResult.approvalNumber || "-",
+                    fallbackResult.details || "-",
+                  ]],
+                  preferOAuth: true,
+                }).catch(() => {});
+                const usedTokens = Math.round(1200);
+                await deductTokens(cleanEmail, usedTokens).catch(() => {});
+              }
             }
           }
+
+          // 감사 로그 적재 (영수증 및 일반 파일)
+          let ruleId = "FILE_UPLOAD";
+          let ruleName = "📁 구글 드라이브 파일 업로드";
+          let contentSummary = `[${targetFolderName}] ${capturedTargetFileName} (${capturedFileSizeMb})`;
+
+          if (capturedOcrType === "RECEIPT") {
+            ruleId = "RECEIPT_OCR";
+            ruleName = "🧾 영수증 AI OCR 장부화";
+            contentSummary = `[영수증 OCR] ${capturedTargetFileName} -> ${defaultSheetTitle}`;
+          }
+
+          const logId = Date.now();
+          await insertRows("sheetbot_user_dispatch_logs", [
+            {
+              id: logId,
+              user_email: cleanEmail,
+              rule_id: ruleId,
+              rule_name: ruleName,
+              device_id: capturedDeviceId,
+              recipient: "Google Drive / Sheet",
+              content: contentSummary,
+              status: "SUCCESS",
+              error_message: null,
+              created_at: getKoreanTimeString(),
+            },
+          ]).catch(() => {});
+        } catch (bgErr: any) {
+          console.warn("[FilesUpload] Background pipeline error:", bgErr.message);
         }
-
-        // 3. 감사 로그 적재
-        let ruleId = "FILE_UPLOAD";
-        let ruleName = "📁 구글 드라이브 파일 업로드";
-        let contentSummary = `[${targetFolderName}] ${capturedTargetFileName} (${capturedFileSizeMb})`;
-
-        if (capturedOcrType === "RECEIPT") {
-          ruleId = "RECEIPT_OCR";
-          ruleName = "🧾 영수증 AI OCR 장부화";
-          contentSummary = `[영수증 OCR] ${capturedTargetFileName} -> ${defaultSheetTitle}`;
-        } else if (capturedOcrType === "BUSINESS_CARD") {
-          ruleId = "BUSINESS_CARD_OCR";
-          ruleName = "🪪 명함 AI OCR 인맥 등록";
-          contentSummary = `[명함 OCR] ${capturedTargetFileName} -> ${defaultSheetTitle}`;
-        }
-
-        const logId = Date.now();
-        await insertRows("sheetbot_user_dispatch_logs", [
-          {
-            id: logId,
-            user_email: cleanEmail,
-            rule_id: ruleId,
-            rule_name: ruleName,
-            device_id: capturedDeviceId,
-            recipient: "Google Drive / Sheet",
-            content: contentSummary,
-            status: "SUCCESS",
-            error_message: null,
-            created_at: getKoreanTimeString(),
-          },
-        ]).catch(() => {});
-      } catch (bgErr: any) {
-        console.warn("[FilesUpload] Background pipeline error:", bgErr.message);
-      }
-    })();
+      })();
+    }
 
     const successResponse = {
       success: true,
@@ -708,6 +693,9 @@ export async function POST(req: NextRequest) {
       folderName: targetFolderName,
       folderId: targetFolderId,
       webViewLink,
+      spreadsheetUrl: cardSpreadsheetUrl || undefined,
+      ocrData: cardOcrResult || undefined,
+      cardData: cardOcrResult || undefined,
     };
 
     recentFileUploads.set(dedupKey, { timestamp: nowTs, response: successResponse });

@@ -37,6 +37,60 @@ class PhoneCallReceiver : BroadcastReceiver() {
         private var savedIncomingNumber: String? = null
         private var isIncomingAnswered = false
         private var callStartTime = 0L
+
+        /**
+         * 모바일 명함 문자 즉시 전송 (웹 명함 링크 모드)
+         */
+        fun sendBusinessCardSms(context: Context, phoneNumber: String, contactName: String?, onComplete: ((Boolean) -> Unit)? = null) {
+            val prefs = PreferencesManager(context)
+            val template = prefs.businessCardSmsTemplate.trim()
+            val webLink = prefs.businessCardWebLink.trim()
+            val finalMessage = if (webLink.isNotBlank() && !template.contains(webLink)) {
+                "$template\n▶ 모바일 명함: $webLink"
+            } else {
+                template
+            }
+            val userEmail = prefs.userEmail
+
+            CoroutineScope(Dispatchers.IO).launch {
+                val isSent = SmsSenderUtil.sendSms(context, phoneNumber, finalMessage)
+                if (isSent) {
+                    Log.i(TAG, "🎉 [모바일 명함 발송 성공] 대상: $phoneNumber")
+                    if (prefs.isTtsEnabled) {
+                        TtsManager.speak(context, "상대방에게 모바일 명함이 성공적으로 발송되었습니다.")
+                    }
+
+                    // [SheetBot] 모바일 명함 발송 대장에 실시간 기록
+                    if (!userEmail.isNullOrBlank()) {
+                        ApiClient.sendBusinessCardSync(
+                            userEmail = userEmail,
+                            recipientPhone = phoneNumber,
+                            contactName = contactName,
+                            sendMode = "스마트 웹 명함(0원)",
+                            cardContentOrUrl = finalMessage,
+                            status = "전송 완료"
+                        )
+                    }
+
+                    // 구글 시트 일반 문자 대장에도 발신 기록 동기화
+                    if (!userEmail.isNullOrBlank() && prefs.isSmsSheetSyncEnabled) {
+                        ApiClient.sendSmsSync(
+                            userEmail = userEmail,
+                            direction = "OUTBOUND",
+                            phoneNumber = phoneNumber,
+                            contactName = contactName,
+                            message = finalMessage,
+                            sheetTitle = prefs.smsDriveSheetTitle
+                        )
+                    }
+                }
+                onComplete?.invoke(isSent)
+            }
+
+            // 알림 닫기
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.cancel(2001)
+        }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -233,58 +287,7 @@ class PhoneCallReceiver : BroadcastReceiver() {
         manager.notify(2001, notification)
     }
 
-    /**
-     * 모바일 명함 문자 즉시 전송 (웹 명함 링크 모드)
-     */
-    private fun sendBusinessCardSms(context: Context, phoneNumber: String, contactName: String?) {
-        val prefs = PreferencesManager(context)
-        val template = prefs.businessCardSmsTemplate.trim()
-        val webLink = prefs.businessCardWebLink.trim()
-        val finalMessage = if (webLink.isNotBlank() && !template.contains(webLink)) {
-            "$template\n▶ 모바일 명함: $webLink"
-        } else {
-            template
-        }
-        val userEmail = prefs.userEmail
 
-        CoroutineScope(Dispatchers.IO).launch {
-            val isSent = SmsSenderUtil.sendSms(context, phoneNumber, finalMessage)
-            if (isSent) {
-                Log.i(TAG, "🎉 [모바일 명함 발송 성공] 대상: $phoneNumber")
-                if (prefs.isTtsEnabled) {
-                    TtsManager.speak(context, "상대방에게 모바일 명함이 성공적으로 발송되었습니다.")
-                }
-
-                // [SheetBot] 모바일 명함 발송 대장에 실시간 기록
-                if (!userEmail.isNullOrBlank()) {
-                    ApiClient.sendBusinessCardSync(
-                        userEmail = userEmail,
-                        recipientPhone = phoneNumber,
-                        contactName = contactName,
-                        sendMode = "스마트 웹 명함(0원)",
-                        cardContentOrUrl = finalMessage,
-                        status = "전송 완료"
-                    )
-                }
-
-                // 구글 시트 일반 문자 대장에도 발신 기록 동기화
-                if (!userEmail.isNullOrBlank() && prefs.isSmsSheetSyncEnabled) {
-                    ApiClient.sendSmsSync(
-                        userEmail = userEmail,
-                        direction = "OUTBOUND",
-                        phoneNumber = phoneNumber,
-                        contactName = contactName,
-                        message = finalMessage,
-                        sheetTitle = prefs.smsDriveSheetTitle
-                    )
-                }
-            }
-        }
-
-        // 알림 닫기
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.cancel(2001)
-    }
 
     private fun showMissedCallNotification(context: Context, nameOrPhone: String, autoReplied: Boolean) {
         ensureNotificationChannel(context)
