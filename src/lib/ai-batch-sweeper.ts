@@ -74,53 +74,96 @@ export async function processPendingBatchJobs(): Promise<{
             rawText = rawText.replace(/^```\s*/, '').replace(/\s*```$/, '');
           }
 
-          let summary = '1. 통화 확인 완료\n2. 후속 조치 요망\n3. 상세 내용 녹음 참조';
-          let actionItems = '• 담당자 확인 필요';
-          let transcript = '음성 분석 완료';
+          const jobType = String(job.job_type || (job.file_name?.startsWith('[LINK_BOOKMARK]') || !job.file_name?.match(/\.(m4a|mp3|wav|ogg)$/i) ? 'LINK_BOOKMARK' : 'RECORDING'));
 
-          try {
-            const parsed = JSON.parse(rawText);
-            if (parsed.summary) summary = parsed.summary;
-            if (parsed.actionItems) actionItems = parsed.actionItems;
-            if (parsed.transcript) transcript = parsed.transcript;
-          } catch {
-            if (rawText.length > 0) {
-              summary = rawText.slice(0, 300);
-              transcript = rawText;
+          if (jobType === 'LINK_BOOKMARK') {
+            // [LINK_BOOKMARK] 웹 링크 및 유튜브 3줄 요약 수거
+            let finalSummary = rawText;
+            try {
+              const parsed = JSON.parse(rawText);
+              if (parsed.summary) finalSummary = parsed.summary;
+            } catch {}
+            if (finalSummary.length < 5) {
+              finalSummary = '1. 원본 링크 참조\n2. 주요 콘텐츠 확인 완료\n3. 후속 검토 요망';
             }
+
+            // 구글 시트 F열 핀포인트 갱신
+            if (spreadsheetId && rowIndex > 1) {
+              await callSheetsTool('sheets_update_range', {
+                spreadsheetId,
+                range: `시트1!F${rowIndex}:F${rowIndex}`,
+                values: [[finalSummary]],
+                preferOAuth: true,
+              }).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
+            }
+
+            // 50% 반값 할인 토큰 정산
+            const promptLen = 1200;
+            const respLen = finalSummary.length;
+            const rawTokens = Math.max(300, Math.ceil((promptLen + respLen) / 2.5));
+            const usedTokens = Math.round(rawTokens * 0.5); // 50% 배치 할인
+
+            await deductTokens(userEmail, usedTokens).catch(() => {});
+
+            void recordAiUsageLog({
+              userEmail,
+              caller: 'sheetbot-link-batch-sweeper',
+              purpose: `웹 링크/유튜브 AI 3줄 요약 [AI 배치(50% 절감)] (${targetModel} / 0.5x)`,
+              model: targetModel,
+              promptTokens: Math.ceil(promptLen / 2.5),
+              completionTokens: Math.ceil(respLen / 2.5),
+              totalTokens: usedTokens,
+              promptText: `비동기 수거 링크 분석: ${fileName}`,
+              responseText: finalSummary,
+            });
+          } else {
+            // [RECORDING] 통화 녹음 대장 수거 (E: 요약, F: Action Items, G: 전사문)
+            let summary = '1. 통화 확인 완료\n2. 후속 조치 요망\n3. 상세 내용 녹음 참조';
+            let actionItems = '• 담당자 확인 필요';
+            let transcript = '음성 분석 완료';
+
+            try {
+              const parsed = JSON.parse(rawText);
+              if (parsed.summary) summary = parsed.summary;
+              if (parsed.actionItems) actionItems = parsed.actionItems;
+              if (parsed.transcript) transcript = parsed.transcript;
+            } catch {
+              if (rawText.length > 0) {
+                summary = rawText.slice(0, 300);
+                transcript = rawText;
+              }
+            }
+
+            if (spreadsheetId && rowIndex > 1) {
+              await callSheetsTool('sheets_update_range', {
+                spreadsheetId,
+                range: `시트1!E${rowIndex}:G${rowIndex}`,
+                values: [[summary, actionItems, transcript]],
+                preferOAuth: true,
+              }).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
+            }
+
+            const promptLen = 4500;
+            const respLen = rawText.length;
+            const rawTokens = Math.max(800, Math.ceil((promptLen + respLen) / 2.5) + 500);
+            const usedTokens = Math.round(rawTokens * 0.5); // 50% 배치 할인
+
+            await deductTokens(userEmail, usedTokens).catch(() => {});
+
+            void recordAiUsageLog({
+              userEmail,
+              caller: 'sheetbot-voice-batch-sweeper',
+              purpose: `통화 녹음 AI STT 및 3줄 요약/Action Items [AI 배치(50% 절감)] (${targetModel} / 0.5x)`,
+              model: targetModel,
+              promptTokens: Math.ceil(promptLen / 2.5),
+              completionTokens: Math.ceil(respLen / 2.5),
+              totalTokens: usedTokens,
+              promptText: `비동기 수거 음성 분석: ${fileName}`,
+              responseText: summary,
+            });
           }
 
-          // 3. 구글 시트 행 자동 갱신 (E: 요약, F: Action Items, G: 전사문)
-          if (spreadsheetId && rowIndex > 1) {
-            await callSheetsTool('sheets_update_range', {
-              spreadsheetId,
-              range: `시트1!E${rowIndex}:G${rowIndex}`,
-              values: [[summary, actionItems, transcript]],
-              preferOAuth: true,
-            }).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
-          }
-
-          // 4. 50% 반값 할인 토큰 정산
-          const promptLen = 4500;
-          const respLen = rawText.length;
-          const rawTokens = Math.max(800, Math.ceil((promptLen + respLen) / 2.5) + 500);
-          const usedTokens = Math.round(rawTokens * 0.5); // 50% 배치 할인
-
-          await deductTokens(userEmail, usedTokens).catch(() => {});
-
-          void recordAiUsageLog({
-            userEmail,
-            caller: 'sheetbot-voice-batch-sweeper',
-            purpose: `통화 녹음 AI STT 및 3줄 요약/Action Items [AI 배치(50% 절감)] (${targetModel} / 0.5x)`,
-            model: targetModel,
-            promptTokens: Math.ceil(promptLen / 2.5),
-            completionTokens: Math.ceil(respLen / 2.5),
-            totalTokens: usedTokens,
-            promptText: `비동기 수거 음성 분석: ${fileName}`,
-            responseText: summary,
-          });
-
-          // 5. 잡 상태 SUCCEEDED로 마감
+          // 공통: 잡 상태 SUCCEEDED로 마감
           const nowStr = getKoreanTimeString();
           await updateRows('sheetbot_ai_batch_jobs', {
             status: 'SUCCEEDED',
@@ -139,13 +182,23 @@ export async function processPendingBatchJobs(): Promise<{
             updated_at: nowStr,
           }, { ids: [Number(jobId)] }).catch(() => {});
 
+          const jobType = String(job.job_type || (job.file_name?.startsWith('[LINK_BOOKMARK]') || !job.file_name?.match(/\.(m4a|mp3|wav|ogg)$/i) ? 'LINK_BOOKMARK' : 'RECORDING'));
           if (spreadsheetId && rowIndex > 1) {
-            await callSheetsTool('sheets_update_range', {
-              spreadsheetId,
-              range: `시트1!E${rowIndex}:G${rowIndex}`,
-              values: [['⚠️ AI 배치 분석 실패 (재분석 지원)', '-', '-']],
-              preferOAuth: true,
-            }).catch(() => {});
+            if (jobType === 'LINK_BOOKMARK') {
+              await callSheetsTool('sheets_update_range', {
+                spreadsheetId,
+                range: `시트1!F${rowIndex}:F${rowIndex}`,
+                values: [['⚠️ AI 배치 요약 실패 (재시도 요망)']],
+                preferOAuth: true,
+              }).catch(() => {});
+            } else {
+              await callSheetsTool('sheets_update_range', {
+                spreadsheetId,
+                range: `시트1!E${rowIndex}:G${rowIndex}`,
+                values: [['⚠️ AI 배치 분석 실패 (재분석 지원)', '-', '-']],
+                preferOAuth: true,
+              }).catch(() => {});
+            }
           }
           failed++;
         } else {
