@@ -70,7 +70,7 @@ function normalizeImageUrl(url?: string | null): string | null {
   if (!url) return null;
   const match = url.match(/quote_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
   if (match) {
-    return `https://cdn.jsdelivr.net/gh/Charismagreat/SheetBot@main/public/uploads/quote-images/${match[0]}`;
+    return `https://raw.githubusercontent.com/Charismagreat/SheetBot/main/public/uploads/quote-images/${match[0]}`;
   }
   return url;
 }

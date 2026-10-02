@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
       if (customImageUrl) {
         const match = customImageUrl.match(/quote_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
         if (match) {
-          customImageUrl = `https://cdn.jsdelivr.net/gh/Charismagreat/SheetBot@main/public/uploads/quote-images/${match[0]}`;
+          customImageUrl = `https://raw.githubusercontent.com/Charismagreat/SheetBot/main/public/uploads/quote-images/${match[0]}`;
         }
       }
 
