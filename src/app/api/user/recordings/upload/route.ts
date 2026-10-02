@@ -23,6 +23,7 @@ import { getAiModelSettings } from "@/lib/ai-settings";
 import { uploadDriveFileWithBridge } from "@/lib/drive-upload-helper";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import { processPendingBatchJobs } from "@/lib/ai-batch-sweeper";
+import { resolveSafeTargetRow } from "@/lib/sheet-fingerprint-guard";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -141,10 +142,10 @@ export async function POST(req: NextRequest) {
       try {
         writeDebugLog(`Step 4: Searching custom folder ${targetFolderName}...`);
         const folderSearch = (await Promise.race([
-          listDriveFiles({
-            query: `mimeType = 'application/vnd.google-apps.folder' and name = '${targetFolderName}' and trashed = false`,
-            preferOAuth: true,
-          }),
+          listDriveFiles(
+            { query: `mimeType = 'application/vnd.google-apps.folder' and name = '${targetFolderName}' and trashed = false` },
+            { preferOAuth: true }
+          ),
           new Promise((_, reject) => setTimeout(() => reject(new Error("Folder search timeout")), 4000)),
         ])) as any;
 
@@ -180,11 +181,10 @@ export async function POST(req: NextRequest) {
       writeDebugLog(`Step 5 warning: ${uploadErr.message}. Checking if file was already created in Drive...`);
       // [Fail-Safe Recovery] 구글 드라이브 MCP 클라이언트 응답 타임아웃이 발생해도 드라이브에 파일이 생성되었는지 확인
       try {
-        const checkRes = await listDriveFiles({
-          folderId: targetFolderId || undefined,
-          query: `name = '${targetFileName}' and trashed = false`,
-          preferOAuth: true,
-        });
+        const checkRes = await listDriveFiles(
+          { folderId: targetFolderId || undefined, query: `name = '${targetFileName}' and trashed = false` },
+          { preferOAuth: true }
+        );
         const foundFiles = checkRes?.files || [];
         if (foundFiles.length > 0) {
           driveFileId = foundFiles[0].id;
@@ -599,7 +599,7 @@ async function triggerAiAudioAnalysis(
     const promptLen = prompt.length;
     const respLen = rawText.length;
     const rawTokens = Math.max(800, Math.ceil((promptLen + respLen) / 2.5) + 500);
-    const baseMultiplier = aiSettings.tokenMultiplier || 1.0;
+    const baseMultiplier = (aiSettings as any).tokenMultiplier || 1.0;
     const batchDiscountRate = isBatchSuccess ? 0.5 : 1.0; // 배치 50% 할인
     const usedTokens = Math.round(rawTokens * baseMultiplier * batchDiscountRate);
 
@@ -619,26 +619,46 @@ async function triggerAiAudioAnalysis(
       responseText: summary,
     });
 
-    // 6. 구글 시트 행 업데이트 (E열: 3줄 요약, F열: Action Items, G열: 전사 텍스트)
+    // 6. 🛡️ 지능형 행 핑거프린트 가드: 구글 시트 행 업데이트 전 사용자 삭제/이동 점검
     if (spreadsheetId && rowIndex && rowIndex > 1) {
-      await callSheetsTool("sheets_update_range", {
+      const guardRes = await resolveSafeTargetRow({
         spreadsheetId,
-        range: `시트1!E${rowIndex}:G${rowIndex}`,
-        values: [[summary, actionItems, transcript]],
-        preferOAuth: true,
-      }).catch((e: any) => console.warn("[AiAudioAnalysis] Sheet update warning:", e.message));
+        expectedRow: rowIndex,
+        fileName,
+      });
+
+      const safeRow = guardRes.safeRow;
+      if (safeRow && safeRow > 1) {
+        await callSheetsTool("sheets_update_range", {
+          spreadsheetId,
+          range: `시트1!E${safeRow}:G${safeRow}`,
+          values: [[summary, actionItems, transcript]],
+          preferOAuth: true,
+        }).catch((e: any) => console.warn("[AiAudioAnalysis] Sheet update warning:", e.message));
+      } else {
+        console.warn(`[AiAudioAnalysis] 🛑 Target row for ${fileName} was deleted by user (${guardRes.reason}). Skipping sheet update.`);
+      }
     }
 
     console.log(`[AiAudioAnalysis] Audio ${fileName} analyzed via ${modeLabel} & ${usedTokens} tokens deducted for ${cleanEmail}.`);
   } catch (err: any) {
     console.warn("[AiAudioAnalysis] Background audio analysis failed:", err.message);
     if (spreadsheetId && rowIndex && rowIndex > 1) {
-      await callSheetsTool("sheets_update_range", {
+      const guardRes = await resolveSafeTargetRow({
         spreadsheetId,
-        range: `시트1!E${rowIndex}:G${rowIndex}`,
-        values: [[`⚠️ AI 분석 일시 지연 (${err.message?.slice(0, 40) || "파일 형식 확인 요망"})`, "-", "-"]],
-        preferOAuth: true,
-      }).catch(() => {});
+        expectedRow: rowIndex,
+        fileName,
+      }).catch(() => ({ safeRow: null }));
+
+      const safeRow = guardRes.safeRow;
+      if (safeRow && safeRow > 1) {
+        await callSheetsTool("sheets_update_range", {
+          spreadsheetId,
+          range: `시트1!E${safeRow}:G${safeRow}`,
+          values: [[`⚠️ AI 분석 일시 지연 (${err.message?.slice(0, 40) || "파일 형식 확인 요망"})`, "-", "-"]],
+          preferOAuth: true,
+        }).catch(() => {});
+      }
     }
   }
 }
