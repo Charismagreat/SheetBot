@@ -23,6 +23,23 @@ function formatBusinessNumber(raw: any): string {
 }
 
 let isSweeperRunning = false;
+let sweeperInterval: NodeJS.Timeout | null = null;
+
+export function ensureBatchSweeperLoop(): void {
+  if (typeof window !== "undefined") return;
+  if (sweeperInterval) return;
+
+  // 45초 주기 백그라운드 PENDING 잡 자생적 자동 점검
+  sweeperInterval = setInterval(() => {
+    void processPendingBatchJobs().catch((err) => {
+      console.warn("[BatchSweeper] Background loop error:", err?.message);
+    });
+  }, 45000);
+
+  if (typeof (sweeperInterval as any)?.unref === "function") {
+    (sweeperInterval as any).unref();
+  }
+}
 
 export async function processPendingBatchJobs(): Promise<{
   processed: number;
@@ -30,6 +47,8 @@ export async function processPendingBatchJobs(): Promise<{
   failed: number;
   pending: number;
 }> {
+  ensureBatchSweeperLoop();
+
   if (isSweeperRunning) {
     return { processed: 0, succeeded: 0, failed: 0, pending: 0 };
   }
