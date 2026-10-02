@@ -120,7 +120,14 @@ export async function POST(req: NextRequest) {
     fs.writeFileSync(tempFilePath, buffer);
     writeDebugLog(`Step 3: Saved temp file to ${tempFilePath}`);
 
-    const fileSizeMb = (buffer.length / (1024 * 1024)).toFixed(2) + " MB";
+    function formatBytes(bytes: number): string {
+      if (!bytes || bytes <= 0) return "0 Bytes";
+      if (bytes < 1024) return `${bytes} Bytes`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    }
+
+    const fileSizeMb = formatBytes(buffer.length);
 
     // 4. 구글 드라이브 대상 폴더 탐색 및 생성
     let targetFolderId: string | null = null;
@@ -183,54 +190,87 @@ export async function POST(req: NextRequest) {
         const targetSpreadsheetId = resolved.spreadsheetId;
         spreadsheetUrl = resolved.spreadsheetUrl;
 
-        if (resolved.isNew && targetSpreadsheetId) {
-          // 초기 헤더 서식 기입 (AI 분석 컬럼 포함 8대 표준 열)
-          const headers = [
-            ["통화일시", "상대방 (이름/번호)", "파일명", "파일크기", "AI 3줄 핵심 요약", "후속 할 일 (Action Items)", "전체 텍스트 전사(STT)", "구글 드라이브 바로듣기 링크"]
-          ];
-          await callSheetsTool("sheets_update_range", {
-            spreadsheetId: targetSpreadsheetId,
-            range: "A1:H1",
-            values: headers,
-            preferOAuth: true,
-          }).catch(() => {});
+        const STANDARD_RECORDING_HEADERS = [
+          "통화 일시",
+          "상대방",
+          "파일명",
+          "파일 크기",
+          "AI 3줄 핵심 요약",
+          "후속 할 일 (Action Items)",
+          "전체 텍스트 전사(STT)",
+          "구글 드라이브 바로듣기 링크"
+        ];
 
-          // 헤더 서식 스타일링
-          await callSheetsTool("sheets_format_headers", {
-            spreadsheetId: targetSpreadsheetId,
-            tabName: "시트1",
-            headerBgColor: "#1e293b",
-            headerTextColor: "#ffffff",
-            preferOAuth: true,
-          }).catch(() => {});
-        }
-
-        // 6-3. 시트에 신규 통화 기록 행 추가
         if (targetSpreadsheetId) {
-          let targetRowIndex: number | null = null;
+          // 기존 시트의 1행 헤더 확인 및 8대 표준 자동 보장
           try {
-            const rangeRes = await callSheetsTool("sheets_get_range", {
+            const headerCheck = await callSheetsTool("sheets_get_range", {
               spreadsheetId: targetSpreadsheetId,
-              range: "시트1!A:A",
+              range: "시트1!A1:H1",
               preferOAuth: true,
             });
-            const currentRows = rangeRes?.values?.length || 1;
-            targetRowIndex = currentRows + 1;
+            const existingHeaders = headerCheck?.values?.[0] || [];
+            if (existingHeaders.length < 8 || existingHeaders[4] !== STANDARD_RECORDING_HEADERS[4]) {
+              await callSheetsTool("sheets_update_range", {
+                spreadsheetId: targetSpreadsheetId,
+                range: "시트1!A1:H1",
+                values: [STANDARD_RECORDING_HEADERS],
+                preferOAuth: true,
+              }).catch(() => {});
+
+              await callSheetsTool("sheets_format_headers", {
+                spreadsheetId: targetSpreadsheetId,
+                tabName: "시트1",
+                headerBgColor: "#1e293b",
+                headerTextColor: "#ffffff",
+                preferOAuth: true,
+              }).catch(() => {});
+            }
+          } catch {}
+
+          // 6-3. 중복 파일 검사 및 행 추가/갱신
+          let targetRowIndex: number | null = null;
+          let isDuplicate = false;
+          try {
+            const filesCheck = await callSheetsTool("sheets_get_range", {
+              spreadsheetId: targetSpreadsheetId,
+              range: "시트1!C:C",
+              preferOAuth: true,
+            });
+            const existingFiles: string[] = (filesCheck?.values || []).map((row: any[]) => String(row[0] || ""));
+            const matchIndex = existingFiles.findIndex((name, idx) => idx > 0 && name === targetFileName);
+            if (matchIndex !== -1) {
+              isDuplicate = true;
+              targetRowIndex = matchIndex + 1; // 1-indexed row number
+            } else {
+              targetRowIndex = existingFiles.length + 1;
+            }
           } catch {
             targetRowIndex = null;
           }
 
-          const initialRowValues = [
-            [callTime, contactName, targetFileName, fileSizeMb, "⏳ AI 분석 준비 중...", "⏳ AI 분석 준비 중...", "⏳ 음성 전사 준비 중...", webViewLink]
-          ];
-          await callSheetsTool("sheets_append_values", {
-            spreadsheetId: targetSpreadsheetId,
-            range: "A:H",
-            values: initialRowValues,
-            preferOAuth: true,
-          }).catch((err: any) => {
-            console.warn("[RecordingsUpload] append_values warning:", err.message);
-          });
+          if (isDuplicate && targetRowIndex) {
+            // 이미 존재하는 행의 링크 및 정보 갱신
+            await callSheetsTool("sheets_update_range", {
+              spreadsheetId: targetSpreadsheetId,
+              range: `시트1!D${targetRowIndex}:H${targetRowIndex}`,
+              values: [[fileSizeMb, "⏳ AI 분석 준비 중...", "⏳ AI 분석 준비 중...", "⏳ 음성 전사 준비 중...", webViewLink]],
+              preferOAuth: true,
+            }).catch(() => {});
+          } else {
+            // 신규 행 추가
+            const initialRowValues = [
+              [callTime, contactName, targetFileName, fileSizeMb, "⏳ AI 분석 준비 중...", "⏳ AI 분석 준비 중...", "⏳ 음성 전사 준비 중...", webViewLink]
+            ];
+            await callSheetsTool("sheets_append_values", {
+              spreadsheetId: targetSpreadsheetId,
+              range: "시트1!A:H",
+              values: initialRowValues,
+              preferOAuth: true,
+            }).catch((err: any) => {
+              console.warn("[RecordingsUpload] append_values warning:", err.message);
+            });
+          }
 
           // 6-4. 비동기 백그라운드 AI 음성 전사(STT) 및 3줄 요약 실행
           const base64Audio = buffer.toString("base64");
@@ -304,14 +344,28 @@ async function triggerAiAudioAnalysis(
   try {
     const cleanEmail = userEmail.toLowerCase().trim();
 
-    // 1. 잔여 토큰 사전 점검 (음성 STT 및 분석용 최소 500 토큰)
+    // 1. 최소 오디오 크기 검사 (1KB 미만은 더미/손상 파일이므로 API 에러 방지)
+    const audioBytesLen = Buffer.byteLength(base64Audio, "base64");
+    if (audioBytesLen < 1024) {
+      if (spreadsheetId && rowIndex && rowIndex > 1) {
+        await callSheetsTool("sheets_update_range", {
+          spreadsheetId,
+          range: `시트1!E${rowIndex}:G${rowIndex}`,
+          values: [["⚠️ 테스트 파일 (음성 파형 없음)", "-", "-"]],
+          preferOAuth: true,
+        }).catch(() => {});
+      }
+      return;
+    }
+
+    // 2. 잔여 토큰 사전 점검 (음성 STT 및 분석용 최소 500 토큰)
     const balanceCheck = await checkTokenBalance(cleanEmail, 500);
     if (!balanceCheck.allowed) {
       const noTokenMsg = "⚠️ 잔여 토큰 부족으로 AI 음성 분석이 생략되었습니다. (충전 후 정상 분석)";
       if (spreadsheetId && rowIndex && rowIndex > 1) {
         await callSheetsTool("sheets_update_range", {
           spreadsheetId,
-          range: `E${rowIndex}:G${rowIndex}`,
+          range: `시트1!E${rowIndex}:G${rowIndex}`,
           values: [[noTokenMsg, "-", "-"]],
           preferOAuth: true,
         }).catch(() => {});
@@ -319,8 +373,21 @@ async function triggerAiAudioAnalysis(
       return;
     }
 
-    const aiSettings = await getAiModelSettings().catch(() => ({ defaultModel: "gemini-3.8-flash", tokenMultiplier: 1.0 }));
-    const targetModel = aiSettings.defaultModel || "gemini-3.8-flash";
+    // 3. 오디오 분석 최적화 모델 (gemini-2.5-flash 기본 타겟)
+    const aiSettings = await getAiModelSettings().catch(() => ({ defaultModel: "gemini-2.5-flash", tokenMultiplier: 1.0 }));
+    let targetModel = aiSettings.defaultModel || "gemini-2.5-flash";
+    if (targetModel.includes("3.8") || targetModel.includes("3.5")) {
+      targetModel = "gemini-2.5-flash";
+    }
+
+    // 파일 확장자에 따른 적정 MIME 타입 매핑
+    let mimeType = "audio/mp4";
+    const lowerName = fileName.toLowerCase();
+    if (lowerName.endsWith(".mp3")) mimeType = "audio/mp3";
+    else if (lowerName.endsWith(".wav")) mimeType = "audio/wav";
+    else if (lowerName.endsWith(".aac")) mimeType = "audio/aac";
+    else if (lowerName.endsWith(".ogg")) mimeType = "audio/ogg";
+    else if (lowerName.endsWith(".flac")) mimeType = "audio/flac";
 
     const prompt = `당신은 비즈니스 통화 녹음 분석 전문 AI입니다.
 첨부된 통화 녹음 파일("${fileName}")의 음성을 정밀하게 분석하여 다음 JSON 포맷으로만 답변하세요. 마크다운 따옴표나 기타 텍스트 없이 순수 JSON만 반환하세요:
@@ -339,7 +406,7 @@ async function triggerAiAudioAnalysis(
           name: fileName,
           content: base64Audio,
           encoding: "base64",
-          mimeType: "audio/mp4",
+          mimeType: mimeType,
         },
       ],
     });
@@ -367,7 +434,7 @@ async function triggerAiAudioAnalysis(
       }
     }
 
-    // 2. 사용 토큰 계산 및 실제 차감 (오디오 STT 가중치 기본 500 + 입출력 토큰)
+    // 4. 사용 토큰 계산 및 실제 차감 (오디오 STT 가중치 기본 500 + 입출력 토큰)
     const promptLen = prompt.length;
     const respLen = rawText.length;
     const rawTokens = Math.max(800, Math.ceil((promptLen + respLen) / 2.5) + 500);
@@ -376,7 +443,7 @@ async function triggerAiAudioAnalysis(
 
     await deductTokens(cleanEmail, usedTokens);
 
-    // 3. AI 사용량 감사 로그 적재
+    // 5. AI 사용량 감사 로그 적재
     void recordAiUsageLog({
       userEmail: cleanEmail,
       caller: "sheetbot-voice-intelligence",
@@ -389,11 +456,11 @@ async function triggerAiAudioAnalysis(
       responseText: summary,
     });
 
-    // 4. 구글 시트 행 업데이트 (E열: 3줄 요약, F열: Action Items, G열: 전사 텍스트)
+    // 6. 구글 시트 행 업데이트 (E열: 3줄 요약, F열: Action Items, G열: 전사 텍스트)
     if (spreadsheetId && rowIndex && rowIndex > 1) {
       await callSheetsTool("sheets_update_range", {
         spreadsheetId,
-        range: `E${rowIndex}:G${rowIndex}`,
+        range: `시트1!E${rowIndex}:G${rowIndex}`,
         values: [[summary, actionItems, transcript]],
         preferOAuth: true,
       }).catch((e: any) => console.warn("[AiAudioAnalysis] Sheet update warning:", e.message));
@@ -402,5 +469,13 @@ async function triggerAiAudioAnalysis(
     console.log(`[AiAudioAnalysis] Audio ${fileName} analyzed & ${usedTokens} tokens deducted for ${cleanEmail}.`);
   } catch (err: any) {
     console.warn("[AiAudioAnalysis] Background audio analysis failed:", err.message);
+    if (spreadsheetId && rowIndex && rowIndex > 1) {
+      await callSheetsTool("sheets_update_range", {
+        spreadsheetId,
+        range: `시트1!E${rowIndex}:G${rowIndex}`,
+        values: [[`⚠️ AI 분석 일시 지연 (${err.message?.slice(0, 40) || "파일 형식 확인 요망"})`, "-", "-"]],
+        preferOAuth: true,
+      }).catch(() => {});
+    }
   }
 }
