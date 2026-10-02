@@ -61,6 +61,8 @@ const KNOWN_DEFAULT_BINDINGS: Record<string, Partial<Record<SheetBindingType, st
     MISSED_CALL: "1DqUqEECRjE2luuLoBuyV8RXYLccqRpbSSD2SZvTOAXo",
     PAYMENT_PUSH: "1CSxsEJEpiBXisqw8yAqz3paTqcraH2kzW6RCpQ07vx8",
     RECEIPT_SMS: "1Hi-hYZAGcmWDSSBpUhgEl6_Utc6iIguUiFClqEqas9I",
+    RECEIPT: "14t6C-90zNNN-NTXexP37fMOKX85gP9iTe3MIlM83RC4",
+    BUSINESS_CARD: "1GPMcTd7hxU2-ORZ32OX7Qz0tOnxMDNtSPqwKzqiS_AI",
     QUOTE: "1XCQMxao3uIhbXGh5kYlnXE5g9vH5mFBQ0cohJGyMl1U",
   },
 };
@@ -224,10 +226,11 @@ async function doResolveUserSpreadsheet(
   // 4. 드라이브 전체에도 없으면 그때에만 최초 1회 신규 생성
   if (!targetSpreadsheetId) {
     try {
-      const createRes = await callSheetsTool("sheets_create_spreadsheet", {
-        title: targetTitle,
-        preferOAuth,
-      });
+      const createRes = await callSheetsTool(
+        "sheets_create_spreadsheet",
+        { title: targetTitle },
+        { preferOAuth }
+      );
       targetSpreadsheetId = createRes?.spreadsheetId || createRes?.id || null;
       isNew = true;
 
