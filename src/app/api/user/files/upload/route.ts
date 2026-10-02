@@ -395,34 +395,99 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // 2. [Zero-Block AI Batch 파이프라인] (50% 토큰 절감 + 15초 Fast-Check + Async Sweeper)
-        if ((capturedOcrType === "RECEIPT" || capturedOcrType === "BUSINESS_CARD") && targetSpreadsheetId && targetRow) {
+        // 2-1. [초고속 실시간 AI 파이프라인] 명함 OCR (Instant CRM - 현장 즉시성 보장 / 3~5초 체감 UX)
+        if (capturedOcrType === "BUSINESS_CARD" && targetSpreadsheetId && targetRow) {
           const rowToUpdate = targetRow;
           const balanceCheck = await checkTokenBalance(cleanEmail, 300);
 
           if (!balanceCheck.allowed) {
             const noTokenMsg = "⚠️ 잔여 토큰 부족으로 AI 분석이 생략되었습니다. (충전 후 재시도 가능)";
-            if (capturedOcrType === "RECEIPT") {
+            await callSheetsTool("sheets_update_range", {
+              spreadsheetId: targetSpreadsheetId,
+              range: `시트1!B${rowToUpdate}:B${rowToUpdate}`,
+              values: [[noTokenMsg]],
+              preferOAuth: true,
+            }).catch(() => {});
+          } else {
+            const base64File = buffer.toString("base64");
+            const ocrResult = await performAiOcr(
+              base64File,
+              capturedTargetFileName,
+              capturedMimeType,
+              "BUSINESS_CARD",
+              configuredModel
+            );
+
+            if (ocrResult) {
+              // 🛡️ 지능형 행 핑거프린트 가드 (사용자가 처리 중 행을 임의 삭제/이동한 경우 오염 차단)
+              let safeRowToUpdate: number | null = rowToUpdate;
+              if (targetSpreadsheetId && rowToUpdate > 1) {
+                const guardRes = await resolveSafeTargetRow({
+                  spreadsheetId: targetSpreadsheetId,
+                  expectedRow: rowToUpdate,
+                  fileName: capturedTargetFileName,
+                  fileUrl: capturedWebViewLink,
+                });
+                safeRowToUpdate = guardRes.safeRow;
+                if (!safeRowToUpdate) {
+                  console.warn(`[FilesUpload] 🛑 Business Card OCR aborted: Row deleted by user (${guardRes.reason}).`);
+                  return;
+                }
+              }
+
               await callSheetsTool("sheets_update_range", {
                 spreadsheetId: targetSpreadsheetId,
-                range: `시트1!D${rowToUpdate}:D${rowToUpdate}`,
-                values: [[noTokenMsg]],
+                range: `시트1!B${safeRowToUpdate}:I${safeRowToUpdate}`,
+                values: [[
+                  ocrResult.name || "확인 불가",
+                  ocrResult.title || "미기재",
+                  ocrResult.company || "미기재",
+                  ocrResult.mobile || "미기재",
+                  ocrResult.email || "미기재",
+                  ocrResult.tel || "미기재",
+                  ocrResult.address || "미기재",
+                  ocrResult.details || "-",
+                ]],
                 preferOAuth: true,
               }).catch(() => {});
-            } else {
-              await callSheetsTool("sheets_update_range", {
-                spreadsheetId: targetSpreadsheetId,
-                range: `시트1!B${rowToUpdate}:B${rowToUpdate}`,
-                values: [[noTokenMsg]],
-                preferOAuth: true,
-              }).catch(() => {});
+
+              const usedTokens = 700;
+              await deductTokens(cleanEmail, usedTokens).catch(() => {});
+
+              void recordAiUsageLog({
+                userEmail: cleanEmail,
+                caller: "sheetbot-card-realtime",
+                purpose: `명함 실시간 AI 인맥 등록 [초고속 실시간] (${configuredModel})`,
+                model: configuredModel,
+                promptTokens: 450,
+                completionTokens: 250,
+                totalTokens: usedTokens,
+                promptText: `실시간 명함 분석: ${capturedTargetFileName}`,
+                responseText: JSON.stringify(ocrResult).slice(0, 300),
+              });
+              console.log(`[FilesUpload] ✅ Realtime Business Card OCR completed for row ${safeRowToUpdate}`);
             }
+          }
+        }
+
+        // 2-2. [Zero-Block AI Batch 파이프라인] 영수증 OCR (대량 결산 적재 - 50% 토큰 절감 + 15초 Fast-Check + Async Sweeper)
+        else if (capturedOcrType === "RECEIPT" && targetSpreadsheetId && targetRow) {
+          const rowToUpdate = targetRow;
+          const balanceCheck = await checkTokenBalance(cleanEmail, 300);
+
+          if (!balanceCheck.allowed) {
+            const noTokenMsg = "⚠️ 잔여 토큰 부족으로 AI 분석이 생략되었습니다. (충전 후 재시도 가능)";
+            await callSheetsTool("sheets_update_range", {
+              spreadsheetId: targetSpreadsheetId,
+              range: `시트1!D${rowToUpdate}:D${rowToUpdate}`,
+              values: [[noTokenMsg]],
+              preferOAuth: true,
+            }).catch(() => {});
             return;
           }
 
           const base64File = buffer.toString("base64");
-          const ocrPrompt = capturedOcrType === "RECEIPT"
-            ? `당신은 대한민국 영수증 및 증빙 전표 분석 전문 AI 공인회계사입니다.
+          const ocrPrompt = `당신은 대한민국 영수증 및 증빙 전표 분석 전문 AI 공인회계사입니다.
 첨부된 영수증/전표/거래 확인 문서 이미지("${capturedTargetFileName}")를 정밀 분석하여 다음 JSON 포맷으로만 답변하세요. 마크다운 따옴표나 서두 없이 순수 JSON만 반환하세요:
 {
   "receiptType": "영수증 구분 (반드시 다음 중 하나: '신용카드 영수증' | '현금영수증' | '간이영수증' | '일반인정영수증(입금표·거래명세서·주문확인서 등)')",
@@ -435,18 +500,6 @@ export async function POST(req: NextRequest) {
   "cardNumber": "카드번호 (마스킹 포함 영수증에 인쇄된 번호, 예: '5365-****-****-1234', 없으면 '')",
   "approvalNumber": "승인번호 (영수증에 인쇄된 승인번호 숫자/영문, 예: '01234567', 없으면 '')",
   "details": "상세내역 (구매 품목별 이름, 단가, 수량, 할인금액, 봉사료, 포인트 사용 등 영수증에 적힌 모든 세부 거래 내역을 간결하고 명확하게 정리)"
-}`
-            : `당신은 비즈니스 명함 분석 및 기업 CRM 전문 AI입니다.
-첨부된 명함 이미지("${capturedTargetFileName}")를 정밀 분석하여 다음 JSON 포맷으로만 답변하세요. 마크다운 따옴표나 서두 없이 순수 JSON만 반환하세요:
-{
-  "name": "성함",
-  "title": "직함 및 직책 (예: 대표이사, 부장, 수석연구원 등)",
-  "company": "회사명 또는 소속 기관명",
-  "mobile": "휴대전화번호 (예: 010-1234-5678)",
-  "email": "이메일 주소",
-  "tel": "회사 대표전화 또는 유선번호",
-  "address": "회사 주소 또는 사업장 소재지",
-  "details": "상세정보 (소속 부서, 팩스번호(FAX), 회사 웹사이트 URL, 계좌번호, 취급 주요 업무/서비스, 슬로건 등 위 항목 외의 명함에 적힌 모든 추가 정보 요약)"
 }`;
 
           // Gemini Batch 제출 (50% 반값 절감)
@@ -467,9 +520,9 @@ export async function POST(req: NextRequest) {
               },
             ],
             {
-              caller: capturedOcrType === "RECEIPT" ? "sheetbot-receipt-ocr" : "sheetbot-card-ocr",
+              caller: "sheetbot-receipt-ocr",
               model: configuredModel,
-              displayName: `SheetBot-${capturedOcrType}-${Date.now()}`,
+              displayName: `SheetBot-RECEIPT-${Date.now()}`,
             }
           ).catch((err: any) => ({ success: false, error: err.message, jobName: undefined }));
 
@@ -482,7 +535,7 @@ export async function POST(req: NextRequest) {
               {
                 id: batchJobId,
                 job_name: batchSubmitRes.jobName,
-                job_type: capturedOcrType,
+                job_type: "RECEIPT",
                 user_email: cleanEmail,
                 file_name: capturedTargetFileName,
                 spreadsheet_id: targetSpreadsheetId,
@@ -530,75 +583,42 @@ export async function POST(req: NextRequest) {
                 }
               }
 
-              if (capturedOcrType === "RECEIPT") {
-                const bNum = formatBusinessNumber(ocrData.businessNumber);
-                const amt = ocrData.amount ? Number(String(ocrData.amount).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
-                const vat = ocrData.vat ? Number(String(ocrData.vat).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
+              const bNum = formatBusinessNumber(ocrData.businessNumber);
+              const amt = ocrData.amount ? Number(String(ocrData.amount).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
+              const vat = ocrData.vat ? Number(String(ocrData.vat).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
 
-                await callSheetsTool("sheets_update_range", {
-                  spreadsheetId: targetSpreadsheetId,
-                  range: `시트1!B${safeRowToUpdate}:K${safeRowToUpdate}`,
-                  values: [[
-                    ocrData.receiptType || "신용카드 영수증",
-                    ocrData.paidAt || getKoreanTimeString(),
-                    ocrData.merchantName || "확인 불가",
-                    bNum,
-                    amt,
-                    vat,
-                    ocrData.cardIssuer || "-",
-                    ocrData.cardNumber || "-",
-                    ocrData.approvalNumber || "-",
-                    ocrData.details || "-",
-                  ]],
-                  preferOAuth: true,
-                }).catch(() => {});
+              await callSheetsTool("sheets_update_range", {
+                spreadsheetId: targetSpreadsheetId,
+                range: `시트1!B${safeRowToUpdate}:K${safeRowToUpdate}`,
+                values: [[
+                  ocrData.receiptType || "신용카드 영수증",
+                  ocrData.paidAt || getKoreanTimeString(),
+                  ocrData.merchantName || "확인 불가",
+                  bNum,
+                  amt,
+                  vat,
+                  ocrData.cardIssuer || "-",
+                  ocrData.cardNumber || "-",
+                  ocrData.approvalNumber || "-",
+                  ocrData.details || "-",
+                ]],
+                preferOAuth: true,
+              }).catch(() => {});
 
-                const usedTokens = Math.round(1200 * 0.5);
-                await deductTokens(cleanEmail, usedTokens).catch(() => {});
+              const usedTokens = Math.round(1200 * 0.5);
+              await deductTokens(cleanEmail, usedTokens).catch(() => {});
 
-                void recordAiUsageLog({
-                  userEmail: cleanEmail,
-                  caller: "sheetbot-receipt-batch-fast",
-                  purpose: `영수증 AI 장부화 [AI 배치(50% 절감)] (${configuredModel} / 0.5x)`,
-                  model: configuredModel,
-                  promptTokens: 400,
-                  completionTokens: 200,
-                  totalTokens: usedTokens,
-                  promptText: `Fast-Check 영수증 분석: ${capturedTargetFileName}`,
-                  responseText: JSON.stringify(ocrData).slice(0, 300),
-                });
-              } else {
-                await callSheetsTool("sheets_update_range", {
-                  spreadsheetId: targetSpreadsheetId,
-                  range: `시트1!B${safeRowToUpdate}:I${safeRowToUpdate}`,
-                  values: [[
-                    ocrData.name || "확인 불가",
-                    ocrData.title || "미기재",
-                    ocrData.company || "미기재",
-                    ocrData.mobile || "미기재",
-                    ocrData.email || "미기재",
-                    ocrData.tel || "미기재",
-                    ocrData.address || "미기재",
-                    ocrData.details || "-",
-                  ]],
-                  preferOAuth: true,
-                }).catch(() => {});
-
-                const usedTokens = Math.round(1000 * 0.5);
-                await deductTokens(cleanEmail, usedTokens).catch(() => {});
-
-                void recordAiUsageLog({
-                  userEmail: cleanEmail,
-                  caller: "sheetbot-card-batch-fast",
-                  purpose: `명함 AI 인맥화 [AI 배치(50% 절감)] (${configuredModel} / 0.5x)`,
-                  model: configuredModel,
-                  promptTokens: 350,
-                  completionTokens: 150,
-                  totalTokens: usedTokens,
-                  promptText: `Fast-Check 명함 분석: ${capturedTargetFileName}`,
-                  responseText: JSON.stringify(ocrData).slice(0, 300),
-                });
-              }
+              void recordAiUsageLog({
+                userEmail: cleanEmail,
+                caller: "sheetbot-receipt-batch-fast",
+                purpose: `영수증 AI 장부화 [AI 배치(50% 절감)] (${configuredModel} / 0.5x)`,
+                model: configuredModel,
+                promptTokens: 400,
+                completionTokens: 200,
+                totalTokens: usedTokens,
+                promptText: `Fast-Check 영수증 분석: ${capturedTargetFileName}`,
+                responseText: JSON.stringify(ocrData).slice(0, 300),
+              });
 
               const nowStr = getKoreanTimeString();
               await updateRows("sheetbot_ai_batch_jobs", {
@@ -612,46 +632,28 @@ export async function POST(req: NextRequest) {
           } else {
             // Fallback: 배치 제출 실패 시 실시간 AI Caller 호출 안전망
             console.warn("[FilesUpload] Batch submit failed, falling back to direct AI Caller:", batchSubmitRes.error);
-            const fallbackResult = await performAiOcr(base64File, capturedTargetFileName, capturedMimeType, capturedOcrType, configuredModel);
+            const fallbackResult = await performAiOcr(base64File, capturedTargetFileName, capturedMimeType, "RECEIPT", configuredModel);
             if (fallbackResult) {
-              if (capturedOcrType === "RECEIPT") {
-                const bNum = formatBusinessNumber(fallbackResult.businessNumber);
-                const amt = fallbackResult.amount ? Number(String(fallbackResult.amount).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
-                const vat = fallbackResult.vat ? Number(String(fallbackResult.vat).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
-                await callSheetsTool("sheets_update_range", {
-                  spreadsheetId: targetSpreadsheetId,
-                  range: `시트1!B${rowToUpdate}:K${rowToUpdate}`,
-                  values: [[
-                    fallbackResult.receiptType || "신용카드 영수증",
-                    fallbackResult.paidAt || getKoreanTimeString(),
-                    fallbackResult.merchantName || "확인 불가",
-                    bNum,
-                    amt,
-                    vat,
-                    fallbackResult.cardIssuer || "-",
-                    fallbackResult.cardNumber || "-",
-                    fallbackResult.approvalNumber || "-",
-                    fallbackResult.details || "-",
-                  ]],
-                  preferOAuth: true,
-                }).catch(() => {});
-              } else {
-                await callSheetsTool("sheets_update_range", {
-                  spreadsheetId: targetSpreadsheetId,
-                  range: `시트1!B${rowToUpdate}:I${rowToUpdate}`,
-                  values: [[
-                    fallbackResult.name || "확인 불가",
-                    fallbackResult.title || "미기재",
-                    fallbackResult.company || "미기재",
-                    fallbackResult.mobile || "미기재",
-                    fallbackResult.email || "미기재",
-                    fallbackResult.tel || "미기재",
-                    fallbackResult.address || "미기재",
-                    fallbackResult.details || "-",
-                  ]],
-                  preferOAuth: true,
-                }).catch(() => {});
-              }
+              const bNum = formatBusinessNumber(fallbackResult.businessNumber);
+              const amt = fallbackResult.amount ? Number(String(fallbackResult.amount).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
+              const vat = fallbackResult.vat ? Number(String(fallbackResult.vat).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
+              await callSheetsTool("sheets_update_range", {
+                spreadsheetId: targetSpreadsheetId,
+                range: `시트1!B${rowToUpdate}:K${rowToUpdate}`,
+                values: [[
+                  fallbackResult.receiptType || "신용카드 영수증",
+                  fallbackResult.paidAt || getKoreanTimeString(),
+                  fallbackResult.merchantName || "확인 불가",
+                  bNum,
+                  amt,
+                  vat,
+                  fallbackResult.cardIssuer || "-",
+                  fallbackResult.cardNumber || "-",
+                  fallbackResult.approvalNumber || "-",
+                  fallbackResult.details || "-",
+                ]],
+                preferOAuth: true,
+              }).catch(() => {});
               const usedTokens = Math.round(1200);
               await deductTokens(cleanEmail, usedTokens).catch(() => {});
             }
