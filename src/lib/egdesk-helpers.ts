@@ -89,6 +89,118 @@ export async function callAiCaller(
   };
 }
 
+export interface AiBatchRequestItem {
+  key?: string;
+  prompt: string;
+  systemPrompt?: string;
+  temperature?: number;
+  files?: Array<{
+    name: string;
+    content: string;
+    encoding?: string;
+    mimeType?: string;
+  }>;
+}
+
+/**
+ * 이지데스크 표준 AI Caller 배치 작업 제출 함수 (표준 가격 대비 50% 반값 할인)
+ */
+export async function callAiBatchSubmit(
+  requests: AiBatchRequestItem[],
+  options: { caller?: string; model?: string; displayName?: string } = {}
+): Promise<{ success: boolean; jobName?: string; error?: string; raw?: any }> {
+  const apiUrl = getServerEgdeskApiUrl();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Api-Key': 'a67ddc0f-7e2b-4997-9a0b-9667a74c89d0',
+  };
+
+  const response = await fetch(`${apiUrl}/ai-caller/tools/call`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      tool: 'ai_caller_batch_submit',
+      arguments: {
+        caller: options.caller || 'sheetbot-voice-batch',
+        model: options.model || 'gemini-2.5-flash',
+        displayName: options.displayName || `SheetBot-Batch-${Date.now()}`,
+        requests,
+      },
+    }),
+  });
+
+  const json = await response.json().catch(() => null);
+  if (!response.ok || !json) {
+    return { success: false, error: `Batch submit HTTP ${response.status}: ${response.statusText}` };
+  }
+
+  let textResult = json.result?.content?.[0]?.text || '';
+  let parsedJob: any = null;
+  try {
+    parsedJob = JSON.parse(textResult);
+  } catch {
+    parsedJob = json.result || json;
+  }
+
+  const jobName = parsedJob?.name || parsedJob?.jobName || parsedJob?.id;
+  return {
+    success: !!jobName,
+    jobName,
+    raw: parsedJob,
+  };
+}
+
+/**
+ * 이지데스크 표준 AI Caller 배치 작업 상태 및 결과 조회 함수
+ */
+export async function callAiBatchGet(
+  jobName: string,
+  options: { waitMs?: number; pollIntervalMs?: number } = {}
+): Promise<{ success: boolean; state?: string; results?: any[]; error?: string; raw?: any }> {
+  const apiUrl = getServerEgdeskApiUrl();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Api-Key': 'a67ddc0f-7e2b-4997-9a0b-9667a74c89d0',
+  };
+
+  const response = await fetch(`${apiUrl}/ai-caller/tools/call`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      tool: 'ai_caller_batch_get',
+      arguments: {
+        name: jobName,
+        includeResults: true,
+        waitMs: options.waitMs !== undefined ? options.waitMs : 60000,
+        pollIntervalMs: options.pollIntervalMs || 5000,
+      },
+    }),
+  });
+
+  const json = await response.json().catch(() => null);
+  if (!response.ok || !json) {
+    return { success: false, error: `Batch get HTTP ${response.status}: ${response.statusText}` };
+  }
+
+  let textResult = json.result?.content?.[0]?.text || '';
+  let parsedData: any = null;
+  try {
+    parsedData = JSON.parse(textResult);
+  } catch {
+    parsedData = json.result || json;
+  }
+
+  const state = parsedData?.state || (parsedData?.completed ? 'JOB_STATE_SUCCEEDED' : 'UNKNOWN');
+  const results = parsedData?.results || parsedData?.responses || [];
+
+  return {
+    success: true,
+    state,
+    results,
+    raw: parsedData,
+  };
+}
+
 /** Run company research search with options */
 export async function runCompanyResearch(
   query: string,

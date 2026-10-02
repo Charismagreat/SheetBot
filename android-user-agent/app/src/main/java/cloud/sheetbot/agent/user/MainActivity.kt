@@ -650,6 +650,22 @@ class MainActivity : AppCompatActivity() {
             showRecordingFolderChooserDialog()
         }
 
+        // 통화 종료 즉시 녹음 자동 업로드 스위치 바인딩
+        binding.switchCallEndedAutoUpload.isChecked = prefs.isCallEndedAutoUploadEnabled
+        binding.switchCallEndedAutoUpload.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isCallEndedAutoUploadEnabled = isChecked
+            val msg = if (isChecked) "통화 종료 즉시 녹음 자동 업로드가 켜졌습니다." else "통화 종료 즉시 자동 업로드가 꺼졌습니다 (수동 동기화 모드)."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+
+        // Wi-Fi 환경 전용 업로드 스위치 바인딩
+        binding.switchRecordingUploadOnlyOnWifi.isChecked = prefs.isRecordingUploadOnlyOnWifi
+        binding.switchRecordingUploadOnlyOnWifi.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isRecordingUploadOnlyOnWifi = isChecked
+            val msg = if (isChecked) "Wi-Fi 환경에서만 녹음이 자동 업로드됩니다 (데이터 절약)." else "모바일 데이터 및 Wi-Fi 환경 모두에서 자동 업로드됩니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+
         binding.btnSyncRecordingsNow.setOnClickListener {
             checkAndRequestAllFilesAccess {
                 executeRecordingSync(forceReupload = false)
