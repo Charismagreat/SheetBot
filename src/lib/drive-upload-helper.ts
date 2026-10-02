@@ -25,6 +25,9 @@ export async function uploadDriveFileWithBridge(options: {
 
   let localPathToUse = tempFilePath || "";
 
+  // 1. 현재 Node 프로세스에서 파일이 실제로 존재하고 접근 가능한지 검사
+  const isDirectlyAccessible = !!(localPathToUse && fs.existsSync(localPathToUse));
+
   // 2. 파일이 로컬 디스크에 없는 경우에만 이지데스크 fs_upload_file MCP 도구 브릿지 시도
   if (!isDirectlyAccessible) {
     try {
