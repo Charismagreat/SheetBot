@@ -257,7 +257,7 @@ object CallRecordingManager {
 
         val msg = when {
             uploadedCount > 0 -> {
-                val failInfo = if (uploadFailedCount > 0) "\n(⚠️ $uploadFailedCount건 업로드 실패: $lastErrorMessage)" else ""
+                val failInfo = if (uploadFailedCount > 0) "\n(⚠️ ${uploadFailedCount}건 업로드 실패: $lastErrorMessage)" else ""
                 "🎉 총 ${totalFound}개 중 ${uploadedCount}개의 녹음 파일이 구글 드라이브 '${targetFolder}' 폴더에 백업되었습니다!$failInfo"
             }
             uploadedCount == 0 && uploadFailedCount > 0 -> {
