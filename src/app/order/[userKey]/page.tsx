@@ -34,7 +34,7 @@ export async function generateMetadata(
   // 🚀 카카오톡 스크랩 봇 전용: 터널 바이너리 왜곡을 원천 우회하는 글로벌 CDN 직통 URL 적용 (100% 무결점 정품 JPG)
   const fileMatch = ogImageUrl.match(/quote_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
   if (fileMatch) {
-    ogImageUrl = `https://cdn.jsdelivr.net/gh/Charismagreat/SheetBot@main/public/uploads/quote-images/${fileMatch[0]}`;
+    ogImageUrl = `https://raw.githubusercontent.com/Charismagreat/SheetBot/main/public/uploads/quote-images/${fileMatch[0]}`;
   }
 
   const title = `[${businessName}]`;
