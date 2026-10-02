@@ -106,6 +106,23 @@
    - 사용자가 인증을 완료하여 `connected: true`가 확인된 시점에 시트 생성(`sheets_create_spreadsheet`) 및 Apps Script 원격 주입(`apps_script_push_to_google`) 파이프라인을 완전 자동 진행합니다. 이를 통해 작업 단절과 사용자 혼란을 원천 방지합니다.
 <!-- END:oauth-preflight-rules -->
 
+<!-- BEGIN:drive-upload-isolation-rules -->
+## 구글 드라이브 파일 업로드 및 대상 폴더 격리 표준 원칙 (Drive Upload Isolation Standard)
+
+1. **무결성 폴더 타겟팅 및 이지데스크 기본 감시 폴더 유출 원천 차단 (Strict Folder-Id Guard)**:
+   - `drive_upload` MCP 도구는 `folderId`가 생략(undefined)되면 호스트 PC의 기본 감시 폴더(`📁 이지데스크 연동`)로 Fallback 업로드하도록 설계되어 있습니다.
+   - 따라서 통화 녹음, 영수증, 명함, 일반 문서 등 모든 파일 업로드 파이프라인에서는 **`targetFolderId`가 유효하게 확정되지 않은 상태에서 `drive_upload` 호출을 엄격히 금지**합니다.
+   - 대상 폴더가 없을 경우 반드시 동기 생성 후 유효한 ID를 획득해야 하며, 획득 실패 시 업로드를 중단하고 명시적 오류를 반환하여 기본 감시 폴더 오염을 100% 방지합니다.
+2. **폴더 ID 영구 바인딩 및 0초 메모리 캐싱 (Zero-Latency Folder Resolution)**:
+   - 매 파일 업로드마다 드라이브 전체 폴더를 동적 검색(`listDriveFiles`)하는 것은 2~4초의 지연과 터널 소켓 타임아웃, 경쟁 상태(Race Condition)를 유발합니다.
+   - 업무별 대상 폴더 ID(`[SheetBot] 통화 녹음`, `[SheetBot] 영수증 보관함`, `[SheetBot] 명함 보관함` 등)는 반드시 DB(`sheetbot_user_sheet_bindings`)에 영구 적재하고, 서버 프로세스 메모리 캐시(`folderCache`)에 사전 등록하여 **0초 즉시 타겟팅**을 보장합니다.
+3. **15초 멱등성(Idempotency) 방어 및 중복 트리거 차단**:
+   - 모바일 기기의 버튼 더블 터치, 네트워크 재전송, 파일 선택 인텐트 중복 콜백으로 인한 중복 저장을 방지하기 위해, 모든 파일 업로드 엔드포인트에는 **동일 사용자 + 파일명/크기 기준 최소 15초 중복 수신 방어 캐시(`recentFileUploads`)를 필수 탑재**합니다.
+   - 15초 이내 동일 요청 유입 시 불필요한 드라이브/시트/AI 연산을 수행하지 않고 1차 성공 응답을 즉시 반환합니다.
+4. **Fast-Return 원칙 및 비동기 분리 파이프라인**:
+   - 드라이브 파일 업로드 완료 즉시 클라이언트에 HTTP 200 응답을 즉시 반환하여 네트워크 타임아웃을 차단하고, 무거운 AI OCR 분석 및 구글 시트 장부화는 백그라운드 파이프라인으로 안전하게 위임합니다.
+<!-- END:drive-upload-isolation-rules -->
+
 <!-- BEGIN:apps-script-safety-rules -->
 ## Google Apps Script 안전 배포 및 트리거 제어 표준 원칙
 

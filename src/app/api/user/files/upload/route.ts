@@ -24,6 +24,16 @@ import path from "path";
 import os from "os";
 
 /**
+ * 파일 업로드 15초 중복 수신 방지 캐시 (Idempotency) 및 폴더 ID 0초 메모리 캐시
+ */
+const recentFileUploads = new Map<string, { timestamp: number; response: any }>();
+const folderCache = new Map<string, string>([
+  ["[SheetBot] 통화 녹음", "14TuBcWsooWB7_yPqyn6L0imjshpVxFVX"],
+  ["[SheetBot] 영수증 보관함", "1nrRbqE5XEnCVV1MJZ03pNntoj76t_uLV"],
+  ["[SheetBot] 파일 보관함", "1bRO1aJEEQBUX_R9bFLfZ7C0liZFZjijc"],
+]);
+
+/**
  * POST /api/user/files/upload
  * 스마트폰 시트봇 에이전트(공유하기 메뉴 또는 앱 내 직접 선택)에서 사진/문서 파일을 수신하여
  * 구글 드라이브 지정 폴더에 자동 업로드하고, 폴더 내 [SheetBot] 대장 시트에 실시간 기록.
@@ -100,6 +110,24 @@ export async function POST(req: NextRequest) {
 
     const cleanEmail = userEmail.toLowerCase().trim();
 
+    // 1-1. [Idempotency] 동일 사용자 + 동일 파일명/크기 15초 이내 중복 전송 방어
+    const dedupKey = `${cleanEmail}:${rawFileName.trim()}:${buffer.length}:${ocrType}`;
+    const nowTs = Date.now();
+    const cachedUpload = recentFileUploads.get(dedupKey);
+    if (cachedUpload && nowTs - cachedUpload.timestamp < 15000) {
+      console.log(`[FilesUpload] Duplicate upload ignored within 15s: ${rawFileName} (serving cached response)`);
+      return NextResponse.json({
+        ...cachedUpload.response,
+        isDuplicate: true,
+      });
+    }
+
+    if (recentFileUploads.size > 200) {
+      for (const [k, v] of recentFileUploads.entries()) {
+        if (nowTs - v.timestamp > 600000) recentFileUploads.delete(k);
+      }
+    }
+
     // 2. ocrType에 따른 폴더명 및 시트 대장명 결정 ([SheetBot] 네이밍 원칙 준수)
     let defaultFolderName = "[SheetBot] 파일 보관함";
     let defaultSheetTitle = "[SheetBot] 파일 업로드 대장";
@@ -131,24 +159,47 @@ export async function POST(req: NextRequest) {
       ? (buffer.length / (1024 * 1024)).toFixed(2) + " MB"
       : (buffer.length / 1024).toFixed(1) + " KB";
 
+    // 4. 구글 드라이브 대상 폴더 탐색 및 미존재 시 자동 생성 (0초 메모리 캐싱 및 폴더 격리 보장)
+    let targetFolderId: string | null = folderCache.get(targetFolderName) || null;
 
-    // 4. 구글 드라이브 대상 폴더 탐색 및 미존재 시 자동 생성
-    let targetFolderId: string | null = null;
-    try {
-      const folderSearch = await listDriveFiles({
-        query: `mimeType = 'application/vnd.google-apps.folder' and name = '${targetFolderName}' and trashed = false`,
-        preferOAuth: true,
-      });
+    if (!targetFolderId) {
+      try {
+        const folderSearch = await listDriveFiles({
+          query: `mimeType = 'application/vnd.google-apps.folder' and name = '${targetFolderName}' and trashed = false`,
+        }, { preferOAuth: true });
 
-      const existingFolders = folderSearch?.files || [];
-      if (existingFolders.length > 0) {
-        targetFolderId = existingFolders[0].id;
-      } else {
-        const newFolderRes = await createDriveFolder(targetFolderName, undefined, true);
-        targetFolderId = newFolderRes?.id || (typeof newFolderRes === "string" ? newFolderRes : null);
+        const existingFolders = folderSearch?.files || [];
+        if (existingFolders.length > 0) {
+          targetFolderId = existingFolders[0].id;
+        } else {
+          const newFolderRes = await createDriveFolder(targetFolderName, undefined, true);
+          targetFolderId = newFolderRes?.id || (typeof newFolderRes === "string" ? newFolderRes : null);
+        }
+
+        if (targetFolderId) {
+          folderCache.set(targetFolderName, targetFolderId);
+        }
+      } catch (folderErr: any) {
+        console.warn("[FilesUpload] Folder resolve warning:", folderErr.message);
       }
-    } catch (folderErr: any) {
-      console.warn("[FilesUpload] Folder resolve warning:", folderErr.message);
+    }
+
+    // ★ [Strict Folder Isolation Rule] targetFolderId가 없으면 drive_upload가 호스트 기본 감시 폴더('이지데스크 연동')로 Fallback하는 것을 원천 차단
+    if (!targetFolderId) {
+      // 1회 즉시 동기 생성 재시도
+      try {
+        const retryCreate = await createDriveFolder(targetFolderName, undefined, true);
+        targetFolderId = retryCreate?.id || (typeof retryCreate === "string" ? retryCreate : null);
+        if (targetFolderId) {
+          folderCache.set(targetFolderName, targetFolderId);
+        }
+      } catch (retryErr: any) {
+        console.error("[FilesUpload] Target folder creation retry failed:", retryErr.message);
+      }
+
+      if (!targetFolderId) {
+        throw new Error(`대상 구글 드라이브 폴더('${targetFolderName}')를 특정하지 못했습니다. 기본 감시 폴더 오염 방지를 위해 업로드를 중단합니다.`);
+      }
     }
 
     // 5. 구글 드라이브로 파일 업로드 (원격/로컬 무손실 브릿지 전송)
@@ -158,7 +209,7 @@ export async function POST(req: NextRequest) {
       const uploadRes = await uploadDriveFileWithBridge({
         buffer,
         fileName: targetFileName,
-        folderId: targetFolderId || undefined,
+        folderId: targetFolderId,
         mimeType,
         tempFilePath,
         preferOAuth: true,
@@ -197,7 +248,7 @@ export async function POST(req: NextRequest) {
               ocrResultData = await performAiOcr(base64File, capturedTargetFileName, capturedMimeType, capturedOcrType, configuredModel);
 
               if (ocrResultData) {
-                const multiplier = aiSettings.tokenMultiplier || 1.0;
+                const multiplier = (aiSettings as any).tokenMultiplier || 1.0;
                 const usedTokens = Math.round(600 * multiplier);
                 await deductTokens(cleanEmail, usedTokens);
 
@@ -347,7 +398,7 @@ export async function POST(req: NextRequest) {
       }
     })();
 
-    return NextResponse.json({
+    const successResponse = {
       success: true,
       message: ocrType === "RECEIPT"
         ? `영수증 AI 분석이 완료되어 구글 스프레드시트 '${defaultSheetTitle}'에 자동 장부화되었습니다.`
@@ -360,7 +411,11 @@ export async function POST(req: NextRequest) {
       folderName: targetFolderName,
       folderId: targetFolderId,
       webViewLink,
-    });
+    };
+
+    recentFileUploads.set(dedupKey, { timestamp: nowTs, response: successResponse });
+
+    return NextResponse.json(successResponse);
   } catch (err: any) {
     console.error("[FilesUpload] Error:", err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
