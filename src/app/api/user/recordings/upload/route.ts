@@ -23,12 +23,22 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 
+const debugLogPath = path.join(process.cwd(), "upload_debug.log");
+function writeDebugLog(msg: string) {
+  try {
+    const timestamp = new Date().toISOString();
+    fs.appendFileSync(debugLogPath, `[${timestamp}] ${msg}\n`);
+    console.log(`[RecordingsUpload] ${msg}`);
+  } catch {}
+}
+
 /**
  * POST /api/user/recordings/upload
  * 스마트폰 시트봇 에이전트에서 통화 녹음 파일을 수신하여
  * 구글 드라이브 지정 폴더에 자동 업로드하고, 폴더 내 [SheetBot] 통화 녹음 대장 시트에 자동 기록
  */
 export async function POST(req: NextRequest) {
+  writeDebugLog(`>>> Incoming upload request. Content-Length: ${req.headers.get("content-length")}, Content-Type: ${req.headers.get("content-type")}`);
   let tempFilePath: string | null = null;
   try {
     await setupDatabase();
@@ -46,14 +56,18 @@ export async function POST(req: NextRequest) {
     const rawFolderName = (formData.get("folderName") as string | null) || "[SheetBot] 통화 녹음";
     const autoRecordSheet = formData.get("autoRecordSheet") !== "false";
 
+    writeDebugLog(`Parsed form: fileName=${rawFileName}, contactName=${contactName}, fileSize=${file?.size}, bodyEmail=${bodyEmail}, sessionEmail=${sessionEmail}`);
+
     const userEmail = (bodyEmail && bodyEmail.includes("@"))
       ? bodyEmail.toLowerCase().trim()
       : (sessionEmail || (headerEmail && headerEmail.includes("@") ? headerEmail.toLowerCase().trim() : ""));
 
     if (!userEmail) {
+      writeDebugLog("Error: Missing userEmail (401)");
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }
     if (!file) {
+      writeDebugLog("Error: Missing file (400)");
       return NextResponse.json({ success: false, error: "업로드할 녹음 파일이 없습니다." }, { status: 400 });
     }
 
@@ -216,6 +230,7 @@ export async function POST(req: NextRequest) {
       },
     ]).catch((err) => console.warn("[RecordingsUpload] DB log insert warning:", err.message));
 
+    writeDebugLog(`SUCCESS! File uploaded with ID: ${driveFileId}`);
     return NextResponse.json({
       success: true,
       message: `통화 녹음 파일이 구글 드라이브 '${targetFolderName}' 폴더로 안전하게 업로드되었습니다.`,
@@ -227,6 +242,7 @@ export async function POST(req: NextRequest) {
       spreadsheetUrl,
     });
   } catch (err: any) {
+    writeDebugLog(`FATAL ERROR in route.ts: ${err.message}\nStack: ${err.stack}`);
     console.error("[RecordingsUpload] Error:", err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   } finally {
