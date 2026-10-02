@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 48,
-      latestVersionName: "2.1.27",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.27/SheetBotAgent.apk",
+      latestVersionCode: 49,
+      latestVersionName: "2.1.28",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.28/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.27 릴리즈\n• 📁 [안드로이드 11+ 모든 파일 접근 권한 탑재] 에이닷(A.), T전화 등 서드파티 통화 녹음 파일 스캔 및 드라이브 백업 100% 무결점 지원\n• ⚡ [즉시 동기화 정밀 피드백] 신규 업로드 건수 및 기백업 파일 감지 결과 정밀 안내\n• 🔄 [전체 강제 재동기화 지원] '즉시 동기화' 버튼 길게 누름(롱클릭) 시 기존 녹음 전체 재업로드 기능 지원",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.28 릴리즈\n• 🎙️ [통화 녹음 감지 진단성 극대화] 발견된 파일 수, 파일명 미리보기, 필터 제외 및 전송 에러 투명 안내\n• 📁 [에이닷/T전화 하위 폴더 포괄 탐색] 지정된 경로 및 1단계 하위 디렉터리 동시 탐색 지원\n• ⚡ [구글 드라이브 원격 업로드 최적화] 무한 대기 방지 및 통신 안정성 강화",
     },
     {
       headers: {

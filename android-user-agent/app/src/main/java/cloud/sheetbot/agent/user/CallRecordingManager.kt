@@ -58,45 +58,46 @@ object CallRecordingManager {
 
         // [우선순위 1] 사용자가 직접 지정한 커스텀 녹음 폴더가 있다면 최우선 탐색
         if (customFolder.isNotBlank()) {
-            candidateFolders.add(File(customFolder))
+            val userDir = File(customFolder)
+            candidateFolders.add(userDir)
+            // 사용자 지정 폴더의 하위 1단계 폴더들도 함께 탐색
+            if (userDir.exists() && userDir.isDirectory) {
+                userDir.listFiles { it.isDirectory }?.let { candidateFolders.addAll(it) }
+            }
         }
 
         // [우선순위 2] 국내외 모든 주요 통화 녹음 앱 표준 저장 경로 자동 탐색
-        candidateFolders.addAll(
-            listOf(
-                // 🎙️ SKT 에이닷(A.) / T전화 전용 통화 녹음 표준 저장 경로 (Android 12+ 및 전체 버전)
-                File(Environment.getExternalStorageDirectory(), "Recordings/TPhoneCallRecords"),
-                File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RECORDINGS), "TPhoneCallRecords"),
-                File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "TPhoneCallRecords"),
-                File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "TPhoneCallRecords/my_sounds"),
-                File(Environment.getExternalStorageDirectory(), "Music/TPhoneCallRecords"),
-                File(Environment.getExternalStorageDirectory(), "Recordings/TPhone"),
-                File(Environment.getExternalStorageDirectory(), "TPhoneCallRecords"),
-                File(Environment.getExternalStorageDirectory(), "TPhone/Recordings"),
-                File(Environment.getExternalStorageDirectory(), "Recordings/A_dot"),
-                File(Environment.getExternalStorageDirectory(), "Recordings/Adot"),
-                File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RECORDINGS), "A_dot"),
-
-                // 📱 삼성 갤럭시 기본 전화 자동 녹음 폴더
-                File(Environment.getExternalStorageDirectory(), "Recordings/Call"),
-                File(Environment.getExternalStorageDirectory(), "Recordings/Calls"),
-                File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RECORDINGS), "Call"),
-                File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RECORDINGS), "Calls"),
-                File(Environment.getExternalStorageDirectory(), "Call"),
-                File(Environment.getExternalStorageDirectory(), "Recordings"),
-
-                // 🌐 기타 서드파티 통화 녹음 앱 (Cube ACR, 후후, All Call Recorder 등)
-                File(Environment.getExternalStorageDirectory(), "Recordings/WhoWho"),
-                File(Environment.getExternalStorageDirectory(), "CubeCallRecorder"),
-                File(Environment.getExternalStorageDirectory(), "Recordings/CubeCallRecorder"),
-                File(Environment.getExternalStorageDirectory(), "AllCallRecorder"),
-                File(Environment.getExternalStorageDirectory(), "CallRecordings"),
-                File(Environment.getExternalStorageDirectory(), "VoiceRecorder"),
-                File(Environment.getExternalStorageDirectory(), "Voice Recorder"),
-                File(Environment.getExternalStorageDirectory(), "Sounds"),
-                File(Environment.getExternalStorageDirectory(), "Download")
-            )
+        val standardBaseDirs = listOfNotNull(
+            Environment.getExternalStorageDirectory(),
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RECORDINGS),
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
         )
+
+        for (base in standardBaseDirs) {
+            candidateFolders.addAll(
+                listOf(
+                    File(base, "Recordings/TPhoneCallRecords"),
+                    File(base, "TPhoneCallRecords"),
+                    File(base, "Recordings/TPhone"),
+                    File(base, "TPhone"),
+                    File(base, "Recordings/Call"),
+                    File(base, "Recordings/Calls"),
+                    File(base, "Call"),
+                    File(base, "Calls"),
+                    File(base, "Recordings"),
+                    File(base, "Recordings/A_dot"),
+                    File(base, "Recordings/Adot"),
+                    File(base, "A_dot"),
+                    File(base, "Adot"),
+                    File(base, "Music/TPhoneCallRecords"),
+                    File(base, "Music/Recordings"),
+                    File(base, "Download"),
+                    File(base, "Android/data/com.skt.tphone/files"),
+                    File(base, "Android/data/com.skt.prod.dialer/files"),
+                    File(base, "Android/data/com.skt.skaf.A/files")
+                )
+            )
+        }
 
         val supportedExtensions = setOf("m4a", "mp3", "amr", "wav", "aac", "3gp", "ogg", "flac", "wma")
         val recordingFiles = mutableListOf<File>()
@@ -170,7 +171,7 @@ object CallRecordingManager {
                 uploadedCount = 0,
                 totalFound = 0,
                 alreadySyncedCount = 0,
-                message = "탐색 대상 폴더($folderHint)에 통화 녹음 파일(.m4a, .mp3 등)이 없습니다.\n\n⚠️ 스마트폰 [설정] > [애플리케이션] > [SheetBot Agent] > [권한]에서 '모든 파일에 대한 접근' 권한이 켜져 있는지 확인해 주세요."
+                message = "탐색 대상 폴더($folderHint)에 통화 녹음 파일(.m4a, .mp3 등)이 발견되지 않았습니다.\n\n⚠️ 스마트폰 [설정] > [애플리케이션] > [SheetBot Agent] > [권한]에서 '모든 파일에 대한 접근' 권한이 켜져 있는지 확인해 주세요."
             )
         }
 
@@ -183,8 +184,12 @@ object CallRecordingManager {
 
         var uploadedCount = 0
         var alreadySyncedCount = 0
+        var filterExcludedCount = 0
+        var uploadFailedCount = 0
+        var lastErrorMessage: String? = null
+        val sampleNames = recordingFiles.take(3).map { it.name }
 
-        // 최근 파일 중 아직 업로드되지 않은 파일 순회 (최대 5개씩 배치)
+        // 최근 파일 중 아직 업로드되지 않은 파일 순회 (최대 15개씩 배치)
         for (file in recordingFiles.take(15)) {
             val fileName = file.name
 
@@ -202,6 +207,7 @@ object CallRecordingManager {
             // 필터링 검사 (지정된 번호 또는 이름에 부합하는지)
             if (!matchesFilter(contactName, fileName, filterText)) {
                 Log.d(TAG, "필터 대상이 아니므로 건너뜀: $fileName (상대방: $contactName, 필터: $filterText)")
+                filterExcludedCount++
                 continue
             }
 
@@ -231,20 +237,40 @@ object CallRecordingManager {
                     TtsManager.speak(context, "${contactName}님과의 통화 녹음이 구글 드라이브에 안전하게 보관되었습니다.")
                 }
             } else {
+                uploadFailedCount++
+                lastErrorMessage = uploadResult.error ?: "통신 응답 실패"
                 Log.w(TAG, "⚠️ 통화 녹음 업로드 실패: $fileName (${uploadResult.error})")
             }
         }
 
+        val sampleListStr = sampleNames.joinToString("\n• ")
+
         val msg = when {
-            uploadedCount > 0 -> "신규 통화 녹음 ${uploadedCount}건이 구글 드라이브에 안전하게 업로드되었습니다!"
-            alreadySyncedCount > 0 && uploadedCount == 0 -> "스마트폰에 있는 통화 녹음 파일 ${totalFound}건이 이미 구글 드라이브에 모두 백업되어 있습니다."
-            else -> "업로드할 조건에 맞는 통화 녹음 파일이 없습니다."
+            uploadedCount > 0 -> {
+                val failInfo = if (uploadFailedCount > 0) "\n(⚠️ $uploadFailedCount건 업로드 실패: $lastErrorMessage)" else ""
+                "🎉 총 ${totalFound}개 중 ${uploadedCount}개의 녹음 파일이 구글 드라이브 '${targetFolder}' 폴더에 백업되었습니다!$failInfo"
+            }
+            uploadedCount == 0 && uploadFailedCount > 0 -> {
+                "⚠️ 스마트폰에서 통화 녹음 파일 ${totalFound}개를 발견하여 업로드를 시도했으나 구글 드라이브 전송에 실패했습니다.\n\n• 오류: ${lastErrorMessage ?: "서버 응답 없음"}\n• 발견된 파일:\n• $sampleListStr\n\n💡 인터넷 연결 상태를 확인 후 다시 시도해 주세요."
+            }
+            uploadedCount == 0 && filterExcludedCount > 0 && alreadySyncedCount == 0 -> {
+                "📁 총 ${totalFound}개의 통화 녹음 파일이 발견되었습니다.\n\n• 확인된 파일:\n• $sampleListStr\n\n⚠️ 그러나 설정된 대상 필터('${filterText}')와 일치하지 않아 업로드 대상에서 제외되었습니다.\n\n💡 모든 통화를 백업하시려면 [업로드 대상 번호/이름] 필터 입력란을 완전히 비워주세요."
+            }
+            uploadedCount == 0 && alreadySyncedCount > 0 -> {
+                "📁 스마트폰에서 발견된 ${totalFound}개의 통화 녹음 파일이 모두 이미 구글 드라이브에 안전하게 보관되어 있습니다.\n\n• 확인된 파일:\n• $sampleListStr\n\n💡 다시 전체를 강제 재업로드하시려면 [⚡ 지금 새 녹음 파일 즉시 동기화] 버튼을 1~2초간 '길게(롱클릭)' 눌러주세요."
+            }
+            else -> {
+                "총 ${totalFound}개의 통화 녹음 파일이 감지되었으나 업로드 조건과 일치하지 않습니다.\n(확인된 파일:\n• $sampleListStr)"
+            }
         }
 
         RecordingSyncResult(
             uploadedCount = uploadedCount,
             totalFound = totalFound,
             alreadySyncedCount = alreadySyncedCount,
+            filterExcludedCount = filterExcludedCount,
+            uploadFailedCount = uploadFailedCount,
+            lastErrorMessage = lastErrorMessage,
             message = msg
         )
     }
@@ -366,11 +392,14 @@ object CallRecordingManager {
      * filterText가 존재하면 쉼표로 분리하여 상대방 이름 또는 전화번호 대조
      */
     private fun matchesFilter(contactName: String, fileName: String, filterText: String): Boolean {
-        if (filterText.isBlank()) {
-            return true // 필터 미설정 시 모든 통화 자동 업로드
+        val trimmed = filterText.trim()
+        if (trimmed.isBlank() || trimmed.equals("전체", ignoreCase = true) ||
+            trimmed.equals("전체 업로드", ignoreCase = true) || trimmed.equals("전체업로드", ignoreCase = true) ||
+            trimmed.equals("all", ignoreCase = true) || trimmed == "*") {
+            return true // 필터 미설정 또는 전체 설정 시 모든 통화 자동 업로드
         }
 
-        val keywords = filterText.split(",", ";", " ").map { it.trim() }.filter { it.isNotBlank() }
+        val keywords = trimmed.split(",", ";", " ").map { it.trim() }.filter { it.isNotBlank() }
         val cleanContact = contactName.replace("-", "").replace(" ", "").lowercase()
         val cleanFileName = fileName.replace("-", "").replace(" ", "").lowercase()
 
@@ -419,5 +448,8 @@ data class RecordingSyncResult(
     val uploadedCount: Int,
     val totalFound: Int,
     val alreadySyncedCount: Int,
+    val filterExcludedCount: Int = 0,
+    val uploadFailedCount: Int = 0,
+    val lastErrorMessage: String? = null,
     val message: String
 )

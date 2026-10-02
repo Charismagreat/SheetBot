@@ -25,13 +25,8 @@ export async function uploadDriveFileWithBridge(options: {
 
   let localPathToUse = tempFilePath || "";
 
-  // 1. 현재 Node 프로세스에서 파일이 실제로 존재하고 접근 가능한지 검사
-  const isDirectlyAccessible = localPathToUse && fs.existsSync(localPathToUse);
-  const isRemoteServer = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
-
-  // 2. 파일이 로컬 디스크에 없거나 Vercel 원격 환경인 경우:
-  //    이지데스크 fs_upload_file MCP 도구를 통해 호스트 PC(Downloads)에 저장하여 절대 경로 획득
-  if (!isDirectlyAccessible || isRemoteServer) {
+  // 2. 파일이 로컬 디스크에 없는 경우에만 이지데스크 fs_upload_file MCP 도구 브릿지 시도
+  if (!isDirectlyAccessible) {
     try {
       const base64Content = buffer.toString("base64");
       const safeBasename = path.basename(fileName).replace(/[/\\?%*:|"<>]/g, "_");
