@@ -621,6 +621,7 @@ class MainActivity : AppCompatActivity() {
             val msg = if (isChecked) "통화 녹음 드라이브 자동 백업이 켜졌습니다." else "통화 녹음 드라이브 백업이 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             if (isChecked) {
+                checkAndRequestAllFilesAccess()
                 provisionSheetAsync("RECORDING", "[SheetBot] 통화 녹음 대장", prefs.callRecordingDriveFolder)
             }
         }
@@ -650,22 +651,23 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnSyncRecordingsNow.setOnClickListener {
-            binding.progressBar.visibility = View.VISIBLE
-            activityScope.launch {
-                try {
-                    val count = CallRecordingManager.scanAndUploadNewRecordings(this@MainActivity)
-                    binding.progressBar.visibility = View.GONE
-                    if (count > 0) {
-                        Toast.makeText(this@MainActivity, "🎉 신규 통화 녹음 ${count}건이 구글 드라이브에 안전하게 업로드되었습니다!", Toast.LENGTH_LONG).show()
-                        addLogItem("녹음 백업", "통화 녹음 ${count}건 구글 드라이브 업로드 완료", true)
-                    } else {
-                        Toast.makeText(this@MainActivity, "업로드할 신규 통화 녹음 파일이 없습니다.", Toast.LENGTH_SHORT).show()
-                    }
-                } catch (e: Exception) {
-                    binding.progressBar.visibility = View.GONE
-                    Toast.makeText(this@MainActivity, "통화 녹음 동기화 중 오류: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
+            checkAndRequestAllFilesAccess {
+                executeRecordingSync(forceReupload = false)
             }
+        }
+
+        binding.btnSyncRecordingsNow.setOnLongClickListener {
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("🔄 통화 녹음 전체 강제 재동기화")
+                .setMessage("기존 백업 이력을 무시하고 스마트폰의 모든 통화 녹음 파일을 구글 드라이브로 다시 업로드하시겠습니까?")
+                .setPositiveButton("전체 재업로드") { _, _ ->
+                    checkAndRequestAllFilesAccess {
+                        executeRecordingSync(forceReupload = true)
+                    }
+                }
+                .setNegativeButton("취소", null)
+                .show()
+            true
         }
 
         // 사진 및 문서 파일 구글 드라이브 업로드 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
@@ -3337,6 +3339,100 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this@MainActivity, "⚠️ [접속 실패] $errText", Toast.LENGTH_LONG).show()
             }
             updateWebsiteMonitorStatusText()
+        }
+    }
+
+    /**
+     * 안드로이드 11+ (API 30+) 환경에서 서드파티 통화 녹음(에이닷, T전화 등) 폴더 파일 읽기를 위한
+     * '모든 파일에 대한 접근'(MANAGE_EXTERNAL_STORAGE) 권한 점검 및 안내 다이얼로그 (v2.1.27)
+     */
+    private fun checkAndRequestAllFilesAccess(onGranted: (() -> Unit)? = null) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (Environment.isExternalStorageManager()) {
+                onGranted?.invoke()
+            } else {
+                AlertDialog.Builder(this)
+                    .setTitle("📁 모든 파일 관리 권한 허용 안내")
+                    .setMessage("에이닷(A.), T전화 등 별도 통화 녹음 어플에 저장된 녹음 파일을 구글 드라이브로 자동 백업하기 위해 '모든 파일에 대한 접근' 권한이 필요합니다.\n\n[설정으로 이동]을 누른 후 '모든 파일 관리 허용' 스위치를 켜주세요.")
+                    .setPositiveButton("설정으로 이동") { _, _ ->
+                        try {
+                            val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                data = Uri.fromParts("package", packageName, null)
+                            }
+                            startActivity(intent)
+                        } catch (e: Exception) {
+                            try {
+                                val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                                startActivity(intent)
+                            } catch (e2: Exception) {
+                                Toast.makeText(this, "설정 화면을 열 수 없습니다: ${e2.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    .setNegativeButton("나중에", null)
+                    .show()
+            }
+        } else {
+            // Android 10 이하
+            val perm = Manifest.permission.READ_EXTERNAL_STORAGE
+            if (ContextCompat.checkSelfPermission(this, perm) == PackageManager.PERMISSION_GRANTED) {
+                onGranted?.invoke()
+            } else {
+                androidx.core.app.ActivityCompat.requestPermissions(this, arrayOf(perm, Manifest.permission.WRITE_EXTERNAL_STORAGE), 1099)
+            }
+        }
+    }
+
+    /**
+     * 통화 녹음 파일 구글 드라이브 즉시 동기화 실행 (v2.1.27)
+     * - forceReupload: 기존 백업 이력 무시하고 강제 재업로드 여부 (롱클릭 지원)
+     */
+    private fun executeRecordingSync(forceReupload: Boolean = false) {
+        val userEmail = prefs.googleAccountEmail
+        if (userEmail.isBlank()) {
+            Toast.makeText(this, "먼저 상단에서 구글 계정으로 로그인해 주세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        binding.btnSyncRecordingsNow.isEnabled = false
+        binding.btnSyncRecordingsNow.text = "🔄 녹음 파일 검사 및 업로드 중..."
+        Toast.makeText(this, "통화 녹음 파일 탐색을 시작합니다...", Toast.LENGTH_SHORT).show()
+
+        activityScope.launch(Dispatchers.IO) {
+            try {
+                val result = CallRecordingManager.scanAndUploadNewRecordings(this@MainActivity, forceReupload = forceReupload)
+                withContext(Dispatchers.Main) {
+                    binding.btnSyncRecordingsNow.isEnabled = true
+                    binding.btnSyncRecordingsNow.text = "⚡ 지금 새 녹음 파일 즉시 동기화"
+
+                    if (result.uploadedCount > 0) {
+                        AlertDialog.Builder(this@MainActivity)
+                            .setTitle("🎉 통화 녹음 백업 완료")
+                            .setMessage("총 ${result.totalFound}개 파일 중 ${result.uploadedCount}개의 신규 녹음 파일이 구글 드라이브 [통화 녹음] 폴더에 안전하게 업로드되었습니다.")
+                            .setPositiveButton("확인", null)
+                            .show()
+                    } else if (result.alreadySyncedCount > 0 && !forceReupload) {
+                        AlertDialog.Builder(this@MainActivity)
+                            .setTitle("📁 이미 백업 완료됨")
+                            .setMessage("스마트폰에서 총 ${result.totalFound}개의 통화 녹음 파일이 발견되었으나, 모두 이미 구글 드라이브에 안전하게 보관되어 있습니다.\n\n💡 다시 전체를 업로드하시려면 [⚡ 지금 새 녹음 파일 즉시 동기화] 버튼을 '길게(롱클릭)' 눌러주세요.")
+                            .setPositiveButton("확인", null)
+                            .show()
+                    } else {
+                        AlertDialog.Builder(this@MainActivity)
+                            .setTitle("ℹ️ 동기화 결과")
+                            .setMessage(result.message)
+                            .setPositiveButton("확인", null)
+                            .show()
+                    }
+                }
+            } catch (e: Throwable) {
+                Log.e("MainActivity", "executeRecordingSync 오류: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    binding.btnSyncRecordingsNow.isEnabled = true
+                    binding.btnSyncRecordingsNow.text = "⚡ 지금 새 녹음 파일 즉시 동기화"
+                    Toast.makeText(this@MainActivity, "동기화 중 오류가 발생했습니다: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 }
