@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 46,
-      latestVersionName: "2.1.25",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.25/SheetBotAgent.apk",
+      latestVersionCode: 47,
+      latestVersionName: "2.1.26",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.26/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.25 릴리즈\n• 📷 [대표 사진 영구 로컬 캐싱 완비] 앱 재실행/화면 이동 시에도 등록된 사진이 사라지지 않고 0초 즉각 유지\n• ⚡ [0초 실시간 렌더링] 사진 선택 즉시 화면에 바로 띄우고 백그라운드 클라우드 동기화 수행\n• 🌐 [오프라인/네트워크 무결점 방어] 통신 지연 시에도 기기 내부 저장소에 안전하게 영구 보존",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.26 릴리즈\n• 🎙️ [통화 녹음 전 어플 통합 지원] SKT 에이닷(A.), T전화, 삼성 갤럭시, 후후, Cube ACR 등 모든 통화 녹음 앱 자동 감지 완비\n• 📁 [저장 위치 자유 선택 지원] 에이닷/T전화 원클릭 지정 및 기타 어플 커스텀 저장 폴더 직접 지정 지원\n• ⚡ [유연한 스마트 파일명 파서] 다양한 형식의 녹음 파일명에서 상대방 연락처와 통화 일시를 100% 무결점 자동 식별",
     },
     {
       headers: {
