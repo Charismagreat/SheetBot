@@ -174,10 +174,10 @@ export async function POST(req: NextRequest) {
       throw new Error(`구글 드라이브 파일 업로드에 실패했습니다: ${uploadErr.message}`);
     }
 
-    // 6. 구글 스프레드시트 대장 고유 ID 영구 바인딩 및 행 기록
+    // 6. 구글 스프레드시트 대장 고유 ID 영구 바인딩 및 행 기록 (시트봇 기본 핵심 기능으로 무조건 기록 보장)
     let spreadsheetUrl = "";
-    if (autoRecordSheet) {
-      try {
+    writeDebugLog(`Step 6: autoRecordSheet=${autoRecordSheet}, resolving spreadsheet...`);
+    try {
         const sheetTitle = "[SheetBot] 통화 녹음 대장";
         const resolved = await resolveUserSpreadsheet({
           userEmail: cleanEmail,
@@ -251,25 +251,30 @@ export async function POST(req: NextRequest) {
 
           if (isDuplicate && targetRowIndex) {
             // 이미 존재하는 행의 링크 및 정보 갱신
+            writeDebugLog(`Step 6: Updating existing duplicate row ${targetRowIndex}...`);
             await callSheetsTool("sheets_update_range", {
               spreadsheetId: targetSpreadsheetId,
-              range: `시트1!D${targetRowIndex}:H${targetRowIndex}`,
+              range: `D${targetRowIndex}:H${targetRowIndex}`,
               values: [[fileSizeMb, "⏳ AI 분석 준비 중...", "⏳ AI 분석 준비 중...", "⏳ 음성 전사 준비 중...", webViewLink]],
               preferOAuth: true,
-            }).catch(() => {});
+            }).catch((err) => writeDebugLog(`Step 6 update error: ${err.message}`));
           } else {
             // 신규 행 추가
             const initialRowValues = [
               [callTime, contactName, targetFileName, fileSizeMb, "⏳ AI 분석 준비 중...", "⏳ AI 분석 준비 중...", "⏳ 음성 전사 준비 중...", webViewLink]
             ];
-            await callSheetsTool("sheets_append_values", {
+            writeDebugLog(`Step 6: Appending new row to sheet ${targetSpreadsheetId}...`);
+            const appendRes = await callSheetsTool("sheets_append_values", {
               spreadsheetId: targetSpreadsheetId,
-              range: "시트1!A:H",
+              range: "A:H",
               values: initialRowValues,
               preferOAuth: true,
             }).catch((err: any) => {
+              writeDebugLog(`Step 6 append error: ${err.message}`);
               console.warn("[RecordingsUpload] append_values warning:", err.message);
+              return null;
             });
+            writeDebugLog(`Step 6: appendRes returned: ${JSON.stringify(appendRes)}`);
           }
 
           // 6-4. 비동기 백그라운드 AI 음성 전사(STT) 및 3줄 요약 실행
@@ -285,9 +290,9 @@ export async function POST(req: NextRequest) {
           ).catch((e) => console.warn("[RecordingsUpload] AI analysis background error:", e.message));
         }
       } catch (sheetErr: any) {
+        writeDebugLog(`Step 6 error/warning: ${sheetErr.message}`);
         console.warn("[RecordingsUpload] Sheet auto-record warning:", sheetErr.message);
       }
-    }
 
     // 7. 발송/수신 감사 대장 DB 적재 (SQLite INTEGER id 규격 준수)
     const logId = Date.now();
