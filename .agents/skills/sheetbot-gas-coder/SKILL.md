@@ -63,6 +63,10 @@ description: Google 스프레드시트 분석 및 Google Apps Script(GAS) 자동
 8. **임의 시트 매핑 절대 금지 (Strict No-Arbitrary Mapping)**:
    - 브릿지 URL에 `spreadsheetId`가 없거나 새 시트 자동 생성이 불가능할 때, 사용자의 확인 없이 드라이브에 있는 과거 기존 시트 ID를 임의로 탐색하여 연결하거나 덮어씌워 배포하지 않습니다. 반드시 사용자에게 시트 생성을 요청하거나 시트 주소를 확인받아야 합니다.
 
+9. **Google OAuth 세분화 권한 안전 격리 및 Graceful Fallback (절대 원칙)**:
+   - 진입점 무조건 	ry-catch 격리: showAiCopilotSidebar() 및 모달 호출 시 SpreadsheetApp.getActiveSpreadsheet() 호출부를 반드시 	ry-catch로 감싸 권한 체크 누락 시에도 사이드바가 100% 정상 오픈되도록 보장합니다.
+   - 상단 메뉴에 🔑 구글 권한 점검 및 재승인(checkGooglePermissions)을 자동 탑재하여 사용자가 언제든 3단계 재승인 가이드를 확인하고 자가 치유할 수 있도록 지원합니다.
+
 ---
 
 ## 3. 코드 주입 및 배포 (POST 요청)

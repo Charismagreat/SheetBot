@@ -13,7 +13,9 @@
 3. **단일 공유 업스트림 허브 및 6대 아키텍처 준수**:
    - 다중 클라이언트 접속 시 연결 과부하를 방지하기 위해 서버 프로세스 내 **단 1개의 공유 업스트림 SSE 연결(Single Shared Upstream Hub)**을 유지하고 클라이언트에 팬아웃합니다.
    - Node.js 런타임, `force-dynamic`, `X-Accel-Buffering: no`, `Cache-Control: no-cache, no-transform` 헤더 적용으로 프록시/Nginx 버퍼링을 원천 차단합니다.
-   - 15초 주기 하트비트(`: ping\n\n`)로 유휴 강제 종료를 방지하고, 클라이언트 `abort` 시 즉시 자원을 회수합니다.
+   - 15초 주기 하트비트(`: ping
+
+`)로 유휴 강제 종료를 방지하고, 클라이언트 `abort` 시 즉시 자원을 회수합니다.
    - 300ms 디바운싱을 통해 대량 삽입/배치 작업 시 이벤트 폭풍을 차단합니다.
 4. **보안 격리 (Cache Invalidation 패턴)**:
    - 스트림으로 민감한 데이터 본문을 직접 노출하지 않고 "테이블 변경 알림" 신호만 전달하며, 브라우저는 자신의 로그인 세션 권한으로 본인 데이터만 안전하게 Re-fetch하여 멀티테넌시 데이터 격리를 100% 보장합니다.
@@ -74,6 +76,23 @@
    - 이지데스크 AI Caller(`ai_caller_call`)는 LLM 생성 결과를 항상 `{ "content": "실제응답텍스트", "usage": { ... }, "finishReason": "STOP" }` 형태의 메타데이터 래퍼 JSON으로 감싸서 반환합니다.
    - 따라서 Google Apps Script나 Node.js에서 AI 응답을 파싱할 때 `res.result.content[0].text`를 그대로 사용하거나 단순 1차 `JSON.parse`만 해서는 안 되며, 반드시 내부의 `.content` 필드를 안전하게 꺼내는 **2중 언래핑 헬퍼(`unwrapAiCallerText`, `unwrapAiCallerJson`) 패턴을 필수로 적용**해야 합니다. 이를 지키지 않아 발생하는 속성 누락(`undefined`)이나 `미확인` 표시는 엄격히 금지됩니다.
 <!-- END:ai-caller-rules -->
+
+<!-- BEGIN:ai-batch-rules -->
+## 이지데스크 AI 배치(Batch) Zero-Block 비동기 수거(Async Sweeper) 표준 원칙 (전역 절대 원칙)
+
+1. **AI 배치 Zero-Block 원칙 (이 프로젝트 및 향후 모든 프로젝트 공통 강제)**:
+   - 이 프로젝트뿐만 아니라 향후 착수하는 **모든 신규 프로젝트 및 AI 연동 기능 개발 시, Gemini Batch 등 비동기 AI 배치 작업 연동에는 동기식 롱 폴링(Long-Polling / 60초 이상 대기)을 엄격히 금지하고, 반드시 '티켓 발행 - 15초 Fast-Check - 비동기 수거 워커(Async Sweeper)' 3단계 Zero-Block 아키텍처를 1순위로 최우선 적용**합니다.
+   - 구글 배치 큐의 처리 시간(수 분~수십 분) 지연으로 인해 서버리스 런타임 타임아웃(SIGKILL)이나 스레드 고갈이 발생하는 것을 원천 차단합니다.
+2. **티켓 발행 및 15초 Fast-Check 2단 방어**:
+   - 배치 작업 제출 즉시 DB 테이블(`_ai_batch_jobs` 계열)에 `PENDING` 티켓을 영구 적재하고, 시트/UI에는 대기 안내 텍스트를 기입한 후 즉시 응답을 반환합니다.
+   - 초단기(15초 이내) 완료건만 가볍게 확인하여 즉시 시트에 반영하고, 15초 초과 시 스레드를 묶어두지 않고 즉시 해제하여 비동기 워커로 안전하게 위임합니다.
+3. **비동기 수거 워커(Async Sweeper) 및 크론 엔드포인트 의무화**:
+   - 1~2분 주기 백그라운드 크론/워커(`ai-batch-sweeper`)가 구글 클라우드에서 배치가 2분이든 10분이든 완료(`JOB_STATE_SUCCEEDED`)되는 시점에 결과를 안전하게 회수하여 시트나 DB에 자동 반영합니다.
+   - 신규 요청(업로드, API 호출 등) 진입 시에도 백그라운드로 `void processPendingBatchJobs()`를 비동기 트리거하여 유휴 지연 없이 즉각 수거합니다.
+4. **50% 반값 할인 정산 및 15분 Max-Wait 지능형 폴백**:
+   - 배치 작업 성공 시 표준 토큰 요금 대비 50% 할인(0.5x 계수)을 안전하게 적용하고 감사 로그에 명시합니다.
+   - 구글 배치 큐가 15분 이상 정체될 경우, 자동으로 실시간 AI Caller로 우회 전환하여 서비스가 영구 대기 상태에 빠지지 않도록 보장합니다.
+<!-- END:ai-batch-rules -->
 
 <!-- BEGIN:oauth-preflight-rules -->
 ## Google Workspace OAuth 사전 점검 (Pre-flight Token Check) 절대 준수 원칙
@@ -146,6 +165,10 @@
      - 단, 시트 하단의 개별 워크시트 탭 이름은 공간 절약과 가독성을 위해 접두사 없이 순수 업무명(예: `명함 대장`)으로 유지합니다.
    - **[기존 구글 시트 연동(`EXISTING_URL`)]**:
      - 기존 협업자의 공유 링크, 북마크, 인지적 일관성을 100% 존중하기 위해, **구글 시트 원본 파일명은 물론 시트봇 대시보드 프로젝트명도 기존 시트 이름 그대로 100% 보존**합니다 (접두사 `[SheetBot]` 임의 추가 금지).
+11. **Google OAuth 세분화 권한 안전 격리 및 Graceful Fallback 표준 원칙 (Strict Granular OAuth Safety)**:
+    - **[진입점 무조건 try-catch 격리]**: `showAiCopilotSidebar()`, `onOpen()`, 모달 호출 등 모든 Apps Script UI 런처 함수 내부에서 `SpreadsheetApp.getActiveSpreadsheet()` 관련 속성(`.getUrl()`, `.getName()` 등)을 호출할 때는 반드시 `try-catch`로 감싸야 합니다. 사용자가 구글 동의 화면에서 스프레드시트 권한 체크박스를 누락했더라도 시스템 에러 팝업으로 전체 실행이 차단되지 않고 사이드바가 100% 정상 오픈되도록 보장합니다.
+    - **[매니페스트 8대 권한 강제 고정]**: `gas-manifest.ts`의 `STANDARD_OAUTH_SCOPES`에 `https://www.googleapis.com/auth/spreadsheets.currentonly` 및 `https://www.googleapis.com/auth/spreadsheets`를 필수 명시하여 구글의 권한 파편화 및 누락을 원천 방지합니다.
+    - **[인-시트 복구 가이드 메뉴 기본 탑재]**: 상단 메뉴에 `🔑 구글 권한 점검 및 재승인`(`checkGooglePermissions`)을 자동 주입하여, 권한 누락 사용자가 구글 계정 제3자 권한 관리(`https://myaccount.google.com/connections`) 연결 초기화 및 재승인 절차를 원클릭으로 안내받을 수 있도록 보장합니다.
 <!-- END:apps-script-safety-rules -->
 
 <!-- BEGIN:sms-dispatch-rules -->

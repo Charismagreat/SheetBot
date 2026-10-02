@@ -171,225 +171,181 @@ export async function POST(req: NextRequest) {
       throw new Error(`구글 드라이브 파일 업로드에 실패했습니다: ${uploadErr.message}`);
     }
 
-    // 6. AI OCR 분석 실행 (영수증 또는 명함인 경우 사이트 설정 AI 모델로 분석 및 토큰 차감)
-    let ocrResultData: any = null;
-    if (ocrType === "RECEIPT" || ocrType === "BUSINESS_CARD") {
+    // ★ [Fast-Return 원칙] 구글 드라이브 파일 업로드 완료 즉시 스마트폰에 200 반환 (타임아웃 및 중복 업로드 원천 차단)
+    const capturedDriveFileId = driveFileId;
+    const capturedWebViewLink = webViewLink;
+    const capturedTargetFolderId = targetFolderId;
+    const capturedTargetFolderName = targetFolderName;
+    const capturedTargetFileName = targetFileName;
+    const capturedMemo = memo;
+    const capturedMimeType = mimeType;
+    const capturedFileSizeMb = fileSizeMb;
+    const capturedDeviceId = deviceId;
+    const capturedOcrType = ocrType;
+
+    // 백그라운드 AI OCR 분석 및 구글 시트 대장 기록, DB 감사 로그 파이프라인
+    void (async () => {
       try {
-        const balanceCheck = await checkTokenBalance(cleanEmail, 300);
-        if (balanceCheck.allowed) {
-          const aiSettings = await getAiModelSettings();
-          const configuredModel = aiSettings.defaultModel;
-          const base64File = buffer.toString("base64");
-          ocrResultData = await performAiOcr(base64File, targetFileName, mimeType, ocrType, configuredModel);
+        let ocrResultData: any = null;
+        if (capturedOcrType === "RECEIPT" || capturedOcrType === "BUSINESS_CARD") {
+          try {
+            const balanceCheck = await checkTokenBalance(cleanEmail, 300);
+            if (balanceCheck.allowed) {
+              const aiSettings = await getAiModelSettings();
+              const configuredModel = aiSettings.defaultModel;
+              const base64File = buffer.toString("base64");
+              ocrResultData = await performAiOcr(base64File, capturedTargetFileName, capturedMimeType, capturedOcrType, configuredModel);
 
-          if (ocrResultData) {
-            // OCR 이미지 분석 가중치 기본 600 + 모델 배율 적용
-            const multiplier = aiSettings.tokenMultiplier || 1.0;
-            const usedTokens = Math.round(600 * multiplier);
+              if (ocrResultData) {
+                const multiplier = aiSettings.tokenMultiplier || 1.0;
+                const usedTokens = Math.round(600 * multiplier);
+                await deductTokens(cleanEmail, usedTokens);
 
-            await deductTokens(cleanEmail, usedTokens);
+                void recordAiUsageLog({
+                  userEmail: cleanEmail,
+                  caller: "sheetbot-ai-ocr",
+                  purpose: `${capturedOcrType === "RECEIPT" ? "영수증" : "명함"} AI OCR 장부화 (${configuredModel || "gemini-3.8-flash"} / ${multiplier}x)`,
+                  model: configuredModel || "gemini-3.8-flash",
+                  promptTokens: 400,
+                  completionTokens: 200,
+                  totalTokens: usedTokens,
+                  promptText: `OCR 분석: ${capturedTargetFileName} (${capturedMimeType})`,
+                  responseText: JSON.stringify(ocrResultData).slice(0, 300),
+                });
+              }
+            }
+          } catch (ocrErr: any) {
+            console.warn("[FilesUpload] Background AI OCR warning:", ocrErr.message);
+          }
+        }
 
-            void recordAiUsageLog({
+        // 구글 시트 대장 기록
+        if (autoRecordSheet) {
+          try {
+            const sheetTitle = defaultSheetTitle;
+            const bindingType = capturedOcrType === "RECEIPT"
+              ? "RECEIPT"
+              : (capturedOcrType === "BUSINESS_CARD" ? "BUSINESS_CARD" : "FILE_UPLOAD");
+
+            const resolved = await resolveUserSpreadsheet({
               userEmail: cleanEmail,
-              caller: "sheetbot-ai-ocr",
-              purpose: `${ocrType === "RECEIPT" ? "영수증" : "명함"} AI OCR 장부화 (${configuredModel || "gemini-3.8-flash"} / ${multiplier}x)`,
-              model: configuredModel || "gemini-3.8-flash",
-              promptTokens: 400,
-              completionTokens: 200,
-              totalTokens: usedTokens,
-              promptText: `OCR 분석: ${targetFileName} (${mimeType})`,
-              responseText: JSON.stringify(ocrResultData).slice(0, 300),
+              sheetType: bindingType,
+              defaultTitle: sheetTitle,
+              folderId: capturedTargetFolderId,
+              preferOAuth: true,
             });
-            console.log(`[FilesUpload] AI OCR completed & ${usedTokens} tokens deducted for ${cleanEmail}`);
+
+            const targetSpreadsheetId = resolved.spreadsheetId;
+
+            if (targetSpreadsheetId) {
+              const nowStr = getKoreanTimeString();
+
+              if (capturedOcrType === "RECEIPT") {
+                const data = ocrResultData || {};
+                const newRowValues = [
+                  [
+                    data.paidAt || nowStr,
+                    data.merchantName || "확인 불가",
+                    data.businessNumber || "미기재",
+                    data.amount || "0",
+                    data.vat || "0",
+                    data.paymentMethod || "신용카드",
+                    data.itemsSummary || capturedTargetFileName,
+                    capturedWebViewLink ? `=HYPERLINK("${capturedWebViewLink}", "🧾 영수증 보기")` : "-",
+                    capturedDeviceId
+                  ]
+                ];
+                await callSheetsTool("sheets_append_values", {
+                  spreadsheetId: targetSpreadsheetId,
+                  range: "A:I",
+                  values: newRowValues,
+                  preferOAuth: true,
+                }).catch(() => {});
+              } else if (capturedOcrType === "BUSINESS_CARD") {
+                const data = ocrResultData || {};
+                const newRowValues = [
+                  [
+                    nowStr,
+                    data.name || "확인 불가",
+                    data.title || "미기재",
+                    data.company || "미기재",
+                    data.mobile || "미기재",
+                    data.email || "미기재",
+                    data.tel || "미기재",
+                    data.address || "미기재",
+                    capturedWebViewLink ? `=HYPERLINK("${capturedWebViewLink}", "🪪 명함 보기")` : "-",
+                    capturedDeviceId
+                  ]
+                ];
+                await callSheetsTool("sheets_append_values", {
+                  spreadsheetId: targetSpreadsheetId,
+                  range: "A:J",
+                  values: newRowValues,
+                  preferOAuth: true,
+                }).catch(() => {});
+              } else {
+                // 일반 파일: [업로드 일시, 구분, 파일명, 파일 크기, 드라이브 링크, 비고] 6대 표준 열 매핑
+                let category = "일반 파일";
+                if (capturedMimeType.startsWith("image/")) category = "사진";
+                else if (capturedMimeType.includes("pdf")) category = "PDF 문서";
+                else if (capturedMimeType.includes("sheet") || capturedMimeType.includes("excel")) category = "엑셀 문서";
+                else if (capturedMimeType.includes("word")) category = "워드 문서";
+
+                const linkFormula = capturedWebViewLink ? `=HYPERLINK("${capturedWebViewLink}", "📁 바로보기")` : "-";
+                const newRowValues = [
+                  [nowStr, category, capturedTargetFileName, capturedFileSizeMb, linkFormula, capturedMemo]
+                ];
+                await callSheetsTool("sheets_append_values", {
+                  spreadsheetId: targetSpreadsheetId,
+                  range: "A:F",
+                  values: newRowValues,
+                  preferOAuth: true,
+                }).catch((e: any) => console.warn("[FilesUpload] append_values error:", e.message));
+              }
+            }
+          } catch (sheetErr: any) {
+            console.warn("[FilesUpload] Background sheet record warning:", sheetErr.message);
           }
-        } else {
-          console.warn(`[FilesUpload] Insufficient token balance for AI OCR: ${cleanEmail}`);
         }
-      } catch (ocrErr: any) {
-        console.warn(`[FilesUpload] AI OCR analysis warning (${ocrType}):`, ocrErr.message);
+
+        // 감사 대장 DB 적재
+        const logId = Date.now();
+        let ruleId = "FILE_UPLOAD";
+        let ruleName = "📁 사진/파일 구글 드라이브 백업";
+        let contentSummary = `[파일 업로드] ${capturedTargetFileName} (${capturedFileSizeMb}) -> ${capturedTargetFolderName}`;
+
+        if (capturedOcrType === "RECEIPT") {
+          ruleId = "RECEIPT_OCR";
+          ruleName = "🧾 영수증 AI OCR 장부화";
+          const mName = ocrResultData?.merchantName || "영수증";
+          const amt = ocrResultData?.amount ? `${Number(ocrResultData.amount).toLocaleString()}원` : "";
+          contentSummary = `[영수증 OCR] ${mName} ${amt} -> ${defaultSheetTitle}`;
+        } else if (capturedOcrType === "BUSINESS_CARD") {
+          ruleId = "BUSINESS_CARD_OCR";
+          ruleName = "🪪 명함 AI OCR 인맥 대장화";
+          const cName = ocrResultData?.name || "명함";
+          const comp = ocrResultData?.company ? `(${ocrResultData.company})` : "";
+          contentSummary = `[명함 OCR] ${cName} ${comp} -> ${defaultSheetTitle}`;
+        }
+
+        await insertRows("sheetbot_user_dispatch_logs", [
+          {
+            id: logId,
+            user_email: cleanEmail,
+            rule_id: ruleId,
+            rule_name: ruleName,
+            device_id: capturedDeviceId,
+            recipient: "Google Drive / Sheet",
+            content: contentSummary,
+            status: "SUCCESS",
+            error_message: null,
+            created_at: getKoreanTimeString(),
+          },
+        ]).catch(() => {});
+      } catch (bgErr: any) {
+        console.warn("[FilesUpload] Background pipeline error:", bgErr.message);
       }
-    }
-
-    // 7. 구글 시트 대장 고유 ID 영구 바인딩 및 행 기록 (autoRecordSheet == true)
-    let spreadsheetUrl = "";
-    if (autoRecordSheet) {
-      try {
-        const sheetTitle = defaultSheetTitle;
-        const bindingType = ocrType === "RECEIPT"
-          ? "RECEIPT"
-          : (ocrType === "BUSINESS_CARD" ? "BUSINESS_CARD" : "FILE_UPLOAD");
-
-        const resolved = await resolveUserSpreadsheet({
-          userEmail: cleanEmail,
-          sheetType: bindingType,
-          defaultTitle: sheetTitle,
-          folderId: targetFolderId,
-          preferOAuth: true,
-        });
-
-        const targetSpreadsheetId = resolved.spreadsheetId;
-        spreadsheetUrl = resolved.spreadsheetUrl;
-
-        if (resolved.isNew && targetSpreadsheetId) {
-          // 헤더 및 테마 서식 기입
-          if (ocrType === "RECEIPT") {
-            // 영수증 헤더 (9열)
-            const headers = [
-              ["결제일시", "상호명 (가맹점)", "사업자등록번호", "결제금액 (원)", "부가세 (원)", "결제수단", "주요 품목 요약", "영수증 원본 링크", "등록 기기"]
-            ];
-            await callSheetsTool("sheets_update_range", {
-              spreadsheetId: targetSpreadsheetId,
-              range: "A1:I1",
-              values: headers,
-              preferOAuth: true,
-            }).catch(() => {});
-
-            await callSheetsTool("sheets_format_headers", {
-              spreadsheetId: targetSpreadsheetId,
-              tabName: "시트1",
-              headerBgColor: "#065f46", // 에메랄드 테마
-              headerTextColor: "#ffffff",
-              preferOAuth: true,
-            }).catch(() => {});
-          } else if (ocrType === "BUSINESS_CARD") {
-            // 명함 헤더 (10열)
-            const headers = [
-              ["등록일시", "성함", "직함", "회사명 / 소속", "휴대전화", "이메일", "회사전화", "회사주소", "명함 원본 링크", "등록 기기"]
-            ];
-            await callSheetsTool("sheets_update_range", {
-              spreadsheetId: targetSpreadsheetId,
-              range: "A1:J1",
-              values: headers,
-              preferOAuth: true,
-            }).catch(() => {});
-
-            await callSheetsTool("sheets_format_headers", {
-              spreadsheetId: targetSpreadsheetId,
-              tabName: "시트1",
-              headerBgColor: "#1e3a8a", // 네이비 블루 테마
-              headerTextColor: "#ffffff",
-              preferOAuth: true,
-            }).catch(() => {});
-          } else {
-            // 일반 파일 헤더 (6열)
-            const headers = [
-              ["업로드 일시", "파일명", "파일 종류", "파일 크기", "출처 / 메모", "구글 드라이브 바로보기 링크"]
-            ];
-            await callSheetsTool("sheets_update_range", {
-              spreadsheetId: targetSpreadsheetId,
-              range: "A1:F1",
-              values: headers,
-              preferOAuth: true,
-            }).catch(() => {});
-
-            await callSheetsTool("sheets_format_headers", {
-              spreadsheetId: targetSpreadsheetId,
-              tabName: "시트1",
-              headerBgColor: "#1e293b",
-              headerTextColor: "#ffffff",
-              preferOAuth: true,
-            }).catch(() => {});
-          }
-        }
-
-        // 7-3. 시트에 신규 기록 행 추가 (한국 표준시 KST 적용)
-        if (targetSpreadsheetId) {
-          const nowStr = getKoreanTimeString();
-
-          if (ocrType === "RECEIPT") {
-            const data = ocrResultData || {};
-            const newRowValues = [
-              [
-                data.paidAt || nowStr,
-                data.merchantName || "확인 불가",
-                data.businessNumber || "미기재",
-                data.amount || "0",
-                data.vat || "0",
-                data.paymentMethod || "신용카드",
-                data.itemsSummary || targetFileName,
-                webViewLink,
-                deviceId
-              ]
-            ];
-            await callSheetsTool("sheets_append_values", {
-              spreadsheetId: targetSpreadsheetId,
-              range: "A:I",
-              values: newRowValues,
-              preferOAuth: true,
-            }).catch((err: any) => console.warn("[FilesUpload] append_values (RECEIPT) warning:", err.message));
-          } else if (ocrType === "BUSINESS_CARD") {
-            const data = ocrResultData || {};
-            const newRowValues = [
-              [
-                nowStr,
-                data.name || "확인 불가",
-                data.title || "미기재",
-                data.company || "미기재",
-                data.mobile || "미기재",
-                data.email || "미기재",
-                data.tel || "미기재",
-                data.address || "미기재",
-                webViewLink,
-                deviceId
-              ]
-            ];
-            await callSheetsTool("sheets_append_values", {
-              spreadsheetId: targetSpreadsheetId,
-              range: "A:J",
-              values: newRowValues,
-              preferOAuth: true,
-            }).catch((err: any) => console.warn("[FilesUpload] append_values (BUSINESS_CARD) warning:", err.message));
-          } else {
-            const newRowValues = [
-              [nowStr, targetFileName, mimeType, fileSizeMb, memo, webViewLink]
-            ];
-            await callSheetsTool("sheets_append_values", {
-              spreadsheetId: targetSpreadsheetId,
-              range: "A:F",
-              values: newRowValues,
-              preferOAuth: true,
-            }).catch((err: any) => console.warn("[FilesUpload] append_values (GENERIC) warning:", err.message));
-          }
-        }
-      } catch (sheetErr: any) {
-        console.warn("[FilesUpload] Sheet auto-record warning:", sheetErr.message);
-      }
-    }
-
-    // 8. 감사 대장 DB 적재 (SQLite INTEGER id 규격 준수)
-    const logId = Date.now();
-    let ruleId = "FILE_UPLOAD";
-    let ruleName = "📁 사진/파일 구글 드라이브 백업";
-    let contentSummary = `[파일 업로드] ${targetFileName} (${fileSizeMb}) -> ${targetFolderName}`;
-
-    if (ocrType === "RECEIPT") {
-      ruleId = "RECEIPT_OCR";
-      ruleName = "🧾 영수증 AI OCR 장부화";
-      const mName = ocrResultData?.merchantName || "영수증";
-      const amt = ocrResultData?.amount ? `${Number(ocrResultData.amount).toLocaleString()}원` : "";
-      contentSummary = `[영수증 OCR] ${mName} ${amt} -> ${defaultSheetTitle}`;
-    } else if (ocrType === "BUSINESS_CARD") {
-      ruleId = "BUSINESS_CARD_OCR";
-      ruleName = "🪪 명함 AI OCR 인맥 대장화";
-      const cName = ocrResultData?.name || "명함";
-      const comp = ocrResultData?.company ? `(${ocrResultData.company})` : "";
-      contentSummary = `[명함 OCR] ${cName} ${comp} -> ${defaultSheetTitle}`;
-    }
-
-    await insertRows("sheetbot_user_dispatch_logs", [
-      {
-        id: logId,
-        user_email: cleanEmail,
-        rule_id: ruleId,
-        rule_name: ruleName,
-        device_id: deviceId,
-        recipient: "Google Drive / Sheet",
-        content: contentSummary,
-        status: "SUCCESS",
-        error_message: null,
-        created_at: getKoreanTimeString(),
-      },
-    ]).catch((err) => console.warn("[FilesUpload] DB log insert warning:", err.message));
+    })();
 
     return NextResponse.json({
       success: true,
@@ -399,13 +355,11 @@ export async function POST(req: NextRequest) {
         ? `명함 AI 분석이 완료되어 구글 스프레드시트 '${defaultSheetTitle}'에 인맥으로 등록되었습니다.`
         : `파일이 구글 드라이브 '${targetFolderName}' 폴더로 안전하게 업로드되었습니다.`,
       ocrType,
-      ocrData: ocrResultData,
       fileId: driveFileId,
       fileName: targetFileName,
       folderName: targetFolderName,
       folderId: targetFolderId,
       webViewLink,
-      spreadsheetUrl,
     });
   } catch (err: any) {
     console.error("[FilesUpload] Error:", err);

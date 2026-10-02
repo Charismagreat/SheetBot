@@ -13,6 +13,7 @@ import {
   uploadDriveFile,
   moveDriveFile,
   insertRows,
+  updateRows,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
@@ -21,6 +22,7 @@ import { recordAiUsageLog } from "@/lib/ai-usage";
 import { getAiModelSettings } from "@/lib/ai-settings";
 import { uploadDriveFileWithBridge } from "@/lib/drive-upload-helper";
 import { getKoreanTimeString } from "@/lib/date-utils";
+import { processPendingBatchJobs } from "@/lib/ai-batch-sweeper";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -44,6 +46,8 @@ export async function POST(req: NextRequest) {
   let tempFilePath: string | null = null;
   try {
     await setupDatabase();
+    // 이전에 대기 중이던 배치 작업이 있다면 백그라운드로 즉시 수거
+    void processPendingBatchJobs().catch(() => {});
 
     // 1. 유저 식별 (세션, 헤더, 폼데이터/JSON 다중 폴백)
     const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
@@ -173,9 +177,29 @@ export async function POST(req: NextRequest) {
       driveFileId = uploadRes?.id || uploadRes?.fileId || null;
       webViewLink = uploadRes?.webViewLink || (driveFileId ? `https://drive.google.com/file/d/${driveFileId}/view` : "");
     } catch (uploadErr: any) {
-      writeDebugLog(`Step 5 error: ${uploadErr.message}`);
-      console.error("[RecordingsUpload] Drive upload failed:", uploadErr);
-      throw new Error(`구글 드라이브 파일 업로드에 실패했습니다: ${uploadErr.message}`);
+      writeDebugLog(`Step 5 warning: ${uploadErr.message}. Checking if file was already created in Drive...`);
+      // [Fail-Safe Recovery] 구글 드라이브 MCP 클라이언트 응답 타임아웃이 발생해도 드라이브에 파일이 생성되었는지 확인
+      try {
+        const checkRes = await listDriveFiles({
+          folderId: targetFolderId || undefined,
+          query: `name = '${targetFileName}' and trashed = false`,
+          preferOAuth: true,
+        });
+        const foundFiles = checkRes?.files || [];
+        if (foundFiles.length > 0) {
+          driveFileId = foundFiles[0].id;
+          webViewLink = foundFiles[0].webViewLink || `https://drive.google.com/file/d/${driveFileId}/view`;
+          writeDebugLog(`Step 5 Fail-Safe SUCCESS: Recovered uploaded fileId: ${driveFileId}`);
+        }
+      } catch (checkErr: any) {
+        writeDebugLog(`Step 5 recovery check failed: ${checkErr.message}`);
+      }
+
+      if (!driveFileId) {
+        writeDebugLog(`Step 5 error: ${uploadErr.message}`);
+        console.error("[RecordingsUpload] Drive upload failed completely:", uploadErr);
+        throw new Error(`구글 드라이브 파일 업로드에 실패했습니다: ${uploadErr.message}`);
+      }
     }
 
     // ★ [Fast-Return 원칙] 스마트폰 클라이언트에게 3초 만에 200 성공 응답을 즉시 반환하여 터널 소켓 타임아웃 원천 차단!
@@ -442,13 +466,17 @@ async function triggerAiAudioAnalysis(
     else if (lowerName.endsWith(".ogg")) mimeType = "audio/ogg";
     else if (lowerName.endsWith(".flac")) mimeType = "audio/flac";
 
-    const prompt = `당신은 비즈니스 통화 녹음 분석 전문 AI입니다.
-첨부된 통화 녹음 파일("${fileName}")의 음성을 정밀하게 분석하여 다음 JSON 포맷으로만 답변하세요. 마크다운 따옴표나 기타 텍스트 없이 순수 JSON만 반환하세요:
+    const prompt = `당신은 비즈니스 통화 녹음 정밀 분석 및 화자 분리(Speaker Diarization) 전문 AI입니다.
+첨부된 통화 녹음 파일("${fileName}")의 음성을 분석하여, 통화 참여자인 두 사람의 발화를 타임라인 순서대로 명확히 구분(화자 분리)하여 다음 JSON 포맷으로만 답변하세요. 마크다운 따옴표나 기타 텍스트 없이 순수 JSON만 반환하세요:
 {
   "summary": "1. [고객 주요 문의 내용]\\n2. [협의 및 결정 사항]\\n3. [기타 중요 사항]",
   "actionItems": "• [후속 조치 1]\\n• [후속 조치 2]",
-  "transcript": "[전체 통화 대화 내용 전사]"
-}`;
+  "transcript": "[화자 1 (상대방)]: [발화 내용]\\n[화자 2 (본인)]: [발화 내용]\\n..."
+}
+
+주의사항:
+- 'transcript'는 반드시 두 참여자의 대화를 한 문장/발화 단위로 번갈아가며 화자 분리하여 전사해야 합니다. 화자 분리 없이 한 문단으로 뭉뚱그려 작성하면 안 됩니다.
+- 음성의 억양과 대화 맥락을 정확히 분석하여 상대방(고객)과 본인의 발화를 매칭하세요.`;
 
     let rawText = "";
     let isBatchSuccess = false;
@@ -480,10 +508,27 @@ async function triggerAiAudioAnalysis(
       );
 
       if (batchSubmitRes.success && batchSubmitRes.jobName) {
-        writeDebugLog(`Batch job submitted: ${batchSubmitRes.jobName}. Waiting for completion...`);
+        const batchJobId = `batch_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        await insertRows("sheetbot_ai_batch_jobs", [
+          {
+            id: batchJobId,
+            job_name: batchSubmitRes.jobName,
+            user_email: cleanEmail,
+            file_name: fileName,
+            spreadsheet_id: spreadsheetId,
+            row_index: rowIndex,
+            model: targetModel,
+            status: "PENDING",
+            created_at: getKoreanTimeString(),
+          },
+        ]).catch(() => {});
+
+        writeDebugLog(`Batch ticket registered in DB: ${batchJobId} (${batchSubmitRes.jobName})`);
+
+        // [15초 Fast-Check] 초단기 완료건은 즉시 감지 (서버 블로킹 최소화)
         const batchGetRes = await callAiBatchGet(batchSubmitRes.jobName, {
-          waitMs: 60000,
-          pollIntervalMs: 5000,
+          waitMs: 15000,
+          pollIntervalMs: 3000,
         });
 
         if (batchGetRes.success && batchGetRes.results && batchGetRes.results.length > 0) {
@@ -491,8 +536,18 @@ async function triggerAiAudioAnalysis(
           rawText = (firstResult.text || firstResult.content || firstResult.response || "").trim();
           if (rawText.length > 0) {
             isBatchSuccess = true;
-            writeDebugLog(`Batch job succeeded! Text length: ${rawText.length}`);
+            writeDebugLog(`Fast-Check Batch job succeeded! Text length: ${rawText.length}`);
+            const nowStr = getKoreanTimeString();
+            await updateRows("sheetbot_ai_batch_jobs", {
+              status: "SUCCEEDED",
+              completed_at: nowStr,
+              updated_at: nowStr,
+            }, { ids: [Number(batchJobId)] }).catch(() => {});
           }
+        } else {
+          writeDebugLog(`[Zero-Block] Batch job ${batchSubmitRes.jobName} is still processing after 15s. Delegating to Async Sweeper Worker.`);
+          // 15초 초과 시 스레드를 묶어두지 않고 백그라운드 워커에 위임
+          return;
         }
       }
     } catch (batchErr: any) {

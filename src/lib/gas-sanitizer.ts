@@ -29,15 +29,26 @@ export function sanitizeGasScriptCode(scriptCode: string): string {
     ""
   );
 
-  // 3. 'showAiCopilotSidebar' 단일 제어 메뉴 자가 보정: 누락 시 구분선과 함께 자동 주입
+  // 3. 'showAiCopilotSidebar' 및 'checkGooglePermissions' 메뉴 자가 보정: 누락 시 자동 주입
   if (!code.includes("showAiCopilotSidebar")) {
     if (code.includes(".addToUi()")) {
       code = code.replace(
         /\.addToUi\s*\(\s*\)/g,
-        ".addSeparator()\n    .addItem('🤖 SheetBot AI 코파일럿', 'showAiCopilotSidebar')\n    .addToUi()"
+        ".addSeparator()\n    .addItem('🤖 SheetBot AI 코파일럿', 'showAiCopilotSidebar')\n    .addItem('🔑 구글 권한 점검 및 재승인', 'checkGooglePermissions')\n    .addToUi()"
       );
     }
+  } else if (!code.includes("checkGooglePermissions") && code.includes("showAiCopilotSidebar")) {
+    code = code.replace(
+      /(\.addItem\s*\(\s*['"`][^'"`]*?showAiCopilotSidebar[^'"`]*?['"`]\s*,\s*['"`]showAiCopilotSidebar['"`]\s*\))/g,
+      "$1\n    .addItem('🔑 구글 권한 점검 및 재승인', 'checkGooglePermissions')"
+    );
   }
+
+  // 3-1. SpreadsheetApp.getActiveSpreadsheet().getUrl() 호출부 Graceful Fallback 자동 보호 (권한 체크 누락 시 팝업 에러 방지)
+  code = code.replace(
+    /SpreadsheetApp\.getActiveSpreadsheet\(\)\.getUrl\(\)/g,
+    '(function(){ try { var _ss = SpreadsheetApp.getActiveSpreadsheet(); return _ss ? _ss.getUrl() : ""; } catch(e) { return ""; } })()'
+  );
 
   // 4. openTokenRechargeModal 함수 정의 부재 시 자동 보강 (사이드바 내부 호출용)
   if (!/function\s+openTokenRechargeModal\s*\(/.test(code)) {
@@ -395,5 +406,54 @@ function submitFdeRequest(formObj) {
 }`;
   }
 
+  // 9. checkGooglePermissions 함수 정의 부재 시 자동 보강 (권한 누락 복구용 원클릭 안내 모달)
+  if (!/function\s+checkGooglePermissions\s*\(/.test(code)) {
+    code += `\n\nfunction checkGooglePermissions() {
+  var sheetUrl = "";
+  var hasSheetAccess = false;
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    sheetUrl = ss ? ss.getUrl() : "";
+    hasSheetAccess = true;
+  } catch (e) {
+    hasSheetAccess = false;
+  }
+
+  var statusHtml = hasSheetAccess 
+    ? '<div style="background:#ecfdf5;border:1px solid #a7f3d0;padding:12px;border-radius:10px;color:#065f46;font-size:12px;margin-bottom:14px;"><b>✅ 구글 스프레드시트 접근 권한이 정상 승인되어 있습니다.</b><br>모든 자동화 및 사이드바 기능을 안심하고 사용하실 수 있습니다.</div>'
+    : '<div style="background:#fef2f2;border:1px solid #fecaca;padding:12px;border-radius:10px;color:#991b1b;font-size:12px;margin-bottom:14px;"><b>⚠️ 구글 스프레드시트 접근 권한이 누락(체크 해제)되었습니다.</b><br>구글 동의 화면에서 체크박스를 누락하면 시트 제어가 차단될 수 있습니다. 아래 3단계로 재승인해 주세요.</div>';
+
+  var html = HtmlService.createHtmlOutput(
+    '<!DOCTYPE html><html><head><base target="_blank"><meta charset="utf-8">' +
+    '<style>' +
+    'body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:18px;margin:0;background:#f8fafc;color:#1e293b;line-height:1.5;}' +
+    '.title{font-size:15px;font-weight:800;color:#0f172a;margin-bottom:6px;display:flex;align-items:center;gap:6px;}' +
+    '.step-box{background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:11.5px;}' +
+    '.step-num{display:inline-block;background:#0f172a;color:#fff;width:18px;height:18px;border-radius:50%;text-align:center;line-height:18px;font-size:10px;font-weight:bold;margin-right:6px;}' +
+    '.btn-link{display:block;text-align:center;padding:10px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;font-weight:700;font-size:12px;margin-top:10px;}' +
+    '</style></head><body>' +
+    '<div class="title"><span>🔑</span><span>Google Workspace 계정 권한 점검</span></div>' +
+    statusHtml +
+    '<div class="step-box">' +
+    '<div style="font-weight:bold;margin-bottom:6px;"><span class="step-num">1</span>구글 계정 권한 관리 페이지 접속</div>' +
+    '아래 버튼을 눌러 계정에 연결된 제3자 앱 목록으로 이동합니다.' +
+    '<a href="https://myaccount.google.com/connections" target="_blank" class="btn-link">👉 구글 계정 연결 관리 페이지 열기 ↗</a>' +
+    '</div>' +
+    '<div class="step-box">' +
+    '<div style="font-weight:bold;margin-bottom:6px;"><span class="step-num">2</span>연결 목록에서 삭제</div>' +
+    '연결된 앱 목록에서 현재 스크립트 또는 SheetBot 앱을 찾아 <b>[연결 삭제]</b>를 클릭합니다.' +
+    '</div>' +
+    '<div class="step-box">' +
+    '<div style="font-weight:bold;margin-bottom:6px;"><span class="step-num">3</span>시트 새로고침(F5) 후 전체 체크</div>' +
+    '구글 시트로 돌아와 <b>F5(새로고침)</b> 후 메뉴를 누르면 승인 창이 다시 뜹니다. 이때 <b>모든 권한 체크박스에 반드시 체크(V)</b>해 주세요.' +
+    '</div>' +
+    '<button onclick="google.script.host.close()" style="width:100%;padding:9px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;font-size:11.5px;cursor:pointer;font-weight:600;color:#475569;">닫기</button>' +
+    '</body></html>'
+  ).setWidth(440).setHeight(530);
+  SpreadsheetApp.getUi().showModalDialog(html, "🔑 구글 권한 점검 및 재승인 가이드");
+}`;
+  }
+
   return code;
 }
+
