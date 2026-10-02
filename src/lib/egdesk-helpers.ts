@@ -1,5 +1,14 @@
 // Central re-export of root egdesk-helpers
 export * from '../../egdesk-helpers';
+import { EGDESK_CONFIG } from '../../egdesk.config';
+
+export function getServerEgdeskApiUrl(): string {
+  return (
+    (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+    EGDESK_CONFIG.apiUrl ||
+    'http://localhost:8080'
+  );
+}
 
 export interface AiCallerOptions {
   caller?: string;

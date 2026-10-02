@@ -117,7 +117,12 @@ object CallRecordingManager {
             if (folder.exists() && folder.isDirectory) {
                 scannedDirNames.add(folder.name)
                 val files = folder.listFiles()?.filter { f ->
-                    f.isFile && f.extension.lowercase() in supportedExtensions
+                    f.isFile && 
+                    !f.name.startsWith(".") && 
+                    !f.name.contains("pending", ignoreCase = true) &&
+                    !f.absolutePath.contains("/.trash", ignoreCase = true) &&
+                    !f.absolutePath.contains("/trash", ignoreCase = true) &&
+                    f.extension.lowercase() in supportedExtensions
                 }
                 if (!files.isNullOrEmpty()) {
                     for (f in files) {
@@ -154,9 +159,15 @@ object CallRecordingManager {
                     val lowerPath = path?.lowercase() ?: ""
                     val lowerName = name?.lowercase() ?: ""
 
-                    val isCallRelated = lowerPath.contains("recording") || lowerPath.contains("tphone") ||
+                    val isTempOrTrash = lowerName.startsWith(".") || 
+                            lowerName.contains("pending") || 
+                            lowerPath.contains("/.trash") || 
+                            lowerPath.contains("/trash")
+
+                    val isCallRelated = (lowerPath.contains("recording") || lowerPath.contains("tphone") ||
                             lowerPath.contains("a_dot") || lowerPath.contains("call") ||
-                            lowerName.contains("통화") || lowerName.contains("녹음") || lowerName.contains("call")
+                            lowerName.contains("통화") || lowerName.contains("녹음") || lowerName.contains("call")) &&
+                            !isTempOrTrash
 
                     if (isCallRelated && !path.isNullOrBlank()) {
                         val f = File(path)
