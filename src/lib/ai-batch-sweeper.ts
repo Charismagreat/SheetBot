@@ -11,6 +11,7 @@ import { callAiBatchGet, callSheetsTool, updateRows } from './egdesk-helpers';
 import { deductTokens } from './token-wallet';
 import { recordAiUsageLog } from './ai-usage';
 import { getKoreanTimeString } from './date-utils';
+import { resolveSafeTargetRow } from './sheet-fingerprint-guard';
 
 function formatBusinessNumber(raw: any): string {
   if (!raw) return "미기재";
@@ -105,6 +106,30 @@ export async function processPendingBatchJobs(): Promise<{
 
           const jobType = String(job.job_type || (job.file_name?.startsWith('[LINK_BOOKMARK]') || !job.file_name?.match(/\.(m4a|mp3|wav|ogg)$/i) ? 'LINK_BOOKMARK' : 'RECORDING'));
 
+          // 🛡️ 지능형 행 핑거프린트 가드: 시트 쓰기 전 사용자 행 삭제/이동 점검
+          let targetRow: number | null = rowIndex;
+          if (spreadsheetId && rowIndex > 1) {
+            const guardRes = await resolveSafeTargetRow({
+              spreadsheetId,
+              expectedRow: rowIndex,
+              fileName,
+            });
+
+            targetRow = guardRes.safeRow;
+            if (!targetRow) {
+              console.warn(`[BatchSweeper] 🛑 Row ${rowIndex} for job ${jobName} was deleted by user (${guardRes.reason}). Skipping sheet write.`);
+              const nowStr = getKoreanTimeString();
+              await updateRows('sheetbot_ai_batch_jobs', {
+                status: 'CANCELLED_USER_DELETED',
+                error_message: '사용자가 구글 시트에서 해당 행을 삭제하여 시트 덮어쓰기를 안전하게 취소함',
+                completed_at: nowStr,
+                updated_at: nowStr,
+              }, { ids: [Number(jobId)] }).catch(() => {});
+              succeeded++;
+              continue;
+            }
+          }
+
           if (jobType === 'RECEIPT') {
             // [RECEIPT] 영수증 13대 표준 컬럼 수거 (B~K열 핀포인트 갱신)
             let ocrData: any = {};
@@ -119,10 +144,10 @@ export async function processPendingBatchJobs(): Promise<{
             const vat = ocrData.vat ? Number(String(ocrData.vat).replace(/[^0-9]/g, '')).toLocaleString('ko-KR') : '0';
 
             // 시트 B열~K열 핀포인트 갱신 (B:구분, C:결제일시, D:상호명, E:사업자번호, F:결제금액, G:부가세, H:카드사, I:카드번호, J:승인번호, K:상세내역)
-            if (spreadsheetId && rowIndex > 1) {
+            if (spreadsheetId && targetRow && targetRow > 1) {
               await callSheetsTool('sheets_update_range', {
                 spreadsheetId,
-                range: `시트1!B${rowIndex}:K${rowIndex}`,
+                range: `시트1!B${targetRow}:K${targetRow}`,
                 values: [[
                   ocrData.receiptType || '신용카드 영수증',
                   ocrData.paidAt || getKoreanTimeString(),
@@ -163,10 +188,10 @@ export async function processPendingBatchJobs(): Promise<{
             }
 
             // 시트 B열~I열 핀포인트 갱신 (B:성함, C:직함, D:회사명, E:휴대폰, F:이메일, G:유선전화, H:회사주소, I:상세정보)
-            if (spreadsheetId && rowIndex > 1) {
+            if (spreadsheetId && targetRow && targetRow > 1) {
               await callSheetsTool('sheets_update_range', {
                 spreadsheetId,
-                range: `시트1!B${rowIndex}:I${rowIndex}`,
+                range: `시트1!B${targetRow}:I${targetRow}`,
                 values: [[
                   ocrData.name || '확인 불가',
                   ocrData.title || '미기재',
@@ -207,10 +232,10 @@ export async function processPendingBatchJobs(): Promise<{
             }
 
             // 구글 시트 F열 핀포인트 갱신
-            if (spreadsheetId && rowIndex > 1) {
+            if (spreadsheetId && targetRow && targetRow > 1) {
               await callSheetsTool('sheets_update_range', {
                 spreadsheetId,
-                range: `시트1!F${rowIndex}:F${rowIndex}`,
+                range: `시트1!F${targetRow}:F${targetRow}`,
                 values: [[finalSummary]],
                 preferOAuth: true,
               }).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
@@ -253,10 +278,10 @@ export async function processPendingBatchJobs(): Promise<{
               }
             }
 
-            if (spreadsheetId && rowIndex > 1) {
+            if (spreadsheetId && targetRow && targetRow > 1) {
               await callSheetsTool('sheets_update_range', {
                 spreadsheetId,
-                range: `시트1!E${rowIndex}:G${rowIndex}`,
+                range: `시트1!E${targetRow}:G${targetRow}`,
                 values: [[summary, actionItems, transcript]],
                 preferOAuth: true,
               }).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
@@ -301,19 +326,30 @@ export async function processPendingBatchJobs(): Promise<{
             updated_at: nowStr,
           }, { ids: [Number(jobId)] }).catch(() => {});
 
-          const jobType = String(job.job_type || (job.file_name?.startsWith('[LINK_BOOKMARK]') || !job.file_name?.match(/\.(m4a|mp3|wav|ogg)$/i) ? 'LINK_BOOKMARK' : 'RECORDING'));
+          // 실패 문구 기입 시에도 핑거프린트 가드 적용
+          let failTargetRow: number | null = rowIndex;
           if (spreadsheetId && rowIndex > 1) {
+            const guardRes = await resolveSafeTargetRow({
+              spreadsheetId,
+              expectedRow: rowIndex,
+              fileName,
+            });
+            failTargetRow = guardRes.safeRow;
+          }
+
+          const jobType = String(job.job_type || (job.file_name?.startsWith('[LINK_BOOKMARK]') || !job.file_name?.match(/\.(m4a|mp3|wav|ogg)$/i) ? 'LINK_BOOKMARK' : 'RECORDING'));
+          if (spreadsheetId && failTargetRow && failTargetRow > 1) {
             if (jobType === 'LINK_BOOKMARK') {
               await callSheetsTool('sheets_update_range', {
                 spreadsheetId,
-                range: `시트1!F${rowIndex}:F${rowIndex}`,
+                range: `시트1!F${failTargetRow}:F${failTargetRow}`,
                 values: [['⚠️ AI 배치 요약 실패 (재시도 요망)']],
                 preferOAuth: true,
               }).catch(() => {});
             } else {
               await callSheetsTool('sheets_update_range', {
                 spreadsheetId,
-                range: `시트1!E${rowIndex}:G${rowIndex}`,
+                range: `시트1!E${failTargetRow}:G${failTargetRow}`,
                 values: [['⚠️ AI 배치 분석 실패 (재분석 지원)', '-', '-']],
                 preferOAuth: true,
               }).catch(() => {});

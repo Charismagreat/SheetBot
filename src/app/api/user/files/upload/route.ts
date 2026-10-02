@@ -23,6 +23,7 @@ import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { recordAiUsageLog } from "@/lib/ai-usage";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import { processPendingBatchJobs } from "@/lib/ai-batch-sweeper";
+import { resolveSafeTargetRow } from "@/lib/sheet-fingerprint-guard";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -513,6 +514,22 @@ export async function POST(req: NextRequest) {
                 ocrData = {};
               }
 
+              // 🛡️ 지능형 행 핑거프린트 가드 (사용자가 15초 내에 행을 삭제/이동한 경우 오염 차단)
+              let safeRowToUpdate: number | null = rowToUpdate;
+              if (targetSpreadsheetId && rowToUpdate > 1) {
+                const guardRes = await resolveSafeTargetRow({
+                  spreadsheetId: targetSpreadsheetId,
+                  expectedRow: rowToUpdate,
+                  fileName: capturedTargetFileName,
+                  fileUrl: capturedWebViewLink,
+                });
+                safeRowToUpdate = guardRes.safeRow;
+                if (!safeRowToUpdate) {
+                  console.warn(`[FilesUpload] 🛑 Fast-Check aborted: Row was deleted by user (${guardRes.reason}). Skipping sheet update.`);
+                  return;
+                }
+              }
+
               if (capturedOcrType === "RECEIPT") {
                 const bNum = formatBusinessNumber(ocrData.businessNumber);
                 const amt = ocrData.amount ? Number(String(ocrData.amount).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
@@ -520,7 +537,7 @@ export async function POST(req: NextRequest) {
 
                 await callSheetsTool("sheets_update_range", {
                   spreadsheetId: targetSpreadsheetId,
-                  range: `시트1!B${rowToUpdate}:K${rowToUpdate}`,
+                  range: `시트1!B${safeRowToUpdate}:K${safeRowToUpdate}`,
                   values: [[
                     ocrData.receiptType || "신용카드 영수증",
                     ocrData.paidAt || getKoreanTimeString(),
@@ -553,7 +570,7 @@ export async function POST(req: NextRequest) {
               } else {
                 await callSheetsTool("sheets_update_range", {
                   spreadsheetId: targetSpreadsheetId,
-                  range: `시트1!B${rowToUpdate}:I${rowToUpdate}`,
+                  range: `시트1!B${safeRowToUpdate}:I${safeRowToUpdate}`,
                   values: [[
                     ocrData.name || "확인 불가",
                     ocrData.title || "미기재",
