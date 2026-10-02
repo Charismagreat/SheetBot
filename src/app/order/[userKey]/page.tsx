@@ -31,6 +31,12 @@ export async function generateMetadata(
     }
   } catch (_) {}
 
+  // 🚀 카카오톡 스크랩 봇 전용: 터널 바이너리 왜곡을 원천 우회하는 글로벌 CDN 직통 URL 적용 (100% 무결점 정품 JPG)
+  const fileMatch = ogImageUrl.match(/quote_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
+  if (fileMatch) {
+    ogImageUrl = `https://cdn.jsdelivr.net/gh/Charismagreat/SheetBot@main/public/uploads/quote-images/${fileMatch[0]}`;
+  }
+
   const title = `[${businessName}]`;
   const description = `실시간 모바일 간편 주문 • ${businessName}`;
   const pageUrl = `https://sheetbot.cloud/order/${userKey}`;
@@ -48,6 +54,8 @@ export async function generateMetadata(
       images: [
         {
           url: ogImageUrl,
+          secureUrl: ogImageUrl,
+          type: "image/jpeg",
           width: 800,
           height: 400,
           alt: `${businessName} 대표 이미지`,

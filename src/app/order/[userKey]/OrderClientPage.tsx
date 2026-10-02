@@ -65,17 +65,12 @@ interface BusinessInfo {
   extraNotice?: string;
 }
 
-// 이미지 URL 정규화 (절대 URL 100% 보존, 도메인/터널 무관 안전 로드)
+// 이미지 URL 정규화 (터널 바이너리 왜곡 우회 및 글로벌 초고속 CDN 직통 서빙)
 function normalizeImageUrl(url?: string | null): string | null {
   if (!url) return null;
-  // http나 https로 시작하는 절대 URL은 그대로 유지 (sheetbot.cloud 등 전역 서빙)
-  if (url.startsWith("http://") || url.startsWith("https://")) {
-    return url;
-  }
-  // 파일명만 들어왔거나 상대경로인 경우 sheetbot.cloud 전역 엔드포인트로 정규화
   const match = url.match(/quote_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
   if (match) {
-    return `https://sheetbot.cloud/api/user/quote/image?file=${match[0]}`;
+    return `https://cdn.jsdelivr.net/gh/Charismagreat/SheetBot@main/public/uploads/quote-images/${match[0]}`;
   }
   return url;
 }

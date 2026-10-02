@@ -43,4 +43,5 @@ scratch*.gs
 *.sqlite
 *.db
 test_image.jpg
-public/uploads/
+public/uploads/*
+!public/uploads/quote-images/
