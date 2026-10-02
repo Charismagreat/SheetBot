@@ -38,19 +38,18 @@ object CallRecordingManager {
 
     /**
      * 신규 통화 녹음 파일을 탐색하고 설정된 필터 조건에 부합하면 구글 드라이브로 자동 업로드
-     * @return 업로드 성공한 녹음 파일 건수
      */
-    suspend fun scanAndUploadNewRecordings(context: Context): Int = withContext(Dispatchers.IO) {
+    suspend fun scanAndUploadNewRecordings(context: Context, forceReupload: Boolean = false): RecordingSyncResult = withContext(Dispatchers.IO) {
         val prefs = PreferencesManager(context)
 
         // 1. 기능 활성화 및 페어링 확인
         if (!prefs.isPaired || !prefs.isCallRecordingSyncEnabled) {
-            return@withContext 0
+            return@withContext RecordingSyncResult(0, 0, 0, "통화 녹음 백업 기능이 비활성화되어 있습니다.")
         }
 
         val userEmail = prefs.userEmail
         if (userEmail.isNullOrBlank()) {
-            return@withContext 0
+            return@withContext RecordingSyncResult(0, 0, 0, "계정이 연동되지 않았습니다.")
         }
 
         // 2. 단말기 내 통화 녹음 폴더 목록 확인 (삼성 기본, SKT 에이닷(A.), T전화, 후후, Cube ACR 등 모든 녹음 앱 통합 지원)
@@ -92,19 +91,29 @@ object CallRecordingManager {
                 File(Environment.getExternalStorageDirectory(), "Recordings/CubeCallRecorder"),
                 File(Environment.getExternalStorageDirectory(), "AllCallRecorder"),
                 File(Environment.getExternalStorageDirectory(), "CallRecordings"),
-                File(Environment.getExternalStorageDirectory(), "VoiceRecorder")
+                File(Environment.getExternalStorageDirectory(), "VoiceRecorder"),
+                File(Environment.getExternalStorageDirectory(), "Voice Recorder"),
+                File(Environment.getExternalStorageDirectory(), "Sounds"),
+                File(Environment.getExternalStorageDirectory(), "Download")
             )
         )
 
+        val supportedExtensions = setOf("m4a", "mp3", "amr", "wav", "aac", "3gp", "ogg", "flac", "wma")
         val recordingFiles = mutableListOf<File>()
+        val scannedDirNames = mutableListOf<String>()
 
         for (folder in candidateFolders) {
             if (folder.exists() && folder.isDirectory) {
+                scannedDirNames.add(folder.name)
                 val files = folder.listFiles { f ->
-                    f.isFile && (f.extension.equals("m4a", true) || f.extension.equals("mp3", true) || f.extension.equals("amr", true) || f.extension.equals("wav", true))
+                    f.isFile && f.extension.lowercase() in supportedExtensions
                 }
                 if (files != null && files.isNotEmpty()) {
-                    recordingFiles.addAll(files)
+                    for (f in files) {
+                        if (!recordingFiles.any { it.absolutePath == f.absolutePath }) {
+                            recordingFiles.add(f)
+                        }
+                    }
                 }
             }
         }
@@ -116,40 +125,53 @@ object CallRecordingManager {
                 MediaStore.Audio.Media.DISPLAY_NAME,
                 MediaStore.Audio.Media.DATA
             )
-            val selection = "${MediaStore.Audio.Media.DATA} LIKE '%Recordings/%' OR " +
-                    "${MediaStore.Audio.Media.DATA} LIKE '%TPhoneCallRecords%' OR " +
-                    "${MediaStore.Audio.Media.DATA} LIKE '%A_dot%' OR " +
-                    "${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%통화%' OR " +
-                    "${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%녹음%' OR " +
-                    "${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%TPhone%'"
             val cursor = context.contentResolver.query(
                 MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                 projection,
-                selection,
+                null,
                 null,
                 "${MediaStore.Audio.Media.DATE_MODIFIED} DESC"
             )
 
             cursor?.use { c ->
                 val dataCol = c.getColumnIndex(MediaStore.Audio.Media.DATA)
-                while (c.moveToNext()) {
-                    if (dataCol != -1) {
-                        val path = c.getString(dataCol)
-                        if (!path.isNullOrBlank()) {
-                            val f = File(path)
-                            if (f.exists() && f.isFile && !recordingFiles.any { it.absolutePath == f.absolutePath }) {
+                val nameCol = c.getColumnIndex(MediaStore.Audio.Media.DISPLAY_NAME)
+                var count = 0
+                while (c.moveToNext() && count < 100) {
+                    val path = if (dataCol != -1) c.getString(dataCol) else null
+                    val name = if (nameCol != -1) c.getString(nameCol) else null
+                    val lowerPath = path?.lowercase() ?: ""
+                    val lowerName = name?.lowercase() ?: ""
+
+                    val isCallRelated = lowerPath.contains("recording") || lowerPath.contains("tphone") ||
+                            lowerPath.contains("a_dot") || lowerPath.contains("call") ||
+                            lowerName.contains("통화") || lowerName.contains("녹음") || lowerName.contains("call")
+
+                    if (isCallRelated && !path.isNullOrBlank()) {
+                        val f = File(path)
+                        if (f.exists() && f.isFile && f.extension.lowercase() in supportedExtensions) {
+                            if (!recordingFiles.any { it.absolutePath == f.absolutePath }) {
                                 recordingFiles.add(f)
                             }
                         }
                     }
+                    count++
                 }
             }
         } catch (e: Exception) {
             Log.w(TAG, "MediaStore query warning: ${e.message}")
         }
 
+        val totalFound = recordingFiles.size
+
         if (recordingFiles.isEmpty()) {
-            return@withContext 0
+            val folderHint = if (customFolder.isNotBlank()) customFolder else "Recordings/TPhoneCallRecords 등"
+            return@withContext RecordingSyncResult(
+                uploadedCount = 0,
+                totalFound = 0,
+                alreadySyncedCount = 0,
+                message = "탐색 대상 폴더($folderHint)에 통화 녹음 파일(.m4a, .mp3 등)이 없습니다.\n\n⚠️ 스마트폰 [설정] > [애플리케이션] > [SheetBot Agent] > [권한]에서 '모든 파일에 대한 접근' 권한이 켜져 있는지 확인해 주세요."
+            )
         }
 
         // 최신 생성순으로 정렬
@@ -160,13 +182,15 @@ object CallRecordingManager {
         val autoRecordSheet = prefs.isCallRecordingSheetEnabled
 
         var uploadedCount = 0
+        var alreadySyncedCount = 0
 
         // 최근 파일 중 아직 업로드되지 않은 파일 순회 (최대 5개씩 배치)
         for (file in recordingFiles.take(15)) {
             val fileName = file.name
 
-            // 이미 업로드 완료된 파일은 건너뜀
-            if (prefs.isRecordingSynced(fileName)) {
+            // 이미 업로드 완료된 파일은 건너뜀 (단, 강제 재동기화 시는 업로드)
+            if (!forceReupload && prefs.isRecordingSynced(fileName)) {
+                alreadySyncedCount++
                 continue
             }
 
@@ -211,7 +235,18 @@ object CallRecordingManager {
             }
         }
 
-        uploadedCount
+        val msg = when {
+            uploadedCount > 0 -> "신규 통화 녹음 ${uploadedCount}건이 구글 드라이브에 안전하게 업로드되었습니다!"
+            alreadySyncedCount > 0 && uploadedCount == 0 -> "스마트폰에 있는 통화 녹음 파일 ${totalFound}건이 이미 구글 드라이브에 모두 백업되어 있습니다."
+            else -> "업로드할 조건에 맞는 통화 녹음 파일이 없습니다."
+        }
+
+        RecordingSyncResult(
+            uploadedCount = uploadedCount,
+            totalFound = totalFound,
+            alreadySyncedCount = alreadySyncedCount,
+            message = msg
+        )
     }
 
     /**
@@ -378,4 +413,11 @@ object CallRecordingManager {
 data class RecordingFileInfo(
     val contactName: String,
     val callTime: String
+)
+
+data class RecordingSyncResult(
+    val uploadedCount: Int,
+    val totalFound: Int,
+    val alreadySyncedCount: Int,
+    val message: String
 )
