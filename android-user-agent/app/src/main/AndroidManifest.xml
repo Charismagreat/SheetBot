@@ -40,6 +40,7 @@
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
 
     <application
         android:name=".SheetBotApp"
@@ -88,6 +89,14 @@
             android:launchMode="singleTask"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
+            android:excludeFromRecents="true" />
+
+        <!-- 명함 등록 시 주소록 저장 및 내 모바일 명함 발송 승인 팝업 액티비티 -->
+        <activity
+            android:name=".CardActionActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.AppCompat.Light.Dialog"
             android:excludeFromRecents="true" />
 
         <!-- 포그라운드 킵얼라이브 서비스 -->
