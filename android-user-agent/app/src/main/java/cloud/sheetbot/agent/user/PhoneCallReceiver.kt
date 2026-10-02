@@ -335,7 +335,7 @@ class PhoneCallReceiver : BroadcastReceiver() {
                 kotlinx.coroutines.delay(3500L)
 
                 Log.i(TAG, "🚀 [통화 종료 후 자동 동기화 시작] 녹음 파일 스캔 및 업로드 진행")
-                val result = CallRecordingManager.syncRecordings(context, forceReupload = false)
+                val result = CallRecordingManager.scanAndUploadNewRecordings(context, forceReupload = false)
 
                 if (result.uploadedCount > 0) {
                     Log.i(TAG, "✅ [통화 녹음 자동 업로드 완료] 업로드 건수: ${result.uploadedCount}개")
