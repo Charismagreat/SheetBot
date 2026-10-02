@@ -95,6 +95,11 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_call_recording_sheet_enabled", false)
         set(value) = prefs.edit().putBoolean("is_call_recording_sheet_enabled", value).apply()
 
+    // 이용자 지정 커스텀 통화 녹음 폴더 (기본값 빈값: 자동 감지)
+    var callRecordingCustomFolder: String
+        get() = prefs.getString("call_recording_custom_folder", "") ?: ""
+        set(value) = prefs.edit().putString("call_recording_custom_folder", value).apply()
+
     // 사진 및 일반 파일 구글 드라이브 업로드 관련 설정
     var isFileUploadSyncEnabled: Boolean
         get() = prefs.getBoolean("is_file_upload_sync_enabled", false)

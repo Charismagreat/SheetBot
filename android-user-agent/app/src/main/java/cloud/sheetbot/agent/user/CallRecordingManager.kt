@@ -24,10 +24,17 @@ object CallRecordingManager {
     private const val NOTIFICATION_CHANNEL_ID = "sheetbot_call_recording_channel"
 
     /**
-     * 삼성 통화 녹음 파일 표준 정규식:
-     * 통화 녹음 [이름 또는 전화번호]_[YYMMDD]_[HHMMSS].m4a
+     * 국내외 모든 통화 녹음 앱 파일명 정규식 지원 (삼성 기본, SKT 에이닷, T전화, Cube ACR, 일반)
      */
-    private val RECORDING_REGEX = Regex("""통화\s*녹음\s*([^_]+)_(\d{6})_(\d{6})""", RegexOption.IGNORE_CASE)
+    // 1. 삼성 갤럭시: 통화 녹음 [이름 또는 전화번호]_[YYMMDD]_[HHMMSS].m4a
+    private val SAMSUNG_REGEX = Regex("""통화\s*녹음\s*([^_]+)_(\d{6})_(\d{6})""", RegexOption.IGNORE_CASE)
+
+    // 2. SKT 에이닷(A.) & T전화: [T전화통화녹음]_[이름/번호]_[YYYYMMDD]_[HHMMSS] 또는 통화녹음_[번호]_[YYYYMMDDHHMMSS]
+    private val TPHONE_REGEX_1 = Regex("""(?:\[?T전화통화녹음\]?|통화\s*녹음)[_\s]+([^_]+)_(\d{8})_?(\d{4,6})?""", RegexOption.IGNORE_CASE)
+    private val TPHONE_REGEX_2 = Regex("""(?:\[?T전화통화녹음\]?|통화\s*녹음)[_\s]+([^_]+)_(\d{6})_?(\d{6})?""", RegexOption.IGNORE_CASE)
+
+    // 3. Cube ACR 및 일반 서드파티: Call_[이름/번호]_[YYYY-MM-DD_HH-mm-ss]
+    private val CUBE_ACR_REGEX = Regex("""(?:Call|Rec|Record)[_\s]+([^_]+)_(\d{4}[-_]?\d{2}[-_]?\d{2})_?(\d{2}[-_]?\d{2}[-_]?\d{2})?""", RegexOption.IGNORE_CASE)
 
     /**
      * 신규 통화 녹음 파일을 탐색하고 설정된 필터 조건에 부합하면 구글 드라이브로 자동 업로드
@@ -46,14 +53,47 @@ object CallRecordingManager {
             return@withContext 0
         }
 
-        // 2. 단말기 내 통화 녹음 폴더 목록 확인
-        val candidateFolders = listOf(
-            File(Environment.getExternalStorageDirectory(), "Recordings/Call"),
-            File(Environment.getExternalStorageDirectory(), "Recordings/Calls"),
-            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RECORDINGS), "Call"),
-            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RECORDINGS), "Calls"),
-            File(Environment.getExternalStorageDirectory(), "Call"),
-            File(Environment.getExternalStorageDirectory(), "Recordings")
+        // 2. 단말기 내 통화 녹음 폴더 목록 확인 (삼성 기본, SKT 에이닷(A.), T전화, 후후, Cube ACR 등 모든 녹음 앱 통합 지원)
+        val customFolder = prefs.callRecordingCustomFolder.trim()
+        val candidateFolders = mutableListOf<File>()
+
+        // [우선순위 1] 사용자가 직접 지정한 커스텀 녹음 폴더가 있다면 최우선 탐색
+        if (customFolder.isNotBlank()) {
+            candidateFolders.add(File(customFolder))
+        }
+
+        // [우선순위 2] 국내외 모든 주요 통화 녹음 앱 표준 저장 경로 자동 탐색
+        candidateFolders.addAll(
+            listOf(
+                // 🎙️ SKT 에이닷(A.) / T전화 전용 통화 녹음 표준 저장 경로 (Android 12+ 및 전체 버전)
+                File(Environment.getExternalStorageDirectory(), "Recordings/TPhoneCallRecords"),
+                File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RECORDINGS), "TPhoneCallRecords"),
+                File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "TPhoneCallRecords"),
+                File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "TPhoneCallRecords/my_sounds"),
+                File(Environment.getExternalStorageDirectory(), "Music/TPhoneCallRecords"),
+                File(Environment.getExternalStorageDirectory(), "Recordings/TPhone"),
+                File(Environment.getExternalStorageDirectory(), "TPhoneCallRecords"),
+                File(Environment.getExternalStorageDirectory(), "TPhone/Recordings"),
+                File(Environment.getExternalStorageDirectory(), "Recordings/A_dot"),
+                File(Environment.getExternalStorageDirectory(), "Recordings/Adot"),
+                File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RECORDINGS), "A_dot"),
+
+                // 📱 삼성 갤럭시 기본 전화 자동 녹음 폴더
+                File(Environment.getExternalStorageDirectory(), "Recordings/Call"),
+                File(Environment.getExternalStorageDirectory(), "Recordings/Calls"),
+                File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RECORDINGS), "Call"),
+                File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RECORDINGS), "Calls"),
+                File(Environment.getExternalStorageDirectory(), "Call"),
+                File(Environment.getExternalStorageDirectory(), "Recordings"),
+
+                // 🌐 기타 서드파티 통화 녹음 앱 (Cube ACR, 후후, All Call Recorder 등)
+                File(Environment.getExternalStorageDirectory(), "Recordings/WhoWho"),
+                File(Environment.getExternalStorageDirectory(), "CubeCallRecorder"),
+                File(Environment.getExternalStorageDirectory(), "Recordings/CubeCallRecorder"),
+                File(Environment.getExternalStorageDirectory(), "AllCallRecorder"),
+                File(Environment.getExternalStorageDirectory(), "CallRecordings"),
+                File(Environment.getExternalStorageDirectory(), "VoiceRecorder")
+            )
         )
 
         val recordingFiles = mutableListOf<File>()
@@ -61,7 +101,7 @@ object CallRecordingManager {
         for (folder in candidateFolders) {
             if (folder.exists() && folder.isDirectory) {
                 val files = folder.listFiles { f ->
-                    f.isFile && (f.extension.equals("m4a", true) || f.extension.equals("mp3", true) || f.extension.equals("amr", true))
+                    f.isFile && (f.extension.equals("m4a", true) || f.extension.equals("mp3", true) || f.extension.equals("amr", true) || f.extension.equals("wav", true))
                 }
                 if (files != null && files.isNotEmpty()) {
                     recordingFiles.addAll(files)
@@ -69,14 +109,19 @@ object CallRecordingManager {
             }
         }
 
-        // MediaStore를 통한 보조 검색 (Android 11+ 스코프드 스토리지 대응)
+        // MediaStore를 통한 보조 검색 (Android 11+ 스코프드 스토리지, 에이닷/T전화/삼성 전역 탐색)
         try {
             val projection = arrayOf(
                 MediaStore.Audio.Media._ID,
                 MediaStore.Audio.Media.DISPLAY_NAME,
                 MediaStore.Audio.Media.DATA
             )
-            val selection = "${MediaStore.Audio.Media.DATA} LIKE '%Recordings/Call%' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '통화 녹음%'"
+            val selection = "${MediaStore.Audio.Media.DATA} LIKE '%Recordings/%' OR " +
+                    "${MediaStore.Audio.Media.DATA} LIKE '%TPhoneCallRecords%' OR " +
+                    "${MediaStore.Audio.Media.DATA} LIKE '%A_dot%' OR " +
+                    "${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%통화%' OR " +
+                    "${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%녹음%' OR " +
+                    "${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%TPhone%'"
             val cursor = context.contentResolver.query(
                 MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                 projection,
@@ -170,42 +215,114 @@ object CallRecordingManager {
     }
 
     /**
-     * 파일명에서 상대방(이름/번호) 및 통화 일시 추출
+     * 파일명에서 상대방(이름/번호) 및 통화 일시 추출 (삼성, 에이닷, T전화, Cube ACR, 전 어플 지원)
      */
     private fun parseRecordingFileInfo(file: File): RecordingFileInfo {
         val fileName = file.name
-        val match = RECORDING_REGEX.find(fileName)
+        val nameWithoutExt = fileName.substringBeforeLast(".")
 
-        if (match != null) {
-            val rawContact = match.groupValues[1].trim()
-            val rawDate = match.groupValues[2] // YYMMDD
-            val rawTime = match.groupValues[3] // HHMMSS
-
-            val formattedTime = try {
+        // 1. 삼성 갤럭시: 통화 녹음 [상대방]_[YYMMDD]_[HHMMSS]
+        val samsungMatch = SAMSUNG_REGEX.find(fileName)
+        if (samsungMatch != null) {
+            val rawContact = samsungMatch.groupValues[1].trim()
+            val rawDate = samsungMatch.groupValues[2] // YYMMDD
+            val rawTime = samsungMatch.groupValues[3] // HHMMSS
+            val parsedTime = try {
                 val inputFormat = SimpleDateFormat("yyMMdd_HHmmss", Locale.KOREA)
                 val outputFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA)
                 val parsed = inputFormat.parse("${rawDate}_${rawTime}")
                 if (parsed != null) outputFormat.format(parsed) else null
-            } catch (_: Exception) {
-                null
-            }
+            } catch (_: Exception) { null }
 
             return RecordingFileInfo(
-                contactName = rawContact,
-                callTime = formattedTime ?: SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA).format(Date(file.lastModified()))
+                contactName = cleanContactName(rawContact),
+                callTime = parsedTime ?: formatLastModified(file)
             )
         }
 
-        // 정규식 매칭 실패 시 fallback: "통화 녹음" 접두사 제거
-        val fallbackName = fileName.substringBeforeLast(".")
+        // 2. SKT 에이닷(A.) & T전화 (YYYYMMDD)
+        val tphoneMatch1 = TPHONE_REGEX_1.find(fileName)
+        if (tphoneMatch1 != null) {
+            val rawContact = tphoneMatch1.groupValues[1].trim()
+            val rawDate = tphoneMatch1.groupValues[2] // YYYYMMDD
+            val rawTime = tphoneMatch1.groupValues.getOrNull(3)?.trim() ?: "" // HHMMSS or HHMM
+            val parsedTime = try {
+                val fmtStr = if (rawTime.length >= 6) "yyyyMMdd_HHmmss" else if (rawTime.length >= 4) "yyyyMMdd_HHmm" else "yyyyMMdd"
+                val inputFormat = SimpleDateFormat(fmtStr, Locale.KOREA)
+                val outputFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA)
+                val parsed = inputFormat.parse(if (rawTime.isNotBlank()) "${rawDate}_${rawTime}" else rawDate)
+                if (parsed != null) outputFormat.format(parsed) else null
+            } catch (_: Exception) { null }
+
+            return RecordingFileInfo(
+                contactName = cleanContactName(rawContact),
+                callTime = parsedTime ?: formatLastModified(file)
+            )
+        }
+
+        // 3. SKT 에이닷(A.) & T전화 (YYMMDD)
+        val tphoneMatch2 = TPHONE_REGEX_2.find(fileName)
+        if (tphoneMatch2 != null) {
+            val rawContact = tphoneMatch2.groupValues[1].trim()
+            val rawDate = tphoneMatch2.groupValues[2] // YYMMDD
+            val rawTime = tphoneMatch2.groupValues.getOrNull(3)?.trim() ?: ""
+            val parsedTime = try {
+                val inputFormat = SimpleDateFormat("yyMMdd_HHmmss", Locale.KOREA)
+                val outputFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA)
+                val parsed = inputFormat.parse("${rawDate}_${rawTime}")
+                if (parsed != null) outputFormat.format(parsed) else null
+            } catch (_: Exception) { null }
+
+            return RecordingFileInfo(
+                contactName = cleanContactName(rawContact),
+                callTime = parsedTime ?: formatLastModified(file)
+            )
+        }
+
+        // 4. Cube ACR 및 일반 서드파티
+        val cubeMatch = CUBE_ACR_REGEX.find(fileName)
+        if (cubeMatch != null) {
+            val rawContact = cubeMatch.groupValues[1].trim()
+            return RecordingFileInfo(
+                contactName = cleanContactName(rawContact),
+                callTime = formatLastModified(file)
+            )
+        }
+
+        // 5. 범용 스마트 토큰 Fallback: 접두사 정리 후 상대방 식별
+        val cleaned = nameWithoutExt
+            .replace(Regex("""^\[?[^\]]+\]?"""), "") // [T전화통화녹음], [녹음] 등 대괄호 태그 제거
             .replace("통화 녹음", "", ignoreCase = true)
             .replace("통화녹음", "", ignoreCase = true)
-            .trim()
-            .split("_")
-            .firstOrNull() ?: "미지정 연락처"
+            .replace("TPhone", "", ignoreCase = true)
+            .replace("A_dot", "", ignoreCase = true)
+            .replace("Adot", "", ignoreCase = true)
+            .replace("Recording", "", ignoreCase = true)
+            .replace("Record", "", ignoreCase = true)
+            .replace("Call", "", ignoreCase = true)
+            .trim('_', '-', ' ')
 
-        val modTime = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA).format(Date(file.lastModified()))
-        return RecordingFileInfo(contactName = fallbackName, callTime = modTime)
+        val tokens = cleaned.split("_", "-").map { it.trim() }.filter { it.isNotBlank() }
+        val detectedContact = tokens.firstOrNull { token ->
+            !token.all { it.isDigit() && token.length >= 6 } // 순수 날짜/시간 숫자 제외
+        } ?: tokens.firstOrNull() ?: "미지정 연락처"
+
+        return RecordingFileInfo(
+            contactName = cleanContactName(detectedContact),
+            callTime = formatLastModified(file)
+        )
+    }
+
+    private fun cleanContactName(raw: String): String {
+        return raw.replace(Regex("""^\[?[^\]]+\]?"""), "")
+            .replace("통화녹음", "", ignoreCase = true)
+            .replace("통화 녹음", "", ignoreCase = true)
+            .trim('_', '-', ' ')
+            .takeIf { it.isNotBlank() } ?: "미지정 연락처"
+    }
+
+    private fun formatLastModified(file: File): String {
+        return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA).format(Date(file.lastModified()))
     }
 
     /**

@@ -1044,6 +1044,52 @@
                         android:layout_marginStart="4dp" />
                 </LinearLayout>
 
+                <!-- 📁 녹음 저장 위치 선택 UI -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="#1E293B"
+                    android:padding="8dp"
+                    android:layout_marginBottom="8dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="📁 감지 대상 어플 / 폴더:"
+                            android:textColor="#94A3B8"
+                            android:textSize="10.5sp" />
+
+                        <TextView
+                            android:id="@+id/tvRecordingSourceFolderBadge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="✨ 자동 감지 (에이닷, T전화, 갤럭시, 전체)"
+                            android:textColor="#38BDF8"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:ellipsize="end"
+                            android:maxLines="1" />
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/btnChangeRecordingFolder"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:backgroundTint="#334155"
+                        android:text="⚙️ 변경"
+                        android:textColor="#F1F5F9"
+                        android:textSize="11sp"
+                        android:paddingHorizontal="10dp" />
+                </LinearLayout>
+
                 <Button
                     android:id="@+id/btnSyncRecordingsNow"
                     android:layout_width="match_parent"

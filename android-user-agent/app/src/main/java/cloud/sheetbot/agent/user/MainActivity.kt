@@ -643,6 +643,11 @@ class MainActivity : AppCompatActivity() {
             openDriveFolder("RECORDING", prefs.callRecordingDriveFolder)
         }
 
+        updateRecordingSourceFolderBadge()
+        binding.btnChangeRecordingFolder.setOnClickListener {
+            showRecordingFolderChooserDialog()
+        }
+
         binding.btnSyncRecordingsNow.setOnClickListener {
             binding.progressBar.visibility = View.VISIBLE
             activityScope.launch {
@@ -2996,6 +3001,100 @@ class MainActivity : AppCompatActivity() {
             binding.tvKakaoTargetCountBadge.setTextColor(Color.parseColor("#34D399"))
             binding.btnManageKakaoTargets.text = "📋 등록 대상 확인 / 제외 (${kakaoList.size}건)"
         }
+    }
+
+    /**
+     * 🎙️ 통화 녹음 감지 대상 어플 / 폴더 뱃지 갱신 (v2.1.26)
+     */
+    private fun updateRecordingSourceFolderBadge() {
+        val custom = prefs.callRecordingCustomFolder.trim()
+        if (custom.isBlank()) {
+            binding.tvRecordingSourceFolderBadge.text = "✨ 자동 감지 (에이닷, T전화, 갤럭시, 전체)"
+            binding.tvRecordingSourceFolderBadge.setTextColor(Color.parseColor("#38BDF8"))
+        } else {
+            val shortName = try {
+                File(custom).name.takeIf { it.isNotBlank() } ?: custom
+            } catch (_: Exception) { custom }
+            binding.tvRecordingSourceFolderBadge.text = "📁 $shortName (지정됨)"
+            binding.tvRecordingSourceFolderBadge.setTextColor(Color.parseColor("#34D399"))
+        }
+    }
+
+    /**
+     * 🎙️ 통화 녹음 감지 대상 어플 / 폴더 선택 다이얼로그 (v2.1.26)
+     */
+    private fun showRecordingFolderChooserDialog() {
+        val options = arrayOf(
+            "✨ 전체 자동 감지 (권장: 에이닷, T전화, 갤럭시, 전체 동시 탐색)",
+            "🔵 SKT 에이닷 (A.) 전용 (Recordings/TPhoneCallRecords)",
+            "🟢 SKT / 일반 T전화 (Recordings/TPhone)",
+            "⚪ 삼성 갤럭시 기본 전화 (Recordings/Call)",
+            "✏️ 폴더 경로 직접 입력 (기타 녹음 어플 / SD카드)"
+        )
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("🎙️ 통화 녹음 감지 어플 / 폴더 설정")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> {
+                        prefs.callRecordingCustomFolder = ""
+                        updateRecordingSourceFolderBadge()
+                        Toast.makeText(this, "✨ 모든 통화 녹음 앱 자동 감지로 설정되었습니다.", Toast.LENGTH_SHORT).show()
+                    }
+                    1 -> {
+                        val path = File(Environment.getExternalStorageDirectory(), "Recordings/TPhoneCallRecords").absolutePath
+                        prefs.callRecordingCustomFolder = path
+                        updateRecordingSourceFolderBadge()
+                        Toast.makeText(this, "🔵 에이닷(A.) 녹음 폴더가 지정되었습니다.", Toast.LENGTH_SHORT).show()
+                    }
+                    2 -> {
+                        val path = File(Environment.getExternalStorageDirectory(), "Recordings/TPhone").absolutePath
+                        prefs.callRecordingCustomFolder = path
+                        updateRecordingSourceFolderBadge()
+                        Toast.makeText(this, "🟢 T전화 녹음 폴더가 지정되었습니다.", Toast.LENGTH_SHORT).show()
+                    }
+                    3 -> {
+                        val path = File(Environment.getExternalStorageDirectory(), "Recordings/Call").absolutePath
+                        prefs.callRecordingCustomFolder = path
+                        updateRecordingSourceFolderBadge()
+                        Toast.makeText(this, "⚪ 삼성 갤럭시 기본 전화 녹음 폴더가 지정되었습니다.", Toast.LENGTH_SHORT).show()
+                    }
+                    4 -> {
+                        showCustomFolderInputDialog()
+                    }
+                }
+            }
+            .setNegativeButton("닫기", null)
+            .show()
+    }
+
+    /**
+     * 기타 녹음 앱 커스텀 폴더 직접 입력 모달
+     */
+    private fun showCustomFolderInputDialog() {
+        val input = EditText(this).apply {
+            hint = "예: /storage/emulated/0/Recordings/폴더명"
+            setText(prefs.callRecordingCustomFolder)
+            setSelection(text.length)
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("📁 녹음 저장 폴더 경로 입력")
+            .setMessage("사용 중이신 통화 녹음 어플의 저장 폴더 절대 경로를 입력해 주세요.")
+            .setView(input)
+            .setPositiveButton("저장") { _, _ ->
+                val entered = input.text.toString().trim()
+                prefs.callRecordingCustomFolder = entered
+                updateRecordingSourceFolderBadge()
+                Toast.makeText(this, "녹음 폴더 경로가 저장되었습니다.", Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton("자동 감지로 리셋") { _, _ ->
+                prefs.callRecordingCustomFolder = ""
+                updateRecordingSourceFolderBadge()
+                Toast.makeText(this, "✨ 전체 자동 감지로 복원되었습니다.", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("취소", null)
+            .show()
     }
 
     /**
