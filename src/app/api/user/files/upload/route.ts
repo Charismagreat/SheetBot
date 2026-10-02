@@ -38,19 +38,54 @@ export async function POST(req: NextRequest) {
   try {
     await setupDatabase();
 
-    // 1. 유저 식별 (세션, 헤더, 폼데이터 다중 폴백)
+    // 1. 유저 식별 (세션, 헤더, 폼데이터/JSON 다중 폴백)
     const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
     const headerEmail = req.headers.get("x-sheetbot-user-email");
+    const contentType = req.headers.get("content-type") || "";
 
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    const bodyEmail = formData.get("userEmail") as string | null;
-    const ocrType = ((formData.get("ocrType") as string | null) || "GENERIC").toUpperCase().trim();
-    const deviceId = (formData.get("deviceId") as string | null) || "SheetBot Agent";
-    const rawFileName = (formData.get("fileName") as string | null) || (file?.name) || "업로드_파일";
-    const customFolderName = formData.get("folderName") as string | null;
-    const memo = (formData.get("memo") as string | null) || "스마트폰 시트봇 에이전트 업로드";
-    const autoRecordSheet = formData.get("autoRecordSheet") !== "false";
+    let buffer: Buffer | null = null;
+    let bodyEmail: string | null = null;
+    let ocrType = "GENERIC";
+    let deviceId = "SheetBot Agent";
+    let rawFileName = "업로드_파일";
+    let customFolderName: string | null = null;
+    let memo = "스마트폰 시트봇 에이전트 업로드";
+    let autoRecordSheet = true;
+    let mimeType: string = "application/octet-stream";
+
+    if (contentType.includes("application/json")) {
+      const json = await req.json();
+      bodyEmail = json.userEmail || json.email || null;
+      ocrType = ((json.ocrType as string | null) || "GENERIC").toUpperCase().trim();
+      deviceId = json.deviceId || "SheetBot Agent";
+      rawFileName = json.fileName || rawFileName;
+      customFolderName = json.folderName || null;
+      memo = json.memo || memo;
+      autoRecordSheet = json.autoRecordSheet !== false;
+      mimeType = json.mimeType || mimeType;
+
+      const rawBase64 = json.fileBase64 || json.base64 || json.imageBase64 || "";
+      if (rawBase64) {
+        const cleanBase64 = rawBase64.replace(/^data:[^;]+;base64,/, "");
+        buffer = Buffer.from(cleanBase64, "base64");
+      }
+    } else {
+      const formData = await req.formData();
+      const file = formData.get("file") as File | null;
+      bodyEmail = formData.get("userEmail") as string | null;
+      ocrType = ((formData.get("ocrType") as string | null) || "GENERIC").toUpperCase().trim();
+      deviceId = (formData.get("deviceId") as string | null) || "SheetBot Agent";
+      rawFileName = (formData.get("fileName") as string | null) || (file?.name) || rawFileName;
+      customFolderName = formData.get("folderName") as string | null;
+      memo = (formData.get("memo") as string | null) || memo;
+      autoRecordSheet = formData.get("autoRecordSheet") !== "false";
+
+      if (file) {
+        const arrayBuffer = await file.arrayBuffer();
+        buffer = Buffer.from(arrayBuffer);
+        mimeType = file.type || mimeType;
+      }
+    }
 
     const userEmail = (bodyEmail && bodyEmail.includes("@"))
       ? bodyEmail.toLowerCase().trim()
@@ -59,7 +94,7 @@ export async function POST(req: NextRequest) {
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }
-    if (!file) {
+    if (!buffer || buffer.length === 0) {
       return NextResponse.json({ success: false, error: "업로드할 파일이 없습니다." }, { status: 400 });
     }
 
@@ -88,8 +123,6 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. 임시 파일로 디스크에 저장 (Drive 업로드 도구에 로컬 경로 필요)
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
     const tempDir = os.tmpdir();
     tempFilePath = path.join(tempDir, `sb_file_${Date.now()}_${path.basename(targetFileName)}`);
     fs.writeFileSync(tempFilePath, buffer);
@@ -97,7 +130,7 @@ export async function POST(req: NextRequest) {
     const fileSizeMb = buffer.length >= 1024 * 1024
       ? (buffer.length / (1024 * 1024)).toFixed(2) + " MB"
       : (buffer.length / 1024).toFixed(1) + " KB";
-    const mimeType = file.type || "application/octet-stream";
+
 
     // 4. 구글 드라이브 대상 폴더 탐색 및 미존재 시 자동 생성
     let targetFolderId: string | null = null;

@@ -43,20 +43,50 @@ export async function POST(req: NextRequest) {
   try {
     await setupDatabase();
 
-    // 1. 유저 식별 (세션, 헤더, 폼데이터 다중 폴백)
+    // 1. 유저 식별 (세션, 헤더, 폼데이터/JSON 다중 폴백)
     const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
     const headerEmail = req.headers.get("x-sheetbot-user-email");
+    const contentType = req.headers.get("content-type") || "";
 
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    const bodyEmail = formData.get("userEmail") as string | null;
-    const rawFileName = (formData.get("fileName") as string | null) || (file?.name) || "통화녹음.m4a";
-    const contactName = (formData.get("contactName") as string | null) || "미지정 연락처";
-    const callTime = (formData.get("callTime") as string | null) || new Date().toISOString().replace("T", " ").slice(0, 19);
-    const rawFolderName = (formData.get("folderName") as string | null) || "[SheetBot] 통화 녹음";
-    const autoRecordSheet = formData.get("autoRecordSheet") !== "false";
+    let buffer: Buffer | null = null;
+    let rawFileName = "통화녹음.m4a";
+    let contactName = "미지정 연락처";
+    let callTime = new Date().toISOString().replace("T", " ").slice(0, 19);
+    let rawFolderName = "[SheetBot] 통화 녹음";
+    let autoRecordSheet = true;
+    let bodyEmail: string | null = null;
 
-    writeDebugLog(`Parsed form: fileName=${rawFileName}, contactName=${contactName}, fileSize=${file?.size}, bodyEmail=${bodyEmail}, sessionEmail=${sessionEmail}`);
+    if (contentType.includes("application/json")) {
+      const json = await req.json();
+      bodyEmail = json.userEmail || json.email || null;
+      rawFileName = json.fileName || rawFileName;
+      contactName = json.contactName || contactName;
+      callTime = json.callTime || callTime;
+      rawFolderName = json.folderName || rawFolderName;
+      autoRecordSheet = json.autoRecordSheet !== false;
+
+      const rawBase64 = json.fileBase64 || json.base64 || json.audioBase64 || "";
+      if (rawBase64) {
+        const cleanBase64 = rawBase64.replace(/^data:[^;]+;base64,/, "");
+        buffer = Buffer.from(cleanBase64, "base64");
+      }
+      writeDebugLog(`Parsed JSON: fileName=${rawFileName}, contactName=${contactName}, bufferSize=${buffer?.length}, bodyEmail=${bodyEmail}`);
+    } else {
+      const formData = await req.formData();
+      const file = formData.get("file") as File | null;
+      bodyEmail = formData.get("userEmail") as string | null;
+      rawFileName = (formData.get("fileName") as string | null) || (file?.name) || rawFileName;
+      contactName = (formData.get("contactName") as string | null) || contactName;
+      callTime = (formData.get("callTime") as string | null) || callTime;
+      rawFolderName = (formData.get("folderName") as string | null) || rawFolderName;
+      autoRecordSheet = formData.get("autoRecordSheet") !== "false";
+
+      if (file) {
+        const arrayBuffer = await file.arrayBuffer();
+        buffer = Buffer.from(arrayBuffer);
+      }
+      writeDebugLog(`Parsed form: fileName=${rawFileName}, contactName=${contactName}, fileSize=${file?.size}, bodyEmail=${bodyEmail}`);
+    }
 
     const userEmail = (bodyEmail && bodyEmail.includes("@"))
       ? bodyEmail.toLowerCase().trim()
@@ -66,8 +96,8 @@ export async function POST(req: NextRequest) {
       writeDebugLog("Error: Missing userEmail (401)");
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }
-    if (!file) {
-      writeDebugLog("Error: Missing file (400)");
+    if (!buffer || buffer.length === 0) {
+      writeDebugLog("Error: Missing file or empty buffer (400)");
       return NextResponse.json({ success: false, error: "업로드할 녹음 파일이 없습니다." }, { status: 400 });
     }
 
@@ -85,30 +115,33 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. 임시 파일로 디스크에 저장 (Drive 업로드 도구에 로컬 경로 필요)
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
     const tempDir = os.tmpdir();
     tempFilePath = path.join(tempDir, `sb_rec_${Date.now()}_${path.basename(targetFileName)}`);
     fs.writeFileSync(tempFilePath, buffer);
+    writeDebugLog(`Step 3: Saved temp file to ${tempFilePath}`);
 
     const fileSizeMb = (buffer.length / (1024 * 1024)).toFixed(2) + " MB";
 
     // 4. 구글 드라이브 대상 폴더 탐색 및 생성
     let targetFolderId: string | null = null;
     try {
+      writeDebugLog(`Step 4: Calling listDriveFiles for folder ${targetFolderName}...`);
       const folderSearch = await listDriveFiles({
         query: `mimeType = 'application/vnd.google-apps.folder' and name = '${targetFolderName}' and trashed = false`,
         preferOAuth: true,
       });
+      writeDebugLog(`Step 4: folderSearch returned: ${JSON.stringify(folderSearch)}`);
 
       const existingFolders = folderSearch?.files || [];
       if (existingFolders.length > 0) {
         targetFolderId = existingFolders[0].id;
       } else {
+        writeDebugLog(`Step 4: Creating folder ${targetFolderName}...`);
         const newFolderRes = await createDriveFolder(targetFolderName, undefined, true);
         targetFolderId = newFolderRes?.id || (typeof newFolderRes === "string" ? newFolderRes : null);
       }
     } catch (folderErr: any) {
+      writeDebugLog(`Step 4 warning: ${folderErr.message}`);
       console.warn("[RecordingsUpload] Folder resolve warning:", folderErr.message);
     }
 
@@ -116,6 +149,7 @@ export async function POST(req: NextRequest) {
     let driveFileId: string | null = null;
     let webViewLink = "";
     try {
+      writeDebugLog(`Step 5: Calling uploadDriveFileWithBridge for ${targetFileName}...`);
       const uploadRes = await uploadDriveFileWithBridge({
         buffer,
         fileName: targetFileName,
@@ -123,10 +157,12 @@ export async function POST(req: NextRequest) {
         tempFilePath,
         preferOAuth: true,
       });
+      writeDebugLog(`Step 5: uploadRes returned: ${JSON.stringify(uploadRes)}`);
 
       driveFileId = uploadRes?.id || uploadRes?.fileId || null;
       webViewLink = uploadRes?.webViewLink || (driveFileId ? `https://drive.google.com/file/d/${driveFileId}/view` : "");
     } catch (uploadErr: any) {
+      writeDebugLog(`Step 5 error: ${uploadErr.message}`);
       console.error("[RecordingsUpload] Drive upload failed:", uploadErr);
       throw new Error(`구글 드라이브 파일 업로드에 실패했습니다: ${uploadErr.message}`);
     }

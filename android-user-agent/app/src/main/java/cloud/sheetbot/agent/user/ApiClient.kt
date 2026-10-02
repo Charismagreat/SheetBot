@@ -668,19 +668,19 @@ object ApiClient {
         autoRecordSheet: Boolean = true
     ): UploadRecordingResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
-        val fileMediaType = "audio/mp4".toMediaType()
-        val requestFile = file.asRequestBody(fileMediaType)
+        val fileBytes = file.readBytes()
+        val base64Str = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)
 
-        val requestBody = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart("userEmail", userEmail)
-            .addFormDataPart("fileName", fileName)
-            .addFormDataPart("contactName", contactName)
-            .addFormDataPart("callTime", callTime)
-            .addFormDataPart("folderName", folderName)
-            .addFormDataPart("autoRecordSheet", autoRecordSheet.toString())
-            .addFormDataPart("file", fileName, requestFile)
-            .build()
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("fileName", fileName)
+            put("contactName", contactName)
+            put("callTime", callTime)
+            put("folderName", folderName)
+            put("autoRecordSheet", autoRecordSheet)
+            put("fileBase64", base64Str)
+        }
+        val requestBody = json.toString().toRequestBody(JSON_MEDIA_TYPE)
 
         var lastErr = "구글 드라이브 업로드 실패"
         for (host in hosts) {
@@ -729,24 +729,23 @@ object ApiClient {
         ocrType: String? = null
     ): UploadGenericFileResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
-        val fileMediaType = (mimeType.takeIf { it.isNotBlank() } ?: "application/octet-stream").toMediaType()
-        val requestFile = file.asRequestBody(fileMediaType)
+        val fileBytes = file.readBytes()
+        val base64Str = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)
 
-        val requestBodyBuilder = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart("userEmail", userEmail)
-            .addFormDataPart("fileName", fileName)
-            .addFormDataPart("folderName", folderName)
-            .addFormDataPart("memo", memo)
-            .addFormDataPart("autoRecordSheet", autoRecordSheet.toString())
-            .addFormDataPart("deviceId", "${Build.MANUFACTURER} ${Build.MODEL} (SheetBot Agent)")
-            .addFormDataPart("file", fileName, requestFile)
-
-        if (!ocrType.isNullOrBlank()) {
-            requestBodyBuilder.addFormDataPart("ocrType", ocrType)
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("fileName", fileName)
+            put("folderName", folderName)
+            put("memo", memo)
+            put("autoRecordSheet", autoRecordSheet)
+            put("deviceId", "${Build.MANUFACTURER} ${Build.MODEL} (SheetBot Agent)")
+            put("fileBase64", base64Str)
+            put("mimeType", mimeType)
+            if (!ocrType.isNullOrBlank()) {
+                put("ocrType", ocrType)
+            }
         }
-
-        val requestBody = requestBodyBuilder.build()
+        val requestBody = json.toString().toRequestBody(JSON_MEDIA_TYPE)
 
         for (host in hosts) {
             val endpoint = "$host/api/user/files/upload"

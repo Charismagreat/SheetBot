@@ -53,9 +53,9 @@ const data = await response.json();
 
 EGDesk automatically sets these when starting your dev server:
 
-- `NEXT_PUBLIC_EGDESK_BASE_PATH` - The tunnel path prefix (e.g., `/t/abc123/p/my-app`)
 - `NEXT_PUBLIC_EGDESK_API_KEY` - Your EGDesk API key (for database/sheets access)
-- `NEXT_PUBLIC_EGDESK_API_URL` - EGDesk API endpoint (usually `http://localhost:8080`)
+- `NEXT_PUBLIC_EGDESK_API_URL` - Local MCP endpoint (`http://localhost:8080`) for API routes and helpers
+- `NEXT_PUBLIC_EGDESK_TUNNEL_URL` - Public tunnel MCP root when a prod tunnel is configured (visitor OAuth)
 
 ## What Works Automatically
 
