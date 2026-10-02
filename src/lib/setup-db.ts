@@ -757,7 +757,26 @@ export async function setupDatabase(force = false): Promise<void> {
       { tableName: 'sheetbot_quotes' }
     );
 
-    // 23. 기본 추천 프롬프트 시딩
+    // 24. sheetbot_ai_batch_jobs 테이블 생성 (Gemini Batch 비동기 수거 및 50% 반값 절감 대장)
+    await safeCreateTable(
+      'SheetBot AI 배치 비동기 수거 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'job_name', type: 'TEXT', notNull: true },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'file_name', type: 'TEXT' },
+        { name: 'spreadsheet_id', type: 'TEXT' },
+        { name: 'row_index', type: 'INTEGER' },
+        { name: 'model', type: 'TEXT' },
+        { name: 'status', type: 'TEXT', notNull: true },
+        { name: 'error_message', type: 'TEXT' },
+        { name: 'completed_at', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_ai_batch_jobs' }
+    );
+
+    // 25. 기본 추천 프롬프트 시딩
     await seedDefaultPromptTemplates();
 
     // 23. 레거시 데이터 마이그레이션 실행
