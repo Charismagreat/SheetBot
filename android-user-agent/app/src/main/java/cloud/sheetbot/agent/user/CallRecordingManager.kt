@@ -44,12 +44,22 @@ object CallRecordingManager {
 
         // 1. 기능 활성화 및 페어링 확인
         if (!prefs.isPaired || !prefs.isCallRecordingSyncEnabled) {
-            return@withContext RecordingSyncResult(0, 0, 0, "통화 녹음 백업 기능이 비활성화되어 있습니다.")
+            return@withContext RecordingSyncResult(
+                uploadedCount = 0,
+                totalFound = 0,
+                alreadySyncedCount = 0,
+                message = "통화 녹음 백업 기능이 비활성화되어 있습니다."
+            )
         }
 
         val userEmail = prefs.userEmail
         if (userEmail.isNullOrBlank()) {
-            return@withContext RecordingSyncResult(0, 0, 0, "계정이 연동되지 않았습니다.")
+            return@withContext RecordingSyncResult(
+                uploadedCount = 0,
+                totalFound = 0,
+                alreadySyncedCount = 0,
+                message = "계정이 연동되지 않았습니다."
+            )
         }
 
         // 2. 단말기 내 통화 녹음 폴더 목록 확인 (삼성 기본, SKT 에이닷(A.), T전화, 후후, Cube ACR 등 모든 녹음 앱 통합 지원)
@@ -62,7 +72,7 @@ object CallRecordingManager {
             candidateFolders.add(userDir)
             // 사용자 지정 폴더의 하위 1단계 폴더들도 함께 탐색
             if (userDir.exists() && userDir.isDirectory) {
-                userDir.listFiles { it.isDirectory }?.let { candidateFolders.addAll(it) }
+                userDir.listFiles()?.filter { it.isDirectory }?.let { candidateFolders.addAll(it) }
             }
         }
 
@@ -106,10 +116,10 @@ object CallRecordingManager {
         for (folder in candidateFolders) {
             if (folder.exists() && folder.isDirectory) {
                 scannedDirNames.add(folder.name)
-                val files = folder.listFiles { f ->
+                val files = folder.listFiles()?.filter { f ->
                     f.isFile && f.extension.lowercase() in supportedExtensions
                 }
-                if (files != null && files.isNotEmpty()) {
+                if (!files.isNullOrEmpty()) {
                     for (f in files) {
                         if (!recordingFiles.any { it.absolutePath == f.absolutePath }) {
                             recordingFiles.add(f)
