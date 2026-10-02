@@ -3388,8 +3388,8 @@ class MainActivity : AppCompatActivity() {
      * - forceReupload: 기존 백업 이력 무시하고 강제 재업로드 여부 (롱클릭 지원)
      */
     private fun executeRecordingSync(forceReupload: Boolean = false) {
-        val userEmail = prefs.googleAccountEmail
-        if (userEmail.isBlank()) {
+        val userEmail = prefs.userEmail
+        if (userEmail.isNullOrBlank()) {
             Toast.makeText(this, "먼저 상단에서 구글 계정으로 로그인해 주세요.", Toast.LENGTH_SHORT).show()
             return
         }
