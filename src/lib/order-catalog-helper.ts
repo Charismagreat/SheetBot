@@ -256,7 +256,12 @@ export async function getOrderCatalogData(options: {
     } catch (_) {}
   }
 
-  if (!merchantImage) {
+  if (merchantImage) {
+    const match = merchantImage.match(/quote_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
+    if (match) {
+      merchantImage = `https://cdn.jsdelivr.net/gh/Charismagreat/SheetBot@main/public/uploads/quote-images/${match[0]}`;
+    }
+  } else {
     merchantImage = "https://sheetbot.cloud/favicon.svg";
   }
 
