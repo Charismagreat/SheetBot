@@ -763,6 +763,7 @@ export async function setupDatabase(force = false): Promise<void> {
       [
         { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
         { name: 'job_name', type: 'TEXT', notNull: true },
+        { name: 'job_type', type: 'TEXT' }, // 'RECORDING' | 'LINK_BOOKMARK'
         { name: 'user_email', type: 'TEXT', notNull: true },
         { name: 'file_name', type: 'TEXT' },
         { name: 'spreadsheet_id', type: 'TEXT' },
@@ -775,6 +776,10 @@ export async function setupDatabase(force = false): Promise<void> {
       ],
       { tableName: 'sheetbot_ai_batch_jobs' }
     );
+
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_ai_batch_jobs ADD COLUMN job_type TEXT;`);
+    } catch {}
 
     // 25. 기본 추천 프롬프트 시딩
     await seedDefaultPromptTemplates();
