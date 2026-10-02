@@ -12,6 +12,16 @@ import { deductTokens } from './token-wallet';
 import { recordAiUsageLog } from './ai-usage';
 import { getKoreanTimeString } from './date-utils';
 
+function formatBusinessNumber(raw: any): string {
+  if (!raw) return "미기재";
+  const str = String(raw).trim();
+  const digits = str.replace(/[^0-9]/g, "");
+  if (digits.length === 10) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+  }
+  return str.length > 0 ? str : "미기재";
+}
+
 let isSweeperRunning = false;
 
 export async function processPendingBatchJobs(): Promise<{
@@ -76,7 +86,97 @@ export async function processPendingBatchJobs(): Promise<{
 
           const jobType = String(job.job_type || (job.file_name?.startsWith('[LINK_BOOKMARK]') || !job.file_name?.match(/\.(m4a|mp3|wav|ogg)$/i) ? 'LINK_BOOKMARK' : 'RECORDING'));
 
-          if (jobType === 'LINK_BOOKMARK') {
+          if (jobType === 'RECEIPT') {
+            // [RECEIPT] 영수증 13대 표준 컬럼 수거 (B~K열 핀포인트 갱신)
+            let ocrData: any = {};
+            try {
+              ocrData = JSON.parse(rawText);
+            } catch {
+              ocrData = { merchantName: '영수증', details: rawText.slice(0, 300) };
+            }
+
+            const bNum = formatBusinessNumber(ocrData.businessNumber);
+            const amt = ocrData.amount ? Number(String(ocrData.amount).replace(/[^0-9]/g, '')).toLocaleString('ko-KR') : '0';
+            const vat = ocrData.vat ? Number(String(ocrData.vat).replace(/[^0-9]/g, '')).toLocaleString('ko-KR') : '0';
+
+            // 시트 B열~K열 핀포인트 갱신 (B:구분, C:결제일시, D:상호명, E:사업자번호, F:결제금액, G:부가세, H:카드사, I:카드번호, J:승인번호, K:상세내역)
+            if (spreadsheetId && rowIndex > 1) {
+              await callSheetsTool('sheets_update_range', {
+                spreadsheetId,
+                range: `시트1!B${rowIndex}:K${rowIndex}`,
+                values: [[
+                  ocrData.receiptType || '신용카드 영수증',
+                  ocrData.paidAt || getKoreanTimeString(),
+                  ocrData.merchantName || '확인 불가',
+                  bNum,
+                  amt,
+                  vat,
+                  ocrData.cardIssuer || '-',
+                  ocrData.cardNumber || '-',
+                  ocrData.approvalNumber || '-',
+                  ocrData.details || '-',
+                ]],
+                preferOAuth: true,
+              }).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
+            }
+
+            const usedTokens = Math.round(1200 * 0.5); // 50% 배치 할인
+            await deductTokens(userEmail, usedTokens).catch(() => {});
+
+            void recordAiUsageLog({
+              userEmail,
+              caller: 'sheetbot-receipt-batch-sweeper',
+              purpose: `영수증 AI 장부화 [AI 배치(50% 절감)] (${targetModel} / 0.5x)`,
+              model: targetModel,
+              promptTokens: 400,
+              completionTokens: 200,
+              totalTokens: usedTokens,
+              promptText: `비동기 영수증 분석: ${fileName}`,
+              responseText: JSON.stringify(ocrData).slice(0, 300),
+            });
+          } else if (jobType === 'BUSINESS_CARD') {
+            // [BUSINESS_CARD] 명함 11대 표준 컬럼 수거 (B~I열 핀포인트 갱신)
+            let ocrData: any = {};
+            try {
+              ocrData = JSON.parse(rawText);
+            } catch {
+              ocrData = { name: '명함', details: rawText.slice(0, 300) };
+            }
+
+            // 시트 B열~I열 핀포인트 갱신 (B:성함, C:직함, D:회사명, E:휴대폰, F:이메일, G:유선전화, H:회사주소, I:상세정보)
+            if (spreadsheetId && rowIndex > 1) {
+              await callSheetsTool('sheets_update_range', {
+                spreadsheetId,
+                range: `시트1!B${rowIndex}:I${rowIndex}`,
+                values: [[
+                  ocrData.name || '확인 불가',
+                  ocrData.title || '미기재',
+                  ocrData.company || '미기재',
+                  ocrData.mobile || '미기재',
+                  ocrData.email || '미기재',
+                  ocrData.tel || '미기재',
+                  ocrData.address || '미기재',
+                  ocrData.details || '-',
+                ]],
+                preferOAuth: true,
+              }).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
+            }
+
+            const usedTokens = Math.round(1000 * 0.5); // 50% 배치 할인
+            await deductTokens(userEmail, usedTokens).catch(() => {});
+
+            void recordAiUsageLog({
+              userEmail,
+              caller: 'sheetbot-card-batch-sweeper',
+              purpose: `명함 AI 인맥화 [AI 배치(50% 절감)] (${targetModel} / 0.5x)`,
+              model: targetModel,
+              promptTokens: 350,
+              completionTokens: 150,
+              totalTokens: usedTokens,
+              promptText: `비동기 명함 분석: ${fileName}`,
+              responseText: JSON.stringify(ocrData).slice(0, 300),
+            });
+          } else if (jobType === 'LINK_BOOKMARK') {
             // [LINK_BOOKMARK] 웹 링크 및 유튜브 3줄 요약 수거
             let finalSummary = rawText;
             try {
