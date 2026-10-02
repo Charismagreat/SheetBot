@@ -131,27 +131,29 @@ export async function POST(req: NextRequest) {
 
     const fileSizeMb = formatBytes(buffer.length);
 
-    // 4. 구글 드라이브 대상 폴더 탐색 및 생성
-    let targetFolderId: string | null = null;
-    try {
-      writeDebugLog(`Step 4: Calling listDriveFiles for folder ${targetFolderName}...`);
-      const folderSearch = await listDriveFiles({
-        query: `mimeType = 'application/vnd.google-apps.folder' and name = '${targetFolderName}' and trashed = false`,
-        preferOAuth: true,
-      });
-      writeDebugLog(`Step 4: folderSearch returned: ${JSON.stringify(folderSearch)}`);
+    // 4. 구글 드라이브 대상 폴더 탐색 및 사전 캐싱 (0초 즉시 매핑)
+    let targetFolderId: string | null = "14TuBcWsooWB7_yPqyn6L0imjshpVxFVX"; // [SheetBot] 통화 녹음 기본 폴더 캐시
+    if (targetFolderName !== "[SheetBot] 통화 녹음") {
+      try {
+        writeDebugLog(`Step 4: Searching custom folder ${targetFolderName}...`);
+        const folderSearch = (await Promise.race([
+          listDriveFiles({
+            query: `mimeType = 'application/vnd.google-apps.folder' and name = '${targetFolderName}' and trashed = false`,
+            preferOAuth: true,
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Folder search timeout")), 4000)),
+        ])) as any;
 
-      const existingFolders = folderSearch?.files || [];
-      if (existingFolders.length > 0) {
-        targetFolderId = existingFolders[0].id;
-      } else {
-        writeDebugLog(`Step 4: Creating folder ${targetFolderName}...`);
-        const newFolderRes = await createDriveFolder(targetFolderName, undefined, true);
-        targetFolderId = newFolderRes?.id || (typeof newFolderRes === "string" ? newFolderRes : null);
+        const existingFolders = folderSearch?.files || [];
+        if (existingFolders.length > 0) {
+          targetFolderId = existingFolders[0].id;
+        } else {
+          const newFolderRes = await createDriveFolder(targetFolderName, undefined, true);
+          targetFolderId = newFolderRes?.id || (typeof newFolderRes === "string" ? newFolderRes : null);
+        }
+      } catch (folderErr: any) {
+        writeDebugLog(`Step 4 warning: ${folderErr.message}`);
       }
-    } catch (folderErr: any) {
-      writeDebugLog(`Step 4 warning: ${folderErr.message}`);
-      console.warn("[RecordingsUpload] Folder resolve warning:", folderErr.message);
     }
 
     // 5. 구글 드라이브로 파일 업로드 (원격/로컬 무손실 브릿지 전송)
@@ -176,144 +178,33 @@ export async function POST(req: NextRequest) {
       throw new Error(`구글 드라이브 파일 업로드에 실패했습니다: ${uploadErr.message}`);
     }
 
-    // 6. 구글 스프레드시트 대장 고유 ID 영구 바인딩 및 행 기록 (시트봇 기본 핵심 기능으로 무조건 기록 보장)
-    let spreadsheetUrl = "";
-    writeDebugLog(`Step 6: autoRecordSheet=${autoRecordSheet}, resolving spreadsheet...`);
-    try {
-        const sheetTitle = "[SheetBot] 통화 녹음 대장";
-        const resolved = await resolveUserSpreadsheet({
-          userEmail: cleanEmail,
-          sheetType: "RECORDING",
-          defaultTitle: sheetTitle,
-          folderId: targetFolderId,
-          preferOAuth: true,
+    // ★ [Fast-Return 원칙] 스마트폰 클라이언트에게 3초 만에 200 성공 응답을 즉시 반환하여 터널 소켓 타임아웃 원천 차단!
+    // 구글 시트 대장 행 기록, DB 감사 로그, Gemini Batch AI 분석은 백그라운드 프로세스로 안전하게 실행
+    const capturedDriveFileId = driveFileId;
+    const capturedWebViewLink = webViewLink;
+    const capturedTargetFolderId = targetFolderId;
+    const base64Audio = buffer.toString("base64");
+
+    void (async () => {
+      try {
+        await executeBackgroundSheetAndAiPipeline({
+          cleanEmail,
+          targetFileName,
+          contactName,
+          callTime,
+          fileSizeMb,
+          webViewLink: capturedWebViewLink,
+          targetFolderId: capturedTargetFolderId,
+          targetFolderName,
+          base64Audio,
+          driveFileId: capturedDriveFileId,
         });
-
-        const targetSpreadsheetId = resolved.spreadsheetId;
-        spreadsheetUrl = resolved.spreadsheetUrl;
-
-        const STANDARD_RECORDING_HEADERS = [
-          "통화 일시",
-          "상대방",
-          "파일명",
-          "파일 크기",
-          "AI 3줄 핵심 요약",
-          "후속 할 일 (Action Items)",
-          "전체 텍스트 전사(STT)",
-          "구글 드라이브 바로듣기 링크"
-        ];
-
-        if (targetSpreadsheetId) {
-          // 기존 시트의 1행 헤더 확인 및 8대 표준 자동 보장
-          try {
-            const headerCheck = await callSheetsTool("sheets_get_range", {
-              spreadsheetId: targetSpreadsheetId,
-              range: "시트1!A1:H1",
-              preferOAuth: true,
-            });
-            const existingHeaders = headerCheck?.values?.[0] || [];
-            if (existingHeaders.length < 8 || existingHeaders[4] !== STANDARD_RECORDING_HEADERS[4]) {
-              await callSheetsTool("sheets_update_range", {
-                spreadsheetId: targetSpreadsheetId,
-                range: "시트1!A1:H1",
-                values: [STANDARD_RECORDING_HEADERS],
-                preferOAuth: true,
-              }).catch(() => {});
-
-              await callSheetsTool("sheets_format_headers", {
-                spreadsheetId: targetSpreadsheetId,
-                tabName: "시트1",
-                headerBgColor: "#1e293b",
-                headerTextColor: "#ffffff",
-                preferOAuth: true,
-              }).catch(() => {});
-            }
-          } catch {}
-
-          // 6-3. 중복 파일 검사 및 행 추가/갱신
-          let targetRowIndex: number | null = null;
-          let isDuplicate = false;
-          try {
-            const filesCheck = await callSheetsTool("sheets_get_range", {
-              spreadsheetId: targetSpreadsheetId,
-              range: "시트1!C:C",
-              preferOAuth: true,
-            });
-            const existingFiles: string[] = (filesCheck?.values || []).map((row: any[]) => String(row[0] || ""));
-            const matchIndex = existingFiles.findIndex((name, idx) => idx > 0 && name === targetFileName);
-            if (matchIndex !== -1) {
-              isDuplicate = true;
-              targetRowIndex = matchIndex + 1; // 1-indexed row number
-            } else {
-              targetRowIndex = existingFiles.length + 1;
-            }
-          } catch {
-            targetRowIndex = null;
-          }
-
-          if (isDuplicate && targetRowIndex) {
-            // 이미 존재하는 행의 링크 및 정보 갱신
-            writeDebugLog(`Step 6: Updating existing duplicate row ${targetRowIndex}...`);
-            await callSheetsTool("sheets_update_range", {
-              spreadsheetId: targetSpreadsheetId,
-              range: `D${targetRowIndex}:H${targetRowIndex}`,
-              values: [[fileSizeMb, "⏳ AI 배치 분석 대기 중 (비용 50% 절감)", "⏳ 분석 준비 중...", "⏳ 음성 전사 대기 중...", webViewLink]],
-              preferOAuth: true,
-            }).catch((err) => writeDebugLog(`Step 6 update error: ${err.message}`));
-          } else {
-            // 신규 행 추가
-            const initialRowValues = [
-              [callTime, contactName, targetFileName, fileSizeMb, "⏳ AI 배치 분석 대기 중 (비용 50% 절감)", "⏳ 분석 준비 중...", "⏳ 음성 전사 대기 중...", webViewLink]
-            ];
-            writeDebugLog(`Step 6: Appending new row to sheet ${targetSpreadsheetId}...`);
-            const appendRes = await callSheetsTool("sheets_append_values", {
-              spreadsheetId: targetSpreadsheetId,
-              range: "A:H",
-              values: initialRowValues,
-              preferOAuth: true,
-            }).catch((err: any) => {
-              writeDebugLog(`Step 6 append error: ${err.message}`);
-              console.warn("[RecordingsUpload] append_values warning:", err.message);
-              return null;
-            });
-            writeDebugLog(`Step 6: appendRes returned: ${JSON.stringify(appendRes)}`);
-          }
-
-          // 6-4. 비동기 백그라운드 AI 음성 전사(STT) 및 3줄 요약 실행
-          const base64Audio = buffer.toString("base64");
-          const targetSpreadsheetIdCopy = targetSpreadsheetId;
-
-          triggerAiAudioAnalysis(
-            base64Audio,
-            targetFileName,
-            targetSpreadsheetIdCopy,
-            targetRowIndex,
-            cleanEmail
-          ).catch((e) => console.warn("[RecordingsUpload] AI analysis background error:", e.message));
-        }
-      } catch (sheetErr: any) {
-        writeDebugLog(`Step 6 error/warning: ${sheetErr.message}`);
-        console.warn("[RecordingsUpload] Sheet auto-record warning:", sheetErr.message);
+      } catch (bgErr: any) {
+        writeDebugLog(`Background pipeline error: ${bgErr.message}`);
       }
+    })();
 
-    // 7. 발송/수신 감사 대장 DB 적재 (SQLite INTEGER id 규격 준수)
-    const logId = Date.now();
-    await insertRows("sheetbot_user_dispatch_logs", [
-      {
-        id: logId,
-        user_email: cleanEmail,
-        rule_id: "CALL_RECORDING_UPLOAD",
-        rule_name: "🎙️ 통화 녹음 구글 드라이브 자동 백업",
-        device_id: "SheetBot Agent",
-        recipient: contactName,
-        content: `[통화녹음 업로드] ${targetFileName} (${fileSizeMb}) -> ${targetFolderName}`,
-        status: "SUCCESS",
-        error_message: null,
-        created_at: getKoreanTimeString(),
-      },
-    ]).catch((err) => console.warn("[RecordingsUpload] DB log insert warning:", err.message));
-
-    writeDebugLog(`SUCCESS! File uploaded with ID: ${driveFileId}`);
+    writeDebugLog(`SUCCESS! File uploaded with ID: ${driveFileId}. Returning fast 200 response to client.`);
     return NextResponse.json({
       success: true,
       message: `통화 녹음 파일이 구글 드라이브 '${targetFolderName}' 폴더로 안전하게 업로드되었습니다.`,
@@ -322,7 +213,6 @@ export async function POST(req: NextRequest) {
       folderName: targetFolderName,
       folderId: targetFolderId,
       webViewLink,
-      spreadsheetUrl,
     });
   } catch (err: any) {
     writeDebugLog(`FATAL ERROR in route.ts: ${err.message}\nStack: ${err.stack}`);
@@ -335,6 +225,162 @@ export async function POST(req: NextRequest) {
         fs.unlinkSync(tempFilePath);
       } catch {}
     }
+  }
+}
+
+/**
+ * 백그라운드 구글 시트 대장 기록 및 Gemini Batch AI 분석 파이프라인
+ */
+async function executeBackgroundSheetAndAiPipeline(params: {
+  cleanEmail: string;
+  targetFileName: string;
+  contactName: string;
+  callTime: string;
+  fileSizeMb: string;
+  webViewLink: string;
+  targetFolderId: string | null;
+  targetFolderName: string;
+  base64Audio: string;
+  driveFileId: string | null;
+}) {
+  const {
+    cleanEmail,
+    targetFileName,
+    contactName,
+    callTime,
+    fileSizeMb,
+    webViewLink,
+    targetFolderId,
+    targetFolderName,
+    base64Audio,
+    driveFileId,
+  } = params;
+
+  // 6. 구글 스프레드시트 대장 고유 ID 영구 바인딩 및 행 기록
+  writeDebugLog(`Background: Resolving spreadsheet for ${cleanEmail}...`);
+  let targetSpreadsheetId: string | null = null;
+  let targetRowIndex: number | null = null;
+
+  try {
+    const sheetTitle = "[SheetBot] 통화 녹음 대장";
+    const resolved = await resolveUserSpreadsheet({
+      userEmail: cleanEmail,
+      sheetType: "RECORDING",
+      defaultTitle: sheetTitle,
+      folderId: targetFolderId,
+      preferOAuth: true,
+    });
+    targetSpreadsheetId = resolved.spreadsheetId;
+
+    const STANDARD_RECORDING_HEADERS = [
+      "통화 일시",
+      "상대방",
+      "파일명",
+      "파일 크기",
+      "AI 3줄 핵심 요약",
+      "후속 할 일 (Action Items)",
+      "전체 텍스트 전사(STT)",
+      "구글 드라이브 바로듣기 링크",
+    ];
+
+    if (targetSpreadsheetId) {
+      // 1행 헤더 확인 및 8대 표준 자동 보장
+      try {
+        const headerCheck = await callSheetsTool("sheets_get_range", {
+          spreadsheetId: targetSpreadsheetId,
+          range: "시트1!A1:H1",
+          preferOAuth: true,
+        });
+        const existingHeaders = headerCheck?.values?.[0] || [];
+        if (existingHeaders.length < 8 || existingHeaders[4] !== STANDARD_RECORDING_HEADERS[4]) {
+          await callSheetsTool("sheets_update_range", {
+            spreadsheetId: targetSpreadsheetId,
+            range: "시트1!A1:H1",
+            values: [STANDARD_RECORDING_HEADERS],
+            preferOAuth: true,
+          }).catch(() => {});
+
+          await callSheetsTool("sheets_format_headers", {
+            spreadsheetId: targetSpreadsheetId,
+            tabName: "시트1",
+            headerBgColor: "#1e293b",
+            headerTextColor: "#ffffff",
+            preferOAuth: true,
+          }).catch(() => {});
+        }
+      } catch {}
+
+      // 중복 파일 검사 및 행 추가/갱신
+      let isDuplicate = false;
+      try {
+        const filesCheck = await callSheetsTool("sheets_get_range", {
+          spreadsheetId: targetSpreadsheetId,
+          range: "시트1!C:C",
+          preferOAuth: true,
+        });
+        const existingFiles: string[] = (filesCheck?.values || []).map((row: any[]) => String(row[0] || ""));
+        const matchIndex = existingFiles.findIndex((name, idx) => idx > 0 && name === targetFileName);
+        if (matchIndex !== -1) {
+          isDuplicate = true;
+          targetRowIndex = matchIndex + 1;
+        } else {
+          targetRowIndex = existingFiles.length + 1;
+        }
+      } catch {
+        targetRowIndex = null;
+      }
+
+      if (isDuplicate && targetRowIndex) {
+        writeDebugLog(`Background: Updating duplicate row ${targetRowIndex}...`);
+        await callSheetsTool("sheets_update_range", {
+          spreadsheetId: targetSpreadsheetId,
+          range: `D${targetRowIndex}:H${targetRowIndex}`,
+          values: [[fileSizeMb, "⏳ AI 배치 분석 대기 중 (비용 50% 절감)", "⏳ 분석 준비 중...", "⏳ 음성 전사 대기 중...", webViewLink]],
+          preferOAuth: true,
+        }).catch(() => {});
+      } else {
+        const initialRowValues = [
+          [callTime, contactName, targetFileName, fileSizeMb, "⏳ AI 배치 분석 대기 중 (비용 50% 절감)", "⏳ 분석 준비 중...", "⏳ 음성 전사 대기 중...", webViewLink],
+        ];
+        writeDebugLog(`Background: Appending row to sheet ${targetSpreadsheetId}...`);
+        await callSheetsTool("sheets_append_values", {
+          spreadsheetId: targetSpreadsheetId,
+          range: "A:H",
+          values: initialRowValues,
+          preferOAuth: true,
+        }).catch(() => {});
+      }
+    }
+  } catch (sheetErr: any) {
+    writeDebugLog(`Background Sheet warning: ${sheetErr.message}`);
+  }
+
+  // 7. 발송/수신 감사 대장 DB 적재
+  const logId = Date.now();
+  await insertRows("sheetbot_user_dispatch_logs", [
+    {
+      id: logId,
+      user_email: cleanEmail,
+      rule_id: "CALL_RECORDING_UPLOAD",
+      rule_name: "🎙️ 통화 녹음 구글 드라이브 자동 백업",
+      device_id: "SheetBot Agent",
+      recipient: contactName,
+      content: `[통화녹음 업로드] ${targetFileName} (${fileSizeMb}) -> ${targetFolderName}`,
+      status: "SUCCESS",
+      error_message: null,
+      created_at: getKoreanTimeString(),
+    },
+  ]).catch(() => {});
+
+  // 8. 백그라운드 AI 음성 전사(STT) 및 3줄 요약 실행
+  if (targetSpreadsheetId) {
+    await triggerAiAudioAnalysis(
+      base64Audio,
+      targetFileName,
+      targetSpreadsheetId,
+      targetRowIndex,
+      cleanEmail
+    ).catch((e) => writeDebugLog(`Background AI error: ${e.message}`));
   }
 }
 
