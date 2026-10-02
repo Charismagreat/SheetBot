@@ -6,6 +6,8 @@ import {
   callDriveTool,
   callSheetsTool,
   callAiCaller,
+  callAiBatchSubmit,
+  callAiBatchGet,
   listDriveFiles,
   createDriveFolder,
   uploadDriveFile,
@@ -255,13 +257,13 @@ export async function POST(req: NextRequest) {
             await callSheetsTool("sheets_update_range", {
               spreadsheetId: targetSpreadsheetId,
               range: `D${targetRowIndex}:H${targetRowIndex}`,
-              values: [[fileSizeMb, "⏳ AI 분석 준비 중...", "⏳ AI 분석 준비 중...", "⏳ 음성 전사 준비 중...", webViewLink]],
+              values: [[fileSizeMb, "⏳ AI 배치 분석 대기 중 (비용 50% 절감)", "⏳ 분석 준비 중...", "⏳ 음성 전사 대기 중...", webViewLink]],
               preferOAuth: true,
             }).catch((err) => writeDebugLog(`Step 6 update error: ${err.message}`));
           } else {
             // 신규 행 추가
             const initialRowValues = [
-              [callTime, contactName, targetFileName, fileSizeMb, "⏳ AI 분석 준비 중...", "⏳ AI 분석 준비 중...", "⏳ 음성 전사 준비 중...", webViewLink]
+              [callTime, contactName, targetFileName, fileSizeMb, "⏳ AI 배치 분석 대기 중 (비용 50% 절감)", "⏳ 분석 준비 중...", "⏳ 음성 전사 대기 중...", webViewLink]
             ];
             writeDebugLog(`Step 6: Appending new row to sheet ${targetSpreadsheetId}...`);
             const appendRes = await callSheetsTool("sheets_append_values", {
@@ -402,21 +404,74 @@ async function triggerAiAudioAnalysis(
   "transcript": "[전체 통화 대화 내용 전사]"
 }`;
 
-    const aiRes = await callAiCaller(prompt, {
-      caller: "sheetbot-voice-intelligence",
-      model: targetModel,
-      temperature: 0.1,
-      files: [
-        {
-          name: fileName,
-          content: base64Audio,
-          encoding: "base64",
-          mimeType: mimeType,
-        },
-      ],
-    });
+    let rawText = "";
+    let isBatchSuccess = false;
 
-    let rawText = (aiRes.text || aiRes.content || "").trim();
+    // [배치 방식 우선 시도] 50% 비용 절감 Gemini Batch API
+    try {
+      writeDebugLog(`Submitting async AI Batch job for ${fileName}...`);
+      const batchSubmitRes = await callAiBatchSubmit(
+        [
+          {
+            key: `call-${Date.now()}`,
+            prompt,
+            temperature: 0.1,
+            files: [
+              {
+                name: fileName,
+                content: base64Audio,
+                encoding: "base64",
+                mimeType,
+              },
+            ],
+          },
+        ],
+        {
+          caller: "sheetbot-voice-batch",
+          model: targetModel,
+          displayName: `CallRecording-${fileName.slice(0, 30)}`,
+        }
+      );
+
+      if (batchSubmitRes.success && batchSubmitRes.jobName) {
+        writeDebugLog(`Batch job submitted: ${batchSubmitRes.jobName}. Waiting for completion...`);
+        const batchGetRes = await callAiBatchGet(batchSubmitRes.jobName, {
+          waitMs: 60000,
+          pollIntervalMs: 5000,
+        });
+
+        if (batchGetRes.success && batchGetRes.results && batchGetRes.results.length > 0) {
+          const firstResult = batchGetRes.results[0];
+          rawText = (firstResult.text || firstResult.content || firstResult.response || "").trim();
+          if (rawText.length > 0) {
+            isBatchSuccess = true;
+            writeDebugLog(`Batch job succeeded! Text length: ${rawText.length}`);
+          }
+        }
+      }
+    } catch (batchErr: any) {
+      writeDebugLog(`Batch attempt warning (falling back to direct call): ${batchErr.message}`);
+    }
+
+    // [폴백 안전망] 만약 배치 작업이 미완료이거나 예외 시 일반 실시간 호출로 안전하게 완료
+    if (!rawText) {
+      writeDebugLog(`Calling standard AI Caller for ${fileName}...`);
+      const aiRes = await callAiCaller(prompt, {
+        caller: "sheetbot-voice-intelligence",
+        model: targetModel,
+        temperature: 0.1,
+        files: [
+          {
+            name: fileName,
+            content: base64Audio,
+            encoding: "base64",
+            mimeType,
+          },
+        ],
+      });
+      rawText = (aiRes.text || aiRes.content || "").trim();
+    }
+
     if (rawText.startsWith("```json")) {
       rawText = rawText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
     } else if (rawText.startsWith("```")) {
@@ -439,20 +494,22 @@ async function triggerAiAudioAnalysis(
       }
     }
 
-    // 4. 사용 토큰 계산 및 실제 차감 (오디오 STT 가중치 기본 500 + 입출력 토큰)
+    // 4. 사용 토큰 계산 및 차감 (★ 배치 방식 성공 시 50% 반값 할인 계수 0.5 적용!)
     const promptLen = prompt.length;
     const respLen = rawText.length;
     const rawTokens = Math.max(800, Math.ceil((promptLen + respLen) / 2.5) + 500);
-    const multiplier = aiSettings.tokenMultiplier || 1.0;
-    const usedTokens = Math.round(rawTokens * multiplier);
+    const baseMultiplier = aiSettings.tokenMultiplier || 1.0;
+    const batchDiscountRate = isBatchSuccess ? 0.5 : 1.0; // 배치 50% 할인
+    const usedTokens = Math.round(rawTokens * baseMultiplier * batchDiscountRate);
 
     await deductTokens(cleanEmail, usedTokens);
 
     // 5. AI 사용량 감사 로그 적재
+    const modeLabel = isBatchSuccess ? "AI 배치(50% 절감)" : "실시간 폴백";
     void recordAiUsageLog({
       userEmail: cleanEmail,
-      caller: "sheetbot-voice-intelligence",
-      purpose: `통화 녹음 AI STT 및 3줄 요약/Action Items (${targetModel} / ${multiplier}x)`,
+      caller: isBatchSuccess ? "sheetbot-voice-batch" : "sheetbot-voice-intelligence",
+      purpose: `통화 녹음 AI STT 및 3줄 요약/Action Items [${modeLabel}] (${targetModel} / ${baseMultiplier * batchDiscountRate}x)`,
       model: targetModel,
       promptTokens: Math.ceil(promptLen / 2.5) + 500,
       completionTokens: Math.ceil(respLen / 2.5),
@@ -471,7 +528,7 @@ async function triggerAiAudioAnalysis(
       }).catch((e: any) => console.warn("[AiAudioAnalysis] Sheet update warning:", e.message));
     }
 
-    console.log(`[AiAudioAnalysis] Audio ${fileName} analyzed & ${usedTokens} tokens deducted for ${cleanEmail}.`);
+    console.log(`[AiAudioAnalysis] Audio ${fileName} analyzed via ${modeLabel} & ${usedTokens} tokens deducted for ${cleanEmail}.`);
   } catch (err: any) {
     console.warn("[AiAudioAnalysis] Background audio analysis failed:", err.message);
     if (spreadsheetId && rowIndex && rowIndex > 1) {

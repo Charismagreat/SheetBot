@@ -91,11 +91,16 @@ class PhoneCallReceiver : BroadcastReceiver() {
                     if (!missedPhone.isNullOrBlank() && prefs.isPaired && !userEmail.isNullOrBlank()) {
                         handleMissedCall(context, prefs, userEmail, missedPhone)
                     }
-                } else if (lastState == TelephonyManager.EXTRA_STATE_OFFHOOK && isIncomingAnswered) {
-                    // ★ 통화 정상 종료 (Call Ended) 감지!
+                } else if (lastState == TelephonyManager.EXTRA_STATE_OFFHOOK) {
+                    // ★ 통화 정상 종료 (Call Ended) 감지! (수신/발신 통화 모두 지원)
                     val endedPhone = phoneNumber ?: savedIncomingNumber
                     if (!endedPhone.isNullOrBlank() && prefs.isCallEndedCardPromptEnabled) {
                         showCallEndedCardPrompt(context, endedPhone)
+                    }
+
+                    // ★ 통화 종료 즉시 녹음 자동 업로드 트리거 (3.5초 스마트 I/O 딜레이 후 실행)
+                    if (prefs.isCallRecordingSyncEnabled && prefs.isCallEndedAutoUploadEnabled && prefs.isPaired) {
+                        triggerAutoRecordingUpload(context, prefs)
                     }
                 }
 
@@ -310,5 +315,74 @@ class PhoneCallReceiver : BroadcastReceiver() {
             }
             manager.createNotificationChannel(channel)
         }
+    }
+
+    /**
+     * 통화 종료 직후 3.5초 스마트 I/O 딜레이 후 통화 녹음 파일 자동 동기화 트리거
+     */
+    private fun triggerAutoRecordingUpload(context: Context, prefs: PreferencesManager) {
+        // Wi-Fi 전용 옵션 검사
+        if (prefs.isRecordingUploadOnlyOnWifi && !isWifiConnected(context)) {
+            Log.d(TAG, "📶 [통화 녹음 자동 업로드 건너뜀] Wi-Fi 전용 옵션 활성화됨 (현재 모바일 데이터 상태)")
+            return
+        }
+
+        Log.i(TAG, "🎙️ [통화 종료 감지] 3.5초 후 통화 녹음 파일 자동 동기화 개시 예정...")
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // 스마트폰 오디오 인코딩 및 파일 시스템 finalize 대기 (3.5초)
+                kotlinx.coroutines.delay(3500L)
+
+                Log.i(TAG, "🚀 [통화 종료 후 자동 동기화 시작] 녹음 파일 스캔 및 업로드 진행")
+                val result = CallRecordingManager.syncRecordings(context, forceReupload = false)
+
+                if (result.uploadedCount > 0) {
+                    Log.i(TAG, "✅ [통화 녹음 자동 업로드 완료] 업로드 건수: ${result.uploadedCount}개")
+                    showRecordingUploadSuccessNotification(context, result.uploadedCount)
+                    if (prefs.isTtsEnabled) {
+                        TtsManager.speak(context, "통화 녹음 파일이 구글 시트 대장에 자동 업로드되었습니다.")
+                    }
+                } else {
+                    Log.d(TAG, "ℹ️ [통화 녹음 자동 동기화 완료] 새로 생성된 대상 녹음 파일 없음: ${result.message}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "통화 종료 후 녹음 자동 동기화 중 오류", e)
+            } finally {
+                pendingResult.finish()
+            }
+        }
+    }
+
+    private fun isWifiConnected(context: Context): Boolean {
+        return try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val network = cm?.activeNetwork ?: return false
+                val caps = cm.getNetworkCapabilities(network) ?: return false
+                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
+            } else {
+                @Suppress("DEPRECATION")
+                val info = cm?.activeNetworkInfo
+                @Suppress("DEPRECATION")
+                info?.type == android.net.ConnectivityManager.TYPE_WIFI && info.isConnected
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun showRecordingUploadSuccessNotification(context: Context, count: Int) {
+        ensureNotificationChannel(context)
+        val notification = NotificationCompat.Builder(context, MISSED_CALL_CHANNEL_ID)
+            .setContentTitle("🎙️ [통화 녹음 자동 백업]")
+            .setContentText("방금 종료된 통화 녹음(${count}건)이 구글 드라이브 및 시트 대장에 자동 기록되었습니다.")
+            .setSmallIcon(android.R.drawable.stat_sys_upload_done)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify((System.currentTimeMillis() % 100000).toInt(), notification)
     }
 }

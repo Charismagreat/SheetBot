@@ -100,6 +100,16 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("call_recording_custom_folder", "") ?: ""
         set(value) = prefs.edit().putString("call_recording_custom_folder", value).apply()
 
+    // 통화 종료 즉시 녹음 자동 업로드 설정 (기본값: true)
+    var isCallEndedAutoUploadEnabled: Boolean
+        get() = prefs.getBoolean("is_call_ended_auto_upload_enabled", true)
+        set(value) = prefs.edit().putBoolean("is_call_ended_auto_upload_enabled", value).apply()
+
+    // Wi-Fi 환경에서만 녹음 자동 업로드 (모바일 데이터 절약, 기본값: false)
+    var isRecordingUploadOnlyOnWifi: Boolean
+        get() = prefs.getBoolean("is_recording_upload_only_on_wifi", false)
+        set(value) = prefs.edit().putBoolean("is_recording_upload_only_on_wifi", value).apply()
+
     // 사진 및 일반 파일 구글 드라이브 업로드 관련 설정
     var isFileUploadSyncEnabled: Boolean
         get() = prefs.getBoolean("is_file_upload_sync_enabled", false)
