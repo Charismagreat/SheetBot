@@ -24,8 +24,8 @@ export async function GET(
       let cdnUrl = `https://github.com/Charismagreat/SheetBot/releases/latest/download/${safeFilename}`;
 
       if (safeFilename.toLowerCase().includes("sheetbotagent")) {
-        // 일반 회원용 시트봇 에이전트 최신 v2.1.27 정본 APK
-        cdnUrl = "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.27/SheetBotAgent.apk";
+        // 일반 회원용 시트봇 에이전트 최신 v2.1.28 정본 APK
+        cdnUrl = "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.28/SheetBotAgent.apk";
       } else if (safeFilename.toLowerCase().includes("deposit")) {
         // 관리자용 시트봇 에이전트 M 최신 v1.5.2 정본 APK
         cdnUrl = "https://github.com/Charismagreat/SheetBot/releases/download/v1.5.2/sheetbot-deposit-agent.apk";

@@ -682,6 +682,7 @@ object ApiClient {
             .addFormDataPart("file", fileName, requestFile)
             .build()
 
+        var lastErr = "구글 드라이브 업로드 실패"
         for (host in hosts) {
             val endpoint = "$host/api/user/recordings/upload"
             try {
@@ -703,13 +704,15 @@ object ApiClient {
                     )
                 } else {
                     val msg = resJson.optString("error", "HTTP ${response.code}")
+                    lastErr = "$host: $msg"
                     Log.w(TAG, "통화 녹음 업로드 실패 ($host): $msg")
                 }
             } catch (e: Exception) {
+                lastErr = "$host: ${e.message}"
                 Log.w(TAG, "통화 녹음 업로드 통신 예외 ($host): ${e.message}")
             }
         }
-        UploadRecordingResult(success = false, error = "구글 드라이브 업로드 실패")
+        UploadRecordingResult(success = false, error = lastErr)
     }
 
     /**

@@ -3405,25 +3405,19 @@ class MainActivity : AppCompatActivity() {
                     binding.btnSyncRecordingsNow.isEnabled = true
                     binding.btnSyncRecordingsNow.text = "⚡ 지금 새 녹음 파일 즉시 동기화"
 
-                    if (result.uploadedCount > 0) {
-                        AlertDialog.Builder(this@MainActivity)
-                            .setTitle("🎉 통화 녹음 백업 완료")
-                            .setMessage("총 ${result.totalFound}개 파일 중 ${result.uploadedCount}개의 신규 녹음 파일이 구글 드라이브 [통화 녹음] 폴더에 안전하게 업로드되었습니다.")
-                            .setPositiveButton("확인", null)
-                            .show()
-                    } else if (result.alreadySyncedCount > 0 && !forceReupload) {
-                        AlertDialog.Builder(this@MainActivity)
-                            .setTitle("📁 이미 백업 완료됨")
-                            .setMessage("스마트폰에서 총 ${result.totalFound}개의 통화 녹음 파일이 발견되었으나, 모두 이미 구글 드라이브에 안전하게 보관되어 있습니다.\n\n💡 다시 전체를 업로드하시려면 [⚡ 지금 새 녹음 파일 즉시 동기화] 버튼을 '길게(롱클릭)' 눌러주세요.")
-                            .setPositiveButton("확인", null)
-                            .show()
-                    } else {
-                        AlertDialog.Builder(this@MainActivity)
-                            .setTitle("ℹ️ 동기화 결과")
-                            .setMessage(result.message)
-                            .setPositiveButton("확인", null)
-                            .show()
+                    val dialogTitle = when {
+                        result.uploadedCount > 0 -> "🎉 통화 녹음 백업 완료"
+                        result.uploadFailedCount > 0 -> "⚠️ 전송 실패 안내"
+                        result.filterExcludedCount > 0 -> "🔍 필터 제외 안내"
+                        result.alreadySyncedCount > 0 -> "📁 이미 백업 완료됨"
+                        else -> "ℹ️ 동기화 결과"
                     }
+
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle(dialogTitle)
+                        .setMessage(result.message)
+                        .setPositiveButton("확인", null)
+                        .show()
                 }
             } catch (e: Throwable) {
                 Log.e("MainActivity", "executeRecordingSync 오류: ${e.message}", e)
