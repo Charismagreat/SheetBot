@@ -92,7 +92,7 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putString("call_recording_drive_folder", value).apply()
 
     var isCallRecordingSheetEnabled: Boolean
-        get() = prefs.getBoolean("is_call_recording_sheet_enabled", false)
+        get() = prefs.getBoolean("is_call_recording_sheet_enabled", true)
         set(value) = prefs.edit().putBoolean("is_call_recording_sheet_enabled", value).apply()
 
     // 이용자 지정 커스텀 통화 녹음 폴더 (기본값 빈값: 자동 감지)
