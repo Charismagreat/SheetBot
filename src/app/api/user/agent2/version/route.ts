@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 45,
-      latestVersionName: "2.1.24",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.24/SheetBotAgent.apk",
+      latestVersionCode: 46,
+      latestVersionName: "2.1.25",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.25/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.24 릴리즈\n• 📊 [스마트 간편 주문 대장 연동 정상화] 주문접수대장 탭(gid=1021826080) 직행 및 구버전 시트 캐시 자동 무효화\n• 🖼️ [대표 사진 로고 무결점 지원] 상대 경로 정규화 및 이미지 엑박 방지 폴백 탑재\n• 🌐 [공용 터널 및 실시간 동기화 안정화] 0초 반응형 스프레드시트 양방향 연동",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.25 릴리즈\n• 📷 [대표 사진 영구 로컬 캐싱 완비] 앱 재실행/화면 이동 시에도 등록된 사진이 사라지지 않고 0초 즉각 유지\n• ⚡ [0초 실시간 렌더링] 사진 선택 즉시 화면에 바로 띄우고 백그라운드 클라우드 동기화 수행\n• 🌐 [오프라인/네트워크 무결점 방어] 통신 지연 시에도 기기 내부 저장소에 안전하게 영구 보존",
     },
     {
       headers: {

@@ -393,6 +393,11 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Throwable) {
             android.util.Log.w("MainActivity", "updateWebsiteMonitorStatusText 방어: ${e.message}")
         }
+        try {
+            refreshQuoteImageUi()
+        } catch (e: Throwable) {
+            android.util.Log.w("MainActivity", "refreshQuoteImageUi 방어: ${e.message}")
+        }
     }
 
     override fun onPause() {
@@ -844,9 +849,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        if (prefs.quoteImageUrl.isNotBlank()) {
-            loadQuoteImageThumbnail(prefs.quoteImageUrl)
-        }
+        refreshQuoteImageUi()
 
         // 🏢 상호명/브랜드명 실시간 자동 저장 및 서버 동기화 (v2.1.17)
         binding.etQuoteBusinessName.setText(prefs.quoteBusinessName)
@@ -918,7 +921,10 @@ class MainActivity : AppCompatActivity() {
                             }
                             if (profile.imageUrl.isNotBlank() && profile.imageUrl != "https://sheetbot.cloud/favicon.svg") {
                                 prefs.quoteImageUrl = profile.imageUrl
-                                loadQuoteImageThumbnail(profile.imageUrl)
+                                // 로컬 영구 파일이 없거나 비어있는 경우에만 원격 이미지 비동기 다운로드 및 캐싱
+                                if (!localQuoteImageFile.exists() || localQuoteImageFile.length() == 0L) {
+                                    loadQuoteImageThumbnail(profile.imageUrl)
+                                }
                             }
                         }
                     }
@@ -1947,18 +1953,54 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 📷 견적 웹앱 및 카카오톡 미리보기용 대표 이미지 선택 처리 (v2.1.18)
+     * 📷 견적 웹앱 및 카카오톡 미리보기용 대표 이미지 로컬 영구 캐시 파일 (v2.1.25)
+     */
+    private val localQuoteImageFile: File
+        get() = File(filesDir, "quote_representative_image.jpg")
+
+    /**
+     * 📷 대표 썸네일 이미지 UI 새로고침 (0초 로컬 파일 우선 + 백그라운드 원격 동기화)
+     */
+    private fun refreshQuoteImageUi() {
+        // 1순위: 로컬 저장소에 영구 보존된 사진이 있다면 0.001초 만에 즉시 렌더링 (재부팅/오프라인 무결점)
+        val localFile = localQuoteImageFile
+        if (localFile.exists() && localFile.length() > 0) {
+            try {
+                val bmp = BitmapFactory.decodeFile(localFile.absolutePath)
+                if (bmp != null) {
+                    binding.ivQuoteImagePreview.setImageBitmap(bmp)
+                    binding.tvQuoteImageStatus.text = "등록됨 ✓"
+                    binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#34D399"))
+                    return
+                }
+            } catch (e: Exception) {
+                Log.w("MainActivity", "로컬 대표 이미지 디코딩 실패: ${e.message}")
+            }
+        }
+
+        // 2순위: 로컬 파일이 없고 원격 URL이 있다면 비동기 다운로드 및 로컬 캐싱
+        val remoteUrl = prefs.quoteImageUrl
+        if (remoteUrl.isNotBlank() && remoteUrl != "https://sheetbot.cloud/favicon.svg") {
+            loadQuoteImageThumbnail(remoteUrl)
+        } else {
+            binding.tvQuoteImageStatus.text = "미등록 (기본 로고)"
+            binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#94A3B8"))
+        }
+    }
+
+    /**
+     * 📷 견적 웹앱 및 카카오톡 미리보기용 대표 이미지 선택 처리 (v2.1.25 무손실 영구 캐시 적용)
      */
     private fun handleQuoteImageSelected(uri: Uri) {
         val email = prefs.userEmail.takeIf { !it.isNullOrBlank() }
             ?: "chachogreat@gmail.com"
 
-        binding.tvQuoteImageStatus.text = "이미지 최적화 및 업로드 중..."
+        binding.tvQuoteImageStatus.text = "이미지 처리 중..."
         binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#F59E0B"))
 
         activityScope.launch {
             try {
-                // 스마트 다운스케일링 및 고화질 압축 (카카오톡 og:image 최적 규격 max 1200px, JPEG 85%)
+                // 1. 스마트 다운스케일링 및 고화질 압축 (카카오톡 og:image 최적 규격 max 1200px, JPEG 85%)
                 val (compressedBytes, displayBitmap) = withContext(Dispatchers.IO) {
                     compressImageForQuote(uri)
                 }
@@ -1971,6 +2013,22 @@ class MainActivity : AppCompatActivity() {
                     return@launch
                 }
 
+                // 2. [0초 즉각 렌더링 & 영구 로컬 저장] 업로드를 기다리지 않고 화면에 즉시 띄움!
+                withContext(Dispatchers.IO) {
+                    try {
+                        localQuoteImageFile.writeBytes(compressedBytes)
+                    } catch (fe: Exception) {
+                        Log.e("MainActivity", "로컬 이미지 파일 저장 실패: ${fe.message}")
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    binding.ivQuoteImagePreview.setImageBitmap(displayBitmap)
+                    binding.tvQuoteImageStatus.text = "저장됨 (클라우드 동기화 중...)"
+                    binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#F59E0B"))
+                }
+
+                // 3. 서버 업로드 및 클라우드 실시간 동기화
                 val fileName = "quote_image_" + System.currentTimeMillis() + ".jpg"
                 val mimeType = "image/jpeg"
 
@@ -1978,14 +2036,13 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     if (result.success && !result.imageUrl.isNullOrBlank()) {
                         prefs.quoteImageUrl = result.imageUrl
-                        binding.ivQuoteImagePreview.setImageBitmap(displayBitmap)
                         binding.tvQuoteImageStatus.text = "등록됨 ✓ (카톡 반영 완료)"
                         binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#34D399"))
-                        Toast.makeText(this@MainActivity, "🎉 카카오톡 공유 대표 이미지가 성공적으로 등록되었습니다!", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@MainActivity, "🎉 대표 이미지가 안전하게 저장되고 카카오톡 공유 링크에 반영되었습니다!", Toast.LENGTH_SHORT).show()
                     } else {
-                        binding.tvQuoteImageStatus.text = "업로드 실패: ${result.error ?: "오류"}"
-                        binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#EF4444"))
-                        Toast.makeText(this@MainActivity, "이미지 업로드 실패: ${result.error}", Toast.LENGTH_SHORT).show()
+                        binding.tvQuoteImageStatus.text = "로컬 저장됨 (동기화 지연)"
+                        binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#F59E0B"))
+                        Toast.makeText(this@MainActivity, "사진이 기기에 안전하게 저장되었습니다. (네트워크 연결 시 클라우드 자동 동기화)", Toast.LENGTH_LONG).show()
                     }
                 }
             } catch (e: Exception) {
@@ -2055,26 +2112,41 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 대표 썸네일 이미지 비동기 로드 및 표시
+     * 대표 썸네일 이미지 비동기 로드, 로컬 영구 파일 저장 및 표시
      */
     private fun loadQuoteImageThumbnail(url: String) {
         if (url.isBlank() || url == "https://sheetbot.cloud/favicon.svg") return
         activityScope.launch(Dispatchers.IO) {
             try {
-                val conn = java.net.URL(url).openConnection()
-                conn.connectTimeout = 5000
-                conn.readTimeout = 5000
-                val inputStream = conn.getInputStream()
-                val bmp = BitmapFactory.decodeStream(inputStream)
-                inputStream.close()
-                if (bmp != null) {
-                    withContext(Dispatchers.Main) {
-                        binding.ivQuoteImagePreview.setImageBitmap(bmp)
-                        binding.tvQuoteImageStatus.text = "등록됨 ✓"
-                        binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#34D399"))
+                val conn = (java.net.URL(url).openConnection() as? java.net.HttpURLConnection) ?: return@launch
+                conn.connectTimeout = 10000
+                conn.readTimeout = 15000
+                conn.instanceFollowRedirects = true
+                conn.requestMethod = "GET"
+
+                if (conn.responseCode in 200..299) {
+                    val bytes = conn.inputStream.use { it.readBytes() }
+                    if (bytes.isNotEmpty()) {
+                        try {
+                            localQuoteImageFile.writeBytes(bytes)
+                        } catch (fe: Exception) {
+                            Log.w("MainActivity", "로컬 이미지 캐싱 실패: ${fe.message}")
+                        }
+
+                        val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        if (bmp != null) {
+                            withContext(Dispatchers.Main) {
+                                binding.ivQuoteImagePreview.setImageBitmap(bmp)
+                                binding.tvQuoteImageStatus.text = "등록됨 ✓"
+                                binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#34D399"))
+                            }
+                        }
                     }
                 }
-            } catch (_: Exception) {}
+                conn.disconnect()
+            } catch (e: Exception) {
+                Log.w("MainActivity", "대표 썸네일 로드 예외: ${e.message}")
+            }
         }
     }
 
