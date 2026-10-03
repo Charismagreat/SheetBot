@@ -387,7 +387,7 @@ export async function POST(req: NextRequest) {
 
                 if (resolved.isNew && capturedOcrType === "RECEIPT") {
                   const receiptHeaders = [
-                    ["등록 일시", "구분", "결제 일시", "상호명", "사업자번호", "결제금액", "부가세", "카드사", "카드번호", "승인번호", "상세내역", "영수증 보기", "등록 기기"]
+                    ["승인일시", "영수증구분", "가맹점명", "사업자번호", "합계금액(원)", "공급가액(원)", "부가세(원)", "품목/적요", "결제수단", "승인번호", "영수증사진URL", "분석상태", "등록일시"]
                   ];
                   await callSheetsTool("sheets_update_range", {
                     spreadsheetId: targetSpreadsheetId,
@@ -397,9 +397,7 @@ export async function POST(req: NextRequest) {
                   }).catch(() => {});
                   await callSheetsTool("sheets_format_headers", {
                     spreadsheetId: targetSpreadsheetId,
-                    tabName: "시트1",
-                    headerBgColor: "#047857",
-                    headerTextColor: "#ffffff",
+                    sheetName: "시트1",
                     preferOAuth: true,
                   }).catch(() => {});
                 }
@@ -418,19 +416,19 @@ export async function POST(req: NextRequest) {
 
                   const initialRow = [
                     [
-                      nowStr,
-                      "신용카드 영수증",
-                      nowStr,
-                      "⏳ AI 영수증 분석 중...",
-                      "-",
-                      "0",
-                      "0",
-                      "-",
-                      "-",
-                      "-",
-                      "⏳ AI 영수증 상세 분석 중...",
-                      capturedWebViewLink ? `=HYPERLINK("${capturedWebViewLink}", "🧾 영수증 보기")` : "-",
-                      capturedDeviceId
+                      nowStr, // A: 승인일시 (초기 등록시각)
+                      "신용카드 영수증", // B: 영수증구분
+                      "⏳ AI 영수증 분석 중...", // C: 가맹점명
+                      "-", // D: 사업자번호
+                      "0", // E: 합계금액(원)
+                      "0", // F: 공급가액(원)
+                      "0", // G: 부가세(원)
+                      "⏳ AI 영수증 품목/적요 분석 중...", // H: 품목/적요
+                      "-", // I: 결제수단
+                      "-", // J: 승인번호
+                      capturedWebViewLink ? `=HYPERLINK("${capturedWebViewLink}", "🧾 영수증 보기")` : "-", // K: 영수증사진URL
+                      "⏳ 분석 중", // L: 분석상태
+                      nowStr // M: 등록일시
                     ]
                   ];
                   await callSheetsTool("sheets_append_values", {
@@ -574,23 +572,30 @@ export async function POST(req: NextRequest) {
                 }
 
                 const bNum = formatBusinessNumber(ocrData.businessNumber);
-                const amt = ocrData.amount ? Number(String(ocrData.amount).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
-                const vat = ocrData.vat ? Number(String(ocrData.vat).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
+                const amtNum = ocrData.amount ? Number(String(ocrData.amount).replace(/[^0-9]/g, "")) : 0;
+                const vatNum = ocrData.vat ? Number(String(ocrData.vat).replace(/[^0-9]/g, "")) : 0;
+                const supplyNum = Math.max(0, amtNum - vatNum);
+                const amt = amtNum.toLocaleString("ko-KR");
+                const vat = vatNum.toLocaleString("ko-KR");
+                const supplyAmt = supplyNum.toLocaleString("ko-KR");
+                const paymentMethod = [ocrData.cardIssuer, ocrData.cardNumber].filter(Boolean).join(" ") || (ocrData.receiptType?.includes("카드") ? "신용카드" : "현금/기타");
 
                 await callSheetsTool("sheets_update_range", {
                   spreadsheetId: targetSpreadsheetId,
-                  range: `시트1!B${safeRowToUpdate}:K${safeRowToUpdate}`,
+                  range: `시트1!A${safeRowToUpdate}:L${safeRowToUpdate}`,
                   values: [[
-                    ocrData.receiptType || "신용카드 영수증",
-                    ocrData.paidAt || getKoreanTimeString(),
-                    ocrData.merchantName || "확인 불가",
-                    bNum,
-                    amt,
-                    vat,
-                    ocrData.cardIssuer || "-",
-                    ocrData.cardNumber || "-",
-                    ocrData.approvalNumber || "-",
-                    ocrData.details || "-",
+                    ocrData.paidAt || getKoreanTimeString(), // A: 승인일시
+                    ocrData.receiptType || "신용카드 영수증", // B: 영수증구분
+                    ocrData.merchantName || "확인 불가", // C: 가맹점명
+                    bNum || "-", // D: 사업자번호
+                    amt, // E: 합계금액(원)
+                    supplyAmt, // F: 공급가액(원)
+                    vat, // G: 부가세(원)
+                    ocrData.details || "-", // H: 품목/적요
+                    paymentMethod, // I: 결제수단
+                    ocrData.approvalNumber || "-", // J: 승인번호
+                    capturedWebViewLink ? `=HYPERLINK("${capturedWebViewLink}", "🧾 영수증 보기")` : "-", // K: 영수증사진URL
+                    "✅ 분석 완료", // L: 분석상태
                   ]],
                   preferOAuth: true,
                 }).catch(() => {});
@@ -624,22 +629,30 @@ export async function POST(req: NextRequest) {
               const fallbackResult = await performAiOcr(base64File, capturedTargetFileName, capturedMimeType, "RECEIPT", configuredModel);
               if (fallbackResult) {
                 const bNum = formatBusinessNumber(fallbackResult.businessNumber);
-                const amt = fallbackResult.amount ? Number(String(fallbackResult.amount).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
-                const vat = fallbackResult.vat ? Number(String(fallbackResult.vat).replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : "0";
+                const amtNum = fallbackResult.amount ? Number(String(fallbackResult.amount).replace(/[^0-9]/g, "")) : 0;
+                const vatNum = fallbackResult.vat ? Number(String(fallbackResult.vat).replace(/[^0-9]/g, "")) : 0;
+                const supplyNum = Math.max(0, amtNum - vatNum);
+                const amt = amtNum.toLocaleString("ko-KR");
+                const vat = vatNum.toLocaleString("ko-KR");
+                const supplyAmt = supplyNum.toLocaleString("ko-KR");
+                const paymentMethod = [fallbackResult.cardIssuer, fallbackResult.cardNumber].filter(Boolean).join(" ") || (fallbackResult.receiptType?.includes("카드") ? "신용카드" : "현금/기타");
+
                 await callSheetsTool("sheets_update_range", {
                   spreadsheetId: targetSpreadsheetId,
-                  range: `시트1!B${rowToUpdate}:K${rowToUpdate}`,
+                  range: `시트1!A${rowToUpdate}:L${rowToUpdate}`,
                   values: [[
-                    fallbackResult.receiptType || "신용카드 영수증",
-                    fallbackResult.paidAt || getKoreanTimeString(),
-                    fallbackResult.merchantName || "확인 불가",
-                    bNum,
-                    amt,
-                    vat,
-                    fallbackResult.cardIssuer || "-",
-                    fallbackResult.cardNumber || "-",
-                    fallbackResult.approvalNumber || "-",
-                    fallbackResult.details || "-",
+                    fallbackResult.paidAt || getKoreanTimeString(), // A: 승인일시
+                    fallbackResult.receiptType || "신용카드 영수증", // B: 영수증구분
+                    fallbackResult.merchantName || "확인 불가", // C: 가맹점명
+                    bNum || "-", // D: 사업자번호
+                    amt, // E: 합계금액(원)
+                    supplyAmt, // F: 공급가액(원)
+                    vat, // G: 부가세(원)
+                    fallbackResult.details || "-", // H: 품목/적요
+                    paymentMethod, // I: 결제수단
+                    fallbackResult.approvalNumber || "-", // J: 승인번호
+                    capturedWebViewLink ? `=HYPERLINK("${capturedWebViewLink}", "🧾 영수증 보기")` : "-", // K: 영수증사진URL
+                    "✅ 분석 완료", // L: 분석상태
                   ]],
                   preferOAuth: true,
                 }).catch(() => {});

@@ -140,28 +140,40 @@ export async function processPendingBatchJobs(): Promise<{
             }
 
             const bNum = formatBusinessNumber(ocrData.businessNumber);
-            const amt = ocrData.amount ? Number(String(ocrData.amount).replace(/[^0-9]/g, '')).toLocaleString('ko-KR') : '0';
-            const vat = ocrData.vat ? Number(String(ocrData.vat).replace(/[^0-9]/g, '')).toLocaleString('ko-KR') : '0';
+            const amtNum = ocrData.amount ? Number(String(ocrData.amount).replace(/[^0-9]/g, '')) : 0;
+            const vatNum = ocrData.vat ? Number(String(ocrData.vat).replace(/[^0-9]/g, '')) : 0;
+            const supplyNum = Math.max(0, amtNum - vatNum);
+            const amt = amtNum.toLocaleString('ko-KR');
+            const vat = vatNum.toLocaleString('ko-KR');
+            const supplyAmt = supplyNum.toLocaleString('ko-KR');
+            const paymentMethod = [ocrData.cardIssuer, ocrData.cardNumber].filter(Boolean).join(' ') || (ocrData.receiptType?.includes('카드') ? '신용카드' : '현금/기타');
 
-            // 시트 B열~K열 핀포인트 갱신 (B:구분, C:결제일시, D:상호명, E:사업자번호, F:결제금액, G:부가세, H:카드사, I:카드번호, J:승인번호, K:상세내역)
+            // 시트 A열~J열 핀포인트 갱신 (A:승인일시, B:영수증구분, C:가맹점명, D:사업자번호, E:합계금액, F:공급가액, G:부가세, H:품목/적요, I:결제수단, J:승인번호) 및 L열(분석상태)
             if (spreadsheetId && targetRow && targetRow > 1) {
               await callSheetsTool('sheets_update_range', {
                 spreadsheetId,
-                range: `시트1!B${targetRow}:K${targetRow}`,
+                range: `시트1!A${targetRow}:J${targetRow}`,
                 values: [[
-                  ocrData.receiptType || '신용카드 영수증',
                   ocrData.paidAt || getKoreanTimeString(),
+                  ocrData.receiptType || '신용카드 영수증',
                   ocrData.merchantName || '확인 불가',
-                  bNum,
+                  bNum || '-',
                   amt,
+                  supplyAmt,
                   vat,
-                  ocrData.cardIssuer || '-',
-                  ocrData.cardNumber || '-',
-                  ocrData.approvalNumber || '-',
                   ocrData.details || '-',
+                  paymentMethod,
+                  ocrData.approvalNumber || '-',
                 ]],
                 preferOAuth: true,
               }).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
+
+              await callSheetsTool('sheets_update_range', {
+                spreadsheetId,
+                range: `시트1!L${targetRow}`,
+                values: [['✅ 분석 완료']],
+                preferOAuth: true,
+              }).catch(() => {});
             }
 
             const usedTokens = Math.round(1200 * 0.5); // 50% 배치 할인
