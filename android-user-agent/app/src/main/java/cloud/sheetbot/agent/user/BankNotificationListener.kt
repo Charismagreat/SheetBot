@@ -491,17 +491,17 @@ class BankNotificationListener : NotificationListenerService() {
                         }
 
                         if (msgToSend.isNotBlank()) {
-                            val isSent = SmsSenderUtil.sendSms(this@BankNotificationListener, syncResult.replySmsPhone, msgToSend)
-                            if (isSent) {
-                                Log.i(TAG, "📲 [메시지 알림 연계 영수증 SMS 발송 성공] 수신: ${syncResult.replySmsPhone} (고객: $custName)")
-                                ApiClient.sendReceiptSmsSync(
-                                    userEmail = userEmail,
-                                    recipientPhone = syncResult.replySmsPhone,
-                                    customerName = custName,
-                                    receiptContent = msgToSend,
-                                    status = "전송 완료"
-                                )
-                            }
+                            val (isSent, finalMsg) = SmsSenderUtil.sendSmsDetailed(this@BankNotificationListener, syncResult.replySmsPhone, msgToSend)
+                            val statusLabel = if (isSent) "전송 완료" else "전송 실패"
+                            Log.i(TAG, "📲 [메시지 알림 연계 영수증 SMS $statusLabel] 수신: ${syncResult.replySmsPhone} (고객: $custName) / 내용: $finalMsg")
+                            ApiClient.sendReceiptSmsSync(
+                                userEmail = userEmail,
+                                recipientPhone = syncResult.replySmsPhone,
+                                customerName = custName,
+                                amount = custAmount,
+                                receiptContent = finalMsg,
+                                status = statusLabel
+                            )
                         }
                     }
 

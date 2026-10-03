@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 67,
-      latestVersionName: "2.1.46",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.46/SheetBotAgent.apk",
+      latestVersionCode: 68,
+      latestVersionName: "2.1.47",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.47/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.46 릴리즈\n• 🧪 [영수증 문자 발송 즉시 테스트 기능 추가] 앱 메인 화면에서 템플릿 실시간 바이트 계산 확인 및 단말기 발송/시트 기록 즉시 테스트 기능 제공\n• 🚀 [수신 SMS 영수증 문자 발송 버그 해결] 문자 시트 동기화 옵션 OFF 상태에서도 스마트 주문 매칭 응답(replySms)을 100% 정상 수신하여 영수증 문자 즉시 발송\n• 📝 [앱 영수증 템플릿 최우선 적용] 모바일 앱 설정의 '고객 발송 영수증 문구 템플릿' 1순위 반영\n• ✂️ [80B 초과 글자수 정밀 자동 제거] EUC-KR 80바이트 초과 글자수를 한글 깨짐 없이 안전하게 제거하여 단문 100% 발송 보장",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.47 릴리즈\n• ⚡ [실제 입금 시 영수증 문자 발송 타임아웃 완벽 해결] 구글 시트 지연으로 인한 6초 타임아웃을 60초로 확장 및 서버 Fast-Path 즉시 응답(1초) 적용으로 실제 입금 시 영수증 문자 100% 자동 발송 보장\n• 🧪 [영수증 문자 즉시 테스트 도구 완비] 템플릿 바이트 실시간 계산 및 단말기/시트 원스톱 테스트 기능 탑재\n• 📝 [앱 영수증 템플릿 최우선 적용] 모바일 앱 설정의 '고객 발송 영수증 문구 템플릿' 1순위 반영\n• ✂️ [80B 초과 글자수 정밀 자동 제거] EUC-KR 80바이트 초과 글자수를 한글 깨짐 없이 안전하게 제거하여 단문 100% 발송 보장",
     },
     {
       headers: {
