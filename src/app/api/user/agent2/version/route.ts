@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 72,
-      latestVersionName: "2.1.51",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.51/SheetBotAgent.apk",
+      latestVersionCode: 73,
+      latestVersionName: "2.1.52",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.52/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.51 릴리즈\n• 🛡️ [영수증 대장 2중 기록 완전 해결] 영수증 대장 동기화에 30초 멱등성 중복 방어(Deduplication Guard) 필터를 탑재하고 단말기 타임아웃을 60초로 확장하여, 네트워크 재시도로 인한 시트 2행 중복 적재를 100% 원천 차단",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.52 릴리즈\n• ⚡ [안드로이드 시스템 ANR 팝업 원천 차단] SMS 수신 시 브로드캐스트 대기(goAsync)를 전면 제거하고 0초 즉각 반환 처리하여 '앱이 응답하지 않음' 시스템 오류 100% 해소\n• ✉️ [영수증 문자 무중단 발송] 입금 확인 즉시 백그라운드 코루틴에서 고객 영수증 문자가 안정적으로 자동 발송되도록 파이프라인 최적화",
     },
     {
       headers: {
