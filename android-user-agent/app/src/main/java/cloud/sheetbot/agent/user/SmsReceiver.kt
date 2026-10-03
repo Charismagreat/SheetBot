@@ -75,12 +75,11 @@ class SmsReceiver : BroadcastReceiver() {
                             sheetTitle = prefs.smsDriveSheetTitle
                         )
                     } else {
-                        val ok = ApiClient.sendInboundSms(
+                        ApiClient.sendInboundSms(
                             userEmail = userEmail,
                             sender = sender,
                             message = fullBody
                         )
-                        SmsSyncResult(success = ok)
                     }
 
                     val isSynced = syncResult.success
