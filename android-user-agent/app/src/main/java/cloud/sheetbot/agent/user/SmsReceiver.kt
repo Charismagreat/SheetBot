@@ -62,9 +62,10 @@ class SmsReceiver : BroadcastReceiver() {
                 return
             }
 
-            val pendingResult = goAsync()
+            // ⚡ [Zero-ANR 절대 원칙]: goAsync()로 OS를 대기시키면 5초 이상 네트워크 지연 시 시스템 ANR이 발생합니다.
+            // onReceive는 0초 만에 즉각 정상 반환하여 OS ANR 타이머를 원천 해제하고,
+            // 모든 통신 및 영수증 발송은 독립적인 백그라운드 코루틴에서 무중단 실행합니다.
             CoroutineScope(Dispatchers.IO).launch {
-                var pendingFinished = false
                 try {
                     val syncResult = if (prefs.isSmsSheetSyncEnabled) {
                         ApiClient.sendSmsSync(
@@ -94,10 +95,6 @@ class SmsReceiver : BroadcastReceiver() {
                         setPackage(context.packageName)
                     }
                     context.sendBroadcast(updateIntent)
-
-                    // ⚡ [ANR 방어]: BroadcastReceiver 생명주기를 여기서 즉시 안전하게 마감하여 OS ANR 다이얼로그 원천 차단
-                    pendingResult.finish()
-                    pendingFinished = true
 
                     // 🎯 고객 영수증 문자 자동 발송 (스마트 간편 주문 매칭 시 - 백그라운드 코루틴에서 무중단 발송)
                     if (prefs.isReceiptSmsEnabled && !syncResult.replySmsPhone.isNullOrBlank()) {
@@ -142,10 +139,6 @@ class SmsReceiver : BroadcastReceiver() {
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "고객 문자 동기화 중 오류 발생", e)
-                } finally {
-                    if (!pendingFinished) {
-                        try { pendingResult.finish() } catch (_: Exception) {}
-                    }
                 }
             }
         } catch (e: Exception) {
