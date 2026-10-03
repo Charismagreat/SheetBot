@@ -443,14 +443,14 @@ object ApiClient {
     }
 
     /**
-     * 이용자 스마트폰에 수신된 고객 SMS를 시트봇 서버 대장으로 전송
+     * 이용자 스마트폰에 수신된 고객 SMS를 시트봇 서버 대장으로 전송 및 스마트 주문 매칭 응답 파싱
      */
     suspend fun sendInboundSms(
         userEmail: String,
         sender: String,
         message: String,
         deviceId: String? = null
-    ): Boolean = withContext(Dispatchers.IO) {
+    ): SmsSyncResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
@@ -465,15 +465,32 @@ object ApiClient {
             try {
                 val request = Request.Builder().url(endpoint).post(body).build()
                 val response = client.newCall(request).execute()
-                if (response.isSuccessful) {
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", true)) {
                     Log.i(TAG, "✅ [고객 문자 수신 동기화 성공] 호스트: $host ($sender)")
-                    return@withContext true
+                    val replySmsObj = resJson.optJSONObject("replySms")
+                    val replyPhone = replySmsObj?.optString("recipientPhone")?.takeIf { it.isNotBlank() }
+                    val replyText = replySmsObj?.optString("message")?.takeIf { it.isNotBlank() }
+                    val ttsText = resJson.optString("ttsText").takeIf { it.isNotBlank() }
+                    val depositorName = resJson.optString("depositorName").takeIf { it.isNotBlank() }
+                    val amountKrw = resJson.optLong("amountKrw", 0L)
+
+                    return@withContext SmsSyncResult(
+                        success = true,
+                        replySmsPhone = replyPhone,
+                        replySmsText = replyText,
+                        depositorName = depositorName,
+                        amountKrw = amountKrw,
+                        ttsText = ttsText
+                    )
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "수신 문자 동기화 실패 ($host): ${e.message}")
             }
         }
-        false
+        SmsSyncResult(success = false)
     }
 
     /**
