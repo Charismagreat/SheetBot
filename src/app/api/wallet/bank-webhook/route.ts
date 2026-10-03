@@ -11,7 +11,7 @@ import { emitDepositEvent } from "@/lib/deposit-events";
 import { recordPaymentToGoogleSheet } from "@/lib/payment-sheet-sync";
 import { recordReceiptSmsToGoogleSheet } from "@/lib/receipt-sms-sync";
 import { getKoreanTimeString } from "@/lib/date-utils";
-import { findMatchingSmartOrder } from "@/lib/smart-order-match";
+import { findMatchingSmartOrder, generateReceiptSmsText } from "@/lib/smart-order-match";
 
 /**
  * POST /api/wallet/bank-webhook
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
     const senderEmail = body?.userEmail ? String(body.userEmail).toLowerCase().trim() : null;
     const deviceModel = body?.deviceModel ? String(body.deviceModel).trim() : null;
     if (senderEmail) {
-      const nowStr = new Date().toISOString().replace("T", " ").slice(0, 19);
+      const nowStr = getKoreanTimeString();
       (async () => {
         try {
           const devRes = await queryTable("sheetbot_user_devices", {
@@ -390,7 +390,7 @@ export async function POST(request: Request) {
       if (targetUserEmail && targetUserEmail.includes("@")) {
         await recordPaymentToGoogleSheet({
           userEmail: targetUserEmail,
-          paymentTime: new Date().toISOString().replace("T", " ").slice(0, 19),
+          paymentTime: getKoreanTimeString(),
           transactionType: detectedTransactionType,
           channelOrBank: bankName || "금융/결제사",
           accountOrCardNumber: detectedAccountOrCard,
@@ -415,25 +415,16 @@ export async function POST(request: Request) {
 
           if (matchedOrder && matchedOrder.customerPhone) {
             console.log(`[Bank-Webhook] 🎉 스마트 간편 주문 매칭 성공! 영수증 SMS 발송 연동: ${matchedOrder.customerName} (${matchedOrder.customerPhone})`);
-            const itemHint = matchedOrder.itemsSummary ? ` (${matchedOrder.itemsSummary.slice(0, 30)})` : "";
-            const replyMsg = `[SheetBot] ${matchedOrder.customerName}님, 주문 결제(${cleanAmount.toLocaleString()}원)가 정상 확인되었습니다.${itemHint} 주문하신 상품을 정성껏 준비하겠습니다. 감사합니다.`;
+            // 단문 SMS 규격(한글 40~45자, 80바이트 이하)으로 생성하여 100% 즉시 전송 보장
+            const replyMsg = generateReceiptSmsText(matchedOrder.customerName, cleanAmount, matchedOrder.itemsSummary);
             
             replySms = {
               recipientPhone: matchedOrder.customerPhone,
               message: replyMsg,
             };
 
-            // [SheetBot] 고객 영수증 문자 발송 대장 시트에도 실시간 자동 기록
-            recordReceiptSmsToGoogleSheet({
-              userEmail: targetUserEmail,
-              sentTime: getKoreanTimeString(),
-              recipientPhone: matchedOrder.customerPhone,
-              customerName: matchedOrder.customerName,
-              amount: cleanAmount,
-              receiptContent: replyMsg,
-              status: "전송 완료",
-              deviceId: body?.deviceModel || "SheetBot Agent",
-            }).catch((err: any) => console.warn("[Bank-Webhook] Order receipt SMS sync warning:", err.message));
+            // ⚠️ 주의: 서버가 시트에 미리 '전송 완료'를 기록하면 앱이 실제 발송 후 리포트할 때 2건이 중복 기록되므로,
+            // 단말기 실제 발송 후 앱의 리포트를 통해서만 단일 1행이 기록되도록 일원화합니다.
           }
         } catch (orderErr: any) {
           console.warn("[Bank-Webhook] findMatchingSmartOrder error:", orderErr);
@@ -467,7 +458,7 @@ export async function POST(request: Request) {
     if (matched?.user_email) {
       recordPaymentToGoogleSheet({
         userEmail: matched.user_email,
-        paymentTime: new Date().toISOString().replace("T", " ").slice(0, 19),
+        paymentTime: getKoreanTimeString(),
         channelOrBank: bankName || "다이렉트 송금",
         customerName: matched.depositor_name || cleanDepositor || "회원",
         amount: cleanAmount,
@@ -531,22 +522,12 @@ export async function POST(request: Request) {
     const replySms = recipientPhone
       ? {
           recipientPhone,
-          message: `[SheetBot] ${matched.depositor_name || matched.user_name || "회원"}님, ${Number(matched.amount_krw).toLocaleString()}원 입금이 확인되어 ${Number(matched.tokens_to_credit).toLocaleString()} 토큰이 정상 충전되었습니다. 감사합니다.`,
+          // 단문 80바이트 이하 최적화
+          message: `[SheetBot] ${matched.depositor_name || matched.user_name || "회원"}님, ${Number(matched.amount_krw).toLocaleString()}원 입금확인 및 ${Number(matched.tokens_to_credit).toLocaleString()}T 충전완료!`,
         }
       : null;
 
-    if (replySms && matched?.user_email) {
-      recordReceiptSmsToGoogleSheet({
-        userEmail: matched.user_email,
-        sentTime: getKoreanTimeString(),
-        recipientPhone: replySms.recipientPhone,
-        customerName: matched.depositor_name || matched.user_name || "회원",
-        amount: Number(matched.amount_krw) || 0,
-        receiptContent: replySms.message,
-        status: "전송 완료",
-        deviceId: body?.deviceModel || "SheetBot Agent",
-      }).catch((err) => console.warn("[Bank-Webhook] Receipt SMS sheet sync error:", err));
-    }
+    // ⚠️ 단말기 실제 발송 후 앱의 리포트를 통해서만 단일 1행이 기록되도록 일원화합니다.
 
     const ttsText = `${matched.depositor_name || "회원"}님 ${Number(matched.amount_krw).toLocaleString()}원 입금, ${Number(matched.tokens_to_credit).toLocaleString()} 토큰 자동 충전 완료되었습니다.`;
 

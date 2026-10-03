@@ -8,7 +8,7 @@ import { maskPhoneNumber, formatZeroRetentionContent } from "@/lib/privacy";
 import { parseBankDepositSms } from "@/lib/bank-sms-parser";
 import { recordPaymentToGoogleSheet } from "@/lib/payment-sheet-sync";
 import { recordReceiptSmsToGoogleSheet } from "@/lib/receipt-sms-sync";
-import { findMatchingSmartOrder } from "@/lib/smart-order-match";
+import { findMatchingSmartOrder, generateReceiptSmsText } from "@/lib/smart-order-match";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import { recordDispatchToGoogleSheet } from "@/lib/dispatch-sheet-sync";
 
@@ -34,7 +34,8 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanEmail = String(userEmail).toLowerCase().trim();
-    const nowIso = receivedAt || new Date().toISOString();
+    const kstNow = getKoreanTimeString();
+    const nowIso = receivedAt || kstNow;
     const logId = Date.now();
 
     // 발신자 표시 형식 정제 (PUSH 푸시인 경우 그대로 유지, 전화번호인 경우 마스킹)
@@ -54,14 +55,14 @@ export async function POST(req: NextRequest) {
         content: formatZeroRetentionContent(isPushNotification ? "금융 푸시" : "수신 문자", message.length),
         status: "INBOUND", // 수신 상태
         error_message: null,
-        created_at: nowIso,
+        created_at: kstNow,
       },
     ]);
 
     // 1-0. 🛡️ [Zero-Retention 실현] 이용자의 구글 시트 [SheetBot] 고객 알림 발송 및 수신 대장에 직접 실시간 1행 기록
     recordDispatchToGoogleSheet({
       userEmail: cleanEmail,
-      dispatchTime: nowIso.replace("T", " ").slice(0, 19),
+      dispatchTime: kstNow,
       direction: isPushNotification ? "결제푸시" : "수신(SMS)",
       ruleName,
       recipient: sender, // 마스킹 없는 온전한 원본 발신자 번호/채널명 기록
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest) {
 
       recordPaymentToGoogleSheet({
         userEmail: cleanEmail,
-        paymentTime: nowIso.replace("T", " ").slice(0, 19),
+        paymentTime: kstNow,
         transactionType: parsedBank.transactionType || "매출(계좌)",
         channelOrBank: detectedBankName,
         accountOrCardNumber: parsedBank.accountOrCardNumber || "-",
@@ -108,8 +109,8 @@ export async function POST(req: NextRequest) {
 
           if (matchedOrder && matchedOrder.customerPhone) {
             console.log(`[InboundSms] 🎉 스마트 간편 주문 매칭 성공! 영수증 SMS 발송 연동: ${matchedOrder.customerName} (${matchedOrder.customerPhone})`);
-            const itemHint = matchedOrder.itemsSummary ? ` (${matchedOrder.itemsSummary.slice(0, 30)})` : "";
-            const replyMsg = `[SheetBot] ${matchedOrder.customerName}님, 주문 결제(${cleanAmount.toLocaleString()}원)가 정상 확인되었습니다.${itemHint} 주문하신 상품을 정성껏 준비하겠습니다. 감사합니다.`;
+            // 단문 SMS 규격(한글 40~45자, 80바이트 이하)으로 생성하여 100% 즉시 전송 보장
+            const replyMsg = generateReceiptSmsText(matchedOrder.customerName, cleanAmount, matchedOrder.itemsSummary);
 
             replySms = {
               recipientPhone: matchedOrder.customerPhone,
@@ -118,16 +119,9 @@ export async function POST(req: NextRequest) {
 
             orderTtsText = `${matchedOrder.customerName}님의 주문 결제 ${cleanAmount.toLocaleString()}원이 확인되어 영수증 문자가 발송되었습니다.`;
 
-            recordReceiptSmsToGoogleSheet({
-              userEmail: cleanEmail,
-              sentTime: getKoreanTimeString(),
-              recipientPhone: matchedOrder.customerPhone,
-              customerName: matchedOrder.customerName,
-              amount: cleanAmount,
-              receiptContent: replyMsg,
-              status: "전송 완료",
-              deviceId: deviceId || "SheetBot Agent",
-            }).catch((err: any) => console.warn("[InboundSms] Order receipt SMS sync error:", err.message));
+            // ⚠️ 주의: 여기서 서버가 대장에 미리 '전송 완료'를 기록하면,
+            // 안드로이드 앱에서 실제 발송 성공 후 sendReceiptSmsSync를 호출할 때 2건이 중복 기록되므로,
+            // 실제 단말기 발송 후 앱의 리포트를 통해 단일 1행만 정확히 기록되도록 일원화합니다.
           }
         } catch (orderErr: any) {
           console.warn("[InboundSms] findMatchingSmartOrder error:", orderErr);

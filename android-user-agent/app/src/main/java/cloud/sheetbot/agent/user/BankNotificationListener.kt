@@ -140,16 +140,16 @@ class BankNotificationListener : NotificationListenerService() {
 
                             if (msgToSend.isNotBlank()) {
                                 val isSent = SmsSenderUtil.sendSms(this@BankNotificationListener, result.replySmsPhone, msgToSend)
-                                if (isSent) {
-                                    Log.i(TAG, "📲 [푸시 연계 영수증 SMS 발송 성공] 수신: ${result.replySmsPhone} (고객: $custName)")
-                                    ApiClient.sendReceiptSmsSync(
-                                        userEmail = userEmail,
-                                        recipientPhone = result.replySmsPhone,
-                                        customerName = custName,
-                                        receiptContent = msgToSend,
-                                        status = "전송 완료"
-                                    )
-                                }
+                                val statusLabel = if (isSent) "전송 완료" else "전송 실패"
+                                Log.i(TAG, "📲 [푸시 연계 영수증 SMS $statusLabel] 수신: ${result.replySmsPhone} (고객: $custName)")
+                                ApiClient.sendReceiptSmsSync(
+                                    userEmail = userEmail,
+                                    recipientPhone = result.replySmsPhone,
+                                    customerName = custName,
+                                    amount = custAmount,
+                                    receiptContent = msgToSend,
+                                    status = statusLabel
+                                )
                             }
                         }
 

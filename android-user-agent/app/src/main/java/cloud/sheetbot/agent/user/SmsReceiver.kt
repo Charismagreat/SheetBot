@@ -106,16 +106,16 @@ class SmsReceiver : BroadcastReceiver() {
 
                         if (msgToSend.isNotBlank()) {
                             val isSent = SmsSenderUtil.sendSms(context, syncResult.replySmsPhone, msgToSend)
-                            if (isSent) {
-                                Log.i(TAG, "📲 [SMS 수신 연계 영수증 SMS 발송 성공] 수신: ${syncResult.replySmsPhone} (고객: $custName)")
-                                ApiClient.sendReceiptSmsSync(
-                                    userEmail = userEmail,
-                                    recipientPhone = syncResult.replySmsPhone,
-                                    customerName = custName,
-                                    receiptContent = msgToSend,
-                                    status = "전송 완료"
-                                )
-                            }
+                            val statusLabel = if (isSent) "전송 완료" else "전송 실패"
+                            Log.i(TAG, "📲 [SMS 수신 연계 영수증 SMS $statusLabel] 수신: ${syncResult.replySmsPhone} (고객: $custName)")
+                            ApiClient.sendReceiptSmsSync(
+                                userEmail = userEmail,
+                                recipientPhone = syncResult.replySmsPhone,
+                                customerName = custName,
+                                amount = custAmount,
+                                receiptContent = msgToSend,
+                                status = statusLabel
+                            )
                         }
                     }
 
