@@ -845,6 +845,65 @@
                     android:checked="true" />
             </LinearLayout>
 
+            <!-- 영수증 문자 커스텀 발송 문구 설정 패널 -->
+            <LinearLayout
+                android:id="@+id/layoutReceiptSmsSettings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0F172A"
+                android:padding="10dp"
+                android:layout_marginBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="4dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="📝 고객 발송 영수증 문구 템플릿"
+                        android:textColor="#94A3B8"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/btnResetReceiptSmsTemplate"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="[기본값]"
+                        android:textColor="#38BDF8"
+                        android:textSize="10.5sp"
+                        android:padding="2dp" />
+                </LinearLayout>
+
+                <EditText
+                    android:id="@+id/etReceiptSmsTemplate"
+                    android:layout_width="match_parent"
+                    android:layout_height="65dp"
+                    android:background="#1E293B"
+                    android:padding="8dp"
+                    android:gravity="top|start"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp"
+                    android:hint="[SheetBot] {고객명}님, {금액} 결제가 정상 확인되었습니다. 이용해 주셔서 감사합니다."
+                    android:textColorHint="#64748B"
+                    android:inputType="textMultiLine"
+                    android:importantForAutofill="no" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="💡 지원 치환 변수: {고객명}, {금액}, {일시} (자동 대입)"
+                    android:textColor="#64748B"
+                    android:textSize="10sp"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 59,
-      latestVersionName: "2.1.38",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.38/SheetBotAgent.apk",
+      latestVersionCode: 60,
+      latestVersionName: "2.1.39",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.39/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.38 릴리즈\n• 🛡️ [문자 송수신 다중 중복 기록 원천 차단] 발신 SMS ContentObserver 다중 발화 선점 가드 및 수신/발신 15초 멱등성 디바운싱(SmsDedupeManager) 탑재\n• 📞 [전화번호 국가코드 자동 정규화] 발신/수신 시 8215993333, 8210... 형태의 번호를 1599-3333, 010-... 표준 하이픈 형식으로 자동 정제\n• ⚡ [수신 리시버 및 알림 옵저버 이중 감지 통합] 동일 문자 수신 시 중복 발송 없이 1건만 안전하게 구글 시트에 기록",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.39 릴리즈\n• 📝 [영수증 문자 커스텀 발송 문구 설정 UI 탑재] 상호명/안내 템플릿 직접 편집 및 실시간 자동 저장 지원\n• 💡 [스마트 치환 변수 지원] {고객명}, {금액}, {일시} 동적 치환 엔진 완비\n• 🔄 [원클릭 기본값 복원] [기본값] 터치 시 표준 영수증 안내 문구로 즉시 리셋",
     },
     {
       headers: {

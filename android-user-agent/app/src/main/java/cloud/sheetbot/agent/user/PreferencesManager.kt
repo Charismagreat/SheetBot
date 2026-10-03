@@ -52,6 +52,11 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_receipt_sms_enabled", true)
         set(value) = prefs.edit().putBoolean("is_receipt_sms_enabled", value).apply()
 
+    var receiptSmsTemplate: String
+        get() = prefs.getString("receipt_sms_template", "[SheetBot] {고객명}님, {금액} 결제가 정상 확인되었습니다. 이용해 주셔서 감사합니다.")
+            ?: "[SheetBot] {고객명}님, {금액} 결제가 정상 확인되었습니다. 이용해 주셔서 감사합니다."
+        set(value) = prefs.edit().putString("receipt_sms_template", value).apply()
+
     var isPushDetectionEnabled: Boolean
         get() = prefs.getBoolean("is_push_detection_enabled", true)
         set(value) = prefs.edit().putBoolean("is_push_detection_enabled", value).apply()
