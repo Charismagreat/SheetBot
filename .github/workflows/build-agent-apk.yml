@@ -76,6 +76,7 @@ jobs:
           git add android-agent/keystore/sheetbot-agent.jks public/downloads/sheetbot-deposit-agent.apk
           if ! git diff --staged --quiet; then
             git commit -m "build(agent): bundle release apk v1.5.2"
+            git pull --rebase origin main || true
             git push origin main
           fi
 
