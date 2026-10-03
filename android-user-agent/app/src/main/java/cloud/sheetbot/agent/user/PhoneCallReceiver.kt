@@ -24,6 +24,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * 스마트폰 전화 상태(수신/통화/종료) 감지 브로드캐스트 리시버
@@ -39,12 +41,20 @@ class PhoneCallReceiver : BroadcastReceiver() {
         const val EXTRA_CONTACT_NAME = "contact_name"
 
         // 정적 상태 보관 (단일 수신/통화 세션 추적)
+        @Volatile
         private var lastState = TelephonyManager.EXTRA_STATE_IDLE
+        @Volatile
         private var savedIncomingNumber: String? = null
+        @Volatile
         private var isIncomingAnswered = false
+        @Volatile
         private var callStartTime = 0L
 
-        // 15초 멱등성 캐시 (동일 번호 부재중 중복 감지 방지)
+        // 부재중 전화 단일 동시 처리 보장 원자적 락 (중복 인텐트 진입 원천 차단)
+        private val isMissedCallProcessing = AtomicBoolean(false)
+        private val lastMissedCallTriggerTime = AtomicLong(0L)
+
+        // 15초 멱등성 캐시 (동일 번호 부재중 중복 감지 방지 - 정규화된 번호 기준)
         private val recentMissedCalls = ConcurrentHashMap<String, Long>()
 
         /**
@@ -204,13 +214,17 @@ class PhoneCallReceiver : BroadcastReceiver() {
                         triggerAutoRecordingUpload(context, prefs)
                     }
                 } else if (!isIncomingAnswered && prefs.isPaired && !userEmail.isNullOrBlank()) {
-                    // 벨이 울렸으나 상태 순서가 누락되어 IDLE로 곧바로 진입한 경우를 위한 안전망
-                    triggerMissedCallHandling(context, prefs, userEmail, candidatePhone)
+                    // 벨이 울렸으나 상태 순서가 누락되어 IDLE로 곧바로 진입한 경우를 위한 안전망 (최근 60초 이내 링 시작 이력 확인)
+                    val now = System.currentTimeMillis()
+                    if (callStartTime > 0 && (now - callStartTime < 60_000)) {
+                        triggerMissedCallHandling(context, prefs, userEmail, candidatePhone)
+                    }
                 }
 
                 // 세션 리셋
                 isIncomingAnswered = false
                 savedIncomingNumber = null
+                callStartTime = 0L
             }
         }
 
@@ -221,6 +235,17 @@ class PhoneCallReceiver : BroadcastReceiver() {
      * 부재중 전화 감지 처리: 인텐트 번호 검증 및 CallLog Fallback 안전망 경유 후 구글 시트 대장 기록
      */
     private fun triggerMissedCallHandling(context: Context, prefs: PreferencesManager, userEmail: String, directPhone: String?) {
+        val now = System.currentTimeMillis()
+        if (now - lastMissedCallTriggerTime.get() < 5_000) {
+            Log.i(TAG, "⏳ [5초 원자적 쿨다운] 최근 5초 이내에 이미 부재중 처리가 시작되었습니다. 중복 트리거 차단.")
+            return
+        }
+        if (!isMissedCallProcessing.compareAndSet(false, true)) {
+            Log.i(TAG, "⏳ [동시 처리 방어] 부재중 전화 처리가 이미 백그라운드에서 진행 중입니다. 중복 코루틴 생성 방지.")
+            return
+        }
+        lastMissedCallTriggerTime.set(now)
+
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
@@ -245,22 +270,28 @@ class PhoneCallReceiver : BroadcastReceiver() {
                     return@launch
                 }
 
-                // 15초 멱등성 검사 (동일 번호 중복 처리 방지)
-                val now = System.currentTimeMillis()
-                val lastProcessed = recentMissedCalls[finalPhone] ?: 0L
-                if (now - lastProcessed < 15_000) {
-                    Log.i(TAG, "⏳ [15초 멱등성 방어] 이미 처리된 부재중 전화입니다: $finalPhone")
+                // 15초 멱등성 검사 (정규화된 숫자 번호 기준 동일 번호 중복 처리 방지)
+                val normalizedPhone = finalPhone.replace(Regex("[^0-9]"), "")
+                val procTime = System.currentTimeMillis()
+                val lastProcessed = recentMissedCalls[normalizedPhone] ?: 0L
+                if (procTime - lastProcessed < 15_000) {
+                    Log.i(TAG, "⏳ [15초 멱등성 방어] 이미 처리된 부재중 전화입니다: $finalPhone (정규화: $normalizedPhone)")
                     return@launch
                 }
-                recentMissedCalls[finalPhone] = now
+                recentMissedCalls[normalizedPhone] = procTime
 
                 // 오래된 캐시 정리 (60초 경과 항목 제거)
-                recentMissedCalls.entries.removeIf { now - it.value > 60_000 }
+                recentMissedCalls.entries.removeIf { procTime - it.value > 60_000 }
 
                 handleMissedCall(context, prefs, userEmail, finalPhone, resolvedName, resolvedCallTime)
             } catch (e: Exception) {
                 Log.e(TAG, "부재중 전화 핸들링 중 오류", e)
             } finally {
+                // 5초 후 처리 락 해제
+                CoroutineScope(Dispatchers.IO).launch {
+                    delay(5000)
+                    isMissedCallProcessing.set(false)
+                }
                 pendingResult.finish()
             }
         }
