@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 64,
-      latestVersionName: "2.1.43",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.43/SheetBotAgent.apk",
+      latestVersionCode: 65,
+      latestVersionName: "2.1.44",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.44/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.43 릴리즈\n• 📲 [한국 통신사 80B 단문 SMS 최적화] 90바이트 초과 Multipart SMS 폐기 문제를 방지하기 위해 단문 규격(80바이트 이하)으로 자동 압축 발송\n• 📁 [단말기 보낸 문자함 동기화] 발송된 영수증 문자가 스마트폰 기본 메시지 앱 발신함(Sent Box)에도 즉시 저장\n• 🕒 [KST 시간 완전 일치] UTC 9시간 시차 버그 완벽 보정 및 영수증 대장 1회 단일 기록 보장",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.44 릴리즈\n• 📝 [앱 영수증 템플릿 최우선 적용] 모바일 앱 설정의 '고객 발송 영수증 문구 템플릿'을 1순위로 즉시 반영\n• ✂️ [80B 초과 글자수 정밀 자동 제거] EUC-KR 80바이트 초과 글자수를 한글 깨짐 없이 안전하게 제거하여 단문 100% 발송 보장\n• 📊 [실제 발송 문구 대장 동기화] 잘려나간 실제 발송 문구가 구글 시트 대장과 단말기 발신함에 동일하게 기록",
     },
     {
       headers: {

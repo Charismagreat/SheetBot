@@ -88,32 +88,30 @@ class SmsReceiver : BroadcastReceiver() {
 
                     // 🎯 고객 영수증 문자 자동 발송 (스마트 간편 주문 매칭 시)
                     if (prefs.isReceiptSmsEnabled && !syncResult.replySmsPhone.isNullOrBlank()) {
-                        val rawReply = syncResult.replySmsText ?: ""
                         val custName = syncResult.depositorName?.takeIf { it.isNotBlank() } ?: "고객"
                         val custAmount = syncResult.amountKrw
 
-                        val msgToSend = if (prefs.receiptSmsTemplate.isNotBlank()) {
-                            SmsSenderUtil.formatReceiptMessage(
-                                template = prefs.receiptSmsTemplate,
-                                customerName = custName,
-                                amountKrw = custAmount
-                            )
-                        } else if (rawReply.isNotBlank()) {
-                            rawReply
-                        } else {
-                            "[SheetBot] ${custName}님, 결제 입금이 확인되었습니다. 감사합니다."
-                        }
+                        // 🎯 [앱 설정 최우선] 고객 발송 영수증 문구 템플릿 란에 설정된 문구를 1순위로 적용
+                        val template = prefs.receiptSmsTemplate.takeIf { it.isNotBlank() }
+                            ?: (syncResult.replySmsText?.takeIf { it.isNotBlank() }
+                                ?: "[SheetBot] {고객명}님, {금액} 결제가 정상 확인되었습니다. 이용해 주셔서 감사합니다.")
+
+                        val msgToSend = SmsSenderUtil.formatReceiptMessage(
+                            template = template,
+                            customerName = custName,
+                            amountKrw = custAmount
+                        )
 
                         if (msgToSend.isNotBlank()) {
-                            val isSent = SmsSenderUtil.sendSms(context, syncResult.replySmsPhone, msgToSend)
+                            val (isSent, finalMsg) = SmsSenderUtil.sendSmsDetailed(context, syncResult.replySmsPhone, msgToSend)
                             val statusLabel = if (isSent) "전송 완료" else "전송 실패"
-                            Log.i(TAG, "📲 [SMS 수신 연계 영수증 SMS $statusLabel] 수신: ${syncResult.replySmsPhone} (고객: $custName)")
+                            Log.i(TAG, "📲 [SMS 수신 연계 영수증 SMS $statusLabel] 수신: ${syncResult.replySmsPhone} (고객: $custName) / 내용: $finalMsg")
                             ApiClient.sendReceiptSmsSync(
                                 userEmail = userEmail,
                                 recipientPhone = syncResult.replySmsPhone,
                                 customerName = custName,
                                 amount = custAmount,
-                                receiptContent = msgToSend,
+                                receiptContent = finalMsg,
                                 status = statusLabel
                             )
                         }

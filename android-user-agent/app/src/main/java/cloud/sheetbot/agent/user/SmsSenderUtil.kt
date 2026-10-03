@@ -36,15 +36,51 @@ object SmsSenderUtil {
     }
 
     /**
-     * 지정된 휴대폰 번호로 텍스트 SMS 단문 안전 발송 (한국 통신사 80바이트 단문 최적화)
-     * 및 스마트폰 기본 메시지 앱 발신함(Sent Box) 동기화
+     * 한국 이동통신사(SKT/KT/LGU+) 단문 SMS 규격(EUC-KR 80바이트 이하) 안전 절단 함수
+     * 80바이트를 초과하는 글자수는 한글 깨짐 없이 글자 단위로 깔끔하게 제거(Truncate)
      */
-    fun sendSms(context: Context, phoneNumber: String, messageText: String): Boolean {
+    fun trimToSmsSafeBytes(text: String, maxBytes: Int = 80): String {
+        if (text.isBlank()) return ""
+        val charset = try {
+            java.nio.charset.Charset.forName("EUC-KR")
+        } catch (_: Exception) {
+            Charsets.UTF_8
+        }
+
+        val rawBytes = text.toByteArray(charset)
+        if (rawBytes.size <= maxBytes) {
+            return text
+        }
+
+        val sb = StringBuilder()
+        var currentBytes = 0
+
+        for (ch in text) {
+            val chBytes = try {
+                ch.toString().toByteArray(charset).size
+            } catch (_: Exception) {
+                if (ch.code > 127) 2 else 1
+            }
+            if (currentBytes + chBytes > maxBytes) {
+                break // 80바이트 초과하는 글자수는 깔끔하게 제거
+            }
+            sb.append(ch)
+            currentBytes += chBytes
+        }
+
+        return sb.toString().trimEnd()
+    }
+
+    /**
+     * 지정된 휴대폰 번호로 텍스트 SMS 단문 안전 발송 (EUC-KR 80바이트 초과 글자수 자동 제거)
+     * @return Pair(성공여부, 실제발송전문)
+     */
+    fun sendSmsDetailed(context: Context, phoneNumber: String, messageText: String): Pair<Boolean, String> {
         return try {
             val cleanPhone = phoneNumber.replace(Regex("[^0-9+]"), "").trim()
             if (cleanPhone.isBlank() || messageText.isBlank()) {
                 Log.w(TAG, "전화번호 또는 메시지가 비어 있어 발송할 수 없습니다.")
-                return false
+                return Pair(false, messageText)
             }
 
             val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -54,17 +90,17 @@ object SmsSenderUtil {
                 SmsManager.getDefault()
             }
 
-            // 🛡️ 한국 통신사(SKT/KT/LGU+) 단문 SMS 규격 (한글 40~45자, 80바이트 이하) 안전 보장
-            // 90바이트 초과 Multipart SMS는 통신사 SMSC에서 폐기/거부될 수 있으므로 단문으로 안전 압축
-            val textToSend = if (messageText.length > 45) {
-                Log.w(TAG, "⚠️ 메시지 길이(${messageText.length}자)가 단문 규격을 초과하여 45자 안전 단문으로 압축합니다.")
-                messageText.substring(0, 43) + ".."
-            } else {
-                messageText
+            // 🛡️ 한국 통신사(SKT/KT/LGU+) 단문 SMS 규격 (EUC-KR 80바이트 이하) 보장: 초과 글자수 깔끔하게 제거
+            val textToSend = trimToSmsSafeBytes(messageText, 80)
+            val charset = java.nio.charset.Charset.forName("EUC-KR")
+            val byteCount = textToSend.toByteArray(charset).size
+
+            if (textToSend.length < messageText.length) {
+                Log.w(TAG, "✂️ [초과 글자수 제거] 원본 ${messageText.length}자 -> 단문 ${textToSend.length}자 (${byteCount}B/80B 제한 적용)")
             }
 
             smsManager.sendTextMessage(cleanPhone, null, textToSend, null, null)
-            Log.i(TAG, "✅ [SMS 통신망 발송 성공] 수신자: $cleanPhone / 전문: $textToSend")
+            Log.i(TAG, "✅ [SMS 단문 발송 성공] 수신자: $cleanPhone / ${byteCount}B / 전문: $textToSend")
 
             // 📁 스마트폰 기본 문자 앱(삼성 메시지 등)의 '보낸 문자함'에 안전 저장
             try {
@@ -81,11 +117,18 @@ object SmsSenderUtil {
                 Log.d(TAG, "발신함 자동 기록 참고 (기본 SMS 앱 권한 차이): ${sentBoxErr.message}")
             }
 
-            true
+            Pair(true, textToSend)
         } catch (e: Exception) {
             Log.e(TAG, "❌ [SMS 발송 실패] 수신자: $phoneNumber / 에러: ${e.message}", e)
-            false
+            Pair(false, messageText)
         }
+    }
+
+    /**
+     * 지정된 휴대폰 번호로 텍스트 SMS 단문 안전 발송 (기존 호출 호환용)
+     */
+    fun sendSms(context: Context, phoneNumber: String, messageText: String): Boolean {
+        return sendSmsDetailed(context, phoneNumber, messageText).first
     }
 
     /**
@@ -130,7 +173,7 @@ object SmsSenderUtil {
                 receipt.message
             }
 
-            val isSent = sendSms(context, receipt.recipientPhone, msgToSend)
+            val (isSent, finalMsg) = sendSmsDetailed(context, receipt.recipientPhone, msgToSend)
             if (isSent) {
                 ApiClient.markReceiptSent(receipt.id, true)
                 val email = prefs.userEmail
@@ -140,7 +183,7 @@ object SmsSenderUtil {
                         recipientPhone = receipt.recipientPhone,
                         customerName = receipt.depositorName,
                         amount = receipt.amountKrw.toLong(),
-                        receiptContent = msgToSend,
+                        receiptContent = finalMsg,
                         status = "전송 완료"
                     )
                 }
