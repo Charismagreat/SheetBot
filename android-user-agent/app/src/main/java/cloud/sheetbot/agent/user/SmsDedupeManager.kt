@@ -1,0 +1,39 @@
+package cloud.sheetbot.agent.user
+
+import java.util.Collections
+import java.util.LinkedHashMap
+
+/**
+ * SMS/RCS 송수신 메시지 15초 멱등성 디바운싱(중복 방어) 전역 매니저
+ * - SmsReceiver, BankNotificationListener(메시지 감지), SmsSentObserver 간의 중복 전송 원천 차단
+ */
+object SmsDedupeManager {
+    private val recentCache = Collections.synchronizedMap(
+        object : LinkedHashMap<String, Long>(100, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean {
+                return size > 100
+            }
+        }
+    )
+
+    /**
+     * 동일 수신/발신 메시지가 15초 이내에 이미 처리되었는지 확인하고,
+     * 처리되지 않았으면 즉시 선점 등록하여 후속 중복 이벤트를 차단
+     * @return true: 최초 1회 처리 허용, false: 15초 이내 중복 감지되어 무시
+     */
+    fun shouldProcessMessage(direction: String, senderOrRecipient: String, body: String): Boolean {
+        val cleanPhone = senderOrRecipient.replace("-", "").replace(" ", "").trim()
+        val cleanBody = body.trim()
+        val key = "$direction:$cleanPhone:$cleanBody"
+        val now = System.currentTimeMillis()
+
+        synchronized(recentCache) {
+            val lastTime = recentCache[key] ?: 0L
+            if (now - lastTime < 15_000L) {
+                return false
+            }
+            recentCache[key] = now
+            return true
+        }
+    }
+}

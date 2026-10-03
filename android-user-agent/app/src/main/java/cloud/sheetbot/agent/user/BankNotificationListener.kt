@@ -378,19 +378,19 @@ class BankNotificationListener : NotificationListenerService() {
 
             if (rawText.isBlank()) return
 
-            val sender = rawTitle.trim()
+            val rawSender = rawTitle.trim()
             val message = rawText.trim()
 
-            // 5초 이내 동일 알림 중복 감지 방어 (SmsReceiver와 중복 기록 방지)
-            val dedupeKey = "msg_noti:$sender:$message"
-            val now = System.currentTimeMillis()
-            val lastSeen = recentCache[dedupeKey] ?: 0L
-            if (now - lastSeen < 8000L) {
+            // 1. 15초 이내 동일 발신자+본문 중복 수신 원천 차단 (SmsReceiver & BankNotificationListener 공통 선점 가드)
+            if (!SmsDedupeManager.shouldProcessMessage("INBOUND", rawSender, message)) {
+                Log.d(TAG, "15초 이내 동일한 수신 메시지(알림) 중복 감지 - 무시합니다.")
                 return
             }
-            recentCache[dedupeKey] = now
 
-            // 주소록 매칭 및 필터 검사
+            // 2. 발신자 번호 정규화
+            val sender = ContactHelper.formatPhoneNumber(rawSender)
+
+            // 3. 주소록 매칭 및 필터 검사
             val isPureNumber = sender.replace("-", "").replace(" ", "").all { it.isDigit() }
             val contactName = if (isPureNumber) {
                 ContactHelper.getContactName(this, sender)

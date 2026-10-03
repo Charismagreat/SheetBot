@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 58,
-      latestVersionName: "2.1.37",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.37/SheetBotAgent.apk",
+      latestVersionCode: 59,
+      latestVersionName: "2.1.38",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.38/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.37 릴리즈\n• 💳 [카카오페이 공식 앱 실시간 연동 100% 보장] 카카오페이(com.kakao.kakaopay) 및 사장님플러스(com.kakaopay.biz) 앱 패키지 정밀 등록\n• 💸 [카카오페이 송금 및 수취인 핀포인트 추출] 'OOO님에게 5,000원을 보냈어요', '5,000원 송금 완료' 등 송금 시 수취인 및 금액 정밀 파싱\n• ⚡ [카카오톡 금융 알림톡 최우선 독립 감지] 일반 카톡 대화 시트 동기화 스위치와 무관하게 카카오페이/카카오뱅크 금융 알림톡 즉시 매장 대장 직행 전송",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.38 릴리즈\n• 🛡️ [문자 송수신 다중 중복 기록 원천 차단] 발신 SMS ContentObserver 다중 발화 선점 가드 및 수신/발신 15초 멱등성 디바운싱(SmsDedupeManager) 탑재\n• 📞 [전화번호 국가코드 자동 정규화] 발신/수신 시 8215993333, 8210... 형태의 번호를 1599-3333, 010-... 표준 하이픈 형식으로 자동 정제\n• ⚡ [수신 리시버 및 알림 옵저버 이중 감지 통합] 동일 문자 수신 시 중복 발송 없이 1건만 안전하게 구글 시트에 기록",
     },
     {
       headers: {

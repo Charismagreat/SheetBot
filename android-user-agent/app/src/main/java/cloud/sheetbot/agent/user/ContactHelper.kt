@@ -11,8 +11,48 @@ import androidx.core.content.ContextCompat
  * - 전화번호를 기반으로 저장된 상대방 이름을 실시간 매칭
  */
 object ContactHelper {
+    /**
+     * 국가코드(82) 제거 및 한국 표준 전화번호 형식(010-XXXX-XXXX, 1599-XXXX 등)으로 변환
+     */
+    fun formatPhoneNumber(raw: String): String {
+        if (raw.isBlank()) return raw
+        var clean = raw.replace("[^0-9+]".toRegex(), "").trim()
+        if (clean.startsWith("+82")) {
+            clean = clean.removePrefix("+82")
+        } else if (clean.startsWith("82") && clean.length >= 10) {
+            clean = clean.removePrefix("82")
+        }
+
+        // 대표번호 (15xx, 16xx, 18xx) 8자리
+        if (clean.length == 8 && (clean.startsWith("15") || clean.startsWith("16") || clean.startsWith("18"))) {
+            return "${clean.substring(0, 4)}-${clean.substring(4)}"
+        }
+
+        if (!clean.startsWith("0")) {
+            clean = "0$clean"
+        }
+
+        return when (clean.length) {
+            11 -> "${clean.substring(0, 3)}-${clean.substring(3, 7)}-${clean.substring(7)}"
+            10 -> {
+                if (clean.startsWith("02")) {
+                    "${clean.substring(0, 2)}-${clean.substring(2, 6)}-${clean.substring(6)}"
+                } else {
+                    "${clean.substring(0, 3)}-${clean.substring(3, 6)}-${clean.substring(6)}"
+                }
+            }
+            9 -> {
+                if (clean.startsWith("02")) {
+                    "${clean.substring(0, 2)}-${clean.substring(2, 5)}-${clean.substring(5)}"
+                } else clean
+            }
+            else -> clean
+        }
+    }
+
     fun getContactName(context: Context, phoneNumber: String): String? {
         if (phoneNumber.isBlank()) return null
+        val normalized = formatPhoneNumber(phoneNumber)
 
         val hasPermission = ContextCompat.checkSelfPermission(
             context,
@@ -25,7 +65,7 @@ object ContactHelper {
         try {
             val uri = Uri.withAppendedPath(
                 ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
-                Uri.encode(phoneNumber)
+                Uri.encode(normalized)
             )
             val projection = arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME)
 

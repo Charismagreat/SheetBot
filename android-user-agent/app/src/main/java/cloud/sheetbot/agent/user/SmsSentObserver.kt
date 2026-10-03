@@ -83,21 +83,33 @@ class SmsSentObserver(
 
                         if (idCol != -1 && addressCol != -1 && bodyCol != -1) {
                             val id = c.getLong(idCol)
-                            val recipient = c.getString(addressCol) ?: ""
+                            val rawRecipient = c.getString(addressCol) ?: ""
                             val body = c.getString(bodyCol) ?: ""
                             val dateLong = if (dateCol != -1) c.getLong(dateCol) else System.currentTimeMillis()
 
-                            // 중복 발신 감지 방어 (이미 동기화된 ID인지 확인)
+                            // 1. 중복 발신 감지 방어 (이미 동기화된 ID인지 선점 확인)
                             if (prefs.isSentSmsSynced(id)) {
                                 return@use
                             }
 
-                            // 10초 이내에 작성된 최근 발신건만 동기화
+                            // 2. 15초 이내 동일 수신자+본문 중복 발화 원천 차단 (SmsDedupeManager 선점 검사)
+                            if (!SmsDedupeManager.shouldProcessMessage("OUTBOUND", rawRecipient, body)) {
+                                Log.d(TAG, "15초 이내 동일한 발신 SMS 이벤트 중복 감지 - 무시합니다.")
+                                return@use
+                            }
+
+                            // 3. 선점 마킹 (비동기 네트워크 완료 전에 마킹하여 동시 발화된 코루틴 즉시 차단!)
+                            prefs.markSentSmsSynced(id)
+
+                            // 4. 60초 이내에 작성된 최근 발신건만 동기화
                             if (System.currentTimeMillis() - dateLong > 60_000L) {
                                 return@use
                             }
 
-                            // 주소록 매칭 및 필터 검사
+                            // 5. 수신자 번호 정규화 (82 국가코드 제거 및 하이픈 표준화)
+                            val recipient = ContactHelper.formatPhoneNumber(rawRecipient)
+
+                            // 6. 주소록 매칭 및 필터 검사
                             val contactName = ContactHelper.getContactName(context, recipient)
                             val filter = prefs.smsTargetFilter.trim()
                             if (!matchesSmsFilter(recipient, contactName, filter)) {
@@ -117,7 +129,6 @@ class SmsSentObserver(
                             )
 
                             if (isSynced) {
-                                prefs.markSentSmsSynced(id)
                                 val who = if (contactName != null) "$contactName($recipient)" else recipient
                                 Log.i(TAG, "🎉 [발신 문자 시트 기록 완료] $who")
 

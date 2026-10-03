@@ -15,6 +15,43 @@ import { parseBankDepositSms } from "@/lib/bank-sms-parser";
 import { recordPaymentToGoogleSheet } from "@/lib/payment-sheet-sync";
 import { getKoreanTimeString } from "@/lib/date-utils";
 
+// 15초 이내 동일 SMS 송수신 중복 기록 방어 캐시 (키: userEmail:direction:phoneNumber:message, 값: timestamp)
+const recentSmsDedupeCache = new Map<string, number>();
+
+/**
+ * 국가코드(82) 제거 및 한국 표준 전화번호 형식(010-XXXX-XXXX, 1599-XXXX 등)으로 정규화
+ */
+function normalizePhoneNumber(phone: string): string {
+  if (!phone) return "-";
+  let clean = phone.replace(/[^0-9+]/g, "").trim();
+  if (clean.startsWith("+82")) {
+    clean = clean.slice(3);
+  } else if (clean.startsWith("82") && clean.length >= 10) {
+    clean = clean.slice(2);
+  }
+
+  // 대표번호 (15xx, 16xx, 18xx) 8자리
+  if (clean.length === 8 && /^(15|16|18)/.test(clean)) {
+    return `${clean.slice(0, 4)}-${clean.slice(4)}`;
+  }
+
+  if (!clean.startsWith("0")) {
+    clean = `0${clean}`;
+  }
+
+  if (clean.length === 11) {
+    return `${clean.slice(0, 3)}-${clean.slice(3, 7)}-${clean.slice(7)}`;
+  } else if (clean.length === 10) {
+    if (clean.startsWith("02")) {
+      return `${clean.slice(0, 2)}-${clean.slice(2, 6)}-${clean.slice(6)}`;
+    }
+    return `${clean.slice(0, 3)}-${clean.slice(3, 6)}-${clean.slice(6)}`;
+  } else if (clean.length === 9 && clean.startsWith("02")) {
+    return `${clean.slice(0, 2)}-${clean.slice(2, 5)}-${clean.slice(5)}`;
+  }
+  return clean;
+}
+
 /**
  * POST /api/user/messages/sms
  * 스마트폰 시트봇 에이전트(SmsReceiver 및 SmsSentObserver)에서 수신/발신된 문자를 수신하여
@@ -28,7 +65,7 @@ export async function POST(req: NextRequest) {
     const {
       userEmail: bodyEmail,
       direction = "INBOUND", // "INBOUND" (수신) 또는 "OUTBOUND" (발신)
-      phoneNumber,
+      phoneNumber: rawPhoneNumber,
       contactName,
       message,
       timestamp,
@@ -46,15 +83,37 @@ export async function POST(req: NextRequest) {
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }
-    if (!phoneNumber || !message) {
+    if (!rawPhoneNumber || !message) {
       return NextResponse.json({ success: false, error: "전화번호와 메시지 내용은 필수입니다." }, { status: 400 });
     }
 
     const cleanEmail = userEmail.toLowerCase().trim();
     const isOutbound = direction.toUpperCase() === "OUTBOUND";
     const directionLabel = isOutbound ? "발신" : "수신";
+    const phoneNumber = normalizePhoneNumber(rawPhoneNumber);
     const displayName = contactName && contactName.trim().length > 0 ? contactName.trim() : "미등록 연락처";
     const nowStr = timestamp || getKoreanTimeString();
+
+    // 0. 15초 이내 동일 송수신 중복 요청 방어 (Idempotency Guard)
+    const dedupeKey = `${cleanEmail}:${directionLabel}:${phoneNumber}:${message.trim()}`;
+    const now = Date.now();
+    const lastSeen = recentSmsDedupeCache.get(dedupeKey) || 0;
+    if (now - lastSeen < 15_000) {
+      return NextResponse.json({
+        success: true,
+        message: `중복된 문자(${directionLabel}) 요청이 15초 이내에 감지되어 시트 중복 기록을 안전하게 방어했습니다.`,
+        isDuplicate: true,
+      });
+    }
+    recentSmsDedupeCache.set(dedupeKey, now);
+
+    // 오래된 캐시 정리 (최대 100개 유지)
+    if (recentSmsDedupeCache.size > 200) {
+      const threshold = now - 60_000;
+      for (const [k, v] of recentSmsDedupeCache.entries()) {
+        if (v < threshold) recentSmsDedupeCache.delete(k);
+      }
+    }
 
     // [SheetBot] 표준 네이밍 원칙 준수
     let sheetTitle = rawSheetTitle.trim();

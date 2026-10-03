@@ -40,12 +40,21 @@ class SmsReceiver : BroadcastReceiver() {
             val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
             if (messages.isNullOrEmpty()) return
 
-            val sender = messages[0].originatingAddress ?: ""
+            val rawSender = messages[0].originatingAddress ?: ""
             val fullBody = messages.joinToString("") { it.messageBody ?: "" }
+
+            // 1. 15초 이내 동일 발신자+본문 중복 수신 원천 차단 (SmsReceiver & BankNotificationListener 공통 선점 가드)
+            if (!SmsDedupeManager.shouldProcessMessage("INBOUND", rawSender, fullBody)) {
+                Log.d(TAG, "15초 이내 동일한 수신 SMS 중복 감지 - 무시합니다.")
+                return
+            }
+
+            // 2. 발신자 번호 정규화 (82 국가코드 제거 및 하이픈 표준화)
+            val sender = ContactHelper.formatPhoneNumber(rawSender)
 
             Log.i(TAG, "📱 [고객 SMS 수신 감지] 발신: $sender / 본문: ${fullBody.take(40)}...")
 
-            // 주소록 매칭 및 필터 검사
+            // 3. 주소록 매칭 및 필터 검사
             val contactName = ContactHelper.getContactName(context, sender)
             val filter = prefs.smsTargetFilter.trim()
             if (!matchesSmsFilter(sender, contactName, filter)) {
