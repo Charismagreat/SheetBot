@@ -37,6 +37,60 @@ function writeDebugLog(msg: string) {
   } catch {}
 }
 
+// 15초 멱등성 중복 수신 방어 캐시 (동일 사용자 + 파일명 기준)
+const recentRecordingUploads = new Map<string, { timestamp: number; fileId: string; webViewLink: string; targetFolderId: string | null; targetFolderName: string }>();
+
+function cleanRecentUploads() {
+  const now = Date.now();
+  for (const [k, v] of recentRecordingUploads.entries()) {
+    if (now - v.timestamp > 30000) {
+      recentRecordingUploads.delete(k);
+    }
+  }
+}
+
+/**
+ * 파일명에서 상대방 이름 및 전화번호, 통화 일시 지능형 파싱 (단말기 파싱 누락 대비 2중 안전망)
+ */
+function parseContactFromFileName(fileName: string): { name: string; time?: string } {
+  const clean = fileName
+    .replace(/^\[SheetBot\]\s*/i, "")
+    .replace(/\.[^.]+$/, "")
+    .trim();
+
+  // 1. 이름_전화번호_날짜시간 (예: 시댁_01077249063_20261003165911)
+  const m1 = clean.match(/^([^_]+)_(\d{9,12})_(\d{8,14})$/);
+  if (m1) {
+    const rawName = m1[1].trim();
+    const phone = m1[2].trim();
+    const dt = m1[3].trim();
+    const formattedPhone = phone.length === 11 
+      ? `${phone.slice(0, 3)}-${phone.slice(3, 7)}-${phone.slice(7)}` 
+      : phone.length === 10 && phone.startsWith("02")
+      ? `${phone.slice(0, 2)}-${phone.slice(2, 6)}-${phone.slice(6)}`
+      : phone;
+    let callTimeStr: string | undefined;
+    if (dt.length >= 14) {
+      callTimeStr = `${dt.slice(0, 4)}-${dt.slice(4, 6)}-${dt.slice(6, 8)} ${dt.slice(8, 10)}:${dt.slice(10, 12)}:${dt.slice(12, 14)}`;
+    }
+    return { name: `${rawName} (${formattedPhone})`, time: callTimeStr };
+  }
+
+  // 2. 통화 녹음 이름_날짜_시간
+  const m2 = clean.match(/(?:통화\s*녹음|T전화통화녹음)[\s_]+([^_]+)_(\d{6,8})_?(\d{4,6})?/i);
+  if (m2) {
+    return { name: m2[1].trim() };
+  }
+
+  // 3. Fallback: 언더스코어로 분리하여 첫 번째 토큰
+  const tokens = clean.split("_").map((t) => t.trim()).filter(Boolean);
+  if (tokens.length > 0 && !tokens[0].match(/^\d{6,}$/)) {
+    return { name: tokens[0] };
+  }
+
+  return { name: "미지정 연락처" };
+}
+
 /**
  * POST /api/user/recordings/upload
  * 스마트폰 시트봇 에이전트에서 통화 녹음 파일을 수신하여
@@ -121,6 +175,34 @@ export async function POST(req: NextRequest) {
       targetFileName = `[SheetBot] ${targetFileName}`;
     }
 
+    // 상대방 이름이 미지정이거나 비어있으면 파일명에서 자동 복원
+    if (!contactName || contactName === "미지정 연락처" || contactName.trim().length === 0) {
+      const parsed = parseContactFromFileName(targetFileName);
+      if (parsed.name && parsed.name !== "미지정 연락처") {
+        contactName = parsed.name;
+        if (parsed.time && (!callTime || callTime.includes("T"))) {
+          callTime = parsed.time;
+        }
+      }
+    }
+
+    // ⚡ [15초 멱등성 중복 방어] 단말기 루프/재전송에 의한 중복 저장 100% 원천 차단
+    cleanRecentUploads();
+    const dedupeKey = `${cleanEmail}_${targetFileName}_${buffer.length}`;
+    const cached = recentRecordingUploads.get(dedupeKey);
+    if (cached && Date.now() - cached.timestamp < 15000) {
+      writeDebugLog(`[Idempotency] Duplicate upload blocked within 15s for ${dedupeKey}. Returning cached response.`);
+      return NextResponse.json({
+        success: true,
+        message: `이미 안전하게 보관된 통화 녹음 파일입니다.`,
+        fileId: cached.fileId,
+        fileName: targetFileName,
+        folderName: cached.targetFolderName,
+        folderId: cached.targetFolderId,
+        webViewLink: cached.webViewLink,
+      });
+    }
+
     // 3. 임시 파일로 디스크에 저장 (Drive 업로드 도구에 로컬 경로 필요)
     const tempDir = os.tmpdir();
     tempFilePath = path.join(tempDir, `sb_rec_${Date.now()}_${path.basename(targetFileName)}`);
@@ -164,42 +246,73 @@ export async function POST(req: NextRequest) {
     // 5. 구글 드라이브로 파일 업로드 (원격/로컬 무손실 브릿지 전송)
     let driveFileId: string | null = null;
     let webViewLink = "";
+
+    // 🛡️ [구글 드라이브 중복 생성 방어] 이미 동일한 이름의 파일이 존재하면 새로 생성하지 않고 기존 파일 재사용
     try {
-      writeDebugLog(`Step 5: Calling uploadDriveFileWithBridge for ${targetFileName}...`);
-      const uploadRes = await uploadDriveFileWithBridge({
-        buffer,
-        fileName: targetFileName,
-        folderId: targetFolderId || undefined,
-        tempFilePath,
-        preferOAuth: true,
-      });
-      writeDebugLog(`Step 5: uploadRes returned: ${JSON.stringify(uploadRes)}`);
+      writeDebugLog(`Step 5: Checking if file already exists in Drive: ${targetFileName}...`);
+      const existingFileCheck = await listDriveFiles(
+        { folderId: targetFolderId || undefined, query: `name = '${targetFileName}' and trashed = false` },
+        { preferOAuth: true }
+      );
+      const existingDriveFiles = existingFileCheck?.files || [];
+      if (existingDriveFiles.length > 0) {
+        driveFileId = existingDriveFiles[0].id;
+        webViewLink = existingDriveFiles[0].webViewLink || `https://drive.google.com/file/d/${driveFileId}/view`;
+        writeDebugLog(`Step 5 Duplicate Guard: Found existing file in Drive: ${driveFileId}`);
+      }
+    } catch (checkErr: any) {
+      writeDebugLog(`Step 5 duplicate check error: ${checkErr.message}`);
+    }
 
-      driveFileId = uploadRes?.id || uploadRes?.fileId || null;
-      webViewLink = uploadRes?.webViewLink || (driveFileId ? `https://drive.google.com/file/d/${driveFileId}/view` : "");
-    } catch (uploadErr: any) {
-      writeDebugLog(`Step 5 warning: ${uploadErr.message}. Checking if file was already created in Drive...`);
-      // [Fail-Safe Recovery] 구글 드라이브 MCP 클라이언트 응답 타임아웃이 발생해도 드라이브에 파일이 생성되었는지 확인
+    if (!driveFileId) {
       try {
-        const checkRes = await listDriveFiles(
-          { folderId: targetFolderId || undefined, query: `name = '${targetFileName}' and trashed = false` },
-          { preferOAuth: true }
-        );
-        const foundFiles = checkRes?.files || [];
-        if (foundFiles.length > 0) {
-          driveFileId = foundFiles[0].id;
-          webViewLink = foundFiles[0].webViewLink || `https://drive.google.com/file/d/${driveFileId}/view`;
-          writeDebugLog(`Step 5 Fail-Safe SUCCESS: Recovered uploaded fileId: ${driveFileId}`);
-        }
-      } catch (checkErr: any) {
-        writeDebugLog(`Step 5 recovery check failed: ${checkErr.message}`);
-      }
+        writeDebugLog(`Step 5: Calling uploadDriveFileWithBridge for ${targetFileName}...`);
+        const uploadRes = await uploadDriveFileWithBridge({
+          buffer,
+          fileName: targetFileName,
+          folderId: targetFolderId || undefined,
+          tempFilePath,
+          preferOAuth: true,
+        });
+        writeDebugLog(`Step 5: uploadRes returned: ${JSON.stringify(uploadRes)}`);
 
-      if (!driveFileId) {
-        writeDebugLog(`Step 5 error: ${uploadErr.message}`);
-        console.error("[RecordingsUpload] Drive upload failed completely:", uploadErr);
-        throw new Error(`구글 드라이브 파일 업로드에 실패했습니다: ${uploadErr.message}`);
+        driveFileId = uploadRes?.id || uploadRes?.fileId || null;
+        webViewLink = uploadRes?.webViewLink || (driveFileId ? `https://drive.google.com/file/d/${driveFileId}/view` : "");
+      } catch (uploadErr: any) {
+        writeDebugLog(`Step 5 warning: ${uploadErr.message}. Checking if file was already created in Drive...`);
+        // [Fail-Safe Recovery] 구글 드라이브 MCP 클라이언트 응답 타임아웃이 발생해도 드라이브에 파일이 생성되었는지 확인
+        try {
+          const checkRes = await listDriveFiles(
+            { folderId: targetFolderId || undefined, query: `name = '${targetFileName}' and trashed = false` },
+            { preferOAuth: true }
+          );
+          const foundFiles = checkRes?.files || [];
+          if (foundFiles.length > 0) {
+            driveFileId = foundFiles[0].id;
+            webViewLink = foundFiles[0].webViewLink || `https://drive.google.com/file/d/${driveFileId}/view`;
+            writeDebugLog(`Step 5 Fail-Safe SUCCESS: Recovered uploaded fileId: ${driveFileId}`);
+          }
+        } catch (checkErr: any) {
+          writeDebugLog(`Step 5 recovery check failed: ${checkErr.message}`);
+        }
+
+        if (!driveFileId) {
+          writeDebugLog(`Step 5 error: ${uploadErr.message}`);
+          console.error("[RecordingsUpload] Drive upload failed completely:", uploadErr);
+          throw new Error(`구글 드라이브 파일 업로드에 실패했습니다: ${uploadErr.message}`);
+        }
       }
+    }
+
+    // 멱등성 캐시 등록
+    if (driveFileId) {
+      recentRecordingUploads.set(dedupeKey, {
+        timestamp: Date.now(),
+        fileId: driveFileId,
+        webViewLink,
+        targetFolderId,
+        targetFolderName,
+      });
     }
 
     // ★ [Fast-Return 원칙] 스마트폰 클라이언트에게 3초 만에 200 성공 응답을 즉시 반환하여 터널 소켓 타임아웃 원천 차단!
@@ -508,11 +621,12 @@ async function triggerAiAudioAnalysis(
       );
 
       if (batchSubmitRes.success && batchSubmitRes.jobName) {
-        const batchJobId = `batch_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const batchJobId = Date.now();
         await insertRows("sheetbot_ai_batch_jobs", [
           {
             id: batchJobId,
             job_name: batchSubmitRes.jobName,
+            job_type: "RECORDING",
             user_email: cleanEmail,
             file_name: fileName,
             spreadsheet_id: spreadsheetId,
@@ -521,7 +635,7 @@ async function triggerAiAudioAnalysis(
             status: "PENDING",
             created_at: getKoreanTimeString(),
           },
-        ]).catch(() => {});
+        ]).catch((e: any) => console.warn("[BatchJobs] Insert error:", e.message));
 
         writeDebugLog(`Batch ticket registered in DB: ${batchJobId} (${batchSubmitRes.jobName})`);
 
@@ -542,21 +656,28 @@ async function triggerAiAudioAnalysis(
               status: "SUCCEEDED",
               completed_at: nowStr,
               updated_at: nowStr,
-            }, { ids: [Number(batchJobId)] }).catch(() => {});
+            }, { ids: [batchJobId] }).catch(() => {});
           }
         } else {
           writeDebugLog(`[Zero-Block] Batch job ${batchSubmitRes.jobName} is still processing after 15s. Delegating to Async Sweeper Worker.`);
-          // 15초 초과 시 스레드를 묶어두지 않고 백그라운드 워커에 위임
+          // 15초 초과 시 스레드를 묶어두지 않고 백그라운드 워커에 위임 (실시간 504 Timeout 원천 차단)
           return;
         }
+      } else {
+        writeDebugLog(`Batch submit was not successful: ${batchSubmitRes.error}`);
       }
     } catch (batchErr: any) {
-      writeDebugLog(`Batch attempt warning (falling back to direct call): ${batchErr.message}`);
+      writeDebugLog(`Batch attempt warning: ${batchErr.message}`);
     }
 
-    // [폴백 안전망] 만약 배치 작업이 미완료이거나 예외 시 일반 실시간 호출로 안전하게 완료
+    // [중요: 오디오 파일 실시간 폴백 504 Timeout 방어]
+    // 50KB 이상의 대용량 음성 파일을 실시간 callAiCaller로 부르면 60초 타임아웃 및 504 Gateway Timeout 발생
     if (!rawText) {
-      writeDebugLog(`Calling standard AI Caller for ${fileName}...`);
+      if (audioBytesLen > 80 * 1024) {
+        writeDebugLog(`Audio file size (${fileSizeMb}) is large. Skipping synchronous call to prevent 504 Gateway Timeout.`);
+        return;
+      }
+      writeDebugLog(`Calling standard AI Caller for small audio ${fileName}...`);
       const aiRes = await callAiCaller(prompt, {
         caller: "sheetbot-voice-intelligence",
         model: targetModel,

@@ -459,7 +459,7 @@ class PhoneCallReceiver : BroadcastReceiver() {
         }
 
         Log.i(TAG, "🎙️ [통화 종료 감지] 3.5초 후 통화 녹음 파일 자동 동기화 개시 예정...")
-        val pendingResult = goAsync()
+        // ⚡ [Zero-ANR]: OS 대기(goAsync) 없이 즉각 반환하고, 백그라운드 코루틴에서 무중단 실행
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 // 스마트폰 오디오 인코딩 및 파일 시스템 finalize 대기 (3.5초)
@@ -479,8 +479,6 @@ class PhoneCallReceiver : BroadcastReceiver() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "통화 종료 후 녹음 자동 동기화 중 오류", e)
-            } finally {
-                pendingResult.finish()
             }
         }
     }

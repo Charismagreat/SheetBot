@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 73,
-      latestVersionName: "2.1.52",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.52/SheetBotAgent.apk",
+      latestVersionCode: 74,
+      latestVersionName: "2.1.53",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.53/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.52 릴리즈\n• ⚡ [안드로이드 시스템 ANR 팝업 원천 차단] SMS 수신 시 브로드캐스트 대기(goAsync)를 전면 제거하고 0초 즉각 반환 처리하여 '앱이 응답하지 않음' 시스템 오류 100% 해소\n• ✉️ [영수증 문자 무중단 발송] 입금 확인 즉시 백그라운드 코루틴에서 고객 영수증 문자가 안정적으로 자동 발송되도록 파이프라인 최적화",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.53 릴리즈\n• 🎙️ [통화 녹음 대장 연동 및 상대방 이름 정상화] 파일명 파싱 버그를 해결하여 상대방 이름 및 전화번호가 '미지정 연락처'로 오표기되던 문제를 완벽 해결\n• 🛡️ [구글 드라이브 파일 중복 생성 원천 차단] 15초 멱등성 가드 및 사전 파일 중복 검증을 탑재하여 동일 통화 녹음 파일의 중복 업로드를 100% 방지\n• ⚡ [AI 음성 비동기 배치 수거 정상화] Zero-Block 비동기 수거 워커 연동을 최적화하여 504 Gateway Timeout 없이 화자 분리 STT 및 3줄 요약이 대장에 안정적으로 자동 기록되도록 개선",
     },
     {
       headers: {
