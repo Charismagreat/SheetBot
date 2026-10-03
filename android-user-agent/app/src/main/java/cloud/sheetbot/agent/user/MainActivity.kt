@@ -617,6 +617,10 @@ class MainActivity : AppCompatActivity() {
             showReceiptSmsTestDialog()
         }
 
+        binding.btnDiagnoseReceiptConditions.setOnClickListener {
+            showReceiptConditionDiagnosisDialog()
+        }
+
         binding.switchPushDetection.isChecked = prefs.isPushDetectionEnabled
         binding.switchPushDetection.setOnCheckedChangeListener { _, isChecked ->
             prefs.isPushDetectionEnabled = isChecked
@@ -3719,4 +3723,227 @@ class MainActivity : AppCompatActivity() {
             dialog.dismiss()
         }
     }
-}
+
+    /**
+     * 🔍 영수증 발송 조건 5단계 종합 진단 및 가상 입금 테스트 도구 (v2.1.49)
+     * 실제 은행 송금 없이 가상 카카오뱅크 입금 문자를 발생시켜
+     * 1) 단말기 권한, 2) 앱 설정, 3) 구글 시트 주문접수대장 매칭, 4) 80B 규격, 5) 영수증 발송/대장 기록까지 원스톱 진단
+     */
+    private fun showReceiptConditionDiagnosisDialog() {
+        val dialogView = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(40, 30, 40, 20)
+            setBackgroundColor(android.graphics.Color.parseColor("#1E293B"))
+        }
+
+        val tvDesc = android.widget.TextView(this).apply {
+            text = "실제 은행 송금 없이 가상 입금 문자를 발생시켜 구글 시트 [주문접수대장] 실시간 매칭부터 영수증 발송까지 전 과정을 1초 만에 종합 진단합니다."
+            setTextColor(android.graphics.Color.parseColor("#94A3B8"))
+            textSize = 12f
+            setPadding(0, 0, 0, 16)
+        }
+        dialogView.addView(tvDesc)
+
+        // 고객명 & 금액 입력
+        val tvCustLabel = android.widget.TextView(this).apply {
+            text = "👤 진단 대상 고객명 / 💰 결제 금액(원):"
+            setTextColor(android.graphics.Color.parseColor("#E2E8F0"))
+            textSize = 12f
+            setPadding(0, 8, 0, 4)
+        }
+        dialogView.addView(tvCustLabel)
+
+        val rowLayout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+        }
+        val etCustName = android.widget.EditText(this).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = 8
+            }
+            setText("차민서")
+            setTextColor(android.graphics.Color.WHITE)
+            setBackgroundColor(android.graphics.Color.parseColor("#0F172A"))
+            setPadding(20, 16, 20, 16)
+            textSize = 13f
+        }
+        val etAmount = android.widget.EditText(this).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            setText("444")
+            setTextColor(android.graphics.Color.WHITE)
+            setBackgroundColor(android.graphics.Color.parseColor("#0F172A"))
+            setPadding(20, 16, 20, 16)
+            textSize = 13f
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        }
+        rowLayout.addView(etCustName)
+        rowLayout.addView(etAmount)
+        dialogView.addView(rowLayout)
+
+        // 실제 문자 발송 여부 체크박스
+        val cbSendRealSms = android.widget.CheckBox(this).apply {
+            text = "매칭 성공 시 고객 번호로 실제 SMS 영수증 발송 & 대장 기록"
+            isChecked = true
+            setTextColor(android.graphics.Color.parseColor("#38BDF8"))
+            textSize = 12f
+            setPadding(0, 16, 0, 8)
+        }
+        dialogView.addView(cbSendRealSms)
+
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("🔍 영수증 발송 조건 5단계 종합 진단")
+            .setView(dialogView)
+            .setPositiveButton("🚀 종합 진단 시작", null)
+            .setNegativeButton("닫기", null)
+            .create()
+
+        dialog.show()
+
+        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val name = etCustName.text.toString().trim().ifBlank { "차민서" }
+            val amt = etAmount.text.toString().trim().toLongOrNull() ?: 444L
+            val willSendRealSms = cbSendRealSms.isChecked
+            val userEmail = prefs.userEmail
+
+            if (userEmail.isNullOrBlank()) {
+                Toast.makeText(this, "계정이 연동되어 있지 않습니다.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            dialog.dismiss()
+
+            // 로딩 안내 토스트
+            Toast.makeText(this, "🔍 [1/5] 영수증 발송 조건 종합 진단을 시작합니다...", Toast.LENGTH_SHORT).show()
+
+            activityScope.launch(Dispatchers.IO) {
+                val reportLines = mutableListOf<String>()
+
+                // 1단계: SMS 발송 권한 검사
+                val hasSmsPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                    this@MainActivity, android.Manifest.permission.SEND_SMS
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+                if (hasSmsPermission) {
+                    reportLines.add("✅ [1단계: 단말기 발송 권한] 승인됨 (SEND_SMS 허용)")
+                } else {
+                    reportLines.add("❌ [1단계: 단말기 발송 권한] 미승인! (SMS 발송 권한 필요)")
+                }
+
+                // 2단계: 앱 설정 활성화 검사
+                val isReceiptEnabled = prefs.isReceiptSmsEnabled
+                if (isReceiptEnabled) {
+                    reportLines.add("✅ [2단계: 영수증 자동 회신] ON (활성화됨)")
+                } else {
+                    reportLines.add("⚠️ [2단계: 영수증 자동 회신] OFF (설정에서 켜주세요)")
+                }
+
+                // 3단계: 가상 카카오뱅크 입금 문자 생성
+                val nowStr = java.text.SimpleDateFormat("MM/dd HH:mm", java.util.Locale.KOREA).format(java.util.Date())
+                val virtualSms = """
+                    [Web발신]
+                    [카카오뱅크]
+                    차*석(5965)
+                    $nowStr
+                    입금 ${amt}원
+                    $name
+                    잔액 10,000원
+                """.trimIndent()
+                reportLines.add("✅ [3단계: 가상 입금 문자 생성] '$name / ${amt}원' 시뮬레이션 완료")
+
+                // 4단계: 서버 구글 시트 주문접수대장 실시간 매칭 검증
+                var matchSuccess = false
+                var matchedPhone: String? = null
+                var matchedCustName: String? = null
+                var matchedAmt: Long = 0L
+                var serverReplyText: String? = null
+
+                try {
+                    val syncResult = if (prefs.isSmsSheetSyncEnabled) {
+                        ApiClient.sendSmsSync(
+                            userEmail = userEmail,
+                            direction = "INBOUND",
+                            phoneNumber = "1599-3333",
+                            contactName = "카카오뱅크",
+                            message = virtualSms,
+                            sheetTitle = prefs.smsDriveSheetTitle
+                        )
+                    } else {
+                        ApiClient.sendInboundSms(
+                            userEmail = userEmail,
+                            sender = "1599-3333",
+                            message = virtualSms
+                        )
+                    }
+
+                    if (!syncResult.replySmsPhone.isNullOrBlank()) {
+                        matchSuccess = true
+                        matchedPhone = syncResult.replySmsPhone
+                        matchedCustName = syncResult.depositorName ?: name
+                        matchedAmt = syncResult.amountKrw.takeIf { it > 0 } ?: amt
+                        serverReplyText = syncResult.replySmsText
+
+                        reportLines.add("✅ [4단계: 주문접수대장 매칭] 성공! 🎉")
+                        reportLines.add("   • 고객 연락처: $matchedPhone")
+                        reportLines.add("   • 매칭 고객/금액: $matchedCustName / ${matchedAmt}원")
+                    } else {
+                        reportLines.add("❌ [4단계: 주문접수대장 매칭] 실패 ⚠️")
+                        reportLines.add("   • 원인: [주문접수대장]에 '$name / ${amt}원' 일치 주문이 없거나 이미 결제완료 상태입니다.")
+                    }
+                } catch (e: Exception) {
+                    reportLines.add("❌ [4단계: 서버 통신 예외] ${e.localizedMessage}")
+                }
+
+                // 5단계: 80B 규격 검증 및 실제 발송 (매칭 성공 시)
+                if (matchSuccess && !matchedPhone.isNullOrBlank()) {
+                    val tpl = prefs.receiptSmsTemplate.takeIf { it.isNotBlank() }
+                        ?: (serverReplyText?.takeIf { it.isNotBlank() }
+                            ?: "[SheetBot] {고객명}님, {금액} 결제가 정상 확인되었습니다. 이용해 주셔서 감사합니다.")
+
+                    val msgToSend = SmsSenderUtil.formatReceiptMessage(tpl, matchedCustName ?: name, matchedAmt)
+                    val trimmedMsg = SmsSenderUtil.trimToSmsSafeBytes(msgToSend, 80)
+                    val bytes = try { trimmedMsg.toByteArray(java.nio.charset.Charset.forName("EUC-KR")).size } catch (_: Exception) { trimmedMsg.length * 2 }
+
+                    reportLines.add("✅ [5단계: 80B 단문 규격 검증] ${trimmedMsg.length}자 ($bytes 바이트 / 80B 이하)")
+                    reportLines.add("   • 발송 전문: \"$trimmedMsg\"")
+
+                    if (willSendRealSms) {
+                        if (hasSmsPermission) {
+                            val (isSent, finalMsg) = SmsSenderUtil.sendSmsDetailed(this@MainActivity, matchedPhone, trimmedMsg)
+                            val statusLabel = if (isSent) "전송 완료" else "전송 실패"
+                            val sheetSyncOk = ApiClient.sendReceiptSmsSync(
+                                userEmail = userEmail,
+                                recipientPhone = matchedPhone,
+                                customerName = matchedCustName ?: name,
+                                amount = matchedAmt,
+                                receiptContent = finalMsg,
+                                status = statusLabel
+                            )
+
+                            if (isSent) {
+                                reportLines.add("🎉 [최종 결과] 고객 번호($matchedPhone)로 실제 SMS 발송 성공!")
+                                reportLines.add("   • 📊 고객 영수증 발송 대장 기록: ${if (sheetSyncOk) "✅ 성공" else "⚠️ 시트 확인 필요"}")
+                                reportLines.add("   • 📁 단말기 보낸 문자함 저장: ✅ 완료")
+                            } else {
+                                reportLines.add("❌ [최종 결과] 단말기 SMS 발송 실패 (통신사 모뎀 응답 확인 필요)")
+                            }
+                        } else {
+                            reportLines.add("⚠️ [최종 결과] SMS 발송 권한이 없어 실제 발송을 건너뛰었습니다.")
+                        }
+                    } else {
+                        reportLines.add("ℹ️ [최종 결과] '실제 발송' 체크 해제로 모의 진단만 완료했습니다.")
+                    }
+                } else {
+                    reportLines.add("⚠️ [최종 결과] 주문 매칭이 되지 않아 영수증 문자가 발송되지 않았습니다.")
+                }
+
+                // UI 다이얼로그로 종합 리포트 표시
+                withContext(Dispatchers.Main) {
+                    val reportTitle = if (matchSuccess) "🎉 [영수증 발송 조건 종합 진단: 정상]" else "⚠️ [영수증 발송 조건 종합 진단: 확인 필요]"
+                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle(reportTitle)
+                        .setMessage(reportLines.joinToString("\n\n"))
+                        .setPositiveButton("확인", null)
+                        .show()
+                }
+            }
+        }
+    }

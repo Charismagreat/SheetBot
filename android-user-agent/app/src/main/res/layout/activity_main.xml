@@ -913,6 +913,17 @@
                     android:textSize="12sp"
                     android:textStyle="bold"
                     android:layout_marginTop="8dp" />
+
+                <Button
+                    android:id="@+id/btnDiagnoseReceiptConditions"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:backgroundTint="#0D9488"
+                    android:text="🔍 영수증 발송 조건 5단계 종합 진단 (가상 입금)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="6dp" />
             </LinearLayout>
 
             <LinearLayout
