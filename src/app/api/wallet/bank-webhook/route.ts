@@ -371,15 +371,6 @@ export async function POST(request: Request) {
     }
 
     if (!matched) {
-      // 1. 가상 테스트 SMS 여부 감지 (isTest 플래그 또는 스마트폰 가상 입금 테스트 시그니처)
-      const isSimulatedTest =
-        Boolean(body?.isTest) ||
-        rawSms.includes("성명(계좌)") ||
-        rawSms.includes("테스트입금") ||
-        rawSms.includes("입금알림") ||
-        rawSms.includes("입금확인(테스트)") ||
-        (cleanAmount === 5000 && rawSms.includes("2,05"));
-
       if (isSimulatedTest) {
         return NextResponse.json({
           success: true,
