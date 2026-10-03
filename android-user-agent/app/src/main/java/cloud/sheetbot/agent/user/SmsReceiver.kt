@@ -65,7 +65,7 @@ class SmsReceiver : BroadcastReceiver() {
             val pendingResult = goAsync()
             CoroutineScope(Dispatchers.IO).launch {
                 try {
-                    val isSynced = if (prefs.isSmsSheetSyncEnabled) {
+                    val syncResult = if (prefs.isSmsSheetSyncEnabled) {
                         ApiClient.sendSmsSync(
                             userEmail = userEmail,
                             direction = "INBOUND",
@@ -75,21 +75,56 @@ class SmsReceiver : BroadcastReceiver() {
                             sheetTitle = prefs.smsDriveSheetTitle
                         )
                     } else {
-                        ApiClient.sendInboundSms(
+                        val ok = ApiClient.sendInboundSms(
                             userEmail = userEmail,
                             sender = sender,
                             message = fullBody
                         )
+                        SmsSyncResult(success = ok)
                     }
 
+                    val isSynced = syncResult.success
                     showInboundSmsNotification(context, contactName ?: sender, fullBody, isSynced)
+
+                    // 🎯 고객 영수증 문자 자동 발송 (스마트 간편 주문 매칭 시)
+                    if (prefs.isReceiptSmsEnabled && !syncResult.replySmsPhone.isNullOrBlank()) {
+                        val rawReply = syncResult.replySmsText ?: ""
+                        val custName = syncResult.depositorName?.takeIf { it.isNotBlank() } ?: "고객"
+                        val custAmount = syncResult.amountKrw
+
+                        val msgToSend = if (prefs.receiptSmsTemplate.isNotBlank()) {
+                            SmsSenderUtil.formatReceiptMessage(
+                                template = prefs.receiptSmsTemplate,
+                                customerName = custName,
+                                amountKrw = custAmount
+                            )
+                        } else if (rawReply.isNotBlank()) {
+                            rawReply
+                        } else {
+                            "[SheetBot] ${custName}님, 결제 입금이 확인되었습니다. 감사합니다."
+                        }
+
+                        if (msgToSend.isNotBlank()) {
+                            val isSent = SmsSenderUtil.sendSms(context, syncResult.replySmsPhone, msgToSend)
+                            if (isSent) {
+                                Log.i(TAG, "📲 [SMS 수신 연계 영수증 SMS 발송 성공] 수신: ${syncResult.replySmsPhone} (고객: $custName)")
+                                ApiClient.sendReceiptSmsSync(
+                                    userEmail = userEmail,
+                                    recipientPhone = syncResult.replySmsPhone,
+                                    customerName = custName,
+                                    receiptContent = msgToSend,
+                                    status = "전송 완료"
+                                )
+                            }
+                        }
+                    }
 
                     if (isSynced) {
                         val who = if (contactName != null) "$contactName($sender)" else sender
                         Log.i(TAG, "✅ [고객 문자 시트 동기화 완료] $who")
                         if (prefs.isTtsEnabled) {
-                            val voiceWho = contactName ?: "고객"
-                            TtsManager.speak(context, "${voiceWho}님의 새 문자가 구글 시트에 기록되었습니다.")
+                            val ttsMsg = syncResult.ttsText ?: "${contactName ?: "고객"}님의 새 문자가 구글 시트에 기록되었습니다."
+                            TtsManager.speak(context, ttsMsg)
                         }
                     } else {
                         Log.w(TAG, "⚠️ [고객 문자 동기화 실패] 발신: $sender")

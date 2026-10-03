@@ -892,7 +892,7 @@ object ApiClient {
         message: String,
         deviceId: String? = null,
         sheetTitle: String = "[SheetBot] 스마트폰 문자(SMS) 송수신 대장"
-    ): Boolean = withContext(Dispatchers.IO) {
+    ): SmsSyncResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
@@ -910,15 +910,32 @@ object ApiClient {
             try {
                 val request = Request.Builder().url(endpoint).post(body).build()
                 val response = client.newCall(request).execute()
-                if (response.isSuccessful) {
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", true)) {
                     Log.i(TAG, "✅ [문자($direction) 시트 동기화 성공] 상대방: $phoneNumber, 호스트: $host")
-                    return@withContext true
+                    val replySmsObj = resJson.optJSONObject("replySms")
+                    val replyPhone = replySmsObj?.optString("recipientPhone")?.takeIf { it.isNotBlank() }
+                    val replyText = replySmsObj?.optString("message")?.takeIf { it.isNotBlank() }
+                    val ttsText = resJson.optString("ttsText").takeIf { it.isNotBlank() }
+                    val depositorName = resJson.optString("depositorName").takeIf { it.isNotBlank() }
+                    val amountKrw = resJson.optLong("amountKrw", 0L)
+
+                    return@withContext SmsSyncResult(
+                        success = true,
+                        replySmsPhone = replyPhone,
+                        replySmsText = replyText,
+                        depositorName = depositorName,
+                        amountKrw = amountKrw,
+                        ttsText = ttsText
+                    )
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "문자($direction) 시트 동기화 예외 ($host): ${e.message}")
             }
         }
-        false
+        SmsSyncResult(success = false)
     }
 
     /**
@@ -1581,6 +1598,15 @@ data class WebhookResult(
     val ttsText: String? = null,
     val depositorName: String? = null,
     val amountKrw: Long = 0L
+)
+
+data class SmsSyncResult(
+    val success: Boolean,
+    val replySmsPhone: String? = null,
+    val replySmsText: String? = null,
+    val depositorName: String? = null,
+    val amountKrw: Long = 0L,
+    val ttsText: String? = null
 )
 
 data class VersionInfo(
