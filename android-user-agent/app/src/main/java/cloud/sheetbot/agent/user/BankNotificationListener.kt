@@ -123,26 +123,29 @@ class BankNotificationListener : NotificationListenerService() {
                         // 7. 고객 영수증 문자 자동 전송 (설정 ON && 서버에서 대상 번호 회신 시)
                         if (prefs.isReceiptSmsEnabled && !result.replySmsPhone.isNullOrBlank()) {
                             val rawReply = result.replySmsText ?: ""
-                            val msgToSend = if (rawReply.isNotBlank() && !rawReply.contains("[SheetBot]")) {
-                                rawReply
-                            } else if (prefs.receiptSmsTemplate.isNotBlank()) {
+                            val custName = result.depositorName?.takeIf { it.isNotBlank() } ?: "고객"
+                            val custAmount = result.amountKrw
+
+                            val msgToSend = if (prefs.receiptSmsTemplate.isNotBlank()) {
                                 SmsSenderUtil.formatReceiptMessage(
                                     template = prefs.receiptSmsTemplate,
-                                    customerName = "고객",
-                                    amountKrw = 0L
+                                    customerName = custName,
+                                    amountKrw = custAmount
                                 )
-                            } else {
+                            } else if (rawReply.isNotBlank()) {
                                 rawReply
+                            } else {
+                                "[SheetBot] ${custName}님, 결제 입금이 확인되었습니다. 감사합니다."
                             }
 
                             if (msgToSend.isNotBlank()) {
                                 val isSent = SmsSenderUtil.sendSms(this@BankNotificationListener, result.replySmsPhone, msgToSend)
                                 if (isSent) {
-                                    Log.i(TAG, "📲 [푸시 연계 영수증 SMS 발송 성공] 수신: ${result.replySmsPhone}")
+                                    Log.i(TAG, "📲 [푸시 연계 영수증 SMS 발송 성공] 수신: ${result.replySmsPhone} (고객: $custName)")
                                     ApiClient.sendReceiptSmsSync(
                                         userEmail = userEmail,
                                         recipientPhone = result.replySmsPhone,
-                                        customerName = "고객",
+                                        customerName = custName,
                                         receiptContent = msgToSend,
                                         status = "전송 완료"
                                     )
@@ -285,7 +288,6 @@ class BankNotificationListener : NotificationListenerService() {
                     Log.i(TAG, "💰 [카카오 금융 알림톡 감지] $financialOrg 결제/송금 -> 매장 대장 웹훅 전송")
 
                     serviceScope.launch {
-                        try {
                             val res = ApiClient.sendBankWebhook(
                                 webhookUrl = prefs.webhookUrl,
                                 fallbackWebhookUrl = prefs.fallbackWebhookUrl,
@@ -294,9 +296,48 @@ class BankNotificationListener : NotificationListenerService() {
                                 userEmail = userEmail
                             )
                             Log.i(TAG, "💰 [카카오 알림톡 웹훅 완료] status=${res.statusCode} success=${res.success}")
-                        } catch (e: Exception) {
-                            Log.w(TAG, "카카오 금융 알림톡 웹훅 연동 예외: ${e.message}")
-                        }
+
+                            if (res.success) {
+                                showNotification("[$financialOrg]", message, true, financialOrg)
+
+                                // 고객 영수증 문자 자동 전송
+                                if (prefs.isReceiptSmsEnabled && !res.replySmsPhone.isNullOrBlank()) {
+                                    val rawReply = res.replySmsText ?: ""
+                                    val custName = res.depositorName?.takeIf { it.isNotBlank() } ?: "고객"
+                                    val custAmount = res.amountKrw
+
+                                    val msgToSend = if (prefs.receiptSmsTemplate.isNotBlank()) {
+                                        SmsSenderUtil.formatReceiptMessage(
+                                            template = prefs.receiptSmsTemplate,
+                                            customerName = custName,
+                                            amountKrw = custAmount
+                                        )
+                                    } else if (rawReply.isNotBlank()) {
+                                        rawReply
+                                    } else {
+                                        "[SheetBot] ${custName}님, 결제 입금이 확인되었습니다. 감사합니다."
+                                    }
+
+                                    if (msgToSend.isNotBlank()) {
+                                        val isSent = SmsSenderUtil.sendSms(this@BankNotificationListener, res.replySmsPhone, msgToSend)
+                                        if (isSent) {
+                                            Log.i(TAG, "📲 [카카오 푸시 연계 영수증 SMS 발송 성공] 수신: ${res.replySmsPhone} (고객: $custName)")
+                                            ApiClient.sendReceiptSmsSync(
+                                                userEmail = userEmail,
+                                                recipientPhone = res.replySmsPhone,
+                                                customerName = custName,
+                                                receiptContent = msgToSend,
+                                                status = "전송 완료"
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (prefs.isTtsEnabled) {
+                                    val voiceMsg = res.ttsText ?: "$financialOrg 결제가 감지되어 대장에 기록되었습니다."
+                                    TtsManager.speak(this@BankNotificationListener, voiceMsg)
+                                }
+                            }
                     }
                 }
             }

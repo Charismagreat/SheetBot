@@ -11,6 +11,7 @@ import { emitDepositEvent } from "@/lib/deposit-events";
 import { recordPaymentToGoogleSheet } from "@/lib/payment-sheet-sync";
 import { recordReceiptSmsToGoogleSheet } from "@/lib/receipt-sms-sync";
 import { getKoreanTimeString } from "@/lib/date-utils";
+import { findMatchingSmartOrder } from "@/lib/smart-order-match";
 
 /**
  * POST /api/wallet/bank-webhook
@@ -384,7 +385,7 @@ export async function POST(request: Request) {
         });
       }
 
-      // 2. 실제 은행 문자이지만 웹에 대기 세션이 없는 경우 (매장 매출 대장 시트 자동 기록)
+      // 2. 실제 은행/페이 문자 매장 매출 대장 시트 자동 기록
       const targetUserEmail = body?.userEmail || "";
       if (targetUserEmail && targetUserEmail.includes("@")) {
         await recordPaymentToGoogleSheet({
@@ -400,13 +401,65 @@ export async function POST(request: Request) {
         }).catch((err) => console.warn("[Bank-Webhook] Sheet sync error (unmatched):", err));
       }
 
+      // 3. 🎯 [SheetBot] 스마트 간편 주문 및 품목 대장 매칭 (고객명과 금액 일치 시 영수증 문자 자동 발송)
+      let replySms: { recipientPhone: string; message: string } | null = null;
+      let matchedOrder: any = null;
+
+      if (targetUserEmail && cleanAmount > 0 && cleanDepositor) {
+        try {
+          matchedOrder = await findMatchingSmartOrder({
+            userEmail: targetUserEmail,
+            depositorName: cleanDepositor,
+            amount: cleanAmount,
+          });
+
+          if (matchedOrder && matchedOrder.customerPhone) {
+            console.log(`[Bank-Webhook] 🎉 스마트 간편 주문 매칭 성공! 영수증 SMS 발송 연동: ${matchedOrder.customerName} (${matchedOrder.customerPhone})`);
+            const itemHint = matchedOrder.itemsSummary ? ` (${matchedOrder.itemsSummary.slice(0, 30)})` : "";
+            const replyMsg = `[SheetBot] ${matchedOrder.customerName}님, 주문 결제(${cleanAmount.toLocaleString()}원)가 정상 확인되었습니다.${itemHint} 주문하신 상품을 정성껏 준비하겠습니다. 감사합니다.`;
+            
+            replySms = {
+              recipientPhone: matchedOrder.customerPhone,
+              message: replyMsg,
+            };
+
+            // [SheetBot] 고객 영수증 문자 발송 대장 시트에도 실시간 자동 기록
+            recordReceiptSmsToGoogleSheet({
+              userEmail: targetUserEmail,
+              sentTime: getKoreanTimeString(),
+              recipientPhone: matchedOrder.customerPhone,
+              customerName: matchedOrder.customerName,
+              amount: cleanAmount,
+              receiptContent: replyMsg,
+              status: "전송 완료",
+              deviceId: body?.deviceModel || "SheetBot Agent",
+            }).catch((err: any) => console.warn("[Bank-Webhook] Order receipt SMS sync warning:", err.message));
+          }
+        } catch (orderErr: any) {
+          console.warn("[Bank-Webhook] findMatchingSmartOrder error:", orderErr);
+        }
+      }
+
+      if (replySms && matchedOrder) {
+        return NextResponse.json({
+          success: true,
+          matched: false,
+          orderMatched: true,
+          message: `🎉 [스마트 주문 매칭 성공] '${matchedOrder.customerName}' 고객님의 주문(${cleanAmount.toLocaleString()}원)과 일치하여 영수증 문자가 자동 발송됩니다!`,
+          depositorName: matchedOrder.customerName,
+          amountKrw: cleanAmount,
+          replySms,
+          ttsText: `${matchedOrder.customerName}님의 주문 결제 ${cleanAmount.toLocaleString()}원이 확인되어 영수증 문자가 발송되었습니다.`,
+        });
+      }
+
       return NextResponse.json({
         success: true,
         matched: false,
-        message: `ℹ️ [문자 감지 성공] ${bankName || "은행"} ${cleanAmount.toLocaleString()}원 (${cleanDepositor}) 입금을 수신했습니다. 단, 웹에 등록된 대기 세션과 일치하지 않아 대기 상태로 유지됩니다.`,
+        message: `ℹ️ [문자 감지 성공] ${bankName || "은행"} ${cleanAmount.toLocaleString()}원 (${cleanDepositor}) 입금을 수신했습니다.`,
         depositorName: cleanDepositor,
         amountKrw: cleanAmount,
-        ttsText: `${cleanDepositor}님 ${cleanAmount.toLocaleString()}원 입금이 확인되었으나, 대기 중인 신청건과 일치하지 않습니다.`,
+        ttsText: `${cleanDepositor}님 ${cleanAmount.toLocaleString()}원 입금이 확인되었습니다.`,
       });
     }
 

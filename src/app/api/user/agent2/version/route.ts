@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 61,
-      latestVersionName: "2.1.40",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.40/SheetBotAgent.apk",
+      latestVersionCode: 62,
+      latestVersionName: "2.1.41",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.41/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.40 릴리즈\n• 🔔 [알림 문구 개선] 결제/송금 감지 알림 제목을 '결제 및 매출 대장 기록 완료!'로 명확화\n• ⚡ [최신 APK 자동 리다이렉트] 인앱 업데이트 및 웹 다운로드 시 항상 최신 정식 버전으로 원클릭 덮어쓰기 지원\n• 🛡️ [카카오페이 송금 지원 강화] 마스킹 수취인 및 계좌 송금 완벽 연동",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.41 릴리즈\n• 🎯 [스마트 간편 주문 영수증 자동 발송] 스마트 간편 주문 및 품목 대장의 고객명과 입금 금액 일치 시 영수증 문자(SMS) 자동 발송 연동\n• 💬 [영수증 문구 동적 치환 최적화] 실제 고객명과 결제 금액을 맞춤 템플릿에 실시간 자동 대입\n• 🔔 [카카오 금융 알림톡 영수증 연동] 카카오페이/카카오뱅크 알림톡 수신 시에도 영수증 SMS 및 음성 안내 지원",
     },
     {
       headers: {

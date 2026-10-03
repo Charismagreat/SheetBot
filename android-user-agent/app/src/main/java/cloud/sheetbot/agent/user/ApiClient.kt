@@ -214,6 +214,8 @@ object ApiClient {
                     val replyPhone = replySmsObj?.optString("recipientPhone")?.takeIf { it.isNotBlank() }
                     val replyText = replySmsObj?.optString("message")?.takeIf { it.isNotBlank() }
                     val ttsText = resJson.optString("ttsText").takeIf { it.isNotBlank() }
+                    val depositorName = resJson.optString("depositorName").takeIf { it.isNotBlank() }
+                    val amountKrw = resJson.optLong("amountKrw", 0L)
 
                     return@withContext WebhookResult(
                         statusCode = response.code,
@@ -221,7 +223,9 @@ object ApiClient {
                         message = resJson.optString("message", "전송 완료 (HTTP ${response.code})"),
                         replySmsPhone = replyPhone,
                         replySmsText = replyText,
-                        ttsText = ttsText
+                        ttsText = ttsText,
+                        depositorName = depositorName,
+                        amountKrw = amountKrw
                     )
                 } else {
                     val msg = resJson.optString("message", "HTTP ${response.code}")
@@ -1574,7 +1578,9 @@ data class WebhookResult(
     val message: String,
     val replySmsPhone: String? = null,
     val replySmsText: String? = null,
-    val ttsText: String? = null
+    val ttsText: String? = null,
+    val depositorName: String? = null,
+    val amountKrw: Long = 0L
 )
 
 data class VersionInfo(
