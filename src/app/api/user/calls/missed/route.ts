@@ -13,6 +13,15 @@ import { maskPhoneNumber, formatZeroRetentionContent } from "@/lib/privacy";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { getKoreanTimeString } from "@/lib/date-utils";
 
+interface MissedCallCacheEntry {
+  timestamp: number;
+  spreadsheetUrl: string;
+  logId: number;
+}
+
+// 15초 멱등성(Idempotency) 방어 캐시 (동일 유저 + 발신번호 기준 중복 시트 쓰기 원천 차단)
+const recentMissedCallsCache = new Map<string, MissedCallCacheEntry>();
+
 /**
  * POST /api/user/calls/missed
  * 스마트폰 시트봇 에이전트에서 부재중 전화(Missed Call) 감지 및 자동 회신 발송 시
@@ -49,6 +58,30 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanEmail = userEmail.toLowerCase().trim();
+    const cleanPhone = String(callerPhone).replace(/\D/g, "");
+    const idempotencyKey = `${cleanEmail}_${cleanPhone}`;
+    const now = Date.now();
+
+    // 15초 멱등성 방어: 동일 유저 + 전화번호가 15초 이내 재인입된 경우 시트 중복 기입을 스킵하고 성공 캐시 반환
+    const cached = recentMissedCallsCache.get(idempotencyKey);
+    if (cached && now - cached.timestamp < 15_000) {
+      console.log(`[MissedCalls] 15초 멱등성 가드 발동: ${idempotencyKey} (중복 기록 차단)`);
+      return NextResponse.json({
+        success: true,
+        message: "이미 안전하게 기록된 부재중 전화 내역입니다 (15초 멱등성 방어).",
+        spreadsheetUrl: cached.spreadsheetUrl,
+        logId: cached.logId,
+        cached: true,
+      });
+    }
+
+    // 60초 경과 캐시 정리
+    for (const [key, item] of recentMissedCallsCache.entries()) {
+      if (now - item.timestamp > 60_000) {
+        recentMissedCallsCache.delete(key);
+      }
+    }
+
     const displayName = contactName && contactName.trim().length > 0 ? contactName.trim() : "미등록 연락처";
     const replyStatusLabel = autoReplied ? "자동 회신 완료" : "미발송 (수동)";
 
@@ -141,6 +174,13 @@ export async function POST(req: NextRequest) {
         timestamp: new Date().toISOString(),
       });
     } catch {}
+
+    // 4. 15초 멱등성 캐시 등록
+    recentMissedCallsCache.set(idempotencyKey, {
+      timestamp: Date.now(),
+      spreadsheetUrl,
+      logId,
+    });
 
     return NextResponse.json({
       success: true,
