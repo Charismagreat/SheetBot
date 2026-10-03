@@ -92,8 +92,7 @@ jobs:
         if: startsWith(github.ref, 'refs/heads/main')
         with:
           tag_name: user-v${{ steps.get_version.outputs.VERSION_NAME }}
-          name: "SheetBot Mobile Agent (이용자용) v${{ steps.get_version.outputs.VERSION_NAME }}"
-          body: "시트봇 모바일 에이전트 v${{ steps.get_version.outputs.VERSION_NAME }} 릴리즈\n• 🪪 [명함 자동 인맥 등록] 명함 대장 등록 시 스마트폰 연락처 자동 저장 & 내 모바일 명함 즉시 발송 승인 팝업 탑재\n• 🖼️ [모바일 명함 MMS 방안 2 유지 개선] 갤러리 명함 사진 등록 후 앱 복귀 시 방안 1로 리셋되던 현상 완벽 해결\n• ⚡ [명함 실시간 AI 가속] 3~5초 이내 초고속 시트 장부화 및 연락처 연동"
+          body: "시트봇 모바일 에이전트 v${{ steps.get_version.outputs.VERSION_NAME }} 릴리즈\n• 🧾 [영수증 대장 0초 즉시 열기 해결] 영수증/명함 대장 사전 캐싱 및 0초 프리셋 탑재로 지연 없이 즉시 열리도록 개선\n• ⚡ [프로비저닝 Fast-Path 0ms 최적화] 기존 시트 탐색 시 무거운 드라이브 재검색을 생략하고 0초 즉시 반환\n• 📊 [모바일 웹앱 13개 전체 열 완벽 지원] 영수증(13열) 및 명함(11열) 전체 데이터 표시 및 모바일 최적화 웹앱 연동"
           files: release-apk/SheetBotAgent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

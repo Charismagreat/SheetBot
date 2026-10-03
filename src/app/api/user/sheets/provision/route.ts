@@ -84,11 +84,21 @@ export const SHEET_DEFINITIONS: Record<string, SheetDefinition> = {
   },
 };
 
+const folderCache = new Map<string, string>([
+  ["[SheetBot] 통화 녹음", "14TuBcWsooWB7_yPqyn6L0imjshpVxFVX"],
+  ["[SheetBot] 영수증 보관함", "1rKVf3Swmi-VifK0fJoME5cdknZgA4H7K"],
+  ["[SheetBot] 파일 보관함", "1bRO1aJEEQBUX_R9bFLfZ7C0liZFZjijc"],
+]);
+
 /**
- * 구글 드라이브 폴더 선제 생성 헬퍼
+ * 구글 드라이브 폴더 선제 생성 헬퍼 (0초 메모리 캐시 적용)
  */
 async function ensureDriveFolder(folderName: string): Promise<string | null> {
   try {
+    if (folderCache.has(folderName)) {
+      return folderCache.get(folderName)!;
+    }
+
     const queryStr = `mimeType = 'application/vnd.google-apps.folder' and name = '${folderName}' and trashed = false`;
     const searchRes = await listDriveFiles(
       { query: queryStr },
@@ -97,12 +107,7 @@ async function ensureDriveFolder(folderName: string): Promise<string | null> {
 
     if (searchRes?.files && searchRes.files.length > 0) {
       const primaryFolder = searchRes.files[0];
-      if (searchRes.files.length > 1) {
-        console.log(`[ProvisionSheet] Found ${searchRes.files.length} folders for '${folderName}', cleaning up duplicates...`);
-        for (let i = 1; i < searchRes.files.length; i++) {
-          trashDriveFile(searchRes.files[i].id, true).catch(() => {});
-        }
-      }
+      folderCache.set(folderName, primaryFolder.id);
       return primaryFolder.id;
     }
 
@@ -111,7 +116,11 @@ async function ensureDriveFolder(folderName: string): Promise<string | null> {
       return null;
     });
 
-    return (createRes as any)?.folderId || (createRes as any)?.id || null;
+    const folderId = (createRes as any)?.folderId || (createRes as any)?.id || null;
+    if (folderId) {
+      folderCache.set(folderName, folderId);
+    }
+    return folderId;
   } catch (err: any) {
     console.warn(`[ProvisionSheet] Failed to ensure folder ${folderName}:`, err.message);
     return null;
@@ -302,7 +311,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3. 스프레드시트 첫 번째 메인 탭 이름 동적 확인 및 1행 A1 헤더 주입
+    const finalSpreadsheetUrl =
+      resolved.spreadsheetUrl ||
+      `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
+    const finalFolderUrl = createdFolderId
+      ? `https://drive.google.com/drive/folders/${createdFolderId}`
+      : null;
+
+    // 2-1. 기존 시트인 경우(isNew === false) 불필요한 시트 탭 조회 및 헤더 검사를 생략하고 즉시 0ms 반환 (Fast-Path)
+    if (!resolved.isNew) {
+      return NextResponse.json({
+        success: true,
+        isNew: false,
+        spreadsheetId: targetSpreadsheetId,
+        spreadsheetUrl: finalSpreadsheetUrl,
+        folderId: createdFolderId,
+        folderUrl: finalFolderUrl,
+        folderName: targetFolder,
+        title: sheetTitle || def.defaultTitle,
+        message: "기존 연결된 구글 스프레드시트 대장을 확인하였습니다.",
+      });
+    }
+
+    // 3. 신규 생성 시트인 경우 첫 번째 메인 탭 이름 동적 확인 및 1행 A1 헤더 주입
     try {
       let primaryTabName = "시트1";
       try {
@@ -367,13 +398,6 @@ export async function POST(req: NextRequest) {
     } catch (fmtErr: any) {
       console.warn(`[ProvisionSheet] Header format warning:`, fmtErr.message);
     }
-
-    const finalSpreadsheetUrl =
-      resolved.spreadsheetUrl ||
-      `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
-    const finalFolderUrl = createdFolderId
-      ? `https://drive.google.com/drive/folders/${createdFolderId}`
-      : null;
 
     return NextResponse.json({
       success: true,

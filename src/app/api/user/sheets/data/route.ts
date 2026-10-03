@@ -71,12 +71,12 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 시트의 데이터 읽기 (빠른 로딩을 위해 상위 80행 및 최대 9열 A1:I80으로 최적화)
+    // 시트의 데이터 읽기 (영수증 13열 및 명함 11열을 포함한 전체 열 조회를 위해 A1:N100으로 최적화)
     let rangeRes = await callSheetsTool(
       "sheets_get_range",
       {
         spreadsheetId: targetSpreadsheetId,
-        range: "A1:I80",
+        range: "A1:N100",
         preferOAuth: true,
       },
       { preferOAuth: true }
@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
         "sheets_get_range",
         {
           spreadsheetId: targetSpreadsheetId,
-          range: "시트1!A1:I80",
+          range: "시트1!A1:N100",
           preferOAuth: true,
         },
         { preferOAuth: true }
