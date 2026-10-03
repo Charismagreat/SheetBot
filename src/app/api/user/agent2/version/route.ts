@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 70,
-      latestVersionName: "2.1.49",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.49/SheetBotAgent.apk",
+      latestVersionCode: 71,
+      latestVersionName: "2.1.50",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.50/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.49 릴리즈\n• 🔍 [영수증 발송 조건 5단계 종합 진단 도구 탑재] 실제 은행 송금 없이 고객명/금액 지정으로 가상 입금 SMS를 시뮬레이션하여 SMS 권한, 앱 설정, 구글 시트 주문접수대장 매칭 여부 및 매칭 세부정보, 규격 검증 및 실제 발송 전 과정을 1초 만에 원스톱 점검\n• 🛡️ [ANR '앱 닫기/대기' 팝업 완전 방어] SMS 수신 시 브로드캐스트 리시버 생명주기 즉시 해제 및 메인 스레드 지갑 폴링 제거로 멈춤 현상 원천 차단",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.50 릴리즈\n• ⚡ [실시간 주문 매칭 0.5초 초고속화] 입금 감지 시 구글 시트 상태 갱신을 비동기 Zero-Block으로 위임하여 단말기 네트워크 타임아웃 원천 차단 및 영수증 문자 즉시 발송 보장\n• 🔍 [5단계 진단 도구 고유화 및 2중 폴백] 가상 입금 문자 고유 타임스탬프 적용으로 15초 중복 방어 필터 회피 및 엔드포인트 2중 폴백 탑재",
     },
     {
       headers: {
