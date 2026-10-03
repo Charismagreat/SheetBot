@@ -176,7 +176,7 @@ class BankNotificationListener : NotificationListenerService() {
             manager.createNotificationChannel(channel)
         }
 
-        val notiTitle = if (isSuccess) "🔔 [$bankName 푸시감지] 무통장 입금 자동 충전 완료!" else "⚠️ [$bankName 푸시감지] 오프라인 대기열 안전 보관"
+        val notiTitle = if (isSuccess) "🔔 [$bankName 푸시감지] 결제 및 매출 대장 기록 완료!" else "⚠️ [$bankName 푸시감지] 오프라인 대기열 안전 보관"
 
         val notification = NotificationCompat.Builder(this, PUSH_CHANNEL_ID)
             .setContentTitle(notiTitle)

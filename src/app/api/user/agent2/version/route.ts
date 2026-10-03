@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 60,
-      latestVersionName: "2.1.39",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.39/SheetBotAgent.apk",
+      latestVersionCode: 61,
+      latestVersionName: "2.1.40",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.40/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.39 릴리즈\n• 📝 [영수증 문자 커스텀 발송 문구 설정 UI 탑재] 상호명/안내 템플릿 직접 편집 및 실시간 자동 저장 지원\n• 💡 [스마트 치환 변수 지원] {고객명}, {금액}, {일시} 동적 치환 엔진 완비\n• 🔄 [원클릭 기본값 복원] [기본값] 터치 시 표준 영수증 안내 문구로 즉시 리셋",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.40 릴리즈\n• 🔔 [알림 문구 개선] 결제/송금 감지 알림 제목을 '결제 및 매출 대장 기록 완료!'로 명확화\n• ⚡ [최신 APK 자동 리다이렉트] 인앱 업데이트 및 웹 다운로드 시 항상 최신 정식 버전으로 원클릭 덮어쓰기 지원\n• 🛡️ [카카오페이 송금 지원 강화] 마스킹 수취인 및 계좌 송금 완벽 연동",
     },
     {
       headers: {

@@ -204,13 +204,13 @@ class BankNotificationListener : NotificationListenerService() {
                 "SheetBot 금융 푸시 알림",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "은행 앱 푸시 알림이 감지되어 토큰 충전이 완료되었을 때 알립니다."
+                description = "은행 및 페이 푸시 알림이 감지되어 매장 결제 및 매출 대장에 자동 기록되었을 때 알립니다."
                 enableVibration(true)
             }
             manager.createNotificationChannel(channel)
         }
 
-        val notiTitle = if (isSuccess) "🔔 [$bankName 푸시감지] 무통장 입금 자동 충전 완료!" else "⚠️ [$bankName 푸시감지] 오프라인 대기열 안전 보관"
+        val notiTitle = if (isSuccess) "🔔 [$bankName 푸시감지] 결제 및 매출 대장 기록 완료!" else "⚠️ [$bankName 푸시감지] 오프라인 대기열 안전 보관"
 
         val notification = NotificationCompat.Builder(this, PUSH_CHANNEL_ID)
             .setContentTitle(notiTitle)
