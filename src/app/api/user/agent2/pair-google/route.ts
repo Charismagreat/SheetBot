@@ -162,8 +162,8 @@ export async function POST(req: NextRequest) {
       googleName,
       token,
       referralMessage,
-      webhookUrl: "https://sheetbot.cloud/api/webhooks/dispatch",
-      fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/webhooks/dispatch",
+      webhookUrl: "https://sheetbot.cloud/api/wallet/bank-webhook",
+      fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/bank-webhook",
       heartbeatUrl: "https://sheetbot.cloud/api/user/agent2/heartbeat",
       fallbackHeartbeatUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/user/agent2/heartbeat",
     });

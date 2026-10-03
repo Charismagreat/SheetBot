@@ -70,15 +70,17 @@ export async function POST(request: Request) {
     const cleanDepositor = (depositorName || "테스트").replace(/\s+/g, "").trim();
     const cleanAmount = Number(amountKrw) || 5000;
 
-    // ⚡ [초고속 검증 가드]: 가상 입금 테스트 요청인 경우, 무거운 DB 초기화 블로킹 없이 0.05초 만에 즉시 성공 반환 (스마트폰 타임아웃 방지)
-    const isSimulatedTest =
+    // ⚡ [초고속 검증 가드]: 명시적 가상 입금 테스트 요청인 경우에만 토큰 실충전 건너뜀
+    let isSimulatedTest =
       Boolean(body?.isTest) ||
       rawSms.includes("성명(계좌)") ||
-      rawSms.includes("테스트입금") ||
-      rawSms.includes("입금알림") ||
       rawSms.includes("입금확인(테스트)") ||
-      rawSms.includes("가상입금") ||
-      (cleanAmount === 5000 && (rawSms.includes("2,05") || rawSms.includes("테스트") || rawSms.includes("카카오뱅크")));
+      rawSms.includes("가상입금테스트");
+
+    // 스마트폰 모바일 에이전트의 실제 푸시/SMS는 가상 테스트에서 100% 제외하여 대장 기록 보장
+    if (body?.source === "android_native_agent" || String(body?.sender).startsWith("PUSH:")) {
+      isSimulatedTest = false;
+    }
 
     // ⚡ [생존 신호 동기화]: 웹훅이 전달되었다는 것은 스마트폰이 정상 동작 중임을 의미하므로 기기 last_connected_at 비동기 갱신
     const senderEmail = body?.userEmail ? String(body.userEmail).toLowerCase().trim() : null;

@@ -121,10 +121,10 @@ object BankPushParser {
         val amountMatch = Regex("([0-9,]+)\\s*원").find(combined)
         val amountStr = amountMatch?.groupValues?.get(1) ?: "0"
 
-        // 3. 입금자/수취인/가맹점명 추출 시도 (카카오페이 '차민서님에게 5,000원을 보냈어요', '차민서 5,000원 송금' 등 완벽 대응)
+        // 3. 입금자/수취인/가맹점명 추출 시도 (카카오페이 '차민서님에게 5,000원을 보냈어요', '(서****3)계좌로', '차민서 5,000원 송금' 등 완벽 대응)
         var partyName = ""
-        val kakaoTransferMatch = Regex("([가-힣a-zA-Z0-9]{2,10})님(?:에게|께)").find(combined)
-        val kakaoDepositMatch = Regex("([가-힣a-zA-Z0-9]{2,10})님(?:이|께서)").find(combined)
+        val kakaoTransferMatch = Regex("([가-힣a-zA-Z0-9*]{2,10})님(?:에게|께)").find(combined)
+        val kakaoDepositMatch = Regex("([가-힣a-zA-Z0-9*]{2,10})님(?:이|께서)").find(combined)
         val merchantMatch = Regex("([가-힣a-zA-Z0-9]{2,15})\\s+[0-9,]+\\s*원?\\s*(?:결제|승인|송금)").find(combined)
         if (kakaoTransferMatch != null) {
             partyName = kakaoTransferMatch.groupValues[1]
@@ -133,11 +133,11 @@ object BankPushParser {
         } else if (merchantMatch != null) {
             partyName = merchantMatch.groupValues[1]
         } else {
-            val parenMatch = Regex("\\(([가-힣a-zA-Z0-9]{2,10})\\)").find(combined)
+            val parenMatch = Regex("\\(([가-힣a-zA-Z0-9*]{2,10})\\)").find(combined)
             if (parenMatch != null && !parenMatch.groupValues[1].contains("잔액")) {
                 partyName = parenMatch.groupValues[1]
             } else {
-                val normalMatch = Regex("(?:입금|출금|승인|결제|송금|받음)\\s*[0-9,]+\\s*원?\\s+([가-힣a-zA-Z0-9]{2,10})").find(combined)
+                val normalMatch = Regex("(?:입금|출금|승인|결제|송금|받음)\\s*[0-9,]+\\s*원?\\s+([가-힣a-zA-Z0-9*]{2,10})").find(combined)
                 if (normalMatch != null) {
                     partyName = normalMatch.groupValues[1]
                 }

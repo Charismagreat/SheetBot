@@ -16,6 +16,18 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const { userEmail, eventType, projectId, rowData, sheetName, triggerTime } = body;
 
+    // ⚡ [Fail-Safe Guard]: 스마트폰 모바일 에이전트의 금융 푸시/SMS 웹훅이 유입된 경우 bank-webhook으로 원자적 자동 위임
+    if (body.smsText || (body.sender && String(body.sender).startsWith("PUSH:")) || body.source === "android_native_agent") {
+      const { POST: handleBankWebhook } = await import("@/app/api/wallet/bank-webhook/route");
+      // req는 이미 json()을 읽었으므로 body를 복원한 새로운 Request 객체로 전달
+      const forwardedReq = new Request(req.url, {
+        method: "POST",
+        headers: req.headers,
+        body: JSON.stringify(body),
+      });
+      return handleBankWebhook(forwardedReq);
+    }
+
     if (!userEmail) {
       return NextResponse.json(
         { success: false, error: "회원 식별자(userEmail)가 누락되었습니다." },
