@@ -204,7 +204,7 @@ object ApiClient {
                     .post(body)
                     .build()
 
-                val response = client.newCall(request).execute()
+                val response = longTimeoutClient.newCall(request).execute()
                 val resStr = response.body?.string() ?: ""
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
 
@@ -464,7 +464,7 @@ object ApiClient {
             val endpoint = "$host/api/user/agent2/inbound-sms"
             try {
                 val request = Request.Builder().url(endpoint).post(body).build()
-                val response = client.newCall(request).execute()
+                val response = longTimeoutClient.newCall(request).execute()
                 val resStr = response.body?.string() ?: ""
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
 
@@ -926,7 +926,7 @@ object ApiClient {
             val endpoint = "$host/api/user/messages/sms"
             try {
                 val request = Request.Builder().url(endpoint).post(body).build()
-                val response = client.newCall(request).execute()
+                val response = longTimeoutClient.newCall(request).execute()
                 val resStr = response.body?.string() ?: ""
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
 

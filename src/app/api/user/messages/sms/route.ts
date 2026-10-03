@@ -122,94 +122,88 @@ export async function POST(req: NextRequest) {
       sheetTitle = `[SheetBot] ${sheetTitle}`;
     }
 
-    // 1. 구글 스프레드시트 대장 고유 ID 영구 바인딩 및 행 기록
+    // 1. 구글 스프레드시트 대장 고유 ID 영구 바인딩 및 행 기록 (비동기 처리로 응답 지연 원천 차단)
     let spreadsheetUrl = "";
     if (autoRecordSheet) {
-      try {
-        const resolved = await resolveUserSpreadsheet({
-          userEmail: cleanEmail,
-          sheetType: "SMS",
-          defaultTitle: "[SheetBot] 스마트폰 문자(SMS) 송수신 대장",
-          requestedTitle: sheetTitle,
-          preferOAuth: true,
-        });
-
-        const targetSpreadsheetId = resolved.spreadsheetId;
-        spreadsheetUrl = resolved.spreadsheetUrl;
-
-        // 시트에 신규 문자 기록 행 추가 (자가 치유: 1행 헤더 보장)
-        if (targetSpreadsheetId) {
-          const headerValues = [
-            ["일시", "구분", "상대방 이름", "상대방 전화번호", "메시지 내용", "기기명"]
-          ];
-
-          // 1행 A1 셀 확인하여 비어있으면 헤더 선제 주입
-          const firstRowCheck = await callSheetsTool("sheets_get_range", {
-            spreadsheetId: targetSpreadsheetId,
-            range: "A1:A1",
+      (async () => {
+        try {
+          const resolved = await resolveUserSpreadsheet({
+            userEmail: cleanEmail,
+            sheetType: "SMS",
+            defaultTitle: "[SheetBot] 스마트폰 문자(SMS) 송수신 대장",
+            requestedTitle: sheetTitle,
             preferOAuth: true,
-          }).catch(() => null);
+          });
 
-          const hasHeaderOrData = firstRowCheck?.values && firstRowCheck.values.length > 0 && firstRowCheck.values[0]?.[0];
+          const targetSpreadsheetId = resolved.spreadsheetId;
 
-          if (!hasHeaderOrData) {
-            await callSheetsTool("sheets_update_range", {
+          // 시트에 신규 문자 기록 행 추가 (자가 치유: 1행 헤더 보장)
+          if (targetSpreadsheetId) {
+            const headerValues = [
+              ["일시", "구분", "상대방 이름", "상대방 전화번호", "메시지 내용", "기기명"]
+            ];
+
+            // 1행 A1 셀 확인하여 비어있으면 헤더 선제 주입
+            const firstRowCheck = await callSheetsTool("sheets_get_range", {
               spreadsheetId: targetSpreadsheetId,
-              range: "A1:F1",
-              values: headerValues,
+              range: "A1:A1",
               preferOAuth: true,
-            }).catch(() => {});
+            }).catch(() => null);
 
-            await callSheetsTool("sheets_format_headers", {
+            const hasHeaderOrData = firstRowCheck?.values && firstRowCheck.values.length > 0 && firstRowCheck.values[0]?.[0];
+
+            if (!hasHeaderOrData) {
+              await callSheetsTool("sheets_update_range", {
+                spreadsheetId: targetSpreadsheetId,
+                range: "A1:F1",
+                values: headerValues,
+                preferOAuth: true,
+              }).catch(() => {});
+
+              await callSheetsTool("sheets_format_headers", {
+                spreadsheetId: targetSpreadsheetId,
+                tabName: "시트1",
+                headerBgColor: "#1e293b",
+                headerTextColor: "#ffffff",
+                preferOAuth: true,
+              }).catch(() => {});
+            }
+
+            const newRowValues = [
+              [nowStr, directionLabel, displayName, phoneNumber, message, deviceId]
+            ];
+            await callSheetsTool("sheets_append_values", {
               spreadsheetId: targetSpreadsheetId,
-              tabName: "시트1",
-              headerBgColor: "#1e293b",
-              headerTextColor: "#ffffff",
+              range: "A:F",
+              values: newRowValues,
               preferOAuth: true,
-            }).catch(() => {});
+            }).catch((err: any) => console.warn("[SmsSync] append_values warning:", err.message));
           }
-
-          const newRowValues = [
-            [nowStr, directionLabel, displayName, phoneNumber, message, deviceId]
-          ];
-          await callSheetsTool("sheets_append_values", {
-            spreadsheetId: targetSpreadsheetId,
-            range: "A:F",
-            values: newRowValues,
-            preferOAuth: true,
-          }).catch((err: any) => console.warn("[SmsSync] append_values warning:", err.message));
+        } catch (sheetErr: any) {
+          console.warn("[SmsSync] Sheet auto-record warning:", sheetErr.message);
         }
-      } catch (sheetErr: any) {
-        console.warn("[SmsSync] Sheet auto-record warning:", sheetErr.message);
-      }
+      })();
     }
 
-    // 1-1. 수신 문자(INBOUND)가 은행 입금 또는 결제 승인 문자일 경우 [SheetBot] 매장 결제 및 매출 대장 시트에도 자동 동기화
+    // 1-1. 수신 문자(INBOUND)가 은행 입금 또는 결제 승인 문자일 경우 스마트 간편 주문 즉시 매칭 (Fast-Path)
     let replySms: { recipientPhone: string; message: string } | null = null;
     let matchedOrder: any = null;
     let orderTtsText: string | null = null;
 
+    let parsedBank: any = null;
+    let cleanAmount = 0;
+    let custName = displayName;
+    let isExpense = false;
+
     if (!isOutbound) {
       try {
-        const parsedBank = parseBankDepositSms(message);
+        parsedBank = parseBankDepositSms(message);
         if (parsedBank.amountKrw && parsedBank.amountKrw > 0) {
-          const isExpense = (parsedBank.transactionType || "").includes("지출");
-          const custName = parsedBank.depositorName || displayName || (isExpense ? "가맹점/출금처" : "고객");
-          const cleanAmount = parsedBank.amountKrw;
+          isExpense = (parsedBank.transactionType || "").includes("지출");
+          custName = parsedBank.depositorName || displayName || (isExpense ? "가맹점/출금처" : "고객");
+          cleanAmount = parsedBank.amountKrw;
 
-          await recordPaymentToGoogleSheet({
-            userEmail: cleanEmail,
-            paymentTime: nowStr,
-            transactionType: parsedBank.transactionType || "매출(계좌)",
-            channelOrBank: parsedBank.bankName || "카드/은행 결제",
-            accountOrCardNumber: parsedBank.accountOrCardNumber || "-",
-            customerName: custName,
-            amount: cleanAmount,
-            memoOrRawText: message.slice(0, 200),
-            deviceId: deviceId || "SheetBot Agent",
-          }).catch((err) => console.warn("[SmsSync] Payment sheet sync error:", err));
-
-          // 🎯 매출(입금) 건인 경우, [SheetBot] 스마트 간편 주문 및 품목 대장 매칭 수행!
+          // 🎯 매출(입금) 건인 경우, [SheetBot] 스마트 간편 주문 및 품목 대장 매칭을 즉각 선제 실행!
           if (!isExpense && custName && custName !== "고객" && cleanAmount > 0) {
             matchedOrder = await findMatchingSmartOrder({
               userEmail: cleanEmail,
@@ -219,24 +213,33 @@ export async function POST(req: NextRequest) {
 
             if (matchedOrder && matchedOrder.customerPhone) {
               console.log(`[SmsSync] 🎉 스마트 간편 주문 매칭 성공! 영수증 SMS 발송 연동: ${matchedOrder.customerName} (${matchedOrder.customerPhone})`);
-              // 단문 SMS 규격(한글 40~45자, 80바이트 이하)으로 생성하여 100% 즉시 전송 보장
               const replyMsg = generateReceiptSmsText(matchedOrder.customerName, cleanAmount, matchedOrder.itemsSummary);
-              
               replySms = {
                 recipientPhone: matchedOrder.customerPhone,
                 message: replyMsg,
               };
-
               orderTtsText = `${matchedOrder.customerName}님의 주문 결제 ${cleanAmount.toLocaleString()}원이 확인되어 영수증 문자가 발송되었습니다.`;
-
-              // ⚠️ 주의: 서버가 시트에 미리 '전송 완료'를 기록하면 앱이 실제 발송 후 리포트할 때 2건이 중복 기록되므로,
-              // 단말기 실제 발송 후 앱의 리포트를 통해서만 단일 1행이 기록되도록 일원화합니다.
             }
           }
         }
       } catch (bankErr: any) {
         console.warn("[SmsSync] Bank deposit parse warning:", bankErr?.message);
       }
+    }
+
+    // 1-2. 매출 대장 시트 동기화 (비동기 병렬 백그라운드 위임으로 클라이언트 타임아웃 100% 방지)
+    if (!isOutbound && parsedBank && parsedBank.amountKrw > 0) {
+      recordPaymentToGoogleSheet({
+        userEmail: cleanEmail,
+        paymentTime: nowStr,
+        transactionType: parsedBank.transactionType || "매출(계좌)",
+        channelOrBank: parsedBank.bankName || "카드/은행 결제",
+        accountOrCardNumber: parsedBank.accountOrCardNumber || "-",
+        customerName: custName,
+        amount: cleanAmount,
+        memoOrRawText: message.slice(0, 200),
+        deviceId: deviceId || "SheetBot Agent",
+      }).catch((err) => console.warn("[SmsSync] Payment sheet sync background error:", err));
     }
 
     // 2. 발송/수신 감사 대장 DB 적재 (Zero-Retention: 고객 전화번호 마스킹 및 본문 서버 미보관 정책 준수)
