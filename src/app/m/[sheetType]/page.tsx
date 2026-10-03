@@ -62,6 +62,16 @@ const TYPE_NAMES: Record<string, { title: string; icon: string; desc: string }> 
     icon: "🧾",
     desc: "결제 완료 후 고객에게 자동 전송된 0원 스마트 영수증",
   },
+  receipt: {
+    title: "스마트 경비 영수증 대장",
+    icon: "🧾",
+    desc: "AI가 가맹점/금액/부가세를 자동 OCR 분석하여 장부화한 영수증 내역",
+  },
+  business_card: {
+    title: "스마트 명함 관리 대장",
+    icon: "🪪",
+    desc: "AI OCR로 실시간 3초 만에 자동 등록된 스마트 인맥/명함 대장",
+  },
   website_monitor: {
     title: "웹사이트 모니터링 & 장애 대장",
     icon: "🚨",
@@ -82,6 +92,8 @@ const DEFAULT_KNOWN_SHEETS: Record<string, Record<string, string>> = {
     missed_call: "1DqUqEECRjE2luuLoBuyV8RXYLccqRpbSSD2SZvTOAXo",
     payment_push: "1CSxsEJEpiBXisqw8yAqz3paTqcraH2kzW6RCpQ07vx8",
     receipt_sms: "1Hi-hYZAGcmWDSSBpUhgEl6_Utc6iIguUiFClqEqas9I",
+    receipt: "14t6C-90zNNN-NTXexP37fMOKX85gP9iTe3MIlM83RC4",
+    business_card: "1GPMcTd7hxU2-ORZ32OX7Qz0tOnxMDNtSPqwKzqiS_AI",
   },
 };
 

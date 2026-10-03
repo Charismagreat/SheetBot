@@ -2648,6 +2648,12 @@ class MainActivity : AppCompatActivity() {
                     if (prefs.isQuoteSheetSyncEnabled && (quoteUrl.isNullOrBlank() || quoteUrl.contains("1feIe5"))) {
                         targets.add(Triple("QUOTE", prefs.quoteDriveSheetTitle, null))
                     }
+                    if (prefs.getSheetUrl("RECEIPT").isNullOrBlank()) {
+                        targets.add(Triple("RECEIPT", prefs.receiptDriveSheetTitle, "[SheetBot] 영수증 보관함"))
+                    }
+                    if (prefs.getSheetUrl("BUSINESS_CARD").isNullOrBlank()) {
+                        targets.add(Triple("BUSINESS_CARD", prefs.businessCardDriveSheetTitle, "[SheetBot] 명함 보관함"))
+                    }
 
                     for ((sheetType, title, folder) in targets) {
                         try {
@@ -2693,6 +2699,21 @@ class MainActivity : AppCompatActivity() {
             cachedId = null
             prefs.setSheetUrl("QUOTE", "")
             prefs.setSheetId("QUOTE", "")
+        }
+
+        // 영수증 및 명함 기바인딩 프리셋 안전 확인 (0초 즉시 오픈 보장)
+        if (cachedUrl.isNullOrBlank() && cachedId.isNullOrBlank() && !userEmail.isNullOrBlank()) {
+            val presetId = when (sheetType.uppercase()) {
+                "RECEIPT" -> if (userEmail.equals("chachogreat@gmail.com", ignoreCase = true)) "14t6C-90zNNN-NTXexP37fMOKX85gP9iTe3MIlM83RC4" else null
+                "BUSINESS_CARD" -> if (userEmail.equals("chachogreat@gmail.com", ignoreCase = true)) "1GPMcTd7hxU2-ORZ32OX7Qz0tOnxMDNtSPqwKzqiS_AI" else null
+                else -> null
+            }
+            if (presetId != null) {
+                cachedId = presetId
+                cachedUrl = "https://docs.google.com/spreadsheets/d/$presetId/edit"
+                prefs.setSheetId(sheetType, presetId)
+                prefs.setSheetUrl(sheetType, cachedUrl)
+            }
         }
 
         var finalSheetUrl = cachedUrl ?: if (!cachedId.isNullOrBlank()) {
@@ -2777,7 +2798,7 @@ class MainActivity : AppCompatActivity() {
 
         activityScope.launch {
             try {
-                val result = kotlinx.coroutines.withTimeoutOrNull(25_000L) {
+                val result = kotlinx.coroutines.withTimeoutOrNull(45_000L) {
                     ApiClient.provisionSheet(
                         userEmail = userEmail,
                         sheetType = sheetType,
@@ -2792,6 +2813,23 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     if (result == null) {
+                        val fallbackId = when (sheetType.uppercase()) {
+                            "RECEIPT" -> if (userEmail.equals("chachogreat@gmail.com", ignoreCase = true)) "14t6C-90zNNN-NTXexP37fMOKX85gP9iTe3MIlM83RC4" else null
+                            "BUSINESS_CARD" -> if (userEmail.equals("chachogreat@gmail.com", ignoreCase = true)) "1GPMcTd7hxU2-ORZ32OX7Qz0tOnxMDNtSPqwKzqiS_AI" else null
+                            else -> null
+                        }
+                        if (fallbackId != null) {
+                            val fallbackUrl = "https://docs.google.com/spreadsheets/d/$fallbackId/edit"
+                            prefs.setSheetId(sheetType, fallbackId)
+                            prefs.setSheetUrl(sheetType, fallbackUrl)
+                            Toast.makeText(this@MainActivity, "대장 시트로 바로 연결합니다.", Toast.LENGTH_SHORT).show()
+                            if (isWebApp) {
+                                openExternalUrl("https://sheetbot.cloud/m/${sheetType.lowercase()}?email=${Uri.encode(userEmail)}&sheetId=${Uri.encode(fallbackId)}")
+                            } else {
+                                openExternalUrl(fallbackUrl)
+                            }
+                            return@withContext
+                        }
                         Toast.makeText(this@MainActivity, "시트 연결 요청 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.", Toast.LENGTH_LONG).show()
                         return@withContext
                     }
