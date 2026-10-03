@@ -11,7 +11,28 @@ import kotlinx.coroutines.withContext
  * 영수증 문자 전송 및 미발송 대기열 처리 전용 유틸리티
  */
 object SmsSenderUtil {
-    private const val TAG = "SmsSenderUtil"
+    /**
+     * 영수증 문구 템플릿 치환 ({고객명}, {이름}, {금액}, {일시} 자동 대입)
+     */
+    fun formatReceiptMessage(
+        template: String,
+        customerName: String,
+        amountKrw: Long = 0L,
+        timeStr: String = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.KOREA).format(java.util.Date())
+    ): String {
+        if (template.isBlank()) return "[SheetBot] 이용해 주셔서 감사합니다."
+        val safeName = if (customerName.isNotBlank() && customerName != "고객") customerName else "고객"
+        val formattedAmount = if (amountKrw > 0) {
+            java.text.NumberFormat.getInstance(java.util.Locale.KOREA).format(amountKrw) + "원"
+        } else ""
+
+        var msg = template
+        msg = msg.replace("{고객명}", safeName)
+        msg = msg.replace("{이름}", safeName)
+        msg = msg.replace("{금액}", formattedAmount)
+        msg = msg.replace("{일시}", timeStr)
+        return msg.trim()
+    }
 
     /**
      * 지정된 휴대폰 번호로 텍스트/장문 SMS 발송
@@ -75,7 +96,19 @@ object SmsSenderUtil {
                 continue
             }
 
-            val isSent = sendSms(context, receipt.recipientPhone, receipt.message)
+            val msgToSend = if (receipt.message.isNotBlank() && !receipt.message.contains("[SheetBot]")) {
+                receipt.message
+            } else if (prefs.receiptSmsTemplate.isNotBlank()) {
+                formatReceiptMessage(
+                    template = prefs.receiptSmsTemplate,
+                    customerName = receipt.depositorName,
+                    amountKrw = receipt.amountKrw.toLong()
+                )
+            } else {
+                receipt.message
+            }
+
+            val isSent = sendSms(context, receipt.recipientPhone, msgToSend)
             if (isSent) {
                 ApiClient.markReceiptSent(receipt.id, true)
                 val email = prefs.userEmail
@@ -85,7 +118,7 @@ object SmsSenderUtil {
                         recipientPhone = receipt.recipientPhone,
                         customerName = receipt.depositorName,
                         amount = receipt.amountKrw.toLong(),
-                        receiptContent = receipt.message,
+                        receiptContent = msgToSend,
                         status = "전송 완료"
                     )
                 }

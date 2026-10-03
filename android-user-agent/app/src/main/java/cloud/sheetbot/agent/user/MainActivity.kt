@@ -585,13 +585,32 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.switchReceiptSms.isChecked = prefs.isReceiptSmsEnabled
+        binding.layoutReceiptSmsSettings.visibility = if (prefs.isReceiptSmsEnabled) View.VISIBLE else View.GONE
+        binding.etReceiptSmsTemplate.setText(prefs.receiptSmsTemplate)
+
         binding.switchReceiptSms.setOnCheckedChangeListener { _, isChecked ->
             prefs.isReceiptSmsEnabled = isChecked
+            binding.layoutReceiptSmsSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
             val msg = if (isChecked) "고객 영수증 문자 자동 전송이 켜졌습니다." else "고객 영수증 문자 자동 전송이 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             if (isChecked) {
                 provisionSheetAsync("RECEIPT_SMS", "[SheetBot] 고객 영수증 문자 발송 대장")
             }
+        }
+
+        binding.etReceiptSmsTemplate.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                prefs.receiptSmsTemplate = s?.toString() ?: ""
+            }
+        })
+
+        binding.btnResetReceiptSmsTemplate.setOnClickListener {
+            val defaultTpl = "[SheetBot] {고객명}님, {금액} 결제가 정상 확인되었습니다. 이용해 주셔서 감사합니다."
+            binding.etReceiptSmsTemplate.setText(defaultTpl)
+            prefs.receiptSmsTemplate = defaultTpl
+            Toast.makeText(this, "영수증 문자 문구가 기본값으로 복원되었습니다.", Toast.LENGTH_SHORT).show()
         }
 
         binding.switchPushDetection.isChecked = prefs.isPushDetectionEnabled
