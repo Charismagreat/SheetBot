@@ -711,6 +711,12 @@ class MainActivity : AppCompatActivity() {
         binding.btnOpenFileFolder.setOnClickListener {
             openDriveFolder("FILE_UPLOAD", prefs.fileUploadDriveFolder)
         }
+        binding.btnOpenReceiptSheet.setOnClickListener {
+            showOpenSheetChooserDialog("RECEIPT", prefs.receiptDriveSheetTitle)
+        }
+        binding.btnOpenBusinessCardSheet.setOnClickListener {
+            showOpenSheetChooserDialog("BUSINESS_CARD", prefs.businessCardDriveSheetTitle)
+        }
 
         // 웹 링크 & 유튜브 영상 AI 자동 스크랩 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchLinkScrap.isChecked = prefs.isLinkScrapEnabled
@@ -2754,6 +2760,8 @@ class MainActivity : AppCompatActivity() {
         val folderName = when (sheetType) {
             "RECORDING" -> prefs.callRecordingDriveFolder
             "FILE_UPLOAD" -> prefs.fileUploadDriveFolder
+            "RECEIPT" -> "[SheetBot] 영수증 보관함"
+            "BUSINESS_CARD" -> "[SheetBot] 명함 보관함"
             else -> null
         }
 
