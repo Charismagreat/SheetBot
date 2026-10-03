@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
  * 영수증 문자 전송 및 미발송 대기열 처리 전용 유틸리티
  */
 object SmsSenderUtil {
+    private const val TAG = "SmsSenderUtil"
     /**
      * 영수증 문구 템플릿 치환 ({고객명}, {이름}, {금액}, {일시} 자동 대입)
      */
