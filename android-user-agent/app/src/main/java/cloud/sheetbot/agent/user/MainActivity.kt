@@ -82,14 +82,14 @@ class MainActivity : AppCompatActivity() {
     private var lastHandledShareUrl: String? = null
     private var lastHandledShareTime: Long = 0L
 
-    // 입금 감지 시 실시간 화면 갱신 리시버
+    // 입금 감지 시 실시간 화면 갱신 리시버 (ANR 방어를 위해 가벼운 로그만 갱신)
     private val depositUpdateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val body = intent?.getStringExtra("smsBody") ?: ""
             val sender = intent?.getStringExtra("sender") ?: ""
             val success = intent?.getBooleanExtra("success", false) ?: false
             addLogItem(sender, body, success)
-            updateUiState()
+            updateTargetBadges()
         }
     }
 

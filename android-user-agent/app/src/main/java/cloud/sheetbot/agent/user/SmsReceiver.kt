@@ -64,6 +64,7 @@ class SmsReceiver : BroadcastReceiver() {
 
             val pendingResult = goAsync()
             CoroutineScope(Dispatchers.IO).launch {
+                var pendingFinished = false
                 try {
                     val syncResult = if (prefs.isSmsSheetSyncEnabled) {
                         ApiClient.sendSmsSync(
@@ -85,7 +86,20 @@ class SmsReceiver : BroadcastReceiver() {
                     val isSynced = syncResult.success
                     showInboundSmsNotification(context, contactName ?: sender, fullBody, isSynced)
 
-                    // 🎯 고객 영수증 문자 자동 발송 (스마트 간편 주문 매칭 시)
+                    // UI 로그 갱신용 브로드캐스트 발송
+                    val updateIntent = Intent(ACTION_SMS_RECEIVED).apply {
+                        putExtra("smsBody", "[수신] ${contactName?.let { "$it: " } ?: ""}$fullBody")
+                        putExtra("sender", contactName ?: sender)
+                        putExtra("success", isSynced)
+                        setPackage(context.packageName)
+                    }
+                    context.sendBroadcast(updateIntent)
+
+                    // ⚡ [ANR 방어]: BroadcastReceiver 생명주기를 여기서 즉시 안전하게 마감하여 OS ANR 다이얼로그 원천 차단
+                    pendingResult.finish()
+                    pendingFinished = true
+
+                    // 🎯 고객 영수증 문자 자동 발송 (스마트 간편 주문 매칭 시 - 백그라운드 코루틴에서 무중단 발송)
                     if (prefs.isReceiptSmsEnabled && !syncResult.replySmsPhone.isNullOrBlank()) {
                         val custName = syncResult.depositorName?.takeIf { it.isNotBlank() } ?: "고객"
                         val custAmount = syncResult.amountKrw
@@ -126,19 +140,12 @@ class SmsReceiver : BroadcastReceiver() {
                     } else {
                         Log.w(TAG, "⚠️ [고객 문자 동기화 실패] 발신: $sender")
                     }
-
-                    // UI 로그 갱신용 브로드캐스트 발송
-                    val updateIntent = Intent(ACTION_SMS_RECEIVED).apply {
-                        putExtra("smsBody", "[수신] ${contactName?.let { "$it: " } ?: ""}$fullBody")
-                        putExtra("sender", contactName ?: sender)
-                        putExtra("success", isSynced)
-                        setPackage(context.packageName)
-                    }
-                    context.sendBroadcast(updateIntent)
                 } catch (e: Exception) {
                     Log.e(TAG, "고객 문자 동기화 중 오류 발생", e)
                 } finally {
-                    pendingResult.finish()
+                    if (!pendingFinished) {
+                        try { pendingResult.finish() } catch (_: Exception) {}
+                    }
                 }
             }
         } catch (e: Exception) {
