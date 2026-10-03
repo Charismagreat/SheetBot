@@ -212,7 +212,7 @@ class BankNotificationListener : NotificationListenerService() {
      * 카카오톡 수신 알림 정밀 파싱 및 구글 시트 동기화
      */
     private fun handleKakaoNotification(sbn: StatusBarNotification) {
-        if (!prefs.isPaired || !prefs.isKakaoSheetSyncEnabled) return
+        if (!prefs.isPaired) return
         val userEmail = prefs.userEmail ?: return
 
         try {
@@ -248,6 +248,48 @@ class BankNotificationListener : NotificationListenerService() {
                     isGroupChat = true
                 }
             }
+
+            // ========================================================
+            // [A] 최우선 금융 알림톡 감지 (카카오페이 / 카카오뱅크 송금·입금·결제 알림)
+            // - 일반 카카오톡 시트 동기화 스위치나 개인톡 필터와 무관하게,
+            //   금융 푸시 감지(isPushDetectionEnabled)가 켜져 있으면 매장 결제 대장에 100% 직행 전송
+            // ========================================================
+            val isKakaoFinancial = (chatRoomName.contains("카카오페이") || chatRoomName.contains("카카오뱅크") ||
+                    sender.contains("카카오페이") || sender.contains("카카오뱅크") ||
+                    message.contains("카카오페이") || message.contains("카카오뱅크")) &&
+                    BankPushParser.isFinancialNotification(chatRoomName, message)
+
+            if (isKakaoFinancial && prefs.isPushDetectionEnabled) {
+                val financialDedupeKey = "financial:kakao:$chatRoomName:$sender:$message"
+                val now = System.currentTimeMillis()
+                val lastSeen = recentCache[financialDedupeKey] ?: 0L
+                if (now - lastSeen >= 4000L) {
+                    recentCache[financialDedupeKey] = now
+                    val financialOrg = if (chatRoomName.contains("카카오뱅크") || sender.contains("카카오뱅크")) "카카오뱅크" else "카카오페이"
+                    val simulatedSms = BankPushParser.convertToSimulatedSms("com.kakao.kakaopay", "[$financialOrg]", message)
+                    Log.i(TAG, "💰 [카카오 금융 알림톡 감지] $financialOrg 결제/송금 -> 매장 대장 웹훅 전송")
+
+                    serviceScope.launch {
+                        try {
+                            val res = ApiClient.sendBankWebhook(
+                                webhookUrl = prefs.webhookUrl,
+                                fallbackWebhookUrl = prefs.fallbackWebhookUrl,
+                                sender = "PUSH:$financialOrg",
+                                smsText = simulatedSms,
+                                userEmail = userEmail
+                            )
+                            Log.i(TAG, "💰 [카카오 알림톡 웹훅 완료] status=${res.statusCode} success=${res.success}")
+                        } catch (e: Exception) {
+                            Log.w(TAG, "카카오 금융 알림톡 웹훅 연동 예외: ${e.message}")
+                        }
+                    }
+                }
+            }
+
+            // ========================================================
+            // [B] 일반 카카오톡 대화방 구글 시트 동기화
+            // ========================================================
+            if (!prefs.isKakaoSheetSyncEnabled) return
 
             // 2. 사생활 보호 필터 검사
             val filter = prefs.kakaoTargetFilter.trim()
@@ -297,29 +339,6 @@ class BankNotificationListener : NotificationListenerService() {
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "카카오톡 시트 동기화 예외", e)
-                }
-            }
-
-            // 5. 금융 알림톡(카카오페이, 카카오뱅크 등)일 경우 [SheetBot] 매장 결제 및 매출 대장에도 동시 실시간 연동
-            val isKakaoFinancial = (chatRoomName.contains("카카오페이") || chatRoomName.contains("카카오뱅크") || sender.contains("카카오페이") || sender.contains("카카오뱅크") || message.contains("카카오페이") || message.contains("카카오뱅크")) &&
-                    BankPushParser.isFinancialNotification(chatRoomName, message)
-
-            if (isKakaoFinancial && prefs.isPushDetectionEnabled) {
-                val financialOrg = if (chatRoomName.contains("카카오뱅크") || sender.contains("카카오뱅크")) "카카오뱅크" else "카카오페이"
-                val simulatedSms = BankPushParser.convertToSimulatedSms("com.kakaopay.app", "[$financialOrg]", message)
-                serviceScope.launch {
-                    try {
-                        ApiClient.sendBankWebhook(
-                            webhookUrl = prefs.webhookUrl,
-                            fallbackWebhookUrl = prefs.fallbackWebhookUrl,
-                            sender = "PUSH:$financialOrg",
-                            smsText = simulatedSms,
-                            userEmail = userEmail
-                        )
-                        Log.i(TAG, "💰 [카카오 알림톡 금융 대장 동시 기록 완료] $financialOrg 결제/송금 연동")
-                    } catch (e: Exception) {
-                        Log.w(TAG, "카카오 금융 알림톡 웹훅 연동 예외: ${e.message}")
-                    }
                 }
             }
         } catch (e: Exception) {
