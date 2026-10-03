@@ -90,8 +90,9 @@ export function extractAccountOrCardNumber(text: string): string {
  * 텍스트에서 금융사 또는 카드사 이름 추출
  */
 function detectFinancialOrgName(text: string): string {
-  if (text.includes("카카오뱅크")) return "카카오뱅크";
-  if (text.includes("토스뱅크") || text.includes("토스")) return "토스뱅크";
+  if (text.includes("카카오페이") || text.includes("페이머니") || text.includes("kakaopay")) return "카카오페이";
+  if (text.includes("카카오뱅크") || text.includes("kakaobank")) return "카카오뱅크";
+  if (text.includes("토스뱅크") || text.includes("토스") || text.includes("toss")) return "토스뱅크";
   if (text.includes("케이뱅크")) return "케이뱅크";
   if (text.includes("KB국민은행") || text.includes("국민은행") || text.includes("[KB]")) return "KB국민은행";
   if (text.includes("신한은행")) return "신한은행";
@@ -196,7 +197,7 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
   }
 
   // ==========================================
-  // [B] 출금 및 사장님 카드 결제(지출) 패턴 검사
+  // [B] 출금, 송금 및 카드/간편결제(지출) 패턴 검사 ➡️ 지출(카드) / 지출(계좌)
   // ==========================================
   const isWithdrawOrApproval =
     clean.includes("출금") ||
@@ -206,23 +207,31 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
     clean.includes("카드승인") ||
     clean.includes("송금완료") ||
     clean.includes("이체완료") ||
-    clean.includes("일시불");
+    clean.includes("일시불") ||
+    clean.includes("간편결제") ||
+    clean.includes("매장결제") ||
+    clean.includes("온라인결제") ||
+    (clean.includes("보냈어요") && !clean.includes("받았어요")) ||
+    (clean.includes("송금") && !clean.includes("송금받") && !clean.includes("받았어요"));
 
-  if (isWithdrawOrApproval && !clean.includes("승인취소") && !clean.includes("입금")) {
+  if (isWithdrawOrApproval && !clean.includes("승인취소") && (!clean.includes("입금") || clean.includes("출금"))) {
     const detectedOrg = detectFinancialOrgName(clean);
     const isCard =
       detectedOrg.includes("카드") ||
       clean.includes("카드") ||
       clean.includes("일시불") ||
-      clean.includes("승인");
+      clean.includes("승인") ||
+      clean.includes("결제") ||
+      clean.includes("매장결제") ||
+      clean.includes("온라인결제");
 
-    // 1. 금액 추출 ('원'이 명시된 금액을 1순위, 없을 시 출금/결제 직후 4자리 이상 숫자)
+    // 1. 금액 추출 ('원'이 명시된 금액을 1순위, 없을 시 출금/결제/송금 직후 4자리 이상 숫자)
     let amt = 0;
     const amountWithWon = clean.match(/([\d,]+)\s*원/);
     if (amountWithWon) {
       amt = parseInt(amountWithWon[1].replace(/,/g, ""), 10);
     } else {
-      const amountAfterKeyword = clean.match(/(?:출금|결제|승인)\s*([\d,]{4,})/);
+      const amountAfterKeyword = clean.match(/(?:출금|결제|승인|송금|보냈어요)\s*([\d,]{4,})/);
       if (amountAfterKeyword) {
         amt = parseInt(amountAfterKeyword[1].replace(/,/g, ""), 10);
       }
@@ -231,32 +240,62 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
     if (amt > 0) {
       let merchantName = isCard ? "가맹점" : "출금처";
 
-      // 괄호 내 상호명 검사 (계좌번호/숫자/잔액 제외)
-      const juCompanyMatch = clean.match(/(?:\((?:주|유)\)|(?:주|유)\))\s*([가-힣A-Za-z0-9]+)/);
-      const parenMatch = clean.match(/\(([^)]+)\)/);
-
-      if (juCompanyMatch) {
-        merchantName = `(주)${juCompanyMatch[1].trim()}`;
-      } else if (
-        parenMatch &&
-        !parenMatch[1].includes("잔액") &&
-        parenMatch[1].trim().length >= 2 &&
-        !/^[\d*-]+$/.test(parenMatch[1].trim())
-      ) {
-        merchantName = parenMatch[1].trim();
-      } else {
-        // 맨 뒤 단어 추출 (가맹점명 또는 출금처)
-        const words = clean.split(/\s+/).filter(Boolean);
-        const lastWord = words[words.length - 1];
+      // 1-0. 줄바꿈 기준 금액 다음 줄 텍스트 검사 (예: 15,000원 \n 스타벅스강남점 \n 잔액)
+      const lines = clean.split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean);
+      const amtLineIdx = lines.findIndex((l) => /[\d,]+\s*원/.test(l));
+      if (amtLineIdx >= 0 && amtLineIdx + 1 < lines.length) {
+        const nextLine = lines[amtLineIdx + 1].trim();
         if (
-          lastWord &&
-          !lastWord.includes("원") &&
-          !lastWord.includes("잔액") &&
-          !lastWord.includes("일시불") &&
-          !lastWord.includes("승인") &&
-          !/^[\d*-]+$/.test(lastWord)
+          nextLine.length >= 2 &&
+          !nextLine.includes("잔액") &&
+          !nextLine.includes("승인") &&
+          !nextLine.includes("누적") &&
+          !nextLine.includes("일시불") &&
+          !/^[\d*-]+$/.test(nextLine)
         ) {
-          merchantName = lastWord.replace(/[()[\]]/g, "").trim();
+          merchantName = nextLine.replace(/[()[\]]/g, "").trim();
+        }
+      }
+
+      // 1-1. '금액원' 직후에 오는 가맹점/수취인명: 예: "15,000원 스타벅스", "50,000원 홍길동 (잔액..."
+      if (merchantName === (isCard ? "가맹점" : "출금처")) {
+        const afterAmtMatch = clean.match(/[\d,]+\s*원\s+([가-힣A-Za-z0-9&㈜(주)]{2,15})/);
+        if (afterAmtMatch) {
+          const candidate = afterAmtMatch[1].trim();
+          if (
+            candidate.length >= 2 &&
+            !candidate.includes("잔액") &&
+            !candidate.includes("일시불") &&
+            !candidate.includes("승인") &&
+            !candidate.includes("누적")
+          ) {
+            merchantName = candidate.replace(/[()[\]]/g, "").trim();
+          }
+        }
+      }
+
+      // 1-2. 송금 대상자 추출: "홍길동님에게 송금", "홍길동에게 보냈어요", "홍길동 송금"
+      if (merchantName === (isCard ? "가맹점" : "출금처")) {
+        const transferTargetMatch = clean.match(/([가-힣A-Za-z0-9]+?)(?:님에게|에게)?\s*(?:송금|보냈어요)/);
+        if (transferTargetMatch && transferTargetMatch[1].trim().length >= 2 && !transferTargetMatch[1].includes("카카오")) {
+          merchantName = transferTargetMatch[1].trim();
+        }
+      }
+
+      // 1-3. 괄호 내 상호명 검사: (스타벅스), ((주)우아한형제들)
+      if (merchantName === (isCard ? "가맹점" : "출금처")) {
+        const juCompanyMatch = clean.match(/(?:\((?:주|유)\)|(?:주|유)\))\s*([가-힣A-Za-z0-9]+)/);
+        const parenMatch = clean.match(/\(([^)]+)\)/);
+
+        if (juCompanyMatch) {
+          merchantName = `(주)${juCompanyMatch[1].trim()}`;
+        } else if (
+          parenMatch &&
+          !parenMatch[1].includes("잔액") &&
+          parenMatch[1].trim().length >= 2 &&
+          !/^[\d*-]+$/.test(parenMatch[1].trim())
+        ) {
+          merchantName = parenMatch[1].trim();
         }
       }
 
@@ -275,13 +314,15 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
   }
 
   // ==========================================
-  // [C] 은행 계좌 입금 패턴 검사 ➡️ 매출(계좌)
+  // [C] 은행 계좌 및 페이 입금 패턴 검사 ➡️ 매출(계좌)
   // ==========================================
   const isDepositKeyword =
     clean.includes("입금") ||
-    clean.includes("보냈어요") ||
     clean.includes("받았어요") ||
-    clean.includes("송금받음");
+    clean.includes("송금받") ||
+    clean.includes("충전완료") ||
+    clean.includes("머니충전") ||
+    clean.includes("페이머니 충전");
 
   if (isDepositKeyword && !clean.includes("출금")) {
     const detectedBank = detectFinancialOrgName(clean);
@@ -292,7 +333,7 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
     if (amountWithWon) {
       amt = parseInt(amountWithWon[1].replace(/,/g, ""), 10);
     } else {
-      const amountAfterDeposit = clean.match(/입금\s*([\d,]{4,})/);
+      const amountAfterDeposit = clean.match(/(?:입금|받았어요|충전)\s*([\d,]{4,})/);
       if (amountAfterDeposit) {
         amt = parseInt(amountAfterDeposit[1].replace(/,/g, ""), 10);
       }

@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
         const parsedBank = parseBankDepositSms(message);
         if (parsedBank.amountKrw && parsedBank.amountKrw > 0) {
           const isExpense = (parsedBank.transactionType || "").includes("지출");
-          recordPaymentToGoogleSheet({
+          await recordPaymentToGoogleSheet({
             userEmail: cleanEmail,
             paymentTime: nowStr,
             transactionType: parsedBank.transactionType || "매출(계좌)",

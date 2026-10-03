@@ -12,6 +12,7 @@ object BankPushParser {
     val SUPPORTED_BANK_PACKAGES = mapOf(
         // 인터넷 및 시중은행
         "com.kakaobank.channel" to "카카오뱅크",
+        "com.kakaopay.app" to "카카오페이",
         "viva.republica.toss" to "토스",
         "com.kbankwith.smartbank" to "케이뱅크",
         "com.kbstar.kbbank" to "KB국민은행",
@@ -57,13 +58,13 @@ object BankPushParser {
 
     // 입금 감지 키워드
     private val DEPOSIT_KEYWORDS = listOf(
-        "입금", "보냈어요", "받았어요", "송금받음", "입금알림", "입금확인", "충전완료"
+        "입금", "보냈어요", "받았어요", "송금받음", "송금받았어요", "입금알림", "입금확인", "충전완료", "머니충전", "페이머니 충전"
     )
 
     // 출금 및 카드 결제 승인 감지 키워드
     private val WITHDRAW_KEYWORDS = listOf(
         "출금", "결제", "체크승인", "체크 승인", "카드승인", "카드 승인", "승인", "출금완료",
-        "이체완료", "송금완료", "일시불", "간편결제"
+        "이체완료", "송금완료", "송금", "보냈어요", "일시불", "간편결제", "매장결제", "온라인결제", "페이머니 결제"
     )
 
     /**
@@ -111,7 +112,7 @@ object BankPushParser {
 
         // 1. 거래 구분 판별 (POS 매장 매출인지, 은행 출금/카드 지출인지, 계좌 입금인지)
         val isPosApp = packageName in listOf("com.payhere.pos", "team.freeapp.pos", "com.woowahan.baemin", "com.kicc.pos")
-        val isWithdraw = !isPosApp && WITHDRAW_KEYWORDS.any { combined.contains(it) } && !combined.contains("입금")
+        val isWithdraw = !isPosApp && WITHDRAW_KEYWORDS.any { combined.contains(it) } && (!combined.contains("입금") && !combined.contains("받았어요") && !combined.contains("송금받"))
         val actionType = if (isPosApp) "결제" else (if (isWithdraw) "출금" else "입금")
 
         // 2. 금액 추출 (예: 5,000원 -> 5,000원) - 제목이나 본문 어디서든 추출
@@ -121,14 +122,17 @@ object BankPushParser {
         // 3. 입금자/가맹점명 추출 시도
         var partyName = ""
         val tossMatch = Regex("([가-힣a-zA-Z0-9]{2,10})님(?:이|께서)").find(combined)
+        val kakaoTransferMatch = Regex("([가-힣a-zA-Z0-9]{2,10})님에게\\s*(?:송금|보냈어요)").find(combined)
         if (tossMatch != null) {
             partyName = tossMatch.groupValues[1]
+        } else if (kakaoTransferMatch != null) {
+            partyName = kakaoTransferMatch.groupValues[1]
         } else {
             val parenMatch = Regex("\\(([가-힣a-zA-Z0-9]{2,10})\\)").find(combined)
             if (parenMatch != null && !parenMatch.groupValues[1].contains("잔액")) {
                 partyName = parenMatch.groupValues[1]
             } else {
-                val normalMatch = Regex("(?:입금|출금|승인|받음)\\s*[0-9,]+\\s*원?\\s+([가-힣a-zA-Z0-9]{2,10})").find(combined)
+                val normalMatch = Regex("(?:입금|출금|승인|결제|송금|받음)\\s*[0-9,]+\\s*원?\\s+([가-힣a-zA-Z0-9]{2,10})").find(combined)
                 if (normalMatch != null) {
                     partyName = normalMatch.groupValues[1]
                 }

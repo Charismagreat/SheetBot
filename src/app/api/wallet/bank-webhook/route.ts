@@ -47,6 +47,9 @@ export async function POST(request: Request) {
 
     // 스마트폰 전달 앱에서 본문 텍스트 통째로 넘어온 경우 (smsText, text, content, message 등)
     const rawSms = body?.smsText || body?.text || body?.content || body?.message || body?.msg || depositorName || "";
+    let detectedTransactionType = "매출(계좌)";
+    let detectedAccountOrCard = "-";
+
     if (typeof rawSms === "string" && rawSms.length > 5) {
       const parsed = parseBankDepositSms(rawSms);
       if (parsed.success) {
@@ -59,6 +62,8 @@ export async function POST(request: Request) {
         if (!bankName || bankName === "자동감지") {
           bankName = parsed.bankName;
         }
+        detectedTransactionType = parsed.transactionType || "매출(계좌)";
+        detectedAccountOrCard = parsed.accountOrCardNumber || "-";
       }
     }
 
@@ -389,10 +394,12 @@ export async function POST(request: Request) {
       // 2. 실제 은행 문자이지만 웹에 대기 세션이 없는 경우 (매장 매출 대장 시트 자동 기록)
       const targetUserEmail = body?.userEmail || "";
       if (targetUserEmail && targetUserEmail.includes("@")) {
-        recordPaymentToGoogleSheet({
+        await recordPaymentToGoogleSheet({
           userEmail: targetUserEmail,
           paymentTime: new Date().toISOString().replace("T", " ").slice(0, 19),
+          transactionType: detectedTransactionType,
           channelOrBank: bankName || "금융/결제사",
+          accountOrCardNumber: detectedAccountOrCard,
           customerName: cleanDepositor || "미확인",
           amount: cleanAmount,
           memoOrRawText: rawSms.slice(0, 200),
