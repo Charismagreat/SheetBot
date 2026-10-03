@@ -902,6 +902,17 @@
                     android:textColor="#64748B"
                     android:textSize="10sp"
                     android:layout_marginTop="4dp" />
+
+                <Button
+                    android:id="@+id/btnTestReceiptSms"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:backgroundTint="#0284C7"
+                    android:text="🧪 영수증 문자 발송 즉시 테스트"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="8dp" />
             </LinearLayout>
 
             <LinearLayout

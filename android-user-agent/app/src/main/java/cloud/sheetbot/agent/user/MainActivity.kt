@@ -613,6 +613,10 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "영수증 문자 문구가 기본값으로 복원되었습니다.", Toast.LENGTH_SHORT).show()
         }
 
+        binding.btnTestReceiptSms.setOnClickListener {
+            showReceiptSmsTestDialog()
+        }
+
         binding.switchPushDetection.isChecked = prefs.isPushDetectionEnabled
         binding.switchPushDetection.setOnCheckedChangeListener { _, isChecked ->
             prefs.isPushDetectionEnabled = isChecked
@@ -3530,6 +3534,189 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, "동기화 중 오류가 발생했습니다: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
+        }
+    }
+
+    /**
+     * 🧪 영수증 문자 발송 즉시 테스트 및 권한/시트/단말기 발송 상태 실시간 진단 다이얼로그
+     */
+    private fun showReceiptSmsTestDialog() {
+        val hasSendSmsPerm = androidx.core.content.ContextCompat.checkSelfPermission(
+            this, android.Manifest.permission.SEND_SMS
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        val dialogView = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(40, 30, 40, 20)
+            setBackgroundColor(android.graphics.Color.parseColor("#1E293B"))
+        }
+
+        // 권한 상태 뱃지
+        val tvPermStatus = android.widget.TextView(this).apply {
+            text = if (hasSendSmsPerm) "✅ [정상] 스마트폰 SMS 전송 권한 허용됨" else "⚠️ [경고] SMS 전송 권한 미허용 상태입니다!\n(아래 테스트 발송 시 권한 허용 팝업이 뜹니다)"
+            setTextColor(if (hasSendSmsPerm) android.graphics.Color.parseColor("#34D399") else android.graphics.Color.parseColor("#F87171"))
+            textSize = 12f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(0, 0, 0, 16)
+        }
+        dialogView.addView(tvPermStatus)
+
+        // 수신 전화번호 입력란
+        val tvPhoneLabel = android.widget.TextView(this).apply {
+            text = "📱 테스트 수신 휴대폰 번호:"
+            setTextColor(android.graphics.Color.parseColor("#E2E8F0"))
+            textSize = 12f
+        }
+        dialogView.addView(tvPhoneLabel)
+
+        val etPhone = android.widget.EditText(this).apply {
+            setText("010-7523-5071")
+            setTextColor(android.graphics.Color.WHITE)
+            setBackgroundColor(android.graphics.Color.parseColor("#0F172A"))
+            setPadding(20, 16, 20, 16)
+            textSize = 13f
+            inputType = android.text.InputType.TYPE_CLASS_PHONE
+        }
+        dialogView.addView(etPhone)
+
+        // 고객명 & 금액
+        val tvCustLabel = android.widget.TextView(this).apply {
+            text = "👤 고객명 / 💰 금액(원):"
+            setTextColor(android.graphics.Color.parseColor("#E2E8F0"))
+            textSize = 12f
+            setPadding(0, 16, 0, 4)
+        }
+        dialogView.addView(tvCustLabel)
+
+        val rowLayout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+        }
+        val etCustName = android.widget.EditText(this).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = 8
+            }
+            setText("차민서")
+            setTextColor(android.graphics.Color.WHITE)
+            setBackgroundColor(android.graphics.Color.parseColor("#0F172A"))
+            setPadding(20, 16, 20, 16)
+            textSize = 13f
+        }
+        val etAmount = android.widget.EditText(this).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            setText("777")
+            setTextColor(android.graphics.Color.WHITE)
+            setBackgroundColor(android.graphics.Color.parseColor("#0F172A"))
+            setPadding(20, 16, 20, 16)
+            textSize = 13f
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        }
+        rowLayout.addView(etCustName)
+        rowLayout.addView(etAmount)
+        dialogView.addView(rowLayout)
+
+        // 실시간 미리보기 텍스트
+        val tvPreview = android.widget.TextView(this).apply {
+            setTextColor(android.graphics.Color.parseColor("#94A3B8"))
+            textSize = 11f
+            setPadding(0, 16, 0, 8)
+        }
+        dialogView.addView(tvPreview)
+
+        fun updatePreview() {
+            val name = etCustName.text.toString().trim().ifBlank { "고객" }
+            val amt = etAmount.text.toString().trim().toLongOrNull() ?: 0L
+            val tpl = prefs.receiptSmsTemplate.takeIf { it.isNotBlank() }
+                ?: "[SheetBot] {고객명}님, {금액} 결제가 정상 확인되었습니다. 이용해 주셔서 감사합니다."
+            val rawMsg = SmsSenderUtil.formatReceiptMessage(tpl, name, amt)
+            val trimmedMsg = SmsSenderUtil.trimToSmsSafeBytes(rawMsg, 80)
+            val bytes = try { trimmedMsg.toByteArray(java.nio.charset.Charset.forName("EUC-KR")).size } catch (_: Exception) { trimmedMsg.length * 2 }
+            tvPreview.text = "✉️ 발송 문구 미리보기 (${bytes}B / 80B):\n\"$trimmedMsg\""
+        }
+        updatePreview()
+
+        val watcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) { updatePreview() }
+        }
+        etCustName.addTextChangedListener(watcher)
+        etAmount.addTextChangedListener(watcher)
+
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("🧪 영수증 문자 발송 테스트")
+            .setView(dialogView)
+            .setPositiveButton("🚀 테스트 발송", null)
+            .setNegativeButton("닫기", null)
+            .create()
+
+        dialog.show()
+
+        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            // 권한 체크 및 필요 시 즉시 요청
+            if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.SEND_SMS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                androidx.core.app.ActivityCompat.requestPermissions(
+                    this, arrayOf(android.Manifest.permission.SEND_SMS), 1088
+                )
+                Toast.makeText(this, "SMS 발송 권한이 필요합니다. 팝업에서 [허용]을 눌러주세요.", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+
+            val phone = etPhone.text.toString().trim()
+            val name = etCustName.text.toString().trim().ifBlank { "고객" }
+            val amt = etAmount.text.toString().trim().toLongOrNull() ?: 0L
+
+            if (phone.isBlank()) {
+                Toast.makeText(this, "수신자 번호를 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val tpl = prefs.receiptSmsTemplate.takeIf { it.isNotBlank() }
+                ?: "[SheetBot] {고객명}님, {금액} 결제가 정상 확인되었습니다. 이용해 주셔서 감사합니다."
+            val rawMsg = SmsSenderUtil.formatReceiptMessage(tpl, name, amt)
+
+            // 백그라운드 발송 및 대장 동기화
+            activityScope.launch(Dispatchers.IO) {
+                val (isSent, finalMsg) = SmsSenderUtil.sendSmsDetailed(this@MainActivity, phone, rawMsg)
+                val statusLabel = if (isSent) "전송 완료" else "전송 실패"
+
+                // 대장 기록
+                val userEmail = prefs.userEmail
+                var sheetSyncOk = false
+                if (!userEmail.isNullOrBlank()) {
+                    sheetSyncOk = ApiClient.sendReceiptSmsSync(
+                        userEmail = userEmail,
+                        recipientPhone = phone,
+                        customerName = name,
+                        amount = amt,
+                        receiptContent = finalMsg,
+                        status = statusLabel
+                    )
+                }
+
+                withContext(Dispatchers.Main) {
+                    val bytes = try { finalMsg.toByteArray(java.nio.charset.Charset.forName("EUC-KR")).size } catch (_: Exception) { finalMsg.length * 2 }
+                    val resultTitle = if (isSent) "🎉 [영수증 발송 성공]" else "❌ [영수증 발송 실패]"
+                    val resultMsg = """
+                        발송 결과: $statusLabel
+                        수신 번호: $phone
+                        고객명 / 금액: $name / ${amt}원
+                        문자 길이: ${finalMsg.length}자 ($bytes 바이트 / 80B 이하)
+                        
+                        발송 전문:
+                        "$finalMsg"
+                        
+                        📊 구글 시트 대장 기록: ${if (sheetSyncOk) "✅ 성공" else "⚠️ 시트 확인 필요"}
+                        📁 단말기 보낸 문자함 저장: ${if (isSent) "✅ 완료" else "❌ 실패"}
+                    """.trimIndent()
+
+                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle(resultTitle)
+                        .setMessage(resultMsg)
+                        .setPositiveButton("확인", null)
+                        .show()
+                }
+            }
+            dialog.dismiss()
         }
     }
 }
