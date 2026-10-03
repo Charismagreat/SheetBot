@@ -1132,7 +1132,11 @@ object ApiClient {
         for (host in hosts) {
             val endpoint = "$host/api/user/calls/missed"
             try {
-                val request = Request.Builder().url(endpoint).post(body).build()
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(body)
+                    .header("x-sheetbot-user-email", userEmail)
+                    .build()
                 val response = client.newCall(request).execute()
                 if (response.isSuccessful) {
                     Log.i(TAG, "✅ [부재중 전화 시트 동기화 성공] 발신: $callerPhone, 호스트: $host")

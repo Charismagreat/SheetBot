@@ -74,9 +74,9 @@ export async function POST(req: NextRequest) {
         spreadsheetUrl = resolved.spreadsheetUrl;
 
         if (resolved.isNew && targetSpreadsheetId) {
-          // 초기 헤더 기입
+          // 초기 헤더 기입 ([SheetBot] 부재중 전화 표준 6대 열)
           const headers = [
-            ["부재중 일시", "상대방 이름", "전화번호", "자동 회신 여부", "회신 내용", "기기명"]
+            ["부재중 일시", "발신 번호", "연락처 이름", "자동 회신 내용", "회신 상태", "기기명"]
           ];
           await callSheetsTool("sheets_update_range", {
             spreadsheetId: targetSpreadsheetId,
@@ -95,10 +95,10 @@ export async function POST(req: NextRequest) {
           }).catch(() => {});
         }
 
-        // 시트에 신규 부재중 기록 행 추가
+        // 시트에 신규 부재중 기록 행 추가 (헤더 순서와 100% 일치)
         if (targetSpreadsheetId) {
           const newRowValues = [
-            [callTime, displayName, callerPhone, replyStatusLabel, replyMessage, deviceId]
+            [callTime, callerPhone, displayName, replyMessage, replyStatusLabel, deviceId]
           ];
           await callSheetsTool("sheets_append_values", {
             spreadsheetId: targetSpreadsheetId,

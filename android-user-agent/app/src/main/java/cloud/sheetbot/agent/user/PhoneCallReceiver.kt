@@ -1,23 +1,29 @@
 package cloud.sheetbot.agent.user
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.CallLog
 import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 스마트폰 전화 상태(수신/통화/종료) 감지 브로드캐스트 리시버
@@ -37,6 +43,9 @@ class PhoneCallReceiver : BroadcastReceiver() {
         private var savedIncomingNumber: String? = null
         private var isIncomingAnswered = false
         private var callStartTime = 0L
+
+        // 15초 멱등성 캐시 (동일 번호 부재중 중복 감지 방지)
+        private val recentMissedCalls = ConcurrentHashMap<String, Long>()
 
         /**
          * 모바일 명함 문자 즉시 전송 (웹 명함 링크 모드)
@@ -91,6 +100,41 @@ class PhoneCallReceiver : BroadcastReceiver() {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.cancel(2001)
         }
+
+        /**
+         * 시스템 CallLog.Calls에서 최근 60초 이내에 발생한 최신 부재중 통화(MISSED_TYPE) 조회 (Fallback 안전망)
+         */
+        fun getLatestMissedCallFromLog(context: Context): Triple<String, String?, String>? {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "CallLog 조회를 위한 READ_CALL_LOG 권한이 부여되지 않았습니다.")
+                return null
+            }
+            try {
+                val cursor = context.contentResolver.query(
+                    CallLog.Calls.CONTENT_URI,
+                    arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME, CallLog.Calls.DATE, CallLog.Calls.TYPE),
+                    "${CallLog.Calls.TYPE} = ?",
+                    arrayOf(CallLog.Calls.MISSED_TYPE.toString()),
+                    "${CallLog.Calls.DATE} DESC"
+                )
+                cursor?.use {
+                    if (it.moveToFirst()) {
+                        val dateMillis = it.getLong(it.getColumnIndexOrThrow(CallLog.Calls.DATE))
+                        if (System.currentTimeMillis() - dateMillis < 60_000) {
+                            val number = it.getString(it.getColumnIndexOrThrow(CallLog.Calls.NUMBER)) ?: ""
+                            val cachedName = it.getString(it.getColumnIndexOrThrow(CallLog.Calls.CACHED_NAME))
+                            val timeStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA).format(Date(dateMillis))
+                            if (number.isNotBlank()) {
+                                return Triple(number, cachedName, timeStr)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "CallLog 조회 중 예외: ${e.message}")
+            }
+            return null
+        }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -139,15 +183,18 @@ class PhoneCallReceiver : BroadcastReceiver() {
 
             TelephonyManager.EXTRA_STATE_IDLE -> {
                 // 통화 종료 또는 미수신 상태 전환
-                if (lastState == TelephonyManager.EXTRA_STATE_RINGING && !isIncomingAnswered) {
-                    // ★ 부재중 전화(Missed Call) 감지! (벨 울림 -> 받지 않고 끊김)
-                    val missedPhone = phoneNumber ?: savedIncomingNumber
-                    if (!missedPhone.isNullOrBlank() && prefs.isPaired && !userEmail.isNullOrBlank()) {
-                        handleMissedCall(context, prefs, userEmail, missedPhone)
+                val wasRingingNotAnswered = (lastState == TelephonyManager.EXTRA_STATE_RINGING && !isIncomingAnswered)
+                val wasOffhook = (lastState == TelephonyManager.EXTRA_STATE_OFFHOOK)
+                val candidatePhone = phoneNumber ?: savedIncomingNumber
+
+                if (wasRingingNotAnswered) {
+                    // ★ 부재중 전화(Missed Call) 1차 감지! (벨 울림 -> 받지 않고 끊김)
+                    if (prefs.isPaired && !userEmail.isNullOrBlank()) {
+                        triggerMissedCallHandling(context, prefs, userEmail, candidatePhone)
                     }
-                } else if (lastState == TelephonyManager.EXTRA_STATE_OFFHOOK) {
+                } else if (wasOffhook) {
                     // ★ 통화 정상 종료 (Call Ended) 감지! (수신/발신 통화 모두 지원)
-                    val endedPhone = phoneNumber ?: savedIncomingNumber
+                    val endedPhone = candidatePhone
                     if (!endedPhone.isNullOrBlank() && prefs.isCallEndedCardPromptEnabled) {
                         showCallEndedCardPrompt(context, endedPhone)
                     }
@@ -156,6 +203,9 @@ class PhoneCallReceiver : BroadcastReceiver() {
                     if (prefs.isCallRecordingSyncEnabled && prefs.isCallEndedAutoUploadEnabled && prefs.isPaired) {
                         triggerAutoRecordingUpload(context, prefs)
                     }
+                } else if (!isIncomingAnswered && prefs.isPaired && !userEmail.isNullOrBlank()) {
+                    // 벨이 울렸으나 상태 순서가 누락되어 IDLE로 곧바로 진입한 경우를 위한 안전망
+                    triggerMissedCallHandling(context, prefs, userEmail, candidatePhone)
                 }
 
                 // 세션 리셋
@@ -168,48 +218,95 @@ class PhoneCallReceiver : BroadcastReceiver() {
     }
 
     /**
-     * 부재중 전화 감지 처리: 0원 자동 회신 문자 발송 및 구글 시트 대장 기록
+     * 부재중 전화 감지 처리: 인텐트 번호 검증 및 CallLog Fallback 안전망 경유 후 구글 시트 대장 기록
      */
-    private fun handleMissedCall(context: Context, prefs: PreferencesManager, userEmail: String, phone: String) {
-        val contactName = ContactHelper.getContactName(context, phone)
-        val callTime = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA).format(Date())
-        val replyTemplate = prefs.missedCallReplyTemplate
-
-        Log.i(TAG, "🚨 [부재중 전화 감지] 번호: $phone / 이름: $contactName")
-
+    private fun triggerMissedCallHandling(context: Context, prefs: PreferencesManager, userEmail: String, directPhone: String?) {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                var autoReplied = false
-                if (prefs.isMissedCallAutoReplyEnabled && replyTemplate.isNotBlank()) {
-                    // 0원 안내 문자 자동 회신
-                    autoReplied = SmsSenderUtil.sendSms(context, phone, replyTemplate)
-                    if (autoReplied) {
-                        Log.i(TAG, "📲 [부재중 자동 회신 완료] $phone")
-                        if (prefs.isTtsEnabled) {
-                            TtsManager.speak(context, "부재중 전화가 감지되어 고객님께 안내 문자를 자동 회신했습니다.")
-                        }
+                var finalPhone = directPhone?.trim() ?: ""
+                var resolvedName: String? = null
+                var resolvedCallTime: String? = null
+
+                // 인텐트 번호가 비어있으면 800ms 대기 후 시스템 CallLog에서 최신 부재중 전화 복구
+                if (finalPhone.isBlank()) {
+                    delay(800)
+                    val fromLog = getLatestMissedCallFromLog(context)
+                    if (fromLog != null) {
+                        finalPhone = fromLog.first
+                        resolvedName = fromLog.second
+                        resolvedCallTime = fromLog.third
+                        Log.i(TAG, "📋 [CallLog Fallback 성공] 복구된 부재중 번호: $finalPhone, 이름: $resolvedName")
                     }
                 }
 
-                // 구글 시트 [SheetBot] 부재중 전화 대장에 기록
-                val isSynced = ApiClient.sendMissedCallSync(
-                    userEmail = userEmail,
-                    callerPhone = phone,
-                    contactName = contactName,
-                    callTime = callTime,
-                    autoReplied = autoReplied,
-                    replyMessage = if (autoReplied) replyTemplate else "미발송",
-                    sheetTitle = prefs.missedCallDriveSheetTitle
-                )
+                if (finalPhone.isBlank()) {
+                    Log.w(TAG, "부재중 전화를 감지했으나 전화번호를 획득하지 못해 처리를 건너뜁니다.")
+                    return@launch
+                }
 
-                showMissedCallNotification(context, contactName ?: phone, autoReplied)
+                // 15초 멱등성 검사 (동일 번호 중복 처리 방지)
+                val now = System.currentTimeMillis()
+                val lastProcessed = recentMissedCalls[finalPhone] ?: 0L
+                if (now - lastProcessed < 15_000) {
+                    Log.i(TAG, "⏳ [15초 멱등성 방어] 이미 처리된 부재중 전화입니다: $finalPhone")
+                    return@launch
+                }
+                recentMissedCalls[finalPhone] = now
+
+                // 오래된 캐시 정리 (60초 경과 항목 제거)
+                recentMissedCalls.entries.removeIf { now - it.value > 60_000 }
+
+                handleMissedCall(context, prefs, userEmail, finalPhone, resolvedName, resolvedCallTime)
             } catch (e: Exception) {
-                Log.e(TAG, "부재중 전화 처리 중 오류", e)
+                Log.e(TAG, "부재중 전화 핸들링 중 오류", e)
             } finally {
                 pendingResult.finish()
             }
         }
+    }
+
+    /**
+     * 부재중 전화 최종 처리: 0원 자동 회신 문자 발송 및 구글 시트 대장 기록
+     */
+    private suspend fun handleMissedCall(
+        context: Context,
+        prefs: PreferencesManager,
+        userEmail: String,
+        phone: String,
+        fallbackName: String? = null,
+        fallbackTime: String? = null
+    ) {
+        val contactName = ContactHelper.getContactName(context, phone) ?: fallbackName
+        val callTime = fallbackTime ?: SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA).format(Date())
+        val replyTemplate = prefs.missedCallReplyTemplate
+
+        Log.i(TAG, "🚨 [부재중 전화 최종 처리] 번호: $phone / 이름: $contactName / 일시: $callTime")
+
+        var autoReplied = false
+        if (prefs.isMissedCallAutoReplyEnabled && replyTemplate.isNotBlank()) {
+            // 0원 안내 문자 자동 회신
+            autoReplied = SmsSenderUtil.sendSms(context, phone, replyTemplate)
+            if (autoReplied) {
+                Log.i(TAG, "📲 [부재중 자동 회신 완료] $phone")
+                if (prefs.isTtsEnabled) {
+                    TtsManager.speak(context, "부재중 전화가 감지되어 고객님께 안내 문자를 자동 회신했습니다.")
+                }
+            }
+        }
+
+        // 구글 시트 [SheetBot] 부재중 전화 대장에 기록
+        val isSynced = ApiClient.sendMissedCallSync(
+            userEmail = userEmail,
+            callerPhone = phone,
+            contactName = contactName,
+            callTime = callTime,
+            autoReplied = autoReplied,
+            replyMessage = if (autoReplied) replyTemplate else "미발송",
+            sheetTitle = prefs.missedCallDriveSheetTitle
+        )
+
+        showMissedCallNotification(context, contactName ?: phone, autoReplied)
     }
 
     /**
