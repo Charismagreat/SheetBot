@@ -1293,6 +1293,38 @@
                         android:layout_marginStart="4dp" />
                 </LinearLayout>
 
+                <!-- 스마트 경비 영수증 대장 & 스마트 명함 관리 대장 열기 바로가기 뱃지 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+
+                    <Button
+                        android:id="@+id/btnOpenReceiptSheet"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#1E293B"
+                        android:text="🧾 영수증 대장 열기 ↗"
+                        android:textColor="#34D399"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btnOpenBusinessCardSheet"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#1E293B"
+                        android:text="🪪 명함 대장 열기 ↗"
+                        android:textColor="#60A5FA"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold"
+                        android:layout_marginStart="4dp" />
+                </LinearLayout>
+
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

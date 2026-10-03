@@ -45,6 +45,18 @@ export const SHEET_DEFINITIONS: Record<string, SheetDefinition> = {
     range: "A1:F1",
     defaultFolder: "[SheetBot] 파일 보관함",
   },
+  RECEIPT: {
+    defaultTitle: "[SheetBot] 스마트 경비 영수증 대장",
+    headers: ["승인일시", "영수증구분", "가맹점명", "사업자번호", "합계금액(원)", "공급가액(원)", "부가세(원)", "품목/적요", "결제수단", "승인번호", "영수증사진URL", "분석상태", "등록일시"],
+    range: "A1:M1",
+    defaultFolder: "[SheetBot] 영수증 보관함",
+  },
+  BUSINESS_CARD: {
+    defaultTitle: "[SheetBot] 스마트 명함 관리 대장",
+    headers: ["등록 일시", "성함", "직함/직책", "회사명", "휴대폰", "이메일", "유선전화", "회사 주소", "상세정보", "명함 보기", "등록 기기"],
+    range: "A1:K1",
+    defaultFolder: "[SheetBot] 명함 보관함",
+  },
   CALL_ENDED_CARD: {
     defaultTitle: "[SheetBot] 모바일 명함 발송 대장",
     headers: ["발송 일시", "상대방 번호", "연락처 이름", "발송 방식", "명함 내용/URL", "발송 결과", "기기명"],

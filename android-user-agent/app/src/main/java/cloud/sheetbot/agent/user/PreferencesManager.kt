@@ -189,6 +189,14 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("missed_call_drive_sheet_title", "[SheetBot] 부재중 전화 대장") ?: "[SheetBot] 부재중 전화 대장"
         set(value) = prefs.edit().putString("missed_call_drive_sheet_title", value).apply()
 
+    var receiptDriveSheetTitle: String
+        get() = prefs.getString("receipt_drive_sheet_title", "[SheetBot] 스마트 경비 영수증 대장") ?: "[SheetBot] 스마트 경비 영수증 대장"
+        set(value) = prefs.edit().putString("receipt_drive_sheet_title", value).apply()
+
+    var businessCardDriveSheetTitle: String
+        get() = prefs.getString("business_card_drive_sheet_title", "[SheetBot] 스마트 명함 관리 대장") ?: "[SheetBot] 스마트 명함 관리 대장"
+        set(value) = prefs.edit().putString("business_card_drive_sheet_title", value).apply()
+
     // 통화 종료 직후 모바일 명함 / 감사 문자 원터치 발송 설정 (신규 설치 시 기본 꺼짐: false)
     var isCallEndedCardPromptEnabled: Boolean
         get() = prefs.getBoolean("is_call_ended_card_prompt_enabled", false)
