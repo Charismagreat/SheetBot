@@ -1027,7 +1027,7 @@ object ApiClient {
             val endpoint = "$host/api/user/messages/receipt-sms"
             try {
                 val request = Request.Builder().url(endpoint).post(body).build()
-                val response = client.newCall(request).execute()
+                val response = longTimeoutClient.newCall(request).execute()
                 if (response.isSuccessful) {
                     Log.i(TAG, "✅ [고객 영수증 문자 대장 시트 동기화 성공] 수신: $recipientPhone, 호스트: $host")
                     return@withContext true

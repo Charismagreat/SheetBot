@@ -17,9 +17,22 @@ export interface RecordReceiptSmsParams {
   sheetTitle?: string;
 }
 
+// 30초 이내 동일 영수증 발송 내역 중복 기록 방어 캐시 (1차/2차 호스트 재시도 및 중복 콜백 방어)
+const recentReceiptSmsDedupeMap = new Map<string, number>();
+
+function cleanOldReceiptDedupeEntries() {
+  const cutoff = Date.now() - 5 * 60 * 1000;
+  for (const [key, timestamp] of recentReceiptSmsDedupeMap.entries()) {
+    if (timestamp < cutoff) {
+      recentReceiptSmsDedupeMap.delete(key);
+    }
+  }
+}
+
 export interface RecordReceiptSmsResult {
   success: boolean;
   spreadsheetUrl?: string;
+  duplicated?: boolean;
   error?: string;
 }
 
@@ -49,6 +62,26 @@ export async function recordReceiptSmsToGoogleSheet(
     if (!userEmail) {
       return { success: false, error: "userEmail이 누락되었습니다." };
     }
+
+    const cleanEmail = userEmail.toLowerCase().trim();
+    const cleanPhone = (recipientPhone || "").replace(/[^0-9]/g, "");
+    const numAmount = Number(amount) || 0;
+
+    // 🛡️ [30초 중복 방어 필터]: 1차 서버 타임아웃으로 인한 2차 폴백 중복 적재 원천 차단
+    const dedupeKey = `${cleanEmail}_${cleanPhone}_${numAmount}`;
+    const nowMs = Date.now();
+    const lastRecordedAt = recentReceiptSmsDedupeMap.get(dedupeKey);
+
+    if (lastRecordedAt && (nowMs - lastRecordedAt) < 30 * 1000) {
+      console.log(`🛡️ [ReceiptSmsSync] 30초 이내 중복 영수증 기록 감지 - 시트 기록 방어: ${dedupeKey}`);
+      return {
+        success: true,
+        duplicated: true,
+      };
+    }
+
+    recentReceiptSmsDedupeMap.set(dedupeKey, nowMs);
+    cleanOldReceiptDedupeEntries();
 
     let sheetTitle = rawSheetTitle.trim();
     if (!sheetTitle.startsWith("[SheetBot]")) {
