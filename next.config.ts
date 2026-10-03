@@ -41,7 +41,6 @@ const nextConfig: any = {
     // Always skip ESLint errors to prevent blocking on auto-generated files
     ignoreDuringBuilds: true,
   },
-
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb',
