@@ -347,23 +347,39 @@ export function parseBankDepositSms(text: string): ParsedDepositSms {
     if (nameWithParenAcc) {
       depositor = nameWithParenAcc[1].trim();
     } else {
-      // 패턴 2-2: '입금 50,000원 3333**01234 홍길동' -> 홍길동
-      // 또는 '입금 12,000원(홍길동)'
-      const parenMatch = clean.match(/\(([^)]+)\)/);
-      if (parenMatch && !parenMatch[1].includes("잔액") && !/^\d+$/.test(parenMatch[1]) && !parenMatch[1].includes("*")) {
-        depositor = parenMatch[1].trim();
-      } else {
-        // 단어 분리 후 잔액/계좌번호/날짜/시간/은행명/금액을 제외한 한글 이름 탐색
-        const tokens = clean.split(/\s+/).map((t) => t.replace(/[()[\]]/g, "").trim());
-        for (const token of tokens) {
-          if (
-            token.length >= 2 &&
-            token.length <= 6 &&
-            /^[가-힣]{2,6}$/.test(token) &&
-            !["입금", "출금", "잔액", "보냈어요", "받았어요", "카카오뱅크", "국민은행", "신한은행", "우리은행", "농협", "토스", "하나은행"].includes(token)
-          ) {
-            depositor = token;
-            break;
+      // 패턴 2-2: 줄바꿈 기준 금액 다음 줄 텍스트 검사 (예: 1,000원 \n 차호석 \n 잔액)
+      const lines = clean.split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean);
+      const amtLineIdx = lines.findIndex((l) => /[\d,]+\s*원/.test(l));
+      if (amtLineIdx >= 0 && amtLineIdx + 1 < lines.length) {
+        const nextLine = lines[amtLineIdx + 1].trim();
+        if (
+          nextLine.length >= 2 &&
+          nextLine.length <= 8 &&
+          /^[가-힣A-Za-z0-9*]{2,8}$/.test(nextLine) &&
+          !nextLine.includes("잔액") &&
+          !nextLine.includes("알림")
+        ) {
+          depositor = nextLine;
+        }
+      }
+
+      if (depositor === "고객") {
+        const parenMatch = clean.match(/\(([^)]+)\)/);
+        if (parenMatch && !parenMatch[1].includes("잔액") && !/^\d+$/.test(parenMatch[1]) && !parenMatch[1].includes("*")) {
+          depositor = parenMatch[1].trim();
+        } else {
+          // 단어 분리 후 잔액/계좌번호/날짜/시간/은행명/금액/알림류를 제외한 한글 이름 탐색
+          const tokens = clean.split(/\s+/).map((t) => t.replace(/[()[\]]/g, "").trim());
+          for (const token of tokens) {
+            if (
+              token.length >= 2 &&
+              token.length <= 6 &&
+              /^[가-힣]{2,6}$/.test(token) &&
+              !["입금", "출금", "잔액", "보냈어요", "받았어요", "카카오뱅크", "국민은행", "신한은행", "우리은행", "농협", "토스", "하나은행", "입금알림", "출금알림", "결제알림", "Web발신"].includes(token)
+            ) {
+              depositor = token;
+              break;
+            }
           }
         }
       }
