@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     const ruleName = isPushNotification ? `🔔 ${sender.replace("PUSH:", "")} 입금/결제 푸시` : "📱 스마트폰 고객 문자 수신";
 
     // 1. 회원의 스마트 알림 발송/수신 이력 대장에 INBOUND로 기록 (Zero-Retention: 고객 전화번호 마스킹 및 본문 서버 미보관 정책 준수)
-    await insertRows("sheetbot_user_dispatch_logs", [
+    insertRows("sheetbot_user_dispatch_logs", [
       {
         id: logId,
         user_email: cleanEmail,
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
         error_message: null,
         created_at: kstNow,
       },
-    ]);
+    ]).catch((err: any) => console.warn("[InboundSms] DB log insert error:", err?.message));
 
     // 1-0. 🛡️ [Zero-Retention 실현] 이용자의 구글 시트 [SheetBot] 고객 알림 발송 및 수신 대장에 직접 실시간 1행 기록
     recordDispatchToGoogleSheet({

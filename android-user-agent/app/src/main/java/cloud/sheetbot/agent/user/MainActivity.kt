@@ -3837,7 +3837,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 // 3단계: 가상 카카오뱅크 입금 문자 생성
-                val nowStr = java.text.SimpleDateFormat("MM/dd HH:mm", java.util.Locale.KOREA).format(java.util.Date())
+                val nowStr = java.text.SimpleDateFormat("MM/dd HH:mm:ss", java.util.Locale.KOREA).format(java.util.Date())
                 val virtualSms = """
                     [Web발신]
                     [카카오뱅크]
@@ -3857,7 +3857,7 @@ class MainActivity : AppCompatActivity() {
                 var serverReplyText: String? = null
 
                 try {
-                    val syncResult = if (prefs.isSmsSheetSyncEnabled) {
+                    var syncResult = if (prefs.isSmsSheetSyncEnabled) {
                         ApiClient.sendSmsSync(
                             userEmail = userEmail,
                             direction = "INBOUND",
@@ -3872,6 +3872,26 @@ class MainActivity : AppCompatActivity() {
                             sender = "1599-3333",
                             message = virtualSms
                         )
+                    }
+
+                    // 1차 응답에서 매칭 정보가 비어있을 경우 2차 대체 엔드포인트로 즉시 보강 시도
+                    if (syncResult.replySmsPhone.isNullOrBlank()) {
+                        syncResult = if (prefs.isSmsSheetSyncEnabled) {
+                            ApiClient.sendInboundSms(
+                                userEmail = userEmail,
+                                sender = "1599-3333",
+                                message = virtualSms
+                            )
+                        } else {
+                            ApiClient.sendSmsSync(
+                                userEmail = userEmail,
+                                direction = "INBOUND",
+                                phoneNumber = "1599-3333",
+                                contactName = "카카오뱅크",
+                                message = virtualSms,
+                                sheetTitle = prefs.smsDriveSheetTitle
+                            )
+                        }
                     }
 
                     if (!syncResult.replySmsPhone.isNullOrBlank()) {

@@ -221,7 +221,8 @@ export async function findMatchingSmartOrder(params: {
               const timeColLetter = statusColIdx === 9 ? "K" : "J";
               const nowFormatted = getKoreanTimeString();
 
-              await callSheetsTool(
+              // ⚡ 초고속 응답을 위해 시트 상태 갱신('결제완료')은 비동기 백그라운드로 즉시 위임 (Zero-Block)
+              callSheetsTool(
                 "sheets_update_range",
                 {
                   spreadsheetId: resolved.spreadsheetId,
