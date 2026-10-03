@@ -128,7 +128,7 @@ class SmsSentObserver(
                                 sheetTitle = prefs.smsDriveSheetTitle
                             )
 
-                            if (isSynced) {
+                            if (isSynced.success) {
                                 val who = if (contactName != null) "$contactName($recipient)" else recipient
                                 Log.i(TAG, "🎉 [발신 문자 시트 기록 완료] $who")
 

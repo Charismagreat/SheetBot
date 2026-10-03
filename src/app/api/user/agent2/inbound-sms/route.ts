@@ -7,6 +7,9 @@ import { realtimeHub } from "@/lib/realtime-hub";
 import { maskPhoneNumber, formatZeroRetentionContent } from "@/lib/privacy";
 import { parseBankDepositSms } from "@/lib/bank-sms-parser";
 import { recordPaymentToGoogleSheet } from "@/lib/payment-sheet-sync";
+import { recordReceiptSmsToGoogleSheet } from "@/lib/receipt-sms-sync";
+import { findMatchingSmartOrder } from "@/lib/smart-order-match";
+import { getKoreanTimeString } from "@/lib/date-utils";
 import { recordDispatchToGoogleSheet } from "@/lib/dispatch-sheet-sync";
 
 /**
@@ -69,23 +72,67 @@ export async function POST(req: NextRequest) {
 
     // 1-1. 은행/결제/배달앱 승인 문자 및 푸시일 경우 [SheetBot] 매장 결제 및 매출 대장 시트에 실시간 자동 기록
     const parsedBank = parseBankDepositSms(message);
+    let replySms: { recipientPhone: string; message: string } | null = null;
+    let matchedOrder: any = null;
+    let orderTtsText: string | null = null;
+
     if (parsedBank.amountKrw && parsedBank.amountKrw > 0) {
       const detectedBankName = parsedBank.bankName !== "알 수 없음" && parsedBank.bankName !== "시중은행 (일반)"
         ? parsedBank.bankName
         : (isPushNotification ? sender.replace("PUSH:", "") : "카드/은행 결제");
 
       const isExpense = (parsedBank.transactionType || "").includes("지출");
+      const custName = parsedBank.depositorName || (isExpense ? "가맹점/출금처" : "고객");
+      const cleanAmount = parsedBank.amountKrw;
+
       recordPaymentToGoogleSheet({
         userEmail: cleanEmail,
         paymentTime: nowIso.replace("T", " ").slice(0, 19),
         transactionType: parsedBank.transactionType || "매출(계좌)",
         channelOrBank: detectedBankName,
         accountOrCardNumber: parsedBank.accountOrCardNumber || "-",
-        customerName: parsedBank.depositorName || (isExpense ? "가맹점/출금처" : "고객"),
-        amount: parsedBank.amountKrw,
+        customerName: custName,
+        amount: cleanAmount,
         memoOrRawText: message.slice(0, 200),
         deviceId: deviceId || "SheetBot Agent",
       }).catch((err) => console.warn("[InboundSms] Payment sheet sync error:", err));
+
+      // 🎯 매출(입금) 건인 경우, [SheetBot] 스마트 간편 주문 및 품목 대장 매칭 수행!
+      if (!isExpense && custName && custName !== "고객" && cleanAmount > 0) {
+        try {
+          matchedOrder = await findMatchingSmartOrder({
+            userEmail: cleanEmail,
+            depositorName: custName,
+            amount: cleanAmount,
+          });
+
+          if (matchedOrder && matchedOrder.customerPhone) {
+            console.log(`[InboundSms] 🎉 스마트 간편 주문 매칭 성공! 영수증 SMS 발송 연동: ${matchedOrder.customerName} (${matchedOrder.customerPhone})`);
+            const itemHint = matchedOrder.itemsSummary ? ` (${matchedOrder.itemsSummary.slice(0, 30)})` : "";
+            const replyMsg = `[SheetBot] ${matchedOrder.customerName}님, 주문 결제(${cleanAmount.toLocaleString()}원)가 정상 확인되었습니다.${itemHint} 주문하신 상품을 정성껏 준비하겠습니다. 감사합니다.`;
+
+            replySms = {
+              recipientPhone: matchedOrder.customerPhone,
+              message: replyMsg,
+            };
+
+            orderTtsText = `${matchedOrder.customerName}님의 주문 결제 ${cleanAmount.toLocaleString()}원이 확인되어 영수증 문자가 발송되었습니다.`;
+
+            recordReceiptSmsToGoogleSheet({
+              userEmail: cleanEmail,
+              sentTime: getKoreanTimeString(),
+              recipientPhone: matchedOrder.customerPhone,
+              customerName: matchedOrder.customerName,
+              amount: cleanAmount,
+              receiptContent: replyMsg,
+              status: "전송 완료",
+              deviceId: deviceId || "SheetBot Agent",
+            }).catch((err: any) => console.warn("[InboundSms] Order receipt SMS sync error:", err.message));
+          }
+        } catch (orderErr: any) {
+          console.warn("[InboundSms] findMatchingSmartOrder error:", orderErr);
+        }
+      }
     }
 
     // 2. 실시간 SSE 알림 브로드캐스트 (대시보드 실시간 반영)
@@ -107,6 +154,11 @@ export async function POST(req: NextRequest) {
       success: true,
       message: "수신된 문자가 성공적으로 동기화되었습니다.",
       logId,
+      replySms,
+      matchedOrder: matchedOrder ? true : false,
+      depositorName: matchedOrder?.customerName || null,
+      amountKrw: matchedOrder?.amount || 0,
+      ttsText: orderTtsText,
     });
   } catch (err: any) {
     console.error("[InboundSms] POST error:", err);

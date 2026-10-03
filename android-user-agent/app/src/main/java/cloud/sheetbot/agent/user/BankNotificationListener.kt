@@ -463,7 +463,7 @@ class BankNotificationListener : NotificationListenerService() {
 
             serviceScope.launch {
                 try {
-                    val isSynced = ApiClient.sendSmsSync(
+                    val syncResult = ApiClient.sendSmsSync(
                         userEmail = userEmail,
                         direction = "INBOUND",
                         phoneNumber = sender,
@@ -472,12 +472,47 @@ class BankNotificationListener : NotificationListenerService() {
                         sheetTitle = prefs.smsDriveSheetTitle
                     )
 
+                    val isSynced = syncResult.success
+
+                    // 🎯 고객 영수증 문자 자동 전송 (스마트 간편 주문 매칭 시)
+                    if (prefs.isReceiptSmsEnabled && !syncResult.replySmsPhone.isNullOrBlank()) {
+                        val rawReply = syncResult.replySmsText ?: ""
+                        val custName = syncResult.depositorName?.takeIf { it.isNotBlank() } ?: "고객"
+                        val custAmount = syncResult.amountKrw
+
+                        val msgToSend = if (prefs.receiptSmsTemplate.isNotBlank()) {
+                            SmsSenderUtil.formatReceiptMessage(
+                                template = prefs.receiptSmsTemplate,
+                                customerName = custName,
+                                amountKrw = custAmount
+                            )
+                        } else if (rawReply.isNotBlank()) {
+                            rawReply
+                        } else {
+                            "[SheetBot] ${custName}님, 결제 입금이 확인되었습니다. 감사합니다."
+                        }
+
+                        if (msgToSend.isNotBlank()) {
+                            val isSent = SmsSenderUtil.sendSms(this@BankNotificationListener, syncResult.replySmsPhone, msgToSend)
+                            if (isSent) {
+                                Log.i(TAG, "📲 [메시지 알림 연계 영수증 SMS 발송 성공] 수신: ${syncResult.replySmsPhone} (고객: $custName)")
+                                ApiClient.sendReceiptSmsSync(
+                                    userEmail = userEmail,
+                                    recipientPhone = syncResult.replySmsPhone,
+                                    customerName = custName,
+                                    receiptContent = msgToSend,
+                                    status = "전송 완료"
+                                )
+                            }
+                        }
+                    }
+
                     if (isSynced) {
                         val who = if (contactName != null && contactName != sender) "$contactName($sender)" else sender
                         Log.i(TAG, "✅ [구글 메시지/RCS 시트 동기화 완료] $who")
                         if (prefs.isTtsEnabled) {
-                            val voiceWho = contactName ?: "고객"
-                            TtsManager.speak(this@BankNotificationListener, "${voiceWho}님의 새 메시지가 구글 시트에 기록되었습니다.")
+                            val ttsMsg = syncResult.ttsText ?: "${contactName ?: "고객"}님의 새 메시지가 구글 시트에 기록되었습니다."
+                            TtsManager.speak(this@BankNotificationListener, ttsMsg)
                         }
 
                         // UI 로그 갱신용 브로드캐스트 발송

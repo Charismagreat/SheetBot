@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { queryTable, updateRows } from "../../../../../egdesk-helpers";
+import { queryTable, updateRows } from "@/lib/egdesk-helpers";
 import { creditTokens } from "@/lib/token-wallet";
 import { executeSmartDispatchRules } from "@/lib/smart-dispatch-rules";
 import { setupDatabase } from "@/lib/setup-db";
