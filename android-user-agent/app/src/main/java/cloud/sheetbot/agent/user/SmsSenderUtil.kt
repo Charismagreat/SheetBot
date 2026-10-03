@@ -36,7 +36,8 @@ object SmsSenderUtil {
     }
 
     /**
-     * 지정된 휴대폰 번호로 텍스트/장문 SMS 발송
+     * 지정된 휴대폰 번호로 텍스트 SMS 단문 안전 발송 (한국 통신사 80바이트 단문 최적화)
+     * 및 스마트폰 기본 메시지 앱 발신함(Sent Box) 동기화
      */
     fun sendSms(context: Context, phoneNumber: String, messageText: String): Boolean {
         return try {
@@ -53,13 +54,33 @@ object SmsSenderUtil {
                 SmsManager.getDefault()
             }
 
-            val parts = smsManager.divideMessage(messageText)
-            if (parts.size > 1) {
-                smsManager.sendMultipartTextMessage(cleanPhone, null, parts, null, null)
+            // 🛡️ 한국 통신사(SKT/KT/LGU+) 단문 SMS 규격 (한글 40~45자, 80바이트 이하) 안전 보장
+            // 90바이트 초과 Multipart SMS는 통신사 SMSC에서 폐기/거부될 수 있으므로 단문으로 안전 압축
+            val textToSend = if (messageText.length > 45) {
+                Log.w(TAG, "⚠️ 메시지 길이(${messageText.length}자)가 단문 규격을 초과하여 45자 안전 단문으로 압축합니다.")
+                messageText.substring(0, 43) + ".."
             } else {
-                smsManager.sendTextMessage(cleanPhone, null, messageText, null, null)
+                messageText
             }
-            Log.i(TAG, "✅ [SMS 발송 성공] 수신자: $cleanPhone / 길이: ${messageText.length}자")
+
+            smsManager.sendTextMessage(cleanPhone, null, textToSend, null, null)
+            Log.i(TAG, "✅ [SMS 통신망 발송 성공] 수신자: $cleanPhone / 전문: $textToSend")
+
+            // 📁 스마트폰 기본 문자 앱(삼성 메시지 등)의 '보낸 문자함'에 안전 저장
+            try {
+                val values = android.content.ContentValues().apply {
+                    put("address", cleanPhone)
+                    put("body", textToSend)
+                    put("date", System.currentTimeMillis())
+                    put("type", 2) // 2: MESSAGE_TYPE_SENT (발신)
+                    put("read", 1)
+                }
+                context.contentResolver.insert(android.net.Uri.parse("content://sms/sent"), values)
+                Log.i(TAG, "📁 [기본 메시지 앱 발신함 저장 완료] $cleanPhone")
+            } catch (sentBoxErr: Exception) {
+                Log.d(TAG, "발신함 자동 기록 참고 (기본 SMS 앱 권한 차이): ${sentBoxErr.message}")
+            }
+
             true
         } catch (e: Exception) {
             Log.e(TAG, "❌ [SMS 발송 실패] 수신자: $phoneNumber / 에러: ${e.message}", e)

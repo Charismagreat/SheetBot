@@ -1,5 +1,6 @@
 import { queryTable, updateRows, callSheetsTool } from "@/lib/egdesk-helpers";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
+import { getKoreanTimeString } from "@/lib/date-utils";
 
 export interface MatchedSmartOrder {
   source: "DB" | "SHEET";
@@ -11,6 +12,18 @@ export interface MatchedSmartOrder {
   address?: string;
   status?: string;
   rowIndex?: number;
+}
+
+/**
+ * 한국 통신사(SKT/KT/LGU+) 단문 SMS 규격(한글 40~45자, 80바이트 이하)에 맞춘 초고속 영수증 문자 문구 생성
+ * 90바이트 초과 Multipart SMS로 분할 시 통신사 SMSC에서 전송 거부/유실되는 문제를 원천 방지
+ */
+export function generateReceiptSmsText(customerName: string, amount: number, itemsSummary?: string): string {
+  const safeName = customerName && customerName !== "고객" ? customerName : "고객";
+  const formattedAmount = amount > 0 ? `${amount.toLocaleString()}원` : "";
+  
+  // 단문 80바이트 이하 엄격 준수 (한글 1자=2B, 총 70~75바이트)
+  return `[SheetBot] ${safeName}님, 결제(${formattedAmount}) 확인 완료! 정성껏 준비하겠습니다.`;
 }
 
 /**
@@ -206,7 +219,7 @@ export async function findMatchingSmartOrder(params: {
               const rowNum = i + 2;
               const statusColLetter = statusColIdx === 9 ? "J" : "I";
               const timeColLetter = statusColIdx === 9 ? "K" : "J";
-              const nowFormatted = new Date().toISOString().replace("T", " ").slice(0, 19);
+              const nowFormatted = getKoreanTimeString();
 
               await callSheetsTool(
                 "sheets_update_range",

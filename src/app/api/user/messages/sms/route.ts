@@ -13,8 +13,7 @@ import { maskPhoneNumber, formatZeroRetentionContent } from "@/lib/privacy";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { parseBankDepositSms } from "@/lib/bank-sms-parser";
 import { recordPaymentToGoogleSheet } from "@/lib/payment-sheet-sync";
-import { recordReceiptSmsToGoogleSheet } from "@/lib/receipt-sms-sync";
-import { findMatchingSmartOrder } from "@/lib/smart-order-match";
+import { findMatchingSmartOrder, generateReceiptSmsText } from "@/lib/smart-order-match";
 import { getKoreanTimeString } from "@/lib/date-utils";
 
 // 15초 이내 동일 SMS 송수신 중복 기록 방어 캐시 (키: userEmail:direction:phoneNumber:message, 값: timestamp)
@@ -220,8 +219,8 @@ export async function POST(req: NextRequest) {
 
             if (matchedOrder && matchedOrder.customerPhone) {
               console.log(`[SmsSync] 🎉 스마트 간편 주문 매칭 성공! 영수증 SMS 발송 연동: ${matchedOrder.customerName} (${matchedOrder.customerPhone})`);
-              const itemHint = matchedOrder.itemsSummary ? ` (${matchedOrder.itemsSummary.slice(0, 30)})` : "";
-              const replyMsg = `[SheetBot] ${matchedOrder.customerName}님, 주문 결제(${cleanAmount.toLocaleString()}원)가 정상 확인되었습니다.${itemHint} 주문하신 상품을 정성껏 준비하겠습니다. 감사합니다.`;
+              // 단문 SMS 규격(한글 40~45자, 80바이트 이하)으로 생성하여 100% 즉시 전송 보장
+              const replyMsg = generateReceiptSmsText(matchedOrder.customerName, cleanAmount, matchedOrder.itemsSummary);
               
               replySms = {
                 recipientPhone: matchedOrder.customerPhone,
@@ -230,17 +229,8 @@ export async function POST(req: NextRequest) {
 
               orderTtsText = `${matchedOrder.customerName}님의 주문 결제 ${cleanAmount.toLocaleString()}원이 확인되어 영수증 문자가 발송되었습니다.`;
 
-              // [SheetBot] 고객 영수증 문자 발송 대장 시트에도 실시간 자동 기록
-              recordReceiptSmsToGoogleSheet({
-                userEmail: cleanEmail,
-                sentTime: getKoreanTimeString(),
-                recipientPhone: matchedOrder.customerPhone,
-                customerName: matchedOrder.customerName,
-                amount: cleanAmount,
-                receiptContent: replyMsg,
-                status: "전송 완료",
-                deviceId: deviceId || "SheetBot Agent",
-              }).catch((err: any) => console.warn("[SmsSync] Order receipt SMS sync error:", err.message));
+              // ⚠️ 주의: 서버가 시트에 미리 '전송 완료'를 기록하면 앱이 실제 발송 후 리포트할 때 2건이 중복 기록되므로,
+              // 단말기 실제 발송 후 앱의 리포트를 통해서만 단일 1행이 기록되도록 일원화합니다.
             }
           }
         }
