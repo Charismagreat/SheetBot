@@ -299,6 +299,29 @@ class BankNotificationListener : NotificationListenerService() {
                     Log.e(TAG, "카카오톡 시트 동기화 예외", e)
                 }
             }
+
+            // 5. 금융 알림톡(카카오페이, 카카오뱅크 등)일 경우 [SheetBot] 매장 결제 및 매출 대장에도 동시 실시간 연동
+            val isKakaoFinancial = (chatRoomName.contains("카카오페이") || chatRoomName.contains("카카오뱅크") || sender.contains("카카오페이") || sender.contains("카카오뱅크") || message.contains("카카오페이") || message.contains("카카오뱅크")) &&
+                    BankPushParser.isFinancialNotification(chatRoomName, message)
+
+            if (isKakaoFinancial && prefs.isPushDetectionEnabled) {
+                val financialOrg = if (chatRoomName.contains("카카오뱅크") || sender.contains("카카오뱅크")) "카카오뱅크" else "카카오페이"
+                val simulatedSms = BankPushParser.convertToSimulatedSms("com.kakaopay.app", "[$financialOrg]", message)
+                serviceScope.launch {
+                    try {
+                        ApiClient.sendBankWebhook(
+                            webhookUrl = prefs.webhookUrl,
+                            fallbackWebhookUrl = prefs.fallbackWebhookUrl,
+                            sender = "PUSH:$financialOrg",
+                            smsText = simulatedSms,
+                            userEmail = userEmail
+                        )
+                        Log.i(TAG, "💰 [카카오 알림톡 금융 대장 동시 기록 완료] $financialOrg 결제/송금 연동")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "카카오 금융 알림톡 웹훅 연동 예외: ${e.message}")
+                    }
+                }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "카카오톡 알림 파싱 오류", e)
         }

@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 56,
-      latestVersionName: "2.1.35",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.35/SheetBotAgent.apk",
+      latestVersionCode: 57,
+      latestVersionName: "2.1.36",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.36/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.35 릴리즈\n• 📞 [부재중 전화 대장 중복 기록 원천 차단] 5초 원자적 동시 처리 락(Atomic Lock) 및 정규화 번호 기준 15초 멱등성 가드 탑재\n• 🛡️ [서버 15초 멱등성 2중 방어] 동일 사용자+전화번호 단기간 재인입 시 시트 중복 쓰기 완벽 차단\n• 🔄 [상태 전이 안전망 강화] 링 수신 이력 검증 및 세션 안전 초기화로 단말기 중복 브로드캐스트 방어",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.36 릴리즈\n• 💳 [카카오페이 & 카카오뱅크 송금/결제 대장 연동 완벽 지원] 카카오페이 앱 푸시 및 카카오톡 금융 알림톡 감지 엔진 탑재\n• 📊 [매출 vs 지출 자동 분류] 송금/결제는 '지출(계좌/카드)', 입금/충전은 '매출(계좌)'로 [SheetBot] 매장 결제 및 매출 대장에 실시간 자동 기록\n• 🎯 [가맹점 및 송금대상자 핀포인트 추출] 스타벅스, 배민, 송금 상대방 이름 및 계좌/카드 마스킹 번호 정밀 파싱",
     },
     {
       headers: {

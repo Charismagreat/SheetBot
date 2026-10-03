@@ -106,10 +106,12 @@ export async function recordPaymentToGoogleSheet(
     let targetSpreadsheetId: string | null = null;
     let spreadsheetUrl = "";
 
+    let isNewSheet = false;
+
     // 1. 회원별 대장 고유 ID 영구 바인딩 및 0초 즉각 조회
     try {
       const resolved = await resolveUserSpreadsheet({
-        userEmail,
+        userEmail: cleanEmail,
         sheetType: "PAYMENT_PUSH",
         defaultTitle: "[SheetBot] 매장 결제 및 매출 대장",
         requestedTitle: sheetTitle,
@@ -118,6 +120,7 @@ export async function recordPaymentToGoogleSheet(
       if (resolved?.spreadsheetId) {
         targetSpreadsheetId = resolved.spreadsheetId;
         spreadsheetUrl = resolved.spreadsheetUrl;
+        isNewSheet = Boolean(resolved.isNew);
       }
     } catch (resolveErr: any) {
       console.warn("[PaymentSheetSync] resolveUserSpreadsheet fallback:", resolveErr?.message);
@@ -148,6 +151,7 @@ export async function recordPaymentToGoogleSheet(
         targetSpreadsheetId = createRes?.spreadsheetId || createRes?.id || null;
         if (targetSpreadsheetId) {
           spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
+          isNewSheet = true;
         }
       }
     }
@@ -156,25 +160,12 @@ export async function recordPaymentToGoogleSheet(
       return { success: false, error: "스프레드시트를 생성하거나 찾을 수 없습니다." };
     }
 
-    // 3. 자가 치유(Self-Healing) 헤더 검사 및 보장 (8열 신규 표준 헤더)
-    const headerValues = [
-      ["일시", "구분", "금융사/채널", "계좌/카드번호", "고객/가맹점명", "금액(원)", "거래/결제 내용", "수신 기기"],
-    ];
+    // 3. 신규 시트인 경우에만 8열 신규 표준 헤더 및 서식 초기화 (Fast-Path: 기존 시트는 0ms 통과)
+    if (isNewSheet) {
+      const headerValues = [
+        ["일시", "구분", "금융사/채널", "계좌/카드번호", "고객/가맹점명", "금액(원)", "거래/결제 내용", "수신 기기"],
+      ];
 
-    const firstRowCheck = await callSheetsTool("sheets_get_range", {
-      spreadsheetId: targetSpreadsheetId,
-      range: "A1:H1",
-      preferOAuth: true,
-    }).catch(() => null);
-
-    const firstRowValues = firstRowCheck?.values?.[0] || [];
-    const hasHeaderOrData = firstRowValues.length > 0 && Boolean(firstRowValues[0]);
-    // 만약 기존 6열/7열 헤더이거나 헤더가 없는 경우 신규 8열 헤더로 스마트 업데이트
-    const isLegacyFormat =
-      hasHeaderOrData &&
-      (firstRowValues[1] !== "구분" || firstRowValues[3] !== "계좌/카드번호" || firstRowValues.length < 8);
-
-    if (!hasHeaderOrData || isLegacyFormat) {
       await callSheetsTool("sheets_update_range", {
         spreadsheetId: targetSpreadsheetId,
         range: "A1:H1",
