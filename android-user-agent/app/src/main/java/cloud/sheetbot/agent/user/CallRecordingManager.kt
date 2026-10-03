@@ -36,6 +36,12 @@ object CallRecordingManager {
     // 3. Cube ACR 및 일반 서드파티: Call_[이름/번호]_[YYYY-MM-DD_HH-mm-ss]
     private val CUBE_ACR_REGEX = Regex("""(?:Call|Rec|Record)[_\s]+([^_]+)_(\d{4}[-_]?\d{2}[-_]?\d{2})_?(\d{2}[-_]?\d{2}[-_]?\d{2})?""", RegexOption.IGNORE_CASE)
 
+    // 4. [이름]_[전화번호]_[날짜시간] 형식 (삼성/T전화 커스텀: 예: 시댁_01077249063_20261003165911.m4a)
+    private val NAME_PHONE_DATE_REGEX = Regex("""^([^_]+)_(\d{9,12})_(\d{8,14})""", RegexOption.IGNORE_CASE)
+
+    // 동시 중복 업로드 방지 인메모리 락 (25초 주기 루프 간 중복 파일 전송 차단)
+    private val uploadingFiles = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     /**
      * 신규 통화 녹음 파일을 탐색하고 설정된 필터 조건에 부합하면 구글 드라이브로 자동 업로드
      */
@@ -220,47 +226,57 @@ object CallRecordingManager {
                 continue
             }
 
-            // 파일 정보 파싱
-            val parsedInfo = parseRecordingFileInfo(file)
-            val contactName = parsedInfo.contactName
-            val callTimeStr = parsedInfo.callTime
-
-            // 필터링 검사 (지정된 번호 또는 이름에 부합하는지)
-            if (!matchesFilter(contactName, fileName, filterText)) {
-                Log.d(TAG, "필터 대상이 아니므로 건너뜀: $fileName (상대방: $contactName, 필터: $filterText)")
-                filterExcludedCount++
+            // 현재 비동기 업로드 진행 중인 파일은 중복 실행 차단 (25초 감시 루프 간 동시 중복 전송 방어)
+            if (!uploadingFiles.add(fileName)) {
+                Log.d(TAG, "현재 업로드 진행 중인 파일이므로 건너뜀: $fileName")
                 continue
             }
 
-            Log.i(TAG, "🚀 [통화 녹음 업로드 개시] 파일: $fileName / 상대방: $contactName / 대상 폴더: $targetFolder")
+            try {
+                // 파일 정보 파싱
+                val parsedInfo = parseRecordingFileInfo(file)
+                val contactName = parsedInfo.contactName
+                val callTimeStr = parsedInfo.callTime
 
-            // 구글 드라이브로 파일 업로드
-            val uploadResult = ApiClient.uploadCallRecording(
-                file = file,
-                fileName = fileName,
-                contactName = contactName,
-                callTime = callTimeStr,
-                userEmail = userEmail,
-                folderName = targetFolder,
-                autoRecordSheet = autoRecordSheet
-            )
-
-            if (uploadResult.success) {
-                prefs.markRecordingSynced(fileName)
-                uploadedCount++
-
-                Log.i(TAG, "🎉 [통화 녹음 구글 드라이브 백업 완료] $fileName")
-
-                // 알림 및 음성 안내
-                showUploadSuccessNotification(context, contactName, fileName, targetFolder)
-
-                if (prefs.isTtsEnabled) {
-                    TtsManager.speak(context, "${contactName}님과의 통화 녹음이 구글 드라이브에 안전하게 보관되었습니다.")
+                // 필터링 검사 (지정된 번호 또는 이름에 부합하는지)
+                if (!matchesFilter(contactName, fileName, filterText)) {
+                    Log.d(TAG, "필터 대상이 아니므로 건너뜀: $fileName (상대방: $contactName, 필터: $filterText)")
+                    filterExcludedCount++
+                    continue
                 }
-            } else {
-                uploadFailedCount++
-                lastErrorMessage = uploadResult.error ?: "통신 응답 실패"
-                Log.w(TAG, "⚠️ 통화 녹음 업로드 실패: $fileName (${uploadResult.error})")
+
+                Log.i(TAG, "🚀 [통화 녹음 업로드 개시] 파일: $fileName / 상대방: $contactName / 대상 폴더: $targetFolder")
+
+                // 구글 드라이브로 파일 업로드
+                val uploadResult = ApiClient.uploadCallRecording(
+                    file = file,
+                    fileName = fileName,
+                    contactName = contactName,
+                    callTime = callTimeStr,
+                    userEmail = userEmail,
+                    folderName = targetFolder,
+                    autoRecordSheet = autoRecordSheet
+                )
+
+                if (uploadResult.success) {
+                    prefs.markRecordingSynced(fileName)
+                    uploadedCount++
+
+                    Log.i(TAG, "🎉 [통화 녹음 구글 드라이브 백업 완료] $fileName")
+
+                    // 알림 및 음성 안내
+                    showUploadSuccessNotification(context, contactName, fileName, targetFolder)
+
+                    if (prefs.isTtsEnabled) {
+                        TtsManager.speak(context, "${contactName}님과의 통화 녹음이 구글 드라이브에 안전하게 보관되었습니다.")
+                    }
+                } else {
+                    uploadFailedCount++
+                    lastErrorMessage = uploadResult.error ?: "통신 응답 실패"
+                    Log.w(TAG, "⚠️ 통화 녹음 업로드 실패: $fileName (${uploadResult.error})")
+                }
+            } finally {
+                uploadingFiles.remove(fileName)
             }
         }
 
@@ -361,7 +377,30 @@ object CallRecordingManager {
             )
         }
 
-        // 4. Cube ACR 및 일반 서드파티
+        // 4. [이름]_[전화번호]_[날짜시간] 형식 (삼성/T전화 커스텀 포맷: 예: 시댁_01077249063_20261003165911.m4a)
+        val namePhoneDateMatch = NAME_PHONE_DATE_REGEX.find(fileName)
+        if (namePhoneDateMatch != null) {
+            val rawName = namePhoneDateMatch.groupValues[1].trim()
+            val rawPhone = namePhoneDateMatch.groupValues[2].trim()
+            val rawDateTime = namePhoneDateMatch.groupValues[3].trim()
+            val formattedPhone = formatPhoneNumber(rawPhone)
+            val fullContactName = if (formattedPhone.isNotBlank()) "$rawName ($formattedPhone)" else rawName
+
+            val parsedTime = try {
+                val fmtStr = if (rawDateTime.length >= 14) "yyyyMMddHHmmss" else if (rawDateTime.length >= 12) "yyMMddHHmmss" else "yyyyMMdd"
+                val inputFormat = SimpleDateFormat(fmtStr, Locale.KOREA)
+                val outputFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA)
+                val parsed = inputFormat.parse(rawDateTime)
+                if (parsed != null) outputFormat.format(parsed) else null
+            } catch (_: Exception) { null }
+
+            return RecordingFileInfo(
+                contactName = cleanContactName(fullContactName),
+                callTime = parsedTime ?: formatLastModified(file)
+            )
+        }
+
+        // 5. Cube ACR 및 일반 서드파티
         val cubeMatch = CUBE_ACR_REGEX.find(fileName)
         if (cubeMatch != null) {
             val rawContact = cubeMatch.groupValues[1].trim()
@@ -371,9 +410,9 @@ object CallRecordingManager {
             )
         }
 
-        // 5. 범용 스마트 토큰 Fallback: 접두사 정리 후 상대방 식별
+        // 6. 범용 스마트 토큰 Fallback: 접두사 정리 후 상대방 식별
         val cleaned = nameWithoutExt
-            .replace(Regex("""^\[?[^\]]+\]?"""), "") // [T전화통화녹음], [녹음] 등 대괄호 태그 제거
+            .replace(Regex("""^\[[^\]]+\]"""), "") // [T전화통화녹음], [녹음] 등 대괄호 태그만 정확히 제거
             .replace("통화 녹음", "", ignoreCase = true)
             .replace("통화녹음", "", ignoreCase = true)
             .replace("TPhone", "", ignoreCase = true)
@@ -396,11 +435,22 @@ object CallRecordingManager {
     }
 
     private fun cleanContactName(raw: String): String {
-        return raw.replace(Regex("""^\[?[^\]]+\]?"""), "")
+        return raw.replace(Regex("""^\[[^\]]+\]"""), "") // [대괄호 태그]만 안전하게 제거 (? 제거하여 일반 텍스트 보존)
             .replace("통화녹음", "", ignoreCase = true)
             .replace("통화 녹음", "", ignoreCase = true)
             .trim('_', '-', ' ')
             .takeIf { it.isNotBlank() } ?: "미지정 연락처"
+    }
+
+    private fun formatPhoneNumber(raw: String): String {
+        val digits = raw.filter { it.isDigit() }
+        return when {
+            digits.length == 11 -> "${digits.substring(0, 3)}-${digits.substring(3, 7)}-${digits.substring(7)}"
+            digits.length == 10 && digits.startsWith("02") -> "${digits.substring(0, 2)}-${digits.substring(2, 6)}-${digits.substring(6)}"
+            digits.length == 10 -> "${digits.substring(0, 3)}-${digits.substring(3, 6)}-${digits.substring(6)}"
+            digits.length == 9 && digits.startsWith("02") -> "${digits.substring(0, 2)}-${digits.substring(2, 5)}-${digits.substring(5)}"
+            else -> digits
+        }
     }
 
     private fun formatLastModified(file: File): String {

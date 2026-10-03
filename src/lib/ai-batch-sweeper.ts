@@ -297,6 +297,24 @@ export async function processPendingBatchJobs(): Promise<{
                 values: [[summary, actionItems, transcript]],
                 preferOAuth: true,
               }).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
+
+              // 파일명에서 상대방 이름 복원하여 B열 보정
+              try {
+                const cleanName = fileName.replace(/^\[SheetBot\]\s*/i, '').replace(/\.[^.]+$/, '');
+                const m = cleanName.match(/^([^_]+)_(\d{9,12})_(\d{8,14})$/);
+                if (m) {
+                  const rawName = m[1].trim();
+                  const phone = m[2].trim();
+                  const fPhone = phone.length === 11 ? `${phone.slice(0, 3)}-${phone.slice(3, 7)}-${phone.slice(7)}` : phone;
+                  const fullContact = `${rawName} (${fPhone})`;
+                  await callSheetsTool('sheets_update_range', {
+                    spreadsheetId,
+                    range: `시트1!B${targetRow}`,
+                    values: [[fullContact]],
+                    preferOAuth: true,
+                  }).catch(() => {});
+                }
+              } catch {}
             }
 
             const promptLen = 4500;
