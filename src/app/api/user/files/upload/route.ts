@@ -34,7 +34,8 @@ import os from "os";
 const recentFileUploads = new Map<string, { timestamp: number; response: any }>();
 const folderCache = new Map<string, string>([
   ["[SheetBot] 통화 녹음", "14TuBcWsooWB7_yPqyn6L0imjshpVxFVX"],
-  ["[SheetBot] 영수증 보관함", "1nrRbqE5XEnCVV1MJZ03pNntoj76t_uLV"],
+  ["[SheetBot] 영수증 보관함", "1rKVf3Swmi-VifK0fJoME5cdknZgA4H7K"],
+  ["[SheetBot] 명함 보관함", "1TJpJ01yA7YKOI8FlVTwjhIdUyjxK8aMe"],
   ["[SheetBot] 파일 보관함", "1bRO1aJEEQBUX_R9bFLfZ7C0liZFZjijc"],
 ]);
 

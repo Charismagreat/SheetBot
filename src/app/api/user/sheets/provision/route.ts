@@ -87,6 +87,7 @@ export const SHEET_DEFINITIONS: Record<string, SheetDefinition> = {
 const folderCache = new Map<string, string>([
   ["[SheetBot] 통화 녹음", "14TuBcWsooWB7_yPqyn6L0imjshpVxFVX"],
   ["[SheetBot] 영수증 보관함", "1rKVf3Swmi-VifK0fJoME5cdknZgA4H7K"],
+  ["[SheetBot] 명함 보관함", "1TJpJ01yA7YKOI8FlVTwjhIdUyjxK8aMe"],
   ["[SheetBot] 파일 보관함", "1bRO1aJEEQBUX_R9bFLfZ7C0liZFZjijc"],
 ]);
 
