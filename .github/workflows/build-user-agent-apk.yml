@@ -69,13 +69,15 @@ jobs:
           path: release-apk/*.apk
           retention-days: 30
 
-      - name: Commit and Push Keystore back to Main
+      - name: Commit and Push Keystore and APK back to Main
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add android-user-agent/keystore/sheetbot-agent.jks
+          mkdir -p public/downloads
+          cp release-apk/SheetBotAgent.apk public/downloads/SheetBotAgent.apk
+          git add android-user-agent/keystore/sheetbot-agent.jks public/downloads/SheetBotAgent.apk
           if ! git diff --staged --quiet; then
-            git commit -m "build(user-agent): update keystore"
+            git commit -m "build(user-agent): update keystore and public SheetBotAgent.apk"
             git push origin main
           fi
 
@@ -91,7 +93,7 @@ jobs:
         with:
           tag_name: user-v${{ steps.get_version.outputs.VERSION_NAME }}
           name: "SheetBot Mobile Agent (이용자용) v${{ steps.get_version.outputs.VERSION_NAME }}"
-          body: "시트봇 모바일 에이전트 v${{ steps.get_version.outputs.VERSION_NAME }} 릴리즈\n• ⚡ [통화 녹음 및 파일 고속 터널 전송] 터널 소켓 블로킹 없는 Base64 JSON 초고속 파이프라인 탑재\n• ☁️ [구글 드라이브 및 구글 시트 100% 무손실 동기화] 녹음 파일 업로드 및 링크 자동 기록 안정화\n• 🎙️ [통화 녹음 감지 진단성 극대화] 발견된 파일 수 및 전송 상태 실시간 표시"
+          body: "시트봇 모바일 에이전트 v${{ steps.get_version.outputs.VERSION_NAME }} 릴리즈\n• 🪪 [명함 자동 인맥 등록] 명함 대장 등록 시 스마트폰 연락처 자동 저장 & 내 모바일 명함 즉시 발송 승인 팝업 탑재\n• 🖼️ [모바일 명함 MMS 방안 2 유지 개선] 갤러리 명함 사진 등록 후 앱 복귀 시 방안 1로 리셋되던 현상 완벽 해결\n• ⚡ [명함 실시간 AI 가속] 3~5초 이내 초고속 시트 장부화 및 연락처 연동"
           files: release-apk/SheetBotAgent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
