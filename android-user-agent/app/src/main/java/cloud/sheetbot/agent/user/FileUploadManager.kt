@@ -67,7 +67,11 @@ object FileUploadManager {
             "BUSINESS_CARD" -> "[SheetBot] 명함 보관함"
             else -> prefs.fileUploadDriveFolder.takeIf { it.isNotBlank() } ?: "[SheetBot] 파일 보관함"
         }
-        val autoRecordSheet = prefs.isFileUploadSheetEnabled
+        val autoRecordSheet = if (ocrType.equals("RECEIPT", ignoreCase = true) || ocrType.equals("BUSINESS_CARD", ignoreCase = true)) {
+            true
+        } else {
+            prefs.isFileUploadSheetEnabled
+        }
         val memo = customMemo ?: when (ocrType?.uppercase()) {
             "RECEIPT" -> "스마트폰 시트봇 에이전트 영수증 AI 장부화"
             "BUSINESS_CARD" -> "스마트폰 시트봇 에이전트 명함 AI 인맥화"
