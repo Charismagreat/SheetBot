@@ -75,12 +75,20 @@ interface BusinessInfo {
   extraNotice?: string;
 }
 
-// 이미지 URL 정규화 (터널 바이너리 왜곡 우회 및 글로벌 초고속 CDN 직통 서빙)
+// 이미지 URL 정규화 (터널 및 로컬 업로드 이미지 안전 로드)
 function normalizeImageUrl(url?: string | null): string | null {
   if (!url) return null;
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    // raw.githubusercontent.com 잔재가 남아있다면 로컬 API로 교체
+    const githubMatch = url.match(/quote_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
+    if (url.includes("raw.githubusercontent.com") && githubMatch) {
+      return `https://sheetbot.cloud/api/user/quote/image?file=${githubMatch[0]}`;
+    }
+    return url;
+  }
   const match = url.match(/quote_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
   if (match) {
-    return `https://raw.githubusercontent.com/Charismagreat/SheetBot/main/public/uploads/quote-images/${match[0]}`;
+    return `https://sheetbot.cloud/api/user/quote/image?file=${match[0]}`;
   }
   return url;
 }

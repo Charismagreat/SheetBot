@@ -217,23 +217,29 @@ export async function getOrderCatalogData(options: {
   let merchantPhone = "";
   let merchantImage = "";
 
-  // 1순위: sheetbot_settings 키-값 저장소 우선 확인 (최신 등록 레코드 우선)
+  // 1순위: sheetbot_settings 키-값 저장소 우선 확인 (최신 등록 레코드 우선 및 필드 누락 시 이전 기록 자동 상속)
   try {
     const settingRes = await queryTable("sheetbot_settings", {
       filters: { key: `quote_profile_${targetEmail}` },
       orderBy: "id",
       orderDirection: "DESC",
-      limit: 1,
+      limit: 5,
     }).catch(() => ({ rows: [] }));
 
     if (settingRes.rows && settingRes.rows.length > 0) {
-      const val = JSON.parse(settingRes.rows[0].value || "{}");
-      if (val.businessName && val.businessName.trim()) {
-        businessName = val.businessName.trim();
+      for (const row of settingRes.rows) {
+        try {
+          const val = JSON.parse(row.value || "{}");
+          if (!businessName && val.businessName && val.businessName.trim()) {
+            businessName = val.businessName.trim();
+          }
+          if (!merchantPhone && val.phone) merchantPhone = val.phone;
+          if (!merchantImage) {
+            if (val.ogImageUrl) merchantImage = val.ogImageUrl;
+            else if (val.imageUrl) merchantImage = val.imageUrl;
+          }
+        } catch (_) {}
       }
-      if (val.phone) merchantPhone = val.phone;
-      if (val.ogImageUrl) merchantImage = val.ogImageUrl;
-      else if (val.imageUrl) merchantImage = val.imageUrl;
     }
   } catch (_) {}
 
@@ -252,6 +258,28 @@ export async function getOrderCatalogData(options: {
         }
         if (!merchantPhone && u.phone) merchantPhone = u.phone;
         if (!merchantImage && u.quote_image_url) merchantImage = u.quote_image_url;
+      }
+    } catch (_) {}
+  }
+
+  // 3순위: 로컬 업로드 폴더(public/uploads/quote-images)에서 해당 유저의 최신 업로드 이미지 자동 발굴 (Auto-healing)
+  if (!merchantImage) {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const safePrefix = `quote_${targetEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
+      const uploadDir = path.join(process.cwd(), "public", "uploads", "quote-images");
+      if (fs.existsSync(uploadDir)) {
+        const files = fs.readdirSync(uploadDir)
+          .filter((f) => f.startsWith(safePrefix) && /\.(jpg|jpeg|png|webp)$/i.test(f))
+          .sort((a, b) => {
+            const statA = fs.statSync(path.join(uploadDir, a));
+            const statB = fs.statSync(path.join(uploadDir, b));
+            return statB.mtimeMs - statA.mtimeMs;
+          });
+        if (files.length > 0) {
+          merchantImage = `https://sheetbot.cloud/uploads/quote-images/${files[0]}`;
+        }
       }
     } catch (_) {}
   }
