@@ -1719,13 +1719,22 @@
             android:padding="13dp"
             android:layout_marginBottom="12dp">
 
-<LinearLayout
+<!-- 매장 결제 확인 & 영수증 자동 문자 발송 섹션 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
                 android:id="@+id/layoutPaymentReceiptHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:minHeight="48dp"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="10dp"
+                android:layout_marginBottom="8dp"
                 android:clickable="true"
                 android:focusable="true">
 
