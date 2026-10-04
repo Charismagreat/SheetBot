@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 74,
-      latestVersionName: "2.1.53",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.53/SheetBotAgent.apk",
+      latestVersionCode: 75,
+      latestVersionName: "2.1.54",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.54/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.53 릴리즈\n• 🎙️ [통화 녹음 대장 연동 및 상대방 이름 정상화] 파일명 파싱 버그를 해결하여 상대방 이름 및 전화번호가 '미지정 연락처'로 오표기되던 문제를 완벽 해결\n• 🛡️ [구글 드라이브 파일 중복 생성 원천 차단] 15초 멱등성 가드 및 사전 파일 중복 검증을 탑재하여 동일 통화 녹음 파일의 중복 업로드를 100% 방지\n• ⚡ [AI 음성 비동기 배치 수거 정상화] Zero-Block 비동기 수거 워커 연동을 최적화하여 504 Gateway Timeout 없이 화자 분리 STT 및 3줄 요약이 대장에 안정적으로 자동 기록되도록 개선",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.54 릴리즈\n• 🗂️ [단일 통합 접이식 카드 전면 개편] 기존 3개의 분산 카드를 하나로 통합하고, 한 줄의 슬림한 카드로 언제든 접거나 펼칠 수 있도록 최적화\n• 🛡️ [개인정보 100% 안전 보증 안내 탑재] 시트봇 서버 무보관 100% 원칙 및 개인 구글 계정 전송 보증을 공식 명시\n• 🚀 [화면 공간 극대화] 불필요한 추천 카드를 정리하고 시트봇 관제 센터 바로가기와 통합하여 최적의 모바일 가독성 제공",
     },
     {
       headers: {

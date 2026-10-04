@@ -64,17 +64,17 @@ const nextConfig: any = {
     return [
       {
         source: "/downloads/SheetBotAgent.apk",
-        destination: "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk",
+        destination: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.12/SheetBotAgent.apk",
         permanent: false,
       },
       {
         source: "/downloads/SheetBotAgent2.apk",
-        destination: "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk",
+        destination: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.12/SheetBotAgent.apk",
         permanent: false,
       },
       {
         source: "/download/SheetBotAgent.apk",
-        destination: "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk",
+        destination: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.12/SheetBotAgent.apk",
         permanent: false,
       },
       {
