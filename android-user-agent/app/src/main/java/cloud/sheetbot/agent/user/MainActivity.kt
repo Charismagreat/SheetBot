@@ -2370,6 +2370,11 @@ class MainActivity : AppCompatActivity() {
                         Toast.LENGTH_LONG
                     ).show()
                     addLogItem("🪪 명함 OCR", "$name $comp -> 인맥 대장", true)
+
+                    // ★ [핵심 액션 연결] 명함 등록 후 스마트폰 연락처 추가 & 내 모바일 명함 전송 다이얼로그 즉시 팝업!
+                    if (ocr != null) {
+                        CardActionActivity.start(this@MainActivity, ocr)
+                    }
                 } else {
                     val err = result.error ?: "명함 분석 실패"
                     Toast.makeText(this@MainActivity, "⚠️ 명함 분석 실패: $err", Toast.LENGTH_LONG).show()
