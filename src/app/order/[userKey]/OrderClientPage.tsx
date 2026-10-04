@@ -75,20 +75,18 @@ interface BusinessInfo {
   extraNotice?: string;
 }
 
-// 이미지 URL 정규화 (터널 및 로컬 업로드 이미지 안전 로드)
-function normalizeImageUrl(url?: string | null): string | null {
+// 이미지 URL 정규화 (글로벌 초고속 CDN 1순위 및 터널 로컬 API 2순위 지원)
+function getCdnOrLocalImageUrl(url?: string | null, useLocalOnly = false): string | null {
   if (!url) return null;
-  if (url.startsWith("http://") || url.startsWith("https://")) {
-    // raw.githubusercontent.com 잔재가 남아있다면 로컬 API로 교체
-    const githubMatch = url.match(/quote_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
-    if (url.includes("raw.githubusercontent.com") && githubMatch) {
-      return `https://sheetbot.cloud/api/user/quote/image?file=${githubMatch[0]}`;
-    }
-    return url;
-  }
   const match = url.match(/quote_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
   if (match) {
-    return `https://sheetbot.cloud/api/user/quote/image?file=${match[0]}`;
+    if (useLocalOnly) {
+      return `https://sheetbot.cloud/api/user/quote/image?file=${match[0]}`;
+    }
+    return `https://cdn.jsdelivr.net/gh/Charismagreat/SheetBot@main/public/uploads/quote-images/${match[0]}`;
+  }
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url;
   }
   return url;
 }
@@ -169,6 +167,7 @@ export default function OrderClientPage({
       imageUrl: "",
     };
   });
+  const [logoFallbackLocal, setLogoFallbackLocal] = useState(false);
   const [logoError, setLogoError] = useState(false);
   const [businessInfo, setBusinessInfo] = useState<BusinessInfo>(() => initialData?.businessInfo || {});
   const [catalog, setCatalog] = useState<CatalogItem[]>(() => {
@@ -898,9 +897,15 @@ export default function OrderClientPage({
           <div className="flex items-center gap-2.5">
             {merchant.imageUrl && merchant.imageUrl !== "https://sheetbot.cloud/favicon.svg" && !logoError ? (
               <img
-                src={normalizeImageUrl(merchant.imageUrl) || merchant.imageUrl}
+                src={getCdnOrLocalImageUrl(merchant.imageUrl, logoFallbackLocal) || merchant.imageUrl}
                 alt={displayBusinessName}
-                onError={() => setLogoError(true)}
+                onError={() => {
+                  if (!logoFallbackLocal) {
+                    setLogoFallbackLocal(true);
+                  } else {
+                    setLogoError(true);
+                  }
+                }}
                 className="w-9 h-9 rounded-xl object-cover border border-slate-700/80 shadow-md shadow-emerald-950/40"
               />
             ) : (
