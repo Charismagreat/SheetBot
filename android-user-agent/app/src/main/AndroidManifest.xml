@@ -136,6 +136,7 @@
             <intent-filter>
                 <action android:name="android.intent.action.PHONE_STATE" />
                 <action android:name="cloud.sheetbot.agent.user.ACTION_SEND_BUSINESS_CARD" />
+                <action android:name="cloud.sheetbot.agent.user.ACTION_SEND_BUSINESS_CARD_MMS" />
             </intent-filter>
         </receiver>
 

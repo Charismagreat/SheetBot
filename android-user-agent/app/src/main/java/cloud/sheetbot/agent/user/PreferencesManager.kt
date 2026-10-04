@@ -256,6 +256,11 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_call_ended_card_prompt_enabled", false)
         set(value) = prefs.edit().putBoolean("is_call_ended_card_prompt_enabled", value).apply()
 
+    // 통화 종료 후 즉시 전자동 발송 여부 (false: 알림창 원터치 확인 발송, true: 묻지 않고 즉시 자동 발송)
+    var isCallEndedAutoSendDirectly: Boolean
+        get() = prefs.getBoolean("is_call_ended_auto_send_directly", false)
+        set(value) = prefs.edit().putBoolean("is_call_ended_auto_send_directly", value).apply()
+
     // 발송 방식: "WEB_LINK" (0원 무료 웹링크) 또는 "MMS_IMAGE" (갤러리 사진 직접 첨부 MMS)
     var businessCardSendMode: String
         get() = prefs.getString("business_card_send_mode", "WEB_LINK") ?: "WEB_LINK"
