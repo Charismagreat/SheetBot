@@ -9,8 +9,8 @@ import path from "path";
  * 이용자용 스마트폰 앱 (SheetBot Agent) 최신 버전 정보 및 원클릭 업데이트 APK 링크 제공
  */
 export async function GET() {
-  let latestCode = 85;
-  let latestName = "2.1.64";
+  let latestCode = 86;
+  let latestName = "2.1.65";
 
   try {
     const gradlePath = path.join(process.cwd(), "android-user-agent", "app", "build.gradle.kts");
