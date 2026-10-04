@@ -225,71 +225,100 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. 구글 드라이브로 파일 업로드 (원격/로컬 무손실 브릿지 전송)
-    let driveFileId: string | null = null;
-    let webViewLink = "";
-    try {
-      const uploadRes = await uploadDriveFileWithBridge({
-        buffer,
-        fileName: targetFileName,
-        folderId: targetFolderId,
-        mimeType,
-        tempFilePath,
-        preferOAuth: true,
-      });
-
-      driveFileId = uploadRes?.id || uploadRes?.fileId || null;
-      webViewLink = uploadRes?.webViewLink || (driveFileId ? `https://drive.google.com/file/d/${driveFileId}/view` : "");
-    } catch (uploadErr: any) {
-      console.warn("[FilesUpload] Drive upload warning:", uploadErr.message);
-      // Gateway timeout 등의 경우 실제로는 드라이브에 이미 파일이 정상 올라가 있을 수 있으므로 폴더 내 확인 복구 시도
-      if (targetFolderId) {
-        try {
-          const checkRes = await listDriveFiles({
-            query: `'${targetFolderId}' in parents and name = '${targetFileName}' and trashed = false`,
-          }, { preferOAuth: true });
-          const matched = checkRes?.files?.[0];
-          if (matched) {
-            driveFileId = matched.id;
-            webViewLink = matched.webViewLink || `https://drive.google.com/file/d/${driveFileId}/view`;
-            console.log(`[FilesUpload] ✅ Recovered uploaded file from folder: ${driveFileId}`);
-          }
-        } catch {}
-      }
-
-      // 만약 여전히 fileId가 없더라도, OCR 분석 및 시트 기록(명함/영수증)은 버퍼가 있으므로 멈추지 않고 계속 진행
-      if (!driveFileId && ocrType !== "BUSINESS_CARD" && ocrType !== "RECEIPT") {
-        throw new Error(`구글 드라이브 파일 업로드에 실패했습니다: ${uploadErr.message}`);
-      }
-    }
-
     // ★ [Fast-Return vs Realtime AI 분리 원칙]
     // 명함(BUSINESS_CARD)이나 영수증(RECEIPT)은 그 목적 자체가 AI OCR 장부화이므로 autoRecordSheet 플래그에 상관없이 무조건 시트 기록 보장!
     const shouldRecordSheet = autoRecordSheet || ocrType === "BUSINESS_CARD" || ocrType === "RECEIPT";
+    let driveFileId: string | null = null;
+    let webViewLink = "";
     let cardOcrResult: any = null;
     let cardSpreadsheetUrl: string | null = null;
 
     if (ocrType === "BUSINESS_CARD" && shouldRecordSheet) {
-      // 🪪 명함: 2~3초 초고속 실시간 AI이므로 동기 실행하여 클라이언트에 ocrData를 즉시 반환 (Instant CRM)
+      // 🪪 명함: 드라이브 업로드 + AI OCR + 시트 바인딩 확인을 Promise.all로 동시 병렬 실행 (총 10~15초 완료!)
+      console.log(`[FilesUpload] 🚀 Starting Ultra-Fast Parallel Pipeline for Business Card: ${targetFileName}`);
+      const parallelStart = Date.now();
+
       try {
         const aiSettings = await getAiModelSettings();
         const configuredModel = aiSettings.defaultModel || "gemini-2.5-flash";
+        const base64File = buffer.toString("base64");
 
-        const resolved = await resolveUserSpreadsheet({
+        // 트랙 1: 구글 드라이브 파일 업로드
+        const driveUploadPromise = (async () => {
+          try {
+            const uploadRes = await uploadDriveFileWithBridge({
+              buffer,
+              fileName: targetFileName,
+              folderId: targetFolderId,
+              mimeType,
+              tempFilePath,
+              preferOAuth: true,
+            });
+            const fId = uploadRes?.id || uploadRes?.fileId || null;
+            const link = uploadRes?.webViewLink || (fId ? `https://drive.google.com/file/d/${fId}/view` : "");
+            return { fileId: fId, webViewLink: link };
+          } catch (uploadErr: any) {
+            console.warn("[FilesUpload] Parallel Drive upload warning:", uploadErr.message);
+            return { fileId: null, webViewLink: "" };
+          }
+        })();
+
+        // 트랙 2: 실시간 초고속 AI OCR 분석
+        const aiOcrPromise = performAiOcr(
+          base64File,
+          targetFileName,
+          mimeType,
+          "BUSINESS_CARD",
+          configuredModel
+        ).catch((err: any) => {
+          console.warn("[FilesUpload] Parallel AI OCR error:", err.message);
+          return null;
+        });
+
+        // 트랙 3: 구글 시트 바인딩 확인
+        const sheetResolvePromise = resolveUserSpreadsheet({
           userEmail: cleanEmail,
           sheetType: "BUSINESS_CARD",
           defaultTitle: defaultSheetTitle,
           folderId: targetFolderId,
           preferOAuth: true,
+        }).catch((err: any) => {
+          console.warn("[FilesUpload] Sheet resolve error:", err.message);
+          return null;
         });
 
-        const targetSpreadsheetId = resolved.spreadsheetId;
-        cardSpreadsheetUrl = resolved.spreadsheetUrl;
+        // 세 작업을 동시 병렬 실행!
+        const [driveRes, ocrResult, resolved] = await Promise.all([
+          driveUploadPromise,
+          aiOcrPromise,
+          sheetResolvePromise,
+        ]);
 
-        if (targetSpreadsheetId) {
+        driveFileId = driveRes.fileId;
+        webViewLink = driveRes.webViewLink;
+
+        // 타임아웃 등으로 fileId가 없으면 드라이브 폴더 1회 스캔 복구
+        if (!driveFileId && targetFolderId) {
+          try {
+            const checkRes = await listDriveFiles({
+              query: `'${targetFolderId}' in parents and name = '${targetFileName}' and trashed = false`,
+            }, { preferOAuth: true });
+            const matched = checkRes?.files?.[0];
+            if (matched) {
+              driveFileId = matched.id;
+              webViewLink = matched.webViewLink || `https://drive.google.com/file/d/${driveFileId}/view`;
+              console.log(`[FilesUpload] ✅ Recovered uploaded file from folder: ${driveFileId}`);
+            }
+          } catch {}
+        }
+
+        const targetSpreadsheetId = resolved?.spreadsheetId;
+        cardSpreadsheetUrl = resolved?.spreadsheetUrl;
+
+        if (targetSpreadsheetId && ocrResult) {
+          cardOcrResult = ocrResult;
           const nowStr = getKoreanTimeString();
 
-          // 최초 1회 생성 시 헤더 서식 자동 주입
           if (resolved.isNew) {
             const cardHeaders = [
               ["등록 일시", "성함", "직함/직책", "회사명", "휴대폰", "이메일", "유선전화", "회사 주소", "상세정보", "명함 보기", "등록 기기"]
@@ -309,55 +338,98 @@ export async function POST(req: NextRequest) {
             }).catch(() => {});
           }
 
-          // 초고속 실시간 AI OCR 수행 (2~3초)
-          const base64File = buffer.toString("base64");
-          const ocrResult = await performAiOcr(
-            base64File,
-            targetFileName,
-            mimeType,
-            "BUSINESS_CARD",
-            configuredModel
-          );
+          const newCardRow = [
+            [
+              nowStr,
+              ocrResult.name || "확인 불가",
+              ocrResult.title || "미기재",
+              ocrResult.company || "미기재",
+              ocrResult.mobile || "미기재",
+              ocrResult.email || "미기재",
+              ocrResult.tel || "미기재",
+              ocrResult.address || "미기재",
+              ocrResult.details || "-",
+              webViewLink ? `=HYPERLINK("${webViewLink}", "🪪 명함 보기")` : "-",
+              deviceId
+            ]
+          ];
 
-          if (ocrResult) {
-            cardOcrResult = ocrResult;
-            const newCardRow = [
-              [
-                nowStr,
-                ocrResult.name || "확인 불가",
-                ocrResult.title || "미기재",
-                ocrResult.company || "미기재",
-                ocrResult.mobile || "미기재",
-                ocrResult.email || "미기재",
-                ocrResult.tel || "미기재",
-                ocrResult.address || "미기재",
-                ocrResult.details || "-",
-                webViewLink ? `=HYPERLINK("${webViewLink}", "🪪 명함 보기")` : "-",
-                deviceId
-              ]
-            ];
+          await callSheetsTool("sheets_append_values", {
+            spreadsheetId: targetSpreadsheetId,
+            range: "시트1!A:K",
+            values: newCardRow,
+            preferOAuth: true,
+          }).catch(() => {});
 
-            await callSheetsTool("sheets_append_values", {
-              spreadsheetId: targetSpreadsheetId,
-              range: "시트1!A:K",
-              values: newCardRow,
-              preferOAuth: true,
-            }).catch(() => {});
+          const usedTokens = 700;
+          await deductTokens(cleanEmail, usedTokens).catch(() => {});
 
-            const usedTokens = 700;
-            await deductTokens(cleanEmail, usedTokens).catch(() => {});
+          void recordAiUsageLog({
+            userEmail: cleanEmail,
+            caller: "sheetbot-card-realtime",
+            purpose: `명함 실시간 AI 인맥 등록 [초고속 병렬] (${configuredModel})`,
+            model: configuredModel,
+            promptTokens: 450,
+            completionTokens: 250,
+            totalTokens: usedTokens,
+            promptText: `실시간 명함 분석: ${targetFileName}`,
+            responseText: JSON.stringify(ocrResult).slice(0, 300),
+          });
 
-            void recordAiUsageLog({
-              userEmail: cleanEmail,
-              caller: "sheetbot-card-realtime",
-              purpose: `명함 실시간 AI 인맥 등록 [초고속 실시간] (${configuredModel})`,
-              model: configuredModel,
-              promptTokens: 450,
-              completionTokens: 250,
-              totalTokens: usedTokens,
-              promptText: `실시간 명함 분석: ${targetFileName}`,
-              responseText: JSON.stringify(ocrResult).slice(0, 300),
-            });
+          // 감사 로그 적재
+          const logId = Date.now();
+          await insertRows("sheetbot_user_dispatch_logs", [
+            {
+              id: logId,
+              user_email: cleanEmail,
+              rule_id: "BUSINESS_CARD_OCR",
+              rule_name: "🪪 명함 AI OCR 인맥 등록",
+              device_id: deviceId,
+              recipient: "Google Drive / Sheet",
+              content: `[명함 OCR] ${targetFileName} -> ${defaultSheetTitle}`,
+              status: "SUCCESS",
+              error_message: null,
+              created_at: getKoreanTimeString(),
+            },
+          ]).catch(() => {});
+          console.log(`[FilesUpload] ✅ Realtime Business Card OCR & Sheet append completed in ${Date.now() - parallelStart}ms`);
+        }
+      } catch (cardErr: any) {
+        console.warn("[FilesUpload] Realtime Business Card OCR error:", cardErr.message);
+      }
+    } else {
+      // 5. 일반 파일 및 영수증 업로드 로직 (단일 드라이브 업로드 후 백그라운드 위임)
+      try {
+        const uploadRes = await uploadDriveFileWithBridge({
+          buffer,
+          fileName: targetFileName,
+          folderId: targetFolderId,
+          mimeType,
+          tempFilePath,
+          preferOAuth: true,
+        });
+
+        driveFileId = uploadRes?.id || uploadRes?.fileId || null;
+        webViewLink = uploadRes?.webViewLink || (driveFileId ? `https://drive.google.com/file/d/${driveFileId}/view` : "");
+      } catch (uploadErr: any) {
+        console.warn("[FilesUpload] Drive upload warning:", uploadErr.message);
+        if (targetFolderId) {
+          try {
+            const checkRes = await listDriveFiles({
+              query: `'${targetFolderId}' in parents and name = '${targetFileName}' and trashed = false`,
+            }, { preferOAuth: true });
+            const matched = checkRes?.files?.[0];
+            if (matched) {
+              driveFileId = matched.id;
+              webViewLink = matched.webViewLink || `https://drive.google.com/file/d/${driveFileId}/view`;
+            }
+          } catch {}
+        }
+
+        if (!driveFileId && ocrType !== "RECEIPT") {
+          throw new Error(`구글 드라이브 파일 업로드에 실패했습니다: ${uploadErr.message}`);
+        }
+      }
 
             // 감사 로그 적재
             const logId = Date.now();
