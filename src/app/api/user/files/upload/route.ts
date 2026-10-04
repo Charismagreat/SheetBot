@@ -241,8 +241,26 @@ export async function POST(req: NextRequest) {
       driveFileId = uploadRes?.id || uploadRes?.fileId || null;
       webViewLink = uploadRes?.webViewLink || (driveFileId ? `https://drive.google.com/file/d/${driveFileId}/view` : "");
     } catch (uploadErr: any) {
-      console.error("[FilesUpload] Drive upload failed:", uploadErr);
-      throw new Error(`구글 드라이브 파일 업로드에 실패했습니다: ${uploadErr.message}`);
+      console.warn("[FilesUpload] Drive upload warning:", uploadErr.message);
+      // Gateway timeout 등의 경우 실제로는 드라이브에 이미 파일이 정상 올라가 있을 수 있으므로 폴더 내 확인 복구 시도
+      if (targetFolderId) {
+        try {
+          const checkRes = await listDriveFiles({
+            query: `'${targetFolderId}' in parents and name = '${targetFileName}' and trashed = false`,
+          }, { preferOAuth: true });
+          const matched = checkRes?.files?.[0];
+          if (matched) {
+            driveFileId = matched.id;
+            webViewLink = matched.webViewLink || `https://drive.google.com/file/d/${driveFileId}/view`;
+            console.log(`[FilesUpload] ✅ Recovered uploaded file from folder: ${driveFileId}`);
+          }
+        } catch {}
+      }
+
+      // 만약 여전히 fileId가 없더라도, OCR 분석 및 시트 기록(명함/영수증)은 버퍼가 있으므로 멈추지 않고 계속 진행
+      if (!driveFileId && ocrType !== "BUSINESS_CARD" && ocrType !== "RECEIPT") {
+        throw new Error(`구글 드라이브 파일 업로드에 실패했습니다: ${uploadErr.message}`);
+      }
     }
 
     // ★ [Fast-Return vs Realtime AI 분리 원칙]
