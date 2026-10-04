@@ -1229,7 +1229,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateStatusDetailsVisibility(hidden: Boolean) {
         binding.layoutStatusDetails.visibility = if (hidden) View.GONE else View.VISIBLE
-        binding.btnToggleStatusDetails.text = if (hidden) "펼치기 ▼" else "접기 ▲"
+        binding.btnToggleStatusDetails.text = if (hidden) "▼" else "▲"
     }
 
     private fun updateTokenNoticeVisibility(dismissed: Boolean) {
@@ -1239,7 +1239,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateCardCollapseState(container: View, toggleBtn: TextView, isHidden: Boolean) {
         container.visibility = if (isHidden) View.GONE else View.VISIBLE
-        toggleBtn.text = if (isHidden) "펼치기 ▼" else "접기 ▲"
+        toggleBtn.text = if (isHidden) "▼" else "▲"
     }
 
     private fun refreshAllCardsCollapseState() {
@@ -1360,7 +1360,6 @@ class MainActivity : AppCompatActivity() {
     private fun updateUiState() {
         val verName = getAppVersionName()
         binding.tvAppVersionBadge.text = "v$verName"
-        binding.tvCopilotVersionBadge.text = "v$verName"
 
         val isPaired = prefs.isPaired
         val email = prefs.userEmail
