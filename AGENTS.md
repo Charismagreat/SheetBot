@@ -347,3 +347,20 @@
    - 동일한 웹 페이지에서 메인 페이지와 자식 컴포넌트가 각각 `onUserDataChanged`를 구독하여 이지데스크 터널과 2중 3중으로 SSE 스트림을 열지 않도록 해야 합니다. (단일 SSE 허브 준수)
    - `onUserDataChanged`의 콜백에서 `!event.tableName`일 때(초기 연결 핑/핸드셰이크) 무조건 전체 쿼리를 날리는 버그를 금지하고, 반드시 `if (event.tableName && TARGET_TABLES.includes(event.tableName))`로 실제 대상 데이터 변경 시에만 반응해야 합니다.
 <!-- END:bootstrap-and-inherit-architecture-rules -->
+
+<!-- BEGIN:egdesk-auto-managed-files-and-tunnel-stability-rules -->
+## 이지데스크(EGDesk) 플랫폼 관리 파일 불변 및 터널 안정성 표준 원칙 (절대 원칙)
+
+1. **이지데스크 자동 생성/덮어쓰기 파일 임의 수정 엄격 금지 (Platform Immutability)**:
+   - `@egdesk/next-api-plugin` 및 이지데스크 런타임이 관리하는 플랫폼 파일(`next.config.ts`, `egdesk.config.ts`, `egdesk.schema.ts`, 루트 `egdesk-helpers.ts` 등)을 에이전트가 임의로 수정하거나 설정을 변조(예: `basePath` 강제 변경 등)하는 행위를 엄격히 금지합니다.
+   - 모든 비즈니스 로직과 커스텀 기능은 반드시 `src/lib/` 또는 `src/app/` 하위의 독립 헬퍼 모듈을 통해서만 확장해야 합니다.
+
+2. **카카오톡 미리보기 및 공개 이미지의 글로벌 CDN 직통 서빙 원칙 (터널 바이너리 병목 원천 차단)**:
+   - 카카오톡 스크랩 봇이나 외부 모바일 브라우저가 요청하는 대표 이미지 및 미디어 자원은 절대 로컬 호스트 터널(`sheetbot.cloud/uploads/...`) 경로로 직접 서빙하지 않습니다.
+   - 로컬 터널 소켓의 대용량 바이너리 전송 지연과 60초 게이트웨이 타임아웃(`Gateway timeout: did not respond within 60 seconds`)을 원천 방지하기 위해, 반드시 **글로벌 CDN(`cdn.jsdelivr.net` / GitHub raw)** 직통 경로를 1순위로 사용해야 합니다.
+   - 로컬 터널 정적 경로로 되돌리는(Revert) 코드 수정을 영구 차단합니다.
+
+3. **호스트 포트(3006 등) 프로세스 임의 강제 종료(`Stop-Process -Force`) 엄격 금지**:
+   - 호스트 PC의 EGDesk 터널 클라이언트와 로컬 서버 간의 파이프 연결이 유지되고 있는 상태에서, 터미널 명령으로 포트 프로세스를 강제 종료(`Stop-Process -Force`, `kill -9`)하면 터널 소켓 핸드셰이크가 파괴되어 60초 게이트웨이 타임아웃(Hang)이 발생합니다.
+   - 서버 기동 및 갱신은 반드시 이지데스크 공식 관리 도구(`coding_start_server`)를 통해 규격화된 절차로만 안전하게 수행해야 합니다.
+<!-- END:egdesk-auto-managed-files-and-tunnel-stability-rules -->
