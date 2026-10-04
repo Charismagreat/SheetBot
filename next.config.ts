@@ -28,9 +28,10 @@ const getLocalIPs = () => {
 };
 
 const nextConfig: any = {
-  // Only use basePath in production mode, not in dev mode
-  basePath: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
-  assetPrefix: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
+  // 🚀 SheetBot은 독자적인 커스텀 도메인(sheetbot.cloud)을 사용하므로 basePath를 항상 루트("")로 고정
+  // EGDESK_BASE_PATH 주입으로 인한 404 및 60초 Gateway timeout 원천 차단
+  basePath: '',
+  assetPrefix: '',
   // Allow LAN/IP access to the dev server (Next.js 15+)
   allowedDevOrigins: getLocalIPs(),
   typescript: {
