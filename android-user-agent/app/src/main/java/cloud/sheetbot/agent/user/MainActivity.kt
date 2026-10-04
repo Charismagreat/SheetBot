@@ -441,6 +441,9 @@ class MainActivity : AppCompatActivity() {
         binding.btnToggleStatusDetails.setOnClickListener { toggleStatusAction() }
         binding.layoutIntegratedHeader.setOnClickListener { toggleStatusAction() }
 
+        // 0-0-1. 전 카드 상시 접기/펼치기 아코디언 토글 초기화 및 리스너 등록 (v2.1.54)
+        setupCardCollapseExpandListeners()
+
         // 0-0-2. AI 토큰 안내 상세 접기/펼치기 및 확인 버튼 (v2.0.5)
         updateTokenNoticeVisibility(prefs.isTokenNoticeDismissed)
         binding.btnConfirmTokenNotice.setOnClickListener {
@@ -623,13 +626,13 @@ class MainActivity : AppCompatActivity() {
 
         // 통화 녹음 구글 드라이브 자동 백업 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchCallRecording.isChecked = prefs.isCallRecordingSyncEnabled
-        binding.layoutCallRecordingSettings.visibility = if (prefs.isCallRecordingSyncEnabled) View.VISIBLE else View.GONE
         binding.etRecordingTargetFilter.setText(prefs.callRecordingTargetFilter)
 
         binding.switchCallRecording.setOnCheckedChangeListener { _, isChecked ->
             prefs.isCallRecordingSyncEnabled = isChecked
-            binding.layoutCallRecordingSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
-            val msg = if (isChecked) "통화 녹음 드라이브 자동 백업이 켜졌습니다." else "통화 녹음 드라이브 백업이 꺼졌습니다."
+            prefs.isCallRecordingDetailsHidden = !isChecked
+            updateCardCollapseState(binding.layoutCallRecordingSettings, binding.btnToggleCallRecordingDetails, !isChecked)
+            val msg = if (isChecked) "통화 녹음 드라이브 자동 저장이 켜졌습니다." else "통화 녹음 드라이브 저장이 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             if (isChecked) {
                 checkAndRequestAllFilesAccess()
@@ -699,11 +702,11 @@ class MainActivity : AppCompatActivity() {
 
         // 사진 및 문서 파일 구글 드라이브 업로드 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchFileUploadSync.isChecked = prefs.isFileUploadSyncEnabled
-        binding.layoutFileUploadSettings.visibility = if (prefs.isFileUploadSyncEnabled) View.VISIBLE else View.GONE
 
         binding.switchFileUploadSync.setOnCheckedChangeListener { _, isChecked ->
             prefs.isFileUploadSyncEnabled = isChecked
-            binding.layoutFileUploadSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
+            prefs.isFileUploadDetailsHidden = !isChecked
+            updateCardCollapseState(binding.layoutFileUploadDetails, binding.btnToggleFileUploadDetails, !isChecked)
             val msg = if (isChecked) "사진 및 문서 드라이브 보관함이 켜졌습니다." else "사진 및 문서 드라이브 보관함이 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             if (isChecked) {
@@ -726,11 +729,11 @@ class MainActivity : AppCompatActivity() {
 
         // 웹 링크 & 유튜브 영상 AI 자동 스크랩 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchLinkScrap.isChecked = prefs.isLinkScrapEnabled
-        binding.layoutLinkScrapSettings.visibility = if (prefs.isLinkScrapEnabled) View.VISIBLE else View.GONE
 
         binding.switchLinkScrap.setOnCheckedChangeListener { _, isChecked ->
             prefs.isLinkScrapEnabled = isChecked
-            binding.layoutLinkScrapSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
+            prefs.isLinkScrapDetailsHidden = !isChecked
+            updateCardCollapseState(binding.layoutLinkScrapSettings, binding.btnToggleLinkScrapDetails, !isChecked)
             val msg = if (isChecked) "웹 링크 & 유튜브 AI 자동 스크랩이 켜졌습니다." else "웹 링크 & 유튜브 자동 스크랩이 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             if (isChecked) {
@@ -790,13 +793,13 @@ class MainActivity : AppCompatActivity() {
 
         // 문자(SMS/LMS) 송수신 구글 시트 동기화 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchSmsSync.isChecked = prefs.isSmsSheetSyncEnabled
-        binding.layoutSmsSyncSettings.visibility = if (prefs.isSmsSheetSyncEnabled) View.VISIBLE else View.GONE
         binding.etSmsTargetFilter.setText(prefs.smsTargetFilter)
 
         binding.switchSmsSync.setOnCheckedChangeListener { _, isChecked ->
             prefs.isSmsSheetSyncEnabled = isChecked
-            binding.layoutSmsSyncSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
-            val msg = if (isChecked) "문자(SMS) 시트 자동 기록이 켜졌습니다." else "문자 시트 자동 기록이 꺼졌습니다."
+            prefs.isSmsSyncDetailsHidden = !isChecked
+            updateCardCollapseState(binding.layoutSmsSyncSettings, binding.btnToggleSmsSyncDetails, !isChecked)
+            val msg = if (isChecked) "고객 문자 시트 자동 기록이 켜졌습니다." else "고객 문자 시트 기록이 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             if (isChecked) {
                 provisionSheetAsync("SMS", prefs.smsDriveSheetTitle)
@@ -824,13 +827,13 @@ class MainActivity : AppCompatActivity() {
 
         // 카카오톡 수신 메시지 구글 시트 동기화 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchKakaoSync.isChecked = prefs.isKakaoSheetSyncEnabled
-        binding.layoutKakaoSyncSettings.visibility = if (prefs.isKakaoSheetSyncEnabled) View.VISIBLE else View.GONE
         binding.etKakaoTargetFilter.setText(prefs.kakaoTargetFilter)
 
         binding.switchKakaoSync.setOnCheckedChangeListener { _, isChecked ->
             prefs.isKakaoSheetSyncEnabled = isChecked
-            binding.layoutKakaoSyncSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
-            val msg = if (isChecked) "카카오톡 메시지 시트 기록이 켜졌습니다." else "카카오톡 시트 기록이 꺼졌습니다."
+            prefs.isKakaoSyncDetailsHidden = !isChecked
+            updateCardCollapseState(binding.layoutKakaoSyncSettings, binding.btnToggleKakaoSyncDetails, !isChecked)
+            val msg = if (isChecked) "카카오톡 대화 시트 자동 기록이 켜졌습니다." else "카카오톡 시트 기록이 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             if (isChecked) {
                 provisionSheetAsync("KAKAO", prefs.kakaoDriveSheetTitle)
@@ -868,12 +871,12 @@ class MainActivity : AppCompatActivity() {
 
         // 📑 AI 스마트 견적 및 단가표 대장 연동 UI 바인딩 및 자동 저장 (Auto-Save)
         binding.switchQuoteSync.isChecked = prefs.isQuoteSheetSyncEnabled
-        binding.layoutQuoteSyncSettings.visibility = if (prefs.isQuoteSheetSyncEnabled) View.VISIBLE else View.GONE
 
         binding.switchQuoteSync.setOnCheckedChangeListener { _, isChecked ->
             prefs.isQuoteSheetSyncEnabled = isChecked
-            binding.layoutQuoteSyncSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
-            val msg = if (isChecked) "스마트 간편 주문 및 품목 대장 연동이 켜졌습니다." else "스마트 간편 주문 대장 연동이 꺼졌습니다."
+            prefs.isQuoteSyncDetailsHidden = !isChecked
+            updateCardCollapseState(binding.layoutQuoteSyncSettings, binding.btnToggleQuoteSyncDetails, !isChecked)
+            val msg = if (isChecked) "고객용 간편 주문서 & 단가표 자동 안내가 켜졌습니다." else "간편 주문서 자동 안내가 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             if (isChecked) {
                 provisionSheetAsync("QUOTE", prefs.quoteDriveSheetTitle)
@@ -1022,13 +1025,13 @@ class MainActivity : AppCompatActivity() {
 
         // 부재중 전화(Missed Call) 0원 스마트 자동 회신 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchMissedCall.isChecked = prefs.isMissedCallAutoReplyEnabled
-        binding.layoutMissedCallSettings.visibility = if (prefs.isMissedCallAutoReplyEnabled) View.VISIBLE else View.GONE
         binding.etMissedCallReply.setText(prefs.missedCallReplyTemplate)
 
         binding.switchMissedCall.setOnCheckedChangeListener { _, isChecked ->
             prefs.isMissedCallAutoReplyEnabled = isChecked
-            binding.layoutMissedCallSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
-            val msg = if (isChecked) "부재중 전화 자동 회신이 켜졌습니다." else "부재중 전화 자동 회신이 꺼졌습니다."
+            prefs.isMissedCallDetailsHidden = !isChecked
+            updateCardCollapseState(binding.layoutMissedCallSettings, binding.btnToggleMissedCallDetails, !isChecked)
+            val msg = if (isChecked) "전화 못 받았을 때 자동 답장 문자 발송이 켜졌습니다." else "전화 못 받았을 때 자동 답장이 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             if (isChecked) {
                 provisionSheetAsync("MISSED_CALL", prefs.missedCallDriveSheetTitle)
@@ -1045,7 +1048,6 @@ class MainActivity : AppCompatActivity() {
 
         // 통화 종료 직후 모바일 명함 원터치 발송 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchCallEndedCard.isChecked = prefs.isCallEndedCardPromptEnabled
-        binding.layoutCallEndedCardSettings.visibility = if (prefs.isCallEndedCardPromptEnabled) View.VISIBLE else View.GONE
 
         // 1. 발송 방식 라디오 버튼 초기화 (WEB_LINK vs MMS_IMAGE) 및 실시간 동기화
         refreshBusinessCardUi()
@@ -1074,8 +1076,9 @@ class MainActivity : AppCompatActivity() {
 
         binding.switchCallEndedCard.setOnCheckedChangeListener { _, isChecked ->
             prefs.isCallEndedCardPromptEnabled = isChecked
-            binding.layoutCallEndedCardSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
-            val msg = if (isChecked) "통화 종료 모바일 명함 발송 기능이 켜졌습니다." else "모바일 명함 발송 기능이 꺼졌습니다."
+            prefs.isCallEndedCardDetailsHidden = !isChecked
+            updateCardCollapseState(binding.layoutCallEndedCardSettings, binding.btnToggleCallEndedCardDetails, !isChecked)
+            val msg = if (isChecked) "통화 끝나면 내 모바일 명함 바로 보내기가 켜졌습니다." else "모바일 명함 보내기가 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             if (isChecked) {
                 provisionSheetAsync("CALL_ENDED_CARD", "[SheetBot] 모바일 명함 발송 대장")
@@ -1237,6 +1240,126 @@ class MainActivity : AppCompatActivity() {
         binding.btnToggleTokenNotice.text = if (dismissed) "자세히 보기" else "접기"
     }
 
+    private fun updateCardCollapseState(container: View, toggleBtn: TextView, isHidden: Boolean) {
+        container.visibility = if (isHidden) View.GONE else View.VISIBLE
+        toggleBtn.text = if (isHidden) "펼치기 ▼" else "접기 ▲"
+    }
+
+    private fun refreshAllCardsCollapseState() {
+        updateCardCollapseState(binding.layoutWalletDetails, binding.btnToggleWalletDetails, prefs.isWalletDetailsHidden)
+        updateCardCollapseState(binding.layoutCopilotDetails, binding.btnToggleCopilotDetails, prefs.isCopilotDetailsHidden)
+        updateCardCollapseState(binding.layoutPaymentReceiptDetails, binding.btnTogglePaymentReceiptDetails, prefs.isPaymentReceiptDetailsHidden)
+        updateCardCollapseState(binding.layoutCallRecordingSettings, binding.btnToggleCallRecordingDetails, prefs.isCallRecordingDetailsHidden)
+        updateCardCollapseState(binding.layoutFileUploadDetails, binding.btnToggleFileUploadDetails, prefs.isFileUploadDetailsHidden)
+        updateCardCollapseState(binding.layoutLinkScrapSettings, binding.btnToggleLinkScrapDetails, prefs.isLinkScrapDetailsHidden)
+        updateCardCollapseState(binding.layoutSmsSyncSettings, binding.btnToggleSmsSyncDetails, prefs.isSmsSyncDetailsHidden)
+        updateCardCollapseState(binding.layoutKakaoSyncSettings, binding.btnToggleKakaoSyncDetails, prefs.isKakaoSyncDetailsHidden)
+        updateCardCollapseState(binding.layoutQuoteSyncSettings, binding.btnToggleQuoteSyncDetails, prefs.isQuoteSyncDetailsHidden)
+        updateCardCollapseState(binding.layoutMissedCallSettings, binding.btnToggleMissedCallDetails, prefs.isMissedCallDetailsHidden)
+        updateCardCollapseState(binding.layoutCallEndedCardSettings, binding.btnToggleCallEndedCardDetails, prefs.isCallEndedCardDetailsHidden)
+        updateCardCollapseState(binding.layoutWebsiteMonitorSettings, binding.btnToggleWebsiteMonitorDetails, prefs.isWebsiteMonitorDetailsHidden)
+    }
+
+    private fun setupCardCollapseExpandListeners() {
+        refreshAllCardsCollapseState()
+
+        // 1. 토큰 지갑 카드
+        val toggleWallet = {
+            prefs.isWalletDetailsHidden = !prefs.isWalletDetailsHidden
+            updateCardCollapseState(binding.layoutWalletDetails, binding.btnToggleWalletDetails, prefs.isWalletDetailsHidden)
+        }
+        binding.layoutWalletHeader.setOnClickListener { toggleWallet() }
+        binding.btnToggleWalletDetails.setOnClickListener { toggleWallet() }
+
+        // 2. AI 비서 카드
+        val toggleCopilot = {
+            prefs.isCopilotDetailsHidden = !prefs.isCopilotDetailsHidden
+            updateCardCollapseState(binding.layoutCopilotDetails, binding.btnToggleCopilotDetails, prefs.isCopilotDetailsHidden)
+        }
+        binding.layoutCopilotHeader.setOnClickListener { toggleCopilot() }
+        binding.btnToggleCopilotDetails.setOnClickListener { toggleCopilot() }
+
+        // 3. 매장 결제 & 영수증 카드
+        val togglePaymentReceipt = {
+            prefs.isPaymentReceiptDetailsHidden = !prefs.isPaymentReceiptDetailsHidden
+            updateCardCollapseState(binding.layoutPaymentReceiptDetails, binding.btnTogglePaymentReceiptDetails, prefs.isPaymentReceiptDetailsHidden)
+        }
+        binding.layoutPaymentReceiptHeader.setOnClickListener { togglePaymentReceipt() }
+        binding.btnTogglePaymentReceiptDetails.setOnClickListener { togglePaymentReceipt() }
+
+        // 4. 통화 녹음 카드
+        val toggleCallRecording = {
+            prefs.isCallRecordingDetailsHidden = !prefs.isCallRecordingDetailsHidden
+            updateCardCollapseState(binding.layoutCallRecordingSettings, binding.btnToggleCallRecordingDetails, prefs.isCallRecordingDetailsHidden)
+        }
+        binding.layoutCallRecordingHeader.setOnClickListener { toggleCallRecording() }
+        binding.btnToggleCallRecordingDetails.setOnClickListener { toggleCallRecording() }
+
+        // 5. 사진 & 문서 보관 카드
+        val toggleFileUpload = {
+            prefs.isFileUploadDetailsHidden = !prefs.isFileUploadDetailsHidden
+            updateCardCollapseState(binding.layoutFileUploadDetails, binding.btnToggleFileUploadDetails, prefs.isFileUploadDetailsHidden)
+        }
+        binding.layoutFileUploadHeader.setOnClickListener { toggleFileUpload() }
+        binding.btnToggleFileUploadDetails.setOnClickListener { toggleFileUpload() }
+
+        // 6. 웹 링크 & 유튜브 카드
+        val toggleLinkScrap = {
+            prefs.isLinkScrapDetailsHidden = !prefs.isLinkScrapDetailsHidden
+            updateCardCollapseState(binding.layoutLinkScrapSettings, binding.btnToggleLinkScrapDetails, prefs.isLinkScrapDetailsHidden)
+        }
+        binding.layoutLinkScrapHeader.setOnClickListener { toggleLinkScrap() }
+        binding.btnToggleLinkScrapDetails.setOnClickListener { toggleLinkScrap() }
+
+        // 7. 문자(SMS) 카드
+        val toggleSmsSync = {
+            prefs.isSmsSyncDetailsHidden = !prefs.isSmsSyncDetailsHidden
+            updateCardCollapseState(binding.layoutSmsSyncSettings, binding.btnToggleSmsSyncDetails, prefs.isSmsSyncDetailsHidden)
+        }
+        binding.layoutSmsSyncHeader.setOnClickListener { toggleSmsSync() }
+        binding.btnToggleSmsSyncDetails.setOnClickListener { toggleSmsSync() }
+
+        // 8. 카카오톡 카드
+        val toggleKakaoSync = {
+            prefs.isKakaoSyncDetailsHidden = !prefs.isKakaoSyncDetailsHidden
+            updateCardCollapseState(binding.layoutKakaoSyncSettings, binding.btnToggleKakaoSyncDetails, prefs.isKakaoSyncDetailsHidden)
+        }
+        binding.layoutKakaoSyncHeader.setOnClickListener { toggleKakaoSync() }
+        binding.btnToggleKakaoSyncDetails.setOnClickListener { toggleKakaoSync() }
+
+        // 9. 간편 주문서 카드
+        val toggleQuoteSync = {
+            prefs.isQuoteSyncDetailsHidden = !prefs.isQuoteSyncDetailsHidden
+            updateCardCollapseState(binding.layoutQuoteSyncSettings, binding.btnToggleQuoteSyncDetails, prefs.isQuoteSyncDetailsHidden)
+        }
+        binding.layoutQuoteSyncHeader.setOnClickListener { toggleQuoteSync() }
+        binding.btnToggleQuoteSyncDetails.setOnClickListener { toggleQuoteSync() }
+
+        // 10. 부재중 전화 카드
+        val toggleMissedCall = {
+            prefs.isMissedCallDetailsHidden = !prefs.isMissedCallDetailsHidden
+            updateCardCollapseState(binding.layoutMissedCallSettings, binding.btnToggleMissedCallDetails, prefs.isMissedCallDetailsHidden)
+        }
+        binding.layoutMissedCallHeader.setOnClickListener { toggleMissedCall() }
+        binding.btnToggleMissedCallDetails.setOnClickListener { toggleMissedCall() }
+
+        // 11. 모바일 명함 카드
+        val toggleCallEndedCard = {
+            prefs.isCallEndedCardDetailsHidden = !prefs.isCallEndedCardDetailsHidden
+            updateCardCollapseState(binding.layoutCallEndedCardSettings, binding.btnToggleCallEndedCardDetails, prefs.isCallEndedCardDetailsHidden)
+        }
+        binding.layoutCallEndedCardHeader.setOnClickListener { toggleCallEndedCard() }
+        binding.btnToggleCallEndedCardDetails.setOnClickListener { toggleCallEndedCard() }
+
+        // 12. 웹사이트 모니터링 카드
+        val toggleWebsiteMonitor = {
+            prefs.isWebsiteMonitorDetailsHidden = !prefs.isWebsiteMonitorDetailsHidden
+            updateCardCollapseState(binding.layoutWebsiteMonitorSettings, binding.btnToggleWebsiteMonitorDetails, prefs.isWebsiteMonitorDetailsHidden)
+        }
+        binding.layoutWebsiteMonitorHeader.setOnClickListener { toggleWebsiteMonitor() }
+        binding.btnToggleWebsiteMonitorDetails.setOnClickListener { toggleWebsiteMonitor() }
+    }
+
     private fun updateUiState() {
         val verName = getAppVersionName()
         binding.tvAppVersionBadge.text = "v$verName"
@@ -1247,6 +1370,7 @@ class MainActivity : AppCompatActivity() {
 
         updateStatusDetailsVisibility(prefs.isStatusDetailsHidden)
         updateTokenNoticeVisibility(prefs.isTokenNoticeDismissed)
+        refreshAllCardsCollapseState()
         updateTargetBadges()
 
         if (isPaired && !email.isNullOrBlank()) {
@@ -3066,7 +3190,7 @@ class MainActivity : AppCompatActivity() {
         val recList = binding.etRecordingTargetFilter.text.toString().split(",", ";")
             .map { it.trim() }.filter { it.isNotBlank() }
         if (recList.isEmpty()) {
-            binding.tvRecordingTargetCountBadge.text = "전체 업로드"
+            binding.tvRecordingTargetCountBadge.text = "전체 저장"
             binding.tvRecordingTargetCountBadge.setTextColor(Color.parseColor("#38BDF8"))
             binding.btnManageRecordingTargets.text = "📋 등록 대상 확인 / 제외"
         } else {
@@ -3101,7 +3225,7 @@ class MainActivity : AppCompatActivity() {
             val shortName = try {
                 File(custom).name.takeIf { it.isNotBlank() } ?: custom
             } catch (_: Exception) { custom }
-            binding.tvRecordingSourceFolderBadge.text = "📁 $shortName (지정됨)"
+            binding.tvRecordingSourceFolderBadge.text = "📁 $shortName (선택됨)"
             binding.tvRecordingSourceFolderBadge.setTextColor(Color.parseColor("#34D399"))
         }
     }
@@ -3309,15 +3433,15 @@ class MainActivity : AppCompatActivity() {
     // ==========================================
     private fun setupWebsiteMonitorUI() {
         binding.switchWebsiteMonitor.isChecked = prefs.isWebsiteMonitorEnabled
-        binding.layoutWebsiteMonitorSettings.visibility = if (prefs.isWebsiteMonitorEnabled) View.VISIBLE else View.GONE
         binding.etTargetWebsiteUrl.setText(prefs.targetWebsiteUrl)
         binding.cbWebsiteEmergencyAlarm.isChecked = prefs.isWebsiteEmergencyAlarmEnabled
         updateWebsiteMonitorStatusText()
 
         binding.switchWebsiteMonitor.setOnCheckedChangeListener { _, isChecked ->
             prefs.isWebsiteMonitorEnabled = isChecked
-            binding.layoutWebsiteMonitorSettings.visibility = if (isChecked) View.VISIBLE else View.GONE
-            val msg = if (isChecked) "내 웹사이트 실시간 장애 감시가 시작되었습니다." else "웹사이트 장애 감시가 중단되었습니다."
+            prefs.isWebsiteMonitorDetailsHidden = !isChecked
+            updateCardCollapseState(binding.layoutWebsiteMonitorSettings, binding.btnToggleWebsiteMonitorDetails, !isChecked)
+            val msg = if (isChecked) "내 웹사이트 실시간 접속 장애 감시가 켜졌습니다." else "웹사이트 접속 장애 감시가 꺼졌습니다."
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             updateWebsiteMonitorStatusText()
 

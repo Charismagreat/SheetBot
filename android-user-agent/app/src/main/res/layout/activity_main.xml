@@ -271,11 +271,13 @@
                 android:visibility="gone">
 
                 <LinearLayout
+                    android:id="@+id/layoutWalletHeader"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginBottom="8dp">
+                    android:clickable="true"
+                    android:focusable="true">
 
                     <TextView
                         android:layout_width="0dp"
@@ -306,73 +308,96 @@
                         android:backgroundTint="#334155"
                         android:text="🔄 새로고침"
                         android:textColor="#38BDF8"
-                        android:textSize="11sp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="bottom"
-                    android:layout_marginBottom="4dp">
-
-                    <TextView
-                        android:id="@+id/tvWalletBalance"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="0"
-                        android:textColor="#34D399"
-                        android:textSize="24sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text=" 토큰"
-                        android:textColor="#94A3B8"
-                        android:textSize="14sp"
-                        android:textStyle="bold"
-                        android:layout_marginStart="4dp"
-                        android:layout_marginBottom="2dp" />
-                </LinearLayout>
-
-                <Button
-                    android:id="@+id/btnRechargeToken"
-                    android:layout_width="match_parent"
-                    android:layout_height="44dp"
-                    android:backgroundTint="#6366F1"
-                    android:text="💳 토큰 즉시 충전 (토스 1초 송금 / 계좌이체)"
-                    android:textColor="#FFFFFF"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginTop="8dp">
-
-                    <Button
-                        android:id="@+id/btnInviteFriend"
-                        android:layout_width="0dp"
-                        android:layout_height="42dp"
-                        android:layout_weight="1"
-                        android:backgroundTint="#059669"
-                        android:text="🎁 친구 초대 (+1만T)"
-                        android:textColor="#FFFFFF"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
+                        android:textSize="11sp"
                         android:layout_marginEnd="6dp" />
 
+                    <TextView
+                        android:id="@+id/btnToggleWalletDetails"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_badge_version"
+                        android:backgroundTint="#0F172A"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="3dp"
+                        android:text="접기 ▲"
+                        android:textColor="#E2E8F0"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- 접이식 세부 영역 -->
+                <LinearLayout
+                    android:id="@+id/layoutWalletDetails"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="bottom"
+                        android:layout_marginBottom="8dp">
+
+                        <TextView
+                            android:id="@+id/tvWalletBalance"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0"
+                            android:textColor="#34D399"
+                            android:textSize="24sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text=" 토큰"
+                            android:textColor="#94A3B8"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            android:layout_marginStart="4dp"
+                            android:layout_marginBottom="2dp" />
+                    </LinearLayout>
+
                     <Button
-                        android:id="@+id/btnEnterReferralCode"
-                        android:layout_width="0dp"
-                        android:layout_height="42dp"
-                        android:layout_weight="1"
-                        android:backgroundTint="#334155"
-                        android:text="🏷️ 코드 등록 (+1만T)"
-                        android:textColor="#F1F5F9"
-                        android:textSize="12sp" />
+                        android:id="@+id/btnRechargeToken"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:backgroundTint="#6366F1"
+                        android:text="💳 토큰 즉시 충전 (토스 1초 송금 / 계좌이체)"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="8dp">
+
+                        <Button
+                            android:id="@+id/btnInviteFriend"
+                            android:layout_width="0dp"
+                            android:layout_height="42dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#059669"
+                            android:text="🎁 친구 초대 (+1만T)"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:layout_marginEnd="6dp" />
+
+                        <Button
+                            android:id="@+id/btnEnterReferralCode"
+                            android:layout_width="0dp"
+                            android:layout_height="42dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#334155"
+                            android:text="🏷️ 코드 등록 (+1만T)"
+                            android:textColor="#F1F5F9"
+                            android:textSize="12sp" />
+                    </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
 
@@ -387,17 +412,20 @@
             android:layout_marginBottom="14dp">
 
             <LinearLayout
+                android:id="@+id/layoutCopilotHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="6dp">
+                android:layout_marginBottom="6dp"
+                android:clickable="true"
+                android:focusable="true">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="🎙️ 자연어 AI 시트 코파일럿"
+                    android:text="🎙️ 말 한마디로 실행하는 AI 비서"
                     android:textColor="#38BDF8"
                     android:textSize="13.5sp"
                     android:textStyle="bold" />
@@ -409,7 +437,7 @@
                     android:backgroundTint="#065F46"
                     android:paddingHorizontal="7dp"
                     android:paddingVertical="2dp"
-                    android:text="🪙 AI 사용 시에만 차감"
+                    android:text="🪙 쓸 때만 차감"
                     android:textColor="#34D399"
                     android:textSize="9.5sp"
                     android:textStyle="bold"
@@ -422,133 +450,166 @@
                     android:background="@drawable/bg_badge_version"
                     android:paddingHorizontal="6dp"
                     android:paddingVertical="2dp"
-                    android:text="v2.1.3"
+                    android:text="v2.1.54"
                     android:textColor="#10B981"
                     android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btnToggleCopilotDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="접기 ▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="10.5sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="말 한마디로 구글 시트의 함수(Apps Script)를 실행하고 문자 발송이나 정산을 자동 지시합니다."
+                android:text="말이나 글로 편하게 이야기하세요. 구글 시트 정리부터 문자 발송, 정산 작업까지 AI가 알아서 처리해 드려요."
                 android:textColor="#94A3B8"
                 android:textSize="11sp"
                 android:layout_marginBottom="8dp" />
 
-            <!-- 💡 AI 전용 소량 토큰 차감 & 다른 기능 100% 무료 홍보 배너 -->
+            <!-- 접이식 세부 영역 -->
             <LinearLayout
+                android:id="@+id/layoutCopilotDetails"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="#0F172A"
-                android:padding="10dp"
-                android:layout_marginBottom="8dp">
+                android:orientation="vertical">
 
+                <!-- 💡 이용 요금 안내 & 평생 무료 혜택 배너 -->
                 <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="💡 투명한 토큰 안내 &amp; 평생 무료 혜택"
-                        android:textColor="#FBBF24"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/btnToggleTokenNotice"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/bg_badge_version"
-                        android:backgroundTint="#1E293B"
-                        android:paddingHorizontal="8dp"
-                        android:paddingVertical="3dp"
-                        android:text="자세히 보기"
-                        android:textColor="#38BDF8"
-                        android:textSize="10.5sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
-                <!-- 토큰 안내 상세 내용 (확인 버튼 클릭 시 접힘) -->
-                <LinearLayout
-                    android:id="@+id/layoutTokenNoticeDetails"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:layout_marginTop="6dp">
+                    android:background="#0F172A"
+                    android:padding="10dp"
+                    android:layout_marginBottom="10dp">
 
-                    <TextView
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="• 평생 0원 무료: 0원 문자 발송·수신, 포스·배달앱 결제 알림 시트 기입, 통화 녹음 백업 등 모든 기본 자동화는 토큰 차감 없이 100% 완전 무료(0원)입니다.\n• 오직 AI만 소량 차감: AI 사용 1회당 약 200~300토큰의 소량만 차감됩니다. AI가 사용되지 않는 대부분의 작업에는 토큰이 차감되지 않으며 100% 무료로 제공됩니다."
-                        android:textColor="#94A3B8"
-                        android:textSize="10.5sp"
-                        android:lineSpacingExtra="2.5dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="💡 이용 요금 안내 &amp; 평생 무료 혜택"
+                            android:textColor="#FBBF24"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/btnToggleTokenNotice"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_badge_version"
+                            android:backgroundTint="#1E293B"
+                            android:paddingHorizontal="8dp"
+                            android:paddingVertical="3dp"
+                            android:text="자세히 보기"
+                            android:textColor="#38BDF8"
+                            android:textSize="10.5sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <!-- 토큰 안내 상세 내용 (확인 버튼 클릭 시 접힘) -->
+                    <LinearLayout
+                        android:id="@+id/layoutTokenNoticeDetails"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:layout_marginTop="6dp">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="• 평생 0원 무료: 0원 문자 발송·수신, 포스·배달앱 결제 알림 시트 기입, 통화 녹음 백업 등 모든 기본 자동화는 토큰 차감 없이 100% 완전 무료(0원)입니다.\n• 오직 AI만 소량 차감: AI 사용 1회당 약 200~300토큰의 소량만 차감됩니다. AI가 사용되지 않는 대부분의 작업에는 토큰이 차감되지 않으며 100% 무료로 제공됩니다."
+                            android:textColor="#94A3B8"
+                            android:textSize="10.5sp"
+                            android:lineSpacingExtra="2.5dp"
+                            android:layout_marginBottom="8dp" />
+
+                        <Button
+                            android:id="@+id/btnConfirmTokenNotice"
+                            android:layout_width="match_parent"
+                            android:layout_height="36dp"
+                            android:backgroundTint="#334155"
+                            android:text="✓ 확인 (내용 접기)"
+                            android:textColor="#38BDF8"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- 🎨 옵션 A: 모던 올인원 프롬프트 카드 컨테이너 (텍스트 에디터 + 하단 액션 버튼 바 일체형) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="@drawable/bg_prompt_box"
+                    android:padding="10dp"
+                    android:layout_marginBottom="8dp">
+
+                    <EditText
+                        android:id="@+id/etAiCommand"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="64dp"
+                        android:maxLines="6"
+                        android:background="@null"
+                        android:paddingHorizontal="4dp"
+                        android:paddingVertical="4dp"
+                        android:gravity="top|start"
+                        android:inputType="textMultiLine|textCapSentences"
+                        android:scrollbars="vertical"
+                        android:hint="예: &quot;홍길동 고객에게 결제 안내 문자 보내줘&quot;, &quot;이번 달 정산해줘&quot;"
+                        android:textColorHint="#94A3B8"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13.5sp"
+                        android:lineSpacingExtra="3dp"
                         android:layout_marginBottom="8dp" />
 
-                    <Button
-                        android:id="@+id/btnConfirmTokenNotice"
+                    <LinearLayout
                         android:layout_width="match_parent"
-                        android:layout_height="36dp"
-                        android:backgroundTint="#334155"
-                        android:text="✓ 확인 (내용 접기)"
-                        android:textColor="#38BDF8"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/btnVoiceCommand"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#8B5CF6"
+                            android:text="🎙️ 말로 입력"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:layout_marginEnd="4dp" />
+
+                        <Button
+                            android:id="@+id/btnExecuteCommand"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_weight="1.3"
+                            android:backgroundTint="#4F46E5"
+                            android:text="🚀 바로 실행"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:layout_marginStart="4dp" />
+                    </LinearLayout>
                 </LinearLayout>
-            </LinearLayout>
-
-            <EditText
-                android:id="@+id/etAiCommand"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:minHeight="44dp"
-                android:maxLines="6"
-                android:background="#0F172A"
-                android:paddingHorizontal="10dp"
-                android:paddingVertical="8dp"
-                android:gravity="top|start"
-                android:inputType="textMultiLine|textCapSentences"
-                android:scrollbars="vertical"
-                android:hint="예: 홍길동 고객에게 결제 안내 문자 보내줘, 이번 달 정산해줘"
-                android:textColorHint="#64748B"
-                android:textColor="#FFFFFF"
-                android:textSize="11.5sp"
-                android:layout_marginBottom="8dp" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-
-                <Button
-                    android:id="@+id/btnVoiceCommand"
-                    android:layout_width="0dp"
-                    android:layout_height="40dp"
-                    android:layout_weight="1"
-                    android:backgroundTint="#8B5CF6"
-                    android:text="🎙️ 음성 입력"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11.5sp"
-                    android:textStyle="bold"
-                    android:layout_marginEnd="4dp" />
-
-                <Button
-                    android:id="@+id/btnExecuteCommand"
-                    android:layout_width="0dp"
-                    android:layout_height="40dp"
-                    android:layout_weight="1.3"
-                    android:backgroundTint="#4F46E5"
-                    android:text="🚀 시트 원격 실행"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11.5sp"
-                    android:textStyle="bold"
-                    android:layout_marginStart="4dp" />
             </LinearLayout>
 
             <!-- 실행 결과 피드백 브리핑 카드 -->
@@ -663,17 +724,20 @@
             android:layout_marginBottom="16dp">
 
             <LinearLayout
+                android:id="@+id/layoutPaymentReceiptHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="10dp">
+                android:layout_marginBottom="10dp"
+                android:clickable="true"
+                android:focusable="true">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="💳 매장 결제(포스/배달앱) &amp; 영수증 문자 전송"
+                    android:text="💳 결제 확인 &amp; 영수증 자동 문자"
                     android:textColor="#38BDF8"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -687,54 +751,75 @@
                     android:text="AUTO"
                     android:textColor="#34D399"
                     android:textSize="10sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
+                    android:textStyle="bold"
+                    android:layout_marginEnd="6dp" />
 
                 <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="🔔 결제/입금 앱 푸시 실시간 감지 (배달앱·포스·은행)"
-                    android:textColor="#E2E8F0"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
-
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/switchPushDetection"
+                    android:id="@+id/btnTogglePaymentReceiptDetails"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true" />
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="접기 ▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
+            <!-- 접이식 세부 영역 -->
             <LinearLayout
+                android:id="@+id/layoutPaymentReceiptDetails"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
+                android:orientation="vertical">
 
-                <TextView
-                    android:layout_width="0dp"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="📲 고객에게 영수증 문자 자동 전송"
-                    android:textColor="#E2E8F0"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
 
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/switchReceiptSms"
-                    android:layout_width="wrap_content"
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🔔 포스·배달앱·은행 알림 자동 감지"
+                        android:textColor="#E2E8F0"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchPushDetection"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:checked="true" />
-            </LinearLayout>
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="📲 고객에게 영수증 문자 자동으로 보내기"
+                        android:textColor="#E2E8F0"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchReceiptSms"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
 
             <!-- 영수증 문자 커스텀 발송 문구 설정 패널 -->
             <LinearLayout
@@ -757,7 +842,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="📝 고객 발송 영수증 문구 템플릿"
+                        android:text="📝 영수증 문자 문구 설정"
                         android:textColor="#94A3B8"
                         android:textSize="11sp"
                         android:textStyle="bold" />
@@ -781,7 +866,7 @@
                     android:gravity="top|start"
                     android:textColor="#FFFFFF"
                     android:textSize="11.5sp"
-                    android:hint="[SheetBot] {고객명}님, {금액} 결제가 정상 확인되었습니다. 이용해 주셔서 감사합니다."
+                    android:hint="[SheetBot] {고객명}님, {금액} 결제 확인! 감사합니다."
                     android:textColorHint="#64748B"
                     android:inputType="textMultiLine"
                     android:importantForAutofill="no" />
@@ -789,7 +874,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="💡 지원 치환 변수: {고객명}, {금액}, {일시} (자동 대입)"
+                    android:text="💡 고객명, 금액, 결제시간은 자동으로 바뀌어 전송돼요."
                     android:textColor="#64748B"
                     android:textSize="10sp"
                     android:layout_marginTop="4dp" />
@@ -799,7 +884,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:backgroundTint="#0284C7"
-                    android:text="🧪 영수증 문자 발송 즉시 테스트"
+                    android:text="🧪 테스트 문자 지금 보내보기"
                     android:textColor="#FFFFFF"
                     android:textSize="12sp"
                     android:textStyle="bold"
@@ -810,7 +895,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:backgroundTint="#0D9488"
-                    android:text="🔍 영수증 발송 조건 5단계 종합 진단 (가상 입금)"
+                    android:text="🔍 발송 연결 상태 점검하기"
                     android:textColor="#FFFFFF"
                     android:textSize="12sp"
                     android:textStyle="bold"
@@ -828,7 +913,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="🔊 결제 감지 시 실시간 TTS 음성 안내"
+                    android:text="🔊 결제될 때 음성으로 안내받기"
                     android:textColor="#E2E8F0"
                     android:textSize="12sp"
                     android:textStyle="bold" />
@@ -854,7 +939,7 @@
                     android:layout_height="38dp"
                     android:layout_weight="1"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 결제 대장 열기 ↗"
+                    android:text="📊 결제 시트 열기 ↗"
                     android:textColor="#38BDF8"
                     android:textSize="11sp"
                     android:textStyle="bold"
@@ -866,12 +951,13 @@
                     android:layout_height="38dp"
                     android:layout_weight="1"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 영수증 대장 열기 ↗"
+                    android:text="📜 영수증 문자 발송 시트 열기 ↗"
                     android:textColor="#38BDF8"
                     android:textSize="11sp"
                     android:textStyle="bold"
                     android:layout_marginStart="4dp" />
             </LinearLayout>
+        </LinearLayout>
 
             <!-- 통화 녹음 구글 드라이브 자동 백업 섹션 -->
             <View
@@ -882,17 +968,20 @@
                 android:layout_marginBottom="10dp" />
 
             <LinearLayout
+                android:id="@+id/layoutCallRecordingHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="🎙️ 통화 녹음 드라이브 자동 백업"
+                    android:text="🎙️ 통화 녹음 드라이브 자동 저장"
                     android:textColor="#E2E8F0"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -901,7 +990,21 @@
                     android:id="@+id/switchCallRecording"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="false" />
+                    android:checked="false"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btnToggleCallRecordingDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="접기 ▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
             <LinearLayout
@@ -924,7 +1027,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="🎯 업로드 대상 번호/이름 (빈칸은 전체):"
+                        android:text="🎯 저장할 전화번호 / 이름 (비워두면 전체 저장):"
                         android:textColor="#94A3B8"
                         android:textSize="11sp" />
 
@@ -935,7 +1038,7 @@
                         android:background="@drawable/bg_badge_version"
                         android:paddingHorizontal="6dp"
                         android:paddingVertical="1dp"
-                        android:text="전체 업로드"
+                        android:text="전체 저장"
                         android:textColor="#38BDF8"
                         android:textSize="10sp"
                         android:textStyle="bold" />
@@ -978,7 +1081,7 @@
                     android:layout_height="38dp"
                     android:background="#1E293B"
                     android:paddingHorizontal="10dp"
-                    android:hint="직접 입력 시 쉼표(,) 구분 (예: 010-1234-5678, 거래처)"
+                    android:hint="여러 개 입력 시 쉼표(,)로 구분 (예: 010-1234-5678, 거래처)"
                     android:textColorHint="#64748B"
                     android:textColor="#FFFFFF"
                     android:textSize="11.5sp"
@@ -997,7 +1100,7 @@
                         android:layout_height="40dp"
                         android:layout_weight="1"
                         android:backgroundTint="#1E293B"
-                        android:text="📊 대장 시트 열기 ↗"
+                        android:text="📊 통화 기록 시트 열기 ↗"
                         android:textColor="#38BDF8"
                         android:textSize="11.5sp"
                         android:textStyle="bold"
@@ -1009,7 +1112,7 @@
                         android:layout_height="40dp"
                         android:layout_weight="1"
                         android:backgroundTint="#1E293B"
-                        android:text="📁 드라이브 폴더 ↗"
+                        android:text="📁 드라이브 폴더 열기 ↗"
                         android:textColor="#A78BFA"
                         android:textSize="11.5sp"
                         android:textStyle="bold"
@@ -1035,7 +1138,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="📁 감지 대상 어플 / 폴더:"
+                            android:text="📁 연결된 녹음 앱 / 저장 위치:"
                             android:textColor="#94A3B8"
                             android:textSize="10.5sp" />
 
@@ -1081,7 +1184,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="📞 통화 종료 즉시 녹음 자동 업로드"
+                            android:text="📞 통화 끝나면 바로 자동 저장"
                             android:textColor="#F1F5F9"
                             android:textSize="11.5sp"
                             android:textStyle="bold" />
@@ -1089,7 +1192,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="통화가 끊기면 3.5초 후 드라이브 보관 및 AI 요약 자동 기록"
+                            android:text="통화가 끝나면 드라이브에 안전하게 보관하고 AI가 내용을 자동 요약해요."
                             android:textColor="#94A3B8"
                             android:textSize="10sp" />
                     </LinearLayout>
@@ -1120,7 +1223,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="📶 Wi-Fi 연결 시에만 자동 업로드"
+                            android:text="📶 Wi-Fi(와이파이) 연결 시에만 저장"
                             android:textColor="#F1F5F9"
                             android:textSize="11.5sp"
                             android:textStyle="bold" />
@@ -1128,7 +1231,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="모바일 데이터(LTE/5G) 소진 방지"
+                            android:text="모바일 데이터(LTE/5G)를 아낄 수 있어요."
                             android:textColor="#94A3B8"
                             android:textSize="10sp" />
                     </LinearLayout>
@@ -1145,7 +1248,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="36dp"
                     android:backgroundTint="#059669"
-                    android:text="⚡ 지금 새 녹음 파일 즉시 동기화"
+                    android:text="⚡ 새 녹음 파일 지금 바로 가져오기"
                     android:textColor="#FFFFFF"
                     android:textSize="11.5sp" />
             </LinearLayout>
@@ -1159,17 +1262,20 @@
                 android:layout_marginBottom="10dp" />
 
             <LinearLayout
+                android:id="@+id/layoutFileUploadHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="📁 사진 &amp; 문서 구글 드라이브 보관"
+                    android:text="📁 사진 &amp; 문서 드라이브에 안전 보관"
                     android:textColor="#E2E8F0"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -1178,132 +1284,154 @@
                     android:id="@+id/switchFileUploadSync"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="false" />
-            </LinearLayout>
-
-            <Button
-                android:id="@+id/btnPickAndUploadFile"
-                android:layout_width="match_parent"
-                android:layout_height="44dp"
-                android:backgroundTint="#4F46E5"
-                android:text="📷/📁 사진 &amp; 문서 파일 직접 선택하여 업로드"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp" />
-
-            <!-- AI OCR 비즈니스 원터치 자동화 버튼 2종 (v1.5) -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="10dp">
-
-                <Button
-                    android:id="@+id/btnPickReceipt"
-                    android:layout_width="0dp"
-                    android:layout_height="44dp"
-                    android:layout_weight="1"
-                    android:backgroundTint="#059669"
-                    android:text="🧾 영수증 AI 장부"
-                    android:textColor="#FFFFFF"
-                    android:textSize="12sp"
-                    android:textStyle="bold"
-                    android:layout_marginEnd="4dp" />
-
-                <Button
-                    android:id="@+id/btnPickBusinessCard"
-                    android:layout_width="0dp"
-                    android:layout_height="44dp"
-                    android:layout_weight="1"
-                    android:backgroundTint="#2563EB"
-                    android:text="🪪 명함 AI 인맥"
-                    android:textColor="#FFFFFF"
-                    android:textSize="12sp"
-                    android:textStyle="bold"
-                    android:layout_marginStart="4dp" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/layoutFileUploadSettings"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="#0F172A"
-                android:padding="10dp"
-                android:layout_marginBottom="12dp">
-
-                <!-- 시트 열기 & 드라이브 폴더 열기 바로가기 뱃지 -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="8dp">
-
-                    <Button
-                        android:id="@+id/btnOpenFileSheet"
-                        android:layout_width="0dp"
-                        android:layout_height="40dp"
-                        android:layout_weight="1"
-                        android:backgroundTint="#1E293B"
-                        android:text="📊 파일 대장 열기 ↗"
-                        android:textColor="#38BDF8"
-                        android:textSize="11.5sp"
-                        android:textStyle="bold"
-                        android:layout_marginEnd="4dp" />
-
-                    <Button
-                        android:id="@+id/btnOpenFileFolder"
-                        android:layout_width="0dp"
-                        android:layout_height="40dp"
-                        android:layout_weight="1"
-                        android:backgroundTint="#1E293B"
-                        android:text="📁 보관함 폴더 ↗"
-                        android:textColor="#A78BFA"
-                        android:textSize="11.5sp"
-                        android:textStyle="bold"
-                        android:layout_marginStart="4dp" />
-                </LinearLayout>
-
-                <!-- 스마트 경비 영수증 대장 & 스마트 명함 관리 대장 열기 바로가기 뱃지 -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="8dp">
-
-                    <Button
-                        android:id="@+id/btnOpenReceiptSheet"
-                        android:layout_width="0dp"
-                        android:layout_height="40dp"
-                        android:layout_weight="1"
-                        android:backgroundTint="#1E293B"
-                        android:text="🧾 영수증 대장 열기 ↗"
-                        android:textColor="#34D399"
-                        android:textSize="11.5sp"
-                        android:textStyle="bold"
-                        android:layout_marginEnd="4dp" />
-
-                    <Button
-                        android:id="@+id/btnOpenBusinessCardSheet"
-                        android:layout_width="0dp"
-                        android:layout_height="40dp"
-                        android:layout_weight="1"
-                        android:backgroundTint="#1E293B"
-                        android:text="🪪 명함 대장 열기 ↗"
-                        android:textColor="#60A5FA"
-                        android:textSize="11.5sp"
-                        android:textStyle="bold"
-                        android:layout_marginStart="4dp" />
-                </LinearLayout>
+                    android:checked="false"
+                    android:layout_marginEnd="6dp" />
 
                 <TextView
+                    android:id="@+id/btnToggleFileUploadDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="접기 ▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- 접이식 세부 영역 -->
+            <LinearLayout
+                android:id="@+id/layoutFileUploadDetails"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <Button
+                    android:id="@+id/btnPickAndUploadFile"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:backgroundTint="#4F46E5"
+                    android:text="📷/📁 사진·문서 바로 올려두기"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- AI OCR 비즈니스 원터치 자동화 버튼 2종 (v1.5) -->
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="💡 팁: 갤러리 또는 파일 앱에서 사진/파일을 누르고 [공유] ➡️ [SheetBot Agent]를 선택하면 앱을 열지 않아도 1초 만에 구글 드라이브로 자동 업로드됩니다."
-                    android:textColor="#64748B"
-                    android:textSize="10.5sp"
-                    android:lineSpacingExtra="2dp" />
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="10dp">
+
+                    <Button
+                        android:id="@+id/btnPickReceipt"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#059669"
+                        android:text="🧾 영수증 사진 ➔ AI 장부 자동 기입"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btnPickBusinessCard"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#2563EB"
+                        android:text="🪪 명함 사진 ➔ AI 연락처 자동 등록"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold"
+                        android:layout_marginStart="4dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/layoutFileUploadSettings"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#0F172A"
+                    android:padding="10dp"
+                    android:layout_marginBottom="12dp">
+
+                    <!-- 시트 열기 & 드라이브 폴더 열기 바로가기 뱃지 -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="8dp">
+
+                        <Button
+                            android:id="@+id/btnOpenFileSheet"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#1E293B"
+                            android:text="📊 보관 파일 시트 열기 ↗"
+                            android:textColor="#38BDF8"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold"
+                            android:layout_marginEnd="4dp" />
+
+                        <Button
+                            android:id="@+id/btnOpenFileFolder"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#1E293B"
+                            android:text="📁 보관 폴더 열기 ↗"
+                            android:textColor="#A78BFA"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold"
+                            android:layout_marginStart="4dp" />
+                    </LinearLayout>
+
+                    <!-- 스마트 경비 영수증 대장 & 스마트 명함 관리 대장 열기 바로가기 뱃지 -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="8dp">
+
+                        <Button
+                            android:id="@+id/btnOpenReceiptSheet"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#1E293B"
+                            android:text="🧾 영수증 시트 열기 ↗"
+                            android:textColor="#34D399"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold"
+                            android:layout_marginEnd="4dp" />
+
+                        <Button
+                            android:id="@+id/btnOpenBusinessCardSheet"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#1E293B"
+                            android:text="🪪 명함 시트 열기 ↗"
+                            android:textColor="#60A5FA"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold"
+                            android:layout_marginStart="4dp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="💡 팁: 갤러리에서 사진을 [공유] ➔ [시트봇]만 누르면 알아서 드라이브에 보관돼요."
+                        android:textColor="#64748B"
+                        android:textSize="10.5sp"
+                        android:lineSpacingExtra="2dp" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- 웹 링크 및 유튜브 영상 AI 자동 스크랩 섹션 -->
@@ -1315,17 +1443,20 @@
                 android:layout_marginBottom="10dp" />
 
             <LinearLayout
+                android:id="@+id/layoutLinkScrapHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="🌐 웹 링크 &amp; 🔴 유튜브 AI 자동 스크랩"
+                    android:text="🌐 웹 링크 &amp; 🔴 유튜브 3줄 요약 보관"
                     android:textColor="#E2E8F0"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -1334,7 +1465,21 @@
                     android:id="@+id/switchLinkScrap"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="false" />
+                    android:checked="false"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btnToggleLinkScrapDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="접기 ▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
             <LinearLayout
@@ -1352,7 +1497,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 스크랩 대장 시트 열기 ↗"
+                    android:text="📊 링크 요약 시트 열기 ↗"
                     android:textColor="#38BDF8"
                     android:textSize="11.5sp"
                     android:textStyle="bold"
@@ -1361,7 +1506,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="💡 팁: 유튜브 앱이나 웹 브라우저에서 [공유] ➡️ [SheetBot Agent]를 선택하면 AI가 3줄 핵심 요약하여 구글 시트에 1초 만에 깔끔하게 자동 스크랩됩니다."
+                    android:text="💡 팁: 유튜브나 기사 보다가 [공유] ➔ [시트봇]만 누르면 AI가 3줄로 깔끔하게 요약해서 시트에 적어둬요."
                     android:textColor="#64748B"
                     android:textSize="10.5sp"
                     android:lineSpacingExtra="2dp" />
@@ -1376,17 +1521,20 @@
                 android:layout_marginBottom="10dp" />
 
             <LinearLayout
+                android:id="@+id/layoutSmsSyncHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="💬 문자(SMS) 송수신 시트 자동 기록"
+                    android:text="💬 고객 문자 주고받은 내역 시트에 자동 기록"
                     android:textColor="#E2E8F0"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -1395,7 +1543,21 @@
                     android:id="@+id/switchSmsSync"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="false" />
+                    android:checked="false"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btnToggleSmsSyncDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="접기 ▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
             <LinearLayout
@@ -1418,7 +1580,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="🎯 기록 대상 번호/이름 (빈칸은 전체):"
+                        android:text="🎯 기록할 전화번호 / 이름 (비워두면 전체 기록):"
                         android:textColor="#94A3B8"
                         android:textSize="11sp" />
 
@@ -1472,7 +1634,7 @@
                     android:layout_height="38dp"
                     android:background="#1E293B"
                     android:paddingHorizontal="10dp"
-                    android:hint="직접 입력 시 쉼표(,) 구분 (예: 010-1234-5678, 거래처)"
+                    android:hint="여러 개 입력 시 쉼표(,)로 구분 (예: 010-1234-5678, 거래처)"
                     android:textColorHint="#64748B"
                     android:textColor="#FFFFFF"
                     android:textSize="11.5sp"
@@ -1484,7 +1646,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 문자 송수신 대장 시트 열기 ↗"
+                    android:text="📊 문자 내역 시트 열기 ↗"
                     android:textColor="#38BDF8"
                     android:textSize="11.5sp"
                     android:textStyle="bold"
@@ -1500,17 +1662,20 @@
                 android:layout_marginBottom="10dp" />
 
             <LinearLayout
+                android:id="@+id/layoutKakaoSyncHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="🟡 카카오톡 메시지 시트 자동 기록"
+                    android:text="🟡 카카오톡 대화 내용 시트에 자동 기록"
                     android:textColor="#FEE500"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -1519,7 +1684,21 @@
                     android:id="@+id/switchKakaoSync"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="false" />
+                    android:checked="false"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btnToggleKakaoSyncDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="접기 ▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
             <LinearLayout
@@ -1542,7 +1721,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="🎯 기록 대상 채팅방/발신자 (빈칸은 전체):"
+                        android:text="🎯 기록할 채팅방 / 이름 (비워두면 전체 기록):"
                         android:textColor="#94A3B8"
                         android:textSize="11sp" />
 
@@ -1575,7 +1754,7 @@
                     android:layout_height="38dp"
                     android:background="#1E293B"
                     android:paddingHorizontal="10dp"
-                    android:hint="직접 입력 시 쉼표(,) 구분 (예: [주문방], 거래처, 고객상담)"
+                    android:hint="여러 개 입력 시 쉼표(,)로 구분 (예: [주문방], 거래처, 고객상담)"
                     android:textColorHint="#64748B"
                     android:textColor="#FFFFFF"
                     android:textSize="11.5sp"
@@ -1587,7 +1766,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:backgroundTint="#D97706"
-                    android:text="💬 카톡 대화 파일 가져오기"
+                    android:text="💬 카톡 대화 내용 통째로 시트에 넣기"
                     android:textColor="#FFFFFF"
                     android:textSize="11.5sp"
                     android:textStyle="bold"
@@ -1599,7 +1778,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 카카오톡 메시지 대장 시트 열기 ↗"
+                    android:text="📊 카카오톡 대화 시트 열기 ↗"
                     android:textColor="#38BDF8"
                     android:textSize="11.5sp"
                     android:textStyle="bold"
@@ -1615,17 +1794,20 @@
                 android:layout_marginBottom="10dp" />
 
             <LinearLayout
+                android:id="@+id/layoutQuoteSyncHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="📑 AI 스마트 간편 주문 &amp; 품목 대장 연동"
+                    android:text="📑 고객용 간편 주문서 &amp; 단가표 자동 안내"
                     android:textColor="#2DD4BF"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -1634,7 +1816,21 @@
                     android:id="@+id/switchQuoteSync"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="false" />
+                    android:checked="false"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btnToggleQuoteSyncDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="접기 ▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
             <LinearLayout
@@ -1649,7 +1845,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="고객 문의 시 시트 품목을 실시간 반영한 모바일 간편 주문 링크를 0원 자동 전송합니다."
+                    android:text="고객이 상품이나 단가를 물어보면 구글 시트 품목을 담은 간편 주문 링크를 자동으로 보내드려요."
                     android:textColor="#94A3B8"
                     android:textSize="11sp"
                     android:layout_marginBottom="6dp" />
@@ -1820,17 +2016,20 @@
                 android:layout_marginBottom="10dp" />
 
             <LinearLayout
+                android:id="@+id/layoutMissedCallHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="📞 부재중 전화 0원 스마트 자동 회신"
+                    android:text="📞 전화 못 받았을 때 자동으로 답장 문자 보내기"
                     android:textColor="#F97316"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -1839,7 +2038,21 @@
                     android:id="@+id/switchMissedCall"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="false" />
+                    android:checked="false"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btnToggleMissedCallDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="접기 ▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
             <LinearLayout
@@ -1854,7 +2067,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="📝 부재중 전화 자동 회신 안내 문자:"
+                    android:text="📝 보낼 답장 문자 내용:"
                     android:textColor="#94A3B8"
                     android:textSize="11sp"
                     android:layout_marginBottom="4dp" />
@@ -1876,7 +2089,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 부재중 전화 대장 시트 열기 ↗"
+                    android:text="📊 부재중 통화 시트 열기 ↗"
                     android:textColor="#38BDF8"
                     android:textSize="11.5sp"
                     android:textStyle="bold"
@@ -1892,17 +2105,20 @@
                 android:layout_marginBottom="10dp" />
 
             <LinearLayout
+                android:id="@+id/layoutCallEndedCardHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="💼 통화 종료 직후 모바일 명함 발송"
+                    android:text="💼 통화 끝나면 내 모바일 명함 바로 보내기"
                     android:textColor="#38BDF8"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -1911,7 +2127,21 @@
                     android:id="@+id/switchCallEndedCard"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="false" />
+                    android:checked="false"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btnToggleCallEndedCardDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="접기 ▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
             <LinearLayout
@@ -1944,7 +2174,7 @@
                         android:id="@+id/rbModeWebLink"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="🌐 [방안 1] 스마트 웹 명함 링크 (0원 무료 · 미리보기 카드)"
+                        android:text="🌐 웹 명함 링크로 보내기 (0원 무료 · 미리보기 카드)"
                         android:textColor="#E2E8F0"
                         android:textSize="11.5sp"
                         android:buttonTint="#38BDF8"
@@ -1954,7 +2184,7 @@
                         android:id="@+id/rbModeMmsImage"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="🖼️ [방안 2] 갤러리 사진 직접 첨부 (MMS 문자 전송)"
+                        android:text="🖼️ 갤러리 사진 직접 첨부해서 보내기 (MMS 문자)"
                         android:textColor="#E2E8F0"
                         android:textSize="11.5sp"
                         android:buttonTint="#38BDF8"
@@ -2109,8 +2339,8 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="💡 발송 방식, 링크, 문구 변경 시 즉시 자동 저장됩니다."
-                    android:textColor="#64748B"
+                    android:text="💡 통화가 끝나면 상단 알림창에서 터치 한 번으로 고객에게 즉시 발송돼요."
+                    android:textColor="#94A3B8"
                     android:textSize="10.5sp"
                     android:gravity="center"
                     android:layout_marginTop="2dp" />
@@ -2121,7 +2351,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 모바일 명함 발송 대장 시트 열기 ↗"
+                    android:text="📊 명함 발송 시트 열기 ↗"
                     android:textColor="#38BDF8"
                     android:textSize="11.5sp"
                     android:textStyle="bold"
@@ -2137,17 +2367,20 @@
                 android:layout_marginBottom="10dp" />
 
             <LinearLayout
+                android:id="@+id/layoutWebsiteMonitorHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="🚨 내 웹사이트 실시간 장애 감시 (Uptime Sentinel)"
+                    android:text="🚨 내 웹사이트 실시간 접속 장애 감시"
                     android:textColor="#F43F5E"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -2156,7 +2389,21 @@
                     android:id="@+id/switchWebsiteMonitor"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="false" />
+                    android:checked="false"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btnToggleWebsiteMonitorDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="접기 ▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
             <LinearLayout

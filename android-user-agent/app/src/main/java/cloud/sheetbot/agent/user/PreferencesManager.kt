@@ -69,6 +69,55 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_status_details_hidden", false)
         set(value) = prefs.edit().putBoolean("is_status_details_hidden", value).apply()
 
+    // 카드별 아코디언 접힘/펼침 상태 (기본값: false = 펼침)
+    var isWalletDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_wallet_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_wallet_details_hidden", value).apply()
+
+    var isCopilotDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_copilot_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_copilot_details_hidden", value).apply()
+
+    var isPaymentReceiptDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_payment_receipt_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_payment_receipt_details_hidden", value).apply()
+
+    var isCallRecordingDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_call_recording_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_call_recording_details_hidden", value).apply()
+
+    var isFileUploadDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_file_upload_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_file_upload_details_hidden", value).apply()
+
+    var isLinkScrapDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_link_scrap_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_link_scrap_details_hidden", value).apply()
+
+    var isSmsSyncDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_sms_sync_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_sms_sync_details_hidden", value).apply()
+
+    var isKakaoSyncDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_kakao_sync_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_kakao_sync_details_hidden", value).apply()
+
+    var isQuoteSyncDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_quote_sync_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_quote_sync_details_hidden", value).apply()
+
+    var isMissedCallDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_missed_call_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_missed_call_details_hidden", value).apply()
+
+    var isCallEndedCardDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_call_ended_card_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_call_ended_card_details_hidden", value).apply()
+
+    var isWebsiteMonitorDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_website_monitor_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_website_monitor_details_hidden", value).apply()
+
     // 토큰 잔액 및 회원 등급 로컬 캐시 (네트워크 지연 시 0원 노출 방지)
     var lastBalanceTokens: Long
         get() = prefs.getLong("last_balance_tokens", -1L)
