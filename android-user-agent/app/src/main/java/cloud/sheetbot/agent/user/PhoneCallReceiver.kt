@@ -36,6 +36,7 @@ class PhoneCallReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "PhoneCallReceiver"
         const val MISSED_CALL_CHANNEL_ID = "sheetbot_missed_call_channel"
+        const val CALL_ENDED_CHANNEL_ID_V3 = "sheetbot_call_ended_v3"
         const val ACTION_SEND_BUSINESS_CARD = "cloud.sheetbot.agent.user.ACTION_SEND_BUSINESS_CARD"
         const val ACTION_SEND_BUSINESS_CARD_MMS = "cloud.sheetbot.agent.user.ACTION_SEND_BUSINESS_CARD_MMS"
         const val EXTRA_TARGET_PHONE = "target_phone"
@@ -511,14 +512,37 @@ class PhoneCallReceiver : BroadcastReceiver() {
     }
 
     /**
-     * 통화 종료 직후 모바일 명함 원터치 발송 Heads-up 알림 표출
+     * 통화 종료 직후 모바일 명함 다이얼로그 팝업창 직접 실행 및 Heads-up 배너 알림 표출
      */
     private fun showCallEndedCardPrompt(context: Context, phoneNumber: String, directContactName: String? = null) {
         val contactName = directContactName ?: ContactHelper.getContactName(context, phoneNumber)
         val displayName = contactName ?: phoneNumber
         val prefs = PreferencesManager(context)
 
-        ensureNotificationChannel(context)
+        // 1. 최상단 다이얼로그 팝업 액티비티 인텐트 준비
+        val dialogIntent = Intent(context, CallEndedPromptActivity::class.java).apply {
+            putExtra(EXTRA_TARGET_PHONE, phoneNumber)
+            putExtra(EXTRA_CONTACT_NAME, contactName)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+
+        // 2. 다이얼로그 팝업창 직접 띄우기 시도 (통화 직후 포그라운드 전환 상태)
+        try {
+            context.startActivity(dialogIntent)
+            Log.i(TAG, "🚀 [모바일 명함 다이얼로그 팝업창 직접 띄우기 성공] 대상: $phoneNumber ($displayName)")
+        } catch (e: Exception) {
+            Log.w(TAG, "다이얼로그 직접 띄우기 제한 (풀스크린 인텐트 헤즈업으로 대체 표출): ${e.message}")
+        }
+
+        // 3. Heads-up 전용 알림 채널 보장
+        ensureCallEndedNotificationChannel(context)
+
+        val dialogPending = PendingIntent.getActivity(
+            context,
+            (System.currentTimeMillis() % 10000).toInt(),
+            dialogIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         val isMmsMode = prefs.businessCardSendMode == "MMS_IMAGE"
         val imagePath = prefs.businessCardImagePath
@@ -534,13 +558,13 @@ class PhoneCallReceiver : BroadcastReceiver() {
             }
             val pending = PendingIntent.getBroadcast(
                 context,
-                (System.currentTimeMillis() % 10000).toInt(),
+                ((System.currentTimeMillis() + 1) % 10000).toInt(),
                 sendIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             Triple(
-                "방금 통화한 상대방에게 등록된 명함/포스터 사진(MMS)과 소개글을 보내시겠습니까?",
-                "🖼️ 모바일 명함(사진) 전송",
+                "방금 통화한 상대방에게 모바일 명함 사진(MMS)을 보내시겠습니까?",
+                "🖼️ 명함 사진 전송",
                 pending
             )
         } else {
@@ -552,7 +576,7 @@ class PhoneCallReceiver : BroadcastReceiver() {
             }
             val pending = PendingIntent.getBroadcast(
                 context,
-                (System.currentTimeMillis() % 10000).toInt(),
+                ((System.currentTimeMillis() + 1) % 10000).toInt(),
                 sendIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
@@ -563,20 +587,24 @@ class PhoneCallReceiver : BroadcastReceiver() {
             )
         }
 
-        val notification = NotificationCompat.Builder(context, MISSED_CALL_CHANNEL_ID)
+        // 4. 상단 배너 헤즈업 팝업(FullScreenIntent) & 알림 뱃지 터치 시 팝업창 오픈(ContentIntent) 2중 방어
+        val notification = NotificationCompat.Builder(context, CALL_ENDED_CHANNEL_ID_V3)
             .setContentTitle("💼 [통화 종료] $displayName")
             .setContentText(contentPrompt)
             .setSmallIcon(android.R.drawable.ic_menu_send)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
+            .setContentIntent(dialogPending) // 알림 터치 시 명함 팝업창 오픈!
+            .setFullScreenIntent(dialogPending, true) // 화면 상단 배너 헤즈업 팝업 강제 노출!
             .addAction(android.R.drawable.ic_menu_send, actionLabel, pendingSend)
             .build()
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(2001, notification)
     }
-
-
 
     private fun showMissedCallNotification(context: Context, nameOrPhone: String, autoReplied: Boolean) {
         ensureNotificationChannel(context)
@@ -592,6 +620,24 @@ class PhoneCallReceiver : BroadcastReceiver() {
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify((System.currentTimeMillis() % 100000).toInt(), notification)
+    }
+
+    private fun ensureCallEndedNotificationChannel(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val channel = NotificationChannel(
+                CALL_ENDED_CHANNEL_ID_V3,
+                "SheetBot 통화 종료 모바일 명함 알림",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "통화 종료 후 화면 최상단에 모바일 명함 발송 팝업을 표시합니다."
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 300, 150, 300)
+                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+                setBypassDnd(true)
+            }
+            manager.createNotificationChannel(channel)
+        }
     }
 
     private fun ensureNotificationChannel(context: Context) {

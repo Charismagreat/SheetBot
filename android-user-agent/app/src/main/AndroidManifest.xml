@@ -100,6 +100,16 @@
             android:theme="@style/Theme.AppCompat.Light.Dialog"
             android:excludeFromRecents="true" />
 
+        <!-- 통화 종료 직후 최상단 모바일 명함 발송 팝업 다이얼로그 액티비티 -->
+        <activity
+            android:name=".CallEndedPromptActivity"
+            android:exported="false"
+            android:theme="@style/Theme.SheetBotDialog"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
+
         <!-- 포그라운드 킵얼라이브 서비스 -->
         <service
             android:name=".KeepAliveService"
