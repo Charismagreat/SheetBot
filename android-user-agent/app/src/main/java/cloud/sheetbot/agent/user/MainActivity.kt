@@ -793,7 +793,7 @@ class MainActivity : AppCompatActivity() {
 
         // 🧪 [디버깅] 명함 헤드업 알림 & 팝업 3초 카운트다운 테스트
         binding.btnTestBusinessCardNotification.setOnClickListener {
-            val notiManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val notiManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             val isEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 notiManager.areNotificationsEnabled()
             } else {
