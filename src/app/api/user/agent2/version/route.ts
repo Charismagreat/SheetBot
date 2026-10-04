@@ -14,7 +14,7 @@ export async function GET() {
       latestVersionName: "2.1.54",
       apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.54/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.54 릴리즈\n• 🗂️ [단일 통합 접이식 카드 전면 개편] 기존 3개의 분산 카드를 하나로 통합하고, 한 줄의 슬림한 카드로 언제든 접거나 펼칠 수 있도록 최적화\n• 🛡️ [개인정보 100% 안전 보증 안내 탑재] 시트봇 서버 무보관 100% 원칙 및 개인 구글 계정 전송 보증을 공식 명시\n• 🚀 [화면 공간 극대화] 불필요한 추천 카드를 정리하고 시트봇 관제 센터 바로가기와 통합하여 최적의 모바일 가독성 제공",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.54 릴리즈\n• 🎙️ [AI 비서 카드 전면 개편] 옵션 A 모던 올인원 프롬프트 박스 디자인(14dp 라운드, 1.5dp 테두리, 음성/실행 일체형) 및 쉬운 안내 문구 적용\n• 💳 [매장 결제 & 통화 녹음 등 주요 카드 개편] '결제될 때 음성으로 안내받기', '영수증 문자 발송 시트 열기', '통화 끝나면 바로 자동 저장' 등 쉬운 동사형 문구 100% 개편\n• 📂 [전 카드 상시 아코디언 접기/펼치기] 토큰 지갑을 포함하여 기능이 켜져 있는 상태에서도 모든 카드를 슬림하게 접어둘 수 있도록 지원\n• 💼 [모바일 명함 옵션 정비] 웹 명함 링크 및 갤러리 사진 직접 첨부(MMS) 방식 선택 지원",
     },
     {
       headers: {
