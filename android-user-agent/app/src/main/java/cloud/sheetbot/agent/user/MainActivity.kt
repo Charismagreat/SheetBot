@@ -2377,12 +2377,7 @@ class MainActivity : AppCompatActivity() {
                         ).show()
                         addLogItem("🪪 명함 OCR", "$name $comp -> 인맥 대장", true)
 
-                        // 화면에 시트봇 앱이 켜져 있는 상태라면 다이얼로그 즉시 팝업
-                        if (ocr != null) {
-                            try {
-                                CardActionActivity.start(this@MainActivity, ocr)
-                            } catch (_: Exception) {}
-                        }
+                        // 상단 알림(진동/소리)이 떠 있으며, 사용자가 알림을 누르면 팝업창(CardActionActivity)이 열립니다.
                     }
                 } else {
                     val err = result.error ?: "명함 분석 실패"

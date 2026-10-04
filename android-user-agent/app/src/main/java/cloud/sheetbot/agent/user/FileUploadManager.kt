@@ -115,14 +115,8 @@ object FileUploadManager {
                 val rawComp = ocrData.optString("company", "")
                 val comp = if (rawComp.isNotBlank()) "($rawComp)" else ""
 
+                // 상단 헤드업 알림을 띄우고, 사용자가 알림을 터치했을 때 CardActionActivity 팝업이 열리도록 보장
                 showBusinessCardActionNotification(context, cName, comp, ocrData)
-                try {
-                    withContext(Dispatchers.Main) {
-                        CardActionActivity.start(context, ocrData)
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "CardActionActivity launch warning: ${e.message}")
-                }
 
                 if (prefs.isTtsEnabled) {
                     TtsManager.speak(context, "${cName}님의 명함이 분석되어 인맥 대장에 등록되었습니다.")

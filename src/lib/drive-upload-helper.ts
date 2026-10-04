@@ -1,5 +1,6 @@
 import { callDriveTool, uploadFile } from "@/lib/egdesk-helpers";
 import fs from "fs";
+import os from "os";
 import path from "path";
 
 /**
@@ -31,7 +32,6 @@ export async function uploadDriveFileWithBridge(options: {
   // 2. 파일이 없으면 os.tmpdir()에 직접 안전하게 기록하여 호스트 절대 경로 확보
   if (!isDirectlyAccessible && buffer && buffer.length > 0) {
     try {
-      const os = require("os");
       const safeBasename = path.basename(fileName).replace(/[/\\?%*:|"<>]/g, "_");
       const tmpPath = path.join(os.tmpdir(), `sb_drive_${Date.now()}_${safeBasename}`);
       fs.writeFileSync(tmpPath, buffer);
@@ -72,7 +72,7 @@ export async function uploadDriveFileWithBridge(options: {
     }
   }
 
-  // 3. 구글 드라이브 업로드 MCP 도구 호출
+  // 4. 구글 드라이브 업로드 MCP 도구 호출
   const uploadRes = await callDriveTool("drive_upload", {
     filePath: localPathToUse,
     folderId: folderId || undefined,
@@ -81,14 +81,27 @@ export async function uploadDriveFileWithBridge(options: {
     preferOAuth,
   });
 
-  const parsedUpload = typeof uploadRes === "string" ? JSON.parse(uploadRes) : uploadRes;
-  const fileId = parsedUpload?.id || parsedUpload?.fileId || null;
-  const webViewLink = parsedUpload?.webViewLink || (fileId ? `https://drive.google.com/file/d/${fileId}/view` : "");
+  // 5. MCP 응답 2중 언래핑 패턴 적용
+  let innerJson: any = null;
+  if (uploadRes && typeof uploadRes === "object") {
+    if (uploadRes.result && Array.isArray(uploadRes.result.content) && uploadRes.result.content[0]?.text) {
+      try { innerJson = JSON.parse(uploadRes.result.content[0].text); } catch {}
+    } else if (Array.isArray(uploadRes.content) && uploadRes.content[0]?.text) {
+      try { innerJson = JSON.parse(uploadRes.content[0].text); } catch {}
+    } else {
+      innerJson = uploadRes;
+    }
+  } else if (typeof uploadRes === "string") {
+    try { innerJson = JSON.parse(uploadRes); } catch {}
+  }
+
+  const fileId = innerJson?.id || innerJson?.fileId || null;
+  const webViewLink = innerJson?.webViewLink || (fileId ? `https://drive.google.com/file/d/${fileId}/view` : "");
 
   return {
     id: fileId,
     fileId,
     webViewLink,
-    name: parsedUpload?.name || fileName,
+    name: innerJson?.name || fileName,
   };
 }
