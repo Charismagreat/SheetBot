@@ -37,13 +37,13 @@ function writeDebugLog(msg: string) {
   } catch {}
 }
 
-// 15초 멱등성 중복 수신 방어 캐시 (동일 사용자 + 파일명 기준)
+// 60초 멱등성 중복 수신 방어 캐시 (동일 사용자 + 파일명 기준)
 const recentRecordingUploads = new Map<string, { timestamp: number; fileId: string; webViewLink: string; targetFolderId: string | null; targetFolderName: string }>();
 
 function cleanRecentUploads() {
   const now = Date.now();
   for (const [k, v] of recentRecordingUploads.entries()) {
-    if (now - v.timestamp > 30000) {
+    if (now - v.timestamp > 70000) {
       recentRecordingUploads.delete(k);
     }
   }
@@ -186,12 +186,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ⚡ [15초 멱등성 중복 방어] 단말기 루프/재전송에 의한 중복 저장 100% 원천 차단
+    // ⚡ [60초 멱등성 중복 방어] 단말기 루프/재전송에 의한 중복 저장 100% 원천 차단
     cleanRecentUploads();
     const dedupeKey = `${cleanEmail}_${targetFileName}_${buffer.length}`;
     const cached = recentRecordingUploads.get(dedupeKey);
-    if (cached && Date.now() - cached.timestamp < 15000) {
-      writeDebugLog(`[Idempotency] Duplicate upload blocked within 15s for ${dedupeKey}. Returning cached response.`);
+    if (cached && Date.now() - cached.timestamp < 60000) {
+      writeDebugLog(`[Idempotency] Duplicate upload blocked within 60s for ${dedupeKey}. Returning cached response.`);
       return NextResponse.json({
         success: true,
         message: `이미 안전하게 보관된 통화 녹음 파일입니다.`,
@@ -202,6 +202,14 @@ export async function POST(req: NextRequest) {
         webViewLink: cached.webViewLink,
       });
     }
+    // 진입 즉시 락 등록하여 동시 중복 수신 차단
+    recentRecordingUploads.set(dedupeKey, {
+      timestamp: Date.now(),
+      fileId: "",
+      webViewLink: "",
+      targetFolderId: null,
+      targetFolderName,
+    });
 
     // 3. 임시 파일로 디스크에 저장 (Drive 업로드 도구에 로컬 경로 필요)
     const tempDir = os.tmpdir();
@@ -674,7 +682,7 @@ async function triggerAiAudioAnalysis(
     // 50KB 이상의 대용량 음성 파일을 실시간 callAiCaller로 부르면 60초 타임아웃 및 504 Gateway Timeout 발생
     if (!rawText) {
       if (audioBytesLen > 80 * 1024) {
-        writeDebugLog(`Audio file size (${fileSizeMb}) is large. Skipping synchronous call to prevent 504 Gateway Timeout.`);
+        writeDebugLog(`Audio file size (${formatBytes(audioBytesLen)}) is large. Skipping synchronous call to prevent 504 Gateway Timeout.`);
         return;
       }
       writeDebugLog(`Calling standard AI Caller for small audio ${fileName}...`);

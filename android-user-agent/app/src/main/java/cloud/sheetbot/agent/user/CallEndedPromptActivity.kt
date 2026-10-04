@@ -1,6 +1,8 @@
 package cloud.sheetbot.agent.user
 
 import android.app.Activity
+import android.app.NotificationManager
+import android.content.Context
 import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.Bundle
@@ -24,6 +26,12 @@ class CallEndedPromptActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 상단 알림 닫기 (명함 발송 다이얼로그가 전면 활성화되었으므로 알림 제거)
+        try {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            manager?.cancel(2001)
+        } catch (_: Exception) {}
 
         // 잠금화면 위 및 화면 켜짐 허용
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {

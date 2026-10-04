@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 78,
-      latestVersionName: "2.1.57",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.57/SheetBotAgent.apk",
+      latestVersionCode: 79,
+      latestVersionName: "2.1.58",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.58/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.57 릴리즈\n• 🪟 [화면 중앙 최상단 팝업 다이얼로그 신설] 통화 종료 시 다른 앱(T전화, 기본 전화 앱 종료 화면)에 절대 가려지지 않도록 화면 중앙에 선명한 모바일 명함 발송 팝업창 직접 표출\n• 🔔 [상단 배너 헤즈업 팝업 & 원터치 터치 연동] FullScreenIntent 및 전용 알림 채널 분리로 상단 배너 헤즈업 알림 강제 표시 및 상단 알림 뱃지 터치 시에도 즉시 팝업창 오픈\n• ⏱️ [15초 스마트 자동 닫힘] 팝업창 방해를 방지하기 위해 15초 카운트다운 후 자동 닫힘 타이머 탑재\n• 🚀 [원터치 발송 & 시트 기록] 팝업창의 '지금 바로 모바일 명함 보내기' 터치 한 번으로 SMS/MMS 발송과 구글 시트 대장 자동 기록 동시 수행",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.58 릴리즈\n• 💼 [상단 알림 버튼 클릭 시 명함 화면 즉시 전환] 통화 종료 후 상단 알림에서 [모바일 명함 보내기] 버튼을 누르면 시트봇 명함 확인 화면으로 즉시 전환되어 내용을 직접 확인하고 안전하게 전송 가능\n• ❌ [상단 알림 닫기 버튼 추가] 알림에 [닫기] 액션을 추가하여 원치 않을 때 알림을 즉시 제거 가능\n• 🧹 [화면 진입 시 알림 자동 정리] 명함 확인 창이 뜨면 상단 알림이 자동으로 닫혀 알림 바가 깔끔하게 유지됨",
     },
     {
       headers: {

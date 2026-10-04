@@ -39,6 +39,7 @@ class PhoneCallReceiver : BroadcastReceiver() {
         const val CALL_ENDED_CHANNEL_ID_V3 = "sheetbot_call_ended_v3"
         const val ACTION_SEND_BUSINESS_CARD = "cloud.sheetbot.agent.user.ACTION_SEND_BUSINESS_CARD"
         const val ACTION_SEND_BUSINESS_CARD_MMS = "cloud.sheetbot.agent.user.ACTION_SEND_BUSINESS_CARD_MMS"
+        const val ACTION_DISMISS_CALL_ENDED = "cloud.sheetbot.agent.user.ACTION_DISMISS_CALL_ENDED"
         const val EXTRA_TARGET_PHONE = "target_phone"
         const val EXTRA_CONTACT_NAME = "contact_name"
 
@@ -267,6 +268,13 @@ class PhoneCallReceiver : BroadcastReceiver() {
             val phone = intent.getStringExtra(EXTRA_TARGET_PHONE) ?: return
             val name = intent.getStringExtra(EXTRA_CONTACT_NAME)
             sendBusinessCardMms(context, phone, name)
+            return
+        }
+
+        // 1-C. 모바일 명함 상단 알림 닫기
+        if (action == ACTION_DISMISS_CALL_ENDED) {
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.cancel(2001)
             return
         }
 
@@ -549,45 +557,25 @@ class PhoneCallReceiver : BroadcastReceiver() {
         val imageFile = if (imagePath.isNotBlank()) File(imagePath) else null
         val hasValidImage = imageFile != null && imageFile.exists() && imageFile.length() > 0
 
-        val (contentPrompt, actionLabel, pendingSend) = if (isMmsMode && hasValidImage) {
-            // [방안 2: 사진 직접 첨부 MMS 모드] -> ACTION_SEND_BUSINESS_CARD_MMS 브로드캐스트로 시트 기록 후 앱 실행
-            val sendIntent = Intent(context, PhoneCallReceiver::class.java).apply {
-                action = ACTION_SEND_BUSINESS_CARD_MMS
-                putExtra(EXTRA_TARGET_PHONE, phoneNumber)
-                putExtra(EXTRA_CONTACT_NAME, contactName)
-            }
-            val pending = PendingIntent.getBroadcast(
-                context,
-                ((System.currentTimeMillis() + 1) % 10000).toInt(),
-                sendIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            Triple(
-                "방금 통화한 상대방에게 모바일 명함 사진(MMS)을 보내시겠습니까?",
-                "🖼️ 명함 사진 전송",
-                pending
-            )
+        val contentPrompt = if (isMmsMode && hasValidImage) {
+            "방금 통화한 상대방에게 모바일 명함 사진(MMS)을 보내시겠습니까?"
         } else {
-            // [방안 1: 스마트 웹 명함 링크 모드 (0원 무료)]
-            val sendIntent = Intent(context, PhoneCallReceiver::class.java).apply {
-                action = ACTION_SEND_BUSINESS_CARD
-                putExtra(EXTRA_TARGET_PHONE, phoneNumber)
-                putExtra(EXTRA_CONTACT_NAME, contactName)
-            }
-            val pending = PendingIntent.getBroadcast(
-                context,
-                ((System.currentTimeMillis() + 1) % 10000).toInt(),
-                sendIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            Triple(
-                "방금 통화한 상대방에게 스마트 모바일 명함(0원 무료)을 보내시겠습니까?",
-                "💼 모바일 명함 즉시 발송",
-                pending
-            )
+            "방금 통화한 상대방에게 스마트 모바일 명함(0원 무료)을 보내시겠습니까?"
         }
+        val actionLabel = if (isMmsMode && hasValidImage) "🖼️ 모바일 명함 보내기" else "💼 모바일 명함 보내기"
 
-        // 4. 상단 배너 헤즈업 팝업(FullScreenIntent) & 알림 뱃지 터치 시 팝업창 오픈(ContentIntent) 2중 방어
+        // 닫기 액션 인텐트 (알림 즉시 닫기)
+        val dismissIntent = Intent(context, PhoneCallReceiver::class.java).apply {
+            action = ACTION_DISMISS_CALL_ENDED
+        }
+        val dismissPending = PendingIntent.getBroadcast(
+            context,
+            ((System.currentTimeMillis() + 1) % 10000).toInt(),
+            dismissIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // 4. 상단 배너 헤즈업 팝업(FullScreenIntent) & 알림 뱃지/버튼 터치 시 시트봇 명함 화면으로 즉시 전환
         val notification = NotificationCompat.Builder(context, CALL_ENDED_CHANNEL_ID_V3)
             .setContentTitle("💼 [통화 종료] $displayName")
             .setContentText(contentPrompt)
@@ -597,9 +585,10 @@ class PhoneCallReceiver : BroadcastReceiver() {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
-            .setContentIntent(dialogPending) // 알림 터치 시 명함 팝업창 오픈!
+            .setContentIntent(dialogPending) // 알림 카드 터치 시 명함 팝업 화면 전환!
             .setFullScreenIntent(dialogPending, true) // 화면 상단 배너 헤즈업 팝업 강제 노출!
-            .addAction(android.R.drawable.ic_menu_send, actionLabel, pendingSend)
+            .addAction(android.R.drawable.ic_menu_send, actionLabel, dialogPending) // [명함 보내기] 버튼 터치 시 시트봇 명함 화면으로 즉시 전환!
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "닫기", dismissPending) // [닫기] 터치 시 알림 닫기
             .build()
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
