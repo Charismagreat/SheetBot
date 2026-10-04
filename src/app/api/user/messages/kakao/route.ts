@@ -13,6 +13,9 @@ import { maskRecipient, formatZeroRetentionContent } from "@/lib/privacy";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { getKoreanTimeString } from "@/lib/date-utils";
 
+// 15초 이내 동일 카카오톡 메시지 중복 기록 방어 캐시 (키: userEmail:roomName:senderName:message, 값: timestamp)
+const recentKakaoDedupeCache = new Map<string, number>();
+
 /**
  * POST /api/user/messages/kakao
  * 스마트폰 시트봇 에이전트(KakaoNotificationListener)에서 수신된 카카오톡 메시지를 받아
@@ -53,6 +56,27 @@ export async function POST(req: NextRequest) {
     const roomName = chatRoomName && chatRoomName.trim().length > 0 ? chatRoomName.trim() : (sender || "미지정 방");
     const senderName = sender && sender.trim().length > 0 ? sender.trim() : roomName;
     const nowStr = timestamp || getKoreanTimeString();
+
+    // 0. 15초 이내 동일 카카오톡 메시지 중복 요청 방어 (Idempotency Guard)
+    const dedupeKey = `${cleanEmail}:${roomName}:${senderName}:${message.trim()}`;
+    const now = Date.now();
+    const lastSeen = recentKakaoDedupeCache.get(dedupeKey) || 0;
+    if (now - lastSeen < 15_000) {
+      return NextResponse.json({
+        success: true,
+        message: "중복된 카카오톡 메시지가 15초 이내에 감지되어 시트 중복 기록을 안전하게 방어했습니다.",
+        isDuplicate: true,
+      });
+    }
+    recentKakaoDedupeCache.set(dedupeKey, now);
+
+    // 오래된 캐시 정리 (최대 200개 유지)
+    if (recentKakaoDedupeCache.size > 200) {
+      const threshold = now - 60_000;
+      for (const [k, v] of recentKakaoDedupeCache.entries()) {
+        if (v < threshold) recentKakaoDedupeCache.delete(k);
+      }
+    }
 
     // [SheetBot] 표준 네이밍 원칙 준수
     let sheetTitle = rawSheetTitle.trim();

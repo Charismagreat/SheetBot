@@ -352,11 +352,11 @@ class BankNotificationListener : NotificationListenerService() {
                 return
             }
 
-            // 3. 3초 이내 동일 알림 중복 감지 방어
+            // 3. 15초 이내 동일 알림 중복 감지 방어 (안드로이드 헤즈업 팝업 닫힘 및 알림창 갱신 2중 이벤트 원천 차단)
             val dedupeKey = "kakao:$chatRoomName:$sender:$message"
             val now = System.currentTimeMillis()
             val lastSeen = recentCache[dedupeKey] ?: 0L
-            if (now - lastSeen < 3000L) {
+            if (now - lastSeen < 15_000L) {
                 return
             }
             recentCache[dedupeKey] = now
