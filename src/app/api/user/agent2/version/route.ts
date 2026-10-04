@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 80,
-      latestVersionName: "2.1.59",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.59/SheetBotAgent.apk",
+      latestVersionCode: 81,
+      latestVersionName: "2.1.60",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.60/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.59 릴리즈\n• 💳 [결제 확인 & 영수증 카드 크기 통일] 다른 스마트 규칙 카드들과 상하 높이 및 상단 구분선 디자인을 100% 일치시켜 깔끔하고 통일된 카드 UI 제공",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.60 릴리즈\n• 🟡 [카카오톡 메시지 2중 기록 완벽 차단] 안드로이드 헤즈업 팝업 닫힘 및 알림창 갱신 시 발생하는 6초 중복 이벤트를 15초 멱등성 디바운싱(앱+서버 2단 방어)으로 완벽 차단하여 시트에 단 1회만 깔끔하게 기록",
     },
     {
       headers: {
