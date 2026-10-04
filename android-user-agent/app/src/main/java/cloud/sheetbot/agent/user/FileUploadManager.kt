@@ -110,21 +110,18 @@ object FileUploadManager {
                     TtsManager.speak(context, "영수증이 분석되어 경비 대장에 자동 기록되었습니다.")
                 }
             } else if (ocrType.equals("BUSINESS_CARD", ignoreCase = true)) {
-                val ocrData = result.ocrData
-                val cName = ocrData?.optString("name", "명함") ?: "명함"
-                val comp = ocrData?.optString("company")?.let { "($it)" } ?: ""
+                val ocrData = result.ocrData ?: org.json.JSONObject()
+                val cName = ocrData.optString("name", "명함 고객").ifBlank { "명함 고객" }
+                val rawComp = ocrData.optString("company", "")
+                val comp = if (rawComp.isNotBlank()) "($rawComp)" else ""
 
-                if (ocrData != null) {
-                    showBusinessCardActionNotification(context, cName, comp, ocrData)
-                    try {
-                        withContext(Dispatchers.Main) {
-                            CardActionActivity.start(context, ocrData)
-                        }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "CardActionActivity launch warning: ${e.message}")
+                showBusinessCardActionNotification(context, cName, comp, ocrData)
+                try {
+                    withContext(Dispatchers.Main) {
+                        CardActionActivity.start(context, ocrData)
                     }
-                } else {
-                    showOcrSuccessNotification(context, "🪪 [명함 AI 인맥 등록 완료]", "$cName $comp 정보가 스마트 인맥 대장에 등록되었습니다.")
+                } catch (e: Exception) {
+                    Log.w(TAG, "CardActionActivity launch warning: ${e.message}")
                 }
 
                 if (prefs.isTtsEnabled) {
@@ -322,12 +319,19 @@ object FileUploadManager {
         manager.notify((System.currentTimeMillis() % 100000).toInt(), noti)
     }
 
-    private const val CARD_NOTIFICATION_CHANNEL_ID = "sheetbot_card_action_channel"
+    private const val CARD_NOTIFICATION_CHANNEL_ID = "sheetbot_card_action_channel_v3"
 
     private fun showBusinessCardActionNotification(context: Context, name: String, company: String, cardJson: org.json.JSONObject) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+        val soundUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val audioAttributes = android.media.AudioAttributes.Builder()
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                .build()
+
             val channel = NotificationChannel(
                 CARD_NOTIFICATION_CHANNEL_ID,
                 "SheetBot 명함 인맥 등록 알림",
@@ -335,7 +339,9 @@ object FileUploadManager {
             ).apply {
                 description = "명함 사진 AI 분석 완료 시 연락처 저장 및 모바일 명함 발송을 위해 화면 상단에 알립니다."
                 enableVibration(true)
+                vibrationPattern = longArrayOf(0, 400, 200, 400)
                 enableLights(true)
+                setSound(soundUri, audioAttributes)
                 lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             }
             manager.createNotificationChannel(channel)
@@ -366,8 +372,10 @@ object FileUploadManager {
             .setSmallIcon(android.R.drawable.ic_menu_myplaces)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setSound(soundUri)
+            .setVibrate(longArrayOf(0, 400, 200, 400))
             .setContentIntent(pendingIntent)
-            .setFullScreenIntent(pendingIntent, false)
+            .setFullScreenIntent(pendingIntent, true)
             .setAutoCancel(true)
             .addAction(android.R.drawable.ic_menu_send, "연락처 저장 & 명함 발송", pendingIntent)
             .build()

@@ -26,9 +26,24 @@ export async function uploadDriveFileWithBridge(options: {
   let localPathToUse = tempFilePath || "";
 
   // 1. 현재 Node 프로세스에서 파일이 실제로 존재하고 접근 가능한지 검사
-  const isDirectlyAccessible = !!(localPathToUse && fs.existsSync(localPathToUse));
+  let isDirectlyAccessible = !!(localPathToUse && fs.existsSync(localPathToUse));
 
-  // 2. 파일이 로컬 디스크에 없는 경우에만 이지데스크 fs_upload_file MCP 도구 브릿지 시도
+  // 2. 파일이 없으면 os.tmpdir()에 직접 안전하게 기록하여 호스트 절대 경로 확보
+  if (!isDirectlyAccessible && buffer && buffer.length > 0) {
+    try {
+      const os = require("os");
+      const safeBasename = path.basename(fileName).replace(/[/\\?%*:|"<>]/g, "_");
+      const tmpPath = path.join(os.tmpdir(), `sb_drive_${Date.now()}_${safeBasename}`);
+      fs.writeFileSync(tmpPath, buffer);
+      localPathToUse = tmpPath;
+      isDirectlyAccessible = true;
+      console.log(`[DriveBridge] Created local temp file for Drive upload: ${localPathToUse}`);
+    } catch (writeErr: any) {
+      console.warn("[DriveBridge] Failed to write local temp file:", writeErr.message);
+    }
+  }
+
+  // 3. 파일이 여전히 접근 불가능한 경우에만 fs_upload_file 브릿지 폴백 시도
   if (!isDirectlyAccessible) {
     try {
       const base64Content = buffer.toString("base64");
@@ -37,7 +52,6 @@ export async function uploadDriveFileWithBridge(options: {
 
       const fsRes = await uploadFile(uniqueBasename, base64Content, "base64");
 
-      // fsRes 텍스트에서 호스트 PC의 절대 경로 추출 (Windows: C:\... 또는 Unix: /Users/... or /home/...)
       const fsText = typeof fsRes === "string"
         ? fsRes
         : (fsRes?.content?.[0]?.text || fsRes?.text || JSON.stringify(fsRes || ""));
