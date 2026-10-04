@@ -163,10 +163,21 @@ class CardActionActivity : AppCompatActivity() {
 
                 // 2. 내 모바일 명함 발송 실행
                 if (cbSendMyCard.isChecked && isMobileValid) {
-                    PhoneCallReceiver.sendBusinessCardSms(context, mobile, name) { success ->
-                        runOnUiThread {
-                            if (success) {
-                                Toast.makeText(context, "📨 '${name}'님께 모바일 명함이 성공적으로 발송되었습니다.", Toast.LENGTH_SHORT).show()
+                    val prefs = PreferencesManager(context)
+                    if (prefs.businessCardSendMode == "MMS_IMAGE") {
+                        PhoneCallReceiver.sendBusinessCardMms(context, mobile, name) { success ->
+                            runOnUiThread {
+                                if (success) {
+                                    Toast.makeText(context, "📨 '${name}'님께 모바일 명함(MMS)이 준비되었습니다.", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    } else {
+                        PhoneCallReceiver.sendBusinessCardSms(context, mobile, name) { success ->
+                            runOnUiThread {
+                                if (success) {
+                                    Toast.makeText(context, "📨 '${name}'님께 모바일 명함이 성공적으로 발송되었습니다.", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
                     }
