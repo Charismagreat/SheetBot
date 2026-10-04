@@ -234,8 +234,8 @@ export async function POST(req: NextRequest) {
     let cardSpreadsheetUrl: string | null = null;
 
     if (ocrType === "BUSINESS_CARD" && shouldRecordSheet) {
-      // 🪪 명함 Zero-Block 초고속 파이프라인 (0.5초 즉각 응답 + 백그라운드 AI OCR 및 시트 인맥 자동 적재)
-      console.log(`[FilesUpload] 🚀 Zero-Block Instant Return for Business Card: ${targetFileName}`);
+      // 🪪 명함 실시간 AI OCR 파이프라인 (2초 AI 분석 완료 후 ocrData 즉각 반환 + 드라이브/시트 비동기 적재)
+      console.log(`[FilesUpload] 🪪 Realtime AI OCR for Business Card: ${targetFileName}`);
 
       const capturedFolderId = targetFolderId;
       const capturedFileName = targetFileName;
@@ -243,40 +243,55 @@ export async function POST(req: NextRequest) {
       const capturedTempFilePath = tempFilePath;
       const capturedBuffer = buffer;
 
-      // 1. 클라이언트(스마트폰 앱)로 즉시 0.5초 만에 성공 응답 반환 (타임아웃 원천 0%)
-      const instantResponse = {
+      const aiSettings = await getAiModelSettings();
+      const configuredModel = aiSettings.defaultModel || "gemini-2.5-flash";
+      const base64File = capturedBuffer.toString("base64");
+
+      // 1. 실시간 Gemini AI OCR 분석 수행 (약 1.5~2초 소요)
+      const ocrResult = await performAiOcr(
+        base64File,
+        capturedFileName,
+        capturedMimeType,
+        "BUSINESS_CARD",
+        configuredModel
+      ).catch((e: any) => {
+        console.warn("[FilesUpload] Card realtime AI OCR warning:", e.message);
+        return null;
+      });
+
+      // 2. 구글 시트 바인딩 확인
+      const resolved = await resolveUserSpreadsheet({
+        userEmail: cleanEmail,
+        sheetType: "BUSINESS_CARD",
+        defaultTitle: defaultSheetTitle,
+        folderId: capturedFolderId,
+        preferOAuth: true,
+      }).catch(() => null);
+
+      const targetSpreadsheetId = resolved?.spreadsheetId;
+      const targetSpreadsheetUrl = targetSpreadsheetId
+        ? `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`
+        : null;
+
+      const cName = ocrResult?.name || "명함 고객";
+      const successResponse = {
         success: true,
-        message: `명함 사진이 성공적으로 접수되었습니다. AI가 인맥 관리 대장에 자동 등록합니다.`,
+        message: `🪪 [${cName}] 명함 AI 분석이 완료되었습니다.`,
         ocrType: "BUSINESS_CARD",
         fileName: targetFileName,
         folderName: targetFolderName,
         folderId: targetFolderId,
-        status: "PROCESSING",
+        ocrData: ocrResult,
+        spreadsheetUrl: targetSpreadsheetUrl,
       };
 
-      recentFileUploads.set(dedupKey, { timestamp: nowTs, response: instantResponse });
+      recentFileUploads.set(dedupKey, { timestamp: nowTs, response: successResponse });
 
-      // 2. 백그라운드에서 드라이브 업로드 + 실시간 AI OCR + 시트 행 추가 안전 완수
+      // 3. 백그라운드에서 드라이브 업로드 및 시트 행 추가, 토큰 차감, 로그 적재 완수
       void (async () => {
         try {
-          console.log(`[FilesUpload] [CardBackground] Starting AI OCR & Drive upload for: ${capturedFileName}`);
-          const aiSettings = await getAiModelSettings();
-          const configuredModel = aiSettings.defaultModel || "gemini-2.5-flash";
-          const base64File = capturedBuffer.toString("base64");
+          console.log(`[FilesUpload] [CardBackground] Starting Drive upload & Sheet append for: ${capturedFileName}`);
 
-          // AI OCR 분석
-          const ocrResult = await performAiOcr(
-            base64File,
-            capturedFileName,
-            capturedMimeType,
-            "BUSINESS_CARD",
-            configuredModel
-          ).catch((e: any) => {
-            console.warn("[FilesUpload] Card background AI OCR warning:", e.message);
-            return null;
-          });
-
-          // 드라이브 업로드
           let bgDriveFileId: string | null = null;
           let bgWebViewLink = "";
           try {
@@ -293,17 +308,6 @@ export async function POST(req: NextRequest) {
           } catch (upErr: any) {
             console.warn("[FilesUpload] Card background Drive upload warning:", upErr.message);
           }
-
-          // 구글 시트 바인딩 확인 및 행 추가
-          const resolved = await resolveUserSpreadsheet({
-            userEmail: cleanEmail,
-            sheetType: "BUSINESS_CARD",
-            defaultTitle: defaultSheetTitle,
-            folderId: capturedFolderId,
-            preferOAuth: true,
-          }).catch(() => null);
-
-          const targetSpreadsheetId = resolved?.spreadsheetId;
 
           if (targetSpreadsheetId) {
             const nowStr = getKoreanTimeString();
@@ -357,7 +361,7 @@ export async function POST(req: NextRequest) {
             void recordAiUsageLog({
               userEmail: cleanEmail,
               caller: "sheetbot-card-background",
-              purpose: `명함 백그라운드 AI 인맥 등록 [Zero-Block] (${configuredModel})`,
+              purpose: `명함 백그라운드 AI 인맥 등록 (${configuredModel})`,
               model: configuredModel,
               promptTokens: 450,
               completionTokens: 250,
@@ -392,7 +396,7 @@ export async function POST(req: NextRequest) {
         }
       })();
 
-      return NextResponse.json(instantResponse);
+      return NextResponse.json(successResponse);
     } else {
       // 5. 일반 파일 및 영수증 업로드 로직 (단일 드라이브 업로드 후 백그라운드 위임)
       try {

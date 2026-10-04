@@ -322,16 +322,21 @@ object FileUploadManager {
         manager.notify((System.currentTimeMillis() % 100000).toInt(), noti)
     }
 
+    private const val CARD_NOTIFICATION_CHANNEL_ID = "sheetbot_card_action_channel"
+
     private fun showBusinessCardActionNotification(context: Context, name: String, company: String, cardJson: org.json.JSONObject) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID,
-                "SheetBot 파일 업로드 알림",
+                CARD_NOTIFICATION_CHANNEL_ID,
+                "SheetBot 명함 인맥 등록 알림",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "사진 및 파일이 구글 드라이브로 업로드되었을 때 알립니다."
+                description = "명함 사진 AI 분석 완료 시 연락처 저장 및 모바일 명함 발송을 위해 화면 상단에 알립니다."
+                enableVibration(true)
+                enableLights(true)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             }
             manager.createNotificationChannel(channel)
         }
@@ -354,13 +359,15 @@ object FileUploadManager {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val noti = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("🪪 [명함 등록 완료] $name $company")
+        val noti = NotificationCompat.Builder(context, CARD_NOTIFICATION_CHANNEL_ID)
+            .setContentTitle("🪪 [명함 AI 분석 완료] $name $company")
             .setContentText("터치하여 스마트폰 연락처에 추가하고 내 모바일 명함을 발송하세요.")
-            .setStyle(NotificationCompat.BigTextStyle().bigText("🪪 $name $company 등록 완료\n• 스마트폰 연락처(주소록) 자동 저장\n• 상대방에게 내 모바일 명함 즉시 발송"))
+            .setStyle(NotificationCompat.BigTextStyle().bigText("🪪 $name $company AI 인맥 등록 완료\n• 터치 시 연락처 자동 저장 & 내 모바일 명함 발송 팝업이 열립니다."))
             .setSmallIcon(android.R.drawable.ic_menu_myplaces)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(pendingIntent)
+            .setFullScreenIntent(pendingIntent, false)
             .setAutoCancel(true)
             .addAction(android.R.drawable.ic_menu_send, "연락처 저장 & 명함 발송", pendingIntent)
             .build()

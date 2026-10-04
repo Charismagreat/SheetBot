@@ -2352,37 +2352,50 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.progressBar.visibility = View.VISIBLE
-        Toast.makeText(this, "🪪 명함을 업로드하고 AI 인맥 분석을 시작합니다...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "🪪 명함을 전송했습니다. 다른 앱을 이용하셔도 AI 분석 완료 시 상단 알림이 뜹니다.", Toast.LENGTH_SHORT).show()
 
-        activityScope.launch {
+        val appContext = applicationContext
+        // 액티비티 생명주기에 종속되지 않는 백그라운드 코루틴 실행 (창 전환 시에도 무중단 완수)
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             try {
-                val result = FileUploadManager.uploadOcrBusinessCard(this@MainActivity, uri)
-                binding.progressBar.visibility = View.GONE
+                val result = FileUploadManager.uploadOcrBusinessCard(appContext, uri)
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    binding.progressBar.visibility = View.GONE
+                }
 
                 if (result.success) {
                     val ocr = result.ocrData
                     val name = ocr?.optString("name", "명함") ?: "명함"
                     val rawComp = ocr?.optString("company")
                     val comp = if (!rawComp.isNullOrBlank()) "($rawComp)" else ""
-                    Toast.makeText(
-                        this@MainActivity,
-                        "🎉 [명함 등록 완료] $name $comp\n인맥 관리 대장에 자동 기록되었습니다!",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    addLogItem("🪪 명함 OCR", "$name $comp -> 인맥 대장", true)
 
-                    // ★ [핵심 액션 연결] 명함 등록 후 스마트폰 연락처 추가 & 내 모바일 명함 전송 다이얼로그 즉시 팝업!
-                    if (ocr != null) {
-                        CardActionActivity.start(this@MainActivity, ocr)
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        Toast.makeText(
+                            appContext,
+                            "🎉 [명함 등록 완료] $name $comp\n인맥 관리 대장에 자동 기록되었습니다!",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        addLogItem("🪪 명함 OCR", "$name $comp -> 인맥 대장", true)
+
+                        // 화면에 시트봇 앱이 켜져 있는 상태라면 다이얼로그 즉시 팝업
+                        if (ocr != null) {
+                            try {
+                                CardActionActivity.start(this@MainActivity, ocr)
+                            } catch (_: Exception) {}
+                        }
                     }
                 } else {
                     val err = result.error ?: "명함 분석 실패"
-                    Toast.makeText(this@MainActivity, "⚠️ 명함 분석 실패: $err", Toast.LENGTH_LONG).show()
-                    addLogItem("명함 오류", err, false)
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        Toast.makeText(appContext, "⚠️ 명함 분석 실패: $err", Toast.LENGTH_LONG).show()
+                        addLogItem("명함 오류", err, false)
+                    }
                 }
             } catch (e: Exception) {
-                binding.progressBar.visibility = View.GONE
-                Toast.makeText(this@MainActivity, "명함 처리 예외: ${e.message}", Toast.LENGTH_SHORT).show()
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    binding.progressBar.visibility = View.GONE
+                    Toast.makeText(appContext, "명함 처리 예외: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
