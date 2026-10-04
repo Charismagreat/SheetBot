@@ -178,7 +178,7 @@ object FileUploadManager {
     /**
      * Content URI에서 파일명 및 MIME 타입 메타데이터 추출
      */
-    private fun resolveUriMetadata(context: Context, uri: Uri): UriFileMetadata {
+    internal fun resolveUriMetadata(context: Context, uri: Uri): UriFileMetadata {
         var fileName: String? = null
         var fileSize: Long = 0L
 
@@ -223,7 +223,7 @@ object FileUploadManager {
     /**
      * Content URI 내용을 앱 캐시 디렉터리의 임시 파일로 복사
      */
-    private fun copyUriToTempFile(context: Context, uri: Uri, originalName: String): File? {
+    internal fun copyUriToTempFile(context: Context, uri: Uri, originalName: String): File? {
         return try {
             val cleanName = originalName.replace(Regex("[\\\\/:*?\"<>|]"), "_")
             val tempFile = File(context.cacheDir, "upload_${System.currentTimeMillis()}_$cleanName")
@@ -237,6 +237,62 @@ object FileUploadManager {
             Log.e(TAG, "Failed to copy URI to temp file: ${e.message}", e)
             null
         }
+    }
+
+    /**
+     * 이미 앱 캐시로 복사된 명함 파일 업로드 및 AI 인맥 등록 (창 전환 권한 소멸 방어)
+     */
+    suspend fun uploadPreparedBusinessCard(
+        context: Context,
+        tempFile: File,
+        meta: UriFileMetadata
+    ): UploadGenericFileResult = withContext(Dispatchers.IO) {
+        val prefs = PreferencesManager(context)
+        val userEmail = prefs.userEmail
+        if (userEmail.isNullOrBlank()) {
+            return@withContext UploadGenericFileResult(
+                success = false,
+                error = "연동된 계정 이메일이 없습니다."
+            )
+        }
+
+        val targetFolder = "[SheetBot] 명함 보관함"
+        val memo = "스마트폰 시트봇 에이전트 명함 AI 인맥화"
+
+        val result = try {
+            ApiClient.uploadGenericFile(
+                file = tempFile,
+                fileName = meta.fileName,
+                mimeType = meta.mimeType,
+                userEmail = userEmail,
+                folderName = targetFolder,
+                memo = memo,
+                autoRecordSheet = true,
+                ocrType = "BUSINESS_CARD"
+            )
+        } finally {
+            try {
+                if (tempFile.exists()) tempFile.delete()
+            } catch (_: Exception) {}
+        }
+
+        if (result.success) {
+            val ocrData = result.ocrData ?: org.json.JSONObject()
+            val cName = ocrData.optString("name", "명함 고객").ifBlank { "명함 고객" }
+            val rawComp = ocrData.optString("company", "")
+            val comp = if (rawComp.isNotBlank()) "($rawComp)" else ""
+
+            // 상단 헤드업 알림을 띄우고, 사용자가 알림을 터치했을 때 CardActionActivity 팝업이 열리도록 보장
+            showBusinessCardActionNotification(context, cName, comp, ocrData)
+
+            if (prefs.isTtsEnabled) {
+                TtsManager.speak(context, "${cName}님의 명함이 분석되어 인맥 대장에 등록되었습니다.")
+            }
+        } else {
+            showOcrSuccessNotification(context, "⚠️ [명함 AI 분석 실패]", result.error ?: "네트워크 또는 분석 오류가 발생했습니다.")
+        }
+
+        result
     }
 
     private fun showUploadSuccessNotification(context: Context, fileName: String, folderName: String) {

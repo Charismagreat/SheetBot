@@ -791,6 +791,59 @@ class MainActivity : AppCompatActivity() {
             businessCardPickerLauncher.launch("image/*")
         }
 
+        // 🧪 [디버깅] 명함 헤드업 알림 & 팝업 3초 카운트다운 테스트
+        binding.btnTestBusinessCardNotification.setOnClickListener {
+            val notiManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val isEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                notiManager.areNotificationsEnabled()
+            } else {
+                true
+            }
+
+            if (!isEnabled) {
+                Toast.makeText(this, "⚠️ 시트봇 앱 알림 권한이 꺼져 있습니다! 알림 설정 화면을 엽니다.", Toast.LENGTH_LONG).show()
+                try {
+                    val intent = Intent().apply {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            action = android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS
+                            putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                        } else {
+                            action = "android.settings.APP_NOTIFICATION_SETTINGS"
+                            putExtra("app_package", packageName)
+                            putExtra("app_uid", applicationInfo.uid)
+                        }
+                    }
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    Toast.makeText(this, "설정 화면 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+                return@setOnClickListener
+            }
+
+            Toast.makeText(this, "🧪 [3초 테스트 시작] 지금 바로 홈 버튼을 눌러 카카오톡 등 다른 앱으로 전환해 보세요!", Toast.LENGTH_LONG).show()
+
+            val appContext = applicationContext
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                kotlinx.coroutines.delay(3000)
+                val testCardJson = org.json.JSONObject().apply {
+                    put("name", "홍길동")
+                    put("title", "대표이사")
+                    put("company", "시트봇테크(주)")
+                    put("mobile", "010-1234-5678")
+                    put("email", "hong@sheetbot.cloud")
+                    put("tel", "02-123-4567")
+                    put("address", "서울특별시 강남구 테헤란로 123")
+                    put("details", "AI 비즈니스 인맥 자동화 테스트")
+                }
+                FileUploadManager.showBusinessCardActionNotification(
+                    appContext,
+                    "홍길동",
+                    "(시트봇테크)",
+                    testCardJson
+                )
+            }
+        }
+
         // 문자(SMS/LMS) 송수신 구글 시트 동기화 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchSmsSync.isChecked = prefs.isSmsSheetSyncEnabled
         binding.etSmsTargetFilter.setText(prefs.smsTargetFilter)
@@ -2351,14 +2404,22 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        // ★ [창 전환 권한 소멸 원천 방어] 액티비티가 살아있는 즉시 앱 캐시로 복사
+        val meta = FileUploadManager.resolveUriMetadata(this, uri)
+        val tempFile = FileUploadManager.copyUriToTempFile(this, uri, meta.fileName)
+        if (tempFile == null || !tempFile.exists()) {
+            Toast.makeText(this, "⚠️ 명함 이미지를 읽어올 수 없습니다.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         binding.progressBar.visibility = View.VISIBLE
         Toast.makeText(this, "🪪 명함을 전송했습니다. 다른 앱을 이용하셔도 AI 분석 완료 시 상단 알림이 뜹니다.", Toast.LENGTH_SHORT).show()
 
         val appContext = applicationContext
-        // 액티비티 생명주기에 종속되지 않는 백그라운드 코루틴 실행 (창 전환 시에도 무중단 완수)
+        // 이제 로컬 파일이 캐시에 보관되어 있으므로 창 전환해도 100% 무중단 실행!
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             try {
-                val result = FileUploadManager.uploadOcrBusinessCard(appContext, uri)
+                val result = FileUploadManager.uploadPreparedBusinessCard(appContext, tempFile, meta)
                 withContext(kotlinx.coroutines.Dispatchers.Main) {
                     binding.progressBar.visibility = View.GONE
                 }
