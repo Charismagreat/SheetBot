@@ -381,7 +381,23 @@ export async function POST(req: NextRequest) {
           }
         })();
 
-        console.log(`[FilesUpload] ✅ Fast-Return business card response in ${Date.now() - cardStartTime}ms`);
+        const cardFastResponse = {
+          success: true,
+          message: `명함 AI 분석이 완료되어 구글 스프레드시트 '${defaultSheetTitle}'에 인맥으로 등록되었습니다.`,
+          ocrType,
+          fileId: driveFileId || "pending",
+          fileName: targetFileName,
+          folderName: targetFolderName,
+          folderId: targetFolderId,
+          webViewLink,
+          spreadsheetUrl: cardSpreadsheetUrl || undefined,
+          ocrData: cardOcrResult || undefined,
+          cardData: cardOcrResult || undefined,
+        };
+
+        recentFileUploads.set(dedupKey, { timestamp: nowTs, response: cardFastResponse });
+        console.log(`[FilesUpload] 🚀 Returning Fast-Response in ${Date.now() - cardStartTime}ms to mobile app!`);
+        return NextResponse.json(cardFastResponse);
       } catch (cardErr: any) {
         console.warn("[FilesUpload] Realtime Business Card OCR error:", cardErr.message);
       }
@@ -853,20 +869,67 @@ async function performAiOcr(
   "details": "상세정보 (소속 부서, 팩스번호(FAX), 회사 웹사이트 URL, 계좌번호, 취급 주요 업무/서비스, 슬로건 등 위 항목 외의 명함에 적힌 모든 추가 정보 요약)"
 }`;
 
-  const aiRes = await callAiCaller(prompt, {
-    model: modelName || undefined,
-    temperature: 0.1,
-    files: [
-      {
-        name: fileName,
-        content: base64File,
-        encoding: "base64",
-        mimeType: mimeType.startsWith("image/") || mimeType === "application/pdf" ? mimeType : "image/jpeg",
+  // 로컬 호스트 MCP 게이트웨이(http://localhost:8080) 우선 직결 (2.5MB 대용량 base64의 외부 터널 루프백 60초 타임아웃 원천 차단)
+  let innerText = "";
+  try {
+    const localRes = await fetch("http://localhost:8080/ai-caller/tools/call", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Api-Key": "a67ddc0f-7e2b-4997-9a0b-9667a74c89d0",
       },
-    ],
-  });
+      body: JSON.stringify({
+        tool: "ai_caller_call",
+        arguments: {
+          prompt,
+          model: modelName || "gemini-2.5-flash",
+          temperature: 0.1,
+          files: [
+            {
+              name: fileName,
+              content: base64File,
+              encoding: "base64",
+              mimeType: mimeType.startsWith("image/") || mimeType === "application/pdf" ? mimeType : "image/jpeg",
+            },
+          ],
+        },
+      }),
+    });
 
-  let rawText = (aiRes.text || aiRes.content || "").trim();
+    if (localRes.ok) {
+      const json = await localRes.json();
+      if (json?.result?.content?.[0]?.text) {
+        try {
+          const parsed = JSON.parse(json.result.content[0].text);
+          innerText = parsed.content || parsed.text || json.result.content[0].text;
+        } catch {
+          innerText = json.result.content[0].text;
+        }
+      } else if (json?.content) {
+        innerText = json.content;
+      }
+    }
+  } catch (err: any) {
+    console.warn("[AiOcr] Local gateway fetch failed, falling back to callAiCaller:", err.message);
+  }
+
+  if (!innerText) {
+    const aiRes = await callAiCaller(prompt, {
+      model: modelName || undefined,
+      temperature: 0.1,
+      files: [
+        {
+          name: fileName,
+          content: base64File,
+          encoding: "base64",
+          mimeType: mimeType.startsWith("image/") || mimeType === "application/pdf" ? mimeType : "image/jpeg",
+        },
+      ],
+    });
+    innerText = (aiRes.text || aiRes.content || "").trim();
+  }
+
+  let rawText = innerText.trim();
   if (rawText.startsWith("```json")) {
     rawText = rawText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
   } else if (rawText.startsWith("```")) {
