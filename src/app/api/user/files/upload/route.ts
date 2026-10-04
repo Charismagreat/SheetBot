@@ -14,6 +14,7 @@ import {
   moveDriveFile,
   insertRows,
   updateRows,
+  queryTable,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { getAiModelSettings } from "@/lib/ai-settings";
@@ -35,7 +36,8 @@ const recentFileUploads = new Map<string, { timestamp: number; response: any }>(
 const folderCache = new Map<string, string>([
   ["[SheetBot] 통화 녹음", "14TuBcWsooWB7_yPqyn6L0imjshpVxFVX"],
   ["[SheetBot] 영수증 보관함", "1rKVf3Swmi-VifK0fJoME5cdknZgA4H7K"],
-  ["[SheetBot] 명함 보관함", "1TJpJ01yA7YKOI8FlVTwjhIdUyjxK8aMe"],
+  ["[SheetBot] 명함 보관함", "1PypdJD-D7El1btJ-POyINjP00x7r3rIu"],
+  ["[SheetBot] 스크랩 보관함", "185vGZRGTDY4g6iG_OZdgGCuJ23D4GsHE"],
   ["[SheetBot] 파일 보관함", "1bRO1aJEEQBUX_R9bFLfZ7C0liZFZjijc"],
 ]);
 
@@ -169,6 +171,21 @@ export async function POST(req: NextRequest) {
     let targetFolderId: string | null = folderCache.get(targetFolderName) || null;
 
     if (!targetFolderId) {
+      // 4-1. DB 바인딩 테이블에서 기존 바인딩된 고유 폴더 선제 확인 (폴더 중복 생성 원천 차단)
+      try {
+        const bindingSheetType = ocrType === "RECEIPT" ? "RECEIPT" : (ocrType === "BUSINESS_CARD" ? "BUSINESS_CARD" : "FILE_UPLOAD");
+        const bindingQuery = await queryTable("sheetbot_user_sheet_bindings", {
+          filters: { user_email: cleanEmail, sheet_type: bindingSheetType },
+          limit: 1,
+        });
+        if (bindingQuery?.rows?.[0]?.folder_id) {
+          targetFolderId = bindingQuery.rows[0].folder_id;
+          folderCache.set(targetFolderName, targetFolderId);
+        }
+      } catch {}
+    }
+
+    if (!targetFolderId) {
       try {
         const folderSearch = await listDriveFiles({
           query: `mimeType = 'application/vnd.google-apps.folder' and name = '${targetFolderName}' and trashed = false`,
@@ -229,10 +246,12 @@ export async function POST(req: NextRequest) {
     }
 
     // ★ [Fast-Return vs Realtime AI 분리 원칙]
+    // 명함(BUSINESS_CARD)이나 영수증(RECEIPT)은 그 목적 자체가 AI OCR 장부화이므로 autoRecordSheet 플래그에 상관없이 무조건 시트 기록 보장!
+    const shouldRecordSheet = autoRecordSheet || ocrType === "BUSINESS_CARD" || ocrType === "RECEIPT";
     let cardOcrResult: any = null;
     let cardSpreadsheetUrl: string | null = null;
 
-    if (ocrType === "BUSINESS_CARD" && autoRecordSheet) {
+    if (ocrType === "BUSINESS_CARD" && shouldRecordSheet) {
       // 🪪 명함: 2~3초 초고속 실시간 AI이므로 동기 실행하여 클라이언트에 ocrData를 즉시 반환 (Instant CRM)
       try {
         const aiSettings = await getAiModelSettings();
@@ -367,7 +386,7 @@ export async function POST(req: NextRequest) {
           let targetSpreadsheetId: string | null = null;
           let targetRow: number | null = null;
 
-          if (autoRecordSheet) {
+          if (shouldRecordSheet) {
             try {
               const sheetTitle = defaultSheetTitle;
               const bindingType = capturedOcrType === "RECEIPT" ? "RECEIPT" : "FILE_UPLOAD";
