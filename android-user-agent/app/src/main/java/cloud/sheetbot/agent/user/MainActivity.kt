@@ -1202,10 +1202,7 @@ class MainActivity : AppCompatActivity() {
 
         activityScope.launch {
             val ping = withContext(Dispatchers.IO) { ApiClient.pingServer() }
-            val pendingCount = DepositQueueManager.getPendingCount(this@MainActivity)
             val email = prefs.userEmail ?: ""
-
-            binding.tvPendingDepositQueue.text = "📱 0원 양방향 SMS & 구글 시트 1:1 연동 가동 중"
 
             if (ping.isOnline) {
                 binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
