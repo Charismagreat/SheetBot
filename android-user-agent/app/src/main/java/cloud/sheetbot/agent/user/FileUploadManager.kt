@@ -369,9 +369,9 @@ object FileUploadManager {
         manager.notify((System.currentTimeMillis() % 100000).toInt(), noti)
     }
 
-    private const val CARD_NOTIFICATION_CHANNEL_ID = "sheetbot_card_action_channel_v3"
+    const val CARD_NOTIFICATION_CHANNEL_ID = "sheetbot_card_action_channel_v3"
 
-    private fun showBusinessCardActionNotification(context: Context, name: String, company: String, cardJson: org.json.JSONObject) {
+    fun showBusinessCardActionNotification(context: Context, name: String, company: String, cardJson: org.json.JSONObject) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         val soundUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
