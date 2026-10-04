@@ -19,7 +19,7 @@ export async function generateMetadata(
   const { userKey } = await params;
   
   let businessName = "스마트 견적 & 주문 센터";
-  let ogImageUrl = "https://sheetbot.cloud/favicon.svg";
+  let ogImageUrl = "https://sheetbot.cloud/images/og-default.png";
 
   try {
     const data = await getOrderCatalogData({ userKey, isSsr: true });
@@ -31,11 +31,17 @@ export async function generateMetadata(
     }
   } catch (_) {}
 
-  // 🚀 카카오톡 스크랩 봇 전용: 터널 바이너리 왜곡을 원천 우회하는 글로벌 CDN 직통 URL 적용 (100% 무결점 정품 JPG)
+  // 🚀 카카오톡/SNS 스크랩 봇 전용: 404 및 SVG 미지원 방지 정규화
   const fileMatch = ogImageUrl.match(/quote_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
   if (fileMatch) {
-    ogImageUrl = `https://raw.githubusercontent.com/Charismagreat/SheetBot/main/public/uploads/quote-images/${fileMatch[0]}`;
+    ogImageUrl = `https://sheetbot.cloud/api/user/quote/image?file=${fileMatch[0]}`;
+  } else if (!ogImageUrl || ogImageUrl.endsWith(".svg")) {
+    ogImageUrl = "https://sheetbot.cloud/images/og-default.png";
   }
+
+  const isPng = ogImageUrl.toLowerCase().endsWith(".png");
+  const isWebp = ogImageUrl.toLowerCase().endsWith(".webp");
+  const mimeType = isPng ? "image/png" : isWebp ? "image/webp" : "image/jpeg";
 
   const title = `[${businessName}]`;
   const description = `실시간 모바일 간편 주문 • ${businessName}`;
@@ -55,9 +61,9 @@ export async function generateMetadata(
         {
           url: ogImageUrl,
           secureUrl: ogImageUrl,
-          type: "image/jpeg",
-          width: 800,
-          height: 400,
+          type: mimeType,
+          width: 1200,
+          height: 630,
           alt: `${businessName} 대표 이미지`,
         },
       ],

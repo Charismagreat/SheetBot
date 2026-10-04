@@ -468,17 +468,21 @@ async function executeBackgroundFullPipeline(params: {
           targetRowIndex = null;
         }
 
+        const listenLinkFormula = webViewLink
+          ? `=HYPERLINK("${webViewLink}", "▶ 바로듣기")`
+          : "-";
+
         if (isDuplicate && targetRowIndex) {
           writeDebugLog(`Step 3: Updating existing duplicate row ${targetRowIndex}...`);
           await callSheetsTool("sheets_update_range", {
             spreadsheetId: targetSpreadsheetId,
             range: `D${targetRowIndex}:H${targetRowIndex}`,
-            values: [[fileSizeMb, "⏳ AI 배치 분석 대기 중 (비용 50% 절감)", "⏳ 분석 준비 중...", "⏳ 음성 전사 대기 중...", webViewLink]],
+            values: [[fileSizeMb, "⏳ AI 배치 분석 대기 중 (비용 50% 절감)", "⏳ 분석 준비 중...", "⏳ 음성 전사 대기 중...", listenLinkFormula]],
             preferOAuth: true,
           }).catch(() => {});
         } else {
           const initialRowValues = [
-            [callTime, contactName, targetFileName, fileSizeMb, "⏳ AI 배치 분석 대기 중 (비용 50% 절감)", "⏳ 분석 준비 중...", "⏳ 음성 전사 대기 중...", webViewLink],
+            [callTime, contactName, targetFileName, fileSizeMb, "⏳ AI 배치 분석 대기 중 (비용 50% 절감)", "⏳ 분석 준비 중...", "⏳ 음성 전사 대기 중...", listenLinkFormula],
           ];
           writeDebugLog(`Step 3: Appending new row to sheet ${targetSpreadsheetId}...`);
           await callSheetsTool("sheets_append_values", {
@@ -633,23 +637,26 @@ async function triggerAiAudioAnalysis(
       );
 
       if (batchSubmitRes.success && batchSubmitRes.jobName) {
-        const batchJobId = Date.now();
-        await insertRows("sheetbot_ai_batch_jobs", [
-          {
-            id: batchJobId,
-            job_name: batchSubmitRes.jobName,
-            job_type: "RECORDING",
-            user_email: cleanEmail,
-            file_name: fileName,
-            spreadsheet_id: spreadsheetId,
-            row_index: rowIndex,
-            model: targetModel,
-            status: "PENDING",
-            created_at: getKoreanTimeString(),
-          },
-        ]).catch((e: any) => console.warn("[BatchJobs] Insert error:", e.message));
-
-        writeDebugLog(`Batch ticket registered in DB: ${batchJobId} (${batchSubmitRes.jobName})`);
+        let batchJobId: number | null = null;
+        try {
+          const insertRes = await insertRows("sheetbot_ai_batch_jobs", [
+            {
+              job_name: batchSubmitRes.jobName,
+              job_type: "RECORDING",
+              user_email: cleanEmail,
+              file_name: fileName,
+              spreadsheet_id: spreadsheetId,
+              row_index: rowIndex,
+              model: targetModel,
+              status: "PENDING",
+              created_at: getKoreanTimeString(),
+            },
+          ]);
+          batchJobId = insertRes?.insertedIds?.[0] || null;
+          writeDebugLog(`Batch ticket registered in DB: ID ${batchJobId} (${batchSubmitRes.jobName})`);
+        } catch (e: any) {
+          writeDebugLog(`[BatchJobs] Insert error: ${e.message}`);
+        }
 
         // [15초 Fast-Check] 초단기 완료건은 즉시 감지 (서버 블로킹 최소화)
         const batchGetRes = await callAiBatchGet(batchSubmitRes.jobName, {
@@ -664,11 +671,19 @@ async function triggerAiAudioAnalysis(
             isBatchSuccess = true;
             writeDebugLog(`Fast-Check Batch job succeeded! Text length: ${rawText.length}`);
             const nowStr = getKoreanTimeString();
-            await updateRows("sheetbot_ai_batch_jobs", {
-              status: "SUCCEEDED",
-              completed_at: nowStr,
-              updated_at: nowStr,
-            }, { ids: [batchJobId] }).catch(() => {});
+            if (batchJobId) {
+              await updateRows("sheetbot_ai_batch_jobs", {
+                status: "SUCCEEDED",
+                completed_at: nowStr,
+                updated_at: nowStr,
+              }, { ids: [batchJobId] }).catch(() => {});
+            } else {
+              await updateRows("sheetbot_ai_batch_jobs", {
+                status: "SUCCEEDED",
+                completed_at: nowStr,
+                updated_at: nowStr,
+              }, { filters: { job_name: batchSubmitRes.jobName } }).catch(() => {});
+            }
           }
         } else {
           writeDebugLog(`[Zero-Block] Batch job ${batchSubmitRes.jobName} is still processing after 15s. Delegating to Async Sweeper Worker.`);

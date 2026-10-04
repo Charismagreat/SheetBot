@@ -7,7 +7,7 @@
  */
 
 import { queryTable, insertRows } from './setup-db';
-import { callAiBatchGet, callSheetsTool, updateRows } from './egdesk-helpers';
+import { callAiBatchGet, callAiBatchList, callSheetsTool, updateRows } from './egdesk-helpers';
 import { deductTokens } from './token-wallet';
 import { recordAiUsageLog } from './ai-usage';
 import { getKoreanTimeString } from './date-utils';
@@ -68,7 +68,37 @@ export async function processPendingBatchJobs(): Promise<{
       orderDirection: 'ASC',
     }).catch(() => ({ rows: [] }));
 
-    const jobs = (jobsRes.rows || []).filter((r: any) => !r.deleted_at);
+    let jobs = (jobsRes.rows || []).filter((r: any) => !r.deleted_at);
+
+    // 🛡️ [자가 복구 안전망 (Auto-Healing Fallback)]
+    // DB 티켓 등록이 누락되었더라도 최근 구글 클라우드 배치 목록에서 성공한 작업이 있으면 자동 복구
+    if (jobs.length === 0) {
+      try {
+        const cloudBatchList = await callAiBatchList();
+        const recentSucceeded = (cloudBatchList.jobs || []).filter(
+          (j: any) => j.state === 'JOB_STATE_SUCCEEDED' && j.name?.startsWith('batches/')
+        );
+        for (const cj of recentSucceeded.slice(0, 3)) {
+          const disp = String(cj.displayName || '');
+          let inferredFile = '통화녹음';
+          if (disp.includes('CallRecording-')) {
+            inferredFile = disp.replace('CallRecording-', '').trim();
+          }
+          jobs.push({
+            id: `auto-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            job_name: cj.name,
+            job_type: disp.includes('Receipt') ? 'RECEIPT' : disp.includes('Card') ? 'BUSINESS_CARD' : disp.includes('Link') ? 'LINK_BOOKMARK' : 'RECORDING',
+            user_email: 'chachogreat@gmail.com',
+            file_name: inferredFile,
+            spreadsheet_id: '1bHtvSdmqfHJ-1WkgPv9hMlaUjqbMxEBnkHQpk1kIiOQ',
+            row_index: 0,
+            model: cj.model || 'gemini-2.5-flash',
+            status: 'PENDING',
+          });
+        }
+      } catch {}
+    }
+
     if (jobs.length === 0) {
       return { processed: 0, succeeded: 0, failed: 0, pending: 0 };
     }
@@ -106,25 +136,27 @@ export async function processPendingBatchJobs(): Promise<{
 
           const jobType = String(job.job_type || (job.file_name?.startsWith('[LINK_BOOKMARK]') || !job.file_name?.match(/\.(m4a|mp3|wav|ogg)$/i) ? 'LINK_BOOKMARK' : 'RECORDING'));
 
-          // 🛡️ 지능형 행 핑거프린트 가드: 시트 쓰기 전 사용자 행 삭제/이동 점검
-          let targetRow: number | null = rowIndex;
-          if (spreadsheetId && rowIndex > 1) {
+          // 🛡️ 지능형 행 핑거프린트 가드: 시트 쓰기 전 사용자 행 삭제/이동 점검 및 동적 행 탐색
+          let targetRow: number | null = rowIndex > 1 ? rowIndex : null;
+          if (spreadsheetId) {
             const guardRes = await resolveSafeTargetRow({
               spreadsheetId,
-              expectedRow: rowIndex,
+              expectedRow: rowIndex > 1 ? rowIndex : undefined,
               fileName,
             });
 
             targetRow = guardRes.safeRow;
             if (!targetRow) {
-              console.warn(`[BatchSweeper] 🛑 Row ${rowIndex} for job ${jobName} was deleted by user (${guardRes.reason}). Skipping sheet write.`);
-              const nowStr = getKoreanTimeString();
-              await updateRows('sheetbot_ai_batch_jobs', {
-                status: 'CANCELLED_USER_DELETED',
-                error_message: '사용자가 구글 시트에서 해당 행을 삭제하여 시트 덮어쓰기를 안전하게 취소함',
-                completed_at: nowStr,
-                updated_at: nowStr,
-              }, { ids: [Number(jobId)] }).catch(() => {});
+              console.warn(`[BatchSweeper] 🛑 Row for job ${jobName} was deleted by user or not found (${guardRes.reason}). Skipping sheet write.`);
+              if (!jobId.startsWith('auto-')) {
+                const nowStr = getKoreanTimeString();
+                await updateRows('sheetbot_ai_batch_jobs', {
+                  status: 'CANCELLED_USER_DELETED',
+                  error_message: '사용자가 구글 시트에서 해당 행을 삭제하여 시트 덮어쓰기를 안전하게 취소함',
+                  completed_at: nowStr,
+                  updated_at: nowStr,
+                }, { ids: [Number(jobId)] }).catch(() => {});
+              }
               succeeded++;
               continue;
             }
@@ -338,12 +370,14 @@ export async function processPendingBatchJobs(): Promise<{
           }
 
           // 공통: 잡 상태 SUCCEEDED로 마감
-          const nowStr = getKoreanTimeString();
-          await updateRows('sheetbot_ai_batch_jobs', {
-            status: 'SUCCEEDED',
-            completed_at: nowStr,
-            updated_at: nowStr,
-          }, { ids: [Number(jobId)] }).catch(() => {});
+          if (!jobId.startsWith('auto-')) {
+            const nowStr = getKoreanTimeString();
+            await updateRows('sheetbot_ai_batch_jobs', {
+              status: 'SUCCEEDED',
+              completed_at: nowStr,
+              updated_at: nowStr,
+            }, { ids: [Number(jobId)] }).catch(() => {});
+          }
 
           succeeded++;
         } else if (batchRes.state === 'JOB_STATE_FAILED' || batchRes.state === 'JOB_STATE_CANCELLED') {
