@@ -83,9 +83,27 @@ export async function GET(req: NextRequest) {
             "Content-Length": buffer.length.toString(),
             "Accept-Ranges": "bytes",
             "Cache-Control": "public, max-age=86400, s-maxage=86400",
+            "Access-Control-Allow-Origin": "*",
           },
         });
       }
+
+      // 🚀 파일이 유실되었거나 없는 경우에도 404로 깨지지 않고 기본 OG 이미지 자동 폴백 스트리밍
+      try {
+        const defaultOgPath = path.join(process.cwd(), "public", "images", "og-default.png");
+        if (fs.existsSync(defaultOgPath)) {
+          const buffer = fs.readFileSync(defaultOgPath);
+          return new NextResponse(buffer, {
+            status: 200,
+            headers: {
+              "Content-Type": "image/png",
+              "Content-Length": buffer.length.toString(),
+              "Cache-Control": "public, max-age=3600",
+              "Access-Control-Allow-Origin": "*",
+            },
+          });
+        }
+      } catch (_) {}
 
       return NextResponse.json({ success: false, error: "Image not found" }, { status: 404 });
     }

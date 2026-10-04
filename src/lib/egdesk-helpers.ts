@@ -201,6 +201,44 @@ export async function callAiBatchGet(
   };
 }
 
+/**
+ * 이지데스크 표준 AI Caller 최근 배치 작업 목록 조회 함수
+ */
+export async function callAiBatchList(): Promise<{ success: boolean; jobs?: any[]; error?: string }> {
+  const apiUrl = getServerEgdeskApiUrl();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Api-Key': 'a67ddc0f-7e2b-4997-9a0b-9667a74c89d0',
+  };
+
+  const response = await fetch(`${apiUrl}/ai-caller/tools/call`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      tool: 'ai_caller_batch_list',
+      arguments: {},
+    }),
+  });
+
+  const json = await response.json().catch(() => null);
+  if (!response.ok || !json) {
+    return { success: false, error: `Batch list HTTP ${response.status}: ${response.statusText}` };
+  }
+
+  let textResult = json.result?.content?.[0]?.text || '';
+  let parsed: any = null;
+  try {
+    parsed = JSON.parse(textResult);
+  } catch {
+    parsed = json.result || json;
+  }
+
+  return {
+    success: true,
+    jobs: parsed?.jobs || [],
+  };
+}
+
 /** Run company research search with options */
 export async function runCompanyResearch(
   query: string,

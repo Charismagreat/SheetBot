@@ -259,10 +259,12 @@ export async function getOrderCatalogData(options: {
   if (merchantImage) {
     const match = merchantImage.match(/quote_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
     if (match) {
-      merchantImage = `https://raw.githubusercontent.com/Charismagreat/SheetBot/main/public/uploads/quote-images/${match[0]}`;
+      merchantImage = `https://sheetbot.cloud/api/user/quote/image?file=${match[0]}`;
+    } else if (merchantImage.endsWith(".svg")) {
+      merchantImage = "https://sheetbot.cloud/images/og-default.png";
     }
   } else {
-    merchantImage = "https://sheetbot.cloud/favicon.svg";
+    merchantImage = "https://sheetbot.cloud/images/og-default.png";
   }
 
   if (!businessName) {
