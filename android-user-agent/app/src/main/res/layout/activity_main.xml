@@ -46,95 +46,7 @@
                     android:textStyle="bold" />
             </LinearLayout>
  
-            <!-- 🛡️ Zero-Retention 프라이버시 안심 보증 카드 (접기/펼치기) -->
-            <LinearLayout
-                android:id="@+id/cardPrivacy"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingVertical="9dp"
-                android:paddingHorizontal="14dp"
-                android:background="@drawable/bg_card_privacy"
-                android:layout_marginBottom="10dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <TextView
-                        android:id="@+id/tvPrivacyTitle"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="🛡️ 고객정보 안심보증"
-                        android:textColor="#2DD4BF"
-                        android:textSize="13sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/badgePrivacy"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/bg_badge_privacy"
-                        android:paddingHorizontal="7dp"
-                        android:paddingVertical="2dp"
-                        android:text="서버 무보관 100%"
-                        android:textColor="#5EEAD4"
-                        android:textSize="10sp"
-                        android:textStyle="bold"
-                        android:layout_marginEnd="6dp" />
-
-                    <TextView
-                        android:id="@+id/btnTogglePrivacy"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/bg_badge_version"
-                        android:backgroundTint="#134E4A"
-                        android:paddingHorizontal="8dp"
-                        android:paddingVertical="3dp"
-                        android:text="펼치기"
-                        android:textColor="#5EEAD4"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
-                <!-- 펼침 상세 영역: '접기/펼치기' 토글 -->
-                <LinearLayout
-                    android:id="@+id/layoutPrivacyBody"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginTop="6dp"
-                    android:visibility="gone">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="시트봇은 고객의 개인정보, 문자 전문, 통화 내역을 중앙 서버에 일체 보관하지 않습니다. 모든 데이터는 오직 회원님 본인의 안전한 구글 드라이브(Google Drive) 및 구글 시트로만 직통 전송·보관됩니다."
-                        android:textColor="#CCFBF1"
-                        android:textSize="11sp"
-                        android:lineSpacingExtra="2.5dp" />
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:background="#134E4A"
-                        android:layout_marginTop="8dp"
-                        android:layout_marginBottom="8dp" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="✓ 통신비 0원 무제한 고객 알림 문자 발송\n✓ 포스·결제 승인 알림 실시간 구글 시트 기입\n✓ 내 구글 계정(BYOD) 100% 프라이빗 보관"
-                        android:textColor="#99F6E4"
-                        android:textSize="10.5sp"
-                        android:lineSpacingExtra="3dp" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <!-- 🟢 통합 모바일 에이전트 & 서버 통신 관제 카드 (접기/펼치기 지원) -->
+            <!-- 🟢 통합 올인원 상태 관제 카드 (접기/펼치기 지원: 한 줄로 접기 가능) -->
             <LinearLayout
                 android:id="@+id/cardStatus"
                 android:layout_width="match_parent"
@@ -142,39 +54,28 @@
                 android:orientation="vertical"
                 android:paddingVertical="10dp"
                 android:paddingHorizontal="14dp"
-                android:background="@drawable/bg_card_unpaired"
-                android:layout_marginBottom="10dp">
+                android:background="@drawable/bg_card_connected"
+                android:layout_marginBottom="12dp">
 
-                <!-- 1행: 상태 타이틀, [🔄 재점검], [접기/펼치기] -->
+                <!-- 1행: 한 줄 상태 헤더 (항상 노출: 상태 타이틀 + [접기/펼치기]) -->
                 <LinearLayout
+                    android:id="@+id/layoutIntegratedHeader"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:gravity="center_vertical">
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true">
 
                     <TextView
                         android:id="@+id/tvStatusTitle"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="⚠️ 미연동 상태"
+                        android:text="🟢 시트봇 정상 작동 중"
                         android:textColor="#FFFFFF"
                         android:textSize="13.5sp"
                         android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/btnRefreshServerStatus"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/bg_badge_version"
-                        android:backgroundTint="#334155"
-                        android:paddingHorizontal="7dp"
-                        android:paddingVertical="3dp"
-                        android:text="🔄 재점검"
-                        android:textColor="#38BDF8"
-                        android:textSize="10.5sp"
-                        android:textStyle="bold"
-                        android:layout_marginEnd="6dp" />
 
                     <TextView
                         android:id="@+id/btnToggleStatusDetails"
@@ -182,189 +83,179 @@
                         android:layout_height="wrap_content"
                         android:background="@drawable/bg_badge_version"
                         android:backgroundTint="#1E293B"
-                        android:paddingHorizontal="8dp"
-                        android:paddingVertical="3dp"
-                        android:text="접기"
+                        android:paddingHorizontal="9dp"
+                        android:paddingVertical="4dp"
+                        android:text="접기 ▲"
                         android:textColor="#E2E8F0"
                         android:textSize="11sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
-                <!-- 2행: 서버 통신 요약 (상시 노출) -->
-                <TextView
-                    android:id="@+id/tvServerStatus"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:text="🌐 서버 통신: 🟢 정상 가동 (sheetbot.cloud)"
-                    android:textColor="#94A3B8"
-                    android:textSize="11sp" />
-
-                <!-- 3행: 접이식 상세 영역 (접기/펼치기 대상) -->
+                <!-- 2행: 접이식 상세 영역 (한 줄로 접었을 때 숨겨지는 영역) -->
                 <LinearLayout
                     android:id="@+id/layoutStatusDetails"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:layout_marginTop="4dp">
+                    android:layout_marginTop="8dp">
 
-                    <TextView
-                        android:id="@+id/tvPendingDepositQueue"
+                    <!-- 계정 정보 및 [🔄 재점검] 버튼 -->
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="📱 0원 양방향 SMS &amp; 구글 시트 1:1 연동 가동 중"
-                        android:textColor="#CBD5E1"
-                        android:textSize="11sp" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
 
+                        <TextView
+                            android:id="@+id/tvConnectedAccount"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="연결된 계정: 확인 중..."
+                            android:textColor="#E2E8F0"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/btnRefreshServerStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_badge_version"
+                            android:backgroundTint="#334155"
+                            android:paddingHorizontal="8dp"
+                            android:paddingVertical="3dp"
+                            android:text="🔄 재점검"
+                            android:textColor="#38BDF8"
+                            android:textSize="10.5sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <!-- 서버 통신 지연시간 (상태 요약) -->
                     <TextView
-                        android:id="@+id/tvStatusDesc"
+                        android:id="@+id/tvServerStatus"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="3dp"
-                        android:text="시트봇 워크스페이스의 QR코드를 스캔하여 계정을 연동해 주세요.\n🔒 연동 시 데이터는 본인 구글 드라이브에만 안전 저장됩니다."
+                        android:text="🌐 서버 통신: 🟢 정상 (sheetbot.cloud)"
                         android:textColor="#94A3B8"
-                        android:textSize="10.5sp"
-                        android:lineSpacingExtra="2dp" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <!-- 🌐 시트봇 웹 관제 센터 원터치 바로가기 카드 (v2.1.12 NEW) -->
-            <LinearLayout
-                android:id="@+id/btnOpenWebDashboard"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingVertical="12dp"
-                android:paddingHorizontal="14dp"
-                android:background="@drawable/bg_card_web_dashboard"
-                android:layout_marginBottom="10dp"
-                android:clickable="true"
-                android:focusable="true">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🌐"
-                    android:textSize="20sp"
-                    android:layout_marginEnd="10dp" />
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="시트봇 웹 관제 센터 열기"
-                        android:textColor="#FFFFFF"
-                        android:textSize="13.5sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="발송 이력 실시간 확인 · AI 스마트 규칙 관리"
-                        android:textColor="#C7D2FE"
-                        android:textSize="10.5sp"
-                        android:layout_marginTop="2dp" />
-                </LinearLayout>
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_badge_version"
-                    android:backgroundTint="#312E81"
-                    android:paddingHorizontal="8dp"
-                    android:paddingVertical="3dp"
-                    android:text="열기 ↗"
-                    android:textColor="#A5B4FC"
-                    android:textSize="11sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
-            <!-- 💡 실전 추천 4대 자동화 시나리오 안내 카드 (v2.1.12 NEW) -->
-            <LinearLayout
-                android:id="@+id/cardRecommendedScenarios"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingVertical="11dp"
-                android:paddingHorizontal="14dp"
-                android:background="@drawable/bg_card_scenario"
-                android:layout_marginBottom="12dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="8dp">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="💡 대표 추천 자동화 시나리오"
-                        android:textColor="#38BDF8"
-                        android:textSize="12.5sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/btnViewAllScenarios"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="전체 7선 보기 ↗"
-                        android:textColor="#94A3B8"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="• 📑 고객 견적 문의 ➔ AI 단가표 매칭 &amp; 견적서 링크 0원 회신"
-                        android:textColor="#5EEAD4"
-                        android:textSize="11sp"
-                        android:layout_marginBottom="4dp" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="• 💳 POS 결제 승인 ➔ 구글 시트 매출 장부 실시간 자동 기입"
-                        android:textColor="#E2E8F0"
-                        android:textSize="11sp"
-                        android:layout_marginBottom="4dp" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="• 💰 시트 입금완료 ➔ 고객 번호로 감사 문자 통신비 0원 발송"
-                        android:textColor="#E2E8F0"
-                        android:textSize="11sp"
-                        android:layout_marginBottom="4dp" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="• 🛵 배민·쿠팡이츠 주문 ➔ 배달 관리 시트 자동 전표화"
-                        android:textColor="#E2E8F0"
-                        android:textSize="11sp"
-                        android:layout_marginBottom="4dp" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="• 📦 안전 재고 5개 미만 ➔ 사장님 폰 긴급 발주 알림 문자"
-                        android:textColor="#E2E8F0"
                         android:textSize="11sp" />
+
+                    <!-- 구분선 -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#1E293B"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="8dp" />
+
+                    <!-- 🌐 시트봇 관제 센터 바로가기 버튼 -->
+                    <LinearLayout
+                        android:id="@+id/btnOpenWebDashboard"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingVertical="9dp"
+                        android:paddingHorizontal="12dp"
+                        android:background="@drawable/bg_card_web_dashboard"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🌐"
+                            android:textSize="18sp"
+                            android:layout_marginEnd="10dp" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="시트봇 관제 센터"
+                                android:textColor="#FFFFFF"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="발송 이력 실시간 확인 · AI 스마트 규칙 관리"
+                                android:textColor="#C7D2FE"
+                                android:textSize="10sp"
+                                android:layout_marginTop="1dp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_badge_version"
+                            android:backgroundTint="#312E81"
+                            android:paddingHorizontal="8dp"
+                            android:paddingVertical="3dp"
+                            android:text="열기 ↗"
+                            android:textColor="#A5B4FC"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <!-- 구분선 -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#1E293B"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="8dp" />
+
+                    <!-- 🛡️ 개인정보 100% 안전 보증 안내 블록 -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="@drawable/bg_card_privacy"
+                        android:padding="10dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="4dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="🛡️ 개인정보 100% 안전 보증"
+                                android:textColor="#2DD4BF"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_badge_privacy"
+                                android:paddingHorizontal="6dp"
+                                android:paddingVertical="1.5dp"
+                                android:text="서버 무보관 100%"
+                                android:textColor="#5EEAD4"
+                                android:textSize="9.5sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="시트봇 서버에는 어떠한 개인정보나 통화·문자 내역도 남지 않습니다.\n모든 정보는 오직 이용자의 개인 구글 계정(드라이브/시트)으로만 전송되어 보관됩니다."
+                            android:textColor="#CCFBF1"
+                            android:textSize="10.5sp"
+                            android:lineSpacingExtra="2.5dp" />
+                    </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
 

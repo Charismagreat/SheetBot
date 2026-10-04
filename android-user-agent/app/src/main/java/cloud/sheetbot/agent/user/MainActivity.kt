@@ -431,21 +431,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        // 0-0. 프라이버시 안심 보증 카드 '접기/펼치기' 토글
-        updatePrivacyCardVisibility(prefs.isPrivacyCardHidden)
-        binding.btnTogglePrivacy.setOnClickListener {
-            val nextState = !prefs.isPrivacyCardHidden
-            prefs.isPrivacyCardHidden = nextState
-            updatePrivacyCardVisibility(nextState)
-        }
-
-        // 0-0-1. 통합 모바일 에이전트 & 서버 관제 카드 '접기/펼치기' 토글
+        // 0-0. 통합 모바일 에이전트 & 서버 관제 카드 '접기/펼치기' 토글 (v2.1.54)
         updateStatusDetailsVisibility(prefs.isStatusDetailsHidden)
-        binding.btnToggleStatusDetails.setOnClickListener {
+        val toggleStatusAction = {
             val nextState = !prefs.isStatusDetailsHidden
             prefs.isStatusDetailsHidden = nextState
             updateStatusDetailsVisibility(nextState)
         }
+        binding.btnToggleStatusDetails.setOnClickListener { toggleStatusAction() }
+        binding.layoutIntegratedHeader.setOnClickListener { toggleStatusAction() }
 
         // 0-0-2. AI 토큰 안내 상세 접기/펼치기 및 확인 버튼 (v2.0.5)
         updateTokenNoticeVisibility(prefs.isTokenNoticeDismissed)
@@ -540,21 +534,6 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "웹 브라우저를 열 수 없습니다: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
             }
         }
-
-        // 4-2. 💡 추천 자동화 시나리오 클릭 시 웹 관제 센터 규칙 탭 직통 열기
-        val openRulesAction = {
-            try {
-                val rulesUrl = "https://sheetbot.cloud/dashboard/notifications?tab=rules"
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(rulesUrl)).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                startActivity(intent)
-            } catch (e: Exception) {
-                Toast.makeText(this, "웹 브라우저를 열 수 없습니다: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-            }
-        }
-        binding.cardRecommendedScenarios.setOnClickListener { openRulesAction() }
-        binding.btnViewAllScenarios.setOnClickListener { openRulesAction() }
 
         // 5. 계정 삭제 버튼 (화면 최하단 Danger Zone)
         binding.btnUnlink.setOnClickListener {
@@ -1227,18 +1206,18 @@ class MainActivity : AppCompatActivity() {
 
             if (ping.isOnline) {
                 binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
-                binding.tvStatusTitle.text = "🟢 시트봇 모바일 에이전트 가동 중"
-                binding.tvStatusDesc.text = "계정: $email\n구글 시트 ↔ 스마트폰 양방향 자동화 (서버 무보관 100%)"
+                binding.tvStatusTitle.text = "🟢 시트봇 정상 작동 중"
+                binding.tvConnectedAccount.text = "연결된 계정: $email"
                 binding.tvServerStatus.text = "🌐 서버 통신: 🟢 정상 (${ping.latencyMs}ms)"
 
                 if (showToast) {
                     Toast.makeText(this@MainActivity, "✅ sheetbot.cloud 서버 통신 정상 (${ping.latencyMs}ms)", Toast.LENGTH_SHORT).show()
                 }
             } else {
-                // 이용자 앱 친화적: 위협적인 붉은색 경고창/토스트 대신 '가동 중 (통신 확인 중)'으로 자연스럽게 표시
+                // 이용자 앱 친화적: 위협적인 붉은색 경고창/토스트 대신 '정상 작동 중 (통신 확인 중)'으로 자연스럽게 표시
                 binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
-                binding.tvStatusTitle.text = "🟢 시트봇 모바일 에이전트 가동 중 (통신 확인 중)"
-                binding.tvStatusDesc.text = "계정: $email\n구글 시트 ↔ 스마트폰 자동 연결 대기 중 (서버 무보관 100%)"
+                binding.tvStatusTitle.text = "🟢 시트봇 정상 작동 중"
+                binding.tvConnectedAccount.text = "연결된 계정: $email"
                 binding.tvServerStatus.text = "🌐 서버 통신: 🟡 연결 대기 중 (자동 재시도)"
 
                 if (showToast) {
@@ -1248,15 +1227,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updatePrivacyCardVisibility(hidden: Boolean) {
-        binding.layoutPrivacyBody.visibility = if (hidden) View.GONE else View.VISIBLE
-        binding.tvPrivacyTitle.text = if (hidden) "🛡️ 고객정보 안심보증" else "🛡️ Zero-Retention 안심 보증"
-        binding.btnTogglePrivacy.text = if (hidden) "펼치기" else "접기"
-    }
-
     private fun updateStatusDetailsVisibility(hidden: Boolean) {
         binding.layoutStatusDetails.visibility = if (hidden) View.GONE else View.VISIBLE
-        binding.btnToggleStatusDetails.text = if (hidden) "펼치기" else "접기"
+        binding.btnToggleStatusDetails.text = if (hidden) "펼치기 ▼" else "접기 ▲"
     }
 
     private fun updateTokenNoticeVisibility(dismissed: Boolean) {
@@ -1272,15 +1245,14 @@ class MainActivity : AppCompatActivity() {
         val isPaired = prefs.isPaired
         val email = prefs.userEmail
 
-        updatePrivacyCardVisibility(prefs.isPrivacyCardHidden)
         updateStatusDetailsVisibility(prefs.isStatusDetailsHidden)
         updateTokenNoticeVisibility(prefs.isTokenNoticeDismissed)
         updateTargetBadges()
 
         if (isPaired && !email.isNullOrBlank()) {
             binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
-            binding.tvStatusTitle.text = "✅ 연동 완료 (${email})"
-            binding.tvStatusDesc.text = "구글 시트 ↔ 스마트폰 양방향 자동화 가동 중\n🛡️ 데이터는 본인 구글 드라이브에만 안전 저장됩니다."
+            binding.tvStatusTitle.text = "🟢 시트봇 정상 작동 중"
+            binding.tvConnectedAccount.text = "연결된 계정: $email"
             binding.btnRefreshServerStatus.visibility = View.VISIBLE
             binding.btnToggleStatusDetails.visibility = View.VISIBLE
             binding.layoutUnlinkZone.visibility = View.VISIBLE
@@ -1291,7 +1263,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
             binding.tvStatusTitle.text = "⚠️ 미연동 상태"
-            binding.tvStatusDesc.text = "시트봇 모바일 에이전트 QR코드를 스캔하여 계정을 연동해 주세요.\n🛡️ 서버 무보관 100% · 내 구글 드라이브로만 직통 전송"
+            binding.tvConnectedAccount.text = "연결된 계정: 미연동 (QR 스캔 필요)"
             binding.btnRefreshServerStatus.visibility = View.GONE
             binding.btnToggleStatusDetails.visibility = View.GONE
             binding.layoutUnlinkZone.visibility = View.GONE
