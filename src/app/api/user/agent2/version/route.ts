@@ -10,11 +10,11 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 75,
-      latestVersionName: "2.1.54",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.54/SheetBotAgent.apk",
+      latestVersionCode: 76,
+      latestVersionName: "2.1.55",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/user-v2.1.55/SheetBotAgent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: "시트봇 모바일 에이전트 v2.1.54 릴리즈\n• 🎙️ [AI 비서 카드 전면 개편] 옵션 A 모던 올인원 프롬프트 박스 디자인(14dp 라운드, 1.5dp 테두리, 음성/실행 일체형) 및 쉬운 안내 문구 적용\n• 💳 [매장 결제 & 통화 녹음 등 주요 카드 개편] '결제될 때 음성으로 안내받기', '영수증 문자 발송 시트 열기', '통화 끝나면 바로 자동 저장' 등 쉬운 동사형 문구 100% 개편\n• 📂 [전 카드 상시 아코디언 접기/펼치기] 토큰 지갑을 포함하여 기능이 켜져 있는 상태에서도 모든 카드를 슬림하게 접어둘 수 있도록 지원\n• 💼 [모바일 명함 옵션 정비] 웹 명함 링크 및 갤러리 사진 직접 첨부(MMS) 방식 선택 지원",
+      releaseNotes: "시트봇 모바일 에이전트 v2.1.55 릴리즈\n• 🗂️ [카드별 명확한 독립 블록 분리] 펼쳐졌을 때도 각 카드의 영역이 100% 명확히 구분되도록 독립 라운드 카드 박스 적용\n• 🔀 [통화 & 소통 집중형 최적화 재배치] 통화 녹음 ➔ 부재중 자동 답장 ➔ 통화 후 모바일 명함 ➔ 고객 문자 ➔ 카카오톡 ➔ 매장 결제 순으로 상위권 집중 배치\n• 🔼 [슬림 아이콘 버튼화] 접기/펼치기 글자를 제거하고 단일 화살표 아이콘(▲/▼)으로 전환하여 가로 공간 극대화\n• 🎙️ [AI 비서 타이틀 가독성 개선] 불필요한 버전 뱃지를 정리하여 타이틀과 혜택 뱃지가 한 줄로 시원하게 노출\n• 📞 [문구 정비] '전화 못 받았을 때 자동 답장 문자 발송'으로 직관화",
     },
     {
       headers: {
