@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_card_scenario"
+    android:padding="18dp"
+    android:layout_gravity="center"
+    android:layout_margin="20dp">
+
+    <!-- 상단 헤더: 타이틀 & 닫기 버튼 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="10dp">
+
+        <TextView
+            android:id="@+id/tvDialogTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="💼 [통화 종료] 모바일 명함 발송"
+            android:textColor="#38BDF8"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnDialogCloseTop"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:gravity="center"
+            android:text="✕"
+            android:textColor="#94A3B8"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:background="?android:attr/selectableItemBackgroundBorderless" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvDialogSubtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="방금 통화한 상대방에게 모바일 명함을 보내시겠습니까?"
+        android:textColor="#E2E8F0"
+        android:textSize="12.5sp"
+        android:layout_marginBottom="12dp" />
+
+    <!-- 명함 내용 미리보기 카드 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#0F172A"
+        android:padding="12dp"
+        android:layout_marginBottom="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
+
+            <TextView
+                android:id="@+id/tvSendModeBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_badge_version"
+                android:backgroundTint="#0369A1"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="2dp"
+                android:text="🌐 스마트 웹 명함 (0원 무료)"
+                android:textColor="#E0F2FE"
+                android:textSize="10.5sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvRecipientPhone"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#94A3B8"
+                android:textSize="11sp"
+                android:layout_marginStart="8dp"
+                android:text="010-0000-0000" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvMessagePreview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#CBD5E1"
+            android:textSize="11.5sp"
+            android:maxLines="4"
+            android:ellipsize="end"
+            android:text="안녕하세요! 방금 전화 주셔서 감사합니다." />
+
+        <ImageView
+            android:id="@+id/ivDialogImagePreview"
+            android:layout_width="match_parent"
+            android:layout_height="110dp"
+            android:scaleType="fitCenter"
+            android:background="#1E293B"
+            android:visibility="gone"
+            android:layout_marginTop="8dp" />
+    </LinearLayout>
+
+    <!-- 하단 메인 액션 버튼: 지금 바로 발송 -->
+    <Button
+        android:id="@+id/btnSendBusinessCardNow"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:backgroundTint="#0284C7"
+        android:text="🚀 지금 바로 모바일 명함 보내기"
+        android:textColor="#FFFFFF"
+        android:textSize="13.5sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp" />
+
+    <!-- 하단 닫기 텍스트 버튼 (카운트다운 포함) -->
+    <TextView
+        android:id="@+id/tvAutoCloseTimer"
+        android:layout_width="match_parent"
+        android:layout_height="32dp"
+        android:gravity="center"
+        android:text="닫기 (15초 후 자동 닫힘)"
+        android:textColor="#94A3B8"
+        android:textSize="11sp"
+        android:background="?android:attr/selectableItemBackground" />
+
+</LinearLayout>
