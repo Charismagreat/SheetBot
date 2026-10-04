@@ -37,6 +37,7 @@ class PhoneCallReceiver : BroadcastReceiver() {
         private const val TAG = "PhoneCallReceiver"
         const val MISSED_CALL_CHANNEL_ID = "sheetbot_missed_call_channel"
         const val ACTION_SEND_BUSINESS_CARD = "cloud.sheetbot.agent.user.ACTION_SEND_BUSINESS_CARD"
+        const val ACTION_SEND_BUSINESS_CARD_MMS = "cloud.sheetbot.agent.user.ACTION_SEND_BUSINESS_CARD_MMS"
         const val EXTRA_TARGET_PHONE = "target_phone"
         const val EXTRA_CONTACT_NAME = "contact_name"
 
@@ -54,11 +55,12 @@ class PhoneCallReceiver : BroadcastReceiver() {
         private val isMissedCallProcessing = AtomicBoolean(false)
         private val lastMissedCallTriggerTime = AtomicLong(0L)
 
-        // 15초 멱등성 캐시 (동일 번호 부재중 중복 감지 방지 - 정규화된 번호 기준)
+        // 15초 멱등성 캐시 (동일 번호 부재중 / 통화 종료 중복 감지 방지 - 정규화된 번호 기준)
         private val recentMissedCalls = ConcurrentHashMap<String, Long>()
+        private val recentEndedCalls = ConcurrentHashMap<String, Long>()
 
         /**
-         * 모바일 명함 문자 즉시 전송 (웹 명함 링크 모드)
+         * 모바일 명함 문자 즉시 전송 (웹 명함 링크 모드 - 0원 무료 SMS)
          */
         fun sendBusinessCardSms(context: Context, phoneNumber: String, contactName: String?, onComplete: ((Boolean) -> Unit)? = null) {
             val prefs = PreferencesManager(context)
@@ -112,6 +114,71 @@ class PhoneCallReceiver : BroadcastReceiver() {
         }
 
         /**
+         * 모바일 명함 갤러리 사진 첨부 발송 (MMS 모드 - 구글 시트 대장 기록 및 시스템 문자 앱 자동 실행)
+         */
+        fun sendBusinessCardMms(context: Context, phoneNumber: String, contactName: String?, onComplete: ((Boolean) -> Unit)? = null) {
+            val prefs = PreferencesManager(context)
+            val template = prefs.businessCardSmsTemplate.trim()
+            val imagePath = prefs.businessCardImagePath
+            val imageFile = if (imagePath.isNotBlank()) File(imagePath) else null
+            val userEmail = prefs.userEmail
+
+            // 1. 알림 닫기
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.cancel(2001)
+
+            // 2. 구글 시트 [SheetBot] 모바일 명함 발송 대장에 실시간 기록
+            CoroutineScope(Dispatchers.IO).launch {
+                if (!userEmail.isNullOrBlank()) {
+                    ApiClient.sendBusinessCardSync(
+                        userEmail = userEmail,
+                        recipientPhone = phoneNumber,
+                        contactName = contactName,
+                        sendMode = "사진 첨부 MMS",
+                        cardContentOrUrl = template.ifBlank { "명함 이미지 첨부 발송" },
+                        status = "전송 완료 (MMS)"
+                    )
+                }
+                if (!userEmail.isNullOrBlank() && prefs.isSmsSheetSyncEnabled) {
+                    ApiClient.sendSmsSync(
+                        userEmail = userEmail,
+                        direction = "OUTBOUND",
+                        phoneNumber = phoneNumber,
+                        contactName = contactName,
+                        message = "[사진 첨부 MMS] $template",
+                        sheetTitle = prefs.smsDriveSheetTitle
+                    )
+                }
+                onComplete?.invoke(true)
+            }
+
+            // 3. 시스템 문자 앱(MMS 첨부) 띄우기
+            val cleanPhone = phoneNumber.replace(Regex("[^0-9+]"), "").trim()
+            val mmsIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "image/*"
+                putExtra("address", cleanPhone)
+                putExtra(Intent.EXTRA_PHONE_NUMBER, cleanPhone)
+                putExtra("sms_body", template)
+                putExtra(Intent.EXTRA_TEXT, template)
+                if (imageFile != null && imageFile.exists() && imageFile.length() > 0) {
+                    val imageUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", imageFile)
+                    putExtra(Intent.EXTRA_STREAM, imageUri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+
+            try {
+                context.startActivity(mmsIntent)
+                if (prefs.isTtsEnabled) {
+                    TtsManager.speak(context, "모바일 명함 사진 발송 화면을 열었습니다.")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "MMS 문자 앱 실행 실패", e)
+            }
+        }
+
+        /**
          * 시스템 CallLog.Calls에서 최근 60초 이내에 발생한 최신 부재중 통화(MISSED_TYPE) 조회 (Fallback 안전망)
          */
         fun getLatestMissedCallFromLog(context: Context): Triple<String, String?, String>? {
@@ -141,7 +208,43 @@ class PhoneCallReceiver : BroadcastReceiver() {
                     }
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "CallLog 조회 중 예외: ${e.message}")
+                Log.w(TAG, "CallLog 부재중 조회 중 예외: ${e.message}")
+            }
+            return null
+        }
+
+        /**
+         * 시스템 CallLog.Calls에서 최근 90초 이내에 완료된 최신 통화(INCOMING_TYPE 또는 OUTGOING_TYPE) 조회 (Fallback 안전망)
+         * - 내가 건 전화(발신 통화) 및 번호 누락된 수신 통화 번호를 100% 안전하게 역추적
+         */
+        fun getLatestCallFromLog(context: Context): Triple<String, String?, String>? {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "CallLog 조회를 위한 READ_CALL_LOG 권한이 부여되지 않았습니다.")
+                return null
+            }
+            try {
+                val cursor = context.contentResolver.query(
+                    CallLog.Calls.CONTENT_URI,
+                    arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME, CallLog.Calls.DATE, CallLog.Calls.TYPE),
+                    "${CallLog.Calls.TYPE} IN (?, ?)",
+                    arrayOf(CallLog.Calls.INCOMING_TYPE.toString(), CallLog.Calls.OUTGOING_TYPE.toString()),
+                    "${CallLog.Calls.DATE} DESC"
+                )
+                cursor?.use {
+                    if (it.moveToFirst()) {
+                        val dateMillis = it.getLong(it.getColumnIndexOrThrow(CallLog.Calls.DATE))
+                        if (System.currentTimeMillis() - dateMillis < 90_000) {
+                            val number = it.getString(it.getColumnIndexOrThrow(CallLog.Calls.NUMBER)) ?: ""
+                            val cachedName = it.getString(it.getColumnIndexOrThrow(CallLog.Calls.CACHED_NAME))
+                            val timeStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA).format(Date(dateMillis))
+                            if (number.isNotBlank()) {
+                                return Triple(number, cachedName, timeStr)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "CallLog 통화 기록 조회 중 예외: ${e.message}")
             }
             return null
         }
@@ -150,11 +253,19 @@ class PhoneCallReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action
 
-        // 1. 모바일 명함 원터치 발송 브로드캐스트 처리
+        // 1-A. 모바일 명함 원터치 발송 (웹 명함 링크 모드)
         if (action == ACTION_SEND_BUSINESS_CARD) {
             val phone = intent.getStringExtra(EXTRA_TARGET_PHONE) ?: return
             val name = intent.getStringExtra(EXTRA_CONTACT_NAME)
             sendBusinessCardSms(context, phone, name)
+            return
+        }
+
+        // 1-B. 모바일 명함 원터치 발송 (사진 첨부 MMS 모드)
+        if (action == ACTION_SEND_BUSINESS_CARD_MMS) {
+            val phone = intent.getStringExtra(EXTRA_TARGET_PHONE) ?: return
+            val name = intent.getStringExtra(EXTRA_CONTACT_NAME)
+            sendBusinessCardMms(context, phone, name)
             return
         }
 
@@ -205,8 +316,8 @@ class PhoneCallReceiver : BroadcastReceiver() {
                 } else if (wasOffhook) {
                     // ★ 통화 정상 종료 (Call Ended) 감지! (수신/발신 통화 모두 지원)
                     val endedPhone = candidatePhone
-                    if (!endedPhone.isNullOrBlank() && prefs.isCallEndedCardPromptEnabled) {
-                        showCallEndedCardPrompt(context, endedPhone)
+                    if (prefs.isCallEndedCardPromptEnabled) {
+                        triggerCallEndedHandling(context, prefs, endedPhone)
                     }
 
                     // ★ 통화 종료 즉시 녹음 자동 업로드 트리거 (3.5초 스마트 I/O 딜레이 후 실행)
@@ -341,10 +452,69 @@ class PhoneCallReceiver : BroadcastReceiver() {
     }
 
     /**
+     * 통화 종료 감지 처리: candidatePhone 확인 후 비어있으면(발신 통화 등) CallLog에서 수신/발신 번호 Fallback 복구
+     */
+    private fun triggerCallEndedHandling(context: Context, prefs: PreferencesManager, directPhone: String?) {
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                var finalPhone = directPhone?.trim() ?: ""
+                var resolvedName: String? = null
+
+                // 1. 번호가 비어있으면 800ms 대기 후 CallLog(수신/발신)에서 최신 번호 복구
+                if (finalPhone.isBlank()) {
+                    delay(800)
+                    val fromLog = getLatestCallFromLog(context)
+                    if (fromLog != null) {
+                        finalPhone = fromLog.first
+                        resolvedName = fromLog.second
+                        Log.i(TAG, "📋 [통화 종료 CallLog Fallback 성공] 번호: $finalPhone, 이름: $resolvedName")
+                    }
+                }
+
+                if (finalPhone.isBlank()) {
+                    Log.w(TAG, "통화 종료를 감지했으나 상대방 번호를 획득하지 못해 명함 발송 처리를 건너뜁니다.")
+                    return@launch
+                }
+
+                // 15초 멱등성 검사 (동일 번호 통화 종료 중복 트리거 방지)
+                val normalizedPhone = finalPhone.replace(Regex("[^0-9]"), "")
+                val procTime = System.currentTimeMillis()
+                val lastProcessed = recentEndedCalls[normalizedPhone] ?: 0L
+                if (procTime - lastProcessed < 15_000) {
+                    Log.i(TAG, "⏳ [15초 멱등성 방어] 이미 처리된 통화 종료입니다: $finalPhone")
+                    return@launch
+                }
+                recentEndedCalls[normalizedPhone] = procTime
+                recentEndedCalls.entries.removeIf { procTime - it.value > 60_000 }
+
+                if (prefs.isCallEndedAutoSendDirectly) {
+                    // [선택 옵션: 알림창 없이 100% 무조건 즉시 자동 발송]
+                    Log.i(TAG, "🚀 [통화 종료 즉시 자동 발송] 알림창 확인 없이 즉시 발송 진행: $finalPhone")
+                    val isMmsMode = prefs.businessCardSendMode == "MMS_IMAGE"
+                    if (isMmsMode) {
+                        sendBusinessCardMms(context, finalPhone, resolvedName)
+                    } else {
+                        sendBusinessCardSms(context, finalPhone, resolvedName)
+                    }
+                } else {
+                    // [기본 방식: 상단 알림창 원터치 확인 발송]
+                    Log.i(TAG, "💼 [통화 종료 명함 알림창 표출] 원터치 확인 대기: $finalPhone")
+                    showCallEndedCardPrompt(context, finalPhone, resolvedName)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "통화 종료 후 명함 처리 중 오류", e)
+            } finally {
+                pendingResult.finish()
+            }
+        }
+    }
+
+    /**
      * 통화 종료 직후 모바일 명함 원터치 발송 Heads-up 알림 표출
      */
-    private fun showCallEndedCardPrompt(context: Context, phoneNumber: String) {
-        val contactName = ContactHelper.getContactName(context, phoneNumber)
+    private fun showCallEndedCardPrompt(context: Context, phoneNumber: String, directContactName: String? = null) {
+        val contactName = directContactName ?: ContactHelper.getContactName(context, phoneNumber)
         val displayName = contactName ?: phoneNumber
         val prefs = PreferencesManager(context)
 
@@ -356,25 +526,16 @@ class PhoneCallReceiver : BroadcastReceiver() {
         val hasValidImage = imageFile != null && imageFile.exists() && imageFile.length() > 0
 
         val (contentPrompt, actionLabel, pendingSend) = if (isMmsMode && hasValidImage) {
-            // [방안 2: 사진 직접 첨부 MMS 모드]
-            val cleanPhone = phoneNumber.replace(Regex("[^0-9+]"), "").trim()
-            val imageUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", imageFile!!)
-            val template = prefs.businessCardSmsTemplate.trim()
-
-            val mmsIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "image/*"
-                putExtra("address", cleanPhone)
-                putExtra(Intent.EXTRA_PHONE_NUMBER, cleanPhone)
-                putExtra("sms_body", template)
-                putExtra(Intent.EXTRA_TEXT, template)
-                putExtra(Intent.EXTRA_STREAM, imageUri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            // [방안 2: 사진 직접 첨부 MMS 모드] -> ACTION_SEND_BUSINESS_CARD_MMS 브로드캐스트로 시트 기록 후 앱 실행
+            val sendIntent = Intent(context, PhoneCallReceiver::class.java).apply {
+                action = ACTION_SEND_BUSINESS_CARD_MMS
+                putExtra(EXTRA_TARGET_PHONE, phoneNumber)
+                putExtra(EXTRA_CONTACT_NAME, contactName)
             }
-            val pending = PendingIntent.getActivity(
+            val pending = PendingIntent.getBroadcast(
                 context,
                 (System.currentTimeMillis() % 10000).toInt(),
-                mmsIntent,
+                sendIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             Triple(

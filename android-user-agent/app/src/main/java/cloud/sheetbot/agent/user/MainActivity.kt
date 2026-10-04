@@ -1048,6 +1048,12 @@ class MainActivity : AppCompatActivity() {
 
         // 통화 종료 직후 모바일 명함 원터치 발송 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchCallEndedCard.isChecked = prefs.isCallEndedCardPromptEnabled
+        binding.switchCallEndedAutoSendDirectly.isChecked = prefs.isCallEndedAutoSendDirectly
+        binding.switchCallEndedAutoSendDirectly.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isCallEndedAutoSendDirectly = isChecked
+            val msg = if (isChecked) "⚡ 통화 종료 시 알림 확인 없이 즉시 자동 발송 모드로 설정되었습니다." else "💼 통화 종료 후 상단 알림창 원터치 확인 모드로 설정되었습니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
 
         // 1. 발송 방식 라디오 버튼 초기화 (WEB_LINK vs MMS_IMAGE) 및 실시간 동기화
         refreshBusinessCardUi()

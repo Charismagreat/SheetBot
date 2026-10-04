@@ -1171,7 +1171,47 @@
                 android:padding="12dp"
                 android:layout_marginBottom="12dp">
 
-                <!-- 1. 발송 방식 선택 라디오 그룹 -->
+                <!-- 1. 발송 타이밍 제어 토글 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="#1E293B"
+                    android:padding="9dp"
+                    android:layout_marginBottom="10dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="⚡ 통화 종료 즉시 묻지 않고 자동 발송"
+                            android:textColor="#E2E8F0"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="기본값(OFF): 상단 알림창 원터치 확인 시 발송\n켜짐(ON): 통화 끝나면 알림 없이 즉시 발송"
+                            android:textColor="#94A3B8"
+                            android:textSize="10sp"
+                            android:layout_marginTop="2dp" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchCallEndedAutoSendDirectly"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="false" />
+                </LinearLayout>
+
+                <!-- 2. 발송 방식 선택 라디오 그룹 -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
