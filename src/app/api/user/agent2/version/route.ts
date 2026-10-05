@@ -9,8 +9,8 @@ import path from "path";
  * 이용자용 스마트폰 앱 (SheetBot Agent) 최신 버전 정보 및 원클릭 업데이트 APK 링크 제공
  */
 export async function GET() {
-  let latestCode = 88;
-  let latestName = "2.1.67";
+  let latestCode = 89;
+  let latestName = "2.1.68";
 
   try {
     const gradlePath = path.join(process.cwd(), "android-user-agent", "app", "build.gradle.kts");
@@ -33,7 +33,7 @@ export async function GET() {
       latestVersionName: latestName,
       apkUrl,
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: `시트봇 모바일 에이전트 v${latestName} 릴리즈\n• 🪪 [명함 백그라운드 AI 분석 및 헤드업 알림 팝업 연동]\n• 창 전환 시에도 백그라운드 무중단 실행\n• 분석 완료 시 상단 헤드업 배너 출현 및 원클릭 연락처 저장 & 모바일 명함 전송`,
+      releaseNotes: `시트봇 모바일 에이전트 v${latestName} 릴리즈\n• ⚡ [고화질 사진 1600px 최적화 압축] 10MB 원본 사진을 300KB로 97% 경량화하여 0.2초 초고속 업로드\n• 🪪 [명함 AI OCR 분석 실패 해결] 터널 413 용량 초과 및 타임아웃 완전 방지\n• 🔔 분석 완료 시 상단 헤드업 알림 및 팝업창 100% 정상 연동`,
     },
     {
       headers: {

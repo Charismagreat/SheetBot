@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
@@ -274,6 +275,17 @@ export async function POST(req: NextRequest) {
         : null;
 
       const cName = ocrResult?.name || "명함 고객";
+      const fallbackOcrData = {
+        name: cName,
+        title: ocrResult?.title || "",
+        company: ocrResult?.company || "",
+        mobile: ocrResult?.mobile || "",
+        email: ocrResult?.email || "",
+        tel: ocrResult?.tel || "",
+        address: ocrResult?.address || "",
+        details: ocrResult?.details || "",
+      };
+
       const successResponse = {
         success: true,
         message: `🪪 [${cName}] 명함 AI 분석이 완료되었습니다.`,
@@ -281,7 +293,7 @@ export async function POST(req: NextRequest) {
         fileName: targetFileName,
         folderName: targetFolderName,
         folderId: targetFolderId,
-        ocrData: ocrResult,
+        ocrData: ocrResult || fallbackOcrData,
         spreadsheetUrl: targetSpreadsheetUrl,
       };
 
