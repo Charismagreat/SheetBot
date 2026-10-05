@@ -232,7 +232,8 @@ class BankNotificationListener : NotificationListenerService() {
         val userEmail = prefs.userEmail ?: return
 
         try {
-            val extras = sbn.notification.extras ?: return
+            val notification = sbn.notification ?: return
+            val extras = notification.extras ?: return
             val rawTitle = extras.getString(Notification.EXTRA_TITLE)
                 ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
             val rawText = extras.getString(Notification.EXTRA_TEXT)
@@ -243,21 +244,48 @@ class BankNotificationListener : NotificationListenerService() {
 
             if (rawText.isBlank()) return
 
-            // 1. 단체방 vs 1:1 대화 분리 파싱
+            // 1. 안드로이드 최신 MessagingStyle 표준 속성 추출 (단체 대화방 감지)
+            val conversationTitle = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()?.trim()
+            val isGroupConversationExtra = extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)
+            val isCompatGroup = try {
+                NotificationCompat.isGroupConversation(notification)
+            } catch (_: Exception) {
+                false
+            }
+
+            // 2. 단체방 vs 1:1 대화 분리 파싱
             var chatRoomName = rawTitle.trim()
             var sender = rawTitle.trim()
             var message = rawText.trim()
             var isGroupChat = false
 
-            if (rawSubText.isNotBlank()) {
-                // 서브텍스트가 있으면 대화방 이름이 서브텍스트이고 타이틀이 발신자
+            // [우선순위 1] 최신 MessagingStyle 대화방 타이틀이 명시된 경우 (가장 정확한 단체방 감지)
+            if (!conversationTitle.isNullOrBlank()) {
+                chatRoomName = conversationTitle
+                sender = rawTitle.trim()
+                isGroupChat = true
+            }
+            // [우선순위 2] 안드로이드 시스템 표준 그룹 대화 플래그가 true인 경우
+            else if (isGroupConversationExtra || isCompatGroup) {
+                isGroupChat = true
+                if (rawSubText.isNotBlank()) {
+                    chatRoomName = rawSubText.trim()
+                    sender = rawTitle.trim()
+                } else {
+                    chatRoomName = "단체 채팅방"
+                    sender = rawTitle.trim()
+                }
+            }
+            // [우선순위 3] 서브텍스트에 대화방 이름이 실려오는 구형 방식
+            else if (rawSubText.isNotBlank()) {
                 chatRoomName = rawSubText.trim()
                 sender = rawTitle.trim()
                 isGroupChat = true
-            } else if (rawText.contains(": ")) {
-                // 본문에 '발신자: 내용' 형태로 들어오는 경우 (단톡방)
+            }
+            // [우선순위 4] 본문에 '발신자: 내용' 형태로 들어오는 구형 단톡방 방식
+            else if (rawText.contains(": ")) {
                 val parts = rawText.split(": ", limit = 2)
-                if (parts.size == 2 && parts[0].length <= 20) {
+                if (parts.size == 2 && parts[0].length <= 25) {
                     sender = parts[0].trim()
                     message = parts[1].trim()
                     chatRoomName = rawTitle.trim()
