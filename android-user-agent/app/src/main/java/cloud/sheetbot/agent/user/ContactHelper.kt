@@ -12,20 +12,52 @@ import androidx.core.content.ContextCompat
  */
 object ContactHelper {
     /**
+     * 문자열이 실제 전화번호 규격인지 판별 (연락처 이름과 전화번호 구분)
+     */
+    fun isValidPhoneNumber(raw: String): Boolean {
+        if (raw.isBlank()) return false
+        val clean = raw.trim()
+        // 한글이나 알파벳이 1글자라도 포함되어 있으면 전화번호가 아닌 연락처명으로 판정
+        if (clean.any { it in '가'..'힣' || it in 'ㄱ'..'ㅎ' || it in 'a'..'z' || it in 'A'..'Z' }) {
+            return false
+        }
+        val digitsOnly = clean.replace("[^0-9]".toRegex(), "")
+        // 최소 7자리 이상 숫자여야 유효한 한국 전화번호
+        if (digitsOnly.length < 7) return false
+
+        // 대표번호(15xx, 16xx, 18xx) 8자리이거나, 0 또는 +82로 시작
+        return clean.startsWith("0") || clean.startsWith("+") || clean.startsWith("82") || 
+               (digitsOnly.length == 8 && (digitsOnly.startsWith("15") || digitsOnly.startsWith("16") || digitsOnly.startsWith("18")))
+    }
+
+    /**
      * 국가코드(82) 제거 및 한국 표준 전화번호 형식(010-XXXX-XXXX, 1599-XXXX 등)으로 변환
      */
     fun formatPhoneNumber(raw: String): String {
         if (raw.isBlank()) return raw
-        var clean = raw.replace("[^0-9+]".toRegex(), "").trim()
+        val cleanText = raw.trim()
+
+        // 💡 한글이나 영문이 포함된 연락처 이름(예: "차민서2")은 전화번호 변환을 건너뛰고 원본 반환
+        if (cleanText.any { it in '가'..'힣' || it in 'ㄱ'..'ㅎ' || it in 'a'..'z' || it in 'A'..'Z' }) {
+            return cleanText
+        }
+
+        var clean = cleanText.replace("[^0-9+]".toRegex(), "").trim()
+        if (clean.length < 7) {
+            // 7자리 미만의 짧은 숫자는 유효한 전화번호가 아니므로 0 접두어를 억지로 붙이지 않음
+            return cleanText
+        }
+
         if (clean.startsWith("+82")) {
             clean = clean.removePrefix("+82")
         } else if (clean.startsWith("82") && clean.length >= 10) {
             clean = clean.removePrefix("82")
         }
 
+        val noZero = clean.replace("^0+".toRegex(), "")
         // 대표번호 (15xx, 16xx, 18xx) 8자리
-        if (clean.length == 8 && (clean.startsWith("15") || clean.startsWith("16") || clean.startsWith("18"))) {
-            return "${clean.substring(0, 4)}-${clean.substring(4)}"
+        if (noZero.length == 8 && (noZero.startsWith("15") || noZero.startsWith("16") || noZero.startsWith("18"))) {
+            return "${noZero.substring(0, 4)}-${noZero.substring(4)}"
         }
 
         if (!clean.startsWith("0")) {
@@ -48,6 +80,38 @@ object ContactHelper {
             }
             else -> clean
         }
+    }
+
+    /**
+     * 주소록에서 이름으로 저장된 전화번호 역조회
+     */
+    fun getPhoneNumberByName(context: Context, name: String): String? {
+        if (name.isBlank()) return null
+        val hasPermission = ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.READ_CONTACTS
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasPermission) return null
+
+        var phoneNumber: String? = null
+        try {
+            val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
+            val projection = arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER)
+            val selection = "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} = ? OR ${ContactsContract.Data.DISPLAY_NAME} = ?"
+            val selectionArgs = arrayOf(name.trim(), name.trim())
+
+            context.contentResolver.query(uri, projection, selection, selectionArgs, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val numIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                    if (numIdx != -1) {
+                        phoneNumber = cursor.getString(numIdx)
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        return phoneNumber?.let { formatPhoneNumber(it) }?.takeIf { it.isNotBlank() }
     }
 
     fun getContactName(context: Context, phoneNumber: String): String? {
