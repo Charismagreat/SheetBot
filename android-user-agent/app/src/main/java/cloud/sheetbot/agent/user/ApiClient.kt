@@ -835,7 +835,7 @@ object ApiClient {
         fallbackFolderName: String = "[SheetBot] 명함 보관함"
     ): UploadGenericFileResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
-        val maxAttempts = 30 // 1.5초 * 30회 = 최대 45초 대기
+        val maxAttempts = 60 // 1.5초 * 60회 = 최대 90초 대기 (일시적 구글 지연 시에도 타임아웃 오류 방지)
 
         for (attempt in 1..maxAttempts) {
             kotlinx.coroutines.delay(1500)
