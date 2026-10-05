@@ -841,6 +841,9 @@ class MainActivity : AppCompatActivity() {
                     "(시트봇테크)",
                     testCardJson
                 )
+                try {
+                    CardActionActivity.start(this@MainActivity, testCardJson)
+                } catch (_: Exception) {}
             }
         }
 
@@ -2438,7 +2441,12 @@ class MainActivity : AppCompatActivity() {
                         ).show()
                         addLogItem("🪪 명함 OCR", "$name $comp -> 인맥 대장", true)
 
-                        // 상단 알림(진동/소리)이 떠 있으며, 사용자가 알림을 누르면 팝업창(CardActionActivity)이 열립니다.
+                        // ★ [인맥 액션 다이얼로그 즉시 출현] 앱이 켜져 있을 때 연락처 저장 & 내 명함 발송 팝업창 다이렉트 표시!
+                        try {
+                            CardActionActivity.start(this@MainActivity, ocr ?: org.json.JSONObject())
+                        } catch (dialogErr: Exception) {
+                            android.util.Log.w("MainActivity", "CardActionActivity 다이얼로그 팝업 실패: ${dialogErr.message}")
+                        }
                     }
                 } else {
                     val err = result.error ?: "명함 분석 실패"

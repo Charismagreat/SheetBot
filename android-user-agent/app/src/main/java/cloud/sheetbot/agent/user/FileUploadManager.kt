@@ -450,7 +450,7 @@ object FileUploadManager {
         manager.notify((System.currentTimeMillis() % 100000).toInt(), noti)
     }
 
-    const val CARD_NOTIFICATION_CHANNEL_ID = "sheetbot_card_action_channel_v3"
+    const val CARD_NOTIFICATION_CHANNEL_ID = "sheetbot_card_action_channel_v4"
 
     fun showBusinessCardActionNotification(context: Context, name: String, company: String, cardJson: org.json.JSONObject) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -500,13 +500,12 @@ object FileUploadManager {
             .setContentTitle("🪪 [명함 AI 분석 완료] $name $company")
             .setContentText("터치하여 스마트폰 연락처에 추가하고 내 모바일 명함을 발송하세요.")
             .setStyle(NotificationCompat.BigTextStyle().bigText("🪪 $name $company AI 인맥 등록 완료\n• 터치 시 연락처 자동 저장 & 내 모바일 명함 발송 팝업이 열립니다."))
-            .setSmallIcon(android.R.drawable.ic_menu_myplaces)
+            .setSmallIcon(R.drawable.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setSound(soundUri)
             .setVibrate(longArrayOf(0, 400, 200, 400))
             .setContentIntent(pendingIntent)
-            .setFullScreenIntent(pendingIntent, true)
             .setAutoCancel(true)
             .addAction(android.R.drawable.ic_menu_send, "연락처 저장 & 명함 발송", pendingIntent)
             .build()
