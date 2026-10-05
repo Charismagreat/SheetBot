@@ -9,8 +9,8 @@ import path from "path";
  * 이용자용 스마트폰 앱 (SheetBot Agent) 최신 버전 정보 및 원클릭 업데이트 APK 링크 제공
  */
 export async function GET() {
-  let latestCode = 91;
-  let latestName = "2.1.70";
+  let latestCode = 92;
+  let latestName = "2.1.71";
 
   try {
     const gradlePath = path.join(process.cwd(), "android-user-agent", "app", "build.gradle.kts");
@@ -33,7 +33,7 @@ export async function GET() {
       latestVersionName: latestName,
       apkUrl,
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: `시트봇 모바일 에이전트 v${latestName} 릴리즈\n• ⚡ [Zero-Timeout 비동기 티켓 아키텍처] 터널 소켓 타임아웃 100% 원천 차단\n• 🪪 [명함 AI 분석 무결점 수거] 1.5초 Fast-Check + 안전 백그라운드 수거로 time out 오류 완전 종결\n• 🔔 분석 완료 시 상단 헤드업 알림 및 팝업창 100% 정상 연동`,
+      releaseNotes: `시트봇 모바일 에이전트 v${latestName} 릴리즈\n• 🪪 [인맥 액션 다이얼로그 즉시 출현] 명함 AI 분석 완료 시 화면에 즉시 [연락처 저장 & 내 명함 발송] 팝업창 다이렉트 표시\n• 🔔 [상단 헤드업 알림 v4 최적화] 창 전환(백그라운드) 시에도 소리/진동과 함께 상단 알림 배너 100% 정상 연동\n• ⚡ [Zero-Timeout 비동기 티켓 아키텍처] 45초 안정 수거로 타임아웃 완전 차단`,
     },
     {
       headers: {
