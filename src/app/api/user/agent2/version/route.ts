@@ -9,8 +9,8 @@ import path from "path";
  * 이용자용 스마트폰 앱 (SheetBot Agent) 최신 버전 정보 및 원클릭 업데이트 APK 링크 제공
  */
 export async function GET() {
-  let latestCode = 93;
-  let latestName = "2.1.72";
+  let latestCode = 94;
+  let latestName = "2.1.73";
 
   try {
     const gradlePath = path.join(process.cwd(), "android-user-agent", "app", "build.gradle.kts");
@@ -33,7 +33,7 @@ export async function GET() {
       latestVersionName: latestName,
       apkUrl,
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: `시트봇 모바일 에이전트 v${latestName} 릴리즈\n• 📇 [스마트폰 연락처 100% 자동 저장] WRITE_CONTACTS 런타임 권한 자동 요청 및 구글/삼성 계정 자동 바인딩으로 주소록 저장 완벽 해결\n• 🛡️ [2중 안전망 시스템 주소록 연동] 권한 미부여 시에도 시스템 연락처 등록 화면으로 무손실 즉시 연동\n• 🪪 [명함 AI 분석 즉각 팝업] 분석 완료 즉시 화면에 [연락처 저장 & 내 명함 발송] 팝업 다이렉트 출현`,
+      releaseNotes: `시트봇 모바일 에이전트 v${latestName} 릴리즈\n• 🛡️ [3중 중복 방지 시스템 탑재] 서버 60초 선제 락(In-Flight Lock) + 구글 드라이브 중복 파일 재사용 + 시트 중복 행 사전 방어\n• ⚡ [클라이언트 중복 재전송 원천 차단] 소켓 지연 시 2차 호스트 중복 전송 방어\n• 📇 [스마트폰 연락처 100% 자동 저장] 주소록 직접 저장 & 팝업 다이얼로그 무결점 연동`,
     },
     {
       headers: {
