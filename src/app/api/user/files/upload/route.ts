@@ -32,9 +32,10 @@ import path from "path";
 import os from "os";
 
 /**
- * 파일 업로드 15초 중복 수신 방지 캐시 (Idempotency) 및 폴더 ID 0초 메모리 캐시
+ * 파일 업로드 60초 중복 수신 방지 캐시 (Idempotency) 및 동시 진행 락 (In-Flight Lock)
  */
 const recentFileUploads = new Map<string, { timestamp: number; response: any }>();
+const inFlightUploads = new Map<string, { jobId: string; timestamp: number }>();
 const folderCache = new Map<string, string>([
   ["[SheetBot] 통화 녹음", "14TuBcWsooWB7_yPqyn6L0imjshpVxFVX"],
   ["[SheetBot] 영수증 보관함", "1rKVf3Swmi-VifK0fJoME5cdknZgA4H7K"],
@@ -120,12 +121,29 @@ export async function POST(req: NextRequest) {
 
     const cleanEmail = userEmail.toLowerCase().trim();
 
-    // 1-1. [Idempotency] 동일 사용자 + 동일 파일명/크기 15초 이내 중복 전송 방어
+    // 1-1. [Idempotency] 동일 사용자 + 동일 파일명/크기 60초 이내 중복 전송 방어 & 선제 락
     const dedupKey = `${cleanEmail}:${rawFileName.trim()}:${buffer.length}:${ocrType}`;
     const nowTs = Date.now();
+
+    // [1단계 선제 락] 이미 동일 파일의 백그라운드 파이프라인이 진행 중인 경우 즉시 티켓 반환 (0.001초 차단)
+    const inFlight = inFlightUploads.get(dedupKey);
+    if (inFlight && nowTs - inFlight.timestamp < 60000) {
+      console.log(`[FilesUpload] 🛡️ In-Flight duplicate upload detected: ${rawFileName} (reusing jobId: ${inFlight.jobId})`);
+      return NextResponse.json({
+        success: true,
+        jobId: inFlight.jobId,
+        status: "PROCESSING",
+        message: "동일한 명함 사진의 분석 작업이 이미 진행 중입니다. 백그라운드에서 안전하게 완료됩니다.",
+        ocrType,
+        fileName: rawFileName.trim(),
+        isDuplicate: true,
+      });
+    }
+
+    // [2단계 60초 완료 캐시] 최근 60초 이내 완료된 작업 캐시 서빙
     const cachedUpload = recentFileUploads.get(dedupKey);
-    if (cachedUpload && nowTs - cachedUpload.timestamp < 15000) {
-      console.log(`[FilesUpload] Duplicate upload ignored within 15s: ${rawFileName} (serving cached response)`);
+    if (cachedUpload && nowTs - cachedUpload.timestamp < 60000) {
+      console.log(`[FilesUpload] 🛡️ Duplicate upload ignored within 60s: ${rawFileName} (serving cached response)`);
       return NextResponse.json({
         ...cachedUpload.response,
         isDuplicate: true,
@@ -135,6 +153,11 @@ export async function POST(req: NextRequest) {
     if (recentFileUploads.size > 200) {
       for (const [k, v] of recentFileUploads.entries()) {
         if (nowTs - v.timestamp > 600000) recentFileUploads.delete(k);
+      }
+    }
+    if (inFlightUploads.size > 200) {
+      for (const [k, v] of inFlightUploads.entries()) {
+        if (nowTs - v.timestamp > 120000) inFlightUploads.delete(k);
       }
     }
 
@@ -246,6 +269,9 @@ export async function POST(req: NextRequest) {
       const capturedTempFilePath = tempFilePath;
       const capturedBuffer = buffer;
 
+      // 선제 락 등록 (동시 중복 유입 0.001초 차단)
+      inFlightUploads.set(dedupKey, { jobId, timestamp: nowTs });
+
       // 작업 등록
       createCardJob({
         jobId,
@@ -307,20 +333,30 @@ export async function POST(req: NextRequest) {
             spreadsheetUrl: targetSpreadsheetUrl,
           });
 
-          // 3. 드라이브 업로드 및 시트 행 추가, 토큰 차감, 로그 적재
+          // 3. 드라이브 업로드 전 중복 검사: 동일 폴더 내 동일 파일명이 이미 존재하는지 확인
           let bgDriveFileId: string | null = null;
           let bgWebViewLink = "";
           try {
-            const uploadRes = await uploadDriveFileWithBridge({
-              buffer: capturedBuffer,
-              fileName: capturedFileName,
-              folderId: capturedFolderId,
-              mimeType: capturedMimeType,
-              tempFilePath: capturedTempFilePath,
-              preferOAuth: true,
-            });
-            bgDriveFileId = uploadRes?.id || uploadRes?.fileId || null;
-            bgWebViewLink = uploadRes?.webViewLink || (bgDriveFileId ? `https://drive.google.com/file/d/${bgDriveFileId}/view` : "");
+            const existingSearch = await listDriveFiles({
+              query: `'${capturedFolderId}' in parents and name = '${capturedFileName}' and trashed = false`,
+            }, { preferOAuth: true }).catch(() => null);
+
+            if (existingSearch?.files && existingSearch.files.length > 0) {
+              bgDriveFileId = existingSearch.files[0].id;
+              bgWebViewLink = existingSearch.files[0].webViewLink || `https://drive.google.com/file/d/${bgDriveFileId}/view`;
+              console.log(`[FilesUpload] 📁 File already exists in Drive, reusing fileId: ${bgDriveFileId}`);
+            } else {
+              const uploadRes = await uploadDriveFileWithBridge({
+                buffer: capturedBuffer,
+                fileName: capturedFileName,
+                folderId: capturedFolderId,
+                mimeType: capturedMimeType,
+                tempFilePath: capturedTempFilePath,
+                preferOAuth: true,
+              });
+              bgDriveFileId = uploadRes?.id || uploadRes?.fileId || null;
+              bgWebViewLink = uploadRes?.webViewLink || (bgDriveFileId ? `https://drive.google.com/file/d/${bgDriveFileId}/view` : "");
+            }
           } catch (upErr: any) {
             console.warn("[FilesUpload] Card background Drive upload warning:", upErr.message);
           }
@@ -348,65 +384,120 @@ export async function POST(req: NextRequest) {
               }).catch(() => {});
             }
 
-            const newCardRow = [
-              [
-                nowStr,
-                cardData.name || "확인 불가",
-                cardData.title || "미기재",
-                cardData.company || "미기재",
-                cardData.mobile || "미기재",
-                cardData.email || "미기재",
-                cardData.tel || "미기재",
-                cardData.address || "미기재",
-                cardData.details || "-",
-                bgWebViewLink ? `=HYPERLINK("${bgWebViewLink}", "🪪 명함 보기")` : "-",
-                deviceId
-              ]
-            ];
+            // 시트 사전 중복 검사: 최근 10개 행 중 동일 휴대폰 또는 성함이 이미 등록되어 있는지 확인
+            let isAlreadyInSheet = false;
+            try {
+              const existingRowsRes = await callSheetsTool("sheets_get_range", {
+                spreadsheetId: targetSpreadsheetId,
+                range: "시트1!B:E",
+                preferOAuth: true,
+              }).catch(() => null);
 
-            await callSheetsTool("sheets_append_values", {
-              spreadsheetId: targetSpreadsheetId,
-              range: "시트1!A:K",
-              values: newCardRow,
-              preferOAuth: true,
-            }).catch((e: any) => console.warn("[FilesUpload] Sheet append warning:", e.message));
+              const rows = existingRowsRes?.values || existingRowsRes?.result?.values || [];
+              if (rows.length > 1) {
+                const recentRows = rows.slice(-10);
+                const targetMobileClean = (cardData.mobile || "").replace(/[^0-9]/g, "");
+                for (const r of recentRows) {
+                  const rName = (r[0] || "").trim();
+                  const rMobileClean = (r[3] || "").replace(/[^0-9]/g, "");
+                  if (targetMobileClean.length >= 8 && targetMobileClean === rMobileClean) {
+                    isAlreadyInSheet = true;
+                    console.log(`[FilesUpload] 🛡️ Sheet duplicate detected by mobile: ${cardData.name} (${cardData.mobile}). Skipping row append.`);
+                    break;
+                  }
+                  if (cardData.name && cardData.name.trim() === rName && cardData.name.trim() !== "확인 불가" && cardData.name.trim() !== "명함 고객") {
+                    // 동일 이름이고 회사도 같으면 중복 판정
+                    isAlreadyInSheet = true;
+                    console.log(`[FilesUpload] 🛡️ Sheet duplicate detected by name: ${cardData.name}. Skipping row append.`);
+                    break;
+                  }
+                }
+              }
+            } catch (dupErr: any) {
+              console.warn("[FilesUpload] Sheet duplicate check warning:", dupErr.message);
+            }
 
-            const usedTokens = 700;
-            await deductTokens(cleanEmail, usedTokens).catch(() => {});
+            if (!isAlreadyInSheet) {
+              const newCardRow = [
+                [
+                  nowStr,
+                  cardData.name || "확인 불가",
+                  cardData.title || "미기재",
+                  cardData.company || "미기재",
+                  cardData.mobile || "미기재",
+                  cardData.email || "미기재",
+                  cardData.tel || "미기재",
+                  cardData.address || "미기재",
+                  cardData.details || "-",
+                  bgWebViewLink ? `=HYPERLINK("${bgWebViewLink}", "🪪 명함 보기")` : "-",
+                  deviceId
+                ]
+              ];
 
-            void recordAiUsageLog({
-              userEmail: cleanEmail,
-              caller: "sheetbot-card-background",
-              purpose: `명함 백그라운드 AI 인맥 등록 (${configuredModel})`,
-              model: configuredModel,
-              promptTokens: 450,
-              completionTokens: 250,
-              totalTokens: usedTokens,
-              promptText: `백그라운드 명함 분석: ${capturedFileName}`,
-              responseText: JSON.stringify(cardData).slice(0, 300),
-            });
+              await callSheetsTool("sheets_append_values", {
+                spreadsheetId: targetSpreadsheetId,
+                range: "시트1!A:K",
+                values: newCardRow,
+                preferOAuth: true,
+              }).catch((e: any) => console.warn("[FilesUpload] Sheet append warning:", e.message));
 
-            const logId = Date.now();
-            await insertRows("sheetbot_user_dispatch_logs", [
-              {
-                id: logId,
-                user_email: cleanEmail,
-                rule_id: "BUSINESS_CARD_OCR",
-                rule_name: "🪪 명함 AI OCR 인맥 등록",
-                device_id: deviceId,
-                recipient: "Google Drive / Sheet",
-                content: `[명함 OCR] ${capturedFileName} -> ${defaultSheetTitle}`,
-                status: "SUCCESS",
-                error_message: null,
-                created_at: getKoreanTimeString(),
-              },
-            ]).catch(() => {});
-            console.log(`[FilesUpload] [CardBackground] ✅ Completed Drive upload & Sheet append for: ${capturedFileName}`);
+              const usedTokens = 700;
+              await deductTokens(cleanEmail, usedTokens).catch(() => {});
+
+              void recordAiUsageLog({
+                userEmail: cleanEmail,
+                caller: "sheetbot-card-background",
+                purpose: `명함 백그라운드 AI 인맥 등록 (${configuredModel})`,
+                model: configuredModel,
+                promptTokens: 450,
+                completionTokens: 250,
+                totalTokens: usedTokens,
+                promptText: `백그라운드 명함 분석: ${capturedFileName}`,
+                responseText: JSON.stringify(cardData).slice(0, 300),
+              });
+
+              const logId = Date.now();
+              await insertRows("sheetbot_user_dispatch_logs", [
+                {
+                  id: logId,
+                  user_email: cleanEmail,
+                  rule_id: "BUSINESS_CARD_OCR",
+                  rule_name: "🪪 명함 AI OCR 인맥 등록",
+                  device_id: deviceId,
+                  recipient: "Google Drive / Sheet",
+                  content: `[명함 OCR] ${capturedFileName} -> ${defaultSheetTitle}`,
+                  status: "SUCCESS",
+                  error_message: null,
+                  created_at: getKoreanTimeString(),
+                },
+              ]).catch(() => {});
+              console.log(`[FilesUpload] [CardBackground] ✅ Completed Drive upload & Sheet append for: ${capturedFileName}`);
+            } else {
+              console.log(`[FilesUpload] [CardBackground] ℹ️ Duplicate row skipped in sheet for: ${capturedFileName}`);
+            }
           }
+
+          // In-Flight 락 해제 및 60초 완료 캐시 등록
+          inFlightUploads.delete(dedupKey);
+          recentFileUploads.set(dedupKey, {
+            timestamp: Date.now(),
+            response: {
+              success: true,
+              jobId,
+              status: "COMPLETED",
+              message: `🪪 [${cName}] 명함 AI 분석이 완료되었습니다.`,
+              ocrType: "BUSINESS_CARD",
+              fileName: capturedFileName,
+              folderName: targetFolderName,
+              folderId: targetFolderId,
+              ocrData: finalOcrData,
+            },
+          });
 
           return finalOcrData;
         } catch (err: any) {
           console.warn("[FilesUpload] Card processing error:", err.message);
+          inFlightUploads.delete(dedupKey);
           updateCardJob(jobId, { status: "FAILED", error: err.message });
           return null;
         } finally {

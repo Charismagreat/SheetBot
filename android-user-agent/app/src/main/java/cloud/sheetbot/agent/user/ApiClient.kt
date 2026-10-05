@@ -813,6 +813,13 @@ object ApiClient {
             } catch (e: Exception) {
                 lastError = e.message ?: "통신 오류"
                 Log.w(TAG, "파일 업로드 통신 예외 ($host): ${e.message}")
+                // 만약 SocketTimeoutException 등 서버 처리 중 발생한 소켓 타임아웃이라면,
+                // 이미 서버에 데이터가 도달하여 백그라운드에서 처리 중일 가능성이 높으므로
+                // 중복 업로드를 방지하기 위해 2차 호스트로 동일 파일 재전송을 중단합니다.
+                if (e is java.net.SocketTimeoutException) {
+                    Log.w(TAG, "⏳ 소켓 타임아웃 감지 -> 중복 업로드 방지를 위해 추가 호스트 재전송 중단")
+                    break
+                }
             }
         }
         UploadGenericFileResult(success = false, error = lastError)
