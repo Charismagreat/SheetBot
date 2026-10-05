@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-10-05T13:29:39.911Z
+ * Generated at: 2026-10-05T13:54:45.797Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */

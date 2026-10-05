@@ -522,7 +522,7 @@ class BankNotificationListener : NotificationListenerService() {
                     }
 
                     if (isSynced) {
-                        val who = if (contactName != null && contactName != sender) "$contactName($sender)" else sender
+                        val who = if (!contactName.isNullOrBlank() && contactName != senderPhone) "$contactName($senderPhone)" else (senderPhone.ifBlank { contactName ?: "알림" })
                         Log.i(TAG, "✅ [구글 메시지/RCS 시트 동기화 완료] $who")
                         if (prefs.isTtsEnabled) {
                             val ttsMsg = syncResult.ttsText ?: "${contactName ?: "고객"}님의 새 메시지가 구글 시트에 기록되었습니다."
@@ -532,7 +532,8 @@ class BankNotificationListener : NotificationListenerService() {
                         // UI 로그 갱신용 브로드캐스트 발송
                         val updateIntent = Intent(SmsReceiver.ACTION_SMS_RECEIVED).apply {
                             putExtra("smsBody", "[수신] ${contactName?.let { "$it: " } ?: ""}$message")
-                            putExtra("sender", contactName ?: sender)
+                            val senderLabel: String = contactName ?: senderPhone.ifBlank { "메시지" }
+                            putExtra("sender", senderLabel)
                             putExtra("success", true)
                             setPackage(packageName)
                         }
