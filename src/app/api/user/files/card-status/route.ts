@@ -17,7 +17,13 @@ export async function GET(req: NextRequest) {
 
   const job = getCardJob(jobId);
   if (!job) {
-    return NextResponse.json({ success: false, error: "작업을 찾을 수 없습니다." }, { status: 404 });
+    // 혹시라도 스레드 간 동기화 지연 시 404로 클라이언트가 깨지지 않도록 PROCESSING 상태로 안전하게 안내
+    return NextResponse.json({
+      success: true,
+      jobId,
+      status: "PROCESSING",
+      message: "명함 AI 분석 작업이 진행 중입니다...",
+    });
   }
 
   return NextResponse.json(

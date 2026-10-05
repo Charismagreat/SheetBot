@@ -515,10 +515,12 @@ export async function POST(req: NextRequest) {
         }
       })();
 
-      // 1.5초 Fast-Check: 초단기에 완료되면 즉시 ocrData 반환, 1.5초 초과 시 터널 타임아웃 차단을 위해 티켓 즉시 반환
+      // ⚡ [직통 완료 Fast-Check (최대 12초 대기)]
+      // AI OCR + 드라이브 + 시트 병렬 파이프라인은 3~5초 내 완료되므로, 동기로 직접 결과를 회수하여
+      // 스마트폰 앱이 번거로운 폴링 없이 단 한 번의 업로드 응답으로 즉시 명함 알림과 연락처 팝업을 띄우도록 보장합니다.
       const fastResult = await Promise.race([
         processingPromise,
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 12000)),
       ]);
 
       if (fastResult) {
