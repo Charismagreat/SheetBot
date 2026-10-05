@@ -18,9 +18,10 @@ object ApiClient {
     private const val TAG = "SheetBotApiClient"
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
-    // 1차 메인 호스트 및 2차 이지데스크 터널 폴백 호스트
-    const val PRIMARY_HOST = "https://sheetbot.cloud"
-    const val FALLBACK_HOST = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot"
+    // 1차 메인 호스트: 이지데스크 운영 공식 터널 (Zero-Latency 즉시 직결)
+    const val PRIMARY_HOST = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot"
+    // 2차 백업 호스트
+    const val FALLBACK_HOST = "https://sheetbot.cloud"
 
     // 빠른 2단계 폴백을 위한 타임아웃 최적화 (1차 서버 장애 시 3.5초 내 2차로 즉시 전환)
     private val client = OkHttpClient.Builder()
