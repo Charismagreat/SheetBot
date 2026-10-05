@@ -247,11 +247,7 @@ class BankNotificationListener : NotificationListenerService() {
             // 1. 안드로이드 최신 MessagingStyle 표준 속성 추출 (단체 대화방 감지)
             val conversationTitle = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()?.trim()
             val isGroupConversationExtra = extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)
-            val isCompatGroup = try {
-                NotificationCompat.isGroupConversation(notification)
-            } catch (_: Exception) {
-                false
-            }
+                || extras.getBoolean("android.isGroupConversation", false)
 
             // 2. 단체방 vs 1:1 대화 분리 파싱
             var chatRoomName = rawTitle.trim()
@@ -266,7 +262,7 @@ class BankNotificationListener : NotificationListenerService() {
                 isGroupChat = true
             }
             // [우선순위 2] 안드로이드 시스템 표준 그룹 대화 플래그가 true인 경우
-            else if (isGroupConversationExtra || isCompatGroup) {
+            else if (isGroupConversationExtra) {
                 isGroupChat = true
                 if (rawSubText.isNotBlank()) {
                     chatRoomName = rawSubText.trim()
