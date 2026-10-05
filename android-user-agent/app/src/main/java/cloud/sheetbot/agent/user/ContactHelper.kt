@@ -87,6 +87,40 @@ object ContactHelper {
     }
 
     /**
+     * 주소록에서 기존에 사용 중인 기본 계정(Google, Samsung 등) 감지
+     * 계정 연동 시 해당 계정으로 저장되어 주소록 필터에서 숨겨지는 현상을 원천 방지
+     */
+    private fun getDefaultAccount(context: Context): Pair<String?, String?> {
+        try {
+            val projection = arrayOf(
+                ContactsContract.RawContacts.ACCOUNT_NAME,
+                ContactsContract.RawContacts.ACCOUNT_TYPE
+            )
+            val uri = ContactsContract.RawContacts.CONTENT_URI
+            context.contentResolver.query(
+                uri,
+                projection,
+                "${ContactsContract.RawContacts.ACCOUNT_NAME} IS NOT NULL",
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIdx = cursor.getColumnIndex(ContactsContract.RawContacts.ACCOUNT_NAME)
+                    val typeIdx = cursor.getColumnIndex(ContactsContract.RawContacts.ACCOUNT_TYPE)
+                    if (nameIdx != -1 && typeIdx != -1) {
+                        val accName = cursor.getString(nameIdx)
+                        val accType = cursor.getString(typeIdx)
+                        if (!accName.isNullOrBlank() && !accType.isNullOrBlank()) {
+                            return Pair(accName, accType)
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        return Pair(null, null)
+    }
+
+    /**
      * 명함 OCR 분석 정보를 스마트폰 연락처(주소록)에 자동 등록
      */
     fun insertContact(
@@ -106,17 +140,21 @@ object ContactHelper {
             android.Manifest.permission.WRITE_CONTACTS
         ) == PackageManager.PERMISSION_GRANTED
 
-        if (!hasPermission) return false
+        if (!hasPermission) {
+            android.util.Log.w("ContactHelper", "WRITE_CONTACTS 권한 없음 -> 주소록 저장 건너뜀")
+            return false
+        }
 
         try {
+            val (accountName, accountType) = getDefaultAccount(context)
             val ops = ArrayList<android.content.ContentProviderOperation>()
             val rawContactInsertIndex = ops.size
 
-            // 1. RawContact 생성
+            // 1. RawContact 생성 (기본 계정 바인딩)
             ops.add(
                 android.content.ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI)
-                    .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, null)
-                    .withValue(ContactsContract.RawContacts.ACCOUNT_NAME, null)
+                    .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, accountType)
+                    .withValue(ContactsContract.RawContacts.ACCOUNT_NAME, accountName)
                     .build()
             )
 
@@ -195,8 +233,10 @@ object ContactHelper {
             )
 
             context.contentResolver.applyBatch(ContactsContract.AUTHORITY, ops)
+            android.util.Log.i("ContactHelper", "🎉 [주소록 저장 성공] $name ($mobile) -> account: $accountName")
             return true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.e("ContactHelper", "❌ [주소록 저장 예외] ${e.message}", e)
             return false
         }
     }
