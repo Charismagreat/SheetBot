@@ -1,5 +1,20 @@
 # Project Agent Rules
 
+<!-- BEGIN:egdesk-server-and-tunnel-infrastructure-rules -->
+## 이지데스크(EGDesk) 서버 운영 인프라 및 도메인 터널링 표준 원칙 (절대 원칙)
+
+1. **이지데스크 독점 운영 관리 원칙 (Server Operation Exclusivity)**:
+   - 본 프로젝트의 백엔드/Next.js 웹 애플리케이션 서버는 개발자가 임의로 터미널에서 `npm run start` 등으로 수동 기동하거나 개별 프로세스로 띄우지 않고, **반드시 이지데스크 SSL/코딩 서버(`coding_start_server`, `egdesk-ssl`)를 통해서만 빌드 및 운영 관리**되어야 합니다.
+   - 이를 통해 포트(3006), 환경변수, 배포 디렉토리(`~/.egdesk/deployments/SheetBot/...`), 인증서 및 터널 라우팅이 일관되게 중앙 관리됩니다.
+2. **도메인(`sheetbot.cloud`)과 터널링의 일체형 구조 (Domain via Tunneling Architecture)**:
+   - `https://sheetbot.cloud`는 외부의 독립된 별개 서버가 아니며, **이지데스크 터널링 서비스(`https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot`)를 통해 로컬 호스트 PC의 이지데스크 서버로 직결되는 공식 도메인**입니다.
+   - 따라서 도메인과 로컬 서버를 서로 다른 인프라로 오인하여 이원화하거나 외부 핑계를 대서는 안 되며, 도메인 요청이 곧 로컬 이지데스크 서버로 도착한다는 일체형 원리를 항상 전제로 개발합니다.
+3. **모바일 클라이언트 통신 최적화 및 1600px 압축 원칙 (Mobile Payload Optimization)**:
+   - 스마트폰 카메라 원본 사진(8MB~15MB)을 터널링 프록시로 직접 전송하면 프록시 버퍼링, 413 Payload Too Large, 또는 60초 타임아웃으로 인한 앱-서버 연결 단절이 발생합니다.
+   - 따라서 모바일 앱(명함, 영수증, 문서 등)에서 사진을 업로드할 때는 반드시 **1600px 지능형 샘플링 리사이즈 및 85% JPEG 압축을 사전 적용하여 300KB 수준으로 97% 경량화**한 후 전송해야 합니다. 이를 통해 0.2초 초고속 업로드와 무결점 응답을 보장합니다.
+4. **버전 배포 시 배포 디렉토리 자동 동기화**:
+   - 신규 APK 빌드 및 버전 갱신 시 `android-user-agent/app/build.gradle.kts`와 `public/downloads/SheetBotAgent.apk`는 현재 이지데스크 활성 배포 디렉토리(`~/.egdesk/deployments/SheetBot/...`)에도 누락 없이 동기화하여 버전 API(`route.ts`)가 실시간으로 최신 버전을 반환하도록 유지합니다.
+<!-- END:egdesk-server-and-tunnel-infrastructure-rules -->
 
 <!-- BEGIN:db-watcher-first-rules -->
 ## 이지데스크 DB 왓처(DB Watcher) 최우선 사용 및 실시간 동기화 표준 원칙 (절대 원칙)
