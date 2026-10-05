@@ -5,6 +5,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
@@ -222,11 +224,35 @@ object FileUploadManager {
 
     /**
      * Content URI 내용을 앱 캐시 디렉터리의 임시 파일로 복사
+     * 이미지인 경우 AI OCR에 최적화된 최대 1600px 리사이즈 및 JPEG 85 압축 적용 (10MB -> 300KB 초고속 전송 및 터널 413 방지)
      */
     internal fun copyUriToTempFile(context: Context, uri: Uri, originalName: String): File? {
         return try {
             val cleanName = originalName.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+            val mimeType = context.contentResolver.getType(uri) ?: ""
+            val isImage = mimeType.startsWith("image/") ||
+                cleanName.endsWith(".jpg", ignoreCase = true) ||
+                cleanName.endsWith(".jpeg", ignoreCase = true) ||
+                cleanName.endsWith(".png", ignoreCase = true) ||
+                cleanName.endsWith(".webp", ignoreCase = true)
+
             val tempFile = File(context.cacheDir, "upload_${System.currentTimeMillis()}_$cleanName")
+
+            if (isImage) {
+                // 이미지 최적화: 1600px 리사이즈 및 JPEG 압축으로 OOM 및 터널 413 타임아웃 완전 방지
+                val bitmap = decodeSampledBitmapFromUri(context, uri, 1600, 1600)
+                if (bitmap != null) {
+                    FileOutputStream(tempFile).use { output ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, output)
+                        output.flush()
+                    }
+                    bitmap.recycle()
+                    Log.i(TAG, "📸 이미지 최적화 압축 완료: ${tempFile.length() / 1024} KB ($originalName)")
+                    return tempFile
+                }
+            }
+
+            // 일반 파일 또는 비트맵 디코딩 실패 시 원본 스트림 복사
             context.contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(tempFile).use { output ->
                     input.copyTo(output)
@@ -236,6 +262,61 @@ object FileUploadManager {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to copy URI to temp file: ${e.message}", e)
             null
+        }
+    }
+
+    private fun decodeSampledBitmapFromUri(context: Context, uri: Uri, reqWidth: Int, reqHeight: Int): Bitmap? {
+        try {
+            // 1. inJustDecodeBounds로 이미지 원본 크기만 먼저 측정 (메모리 절약)
+            val options = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                BitmapFactory.decodeStream(input, null, options)
+            }
+
+            val origWidth = options.outWidth
+            val origHeight = options.outHeight
+            if (origWidth <= 0 || origHeight <= 0) return null
+
+            // 2. 적정 sampleSize 계산
+            var inSampleSize = 1
+            if (origHeight > reqHeight || origWidth > reqWidth) {
+                val halfHeight = origHeight / 2
+                val halfWidth = origWidth / 2
+                while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+                    inSampleSize *= 2
+                }
+            }
+
+            // 3. 실제 비트맵 디코딩 (RGB_565로 메모리 절반 절약)
+            val decodeOptions = BitmapFactory.Options().apply {
+                this.inSampleSize = inSampleSize
+                inPreferredConfig = Bitmap.Config.RGB_565
+            }
+            val sampledBitmap = context.contentResolver.openInputStream(uri)?.use { input ->
+                BitmapFactory.decodeStream(input, null, decodeOptions)
+            } ?: return null
+
+            // 4. 가로/세로 비율 유지하며 최대 reqWidth/reqHeight로 스케일링
+            val scale = Math.min(
+                reqWidth.toFloat() / sampledBitmap.width,
+                reqHeight.toFloat() / sampledBitmap.height
+            )
+            return if (scale < 1.0f) {
+                val targetW = (sampledBitmap.width * scale).toInt()
+                val targetH = (sampledBitmap.height * scale).toInt()
+                val scaled = Bitmap.createScaledBitmap(sampledBitmap, targetW, targetH, true)
+                if (scaled != sampledBitmap) {
+                    sampledBitmap.recycle()
+                }
+                scaled
+            } else {
+                sampledBitmap
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "decodeSampledBitmapFromUri failed: ${e.message}")
+            return null
         }
     }
 

@@ -30,9 +30,9 @@ object ApiClient {
         .retryOnConnectionFailure(true)
         .build()
 
-    // 파일 업로드, AI OCR/요약 및 구글 시트 연동을 위한 대기 타임아웃 클라이언트 (60초)
+    // 파일 업로드, AI OCR/요약 및 구글 시트 연동을 위한 대기 타임아웃 클라이언트 (1차 실패 시 4초 내 빠른 2차 전환)
     private val longTimeoutClient = client.newBuilder()
-        .connectTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(4, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
@@ -768,6 +768,8 @@ object ApiClient {
         }
         val requestBody = json.toString().toRequestBody(JSON_MEDIA_TYPE)
 
+        var lastError = "구글 드라이브 파일 업로드에 실패했습니다."
+
         for (host in hosts) {
             val endpoint = "$host/api/user/files/upload"
             try {
@@ -793,13 +795,15 @@ object ApiClient {
                     )
                 } else {
                     val msg = resJson.optString("error", "HTTP ${response.code}")
+                    lastError = msg
                     Log.w(TAG, "파일 업로드 실패 ($host): $msg")
                 }
             } catch (e: Exception) {
+                lastError = e.message ?: "통신 오류"
                 Log.w(TAG, "파일 업로드 통신 예외 ($host): ${e.message}")
             }
         }
-        UploadGenericFileResult(success = false, error = "구글 드라이브 파일 업로드에 실패했습니다.")
+        UploadGenericFileResult(success = false, error = lastError)
     }
 
     /**
