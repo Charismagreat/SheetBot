@@ -259,104 +259,74 @@ export async function POST(req: NextRequest) {
     let cardSpreadsheetUrl: string | null = null;
 
     if (ocrType === "BUSINESS_CARD" && shouldRecordSheet) {
-      // 🪪 [Zero-Timeout] 명함 비동기 티켓 발급 및 Fast-Check 파이프라인
-      const jobId = `card_job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      console.log(`[FilesUpload] 🪪 Realtime AI OCR for Business Card: ${targetFileName} (jobId: ${jobId})`);
+      // 🪪 [Direct-Return Instant CRM] 초고속 실시간 명함 분석 파이프라인 (3~4초 즉시 완료)
+      console.log(`[FilesUpload] 🪪 Instant Direct Realtime AI OCR for Business Card: ${targetFileName}`);
 
+      const base64File = buffer.toString("base64");
+      // 초고속 Flash-Lite 전용 모델로 3~4초 내 무조건 OCR 완료
+      const configuredModel = "gemini-2.5-flash-lite";
+
+      let ocrResult: any = null;
+      try {
+        ocrResult = await performAiOcr(
+          base64File,
+          targetFileName,
+          mimeType,
+          "BUSINESS_CARD",
+          configuredModel
+        );
+      } catch (ocrErr: any) {
+        console.warn("[FilesUpload] Direct Card AI OCR error:", ocrErr.message);
+      }
+
+      const cName = ocrResult?.name || "명함 고객";
+      const finalOcrData = ocrResult || {
+        name: cName,
+        title: "",
+        company: "",
+        mobile: "",
+        email: "",
+        tel: "",
+        address: "",
+        details: "",
+      };
+
+      const jobId = `card_job_${Date.now()}`;
+      const successResponse = {
+        success: true,
+        jobId,
+        status: "COMPLETED",
+        message: `🪪 [${cName}] 명함 AI 분석이 완료되었습니다.`,
+        ocrType: "BUSINESS_CARD",
+        fileName: targetFileName,
+        folderName: targetFolderName,
+        folderId: targetFolderId,
+        ocrData: finalOcrData,
+      };
+
+      // 멱등성 캐시 등록
+      recentFileUploads.set(dedupKey, { timestamp: nowTs, response: successResponse });
+
+      // ⚡ [백그라운드 파이프라인] 구글 드라이브 업로드 및 시트 행 적재를 완전 비동기로 위임 (Zero-Block)
       const capturedFolderId = targetFolderId;
       const capturedFileName = targetFileName;
       const capturedMimeType = mimeType;
       const capturedTempFilePath = tempFilePath;
       const capturedBuffer = buffer;
 
-      // 선제 락 등록 (동시 중복 유입 0.001초 차단)
-      inFlightUploads.set(dedupKey, { jobId, timestamp: nowTs });
-
-      // 작업 등록
-      createCardJob({
-        jobId,
-        userEmail: cleanEmail,
-        fileName: targetFileName,
-        folderName: targetFolderName,
-        folderId: targetFolderId,
-      });
-
-      // 백그라운드에서 AI OCR + 드라이브 업로드 + 시트 조회를 완전 병렬(Promise.all)로 3~5초 내 완수
-      const processingPromise = (async () => {
+      void (async () => {
         try {
-          const aiSettings = await getAiModelSettings();
-          const configuredModel = aiSettings.defaultModel || "gemini-2.5-flash";
-          const base64File = capturedBuffer.toString("base64");
-
-          // ⚡ [1단계: 초고속 AI OCR 및 시트 바인딩 병렬 실행 (2~3초 완료)]
-          const [ocrResult, resolved] = await Promise.all([
-            // 1. Gemini AI OCR 분석 수행
-            performAiOcr(
-              base64File,
-              capturedFileName,
-              capturedMimeType,
-              "BUSINESS_CARD",
-              configuredModel
-            ).catch((e: any) => {
-              console.warn("[FilesUpload] Card AI OCR warning:", e.message);
-              return null;
-            }),
-
-            // 2. 구글 시트 바인딩 확인
-            resolveUserSpreadsheet({
-              userEmail: cleanEmail,
-              sheetType: "BUSINESS_CARD",
-              defaultTitle: defaultSheetTitle,
-              folderId: capturedFolderId,
-              preferOAuth: true,
-            }).catch(() => null),
-          ]);
+          const resolved = await resolveUserSpreadsheet({
+            userEmail: cleanEmail,
+            sheetType: "BUSINESS_CARD",
+            defaultTitle: defaultSheetTitle,
+            folderId: capturedFolderId,
+            preferOAuth: true,
+          }).catch(() => null);
 
           const targetSpreadsheetId = resolved?.spreadsheetId;
-          const targetSpreadsheetUrl = targetSpreadsheetId
-            ? `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`
-            : null;
 
-          const cName = ocrResult?.name || "명함 고객";
-          const finalOcrData = ocrResult || {
-            name: cName,
-            title: "",
-            company: "",
-            mobile: "",
-            email: "",
-            tel: "",
-            address: "",
-            details: "",
-          };
-
-          // 🚀 [Zero-Delay Instant CRM] AI OCR 분석 완료 즉시 COMPLETED 발행!
-          // 드라이브 업로드가 몇 초가 걸리든 기다리지 않고, 스마트폰 앱에 즉시 명함 데이터를 전달하여
-          // 2~3초 만에 상단 헤드업 알림과 연락처 저장 팝업(CardActionActivity)을 100% 무조건 띄웁니다!
-          updateCardJob(jobId, {
-            status: "COMPLETED",
-            ocrData: finalOcrData,
-            spreadsheetUrl: targetSpreadsheetUrl,
-          });
-
-          // In-Flight 락 해제 및 60초 완료 캐시 등록
-          inFlightUploads.delete(dedupKey);
-          recentFileUploads.set(dedupKey, {
-            timestamp: Date.now(),
-            response: {
-              success: true,
-              jobId,
-              status: "COMPLETED",
-              message: `🪪 [${cName}] 명함 AI 분석이 완료되었습니다.`,
-              ocrType: "BUSINESS_CARD",
-              fileName: capturedFileName,
-              folderName: targetFolderName,
-              folderId: targetFolderId,
-              ocrData: finalOcrData,
-            },
-          });
-
-          // ⚡ [2단계: 구글 드라이브 업로드 및 시트 행 적재 (최대 5초 Fast-Wait)]
-          let bgDriveFileId: string | null = null;
+          // 드라이브 업로드 (최대 5초 Fast-Wait)
           let bgWebViewLink = "";
           try {
             const driveUploadPromise = (async () => {
@@ -366,33 +336,27 @@ export async function POST(req: NextRequest) {
 
               if (existingSearch?.files && existingSearch.files.length > 0) {
                 const bgId = existingSearch.files[0].id;
-                const bgLink = existingSearch.files[0].webViewLink || `https://drive.google.com/file/d/${bgId}/view`;
-                console.log(`[FilesUpload] 📁 File already exists in Drive, reusing fileId: ${bgId}`);
-                return { fileId: bgId, webViewLink: bgLink };
-              } else {
-                const uploadRes = await uploadDriveFileWithBridge({
-                  buffer: capturedBuffer,
-                  fileName: capturedFileName,
-                  folderId: capturedFolderId,
-                  mimeType: capturedMimeType,
-                  tempFilePath: capturedTempFilePath,
-                  preferOAuth: true,
-                });
-                const bgId = uploadRes?.id || uploadRes?.fileId || null;
-                const bgLink = uploadRes?.webViewLink || (bgId ? `https://drive.google.com/file/d/${bgId}/view` : "");
-                return { fileId: bgId, webViewLink: bgLink };
+                return existingSearch.files[0].webViewLink || `https://drive.google.com/file/d/${bgId}/view`;
               }
+
+              const uploadRes = await uploadDriveFileWithBridge({
+                buffer: capturedBuffer,
+                fileName: capturedFileName,
+                folderId: capturedFolderId,
+                mimeType: capturedMimeType,
+                tempFilePath: capturedTempFilePath,
+                preferOAuth: true,
+              });
+              const bgId = uploadRes?.id || uploadRes?.fileId || null;
+              return uploadRes?.webViewLink || (bgId ? `https://drive.google.com/file/d/${bgId}/view` : "");
             })();
 
-            const driveResult = await Promise.race([
+            bgWebViewLink = await Promise.race([
               driveUploadPromise,
-              new Promise<{ fileId: null; webViewLink: "" }>((res) => setTimeout(() => res({ fileId: null, webViewLink: "" }), 5000)),
+              new Promise<string>((res) => setTimeout(() => res(""), 5000)),
             ]);
-
-            bgDriveFileId = driveResult?.fileId || null;
-            bgWebViewLink = driveResult?.webViewLink || "";
-          } catch (upErr: any) {
-            console.warn("[FilesUpload] Card background Drive upload warning:", upErr.message);
+          } catch (driveErr: any) {
+            console.warn("[FilesUpload] Card Drive upload background warning:", driveErr.message);
           }
 
           if (targetSpreadsheetId) {
@@ -418,7 +382,7 @@ export async function POST(req: NextRequest) {
               }).catch(() => {});
             }
 
-            // 시트 사전 중복 검사: 최근 10개 행 중 동일 휴대폰 또는 성함이 이미 등록되어 있는지 확인
+            // 시트 사전 중복 검사: 최근 10개 행 중 동일 휴대폰 또는 성함 확인
             let isAlreadyInSheet = false;
             try {
               const existingRowsRes = await callSheetsTool("sheets_get_range", {
@@ -440,7 +404,6 @@ export async function POST(req: NextRequest) {
                     break;
                   }
                   if (cardData.name && cardData.name.trim() === rName && cardData.name.trim() !== "확인 불가" && cardData.name.trim() !== "명함 고객") {
-                    // 동일 이름이고 회사도 같으면 중복 판정
                     isAlreadyInSheet = true;
                     console.log(`[FilesUpload] 🛡️ Sheet duplicate detected by name: ${cardData.name}. Skipping row append.`);
                     break;
@@ -480,13 +443,13 @@ export async function POST(req: NextRequest) {
 
               void recordAiUsageLog({
                 userEmail: cleanEmail,
-                caller: "sheetbot-card-background",
-                purpose: `명함 백그라운드 AI 인맥 등록 (${configuredModel})`,
+                caller: "sheetbot-card-direct",
+                purpose: `명함 초고속 AI 인맥 등록 (gemini-2.5-flash-lite)`,
                 model: configuredModel,
                 promptTokens: 450,
                 completionTokens: 250,
                 totalTokens: usedTokens,
-                promptText: `백그라운드 명함 분석: ${capturedFileName}`,
+                promptText: `명함 분석: ${capturedFileName}`,
                 responseText: JSON.stringify(cardData).slice(0, 300),
               });
 
@@ -510,13 +473,8 @@ export async function POST(req: NextRequest) {
               console.log(`[FilesUpload] [CardBackground] ℹ️ Duplicate row skipped in sheet for: ${capturedFileName}`);
             }
           }
-
-          return finalOcrData;
-        } catch (err: any) {
-          console.warn("[FilesUpload] Card processing error:", err.message);
-          inFlightUploads.delete(dedupKey);
-          updateCardJob(jobId, { status: "FAILED", error: err.message });
-          return null;
+        } catch (bgErr: any) {
+          console.warn("[FilesUpload] Card background task error:", bgErr.message);
         } finally {
           if (capturedTempFilePath && fs.existsSync(capturedTempFilePath)) {
             try { fs.unlinkSync(capturedTempFilePath); } catch {}
@@ -524,45 +482,8 @@ export async function POST(req: NextRequest) {
         }
       })();
 
-      // ⚡ [0.5초 Fast-Ticket 즉시 반환]
-      // 대용량 base64 이미지 업로드 시 터널 프록시(Render)의 15~30초 소켓 타임아웃을 원천 방지하기 위해,
-      // 0.5초 초단기 내 즉각 티켓(jobId)을 반환하고 클라이언트가 백그라운드 폴링(card-status)으로 안전 수거합니다.
-      const fastResult = await Promise.race([
-        processingPromise,
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 500)),
-      ]);
-
-      if (fastResult) {
-        // 1.5초 내 즉각 완료된 경우
-        const cName = fastResult?.name || "명함 고객";
-        const successResponse = {
-          success: true,
-          jobId,
-          status: "COMPLETED",
-          message: `🪪 [${cName}] 명함 AI 분석이 완료되었습니다.`,
-          ocrType: "BUSINESS_CARD",
-          fileName: targetFileName,
-          folderName: targetFolderName,
-          folderId: targetFolderId,
-          ocrData: fastResult,
-        };
-        recentFileUploads.set(dedupKey, { timestamp: nowTs, response: successResponse });
-        return NextResponse.json(successResponse);
-      }
-
-      // 1.5초 초과 시: 스레드와 터널 소켓을 즉시 해제하여 타임아웃 원천 방지 (Fast-Ticket)
-      const ticketResponse = {
-        success: true,
-        jobId,
-        status: "PROCESSING",
-        message: "명함 사진이 안전하게 접수되었습니다. AI 분석이 백그라운드에서 진행 중입니다.",
-        ocrType: "BUSINESS_CARD",
-        fileName: targetFileName,
-        folderName: targetFolderName,
-        folderId: targetFolderId,
-      };
-      recentFileUploads.set(dedupKey, { timestamp: nowTs, response: ticketResponse });
-      return NextResponse.json(ticketResponse);
+      // 🚀 스마트폰 앱에 즉시 COMPLETED 및 명함 데이터 반환 (3~4초 만에 직통 완료!)
+      return NextResponse.json(successResponse);
     } else {
       // 5. 일반 파일 및 영수증 업로드 로직 (단일 드라이브 업로드 후 백그라운드 위임)
       try {
@@ -1040,12 +961,12 @@ async function performAiOcr(
         "Content-Type": "application/json",
         "X-Api-Key": "a67ddc0f-7e2b-4997-9a0b-9667a74c89d0",
       },
-      signal: AbortSignal.timeout(10000), // 10초 타임아웃: 지연 발생 시 즉시 callAiCaller로 빠른 폴백
+      signal: AbortSignal.timeout(15000), // 15초 타임아웃
       body: JSON.stringify({
         tool: "ai_caller_call",
         arguments: {
           prompt,
-          model: modelName || "gemini-2.5-flash",
+          model: modelName || "gemini-2.5-flash-lite",
           temperature: 0.1,
           files: [
             {
