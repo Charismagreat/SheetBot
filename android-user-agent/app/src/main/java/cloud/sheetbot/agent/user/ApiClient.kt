@@ -614,17 +614,18 @@ object ApiClient {
 
     private fun parseVersionToCode(versionName: String): Int {
         return try {
-            val parts = versionName.split(".")
-            val major = parts.getOrNull(0)?.toIntOrNull() ?: 1
-            val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
-            val patch = parts.getOrNull(2)?.toIntOrNull() ?: 0
-            if (major == 1 && minor == 5) {
-                7 + patch
+            val clean = versionName.replace(Regex("^(user-)?v?", RegexOption.IGNORE_CASE), "").trim()
+            val parts = clean.split(".")
+            val major = parts.getOrNull(0)?.toIntOrNull() ?: 2
+            val minor = parts.getOrNull(1)?.toIntOrNull() ?: 1
+            val patch = parts.getOrNull(2)?.toIntOrNull() ?: 76
+            if (major == 2 && minor == 1) {
+                97 + (patch - 76)
             } else {
                 major * 10000 + minor * 100 + patch
             }
         } catch (_: Exception) {
-            999
+            97
         }
     }
 

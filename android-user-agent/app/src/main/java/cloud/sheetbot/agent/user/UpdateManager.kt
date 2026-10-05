@@ -56,25 +56,35 @@ object UpdateManager {
             withContext(Dispatchers.Main) {
                 if (activity.isFinishing || activity.isDestroyed) return@withContext
 
-                val hasUpdate = versionInfo != null && (
-                    versionInfo.latestVersionCode > currentVersionCode ||
-                    isNewerVersion(versionInfo.latestVersionName, currentVersionName)
+                val normRemote = normalizeVersion(versionInfo?.latestVersionName ?: "")
+                val normLocal = normalizeVersion(currentVersionName)
+                val isSameVersion = normRemote.isNotBlank() && normRemote == normLocal
+                val isNewer = isNewerVersion(normRemote, normLocal)
+
+                val hasUpdate = versionInfo != null && !isSameVersion && (
+                    isNewer || (versionInfo.latestVersionCode > currentVersionCode && versionInfo.latestVersionCode < 1000)
                 )
 
                 if (hasUpdate && versionInfo != null) {
                     showUpdateDialog(activity, versionInfo)
                 } else if (showToastIfLatest) {
-                    val ver = versionInfo?.latestVersionName ?: currentVersionName
+                    val ver = normRemote.ifBlank { normLocal }
                     Toast.makeText(activity, "현재 최신 버전(v${ver})을 사용 중입니다.", Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
 
+    private fun normalizeVersion(ver: String): String {
+        return ver.replace(Regex("^(user-)?v?", RegexOption.IGNORE_CASE), "").trim()
+    }
+
     private fun isNewerVersion(remote: String, local: String): Boolean {
         try {
-            val rParts = remote.split(".").mapNotNull { it.toIntOrNull() }
-            val lParts = local.split(".").mapNotNull { it.toIntOrNull() }
+            val rClean = normalizeVersion(remote)
+            val lClean = normalizeVersion(local)
+            val rParts = rClean.split(".").mapNotNull { it.toIntOrNull() }
+            val lParts = lClean.split(".").mapNotNull { it.toIntOrNull() }
             val maxLen = maxOf(rParts.size, lParts.size)
             for (i in 0 until maxLen) {
                 val r = rParts.getOrElse(i) { 0 }

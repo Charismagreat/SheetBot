@@ -20,8 +20,8 @@ function parseVersionToCode(versionName: string): number {
   const clean = versionName.replace(/^(user-)?v?/i, "").trim();
   const parts = clean.split(".").map((p) => parseInt(p, 10) || 0);
   if (parts.length >= 3) {
-    // 예: 2.1.76 -> 2 * 10000 + 1 * 100 + 76 = 20176
-    return parts[0] * 10000 + parts[1] * 100 + parts[2];
+    // 2.1.76 기준 versionCode 97 매핑
+    return 97 + (parts[2] - 76);
   }
   return 97;
 }
@@ -42,7 +42,7 @@ export async function GET() {
   }
 
   let latestName = "2.1.76";
-  let latestCode = 20176;
+  let latestCode = 97;
   let apkUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";
   let releaseNotes = "시트봇 모바일 에이전트 최신 버전입니다.";
 
