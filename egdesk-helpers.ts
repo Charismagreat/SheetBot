@@ -75,6 +75,26 @@ function buildServerEgdeskHeaders(): Record<string, string> {
   return headers;
 }
 
+/**
+ * Server-side MCP root for API routes / RSC.
+ * Prefer EGDESK_MCP_INTERNAL_URL (localhost) so hosted Next never re-enters the
+ * public tunnel for MCP calls (avoids double-hop upload 504s).
+ * Browser code must not use this — use /__*_proxy + apiFetch instead.
+ */
+function resolveServerEgdeskApiUrl(): string {
+  if (typeof process !== 'undefined') {
+    const internal = process.env?.EGDESK_MCP_INTERNAL_URL;
+    if (internal && String(internal).trim()) {
+      return String(internal).replace(/\/$/, '');
+    }
+    const pub = process.env?.NEXT_PUBLIC_EGDESK_API_URL;
+    if (pub && String(pub).trim()) {
+      return String(pub).replace(/\/$/, '');
+    }
+  }
+  return String(EGDESK_CONFIG.apiUrl || '').replace(/\/$/, '');
+}
+
 const VISITOR_SESSION_KEY = 'egdesk_visitor_session';
 
 export type WorkspaceVisitorCallOptions = {
@@ -163,9 +183,7 @@ async function callWorkspaceMcpTool(
   const visitorHeaders = buildWorkspaceVisitorHeaders(options);
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}${path}`, {
       method: 'POST',
       headers: { ...buildServerEgdeskHeaders(), ...visitorHeaders },
@@ -296,9 +314,7 @@ export async function callEgdeskHttp(
   const isServer = typeof window === 'undefined';
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     const base = apiUrl.endsWith('/') ? apiUrl : `${apiUrl}/`;
     const url = new URL(pathname.startsWith('/') ? pathname.slice(1) : pathname, base);
     for (const [key, value] of Object.entries(query)) {
@@ -328,9 +344,8 @@ export async function callEgdeskHttp(
 /**
  * Call EGDesk user-data MCP tool
  *
- * - Server (API routes): Calls Egdesk API directly using EGDESK_CONFIG.apiUrl and
- *   EGDESK_CONFIG.apiKey (from env NEXT_PUBLIC_EGDESK_API_URL / NEXT_PUBLIC_EGDESK_API_KEY)
- *   so relative URLs and tunnel base path are not an issue.
+ * - Server (API routes): Calls Egdesk via resolveServerEgdeskApiUrl()
+ *   (EGDESK_MCP_INTERNAL_URL localhost first, then NEXT_PUBLIC_EGDESK_API_URL) + API key.
  * - Client (browser): Uses /__user_data_proxy so CORS and tunnel base path still work.
  */
 export async function callUserDataTool(
@@ -344,9 +359,7 @@ export async function callUserDataTool(
   let response: Response;
   if (isServer) {
     // API routes: call Egdesk directly (relative URL is invalid in Node)
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/user-data/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -612,12 +625,251 @@ export async function renameTable(
 // FILE STORAGE HELPERS
 // ==========================================
 
+/** Above this decoded size, uploadFile switches to chunked tunnel-safe uploads. */
+const UPLOAD_CHUNKED_THRESHOLD_BYTES = 4 * 1024 * 1024;
+
+function estimateBase64DecodedBytes(data: string): number {
+  const trimmed = String(data || '').replace(/^data:[^;]+;base64,/i, '').replace(/\s/g, '');
+  return Math.floor((trimmed.length * 3) / 4);
+}
+
+function base64ToUint8Array(data: string): Uint8Array {
+  const trimmed = String(data || '').replace(/^data:[^;]+;base64,/i, '').replace(/\s/g, '');
+  const bin = atob(trimmed);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function sha256Hex(buf: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+export type UploadFileChunkedOptions = {
+  mimeType?: string;
+  forceStorageType?: 'blob' | 'filesystem';
+  compress?: boolean;
+  onProgress?: (p: { sentBytes: number; totalBytes: number; sentChunks: number; totalChunks: number }) => void;
+  signal?: AbortSignal;
+  parallelism?: number;
+};
+
+/**
+ * Chunked upload for large files (tunnel-safe). Browser sends raw octet-stream chunks
+ * to /api/user/files/uploads/*; MCP assembles on disk and path-ingests.
+ */
+export async function uploadFileChunked(
+  tableName: string,
+  rowId: number,
+  columnName: string,
+  file: Blob | File,
+  options: UploadFileChunkedOptions = {},
+): Promise<any> {
+  if (typeof window === 'undefined') {
+    throw new Error('uploadFileChunked() is browser-only. On the server, stream to MCP /user-data/uploads directly.');
+  }
+  const filename =
+    (file as File).name ||
+    `upload-${Date.now()}.bin`;
+  const mimeType = options.mimeType || file.type || 'application/octet-stream';
+  const totalBytes = file.size;
+  const lastModified = Number((file as File).lastModified) || 0;
+  const resumeKey = `egdesk_chunked_upload:${tableName}|${rowId}|${columnName}|${filename}|${totalBytes}|${lastModified}`;
+  const readResume = (): string => {
+    try {
+      return localStorage.getItem(resumeKey) || '';
+    } catch {
+      return '';
+    }
+  };
+  const writeResume = (id: string) => {
+    try {
+      localStorage.setItem(resumeKey, id);
+    } catch {
+      // ignore quota / private mode
+    }
+  };
+  const clearResume = () => {
+    try {
+      localStorage.removeItem(resumeKey);
+    } catch {
+      // ignore
+    }
+  };
+
+  let uploadId = readResume();
+  let chunkSize = 0;
+  let totalChunks = 0;
+
+  if (uploadId) {
+    const statusRes = await apiFetch(`/api/user/files/uploads/${uploadId}`, { signal: options.signal });
+    const statusJson = await statusRes.json().catch(() => ({}));
+    if (
+      statusRes.ok &&
+      statusJson.success !== false &&
+      (statusJson.state === 'receiving' || statusJson.state === 'finalizing') &&
+      Number(statusJson.size) === totalBytes
+    ) {
+      chunkSize = Number(statusJson.chunkSize);
+      totalChunks = Number(statusJson.totalChunks || Math.ceil(totalBytes / chunkSize));
+    } else if (statusRes.ok && statusJson.state === 'done' && statusJson.file) {
+      clearResume();
+      return {
+        success: true,
+        uploadId,
+        file: statusJson.file,
+        state: 'done',
+        sha256: statusJson.sha256,
+        resumed: true,
+      };
+    } else {
+      clearResume();
+      uploadId = '';
+    }
+  }
+
+  if (!uploadId) {
+    const initRes = await apiFetch('/api/user/files/uploads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename,
+        size: totalBytes,
+        mimeType,
+        tableName,
+        rowId,
+        columnName,
+        forceStorageType: options.forceStorageType,
+        compress: options.compress,
+      }),
+      signal: options.signal,
+    });
+    const initJson = await initRes.json();
+    if (!initRes.ok || initJson.success === false) {
+      throw new Error(initJson.error || initJson.message || `Init upload failed (HTTP ${initRes.status})`);
+    }
+    uploadId = String(initJson.uploadId);
+    chunkSize = Number(initJson.chunkSize);
+    totalChunks = Number(initJson.totalChunks || Math.ceil(totalBytes / chunkSize));
+    writeResume(uploadId);
+  }
+
+  const parallelism = Math.max(1, Math.min(options.parallelism ?? 3, 3));
+
+  const statusRes = await apiFetch(`/api/user/files/uploads/${uploadId}`, { signal: options.signal });
+  const statusJson = await statusRes.json().catch(() => ({}));
+  const already = new Set<number>(Array.isArray(statusJson.received) ? statusJson.received : []);
+
+  let sentBytes = Math.min(totalBytes, already.size * chunkSize);
+  let sentChunks = already.size;
+  options.onProgress?.({ sentBytes, totalBytes, sentChunks, totalChunks });
+
+  const pending: number[] = [];
+  for (let i = 0; i < totalChunks; i++) {
+    if (!already.has(i)) pending.push(i);
+  }
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const backoffs = [500, 1500, 4000];
+
+  async function putOne(index: number): Promise<void> {
+    const start = index * chunkSize;
+    const end = Math.min(start + chunkSize, totalBytes);
+    const slice = file.slice(start, end);
+    const buf = await slice.arrayBuffer();
+    const sha = await sha256Hex(buf);
+    let lastErr: Error | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (options.signal?.aborted) throw new Error('Upload aborted');
+      try {
+        const res = await apiFetch(`/api/user/files/uploads/${uploadId}/chunks/${index}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            'x-chunk-sha256': sha,
+          },
+          body: buf,
+          signal: options.signal,
+        });
+        const json = await res.json().catch(() => ({}));
+        if (res.status === 401 && attempt < 2) {
+          await sleep(backoffs[attempt]);
+          continue;
+        }
+        if (!res.ok || json.success === false) {
+          throw new Error(json.error || json.message || `Chunk ${index} failed (HTTP ${res.status})`);
+        }
+        sentChunks += 1;
+        sentBytes = Math.min(totalBytes, sentBytes + (end - start));
+        options.onProgress?.({ sentBytes, totalBytes, sentChunks, totalChunks });
+        return;
+      } catch (e: any) {
+        lastErr = e instanceof Error ? e : new Error(String(e));
+        if (attempt < 2) await sleep(backoffs[attempt]);
+      }
+    }
+    throw lastErr || new Error(`Chunk ${index} failed`);
+  }
+
+  let cursor = 0;
+  async function worker() {
+    while (cursor < pending.length) {
+      const idx = pending[cursor++];
+      await putOne(idx);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(parallelism, pending.length || 1) }, () => worker()));
+
+  const completeRes = await apiFetch(`/api/user/files/uploads/${uploadId}/complete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+    signal: options.signal,
+  });
+  let completeJson = await completeRes.json();
+  if (!completeRes.ok && completeRes.status !== 202) {
+    throw new Error(completeJson.error || completeJson.message || `Complete failed (HTTP ${completeRes.status})`);
+  }
+
+  // Poll when finalizing in background
+  if (completeJson.state === 'finalizing' || completeRes.status === 202) {
+    for (let i = 0; i < 600; i++) {
+      if (options.signal?.aborted) throw new Error('Upload aborted');
+      await sleep(500);
+      const st = await apiFetch(`/api/user/files/uploads/${uploadId}`, { signal: options.signal });
+      const sj = await st.json();
+      if (sj.state === 'done') {
+        completeJson = sj;
+        break;
+      }
+      if (sj.state === 'failed') {
+        throw new Error(sj.error || 'Upload finalization failed');
+      }
+    }
+    if (completeJson.state !== 'done') {
+      throw new Error('Timed out waiting for upload finalization');
+    }
+  }
+
+  clearResume();
+  return {
+    success: true,
+    uploadId,
+    file: completeJson.file,
+    state: completeJson.state || 'done',
+    sha256: completeJson.sha256,
+  };
+}
+
 /**
  * Upload a file attachment for a table row.
  * Files are NOT table columns — they attach via a virtual columnName (e.g. "file").
  * Workflow: insertRows(...) → uploadFile(tableName, rowId, 'file', filename, base64).
- * Data must be base64 (raw or data URL). Files <10KB store as uncompressed blobs,
- * 10-100KB as gzip blobs, >100KB on disk via BucketManager.
+ * Data must be base64 (raw or data URL). Files >4 MiB automatically use chunked upload
+ * in the browser (tunnel-safe). Small files still use a single Base64 MCP call.
  */
 export async function uploadFile(
   tableName: string,
@@ -631,6 +883,13 @@ export async function uploadFile(
     compress?: boolean;
   } = {}
 ) {
+  const decodedBytes = estimateBase64DecodedBytes(data);
+  if (typeof window !== 'undefined' && decodedBytes > UPLOAD_CHUNKED_THRESHOLD_BYTES) {
+    const bytes = base64ToUint8Array(data);
+    const blob = new Blob([bytes], { type: options.mimeType || 'application/octet-stream' });
+    const file = new File([blob], filename, { type: options.mimeType || blob.type });
+    return uploadFileChunked(tableName, rowId, columnName, file, options);
+  }
   return callUserDataTool('user_data_upload_file', {
     tableName,
     rowId,
@@ -977,9 +1236,7 @@ export async function callKakaoTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/kakao/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -1165,9 +1422,7 @@ export async function callFinanceHubTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/financehub/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -1503,9 +1758,7 @@ export async function callBusinessIdentityTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/business-identity/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -1589,9 +1842,7 @@ export async function callCompanyResearchTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/company-research/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -1737,9 +1988,7 @@ export async function callBrowserRecordingTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/browser-recording/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -2148,9 +2397,7 @@ export async function callAICenterTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/ai-center/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -2424,9 +2671,7 @@ export async function callKoreanLawTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/korean-law/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -2650,9 +2895,7 @@ export async function callSeoTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/seo/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -2715,9 +2958,7 @@ export async function callHostingCodingTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/hosting-coding/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -2856,9 +3097,7 @@ export async function callLocalAgentTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/local-agent/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -2933,9 +3172,7 @@ export async function callAiCallerTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/ai-caller/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -3246,9 +3483,7 @@ export async function callPageIndexTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/pageindex/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -4029,9 +4264,7 @@ export async function callKnowledgeWikiTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/knowledge-wiki/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -4141,9 +4374,7 @@ export async function callEgdeskConfigTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/egdesk-config/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -4259,9 +4490,7 @@ export async function callPhoneTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/phone/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -4522,9 +4751,7 @@ export async function callInstagramTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/instagram/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -4857,9 +5084,7 @@ export async function callBlogTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/blog/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
@@ -5141,9 +5366,7 @@ export async function callYouTubeTool(
 
   let response: Response;
   if (isServer) {
-    const apiUrl =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl;
+    const apiUrl = resolveServerEgdeskApiUrl();
     response = await fetch(`${apiUrl}/youtube/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),

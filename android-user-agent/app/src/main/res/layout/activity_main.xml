@@ -2638,6 +2638,121 @@
                     android:lineSpacingExtra="2dp"
                     android:layout_marginTop="4dp" />
             </LinearLayout>
+
+            <!-- 📇 스마트폰 연락처 구글 시트 자동 동기화 (Contacts Sync) -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:id="@+id/layoutContactsHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="📇 스마트폰 연락처 구글 시트에 자동 백업"
+                    android:textColor="#38BDF8"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchContactsSync"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="false"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btnToggleContactsDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutContactsDetails"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0F172A"
+                android:padding="10dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📱 스마트폰 연락처 구글 시트 동기화"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/tvContactsSyncStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="마지막 동기화: 없음"
+                    android:textColor="#CBD5E1"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="8dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnSyncContactsNow"
+                        android:layout_width="0dp"
+                        android:layout_height="42dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#0284C7"
+                        android:text="📇 지금 즉시 전체 동기화"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btnOpenContactsSheet"
+                        android:layout_width="0dp"
+                        android:layout_height="42dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#1E293B"
+                        android:text="📊 연락처 대장 열기"
+                        android:textColor="#38BDF8"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold"
+                        android:layout_marginStart="4dp" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="💡 폰에 저장된 고객 성함, 연락처, 회사, 이메일, 메모가 [SheetBot] 스마트폰 연락처 대장 시트에 중복 없이 깔끔하게 자동 정리됩니다."
+                    android:textColor="#64748B"
+                    android:textSize="10sp"
+                    android:lineSpacingExtra="2dp"
+                    android:layout_marginTop="6dp" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- 독립 카드: utility -->

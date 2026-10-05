@@ -68,36 +68,7 @@ export async function processPendingBatchJobs(): Promise<{
       orderDirection: 'ASC',
     }).catch(() => ({ rows: [] }));
 
-    let jobs = (jobsRes.rows || []).filter((r: any) => !r.deleted_at);
-
-    // 🛡️ [자가 복구 안전망 (Auto-Healing Fallback)]
-    // DB 티켓 등록이 누락되었더라도 최근 구글 클라우드 배치 목록에서 성공한 작업이 있으면 자동 복구
-    if (jobs.length === 0) {
-      try {
-        const cloudBatchList = await callAiBatchList();
-        const recentSucceeded = (cloudBatchList.jobs || []).filter(
-          (j: any) => j.state === 'JOB_STATE_SUCCEEDED' && j.name?.startsWith('batches/')
-        );
-        for (const cj of recentSucceeded.slice(0, 3)) {
-          const disp = String(cj.displayName || '');
-          let inferredFile = '통화녹음';
-          if (disp.includes('CallRecording-')) {
-            inferredFile = disp.replace('CallRecording-', '').trim();
-          }
-          jobs.push({
-            id: `auto-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-            job_name: cj.name,
-            job_type: disp.includes('Receipt') ? 'RECEIPT' : disp.includes('Card') ? 'BUSINESS_CARD' : disp.includes('Link') ? 'LINK_BOOKMARK' : 'RECORDING',
-            user_email: 'chachogreat@gmail.com',
-            file_name: inferredFile,
-            spreadsheet_id: '1bHtvSdmqfHJ-1WkgPv9hMlaUjqbMxEBnkHQpk1kIiOQ',
-            row_index: 0,
-            model: cj.model || 'gemini-2.5-flash',
-            status: 'PENDING',
-          });
-        }
-      } catch {}
-    }
+    const jobs = (jobsRes.rows || []).filter((r: any) => !r.deleted_at);
 
     if (jobs.length === 0) {
       return { processed: 0, succeeded: 0, failed: 0, pending: 0 };

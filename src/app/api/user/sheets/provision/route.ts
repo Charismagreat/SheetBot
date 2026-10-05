@@ -82,6 +82,11 @@ export const SHEET_DEFINITIONS: Record<string, SheetDefinition> = {
     headers: ["카테고리", "품목코드", "품목명", "규격/단위", "단가(원)", "할인가(원)", "대표사진", "상세이미지", "품절표시", "비고/설명"],
     range: "A1:J1",
   },
+  CONTACTS: {
+    defaultTitle: "[SheetBot] 스마트폰 연락처 대장",
+    headers: ["ID", "이름", "휴대전화", "추가 번호", "이메일", "회사/상호", "직함/부서", "메모", "주소", "동기화 기기", "최종 갱신일시"],
+    range: "A1:K1",
+  },
 };
 
 const folderCache = new Map<string, string>([

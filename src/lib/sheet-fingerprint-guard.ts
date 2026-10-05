@@ -71,28 +71,21 @@ export async function resolveSafeTargetRow(options: {
 
     const allRows: string[][] = scanRes?.values || [];
 
-    // 2-1. 파일 URL 또는 파일명으로 완벽 매칭되는 행 탐색 (역순: 최신 등록건 우선)
+    // 2-1. 파일 URL 또는 파일명으로 매칭되는 행 탐색 (역순: 최신 등록건 우선)
     if (fileUrl || fileName) {
+      const cleanFileName = fileName ? fileName.replace(/^\[SheetBot\]\s*/i, "").replace(/\.[^.]+$/, "").trim() : "";
       for (let i = allRows.length - 1; i >= 1; i--) {
         const lineStr = (allRows[i] || []).join(" ");
-        const matchesFile = (fileUrl && lineStr.includes(fileUrl)) || (fileName && lineStr.includes(fileName));
+        const matchesFile = (fileUrl && lineStr.includes(fileUrl)) ||
+          (fileName && lineStr.includes(fileName)) ||
+          (cleanFileName.length >= 4 && lineStr.includes(cleanFileName));
         const matchesPending = defaultKeywords.some((kw) => lineStr.includes(kw));
 
         if (matchesFile && matchesPending) {
           const relocatedRow = i + 1;
-          console.log(`[FingerprintGuard] 🎯 Relocated row found by file match: ${relocatedRow}`);
+          console.log(`[FingerprintGuard] 🎯 Relocated row found by strict file match: ${relocatedRow} for ${fileName}`);
           return { safeRow: relocatedRow, reason: "MATCH_RELOCATED" };
         }
-      }
-    }
-
-    // 2-2. 파일명이 부분 매칭되거나 아직 대기 중인 행이 있는지 2차 탐색
-    for (let i = allRows.length - 1; i >= 1; i--) {
-      const lineStr = (allRows[i] || []).join(" ");
-      if (defaultKeywords.some((kw) => lineStr.includes(kw))) {
-        const relocatedRow = i + 1;
-        console.log(`[FingerprintGuard] 🎯 Relocated row found by pending marker: ${relocatedRow}`);
-        return { safeRow: relocatedRow, reason: "MATCH_RELOCATED" };
       }
     }
 

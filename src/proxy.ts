@@ -22,6 +22,13 @@ function buildEgdeskHeaders(): Record<string, string> {
   return headers;
 }
 
+/** Prefer loopback MCP so proxy hops never re-enter the public tunnel. */
+function resolveEgdeskMcpApiUrl(): string {
+  const internal = process.env.EGDESK_MCP_INTERNAL_URL;
+  if (internal && internal.trim()) return internal.replace(/\/$/, '');
+  return (process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080').replace(/\/$/, '');
+}
+
 /** Forward this site's origin so EGDesk can bind visitor sessions to this site only. */
 function visitorForwardHeaders(request: NextRequest): Record<string, string> {
   const headers = buildEgdeskHeaders();
@@ -58,7 +65,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__user_data_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       // Forward to EGDesk MCP server
       const response = await fetch(`${apiUrl}/user-data/tools/call`, {
@@ -81,7 +88,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__browser_recording_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/browser-recording/tools/call`, {
         method: 'POST',
@@ -103,7 +110,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__business_identity_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/business-identity/tools/call`, {
         method: 'POST',
@@ -125,7 +132,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__ai_center_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/ai-center/tools/call`, {
         method: 'POST',
@@ -147,7 +154,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__korean_law_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/korean-law/tools/call`, {
         method: 'POST',
@@ -169,7 +176,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__bizinfo_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/company-research/tools/call`, {
         method: 'POST',
@@ -191,7 +198,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__bidnotice_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/company-research/tools/call`, {
         method: 'POST',
@@ -213,7 +220,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__koneps_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/company-research/tools/call`, {
         method: 'POST',
@@ -235,7 +242,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__nps_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/company-research/tools/call`, {
         method: 'POST',
@@ -257,7 +264,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__seo_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/seo/tools/call`, {
         method: 'POST',
@@ -279,7 +286,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__hosting_coding_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/hosting-coding/tools/call`, {
         method: 'POST',
@@ -301,7 +308,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__company_research_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/company-research/tools/call`, {
         method: 'POST',
@@ -323,7 +330,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__local_agent_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/local-agent/tools/call`, {
         method: 'POST',
@@ -345,7 +352,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__pageindex_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/pageindex/tools/call`, {
         method: 'POST',
@@ -367,7 +374,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__drive_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/drive/tools/call`, {
         method: 'POST',
@@ -389,7 +396,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__docs_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/docs/tools/call`, {
         method: 'POST',
@@ -411,7 +418,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__slides_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/slides/tools/call`, {
         method: 'POST',
@@ -433,7 +440,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__sheets_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/sheets/tools/call`, {
         method: 'POST',
@@ -461,7 +468,7 @@ export async function proxy(request: NextRequest) {
         return NextResponse.json({ error: 'Path not allowed', path: targetPath }, { status: 400 });
       }
       const method = payload.method === 'POST' ? 'POST' : 'GET';
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
       const base = apiUrl.endsWith('/') ? apiUrl : `${apiUrl}/`;
       const url = new URL(targetPath.startsWith('/') ? targetPath.slice(1) : targetPath, base);
       const query = payload.query && typeof payload.query === 'object' ? payload.query as Record<string, unknown> : {};
@@ -486,7 +493,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__gmail_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
       const response = await fetch(`${apiUrl}/gmail/tools/call`, {
         method: 'POST',
         headers: workspaceForwardHeaders(request),
@@ -505,7 +512,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__apps_script_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
       const response = await fetch(`${apiUrl}/apps-script/tools/call`, {
         method: 'POST',
         headers: workspaceForwardHeaders(request),
@@ -524,7 +531,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__knowledge_wiki_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/knowledge-wiki/tools/call`, {
         method: 'POST',
@@ -546,7 +553,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__kakao_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/kakao/tools/call`, {
         method: 'POST',
@@ -568,7 +575,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__phone_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/phone/tools/call`, {
         method: 'POST',
@@ -590,7 +597,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__instagram_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/instagram/tools/call`, {
         method: 'POST',
@@ -612,7 +619,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__egdesk_config_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/egdesk-config/tools/call`, {
         method: 'POST',
@@ -634,7 +641,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__ai_caller_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/ai-caller/tools/call`, {
         method: 'POST',
@@ -656,7 +663,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__financehub_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/financehub/tools/call`, {
         method: 'POST',
@@ -678,7 +685,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__blog_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/blog/tools/call`, {
         method: 'POST',
@@ -700,7 +707,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__youtube_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/youtube/tools/call`, {
         method: 'POST',
@@ -722,7 +729,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__visitor_auth_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/visitor-auth/tools/call`, {
         method: 'POST',
@@ -744,7 +751,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__visitor_google_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = resolveEgdeskMcpApiUrl();
       const headers = visitorForwardHeaders(request);
       const authorization = request.headers.get('authorization');
       if (authorization) headers['Authorization'] = authorization;

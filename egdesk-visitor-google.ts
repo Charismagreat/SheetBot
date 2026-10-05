@@ -178,11 +178,35 @@ function isTunnelMcpRoot(value: string): boolean {
   }
 }
 
+/** Custom-domain MCP roots must not keep /t/{id}; the gateway routes those by Host. */
+function oauthBounceRoot(value: string): string {
+  try {
+    const parsed = new URL(value);
+    const gateway =
+      parsed.hostname === 'tunneling-service.onrender.com' ||
+      parsed.hostname.endsWith('.egdesk.cloud');
+    if (!gateway && /^\/t\/[^/]+/.test(parsed.pathname)) return parsed.origin;
+    return value.replace(/\/$/, '');
+  } catch {
+    return value.replace(/\/$/, '');
+  }
+}
+
+function resolveRemoteMcpRoot(configured: string, tunnelUrl: string): string {
+  if (tunnelUrl && isTunnelMcpRoot(tunnelUrl)) {
+    return oauthBounceRoot(tunnelUrl);
+  }
+  if (configured && !isLocalEgdeskUrl(configured)) {
+    return oauthBounceRoot(configured);
+  }
+  return '';
+}
+
 /**
  * MCP root passed to visitor-auth start (egdeskPublicUrl).
  *
- * - Loopback dev → configured URL or http://localhost:8080 (OAuth still bounces via :54321).
- * - LAN IP → tunnel MCP root from NEXT_PUBLIC_EGDESK_API_URL / _TUNNEL_URL (required).
+ * - Loopback dev → NEXT_PUBLIC_EGDESK_TUNNEL_URL when set, else local MCP (OAuth bounces via :54321).
+ * - LAN IP → tunnel MCP root from NEXT_PUBLIC_EGDESK_TUNNEL_URL or non-local API URL (required).
  * - Tunnel/custom domain → tunnel MCP root; never window.location.origin on dev/LAN hosts.
  *
  * Published hosts must never silently fall back to http://localhost:8080.
@@ -196,10 +220,11 @@ export function resolveEgdeskPublicUrl(): string {
     (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_TUNNEL_URL) ||
     ''
   ).replace(/\/$/, '');
-  const preferred = configured || tunnelUrl;
+  const remoteMcpRoot = resolveRemoteMcpRoot(configured, tunnelUrl);
+  const localMcpRoot = configured || tunnelUrl || 'http://localhost:8080';
 
   if (typeof window === 'undefined') {
-    return preferred || 'http://localhost:8080';
+    return remoteMcpRoot || localMcpRoot;
   }
 
   const hostname = window.location.hostname;
@@ -215,22 +240,23 @@ export function resolveEgdeskPublicUrl(): string {
   }
 
   if (isDevSiteHostname(hostname)) {
-    if (isPrivateLanHostname(hostname) && preferred && isTunnelMcpRoot(preferred)) {
-      return preferred;
+    if (isPrivateLanHostname(hostname)) {
+      if (remoteMcpRoot) return remoteMcpRoot;
+      throw new Error(
+        'Visitor Google login from a LAN IP requires NEXT_PUBLIC_EGDESK_TUNNEL_URL or a tunnel MCP root in NEXT_PUBLIC_EGDESK_API_URL (https://…/t/{id}).',
+      );
     }
     if (isLoopbackHostname(hostname)) {
-      return preferred || 'http://localhost:8080';
+      return remoteMcpRoot || localMcpRoot;
     }
-    if (preferred && !isLocalEgdeskUrl(preferred)) {
-      return preferred;
-    }
+    if (remoteMcpRoot) return remoteMcpRoot;
     throw new Error(
-      'Visitor Google login from a LAN IP requires NEXT_PUBLIC_EGDESK_API_URL to be the tunnel MCP root (https://…/t/{id}).',
+      'Visitor Google login from a LAN IP requires NEXT_PUBLIC_EGDESK_TUNNEL_URL or a tunnel MCP root in NEXT_PUBLIC_EGDESK_API_URL (https://…/t/{id}).',
     );
   }
 
-  if (preferred && !isLocalEgdeskUrl(preferred)) {
-    return preferred;
+  if (remoteMcpRoot) {
+    return remoteMcpRoot;
   }
 
   console.error(

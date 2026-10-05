@@ -217,8 +217,14 @@ object CallRecordingManager {
         val sampleNames = recordingFiles.take(3).map { it.name }
 
         // 최근 파일 중 아직 업로드되지 않은 파일 순회 (최대 15개씩 배치)
+        val nowMs = System.currentTimeMillis()
         for (file in recordingFiles.take(15)) {
             val fileName = file.name
+
+            // 7일 이상 지난 과거 오래된 녹음 파일은 자동 백업 루프에서 제외 (사용자가 드라이브를 비웠을 때 옛날 파일들이 다시 쏟아지는 현상 원천 차단)
+            if (!forceReupload && (nowMs - file.lastModified() > 7L * 24 * 3600 * 1000)) {
+                continue
+            }
 
             // 이미 업로드 완료된 파일은 건너뜀 (단, 강제 재동기화 시는 업로드)
             if (!forceReupload && prefs.isRecordingSynced(fileName)) {
