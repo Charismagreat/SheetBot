@@ -435,36 +435,52 @@ class BankNotificationListener : NotificationListenerService() {
             val rawSender = rawTitle.trim()
             val message = rawText.trim()
 
-            // 1. 15초 이내 동일 발신자+본문 중복 수신 원천 차단 (SmsReceiver & BankNotificationListener 공통 선점 가드)
-            if (!SmsDedupeManager.shouldProcessMessage("INBOUND", rawSender, message)) {
-                Log.d(TAG, "15초 이내 동일한 수신 메시지(알림) 중복 감지 - 무시합니다.")
-                return
-            }
+            // 1. 발신자 식별 (전화번호 vs 연락처 이름 분기)
+            val isPhone = ContactHelper.isValidPhoneNumber(rawSender)
+            val senderPhone: String
+            val contactName: String?
 
-            // 2. 발신자 번호 정규화
-            val sender = ContactHelper.formatPhoneNumber(rawSender)
-
-            // 3. 주소록 매칭 및 필터 검사
-            val isPureNumber = sender.replace("-", "").replace(" ", "").all { it.isDigit() }
-            val contactName = if (isPureNumber) {
-                ContactHelper.getContactName(this, sender)
+            if (isPhone) {
+                senderPhone = ContactHelper.formatPhoneNumber(rawSender)
+                contactName = ContactHelper.getContactName(this, senderPhone)
             } else {
-                sender // 타이틀이 이미 연락처 이름인 경우
+                // 알림 제목이 주소록 이름(예: "차민서2")인 경우 원본 이름을 보존하고 주소록에서 실제 번호 역조회
+                contactName = rawSender
+                senderPhone = ContactHelper.getPhoneNumberByName(this, rawSender) ?: ""
             }
-            val filter = prefs.smsTargetFilter.trim()
-            if (!matchesSmsFilter(sender, contactName, filter)) {
-                Log.d(TAG, "메시지 필터 제외: $sender / $contactName")
+
+            // 2. 15초 이중 중복 방어 (이름, 번호, 원본 발신자 모두 교차 점검하여 SmsReceiver에서 기처리된 건 완벽 차단)
+            val identifiers = listOfNotNull(
+                senderPhone.takeIf { it.isNotBlank() },
+                contactName?.takeIf { it.isNotBlank() }
+            )
+            if (!SmsDedupeManager.shouldProcessMessage("INBOUND", rawSender, message, identifiers)) {
+                Log.d(TAG, "15초 이내 동일한 수신 메시지(알림) 중복 감지 - 무시합니다: $rawSender / $senderPhone")
                 return
             }
 
-            Log.i(TAG, "💬 [구글/기본 메시지 알림 감지] 발신: $sender / 본문: ${message.take(40)}...")
+            // 전화번호도 없고 이름도 없는 경우 무시
+            if (senderPhone.isBlank() && contactName.isNullOrBlank()) {
+                return
+            }
+
+            // 3. 필터 검사
+            val filter = prefs.smsTargetFilter.trim()
+            val filterTarget = senderPhone.ifBlank { contactName ?: "" }
+            if (!matchesSmsFilter(filterTarget, contactName, filter)) {
+                Log.d(TAG, "메시지 필터 제외: $filterTarget / $contactName")
+                return
+            }
+
+            val finalPhoneNumber = senderPhone.ifBlank { "알림:$contactName" }
+            Log.i(TAG, "💬 [구글/기본 메시지 알림 감지] 발신: $finalPhoneNumber ($contactName) / 본문: ${message.take(40)}...")
 
             serviceScope.launch {
                 try {
                     val syncResult = ApiClient.sendSmsSync(
                         userEmail = userEmail,
                         direction = "INBOUND",
-                        phoneNumber = sender,
+                        phoneNumber = finalPhoneNumber,
                         contactName = contactName,
                         message = message,
                         sheetTitle = prefs.smsDriveSheetTitle

@@ -56,6 +56,11 @@ class SmsReceiver : BroadcastReceiver() {
 
             // 3. 주소록 매칭 및 필터 검사
             val contactName = ContactHelper.getContactName(context, sender)
+            if (!contactName.isNullOrBlank()) {
+                // 후속 알림 리스너(BankNotificationListener)가 동일 문자의 알림 제목(이름)을 인입하더라도 즉각 차단하도록 선점 등록
+                SmsDedupeManager.registerAdditionalIdentifier("INBOUND", contactName, fullBody)
+            }
+
             val filter = prefs.smsTargetFilter.trim()
             if (!matchesSmsFilter(sender, contactName, filter)) {
                 Log.d(TAG, "SMS 필터 제외 대상: $sender / $contactName")

@@ -174,7 +174,7 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putString("file_upload_drive_folder", value).apply()
 
     var isFileUploadSheetEnabled: Boolean
-        get() = prefs.getBoolean("is_file_upload_sheet_enabled", false)
+        get() = prefs.getBoolean("is_file_upload_sheet_enabled", true)
         set(value) = prefs.edit().putBoolean("is_file_upload_sheet_enabled", value).apply()
 
     // 웹 링크 및 유튜브 영상 AI 자동 스크랩 설정 (신규 설치 시 기본 꺼짐: false)

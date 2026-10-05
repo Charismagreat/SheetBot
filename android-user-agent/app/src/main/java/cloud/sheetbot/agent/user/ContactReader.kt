@@ -73,23 +73,28 @@ object ContactReader {
 
                 while (cursor.moveToNext()) {
                     val contactId = cursor.getString(colContactId) ?: continue
-                    val displayName = cursor.getString(colDisplayName) ?: "이름 없음"
+                    val rawDisplayName = cursor.getString(colDisplayName) ?: "이름 없음"
                     val mimeType = cursor.getString(colMimeType) ?: continue
                     val data1 = cursor.getString(colData1) ?: ""
 
                     val contact = contactsMap.getOrPut(contactId) {
-                        MutableContact(id = contactId, name = displayName, updatedAt = nowStr)
+                        val initName = if (rawDisplayName.contains("BEGIN:VCARD")) "이름 없음" else rawDisplayName
+                        MutableContact(id = contactId, name = initName, updatedAt = nowStr).also {
+                            if (rawDisplayName.contains("BEGIN:VCARD")) {
+                                populateFromVCard(it, rawDisplayName)
+                            }
+                        }
                     }
 
                     // 이름이 비어있었다면 업데이트
-                    if (contact.name == "이름 없음" && displayName.isNotBlank()) {
-                        contact.name = displayName
+                    if (contact.name == "이름 없음" && rawDisplayName.isNotBlank() && !rawDisplayName.contains("BEGIN:VCARD")) {
+                        contact.name = rawDisplayName
                     }
 
                     when (mimeType) {
                         ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE -> {
                             val phoneType = if (colData2 >= 0) cursor.getInt(colData2) else -1
-                            val phoneNum = data1.trim()
+                            val phoneNum = ContactHelper.formatPhoneNumber(data1.trim())
                             if (phoneNum.isNotBlank()) {
                                 if (contact.mobile.isBlank()) {
                                     contact.mobile = phoneNum
@@ -135,6 +140,63 @@ object ContactReader {
         val resultList = contactsMap.values.map { it.toDto() }
         Log.i(TAG, "📱 스마트폰 연락처 추출 완료: 총 ${resultList.size}건")
         return resultList
+    }
+
+    /**
+     * vCard 텍스트(BEGIN:VCARD...END:VCARD)가 연락처 이름 등에 통째로 저장된 경우
+     * 성명, 전화번호, 회사, 직함, 이메일, 주소 등을 지능형으로 분해하여 매핑
+     */
+    private fun populateFromVCard(contact: MutableContact, vcardText: String) {
+        val lines = vcardText.split("\n", "\r")
+        val extraNotes = mutableListOf<String>()
+
+        for (line in lines) {
+            val trimmed = line.trim()
+            if (trimmed.isEmpty() || trimmed.startsWith("BEGIN:") || trimmed.startsWith("END:") || trimmed.startsWith("VERSION:")) {
+                continue
+            }
+            val colonIdx = trimmed.indexOf(":")
+            if (colonIdx == -1) continue
+
+            val keyPart = trimmed.substring(0, colonIdx).uppercase()
+            val valPart = trimmed.substring(colonIdx + 1).trim()
+
+            if (keyPart == "FN") {
+                contact.name = valPart
+            } else if (keyPart.startsWith("N") && (contact.name.isBlank() || contact.name == "이름 없음")) {
+                val parts = valPart.split(";").map { it.trim() }.filter { it.isNotBlank() }
+                if (parts.isNotEmpty()) contact.name = parts.joinToString("")
+            } else if (keyPart.startsWith("ORG") && contact.company.isBlank()) {
+                contact.company = valPart.replace(";", " ").trim()
+            } else if (keyPart.startsWith("TITLE") && contact.title.isBlank()) {
+                contact.title = valPart
+            } else if (keyPart.startsWith("TEL")) {
+                val phone = ContactHelper.formatPhoneNumber(valPart.replace(";", "").trim())
+                if (phone.isNotBlank()) {
+                    if (contact.mobile.isBlank()) {
+                        contact.mobile = phone
+                    } else if (contact.extraPhone.isBlank() && contact.mobile != phone) {
+                        contact.extraPhone = phone
+                    } else if (contact.mobile != phone && contact.extraPhone != phone) {
+                        extraNotes.add("기타번호: $phone")
+                    }
+                }
+            } else if (keyPart.startsWith("EMAIL") && contact.email.isBlank()) {
+                contact.email = valPart
+            } else if (keyPart.startsWith("ADR") && contact.address.isBlank()) {
+                val cleanAddr = valPart.split(";").map { it.trim() }.filter { it.isNotBlank() }.joinToString(" ")
+                contact.address = cleanAddr
+            } else if (keyPart.startsWith("URL")) {
+                extraNotes.add("웹사이트: $valPart")
+            } else if (keyPart.startsWith("NOTE")) {
+                extraNotes.add(valPart)
+            }
+        }
+
+        if (extraNotes.isNotEmpty()) {
+            val combined = extraNotes.joinToString(", ")
+            contact.note = if (contact.note.isBlank()) combined else "${contact.note} | $combined"
+        }
     }
 
     private class MutableContact(

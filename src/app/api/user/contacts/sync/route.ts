@@ -36,35 +36,160 @@ const HEADERS = [
 ];
 
 /**
- * 전화번호 표준화 헬퍼 (010-XXXX-XXXX 포맷팅)
+ * 구글 시트 Formula Injection 및 파싱 에러 방지 헬퍼
+ * Google Sheets에서 +, =, -, @로 시작하는 문자열은 수식으로 파싱되어 #ERROR!가 발생하므로
+ * 앞에 작은따옴표(')를 붙여 순수 텍스트로 보존합니다.
+ */
+function escapeSheetFormula(val: any): string {
+  if (val === null || val === undefined) return "";
+  const str = String(val).trim();
+  if (str.startsWith("+") || str.startsWith("=") || str.startsWith("-") || str.startsWith("@")) {
+    return "'" + str;
+  }
+  return str;
+}
+
+/**
+ * 전화번호 표준화 헬퍼 (010-XXXX-XXXX, 1522-XXXX, 02-XXXX-XXXX 포맷팅)
  */
 function normalizePhoneNumber(raw?: string): string {
   if (!raw) return "";
-  let cleaned = raw.replace(/[^0-9+]/g, "").trim();
+  let trimmed = raw.trim();
+  let cleaned = trimmed.replace(/[^0-9+]/g, "");
+
+  // +82 또는 82 국가코드 처리
   if (cleaned.startsWith("+82")) {
-    cleaned = "0" + cleaned.substring(3);
+    cleaned = cleaned.substring(3);
+  } else if (cleaned.startsWith("82") && cleaned.length >= 10) {
+    cleaned = cleaned.substring(2);
   }
-  // 한국 휴대폰 번호 (10자리 또는 11자리)
-  if (cleaned.length === 11 && cleaned.startsWith("01")) {
+
+  // 앞선 0 정리 전 전국대표번호(15xx, 16xx, 18xx) 8자리 체크
+  const noZero = cleaned.replace(/^0+/, "");
+  if (noZero.length === 8 && /^(15|16|18)/.test(noZero)) {
+    return `${noZero.substring(0, 4)}-${noZero.substring(4)}`;
+  }
+
+  // 한국 번호인데 0으로 시작하지 않으면 0 추가 (예: 1012345678 -> 01012345678)
+  if (!cleaned.startsWith("0") && cleaned.length >= 8 && !cleaned.startsWith("+")) {
+    cleaned = "0" + cleaned;
+  }
+
+  // 11자리 (010, 070, 031 등)
+  if (cleaned.length === 11 && cleaned.startsWith("0")) {
     return `${cleaned.substring(0, 3)}-${cleaned.substring(3, 7)}-${cleaned.substring(7)}`;
   }
-  if (cleaned.length === 10 && cleaned.startsWith("01")) {
-    return `${cleaned.substring(0, 3)}-${cleaned.substring(3, 6)}-${cleaned.substring(6)}`;
-  }
-  // 일반 지역번호 (02, 031 등)
+
+  // 10자리 (02 서울 유선전화 vs 기타 0xx)
   if (cleaned.length === 10 && cleaned.startsWith("02")) {
     return `${cleaned.substring(0, 2)}-${cleaned.substring(2, 6)}-${cleaned.substring(6)}`;
   }
+  if (cleaned.length === 10 && cleaned.startsWith("0")) {
+    return `${cleaned.substring(0, 3)}-${cleaned.substring(3, 6)}-${cleaned.substring(6)}`;
+  }
+
+  // 9자리 (02 서울 유선전화)
   if (cleaned.length === 9 && cleaned.startsWith("02")) {
     return `${cleaned.substring(0, 2)}-${cleaned.substring(2, 5)}-${cleaned.substring(5)}`;
   }
-  if (cleaned.length === 10) {
-    return `${cleaned.substring(0, 3)}-${cleaned.substring(3, 6)}-${cleaned.substring(6)}`;
+
+  return trimmed;
+}
+
+/**
+ * 구글 시트용 전화번호 안전 변환
+ * - 숫자만 있는 경우(15220741 등) 앞자리 0 탈락 및 숫자 캐스팅 방지를 위해 작은따옴표(') 부착
+ * - +, =, -, @로 시작하는 경우 수식 파싱 오류 방지를 위해 작은따옴표(') 부착
+ */
+function formatPhoneForSheet(raw?: string): string {
+  if (!raw) return "";
+  const normalized = normalizePhoneNumber(raw);
+  if (!normalized) return "";
+  // 순수 숫자로만 구성되어 있거나 특수문자 시작인 경우 시트 텍스트 리터럴 강제
+  if (/^[0-9]+$/.test(normalized) || /^[+=@-]/.test(normalized)) {
+    return "'" + normalized;
   }
-  if (cleaned.length === 11) {
-    return `${cleaned.substring(0, 3)}-${cleaned.substring(3, 7)}-${cleaned.substring(7)}`;
+  return normalized;
+}
+
+/**
+ * vCard 텍스트 감지 시 개별 필드로 지능형 분해(Unpacking) 헬퍼
+ * 스마트폰 주소록에 BEGIN:VCARD... 전문이 이름란에 저장된 경우 정상 분해하여 시트에 적재
+ */
+function unpackVCardIfPresent(c: ContactSyncItem): ContactSyncItem {
+  const rawName = String(c.name || "").trim();
+  if (!rawName.includes("BEGIN:VCARD")) {
+    return c;
   }
-  return raw.trim();
+
+  const lines = rawName.split(/\r?\n/);
+  let name = "";
+  let mobile = c.mobile || "";
+  let extraPhone = c.extraPhone || "";
+  let email = c.email || "";
+  let company = c.company || "";
+  let title = c.title || "";
+  let note = c.note || "";
+  let address = c.address || "";
+  const extraNotes: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("BEGIN:") || trimmed.startsWith("END:") || trimmed.startsWith("VERSION:")) {
+      continue;
+    }
+
+    const colonIdx = trimmed.indexOf(":");
+    if (colonIdx === -1) continue;
+
+    const keyPart = trimmed.substring(0, colonIdx).toUpperCase();
+    const valPart = trimmed.substring(colonIdx + 1).trim();
+
+    if (keyPart === "FN") {
+      name = valPart;
+    } else if (keyPart.startsWith("N") && !name) {
+      const parts = valPart.split(";").map((p) => p.trim()).filter(Boolean);
+      if (parts.length > 0) name = parts.join("");
+    } else if (keyPart.startsWith("ORG")) {
+      company = company || valPart.replace(/;/g, " ").trim();
+    } else if (keyPart.startsWith("TITLE")) {
+      title = title || valPart;
+    } else if (keyPart.startsWith("TEL")) {
+      const cleanPhone = valPart.replace(/;/g, "").trim();
+      if (!mobile) {
+        mobile = cleanPhone;
+      } else if (!extraPhone && mobile !== cleanPhone) {
+        extraPhone = cleanPhone;
+      } else if (mobile !== cleanPhone && extraPhone !== cleanPhone) {
+        extraNotes.push(`기타번호: ${cleanPhone}`);
+      }
+    } else if (keyPart.startsWith("EMAIL")) {
+      email = email || valPart;
+    } else if (keyPart.startsWith("ADR")) {
+      const cleanAddr = valPart.split(";").map((p) => p.trim()).filter(Boolean).join(" ");
+      address = address || cleanAddr;
+    } else if (keyPart.startsWith("URL")) {
+      extraNotes.push(`웹사이트: ${valPart}`);
+    } else if (keyPart.startsWith("NOTE")) {
+      extraNotes.push(valPart);
+    }
+  }
+
+  if (extraNotes.length > 0) {
+    note = note ? `${note} | ${extraNotes.join(", ")}` : extraNotes.join(", ");
+  }
+
+  return {
+    ...c,
+    name: name || "이름 없음",
+    mobile,
+    extraPhone,
+    email,
+    company,
+    title,
+    note,
+    address,
+  };
 }
 
 /**
@@ -150,16 +275,17 @@ export async function POST(req: NextRequest) {
 
     // 3. 연락처 행 데이터 빌드
     const rowsToInsert = contacts.map((c) => {
-      const contactId = String(c.id || "").trim();
-      const name = String(c.name || "").trim();
-      const mobile = normalizePhoneNumber(c.mobile);
-      const extraPhone = normalizePhoneNumber(c.extraPhone);
-      const email = String(c.email || "").trim();
-      const company = String(c.company || "").trim();
-      const title = String(c.title || "").trim();
-      const note = String(c.note || "").trim();
-      const address = String(c.address || "").trim();
-      const updatedAt = c.updatedAt || nowStr;
+      const parsed = unpackVCardIfPresent(c);
+      const contactId = escapeSheetFormula(parsed.id);
+      const name = escapeSheetFormula(parsed.name);
+      const mobile = formatPhoneForSheet(parsed.mobile);
+      const extraPhone = formatPhoneForSheet(parsed.extraPhone);
+      const email = escapeSheetFormula(parsed.email);
+      const company = escapeSheetFormula(parsed.company);
+      const title = escapeSheetFormula(parsed.title);
+      const note = escapeSheetFormula(parsed.note);
+      const address = escapeSheetFormula(parsed.address);
+      const updatedAt = escapeSheetFormula(parsed.updatedAt || nowStr);
 
       return [
         contactId,

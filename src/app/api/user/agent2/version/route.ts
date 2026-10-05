@@ -41,10 +41,10 @@ export async function GET() {
     );
   }
 
-  let latestName = "2.1.77";
-  let latestCode = 98;
+  let latestName = "2.1.78";
+  let latestCode = 99;
   let apkUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";
-  let releaseNotes = "시트봇 모바일 에이전트 최신 버전입니다.";
+  let releaseNotes = "문자(SMS/RCS) 중복 수신 방어 및 연락처 파싱 안전 가드가 적용되었습니다.";
 
   try {
     const ghRes = await fetch("https://api.github.com/repos/Charismagreat/SheetBot/releases/latest", {

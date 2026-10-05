@@ -18,13 +18,28 @@ import { getKoreanTimeString } from "@/lib/date-utils";
 
 // 15초 이내 동일 SMS 송수신 중복 기록 방어 캐시 (키: userEmail:direction:phoneNumber:message, 값: timestamp)
 const recentSmsDedupeCache = new Map<string, number>();
+// 동일 본문 기준 2차 중복 방어 캐시 (단말기 이중 감시로 인한 번호 왜곡 중복 방지)
+const recentSmsBodyCache = new Map<string, { time: number; phone: string }>();
 
 /**
  * 국가코드(82) 제거 및 한국 표준 전화번호 형식(010-XXXX-XXXX, 1599-XXXX 등)으로 정규화
  */
 function normalizePhoneNumber(phone: string): string {
   if (!phone) return "-";
-  let clean = phone.replace(/[^0-9+]/g, "").trim();
+  const trimmed = phone.trim();
+
+  // "알림:" 접두어가 붙어있거나 일반 텍스트인 경우 원본 유지
+  if (trimmed.startsWith("알림:") || /[가-힣a-zA-Z]/.test(trimmed)) {
+    return trimmed;
+  }
+
+  let clean = trimmed.replace(/[^0-9+]/g, "").trim();
+
+  // 7자리 미만의 짧은 숫자는 유효한 한국 전화번호가 아니므로 0 접두어를 억지로 붙이지 않고 원본 반환
+  if (clean.length < 7) {
+    return trimmed;
+  }
+
   if (clean.startsWith("+82")) {
     clean = clean.slice(3);
   } else if (clean.startsWith("82") && clean.length >= 10) {
@@ -108,11 +123,33 @@ export async function POST(req: NextRequest) {
     }
     recentSmsDedupeCache.set(dedupeKey, now);
 
-    // 오래된 캐시 정리 (최대 100개 유지)
+    // 0-1. 본문 기준 2차 지능형 중복 방어 (단말기 이중 감시로 번호가 왜곡되어 들어온 2차 요청 스킵)
+    const bodyKey = `${cleanEmail}:${directionLabel}:${message.trim()}`;
+    const lastBodyRecord = recentSmsBodyCache.get(bodyKey);
+    const currentDigits = phoneNumber.replace(/[^0-9]/g, "");
+
+    if (lastBodyRecord && (now - lastBodyRecord.time < 15_000)) {
+      const prevDigits = lastBodyRecord.phone.replace(/[^0-9]/g, "");
+      // 동일 본문이 15초 내에 이미 들어왔는데, 현재 번호가 7자리 미만의 비정상이거나 알림 접두어인 경우 중복 스킵
+      if (currentDigits.length < 7 || phoneNumber.startsWith("알림:") || (prevDigits.length >= 9 && currentDigits.length < prevDigits.length)) {
+        console.warn(`[SMS API] 단말기 이중 인입 중복 차단: 이전번호=${lastBodyRecord.phone}, 현재번호=${phoneNumber}, 본문=${message.trim()}`);
+        return NextResponse.json({
+          success: true,
+          message: `동일 메시지가 15초 이내에 이미 정상 기록되어 2차 중복 요청을 안전하게 건너뛰었습니다.`,
+          isDuplicate: true,
+        });
+      }
+    }
+    recentSmsBodyCache.set(bodyKey, { time: now, phone: phoneNumber });
+
+    // 오래된 캐시 정리 (최대 200개 유지)
     if (recentSmsDedupeCache.size > 200) {
       const threshold = now - 60_000;
       for (const [k, v] of recentSmsDedupeCache.entries()) {
         if (v < threshold) recentSmsDedupeCache.delete(k);
+      }
+      for (const [k, v] of recentSmsBodyCache.entries()) {
+        if (v.time < threshold) recentSmsBodyCache.delete(k);
       }
     }
 
