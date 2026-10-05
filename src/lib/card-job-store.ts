@@ -18,7 +18,12 @@ export interface CardJobData {
   completedAt?: number;
 }
 
-const cardJobs = new Map<string, CardJobData>();
+const globalForCardJobs = globalThis as unknown as {
+  sheetbotCardJobs: Map<string, CardJobData> | undefined;
+};
+
+export const cardJobs = globalForCardJobs.sheetbotCardJobs ?? new Map<string, CardJobData>();
+globalForCardJobs.sheetbotCardJobs = cardJobs;
 
 export function createCardJob(job: Omit<CardJobData, "status" | "createdAt">): CardJobData {
   const newJob: CardJobData = {
