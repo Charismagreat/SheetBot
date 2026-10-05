@@ -1154,6 +1154,9 @@ class MainActivity : AppCompatActivity() {
         // 🌐 내 웹사이트 실시간 장애 감시 (Uptime Sentinel) UI 바인딩
         setupWebsiteMonitorUI()
 
+        // 📇 스마트폰 연락처 구글 시트 자동 동기화 UI 바인딩
+        setupContactsSyncUI()
+
         binding.btnCheckUpdate.setOnClickListener {
             UpdateManager.checkForUpdates(this, showToastIfLatest = true)
         }
@@ -1317,6 +1320,7 @@ class MainActivity : AppCompatActivity() {
         updateCardCollapseState(binding.layoutMissedCallSettings, binding.btnToggleMissedCallDetails, prefs.isMissedCallDetailsHidden)
         updateCardCollapseState(binding.layoutCallEndedCardSettings, binding.btnToggleCallEndedCardDetails, prefs.isCallEndedCardDetailsHidden)
         updateCardCollapseState(binding.layoutWebsiteMonitorSettings, binding.btnToggleWebsiteMonitorDetails, prefs.isWebsiteMonitorDetailsHidden)
+        updateCardCollapseState(binding.layoutContactsDetails, binding.btnToggleContactsDetails, prefs.isContactsDetailsHidden)
     }
 
     private fun setupCardCollapseExpandListeners() {
@@ -1417,6 +1421,14 @@ class MainActivity : AppCompatActivity() {
         }
         binding.layoutWebsiteMonitorHeader.setOnClickListener { toggleWebsiteMonitor() }
         binding.btnToggleWebsiteMonitorDetails.setOnClickListener { toggleWebsiteMonitor() }
+
+        // 13. 스마트폰 연락처 백업 카드
+        val toggleContacts = {
+            prefs.isContactsDetailsHidden = !prefs.isContactsDetailsHidden
+            updateCardCollapseState(binding.layoutContactsDetails, binding.btnToggleContactsDetails, prefs.isContactsDetailsHidden)
+        }
+        binding.layoutContactsHeader.setOnClickListener { toggleContacts() }
+        binding.btnToggleContactsDetails.setOnClickListener { toggleContacts() }
     }
 
     private fun updateUiState() {
@@ -3633,6 +3645,131 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this@MainActivity, "⚠️ [접속 실패] $errText", Toast.LENGTH_LONG).show()
             }
             updateWebsiteMonitorStatusText()
+        }
+    }
+
+    // ==========================================
+    // 📇 스마트폰 연락처 구글 시트 자동 동기화 UI (Contacts Sync)
+    // ==========================================
+    private fun setupContactsSyncUI() {
+        binding.switchContactsSync.isChecked = prefs.isContactsSyncEnabled
+        updateContactsSyncStatusText()
+
+        binding.switchContactsSync.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isContactsSyncEnabled = isChecked
+            prefs.isContactsDetailsHidden = !isChecked
+            updateCardCollapseState(binding.layoutContactsDetails, binding.btnToggleContactsDetails, !isChecked)
+            val msg = if (isChecked) "스마트폰 연락처 구글 시트 자동 백업이 켜졌습니다." else "연락처 자동 백업이 꺼졌습니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            updateContactsSyncStatusText()
+
+            if (isChecked) {
+                // READ_CONTACTS 권한 점검
+                if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    androidx.core.app.ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.READ_CONTACTS), 1010)
+                }
+                provisionSheetAsync("CONTACTS", "[SheetBot] 스마트폰 연락처 대장")
+            }
+        }
+
+        binding.btnSyncContactsNow.setOnClickListener {
+            if (!prefs.isPaired) {
+                Toast.makeText(this, "먼저 시트봇 워크스페이스와 연동해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                androidx.core.app.ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.READ_CONTACTS), 1010)
+                Toast.makeText(this, "연락처 접근 권한을 허용해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            syncContactsImmediate()
+        }
+
+        binding.btnOpenContactsSheet.setOnClickListener {
+            showOpenSheetChooserDialog("CONTACTS", "[SheetBot] 스마트폰 연락처 대장")
+        }
+    }
+
+    private fun updateContactsSyncStatusText() {
+        try {
+            if (!::binding.isInitialized) return
+            val lastTime = prefs.lastContactsSyncTime
+            val lastCount = prefs.lastContactsSyncCount
+            if (lastTime <= 0L) {
+                binding.tvContactsSyncStatus.text = "마지막 동기화: 동기화 이력 없음"
+                binding.tvContactsSyncStatus.setTextColor(android.graphics.Color.parseColor("#94A3B8"))
+            } else {
+                val format = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.KOREA)
+                val timeStr = format.format(java.util.Date(lastTime))
+                binding.tvContactsSyncStatus.text = "마지막 동기화: ${lastCount}건 ($timeStr)"
+                binding.tvContactsSyncStatus.setTextColor(android.graphics.Color.parseColor("#38BDF8"))
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun syncContactsImmediate() {
+        binding.btnSyncContactsNow.isEnabled = false
+        binding.btnSyncContactsNow.text = "⏳ 연락처 읽는 중..."
+
+        activityScope.launch {
+            try {
+                val contacts = withContext(Dispatchers.IO) {
+                    ContactReader.readAllContacts(this@MainActivity)
+                }
+
+                if (contacts.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@MainActivity, "스마트폰에 저장된 연락처가 없습니다.", Toast.LENGTH_SHORT).show()
+                        binding.btnSyncContactsNow.isEnabled = true
+                        binding.btnSyncContactsNow.text = "📇 지금 즉시 전체 동기화"
+                    }
+                    return@launch
+                }
+
+                withContext(Dispatchers.Main) {
+                    binding.btnSyncContactsNow.text = "⏳ 구글 시트 전송 중 (${contacts.size}건)..."
+                }
+
+                val email = prefs.userEmail ?: ""
+                val result = withContext(Dispatchers.IO) {
+                    ApiClient.syncContacts(
+                        userEmail = email,
+                        contacts = contacts,
+                        isFullSync = true
+                    )
+                }
+
+                withContext(Dispatchers.Main) {
+                    binding.btnSyncContactsNow.isEnabled = true
+                    binding.btnSyncContactsNow.text = "📇 지금 즉시 전체 동기화"
+
+                    if (result.success) {
+                        prefs.lastContactsSyncTime = System.currentTimeMillis()
+                        prefs.lastContactsSyncCount = result.totalCount
+                        if (result.spreadsheetUrl.isNotBlank()) {
+                            prefs.setSheetUrl("CONTACTS", result.spreadsheetUrl)
+                        }
+                        updateContactsSyncStatusText()
+                        Toast.makeText(
+                            this@MainActivity,
+                            "🎉 연락처 ${result.totalCount}건 동기화 완료!",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    } else {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "동기화 실패: ${result.error ?: "통신 오류"}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    binding.btnSyncContactsNow.isEnabled = true
+                    binding.btnSyncContactsNow.text = "📇 지금 즉시 전체 동기화"
+                    Toast.makeText(this@MainActivity, "오류 발생: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 

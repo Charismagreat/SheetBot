@@ -44,6 +44,9 @@ const folderCache = new Map<string, string>([
   ["[SheetBot] 파일 보관함", "1bRO1aJEEQBUX_R9bFLfZ7C0liZFZjijc"],
 ]);
 
+// 백그라운드 구글 드라이브 업로드 및 시트 적재의 순차 처리를 위한 직렬화 큐 (Hub Gateway Timeout 방지)
+let cardBackgroundQueue: Promise<any> = Promise.resolve();
+
 /**
  * POST /api/user/files/upload
  * 스마트폰 시트봇 에이전트(공유하기 메뉴 또는 앱 내 직접 선택)에서 사진/문서 파일을 수신하여
@@ -60,7 +63,6 @@ export async function POST(req: NextRequest) {
     await setupDatabase();
 
     // 1. 유저 식별 (세션, 헤더, 폼데이터/JSON 다중 폴백)
-    const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
     const headerEmail = req.headers.get("x-sheetbot-user-email");
     const contentType = req.headers.get("content-type") || "";
 
@@ -93,7 +95,7 @@ export async function POST(req: NextRequest) {
     } else {
       const formData = await req.formData();
       const file = formData.get("file") as File | null;
-      bodyEmail = formData.get("userEmail") as string | null;
+      bodyEmail = (formData.get("userEmail") as string | null) || (formData.get("email") as string | null);
       ocrType = ((formData.get("ocrType") as string | null) || "GENERIC").toUpperCase().trim();
       deviceId = (formData.get("deviceId") as string | null) || "SheetBot Agent";
       rawFileName = (formData.get("fileName") as string | null) || (file?.name) || rawFileName;
@@ -108,9 +110,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const userEmail = (bodyEmail && bodyEmail.includes("@"))
+    // 헤더나 바디에 유효한 이메일이 없을 때만 getCurrentUserEmail(req) 지연 호출 (불필요한 DB/OAuth 블로킹 방어)
+    let userEmail = (bodyEmail && bodyEmail.includes("@"))
       ? bodyEmail.toLowerCase().trim()
-      : (sessionEmail || (headerEmail && headerEmail.includes("@") ? headerEmail.toLowerCase().trim() : ""));
+      : (headerEmail && headerEmail.includes("@") ? headerEmail.toLowerCase().trim() : "");
+
+    if (!userEmail) {
+      const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
+      if (sessionEmail && sessionEmail.includes("@")) {
+        userEmail = sessionEmail.toLowerCase().trim();
+      }
+    }
 
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
@@ -137,7 +147,7 @@ export async function POST(req: NextRequest) {
         ocrType,
         fileName: rawFileName.trim(),
         isDuplicate: true,
-      });
+      }, { headers: { "Connection": "close" } });
     }
 
     // [2단계 60초 완료 캐시] 최근 60초 이내 완료된 작업 캐시 서빙
@@ -147,7 +157,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ...cachedUpload.response,
         isDuplicate: true,
-      });
+      }, { headers: { "Connection": "close" } });
     }
 
     if (recentFileUploads.size > 200) {
@@ -210,7 +220,8 @@ export async function POST(req: NextRequest) {
       } catch {}
     }
 
-    if (!targetFolderId) {
+    // 명함(BUSINESS_CARD)은 초고속 즉시 반환(Fast-Return)을 위해 앞단에서 드라이브 폴더 탐색을 대기하지 않고 즉시 AI OCR로 직행
+    if (!targetFolderId && ocrType !== "BUSINESS_CARD") {
       try {
         const folderSearch = await listDriveFiles({
           query: `mimeType = 'application/vnd.google-apps.folder' and name = '${targetFolderName}' and trashed = false`,
@@ -232,8 +243,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ★ [Strict Folder Isolation Rule] targetFolderId가 없으면 drive_upload가 호스트 기본 감시 폴더('이지데스크 연동')로 Fallback하는 것을 원천 차단
-    if (!targetFolderId) {
+    // ★ [Strict Folder Isolation Rule] 명함이 아닌 일반/영수증 업로드 시 targetFolderId 엄격 검증
+    if (!targetFolderId && ocrType !== "BUSINESS_CARD") {
       // 1회 즉시 동기 생성 재시도
       try {
         const retryCreate = await createDriveFolder(targetFolderName, undefined, true);
@@ -263,17 +274,14 @@ export async function POST(req: NextRequest) {
       console.log(`[FilesUpload] 🪪 Instant Direct Realtime AI OCR for Business Card: ${targetFileName}`);
 
       const base64File = buffer.toString("base64");
-      // 초고속 Flash-Lite 전용 모델로 3~4초 내 무조건 OCR 완료
-      const configuredModel = "gemini-2.5-flash-lite";
-
+      // 사용자 지정 프로젝트 기본 AI 모델 자동 적용 (AI Caller에 위임)
       let ocrResult: any = null;
       try {
         ocrResult = await performAiOcr(
           base64File,
           targetFileName,
           mimeType,
-          "BUSINESS_CARD",
-          configuredModel
+          "BUSINESS_CARD"
         );
       } catch (ocrErr: any) {
         console.warn("[FilesUpload] Direct Card AI OCR error:", ocrErr.message);
@@ -314,13 +322,35 @@ export async function POST(req: NextRequest) {
       const capturedTempFilePath = tempFilePath;
       const capturedBuffer = buffer;
 
-      void (async () => {
-        try {
+      // ⚡ [백그라운드 파이프라인] HTTP 응답이 터널을 완전히 빠져나간 뒤(150ms) 순차 큐로 안전 실행 (Hub 소켓 경합 원천 차단)
+      setTimeout(() => {
+        cardBackgroundQueue = cardBackgroundQueue.then(async () => {
+          try {
+          let actualFolderId = capturedFolderId;
+          if (!actualFolderId) {
+            actualFolderId = folderCache.get(targetFolderName) || null;
+            if (!actualFolderId) {
+              try {
+                const folderSearch = await listDriveFiles({
+                  query: `mimeType = 'application/vnd.google-apps.folder' and name = '${targetFolderName}' and trashed = false`,
+                }, { preferOAuth: true }).catch(() => null);
+                const existingFolders = folderSearch?.files || [];
+                if (existingFolders.length > 0) {
+                  actualFolderId = existingFolders[0].id;
+                } else {
+                  const newFolderRes = await createDriveFolder(targetFolderName, undefined, true).catch(() => null);
+                  actualFolderId = newFolderRes?.id || (typeof newFolderRes === "string" ? newFolderRes : null);
+                }
+                if (actualFolderId) folderCache.set(targetFolderName, actualFolderId);
+              } catch {}
+            }
+          }
+
           const resolved = await resolveUserSpreadsheet({
             userEmail: cleanEmail,
             sheetType: "BUSINESS_CARD",
             defaultTitle: defaultSheetTitle,
-            folderId: capturedFolderId,
+            folderId: actualFolderId || undefined,
             preferOAuth: true,
           }).catch(() => null);
 
@@ -330,19 +360,23 @@ export async function POST(req: NextRequest) {
           let bgWebViewLink = "";
           try {
             const driveUploadPromise = (async () => {
-              const existingSearch = await listDriveFiles({
-                query: `'${capturedFolderId}' in parents and name = '${capturedFileName}' and trashed = false`,
-              }, { preferOAuth: true }).catch(() => null);
+              if (actualFolderId) {
+                const existingSearch = await listDriveFiles({
+                  query: `'${actualFolderId}' in parents and name = '${capturedFileName}' and trashed = false`,
+                }, { preferOAuth: true }).catch(() => null);
 
-              if (existingSearch?.files && existingSearch.files.length > 0) {
-                const bgId = existingSearch.files[0].id;
-                return existingSearch.files[0].webViewLink || `https://drive.google.com/file/d/${bgId}/view`;
+                if (existingSearch?.files && existingSearch.files.length > 0) {
+                  const bgId = existingSearch.files[0].id;
+                  return existingSearch.files[0].webViewLink || `https://drive.google.com/file/d/${bgId}/view`;
+                }
               }
+
+              if (!actualFolderId) return "";
 
               const uploadRes = await uploadDriveFileWithBridge({
                 buffer: capturedBuffer,
                 fileName: capturedFileName,
-                folderId: capturedFolderId,
+                folderId: actualFolderId,
                 mimeType: capturedMimeType,
                 tempFilePath: capturedTempFilePath,
                 preferOAuth: true,
@@ -480,10 +514,15 @@ export async function POST(req: NextRequest) {
             try { fs.unlinkSync(capturedTempFilePath); } catch {}
           }
         }
-      })();
+      }).catch(() => {});
+    }, 150);
 
       // 🚀 스마트폰 앱에 즉시 COMPLETED 및 명함 데이터 반환 (3~4초 만에 직통 완료!)
-      return NextResponse.json(successResponse);
+      return NextResponse.json(successResponse, {
+        headers: {
+          "Connection": "close",
+        },
+      });
     } else {
       // 5. 일반 파일 및 영수증 업로드 로직 (단일 드라이브 업로드 후 백그라운드 위임)
       try {
@@ -887,10 +926,19 @@ export async function POST(req: NextRequest) {
 
     recentFileUploads.set(dedupKey, { timestamp: nowTs, response: successResponse });
 
-    return NextResponse.json(successResponse);
+    return NextResponse.json(successResponse, {
+      headers: {
+        "Connection": "close",
+      },
+    });
   } catch (err: any) {
     console.error("[FilesUpload] Error:", err);
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: err.message }, {
+      status: 500,
+      headers: {
+        "Connection": "close",
+      },
+    });
   } finally {
     // 임시 파일 삭제
     if (tempFilePath && fs.existsSync(tempFilePath)) {
@@ -952,54 +1000,11 @@ async function performAiOcr(
   "details": "상세정보 (소속 부서, 팩스번호(FAX), 회사 웹사이트 URL, 계좌번호, 취급 주요 업무/서비스, 슬로건 등 위 항목 외의 명함에 적힌 모든 추가 정보 요약)"
 }`;
 
-  // 로컬 호스트 MCP 게이트웨이(http://localhost:8080) 우선 직결 (2.5MB 대용량 base64의 외부 터널 루프백 60초 타임아웃 원천 차단)
+  // 이지데스크 표준 AI Caller 경유 (12초 타임아웃 방어 및 메타데이터 2중 언래핑 준수)
   let innerText = "";
   try {
-    const localRes = await fetch("http://localhost:8080/ai-caller/tools/call", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Api-Key": "a67ddc0f-7e2b-4997-9a0b-9667a74c89d0",
-      },
-      signal: AbortSignal.timeout(15000), // 15초 타임아웃
-      body: JSON.stringify({
-        tool: "ai_caller_call",
-        arguments: {
-          prompt,
-          model: modelName || "gemini-2.5-flash-lite",
-          temperature: 0.1,
-          files: [
-            {
-              name: fileName,
-              content: base64File,
-              encoding: "base64",
-              mimeType: mimeType.startsWith("image/") || mimeType === "application/pdf" ? mimeType : "image/jpeg",
-            },
-          ],
-        },
-      }),
-    });
-
-    if (localRes.ok) {
-      const json = await localRes.json();
-      if (json?.result?.content?.[0]?.text) {
-        try {
-          const parsed = JSON.parse(json.result.content[0].text);
-          innerText = parsed.content || parsed.text || json.result.content[0].text;
-        } catch {
-          innerText = json.result.content[0].text;
-        }
-      } else if (json?.content) {
-        innerText = json.content;
-      }
-    }
-  } catch (err: any) {
-    console.warn("[AiOcr] Local gateway fetch failed, falling back to callAiCaller:", err.message);
-  }
-
-  if (!innerText) {
-    const aiRes = await callAiCaller(prompt, {
-      model: modelName || undefined,
+    const aiCallerPromise = callAiCaller(prompt, {
+      ...(modelName ? { model: modelName } : {}),
       temperature: 0.1,
       files: [
         {
@@ -1010,7 +1015,27 @@ async function performAiOcr(
         },
       ],
     });
-    innerText = (aiRes.text || aiRes.content || "").trim();
+
+    const aiRes = await Promise.race([
+      aiCallerPromise,
+      new Promise<null>((_, reject) => setTimeout(() => reject(new Error("AI Caller timeout (12s)")), 12000)),
+    ]);
+
+    if (aiRes) {
+      const rawRes = (aiRes as any).raw || aiRes;
+      if (rawRes?.result?.content?.[0]?.text) {
+        try {
+          const parsed = JSON.parse(rawRes.result.content[0].text);
+          innerText = parsed.content || parsed.text || rawRes.result.content[0].text;
+        } catch {
+          innerText = rawRes.result.content[0].text;
+        }
+      } else {
+        innerText = (aiRes as any).text || (aiRes as any).content || "";
+      }
+    }
+  } catch (err: any) {
+    console.warn("[AiOcr] AI Caller execution warning:", err.message);
   }
 
   let rawText = innerText.trim();

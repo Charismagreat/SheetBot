@@ -33,7 +33,7 @@ export async function GET() {
       latestVersionName: latestName,
       apkUrl,
       fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: `시트봇 모바일 에이전트 v${latestName} 릴리즈\n• ⚡ [명함 AI 병렬 가속] AI OCR + 구글 드라이브 + 시트 바인딩 완전 동시 처리로 분석 속도 3~5초 극적 단축\n• 🛡️ [타임아웃 무결점 방어] AI 게이트웨이 10초 타임아웃 2단 폴백 + 앱 폴링 대기시간 90초 대폭 확장\n• 📇 [연락처 자동 팝업 보장] 분석 완료 즉시 헤드업 알림 및 원클릭 주소록 저장 100% 보장`,
+      releaseNotes: `시트봇 모바일 에이전트 v${latestName} 릴리즈\n• 🚀 [터널 안심 청크 분할 업로드] 512KB/2MB 바이너리 청크 분할 전송(ChunkedUploader) 도입으로 60초 터널 타임아웃 완벽 차단\n• 🛡️ [SHA-256 무결성 검증] 전송 실패 청크 3회 자동 재시도 및 2단 안전망 폴백\n• 🎙️ [대용량 통화녹음/사진 안정 전송] 파일 크기 제한 없이 안전한 구글 드라이브 보관 및 시트 실시간 장부화`,
     },
     {
       headers: {

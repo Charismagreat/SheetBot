@@ -312,6 +312,24 @@ class PreferencesManager(context: Context) {
             ?: "[SheetBot] 안녕하세요. 조금 전 통화드린 담당자 명함입니다.\n• 서비스: 시트봇 클라우드 (https://sheetbot.cloud)\n감사합니다."
         set(value) = prefs.edit().putString("business_card_sms_template", value).apply()
 
+    // 스마트폰 연락처 구글 시트 자동 동기화 설정
+    var isContactsSyncEnabled: Boolean
+        get() = prefs.getBoolean("is_contacts_sync_enabled", false)
+        set(value) = prefs.edit().putBoolean("is_contacts_sync_enabled", value).apply()
+
+    var lastContactsSyncTime: Long
+        get() = prefs.getLong("last_contacts_sync_time", 0L)
+        set(value) = prefs.edit().putLong("last_contacts_sync_time", value).apply()
+
+    var lastContactsSyncCount: Int
+        get() = prefs.getInt("last_contacts_sync_count", 0)
+        set(value) = prefs.edit().putInt("last_contacts_sync_count", value).apply()
+
+    var isContactsDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_contacts_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_contacts_details_hidden", value).apply()
+
+
     fun isSentSmsSynced(id: Long): Boolean {
         val synced = prefs.getStringSet("synced_sent_sms_ids", emptySet()) ?: emptySet()
         return synced.contains(id.toString())

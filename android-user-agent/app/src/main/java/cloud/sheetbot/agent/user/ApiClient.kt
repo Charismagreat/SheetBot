@@ -31,11 +31,14 @@ object ApiClient {
         .retryOnConnectionFailure(true)
         .build()
 
-    // 파일 업로드, AI OCR/요약 및 구글 시트 연동을 위한 대기 타임아웃 클라이언트 (1차 실패 시 4초 내 빠른 2차 전환)
+    // 파일 업로드, AI OCR/요약 및 구글 시트 연동을 위한 대기 타임아웃 클라이언트
+    // ★ [Zero-Stale Connection] 터널 프록시의 소켓 반폐쇄/유휴 재사용 멈춤 현상(60초 타임아웃)을 원천 방지하기 위해 ConnectionPool을 0으로 설정하여 항상 깨끗한 직통 새 소켓 사용
     private val longTimeoutClient = client.newBuilder()
+        .connectionPool(okhttp3.ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
         .connectTimeout(4, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build()
 
     /**
@@ -689,6 +692,36 @@ object ApiClient {
         folderName: String = "[SheetBot] 통화 녹음",
         autoRecordSheet: Boolean = true
     ): UploadRecordingResult = withContext(Dispatchers.IO) {
+        // 1. [1순위] 터널 안심 청크 분할 업로드 (ChunkedUploader)
+        try {
+            val chunkResult = ChunkedUploader.uploadFileChunked(
+                file = file,
+                fileName = fileName,
+                mimeType = "audio/m4a",
+                userEmail = userEmail,
+                folderName = folderName,
+                autoRecordSheet = autoRecordSheet,
+                isCallRecording = true,
+                contactName = contactName,
+                callTime = callTime
+            )
+            if (chunkResult.success) {
+                Log.i(TAG, "🎉 [통화 녹음 청크 업로드 성공] $fileName -> $folderName")
+                return@withContext UploadRecordingResult(
+                    success = true,
+                    fileId = chunkResult.fileId,
+                    fileName = chunkResult.fileName ?: fileName,
+                    webViewLink = chunkResult.webViewLink,
+                    spreadsheetUrl = chunkResult.spreadsheetUrl
+                )
+            } else {
+                Log.w(TAG, "통화 녹음 청크 업로드 실패, 기존 단일 업로드로 폴백: ${chunkResult.error}")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "통화 녹음 청크 업로드 예외, 단일 업로드 폴백: ${e.message}")
+        }
+
+        // 2. [2순위 폴백] 기존 단일 Base64 업로드
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val fileBytes = file.readBytes()
         val base64Str = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)
@@ -750,6 +783,49 @@ object ApiClient {
         autoRecordSheet: Boolean = true,
         ocrType: String? = null
     ): UploadGenericFileResult = withContext(Dispatchers.IO) {
+        // 1. [1순위] 터널 안심 청크 분할 업로드 (ChunkedUploader)
+        try {
+            val chunkResult = ChunkedUploader.uploadFileChunked(
+                file = file,
+                fileName = fileName,
+                mimeType = mimeType,
+                userEmail = userEmail,
+                folderName = folderName,
+                memo = memo,
+                autoRecordSheet = autoRecordSheet,
+                ocrType = ocrType
+            )
+            if (chunkResult.success) {
+                Log.i(TAG, "🎉 [파일 청크 업로드 성공] $fileName -> $folderName (ocr: $ocrType)")
+                val jobId = chunkResult.jobId
+                val status = chunkResult.status
+
+                if (ocrType.equals("BUSINESS_CARD", ignoreCase = true) && status == "PROCESSING" && jobId != null) {
+                    Log.i(TAG, "⏳ [명함 비동기 수거 시작] jobId: $jobId -> 타임아웃 없는 안전 폴링 개시")
+                    return@withContext pollBusinessCardStatus(jobId, fileName, folderName)
+                }
+
+                return@withContext UploadGenericFileResult(
+                    success = true,
+                    fileId = chunkResult.fileId,
+                    fileName = chunkResult.fileName ?: fileName,
+                    folderName = chunkResult.folderName ?: folderName,
+                    webViewLink = chunkResult.webViewLink,
+                    spreadsheetUrl = chunkResult.spreadsheetUrl,
+                    message = chunkResult.message ?: "업로드 완료",
+                    ocrType = chunkResult.ocrType ?: ocrType,
+                    ocrData = chunkResult.ocrData,
+                    jobId = jobId,
+                    status = status
+                )
+            } else {
+                Log.w(TAG, "파일 청크 업로드 실패, 기존 단일 업로드로 폴백: ${chunkResult.error}")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "파일 청크 업로드 예외, 단일 업로드 폴백: ${e.message}")
+        }
+
+        // 2. [2순위 폴백] 기존 단일 Base64 업로드
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val fileBytes = file.readBytes()
         val base64Str = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)
@@ -776,6 +852,7 @@ object ApiClient {
             try {
                 val request = Request.Builder()
                     .url(endpoint)
+                    .header("Connection", "close")
                     .post(requestBody)
                     .build()
                 val response = longTimeoutClient.newCall(request).execute()
@@ -1661,7 +1738,92 @@ object ApiClient {
         }
         UploadQuoteImageResult(success = false, error = lastError)
     }
+
+    /**
+     * 스마트폰 연락처 목록 구글 시트 대장 동기화
+     * POST /api/user/contacts/sync
+     */
+    suspend fun syncContacts(
+        userEmail: String,
+        contacts: List<ContactDto>,
+        isFullSync: Boolean = true,
+        deviceId: String? = null
+    ): ContactSyncResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastError = "연락처 동기화 실패"
+
+        val contactsArray = org.json.JSONArray()
+        for (c in contacts) {
+            val item = JSONObject().apply {
+                put("id", c.id)
+                put("name", c.name)
+                put("mobile", c.mobile)
+                put("extraPhone", c.extraPhone)
+                put("email", c.email)
+                put("company", c.company)
+                put("title", c.title)
+                put("note", c.note)
+                put("address", c.address)
+                put("updatedAt", c.updatedAt)
+            }
+            contactsArray.put(item)
+        }
+
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("deviceId", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL} (SheetBot Agent)")
+            put("isFullSync", isFullSync)
+            put("contacts", contactsArray)
+        }
+        val requestBody = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/contacts/sync"
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(requestBody)
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .build()
+                val response = longTimeoutClient.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val totalCount = resJson.optInt("totalCount", contacts.size)
+                    val insertedCount = resJson.optInt("insertedCount", 0)
+                    val updatedCount = resJson.optInt("updatedCount", 0)
+                    val sheetUrl = resJson.optString("spreadsheetUrl", "")
+                    Log.i(TAG, "📇 [연락처 구글 시트 동기화 성공] 총 ${totalCount}건 (추가: $insertedCount, 수정: $updatedCount)")
+                    return@withContext ContactSyncResult(
+                        success = true,
+                        totalCount = totalCount,
+                        insertedCount = insertedCount,
+                        updatedCount = updatedCount,
+                        spreadsheetUrl = sheetUrl,
+                        message = resJson.optString("message", "연락처 동기화 완료")
+                    )
+                } else {
+                    lastError = resJson.optString("error", "HTTP ${response.code}")
+                }
+            } catch (e: Exception) {
+                lastError = e.localizedMessage ?: "네트워크 통신 오류"
+                Log.w(TAG, "[$endpoint] 연락처 동기화 통신 예외: ${e.message}")
+            }
+        }
+        ContactSyncResult(success = false, error = lastError)
+    }
 }
+
+data class ContactSyncResult(
+    val success: Boolean,
+    val totalCount: Int = 0,
+    val insertedCount: Int = 0,
+    val updatedCount: Int = 0,
+    val spreadsheetUrl: String = "",
+    val message: String = "",
+    val error: String? = null
+)
+
 
 data class UploadQuoteImageResult(
     val success: Boolean,

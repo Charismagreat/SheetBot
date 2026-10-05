@@ -24,7 +24,8 @@ export type SheetBindingType =
   | "RECEIPT_SMS"
   | "WEBSITE_MONITOR"
   | "DISPATCH_LOG"
-  | "QUOTE";
+  | "QUOTE"
+  | "CONTACTS";
 
 export interface ResolveSheetOptions {
   userEmail: string;
