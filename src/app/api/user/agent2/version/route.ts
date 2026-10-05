@@ -41,8 +41,8 @@ export async function GET() {
     );
   }
 
-  let latestName = "2.1.76";
-  let latestCode = 97;
+  let latestName = "2.1.77";
+  let latestCode = 98;
   let apkUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";
   let releaseNotes = "시트봇 모바일 에이전트 최신 버전입니다.";
 
