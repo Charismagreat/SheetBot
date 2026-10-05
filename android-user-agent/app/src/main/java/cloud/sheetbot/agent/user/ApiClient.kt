@@ -783,6 +783,15 @@ object ApiClient {
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
                     Log.i(TAG, "🎉 [파일 업로드 성공] $fileName -> $folderName (ocr: $ocrType)")
+                    val jobId = resJson.optString("jobId").takeIf { it.isNotBlank() }
+                    val status = resJson.optString("status")
+
+                    // 만약 명함이고 백그라운드 분석 중(PROCESSING)이면 비동기 폴링으로 안전 수거 (Zero-Timeout)
+                    if (ocrType.equals("BUSINESS_CARD", ignoreCase = true) && status == "PROCESSING" && jobId != null) {
+                        Log.i(TAG, "⏳ [명함 비동기 수거 시작] jobId: $jobId -> 타임아웃 없는 안전 폴링 개시")
+                        return@withContext pollBusinessCardStatus(jobId, fileName, folderName)
+                    }
+
                     return@withContext UploadGenericFileResult(
                         success = true,
                         fileId = resJson.optString("fileId").takeIf { it.isNotBlank() },
@@ -792,7 +801,9 @@ object ApiClient {
                         spreadsheetUrl = resJson.optString("spreadsheetUrl").takeIf { it.isNotBlank() },
                         message = resJson.optString("message", "업로드 완료"),
                         ocrType = resJson.optString("ocrType").takeIf { it.isNotBlank() } ?: ocrType,
-                        ocrData = resJson.optJSONObject("ocrData")
+                        ocrData = resJson.optJSONObject("ocrData"),
+                        jobId = jobId,
+                        status = status
                     )
                 } else {
                     val msg = resJson.optString("error", "HTTP ${response.code}")
@@ -805,6 +816,71 @@ object ApiClient {
             }
         }
         UploadGenericFileResult(success = false, error = lastError)
+    }
+
+    /**
+     * 명함 AI OCR 비동기 작업 수거 (Zero-Timeout 아키텍처)
+     * 1.5초 간격으로 가볍게 확인하여 타임아웃 없이 100% 안전하게 결과를 회수합니다.
+     */
+    suspend fun pollBusinessCardStatus(
+        jobId: String,
+        fallbackFileName: String = "명함",
+        fallbackFolderName: String = "[SheetBot] 명함 보관함"
+    ): UploadGenericFileResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val maxAttempts = 20 // 1.5초 * 20회 = 최대 30초 대기
+
+        for (attempt in 1..maxAttempts) {
+            kotlinx.coroutines.delay(1500)
+
+            for (host in hosts) {
+                val endpoint = "$host/api/user/files/card-status?jobId=$jobId"
+                try {
+                    val request = Request.Builder().url(endpoint).get().build()
+                    val response = client.newCall(request).execute()
+                    val resStr = response.body?.string() ?: ""
+                    val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                    if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                        val status = resJson.optString("status")
+                        if (status == "COMPLETED") {
+                            Log.i(TAG, "🎉 [명함 AI 분석 수거 완료] attempt: $attempt, jobId: $jobId")
+                            return@withContext UploadGenericFileResult(
+                                success = true,
+                                fileName = resJson.optString("fileName", fallbackFileName),
+                                folderName = resJson.optString("folderName", fallbackFolderName),
+                                spreadsheetUrl = resJson.optString("spreadsheetUrl").takeIf { it.isNotBlank() },
+                                message = resJson.optString("message", "명함 분석 완료"),
+                                ocrType = "BUSINESS_CARD",
+                                ocrData = resJson.optJSONObject("ocrData"),
+                                jobId = jobId,
+                                status = "COMPLETED"
+                            )
+                        } else if (status == "FAILED") {
+                            val err = resJson.optString("error", "명함 분석 실패")
+                            Log.w(TAG, "명함 분석 실패 판정: $err")
+                            return@withContext UploadGenericFileResult(
+                                success = false,
+                                error = err,
+                                jobId = jobId,
+                                status = "FAILED"
+                            )
+                        }
+                        // 아직 PROCESSING 중이면 다음 시도로 계속
+                        break
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "명함 상태 폴링 통신 예외 ($host): ${e.message}")
+                }
+            }
+        }
+
+        UploadGenericFileResult(
+            success = false,
+            error = "AI 분석 대기 시간이 초과되었습니다.",
+            jobId = jobId,
+            status = "TIMEOUT"
+        )
     }
 
     /**
@@ -1674,7 +1750,9 @@ data class UploadGenericFileResult(
     val message: String? = null,
     val error: String? = null,
     val ocrType: String? = null,
-    val ocrData: JSONObject? = null
+    val ocrData: JSONObject? = null,
+    val jobId: String? = null,
+    val status: String? = null
 )
 
 data class BookmarkResult(
