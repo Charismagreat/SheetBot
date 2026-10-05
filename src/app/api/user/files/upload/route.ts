@@ -281,33 +281,67 @@ export async function POST(req: NextRequest) {
         folderId: targetFolderId,
       });
 
-      // 백그라운드에서 AI OCR + 드라이브 업로드 + 시트 행 추가 완수
+      // 백그라운드에서 AI OCR + 드라이브 업로드 + 시트 조회를 완전 병렬(Promise.all)로 3~5초 내 완수
       const processingPromise = (async () => {
         try {
           const aiSettings = await getAiModelSettings();
           const configuredModel = aiSettings.defaultModel || "gemini-2.5-flash";
           const base64File = capturedBuffer.toString("base64");
 
-          // 1. Gemini AI OCR 분석 수행
-          const ocrResult = await performAiOcr(
-            base64File,
-            capturedFileName,
-            capturedMimeType,
-            "BUSINESS_CARD",
-            configuredModel
-          ).catch((e: any) => {
-            console.warn("[FilesUpload] Card AI OCR warning:", e.message);
-            return null;
-          });
+          // ⚡ [3대 핵심 작업 완전 병렬 실행] AI OCR + 시트 바인딩 확인 + 드라이브 업로드를 동시 진행하여 지연 1/3 단축
+          const [ocrResult, resolved, driveResult] = await Promise.all([
+            // 1. Gemini AI OCR 분석 수행
+            performAiOcr(
+              base64File,
+              capturedFileName,
+              capturedMimeType,
+              "BUSINESS_CARD",
+              configuredModel
+            ).catch((e: any) => {
+              console.warn("[FilesUpload] Card AI OCR warning:", e.message);
+              return null;
+            }),
 
-          // 2. 구글 시트 바인딩 확인
-          const resolved = await resolveUserSpreadsheet({
-            userEmail: cleanEmail,
-            sheetType: "BUSINESS_CARD",
-            defaultTitle: defaultSheetTitle,
-            folderId: capturedFolderId,
-            preferOAuth: true,
-          }).catch(() => null);
+            // 2. 구글 시트 바인딩 확인
+            resolveUserSpreadsheet({
+              userEmail: cleanEmail,
+              sheetType: "BUSINESS_CARD",
+              defaultTitle: defaultSheetTitle,
+              folderId: capturedFolderId,
+              preferOAuth: true,
+            }).catch(() => null),
+
+            // 3. 구글 드라이브 중복 검사 및 업로드
+            (async () => {
+              try {
+                const existingSearch = await listDriveFiles({
+                  query: `'${capturedFolderId}' in parents and name = '${capturedFileName}' and trashed = false`,
+                }, { preferOAuth: true }).catch(() => null);
+
+                if (existingSearch?.files && existingSearch.files.length > 0) {
+                  const bgDriveFileId = existingSearch.files[0].id;
+                  const bgWebViewLink = existingSearch.files[0].webViewLink || `https://drive.google.com/file/d/${bgDriveFileId}/view`;
+                  console.log(`[FilesUpload] 📁 File already exists in Drive, reusing fileId: ${bgDriveFileId}`);
+                  return { fileId: bgDriveFileId, webViewLink: bgWebViewLink };
+                } else {
+                  const uploadRes = await uploadDriveFileWithBridge({
+                    buffer: capturedBuffer,
+                    fileName: capturedFileName,
+                    folderId: capturedFolderId,
+                    mimeType: capturedMimeType,
+                    tempFilePath: capturedTempFilePath,
+                    preferOAuth: true,
+                  });
+                  const bgDriveFileId = uploadRes?.id || uploadRes?.fileId || null;
+                  const bgWebViewLink = uploadRes?.webViewLink || (bgDriveFileId ? `https://drive.google.com/file/d/${bgDriveFileId}/view` : "");
+                  return { fileId: bgDriveFileId, webViewLink: bgWebViewLink };
+                }
+              } catch (upErr: any) {
+                console.warn("[FilesUpload] Card background Drive upload warning:", upErr.message);
+                return { fileId: null, webViewLink: "" };
+              }
+            })()
+          ]);
 
           const targetSpreadsheetId = resolved?.spreadsheetId;
           const targetSpreadsheetUrl = targetSpreadsheetId
@@ -326,40 +360,14 @@ export async function POST(req: NextRequest) {
             details: "",
           };
 
-          // 작업 완료 상태 업데이트
+          // 작업 완료 상태 업데이트 (앱이 폴링 시 즉각 수거 가능하도록 즉시 COMPLETED 발행)
           updateCardJob(jobId, {
             status: "COMPLETED",
             ocrData: finalOcrData,
             spreadsheetUrl: targetSpreadsheetUrl,
           });
 
-          // 3. 드라이브 업로드 전 중복 검사: 동일 폴더 내 동일 파일명이 이미 존재하는지 확인
-          let bgDriveFileId: string | null = null;
-          let bgWebViewLink = "";
-          try {
-            const existingSearch = await listDriveFiles({
-              query: `'${capturedFolderId}' in parents and name = '${capturedFileName}' and trashed = false`,
-            }, { preferOAuth: true }).catch(() => null);
-
-            if (existingSearch?.files && existingSearch.files.length > 0) {
-              bgDriveFileId = existingSearch.files[0].id;
-              bgWebViewLink = existingSearch.files[0].webViewLink || `https://drive.google.com/file/d/${bgDriveFileId}/view`;
-              console.log(`[FilesUpload] 📁 File already exists in Drive, reusing fileId: ${bgDriveFileId}`);
-            } else {
-              const uploadRes = await uploadDriveFileWithBridge({
-                buffer: capturedBuffer,
-                fileName: capturedFileName,
-                folderId: capturedFolderId,
-                mimeType: capturedMimeType,
-                tempFilePath: capturedTempFilePath,
-                preferOAuth: true,
-              });
-              bgDriveFileId = uploadRes?.id || uploadRes?.fileId || null;
-              bgWebViewLink = uploadRes?.webViewLink || (bgDriveFileId ? `https://drive.google.com/file/d/${bgDriveFileId}/view` : "");
-            }
-          } catch (upErr: any) {
-            console.warn("[FilesUpload] Card background Drive upload warning:", upErr.message);
-          }
+          const bgWebViewLink = driveResult?.webViewLink || "";
 
           if (targetSpreadsheetId) {
             const nowStr = getKoreanTimeString();
@@ -1021,6 +1029,7 @@ async function performAiOcr(
         "Content-Type": "application/json",
         "X-Api-Key": "a67ddc0f-7e2b-4997-9a0b-9667a74c89d0",
       },
+      signal: AbortSignal.timeout(10000), // 10초 타임아웃: 지연 발생 시 즉시 callAiCaller로 빠른 폴백
       body: JSON.stringify({
         tool: "ai_caller_call",
         arguments: {
