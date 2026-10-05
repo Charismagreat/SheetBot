@@ -1,44 +1,106 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
+
+interface CachedVersion {
+  timestamp: number;
+  data: {
+    latestVersionCode: number;
+    latestVersionName: string;
+    apkUrl: string;
+    fallbackApkUrl: string;
+    releaseNotes: string;
+  };
+}
+
+let versionCache: CachedVersion | null = null;
+const CACHE_TTL_MS = 30 * 1000; // 30초 캐시 (GitHub API Rate Limit 방어)
+
+function parseVersionToCode(versionName: string): number {
+  const clean = versionName.replace(/^(user-)?v?/i, "").trim();
+  const parts = clean.split(".").map((p) => parseInt(p, 10) || 0);
+  if (parts.length >= 3) {
+    // 예: 2.1.76 -> 2 * 10000 + 1 * 100 + 76 = 20176
+    return parts[0] * 10000 + parts[1] * 100 + parts[2];
+  }
+  return 97;
+}
 
 /**
  * GET /api/user/agent2/version
- * 이용자용 스마트폰 앱 (SheetBot Agent) 최신 버전 정보 및 원클릭 업데이트 APK 링크 제공
+ * 
+ * GitHub Releases API를 실시간 조회하여 가장 최신 버전 정보와 APK 직통 다운로드 링크를 자동 제공합니다.
+ * 더 이상 서버 측 수동 버전 수정이나 배포가 필요 없습니다.
  */
 export async function GET() {
-  let latestCode = 95;
-  let latestName = "2.1.74";
+  const now = Date.now();
+  if (versionCache && now - versionCache.timestamp < CACHE_TTL_MS) {
+    return NextResponse.json(
+      { success: true, ...versionCache.data },
+      { headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" } }
+    );
+  }
+
+  let latestName = "2.1.76";
+  let latestCode = 20176;
+  let apkUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";
+  let releaseNotes = "시트봇 모바일 에이전트 최신 버전입니다.";
 
   try {
-    const gradlePath = path.join(process.cwd(), "android-user-agent", "app", "build.gradle.kts");
-    if (fs.existsSync(gradlePath)) {
-      const gradleContent = fs.readFileSync(gradlePath, "utf-8");
-      const codeMatch = gradleContent.match(/versionCode\s*=\s*(\d+)/);
-      const nameMatch = gradleContent.match(/versionName\s*=\s*["']([^"']+)["']/);
-      if (codeMatch) latestCode = parseInt(codeMatch[1], 10);
-      if (nameMatch) latestName = nameMatch[1].trim();
-    }
-  } catch {}
+    const ghRes = await fetch("https://api.github.com/repos/Charismagreat/SheetBot/releases/latest", {
+      headers: {
+        Accept: "application/vnd.github.v3+json",
+        "User-Agent": "SheetBot-Version-Checker",
+      },
+      next: { revalidate: 30 },
+    });
 
-  const tag = `user-v${latestName}`;
-  const apkUrl = `https://github.com/Charismagreat/SheetBot/releases/download/${tag}/SheetBotAgent.apk`;
+    if (ghRes.ok) {
+      const ghJson = await ghRes.json();
+      const rawTag = (ghJson.tag_name || "").trim();
+      const cleanVer = rawTag.replace(/^(user-)?v?/i, "").trim();
+
+      if (cleanVer) {
+        latestName = cleanVer;
+        latestCode = parseVersionToCode(cleanVer);
+      }
+
+      const body = (ghJson.body || "").trim();
+      if (body) {
+        releaseNotes = body;
+      }
+
+      // assets에서 SheetBotAgent.apk 직통 URL 탐색
+      const assets = ghJson.assets || [];
+      const apkAsset = assets.find((a: any) =>
+        (a.name || "").toLowerCase().includes("sheetbotagent") && (a.name || "").endsWith(".apk")
+      ) || assets.find((a: any) => (a.name || "").endsWith(".apk"));
+
+      if (apkAsset?.browser_download_url) {
+        apkUrl = apkAsset.browser_download_url;
+      } else if (rawTag) {
+        apkUrl = `https://github.com/Charismagreat/SheetBot/releases/download/${rawTag}/SheetBotAgent.apk`;
+      }
+    }
+  } catch (err: any) {
+    console.warn("[VersionCheck] GitHub release fetch error:", err.message);
+  }
+
+  const resultData = {
+    latestVersionCode: latestCode,
+    latestVersionName: latestName,
+    apkUrl,
+    fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
+    releaseNotes,
+  };
+
+  versionCache = {
+    timestamp: now,
+    data: resultData,
+  };
 
   return NextResponse.json(
-    {
-      success: true,
-      latestVersionCode: latestCode,
-      latestVersionName: latestName,
-      apkUrl,
-      fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
-      releaseNotes: `시트봇 모바일 에이전트 v${latestName} 릴리즈\n• 🚀 [터널 안심 청크 분할 업로드] 512KB/2MB 바이너리 청크 분할 전송(ChunkedUploader) 도입으로 60초 터널 타임아웃 완벽 차단\n• 🛡️ [SHA-256 무결성 검증] 전송 실패 청크 3회 자동 재시도 및 2단 안전망 폴백\n• 🎙️ [대용량 통화녹음/사진 안정 전송] 파일 크기 제한 없이 안전한 구글 드라이브 보관 및 시트 실시간 장부화`,
-    },
-    {
-      headers: {
-        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-      },
-    }
+    { success: true, ...resultData },
+    { headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" } }
   );
 }

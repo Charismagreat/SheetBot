@@ -528,31 +528,13 @@ object ApiClient {
 
     /**
      * 최신 앱 버전 및 원클릭 업데이트 정보 확인
+     * 1순위: GitHub Releases 공식 API 실시간 직접 조회 (릴리즈 즉시 0초 반영)
+     * 2순위: SheetBot 서버 /api/user/agent2/version 교차 검증
      */
     suspend fun fetchLatestVersion(): VersionInfo? = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
-        for (host in hosts) {
-            val endpoint = "$host/api/user/agent2/version"
-            try {
-                val request = Request.Builder().url(endpoint).get().build()
-                val response = client.newCall(request).execute()
-                val resStr = response.body?.string() ?: ""
-                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
-                if (response.isSuccessful && resJson.optBoolean("success", false)) {
-                    return@withContext VersionInfo(
-                        latestVersionCode = resJson.optInt("latestVersionCode", 1),
-                        latestVersionName = resJson.optString("latestVersionName", "1.0.0"),
-                        apkUrl = resJson.optString("apkUrl", ""),
-                        fallbackApkUrl = resJson.optString("fallbackApkUrl", ""),
-                        releaseNotes = resJson.optString("releaseNotes", "")
-                    )
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "버전 확인 실패 ($host): ${e.message}")
-            }
-        }
+        var bestVersion: VersionInfo? = null
 
-        // 3. 3차 폴백: GitHub Releases 공식 API 직접 조회 (sheetbot.cloud 서버가 꺼져 있어도 항상 성공)
+        // 1. GitHub Releases 공식 API 실시간 직접 조회 (가장 정확한 1순위 소스)
         try {
             val ghEndpoint = "https://api.github.com/repos/Charismagreat/SheetBot/releases/latest"
             val ghReq = Request.Builder()
@@ -563,9 +545,9 @@ object ApiClient {
                 .build()
             val ghRes = client.newCall(ghReq).execute()
             val ghStr = ghRes.body?.string() ?: ""
-            val ghJson = JSONObject(ghStr)
+            val ghJson = try { JSONObject(ghStr) } catch (_: Exception) { JSONObject() }
             val rawTag = ghJson.optString("tag_name", "")
-            val cleanVersion = rawTag.removePrefix("v").trim()
+            val cleanVersion = rawTag.replace(Regex("^(user-)?v?", RegexOption.IGNORE_CASE), "").trim()
             val body = ghJson.optString("body", "")
             val assets = ghJson.optJSONArray("assets")
             var downloadUrl = ""
@@ -573,7 +555,7 @@ object ApiClient {
                 for (i in 0 until assets.length()) {
                     val asset = assets.getJSONObject(i)
                     val name = asset.optString("name", "")
-                    if (name.endsWith(".apk")) {
+                    if (name.contains("sheetbotagent", ignoreCase = true) && name.endsWith(".apk")) {
                         downloadUrl = asset.optString("browser_download_url", "")
                         break
                     }
@@ -581,21 +563,53 @@ object ApiClient {
             }
             if (cleanVersion.isNotBlank()) {
                 val calculatedCode = parseVersionToCode(cleanVersion)
-                val finalUrl = if (downloadUrl.isNotBlank()) downloadUrl else "https://github.com/Charismagreat/SheetBot/releases/download/$rawTag/sheetbot-deposit-agent.apk"
-                Log.i(TAG, "🎉 [GitHub 직통 릴리즈 확인 성공] 최신 버전: v$cleanVersion, URL: $finalUrl")
-                return@withContext VersionInfo(
+                val finalUrl = if (downloadUrl.isNotBlank()) downloadUrl else "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk"
+                bestVersion = VersionInfo(
                     latestVersionCode = calculatedCode,
                     latestVersionName = cleanVersion,
                     apkUrl = finalUrl,
-                    fallbackApkUrl = finalUrl,
+                    fallbackApkUrl = "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
                     releaseNotes = body
                 )
+                Log.i(TAG, "🎉 [GitHub 실시간 최신 버전 확인 성공] v$cleanVersion (URL: $finalUrl)")
             }
         } catch (e: Exception) {
-            Log.w(TAG, "GitHub 릴리즈 직통 조회 실패: ${e.message}")
+            Log.w(TAG, "GitHub 릴리즈 직접 조회 경고: ${e.message}")
         }
 
-        null
+        // 2. 서버 엔드포인트 교차 확인
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            val endpoint = "$host/api/user/agent2/version"
+            try {
+                val request = Request.Builder().url(endpoint).get().build()
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val sName = resJson.optString("latestVersionName", "1.0.0")
+                    val sCode = resJson.optInt("latestVersionCode", 1)
+                    val sApk = resJson.optString("apkUrl", "")
+                    val sFallback = resJson.optString("fallbackApkUrl", "")
+                    val sNotes = resJson.optString("releaseNotes", "")
+
+                    if (bestVersion == null) {
+                        bestVersion = VersionInfo(
+                            latestVersionCode = sCode,
+                            latestVersionName = sName,
+                            apkUrl = sApk,
+                            fallbackApkUrl = sFallback,
+                            releaseNotes = sNotes
+                        )
+                    }
+                    break
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "서버 버전 확인 실패 ($host): ${e.message}")
+            }
+        }
+
+        bestVersion
     }
 
     private fun parseVersionToCode(versionName: String): Int {
