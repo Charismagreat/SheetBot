@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+                android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_scenario"
+            android:padding="13dp"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:id="@+id/layoutSiteHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="🌐 AI 모바일 홈페이지 제작 &amp; 관리"
+                    android:textColor="#06B6D4"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btnToggleSiteDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="▼"
+                    android:textColor="#94A3B8"
+                    android:textSize="12sp"
+                    android:padding="4dp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="사진 1~5장 + 상호명 + 업종을 입력하면 AI가 슬로건, 브랜드 스토리, 대표 메뉴 5종을 자동 구성하여 10초 만에 공식 모바일 웹페이지를 즉시 발행합니다."
+                android:textColor="#94A3B8"
+                android:textSize="11sp"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:id="@+id/layoutSiteDetails"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <!-- 1. 사진 복수 선택 버튼 & 상태 표시 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <Button
+                        android:id="@+id/btnSelectSiteImages"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#0891B2"
+                        android:text="📷 대표 사진 선택 (복수 1~5장)"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11sp"
+                        android:layout_marginEnd="6dp" />
+
+                    <Button
+                        android:id="@+id/btnResetSiteImages"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:backgroundTint="#475569"
+                        android:text="초기화"
+                        android:textColor="#E2E8F0"
+                        android:textSize="11sp"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvSiteSelectedImagesCount"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="첨부된 사진: 0장 (선택 시 1600px 85% 자동 압축)"
+                    android:textColor="#CFFAFE"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- 2. 상호명 입력 -->
+                <EditText
+                    android:id="@+id/etSiteTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:background="@drawable/bg_input_field"
+                    android:hint="상호명 / 브랜드명 (예: 성수 아뜰리에 카페)"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#64748B"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- 3. 업종/카테고리 입력 -->
+                <EditText
+                    android:id="@+id/etSiteCategory"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:background="@drawable/bg_input_field"
+                    android:hint="업종 (예: 디저트 베이커리 카페, 헤어살롱, 세무회계)"
+                    android:text="카페 / 베이커리"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#64748B"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- 4. 대표 전화번호 -->
+                <EditText
+                    android:id="@+id/etSitePhone"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:background="@drawable/bg_input_field"
+                    android:hint="대표 전화번호 (예: 02-1234-5678)"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#64748B"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- 5. 주소/위치 -->
+                <EditText
+                    android:id="@+id/etSiteAddress"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:background="@drawable/bg_input_field"
+                    android:hint="매장/회사 주소 (예: 서울 성동구 연무장길 12)"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#64748B"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- 6. 영업시간 -->
+                <EditText
+                    android:id="@+id/etSiteHours"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:background="@drawable/bg_input_field"
+                    android:hint="영업시간 (예: 매일 10:00 ~ 22:00 / 매주 월 휴무)"
+                    android:text="매일 10:00 ~ 22:00"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#64748B"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="10dp" />
+
+                <!-- 7. 실행 버튼 -->
+                <Button
+                    android:id="@+id/btnStartSiteCreation"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:backgroundTint="#06B6D4"
+                    android:text="🚀 10초 모바일 홈페이지 자동 생성"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- 로딩 표시 -->
+                <ProgressBar
+                    android:id="@+id/pbSiteLoading"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:indeterminateTint="#06B6D4"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/tvSiteStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:text="AI가 브랜드 스토리와 메뉴 구성을 기획하고 웹사이트를 발행 중입니다..."
+                    android:textColor="#06B6D4"
+                    android:textSize="11sp"
+                    android:visibility="gone"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- 결과 표시 컨테이너 -->
+                <LinearLayout
+                    android:id="@+id/layoutSiteResultContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#0C2533"
+                    android:padding="10dp"
+                    android:layout_marginTop="4dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/tvSiteResultTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="완성된 상호명 &amp; 슬로건"
+                        android:textColor="#67E8F9"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp" />
+
+                    <TextView
+                        android:id="@+id/tvSiteResultUrl"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="https://sheetbot.cloud/site/..."
+                        android:textColor="#E2E8F0"
+                        android:textSize="11sp"
+                        android:layout_marginBottom="8dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/btnOpenMobileSite"
+                            android:layout_width="0dp"
+                            android:layout_height="34dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#0891B2"
+                            android:text="🌐 모바일웹 열기"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp"
+                            android:layout_marginEnd="4dp" />
+
+                        <Button
+                            android:id="@+id/btnOpenSiteSheet"
+                            android:layout_width="0dp"
+                            android:layout_height="34dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#059669"
+                            android:text="📊 대장 시트"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp"
+                            android:layout_marginEnd="4dp" />
+
+                        <Button
+                            android:id="@+id/btnShareMobileSite"
+                            android:layout_width="0dp"
+                            android:layout_height="34dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#4F46E5"
+                            android:text="🔗 링크 공유"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>

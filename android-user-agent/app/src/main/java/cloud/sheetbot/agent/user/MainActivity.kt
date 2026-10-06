@@ -5240,8 +5240,8 @@ class MainActivity : AppCompatActivity() {
                 val totalKb = selectedBlogFiles.sumOf { it.length() } / 1024
 
                 withContext(Dispatchers.Main) {
-                    binding.tvBlogSelectedImagesCount.text = "📷 첨부된 사진: ${selectedBlogFiles.size}장 (${totalKb} KB)"
-                    binding.btnResetBlogImages.visibility = if (selectedBlogFiles.isNotEmpty()) View.VISIBLE else View.GONE
+                    binding.cardBlog.tvBlogSelectedImagesCount.text = "📷 첨부된 사진: ${selectedBlogFiles.size}장 (${totalKb} KB)"
+                    binding.cardBlog.btnResetBlogImages.visibility = if (selectedBlogFiles.isNotEmpty()) View.VISIBLE else View.GONE
                     Toast.makeText(this@MainActivity, "사진 ${selectedBlogFiles.size}장 최적화 압축 완료!", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
@@ -5257,13 +5257,13 @@ class MainActivity : AppCompatActivity() {
      */
     private fun setupBlogAutomationCard() {
         var isCollapsed = false
-        binding.btnToggleBlogDetails.setOnClickListener {
+        binding.cardBlog.btnToggleBlogDetails.setOnClickListener {
             isCollapsed = !isCollapsed
-            binding.layoutBlogDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
-            binding.btnToggleBlogDetails.text = if (isCollapsed) "▶" else "▼"
+            binding.cardBlog.layoutBlogDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
+            binding.cardBlog.btnToggleBlogDetails.text = if (isCollapsed) "▶" else "▼"
         }
 
-        binding.btnSelectBlogImages.setOnClickListener {
+        binding.cardBlog.btnSelectBlogImages.setOnClickListener {
             try {
                 blogImagesPickerLauncher.launch("image/*")
             } catch (e: Exception) {
@@ -5271,19 +5271,19 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        binding.btnResetBlogImages.setOnClickListener {
+        binding.cardBlog.btnResetBlogImages.setOnClickListener {
             selectedBlogFiles.clear()
-            binding.tvBlogSelectedImagesCount.text = "첨부된 사진: 0장 (선택 시 1600px 85% 자동 압축)"
-            binding.btnResetBlogImages.visibility = View.GONE
+            binding.cardBlog.tvBlogSelectedImagesCount.text = "첨부된 사진: 0장 (선택 시 1600px 85% 자동 압축)"
+            binding.cardBlog.btnResetBlogImages.visibility = View.GONE
             Toast.makeText(this, "사진 첨부가 취소되었습니다.", Toast.LENGTH_SHORT).show()
         }
 
-        binding.btnStartBlogAutomation.setOnClickListener {
-            val topic = binding.etBlogTopic.text.toString().trim()
-            val keywords = binding.etBlogKeywords.text.toString().trim()
-            val refUrl1 = binding.etBlogRefUrl1.text.toString().trim()
-            val refUrl2 = binding.etBlogRefUrl2.text.toString().trim()
-            val refUrl3 = binding.etBlogRefUrl3.text.toString().trim()
+        binding.cardBlog.btnStartBlogAutomation.setOnClickListener {
+            val topic = binding.cardBlog.etBlogTopic.text.toString().trim()
+            val keywords = binding.cardBlog.etBlogKeywords.text.toString().trim()
+            val refUrl1 = binding.cardBlog.etBlogRefUrl1.text.toString().trim()
+            val refUrl2 = binding.cardBlog.etBlogRefUrl2.text.toString().trim()
+            val refUrl3 = binding.cardBlog.etBlogRefUrl3.text.toString().trim()
 
             if (topic.isBlank()) {
                 Toast.makeText(this, "포스팅 주제를 입력해 주세요.", Toast.LENGTH_SHORT).show()
@@ -5296,11 +5296,11 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            binding.pbBlogLoading.visibility = View.VISIBLE
-            binding.tvBlogStatus.visibility = View.VISIBLE
-            binding.tvBlogStatus.text = "AI가 참고 글을 스크래핑하고 네이버 블로그 원고를 집필 중입니다..."
-            binding.btnStartBlogAutomation.isEnabled = false
-            binding.layoutBlogResultContainer.visibility = View.GONE
+            binding.cardBlog.pbBlogLoading.visibility = View.VISIBLE
+            binding.cardBlog.tvBlogStatus.visibility = View.VISIBLE
+            binding.cardBlog.tvBlogStatus.text = "AI가 참고 글을 스크래핑하고 네이버 블로그 원고를 집필 중입니다..."
+            binding.cardBlog.btnStartBlogAutomation.isEnabled = false
+            binding.cardBlog.layoutBlogResultContainer.visibility = View.GONE
 
             lifecycleScope.launch {
                 try {
@@ -5314,18 +5314,18 @@ class MainActivity : AppCompatActivity() {
                         userEmail = userEmail
                     )
 
-                    binding.pbBlogLoading.visibility = View.GONE
-                    binding.tvBlogStatus.visibility = View.GONE
-                    binding.btnStartBlogAutomation.isEnabled = true
+                    binding.cardBlog.pbBlogLoading.visibility = View.GONE
+                    binding.cardBlog.tvBlogStatus.visibility = View.GONE
+                    binding.cardBlog.btnStartBlogAutomation.isEnabled = true
 
                     if (result.success) {
-                        binding.layoutBlogResultContainer.visibility = View.VISIBLE
-                        binding.tvBlogResultTitle.text = "✍️ [원고 완성] ${result.title} (${result.charCount}자)"
-                        binding.tvBlogResultSummary.text = result.summary
+                        binding.cardBlog.layoutBlogResultContainer.visibility = View.VISIBLE
+                        binding.cardBlog.tvBlogResultTitle.text = "✍️ [원고 완성] ${result.title} (${result.charCount}자)"
+                        binding.cardBlog.tvBlogResultSummary.text = result.summary
 
                         if (result.reportUrl.isNotBlank()) {
-                            binding.btnOpenBlogViewer.visibility = View.VISIBLE
-                            binding.btnOpenBlogViewer.setOnClickListener {
+                            binding.cardBlog.btnOpenBlogViewer.visibility = View.VISIBLE
+                            binding.cardBlog.btnOpenBlogViewer.setOnClickListener {
                                 try {
                                     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.reportUrl)))
                                 } catch (e: Exception) {
@@ -5333,12 +5333,12 @@ class MainActivity : AppCompatActivity() {
                                 }
                             }
                         } else {
-                            binding.btnOpenBlogViewer.visibility = View.GONE
+                            binding.cardBlog.btnOpenBlogViewer.visibility = View.GONE
                         }
 
                         if (result.sheetUrl.isNotBlank()) {
-                            binding.btnOpenBlogSheet.visibility = View.VISIBLE
-                            binding.btnOpenBlogSheet.setOnClickListener {
+                            binding.cardBlog.btnOpenBlogSheet.visibility = View.VISIBLE
+                            binding.cardBlog.btnOpenBlogSheet.setOnClickListener {
                                 try {
                                     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.sheetUrl)))
                                 } catch (e: Exception) {
@@ -5346,11 +5346,11 @@ class MainActivity : AppCompatActivity() {
                                 }
                             }
                         } else {
-                            binding.btnOpenBlogSheet.visibility = View.GONE
+                            binding.cardBlog.btnOpenBlogSheet.visibility = View.GONE
                         }
 
-                        binding.btnOpenNaverWrite.visibility = View.VISIBLE
-                        binding.btnOpenNaverWrite.setOnClickListener {
+                        binding.cardBlog.btnOpenNaverWrite.visibility = View.VISIBLE
+                        binding.cardBlog.btnOpenNaverWrite.setOnClickListener {
                             try {
                                 val targetUrl = if (result.naverPostUrl.isNotBlank()) result.naverPostUrl else "https://blog.naver.com/GoBlogWrite.naver"
                                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)))
@@ -5364,9 +5364,9 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this@MainActivity, "작성 실패: ${result.error ?: "오류 발생"}", Toast.LENGTH_LONG).show()
                     }
                 } catch (e: Exception) {
-                    binding.pbBlogLoading.visibility = View.GONE
-                    binding.tvBlogStatus.visibility = View.GONE
-                    binding.btnStartBlogAutomation.isEnabled = true
+                    binding.cardBlog.pbBlogLoading.visibility = View.GONE
+                    binding.cardBlog.tvBlogStatus.visibility = View.GONE
+                    binding.cardBlog.btnStartBlogAutomation.isEnabled = true
                     Toast.makeText(this@MainActivity, "블로그 원고 처리 오류: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
@@ -5426,8 +5426,8 @@ class MainActivity : AppCompatActivity() {
                 val totalKb = selectedInstaFiles.sumOf { it.length() } / 1024
 
                 withContext(Dispatchers.Main) {
-                    binding.tvInstaSelectedImagesCount.text = "📷 첨부된 사진: ${selectedInstaFiles.size}장 (${totalKb} KB)"
-                    binding.btnResetInstaImages.visibility = if (selectedInstaFiles.isNotEmpty()) View.VISIBLE else View.GONE
+                    binding.cardInsta.tvInstaSelectedImagesCount.text = "📷 첨부된 사진: ${selectedInstaFiles.size}장 (${totalKb} KB)"
+                    binding.cardInsta.btnResetInstaImages.visibility = if (selectedInstaFiles.isNotEmpty()) View.VISIBLE else View.GONE
                     Toast.makeText(this@MainActivity, "인스타 사진 ${selectedInstaFiles.size}장 최적화 압축 완료!", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
@@ -5443,13 +5443,13 @@ class MainActivity : AppCompatActivity() {
      */
     private fun setupInstagramAutomationCard() {
         var isCollapsed = false
-        binding.btnToggleInstaDetails.setOnClickListener {
+        binding.cardInsta.btnToggleInstaDetails.setOnClickListener {
             isCollapsed = !isCollapsed
-            binding.layoutInstaDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
-            binding.btnToggleInstaDetails.text = if (isCollapsed) "▶" else "▼"
+            binding.cardInsta.layoutInstaDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
+            binding.cardInsta.btnToggleInstaDetails.text = if (isCollapsed) "▶" else "▼"
         }
 
-        binding.btnSelectInstaImages.setOnClickListener {
+        binding.cardInsta.btnSelectInstaImages.setOnClickListener {
             try {
                 instaImagesPickerLauncher.launch("image/*")
             } catch (e: Exception) {
@@ -5457,20 +5457,20 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        binding.btnResetInstaImages.setOnClickListener {
+        binding.cardInsta.btnResetInstaImages.setOnClickListener {
             selectedInstaFiles.clear()
-            binding.tvInstaSelectedImagesCount.text = "첨부된 사진: 0장 (선택 시 1600px 85% 자동 압축)"
-            binding.btnResetInstaImages.visibility = View.GONE
+            binding.cardInsta.tvInstaSelectedImagesCount.text = "첨부된 사진: 0장 (선택 시 1600px 85% 자동 압축)"
+            binding.cardInsta.btnResetInstaImages.visibility = View.GONE
             Toast.makeText(this, "사진 첨부가 취소되었습니다.", Toast.LENGTH_SHORT).show()
         }
 
-        binding.btnStartInstaAutomation.setOnClickListener {
-            val topic = binding.etInstaTopic.text.toString().trim()
-            val keywords = binding.etInstaKeywords.text.toString().trim()
-            val tone = binding.etInstaTone.text.toString().trim().ifBlank { "감성 & 친근한 후기" }
-            val refUrl1 = binding.etInstaRefUrl1.text.toString().trim()
-            val refUrl2 = binding.etInstaRefUrl2.text.toString().trim()
-            val refUrl3 = binding.etInstaRefUrl3.text.toString().trim()
+        binding.cardInsta.btnStartInstaAutomation.setOnClickListener {
+            val topic = binding.cardInsta.etInstaTopic.text.toString().trim()
+            val keywords = binding.cardInsta.etInstaKeywords.text.toString().trim()
+            val tone = binding.cardInsta.etInstaTone.text.toString().trim().ifBlank { "감성 & 친근한 후기" }
+            val refUrl1 = binding.cardInsta.etInstaRefUrl1.text.toString().trim()
+            val refUrl2 = binding.cardInsta.etInstaRefUrl2.text.toString().trim()
+            val refUrl3 = binding.cardInsta.etInstaRefUrl3.text.toString().trim()
 
             if (topic.isBlank()) {
                 Toast.makeText(this, "포스팅 주제를 입력해 주세요.", Toast.LENGTH_SHORT).show()
@@ -5483,11 +5483,11 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            binding.pbInstaLoading.visibility = View.VISIBLE
-            binding.tvInstaStatus.visibility = View.VISIBLE
-            binding.tvInstaStatus.text = "AI가 인스타그램 훅 카피와 해시태그를 생성 중입니다..."
-            binding.btnStartInstaAutomation.isEnabled = false
-            binding.layoutInstaResultContainer.visibility = View.GONE
+            binding.cardInsta.pbInstaLoading.visibility = View.VISIBLE
+            binding.cardInsta.tvInstaStatus.visibility = View.VISIBLE
+            binding.cardInsta.tvInstaStatus.text = "AI가 인스타그램 훅 카피와 해시태그를 생성 중입니다..."
+            binding.cardInsta.btnStartInstaAutomation.isEnabled = false
+            binding.cardInsta.layoutInstaResultContainer.visibility = View.GONE
 
             lifecycleScope.launch {
                 try {
@@ -5502,19 +5502,19 @@ class MainActivity : AppCompatActivity() {
                         userEmail = userEmail
                     )
 
-                    binding.pbInstaLoading.visibility = View.GONE
-                    binding.tvInstaStatus.visibility = View.GONE
-                    binding.btnStartInstaAutomation.isEnabled = true
+                    binding.cardInsta.pbInstaLoading.visibility = View.GONE
+                    binding.cardInsta.tvInstaStatus.visibility = View.GONE
+                    binding.cardInsta.btnStartInstaAutomation.isEnabled = true
 
                     if (result.success) {
-                        binding.layoutInstaResultContainer.visibility = View.VISIBLE
-                        binding.tvInstaResultHook.text = "✨ ${result.hook}"
-                        binding.tvInstaResultCaption.text = result.caption
-                        binding.tvInstaResultHashtags.text = result.hashtags
+                        binding.cardInsta.layoutInstaResultContainer.visibility = View.VISIBLE
+                        binding.cardInsta.tvInstaResultHook.text = "✨ ${result.hook}"
+                        binding.cardInsta.tvInstaResultCaption.text = result.caption
+                        binding.cardInsta.tvInstaResultHashtags.text = result.hashtags
 
                         if (result.reportUrl.isNotBlank()) {
-                            binding.btnOpenInstaViewer.visibility = View.VISIBLE
-                            binding.btnOpenInstaViewer.setOnClickListener {
+                            binding.cardInsta.btnOpenInstaViewer.visibility = View.VISIBLE
+                            binding.cardInsta.btnOpenInstaViewer.setOnClickListener {
                                 try {
                                     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.reportUrl)))
                                 } catch (e: Exception) {
@@ -5522,12 +5522,12 @@ class MainActivity : AppCompatActivity() {
                                 }
                             }
                         } else {
-                            binding.btnOpenInstaViewer.visibility = View.GONE
+                            binding.cardInsta.btnOpenInstaViewer.visibility = View.GONE
                         }
 
                         if (result.sheetUrl.isNotBlank()) {
-                            binding.btnOpenInstaSheet.visibility = View.VISIBLE
-                            binding.btnOpenInstaSheet.setOnClickListener {
+                            binding.cardInsta.btnOpenInstaSheet.visibility = View.VISIBLE
+                            binding.cardInsta.btnOpenInstaSheet.setOnClickListener {
                                 try {
                                     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.sheetUrl)))
                                 } catch (e: Exception) {
@@ -5535,11 +5535,11 @@ class MainActivity : AppCompatActivity() {
                                 }
                             }
                         } else {
-                            binding.btnOpenInstaSheet.visibility = View.GONE
+                            binding.cardInsta.btnOpenInstaSheet.visibility = View.GONE
                         }
 
-                        binding.btnOpenInstagramApp.visibility = View.VISIBLE
-                        binding.btnOpenInstagramApp.setOnClickListener {
+                        binding.cardInsta.btnOpenInstagramApp.visibility = View.VISIBLE
+                        binding.cardInsta.btnOpenInstagramApp.setOnClickListener {
                             try {
                                 val launchIntent = packageManager.getLaunchIntentForPackage("com.instagram.android")
                                 if (launchIntent != null) {
@@ -5557,9 +5557,9 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this@MainActivity, "생성 실패: ${result.error ?: "오류 발생"}", Toast.LENGTH_LONG).show()
                     }
                 } catch (e: Exception) {
-                    binding.pbInstaLoading.visibility = View.GONE
-                    binding.tvInstaStatus.visibility = View.GONE
-                    binding.btnStartInstaAutomation.isEnabled = true
+                    binding.cardInsta.pbInstaLoading.visibility = View.GONE
+                    binding.cardInsta.tvInstaStatus.visibility = View.GONE
+                    binding.cardInsta.btnStartInstaAutomation.isEnabled = true
                     Toast.makeText(this@MainActivity, "인스타 피드 처리 오류: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
@@ -5618,8 +5618,8 @@ class MainActivity : AppCompatActivity() {
                 val totalKb = selectedSiteFiles.sumOf { it.length() } / 1024
 
                 withContext(Dispatchers.Main) {
-                    binding.tvSiteSelectedImagesCount.text = "📷 첨부된 사진: ${selectedSiteFiles.size}장 (${totalKb} KB)"
-                    binding.btnResetSiteImages.visibility = if (selectedSiteFiles.isNotEmpty()) View.VISIBLE else View.GONE
+                    binding.cardSite.tvSiteSelectedImagesCount.text = "📷 첨부된 사진: ${selectedSiteFiles.size}장 (${totalKb} KB)"
+                    binding.cardSite.btnResetSiteImages.visibility = if (selectedSiteFiles.isNotEmpty()) View.VISIBLE else View.GONE
                     Toast.makeText(this@MainActivity, "사진 ${selectedSiteFiles.size}장 최적화 압축 완료!", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
@@ -5635,13 +5635,13 @@ class MainActivity : AppCompatActivity() {
      */
     private fun setupMobileSiteCard() {
         var isCollapsed = false
-        binding.btnToggleSiteDetails.setOnClickListener {
+        binding.cardSite.btnToggleSiteDetails.setOnClickListener {
             isCollapsed = !isCollapsed
-            binding.layoutSiteDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
-            binding.btnToggleSiteDetails.text = if (isCollapsed) "▶" else "▼"
+            binding.cardSite.layoutSiteDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
+            binding.cardSite.btnToggleSiteDetails.text = if (isCollapsed) "▶" else "▼"
         }
 
-        binding.btnSelectSiteImages.setOnClickListener {
+        binding.cardSite.btnSelectSiteImages.setOnClickListener {
             try {
                 siteImagesPickerLauncher.launch("image/*")
             } catch (e: Exception) {
@@ -5649,19 +5649,19 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        binding.btnResetSiteImages.setOnClickListener {
+        binding.cardSite.btnResetSiteImages.setOnClickListener {
             selectedSiteFiles.clear()
-            binding.tvSiteSelectedImagesCount.text = "첨부된 사진: 0장 (선택 시 1600px 85% 자동 압축)"
-            binding.btnResetSiteImages.visibility = View.GONE
+            binding.cardSite.tvSiteSelectedImagesCount.text = "첨부된 사진: 0장 (선택 시 1600px 85% 자동 압축)"
+            binding.cardSite.btnResetSiteImages.visibility = View.GONE
             Toast.makeText(this, "사진 첨부가 취소되었습니다.", Toast.LENGTH_SHORT).show()
         }
 
-        binding.btnStartSiteCreation.setOnClickListener {
-            val title = binding.etSiteTitle.text.toString().trim()
-            val category = binding.etSiteCategory.text.toString().trim().ifBlank { "카페 / 베이커리" }
-            val phone = binding.etSitePhone.text.toString().trim()
-            val address = binding.etSiteAddress.text.toString().trim()
-            val businessHours = binding.etSiteHours.text.toString().trim().ifBlank { "매일 10:00 ~ 22:00" }
+        binding.cardSite.btnStartSiteCreation.setOnClickListener {
+            val title = binding.cardSite.etSiteTitle.text.toString().trim()
+            val category = binding.cardSite.etSiteCategory.text.toString().trim().ifBlank { "카페 / 베이커리" }
+            val phone = binding.cardSite.etSitePhone.text.toString().trim()
+            val address = binding.cardSite.etSiteAddress.text.toString().trim()
+            val businessHours = binding.cardSite.etSiteHours.text.toString().trim().ifBlank { "매일 10:00 ~ 22:00" }
 
             if (title.isBlank()) {
                 Toast.makeText(this, "상호명(홈페이지 이름)을 입력해 주세요.", Toast.LENGTH_SHORT).show()
@@ -5674,11 +5674,11 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            binding.pbSiteLoading.visibility = View.VISIBLE
-            binding.tvSiteStatus.visibility = View.VISIBLE
-            binding.tvSiteStatus.text = "AI가 브랜드 스토리와 메뉴 구성을 기획하고 웹사이트를 발행 중입니다..."
-            binding.btnStartSiteCreation.isEnabled = false
-            binding.layoutSiteResultContainer.visibility = View.GONE
+            binding.cardSite.pbSiteLoading.visibility = View.VISIBLE
+            binding.cardSite.tvSiteStatus.visibility = View.VISIBLE
+            binding.cardSite.tvSiteStatus.text = "AI가 브랜드 스토리와 메뉴 구성을 기획하고 웹사이트를 발행 중입니다..."
+            binding.cardSite.btnStartSiteCreation.isEnabled = false
+            binding.cardSite.layoutSiteResultContainer.visibility = View.GONE
 
             activityScope.launch(Dispatchers.IO) {
                 try {
@@ -5694,18 +5694,18 @@ class MainActivity : AppCompatActivity() {
                     )
 
                     withContext(Dispatchers.Main) {
-                        binding.pbSiteLoading.visibility = View.GONE
-                        binding.tvSiteStatus.visibility = View.GONE
-                        binding.btnStartSiteCreation.isEnabled = true
+                        binding.cardSite.pbSiteLoading.visibility = View.GONE
+                        binding.cardSite.tvSiteStatus.visibility = View.GONE
+                        binding.cardSite.btnStartSiteCreation.isEnabled = true
 
                         if (result.success) {
-                            binding.layoutSiteResultContainer.visibility = View.VISIBLE
-                            binding.tvSiteResultTitle.text = "🎉 ${result.title} - ${result.slogan}"
-                            binding.tvSiteResultUrl.text = result.siteUrl
+                            binding.cardSite.layoutSiteResultContainer.visibility = View.VISIBLE
+                            binding.cardSite.tvSiteResultTitle.text = "🎉 ${result.title} - ${result.slogan}"
+                            binding.cardSite.tvSiteResultUrl.text = result.siteUrl
 
                             if (result.siteUrl.isNotBlank()) {
-                                binding.btnOpenMobileSite.visibility = View.VISIBLE
-                                binding.btnOpenMobileSite.setOnClickListener {
+                                binding.cardSite.btnOpenMobileSite.visibility = View.VISIBLE
+                                binding.cardSite.btnOpenMobileSite.setOnClickListener {
                                     try {
                                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.siteUrl)))
                                     } catch (e: Exception) {
@@ -5713,8 +5713,8 @@ class MainActivity : AppCompatActivity() {
                                     }
                                 }
 
-                                binding.btnShareMobileSite.visibility = View.VISIBLE
-                                binding.btnShareMobileSite.setOnClickListener {
+                                binding.cardSite.btnShareMobileSite.visibility = View.VISIBLE
+                                binding.cardSite.btnShareMobileSite.setOnClickListener {
                                     try {
                                         val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                             type = "text/plain"
@@ -5727,13 +5727,13 @@ class MainActivity : AppCompatActivity() {
                                     }
                                 }
                             } else {
-                                binding.btnOpenMobileSite.visibility = View.GONE
-                                binding.btnShareMobileSite.visibility = View.GONE
+                                binding.cardSite.btnOpenMobileSite.visibility = View.GONE
+                                binding.cardSite.btnShareMobileSite.visibility = View.GONE
                             }
 
                             if (result.sheetUrl.isNotBlank()) {
-                                binding.btnOpenSiteSheet.visibility = View.VISIBLE
-                                binding.btnOpenSiteSheet.setOnClickListener {
+                                binding.cardSite.btnOpenSiteSheet.visibility = View.VISIBLE
+                                binding.cardSite.btnOpenSiteSheet.setOnClickListener {
                                     try {
                                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.sheetUrl)))
                                     } catch (e: Exception) {
@@ -5741,7 +5741,7 @@ class MainActivity : AppCompatActivity() {
                                     }
                                 }
                             } else {
-                                binding.btnOpenSiteSheet.visibility = View.GONE
+                                binding.cardSite.btnOpenSiteSheet.visibility = View.GONE
                             }
 
                             Toast.makeText(this@MainActivity, "🎉 10초 모바일 홈페이지 생성 완료!", Toast.LENGTH_LONG).show()
@@ -5751,9 +5751,9 @@ class MainActivity : AppCompatActivity() {
                     }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
-                        binding.pbSiteLoading.visibility = View.GONE
-                        binding.tvSiteStatus.visibility = View.GONE
-                        binding.btnStartSiteCreation.isEnabled = true
+                        binding.cardSite.pbSiteLoading.visibility = View.GONE
+                        binding.cardSite.tvSiteStatus.visibility = View.GONE
+                        binding.cardSite.btnStartSiteCreation.isEnabled = true
                         Toast.makeText(this@MainActivity, "홈페이지 생성 오류: ${e.message}", Toast.LENGTH_LONG).show()
                     }
                 }
