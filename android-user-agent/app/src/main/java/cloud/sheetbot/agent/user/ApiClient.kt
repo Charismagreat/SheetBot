@@ -2070,11 +2070,13 @@ object ApiClient {
 
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
                     val isEnrolled = resJson.optBoolean("isEnrolled", false)
+                    val status = resJson.optString("status", if (isEnrolled) "COMPLETED" else "IDLE")
                     val speakerObj = resJson.optJSONObject("speaker")
                     val speakerName = speakerObj?.optString("name", "본인") ?: if (isEnrolled) "본인" else null
                     return@withContext VoiceProfileResult(
                         success = true,
                         isEnrolled = isEnrolled,
+                        status = status,
                         speakerName = speakerName
                     )
                 } else {
@@ -2116,14 +2118,16 @@ object ApiClient {
                     .addHeader("x-sheetbot-user-email", userEmail)
                     .build()
 
-                val response = client.newCall(request).execute()
+                val response = longTimeoutClient.newCall(request).execute()
                 val resStr = response.body?.string() ?: ""
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
 
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val status = resJson.optString("status", "COMPLETED")
                     return@withContext VoiceProfileEnrollResult(
                         success = true,
-                        message = resJson.optString("message", "내 목소리가 성공적으로 등록되었습니다.")
+                        status = status,
+                        message = resJson.optString("message", "음성 샘플이 안전하게 접수되었습니다.")
                     )
                 } else {
                     lastError = resJson.optString("error", "HTTP ${response.code}")
@@ -2188,12 +2192,14 @@ data class TaskListResult(
 data class VoiceProfileResult(
     val success: Boolean,
     val isEnrolled: Boolean = false,
+    val status: String? = null,
     val speakerName: String? = null,
     val error: String? = null
 )
 
 data class VoiceProfileEnrollResult(
     val success: Boolean,
+    val status: String? = null,
     val message: String? = null,
     val error: String? = null
 )

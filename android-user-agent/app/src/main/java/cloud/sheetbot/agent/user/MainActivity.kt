@@ -4116,12 +4116,45 @@ class MainActivity : AppCompatActivity() {
                         binding.tvVoiceProfileStatus.setTextColor(Color.parseColor("#34D399"))
                         binding.btnRecordVoiceProfile.text = "🎙️ 내 목소리 다시 녹음"
                         binding.btnDeleteVoiceProfile.visibility = View.VISIBLE
+                    } else if (res.status == "PROCESSING") {
+                        binding.tvVoiceProfileStatus.text = "🟡 AI 성문 분석 중..."
+                        binding.tvVoiceProfileStatus.setTextColor(Color.parseColor("#F59E0B"))
+                        binding.btnRecordVoiceProfile.text = "🎙️ 내 목소리 5초 녹음 등록"
+                        binding.btnDeleteVoiceProfile.visibility = View.GONE
+                        startVoiceProfilePolling(email)
                     } else {
                         binding.tvVoiceProfileStatus.text = "미등록 (녹음 권장)"
                         binding.tvVoiceProfileStatus.setTextColor(Color.parseColor("#F59E0B"))
                         binding.btnRecordVoiceProfile.text = "🎙️ 내 목소리 5초 녹음 등록"
                         binding.btnDeleteVoiceProfile.visibility = View.GONE
                     }
+                }
+            }
+        }
+    }
+
+    private var voicePollingJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * 🎙️ 비동기 성문 분석 완료 대기 폴링 (6초 간격 최대 7회)
+     */
+    private fun startVoiceProfilePolling(email: String) {
+        voicePollingJob?.cancel()
+        voicePollingJob = activityScope.launch(Dispatchers.IO) {
+            for (attempt in 1..7) {
+                kotlinx.coroutines.delay(6000L)
+                val check = ApiClient.fetchVoiceProfile(email)
+                if (check.success && check.isEnrolled) {
+                    withContext(Dispatchers.Main) {
+                        if (!isFinishing && !isDestroyed) {
+                            binding.tvVoiceProfileStatus.text = "🟢 등록됨 (${check.speakerName ?: "본인"})"
+                            binding.tvVoiceProfileStatus.setTextColor(Color.parseColor("#34D399"))
+                            binding.btnRecordVoiceProfile.text = "🎙️ 내 목소리 다시 녹음"
+                            binding.btnDeleteVoiceProfile.visibility = View.VISIBLE
+                            Toast.makeText(this@MainActivity, "🎉 '내 목소리' 성문 등록이 완료되었습니다!", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    break
                 }
             }
         }
@@ -4304,9 +4337,11 @@ class MainActivity : AppCompatActivity() {
 
                     withContext(Dispatchers.Main) {
                         if (result.success) {
-                            Toast.makeText(this@MainActivity, "🎉 내 목소리(화자 프로필)가 성공적으로 등록되었습니다!", Toast.LENGTH_LONG).show()
+                            Toast.makeText(this@MainActivity, "🎉 음성이 접수되었습니다! AI가 성문을 분석하고 있습니다.", Toast.LENGTH_SHORT).show()
                             dialog.dismiss()
-                            refreshVoiceProfileStatus(email)
+                            binding.tvVoiceProfileStatus.text = "🟡 AI 성문 분석 중..."
+                            binding.tvVoiceProfileStatus.setTextColor(Color.parseColor("#F59E0B"))
+                            startVoiceProfilePolling(email)
                         } else {
                             btnUploadVoice.isEnabled = true
                             btnUploadVoice.text = "☁️ 내 목소리로 등록하기"
