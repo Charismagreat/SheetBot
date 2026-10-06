@@ -70,9 +70,14 @@ class PhoneCallReceiver : BroadcastReceiver() {
                 Log.w(TAG, "⏭️ [모바일 명함 발송 제외] 상대방 번호가 휴대전화가 아닙니다: $phoneNumber (유선/대표번호 자동 제외)")
                 onComplete?.invoke(false)
                 return
+            val prefs = PreferencesManager(context)
+            // 🛡️ 발송 제외 목록에 등록된 번호인 경우 발송 취소
+            if (prefs.isBusinessCardExcluded(phoneNumber)) {
+                Log.w(TAG, "⏭️ [모바일 명함 발송 제외] 발송 제외 목록에 등록된 번호입니다: $phoneNumber")
+                onComplete?.invoke(false)
+                return
             }
 
-            val prefs = PreferencesManager(context)
             val template = prefs.businessCardSmsTemplate.trim()
             val webLink = prefs.businessCardWebLink.trim()
             val finalMessage = if (webLink.isNotBlank() && !template.contains(webLink)) {
@@ -131,9 +136,14 @@ class PhoneCallReceiver : BroadcastReceiver() {
                 Log.w(TAG, "⏭️ [모바일 명함 발송 제외] 상대방 번호가 휴대전화가 아닙니다: $phoneNumber (유선/대표번호 자동 제외)")
                 onComplete?.invoke(false)
                 return
+            val prefs = PreferencesManager(context)
+            // 🛡️ 발송 제외 목록에 등록된 번호인 경우 발송 취소
+            if (prefs.isBusinessCardExcluded(phoneNumber)) {
+                Log.w(TAG, "⏭️ [모바일 명함 발송 제외] 발송 제외 목록에 등록된 번호입니다: $phoneNumber")
+                onComplete?.invoke(false)
+                return
             }
 
-            val prefs = PreferencesManager(context)
             val template = prefs.businessCardSmsTemplate.trim()
             val imagePath = prefs.businessCardImagePath
             val imageFile = if (imagePath.isNotBlank()) File(imagePath) else null
@@ -522,6 +532,12 @@ class PhoneCallReceiver : BroadcastReceiver() {
                 // 🛡️ 상대방 번호가 한국 휴대전화가 아닌 경우(유선전화, 대표번호, 인터넷전화 등) 모바일 명함 팝업 및 발송 제외
                 if (!ContactHelper.isMobilePhoneNumber(finalPhone)) {
                     Log.i(TAG, "⏭️ [통화 종료 명함 제외] 상대방 번호가 휴대전화가 아닙니다: $finalPhone (유선/대표번호 자동 제외)")
+                    return@launch
+                }
+
+                // 🛡️ 사용자가 발송 제외 목록에 등록한 번호인 경우 모바일 명함 팝업 및 발송 제외
+                if (prefs.isBusinessCardExcluded(finalPhone)) {
+                    Log.i(TAG, "⏭️ [통화 종료 명함 제외] 사용자가 발송 제외 목록에 등록한 번호입니다: $finalPhone")
                     return@launch
                 }
 

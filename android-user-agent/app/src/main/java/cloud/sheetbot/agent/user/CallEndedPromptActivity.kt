@@ -124,6 +124,26 @@ class CallEndedPromptActivity : Activity() {
             finish()
         }
 
+        // 🚫 이 번호는 앞으로 발송 제외 버튼 클릭
+        binding.btnExcludeThisNumber.setOnClickListener {
+            cancelCountdown()
+            prefs.addBusinessCardExcludedNumber(targetPhone)
+            val displayName = contactName ?: targetPhone
+            Toast.makeText(
+                this,
+                "🚫 [$displayName] 번호가 명함 발송 제외 목록에 등록되었습니다.",
+                Toast.LENGTH_LONG
+            ).show()
+
+            // 상단 알림 배너 닫기
+            try {
+                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                manager?.cancel(2001)
+            } catch (_: Exception) {}
+
+            finish()
+        }
+
         // 닫기 버튼들
         binding.btnDialogCloseTop.setOnClickListener {
             cancelCountdown()

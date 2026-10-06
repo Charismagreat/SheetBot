@@ -1384,6 +1384,8 @@ class MainActivity : AppCompatActivity() {
             showOpenSheetChooserDialog("CALL_ENDED_CARD", "[SheetBot] 모바일 명함 발송 대장")
         }
 
+        setupBusinessCardExcludedNumbersUI()
+
         // 🌐 내 웹사이트 실시간 장애 감시 (Uptime Sentinel) UI 바인딩
         setupWebsiteMonitorUI()
 
@@ -3083,6 +3085,62 @@ class MainActivity : AppCompatActivity() {
             prefs.businessCardSendMode = if (isWeb) "WEB_LINK" else "MMS_IMAGE"
         }
         renderBusinessCardImagePreview()
+        updateBusinessCardExcludedNumbersBadge()
+    }
+
+    /**
+     * 모바일 명함 발송 제외 번호 관리 다이얼로그 및 뱃지 바인딩
+     */
+    private fun setupBusinessCardExcludedNumbersUI() {
+        updateBusinessCardExcludedNumbersBadge()
+
+        binding.btnManageExcludedNumbers.setOnClickListener {
+            val excludedList = prefs.getBusinessCardExcludedNumbers().sorted()
+            if (excludedList.isEmpty()) {
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("🚫 모바일 명함 발송 제외 관리")
+                    .setMessage("현재 발송 제외로 등록된 번호가 없습니다.\n\n통화 종료 후 나타나는 명함 발송 팝업에서 [🚫 이 번호는 앞으로 발송 제외] 버튼을 누르면 해당 번호가 여기에 등록되어 앞으로 명함이 발송되지 않습니다.")
+                    .setPositiveButton("확인", null)
+                    .show()
+                return@setOnClickListener
+            }
+
+            val items = excludedList.map { "🚫 $it  (터치 시 제외 해제)" }.toTypedArray()
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("🚫 발송 제외 번호 (${excludedList.size}건)")
+                .setItems(items) { _, which ->
+                    val selectedPhone = excludedList[which]
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("제외 해제 확인")
+                        .setMessage("[$selectedPhone] 번호를 제외 목록에서 해제할까요?\n해제 시 향후 통화 종료 시 명함 발송 대상에 다시 포함됩니다.")
+                        .setPositiveButton("해제(복구)") { _, _ ->
+                            prefs.removeBusinessCardExcludedNumber(selectedPhone)
+                            updateBusinessCardExcludedNumbersBadge()
+                            Toast.makeText(this, "[$selectedPhone] 번호의 발송 제외가 해제되었습니다.", Toast.LENGTH_SHORT).show()
+                        }
+                        .setNegativeButton("취소", null)
+                        .show()
+                }
+                .setNeutralButton("전체 초기화") { _, _ ->
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("전체 초기화 확인")
+                        .setMessage("등록된 모든 발송 제외 번호를 초기화할까요?")
+                        .setPositiveButton("전체 초기화") { _, _ ->
+                            prefs.clearBusinessCardExcludedNumbers()
+                            updateBusinessCardExcludedNumbersBadge()
+                            Toast.makeText(this, "모든 발송 제외 번호가 초기화되었습니다.", Toast.LENGTH_SHORT).show()
+                        }
+                        .setNegativeButton("취소", null)
+                        .show()
+                }
+                .setPositiveButton("닫기", null)
+                .show()
+        }
+    }
+
+    private fun updateBusinessCardExcludedNumbersBadge() {
+        val count = prefs.businessCardExcludedCount
+        binding.btnManageExcludedNumbers.text = if (count > 0) "🚫 제외 관리 (${count}건)" else "🚫 발송 제외 관리"
     }
 
     /**

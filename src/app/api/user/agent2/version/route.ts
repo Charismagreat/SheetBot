@@ -41,10 +41,10 @@ export async function GET() {
     );
   }
 
-  let latestName = "2.1.91";
-  let latestCode = 112;
+  let latestName = "2.1.92";
+  let latestCode = 113;
   let apkUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";
-  let releaseNotes = "스마트 통합 할 일 허브(Task Hub), 통화 화면 플로팅 할 일, 모바일 표시 문구 직관화 및 상단 업데이트 알림 뱃지가 적용되었습니다.";
+  let releaseNotes = "통화 종료 모바일 명함 발송 팝업에서 특정 번호 발송 제외 옵션 및 메인 화면 발송 제외 번호 관리 기능이 탑재되었습니다.";
 
   try {
     const ghRes = await fetch("https://api.github.com/repos/Charismagreat/SheetBot/releases/latest", {

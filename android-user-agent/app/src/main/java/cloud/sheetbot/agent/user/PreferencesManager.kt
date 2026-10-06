@@ -320,6 +320,46 @@ class PreferencesManager(context: Context) {
             prefs.edit().putString("business_card_image_path", value).commit()
         }
 
+    // 모바일 명함 발송 제외 번호 목록 관리 (Set<String>)
+    fun getBusinessCardExcludedNumbers(): Set<String> {
+        return prefs.getStringSet("business_card_excluded_numbers", emptySet()) ?: emptySet()
+    }
+
+    fun isBusinessCardExcluded(phoneNumber: String): Boolean {
+        if (phoneNumber.isBlank()) return false
+        val normalized = phoneNumber.replace(Regex("[^0-9]"), "")
+        if (normalized.isBlank()) return false
+        val excludedSet = getBusinessCardExcludedNumbers()
+        return excludedSet.any { excluded ->
+            val normExcluded = excluded.replace(Regex("[^0-9]"), "")
+            normExcluded.isNotBlank() && (normExcluded == normalized || normExcluded == phoneNumber || excluded == phoneNumber)
+        }
+    }
+
+    fun addBusinessCardExcludedNumber(phoneNumber: String) {
+        val clean = phoneNumber.trim()
+        if (clean.isBlank()) return
+        val currentSet = prefs.getStringSet("business_card_excluded_numbers", emptySet())?.toMutableSet() ?: mutableSetOf()
+        currentSet.add(clean)
+        prefs.edit().putStringSet("business_card_excluded_numbers", currentSet).commit()
+    }
+
+    fun removeBusinessCardExcludedNumber(phoneNumber: String) {
+        val normalized = phoneNumber.replace(Regex("[^0-9]"), "")
+        val currentSet = prefs.getStringSet("business_card_excluded_numbers", emptySet())?.toMutableSet() ?: return
+        currentSet.removeAll { 
+            it.replace(Regex("[^0-9]"), "") == normalized || it == phoneNumber
+        }
+        prefs.edit().putStringSet("business_card_excluded_numbers", currentSet).commit()
+    }
+
+    fun clearBusinessCardExcludedNumbers() {
+        prefs.edit().remove("business_card_excluded_numbers").commit()
+    }
+
+    val businessCardExcludedCount: Int
+        get() = getBusinessCardExcludedNumbers().size
+
     // 웹사이트 실시간 다운타임 모니터링 (Uptime Sentinel) 설정
     var isWebsiteMonitorEnabled: Boolean
         get() = prefs.getBoolean("is_website_monitor_enabled", false)
