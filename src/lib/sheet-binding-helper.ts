@@ -15,6 +15,8 @@ export type SheetBindingType =
   | "KAKAO"
   | "MISSED_CALL"
   | "RECORDING"
+  | "MEETING"
+  | "COMPANY_RESEARCH"
   | "FILE_UPLOAD"
   | "RECEIPT"
   | "BUSINESS_CARD"

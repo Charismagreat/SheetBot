@@ -113,7 +113,7 @@ export async function processPendingBatchJobs(): Promise<{
           if (spreadsheetId) {
             const guardRes = await resolveSafeTargetRow({
               spreadsheetId,
-              expectedRow: rowIndex > 1 ? rowIndex : undefined,
+              expectedRow: rowIndex > 1 ? rowIndex : 2,
               fileName,
             });
 
@@ -275,6 +275,88 @@ export async function processPendingBatchJobs(): Promise<{
               totalTokens: usedTokens,
               promptText: `비동기 수거 링크 분석: ${fileName}`,
               responseText: finalSummary,
+            });
+          } else if (jobType === 'MEETING') {
+            // [MEETING] 회의록 대장 수거 (B: 회의명/주제, C: 참석자, F: 3줄 요약, G: 결정사항/Action Items, H: 화자별 전사록)
+            let meetingTitle = '회의록';
+            let participants = '본인, 참석자';
+            let summary = '1. 회의 안건 확인\n2. 주요 논의 진행\n3. 후속 과제 도출';
+            let actionItems = '• 담당자 확인 필요';
+            let transcript = '회의 음성 분석 완료';
+
+            try {
+              const parsed = JSON.parse(rawText);
+              if (parsed.title) meetingTitle = parsed.title;
+              if (parsed.topic) meetingTitle = parsed.topic;
+              if (parsed.participants) {
+                participants = Array.isArray(parsed.participants)
+                  ? parsed.participants.join(', ')
+                  : String(parsed.participants);
+              }
+              if (parsed.summary) summary = parsed.summary;
+              if (parsed.actionItems) actionItems = parsed.actionItems;
+              if (parsed.transcript) transcript = parsed.transcript;
+            } catch {
+              if (rawText.length > 0) {
+                summary = rawText.slice(0, 300);
+                transcript = rawText;
+              }
+            }
+
+            if (spreadsheetId && targetRow && targetRow > 1) {
+              // B~C열 (회의명, 참석자) 갱신
+              await callSheetsTool('sheets_update_range', {
+                spreadsheetId,
+                range: `시트1!B${targetRow}:C${targetRow}`,
+                values: [[meetingTitle, participants]],
+                preferOAuth: true,
+              }).catch((err: any) => console.warn(`[BatchSweeper] Meeting B:C update warning: ${err.message}`));
+
+              // F~H열 (요약, Action Items, 상세 회의록) 갱신
+              await callSheetsTool('sheets_update_range', {
+                spreadsheetId,
+                range: `시트1!F${targetRow}:H${targetRow}`,
+                values: [[summary, actionItems, transcript]],
+                preferOAuth: true,
+              }).catch((err: any) => console.warn(`[BatchSweeper] Meeting F:H update warning: ${err.message}`));
+            }
+
+            // [스마트 통합 할 일 허브 (Task Hub) 연동]
+            try {
+              const parsedTasks = parseActionItems(actionItems);
+              for (const task of parsedTasks) {
+                await createTaskItem({
+                  userEmail,
+                  sourceType: "MEETING_RECORDING",
+                  sourceRef: fileName,
+                  contactName: meetingTitle,
+                  taskTitle: task.title,
+                  dueDate: task.dueDate,
+                  priority: task.priority,
+                  badgeText: "회의록",
+                }).catch((e: any) => console.warn("[BatchSweeper] createTaskItem error:", e.message));
+              }
+            } catch (taskErr: any) {
+              console.warn("[BatchSweeper] Meeting Task Hub integration error:", taskErr.message);
+            }
+
+            const promptLen = 5000;
+            const respLen = rawText.length;
+            const rawTokens = Math.max(1000, Math.ceil((promptLen + respLen) / 2.5) + 600);
+            const usedTokens = Math.round(rawTokens * 0.5); // 50% 배치 할인
+
+            await deductTokens(userEmail, usedTokens).catch(() => {});
+
+            void recordAiUsageLog({
+              userEmail,
+              caller: 'sheetbot-meeting-batch-sweeper',
+              purpose: `회의 녹음 AI 회의록 정리 및 Action Items [AI 배치(50% 절감)] (${targetModel} / 0.5x)`,
+              model: targetModel,
+              promptTokens: Math.ceil(promptLen / 2.5),
+              completionTokens: Math.ceil(respLen / 2.5),
+              totalTokens: usedTokens,
+              promptText: `비동기 수거 회의 음성 분석: ${fileName}`,
+              responseText: summary,
             });
           } else {
             // [RECORDING] 통화 녹음 대장 수거 (E: 요약, F: Action Items, G: 전사문)

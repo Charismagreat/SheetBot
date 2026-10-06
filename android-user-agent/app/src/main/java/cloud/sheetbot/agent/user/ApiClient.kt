@@ -789,6 +789,134 @@ object ApiClient {
     }
 
     /**
+     * 스마트폰 회의 녹음 파일 구글 드라이브 및 [SheetBot] 회의록 대장 자동 업로드
+     */
+    suspend fun uploadMeetingRecording(
+        file: File,
+        fileName: String,
+        topic: String,
+        meetingTime: String,
+        userEmail: String,
+        folderName: String = "[SheetBot] 회의 녹음"
+    ): UploadRecordingResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val fileBytes = file.readBytes()
+        val base64Str = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)
+
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("fileName", fileName)
+            put("topic", topic)
+            put("meetingTime", meetingTime)
+            put("folderName", folderName)
+            put("fileBase64", base64Str)
+        }
+        val requestBody = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        var lastErr = "회의 녹음 구글 드라이브 업로드 실패"
+        for (host in hosts) {
+            val endpoint = "$host/api/user/meetings/upload"
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(requestBody)
+                    .build()
+                val response = longTimeoutClient.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    Log.i(TAG, "🎉 [회의 녹음 업로드 성공] $fileName -> $folderName")
+                    return@withContext UploadRecordingResult(
+                        success = true,
+                        fileId = resJson.optString("fileId").takeIf { it.isNotBlank() },
+                        fileName = resJson.optString("fileName", fileName),
+                        webViewLink = resJson.optString("webViewLink").takeIf { it.isNotBlank() },
+                        spreadsheetUrl = resJson.optString("spreadsheetUrl").takeIf { it.isNotBlank() }
+                    )
+                } else {
+                    val msg = resJson.optString("error", "HTTP ${response.code}")
+                    lastErr = "$host: $msg"
+                    Log.w(TAG, "회의 녹음 업로드 실패 ($host): $msg")
+                }
+            } catch (e: Exception) {
+                lastErr = "$host: ${e.message}"
+                Log.w(TAG, "회의 녹음 업로드 통신 예외 ($host): ${e.message}")
+            }
+        }
+        UploadRecordingResult(success = false, error = lastErr)
+    }
+
+    data class CompanyResearchResult(
+        val success: Boolean,
+        val companyName: String = "",
+        val domain: String = "",
+        val businessNumber: String = "",
+        val docUrl: String = "",
+        val sheetUrl: String = "",
+        val taxStatus: String = "",
+        val employeeCount: String = "",
+        val avgSalary: String = "",
+        val contractSummary: String = "",
+        val grantsSummary: String = "",
+        val summary: String = "",
+        val error: String? = null
+    )
+
+    /**
+     * 기업 심층 리서치 및 구글 리서치 보고서 문서화 요청
+     */
+    suspend fun requestCompanyResearch(
+        companyName: String,
+        domain: String,
+        userEmail: String
+    ): CompanyResearchResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("companyName", companyName)
+            put("domain", domain)
+        }
+        val requestBody = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+        var lastErr = "기업 리서치 요청 실패"
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/company-research"
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(requestBody)
+                    .build()
+                val response = longTimeoutClient.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext CompanyResearchResult(
+                        success = true,
+                        companyName = resJson.optString("companyName", companyName),
+                        domain = resJson.optString("domain", domain),
+                        businessNumber = resJson.optString("businessNumber", ""),
+                        docUrl = resJson.optString("docUrl", ""),
+                        sheetUrl = resJson.optString("sheetUrl", ""),
+                        taxStatus = resJson.optString("taxStatus", "-"),
+                        employeeCount = resJson.optString("employeeCount", "-"),
+                        avgSalary = resJson.optString("avgSalary", "-"),
+                        contractSummary = resJson.optString("contractSummary", "-"),
+                        grantsSummary = resJson.optString("grantsSummary", "-"),
+                        summary = resJson.optString("summary", "")
+                    )
+                } else {
+                    val msg = resJson.optString("error", "HTTP ${response.code}")
+                    lastErr = "$host: $msg"
+                }
+            } catch (e: Exception) {
+                lastErr = "$host: ${e.message}"
+            }
+        }
+        CompanyResearchResult(success = false, error = lastErr)
+    }
+
+    /**
      * 사진 및 일반 파일 구글 드라이브 및 [SheetBot] 파일 업로드 대장 시트 업로드 (AI OCR 지원)
      */
     suspend fun uploadGenericFile(

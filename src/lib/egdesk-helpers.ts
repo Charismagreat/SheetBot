@@ -301,6 +301,48 @@ export async function callVisitorWorkspaceTool(
   }
 }
 
+/**
+ * 이지데스크 표준 Company Research MCP 도구 호출 함수
+ * http://localhost:8080/company-research/tools/call 경유
+ * 2중 언래핑 안전 적용
+ */
+export async function callCompanyResearchTool(
+  toolName: string,
+  args: Record<string, any> = {}
+): Promise<any> {
+  const apiUrl = getServerEgdeskApiUrl();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Api-Key': 'a67ddc0f-7e2b-4997-9a0b-9667a74c89d0',
+  };
+
+  const response = await fetch(`${apiUrl}/company-research/tools/call`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      tool: toolName,
+      arguments: args,
+    }),
+  });
+
+  const json = await response.json().catch(() => null);
+  if (!response.ok || !json) {
+    const errorDetail = json?.error || json?.message || response.statusText;
+    throw new Error(`Company Research 도구 호출 실패 (HTTP ${response.status}): ${errorDetail}`);
+  }
+
+  const textContent = json.result?.content?.[0]?.text;
+  if (!textContent) {
+    return json.result || json;
+  }
+
+  try {
+    return JSON.parse(textContent);
+  } catch {
+    return textContent;
+  }
+}
+
 export interface BizinfoGrantItem {
   id: string;
   title: string;

@@ -14,7 +14,7 @@ export interface TaskItemInput {
   title?: string;
   taskTitle?: string;
   description?: string;
-  sourceType: "CALL_RECORDING" | "MISSED_CALL" | "ORDER_DELAY" | "ORDER" | "KAKAO" | "SMS";
+  sourceType: "CALL_RECORDING" | "MEETING_RECORDING" | "MISSED_CALL" | "ORDER_DELAY" | "ORDER" | "KAKAO" | "SMS";
   sourceId?: string;
   sourceRef?: string;
   contactName?: string;
