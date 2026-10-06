@@ -1154,6 +1154,7 @@
                     android:text="📁 녹음 파일 직접 업로드"
                     android:textColor="#FFFFFF"
                     android:textSize="11.5sp" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- 독립 카드: 회의 녹음 자동 회의록 (음성 녹음기 감지 및 [SheetBot] 회의록 대장) -->
