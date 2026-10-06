@@ -612,6 +612,8 @@ object CallRecordingManager {
                 return true
             }
         }
+        return false
+    }
 
     /**
      * 오디오 파일의 채널 수(1: Mono, 2: Stereo) 감지
