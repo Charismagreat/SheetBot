@@ -5,6 +5,7 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -912,6 +913,7 @@ object ApiClient {
             } catch (e: Exception) {
                 lastErr = "$host: ${e.message}"
             }
+        }
         CompanyResearchResult(success = false, error = lastErr)
     }
 
