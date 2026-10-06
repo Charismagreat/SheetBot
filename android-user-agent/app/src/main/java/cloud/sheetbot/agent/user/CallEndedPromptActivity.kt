@@ -105,6 +105,9 @@ class CallEndedPromptActivity : Activity() {
             binding.ivDialogImagePreview.visibility = View.GONE
         }
 
+        // 📌 고객 관련 미완료 할 일 조회 및 바인딩
+        loadCustomerPendingTasks(prefs.userEmail)
+
         // 발송 버튼 클릭
         binding.btnSendBusinessCardNow.setOnClickListener {
             cancelCountdown()
@@ -125,6 +128,50 @@ class CallEndedPromptActivity : Activity() {
         binding.tvAutoCloseTimer.setOnClickListener {
             cancelCountdown()
             finish()
+        }
+    }
+
+    private fun loadCustomerPendingTasks(userEmail: String?) {
+        if (userEmail.isNullOrBlank() || targetPhone.isBlank()) return
+
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            val result = ApiClient.fetchCallSummary(userEmail, targetPhone)
+            val firstTask = result.pendingTasks.firstOrNull()
+
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                if (isFinishing || isDestroyed) return@withContext
+
+                if (firstTask != null) {
+                    binding.llCustomerTaskContainer.visibility = View.VISIBLE
+                    val dueText = if (!firstTask.dueDate.isNullOrBlank()) " (${firstTask.dueDate})" else ""
+                    val badge = if (!firstTask.badgeText.isNullOrBlank()) "[${firstTask.badgeText}] " else ""
+                    binding.tvCallEndedTaskTitle.text = "$badge${firstTask.title}$dueText"
+
+                    binding.btnMarkTaskDone.setOnClickListener {
+                        binding.btnMarkTaskDone.isEnabled = false
+                        binding.btnMarkTaskDone.text = "처리 중..."
+
+                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                            val success = ApiClient.toggleTaskStatus(userEmail, firstTask.id, "DONE")
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                if (success) {
+                                    binding.tvCallEndedTaskTitle.paintFlags =
+                                        binding.tvCallEndedTaskTitle.paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
+                                    binding.tvCallEndedTaskTitle.setTextColor(android.graphics.Color.GRAY)
+                                    binding.btnMarkTaskDone.text = "✓ 완료됨"
+                                    Toast.makeText(this@CallEndedPromptActivity, "🎉 할 일이 완료 처리되었습니다!", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    binding.btnMarkTaskDone.isEnabled = true
+                                    binding.btnMarkTaskDone.text = "✓ 완료 처리"
+                                    Toast.makeText(this@CallEndedPromptActivity, "완료 처리에 실패했습니다.", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    binding.llCustomerTaskContainer.visibility = View.GONE
+                }
+            }
         }
     }
 

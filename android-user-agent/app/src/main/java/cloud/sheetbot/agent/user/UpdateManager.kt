@@ -75,6 +75,46 @@ object UpdateManager {
         }
     }
 
+    /**
+     * 팝업을 띄우지 않고 조용히 업데이트 존재 여부만 감지 (상단 버전 뱃지 표시용)
+     */
+    fun checkUpdateSilently(activity: Activity, onResult: (hasUpdate: Boolean, latestVerName: String) -> Unit) {
+        CoroutineScope(Dispatchers.IO).launch {
+            val versionInfo = ApiClient.fetchLatestVersion()
+            val currentPackageInfo = try {
+                activity.packageManager.getPackageInfo(activity.packageName, 0)
+            } catch (_: Exception) {
+                null
+            }
+            val currentVersionCode = try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    currentPackageInfo?.longVersionCode?.toInt() ?: 1
+                } else {
+                    @Suppress("DEPRECATION")
+                    currentPackageInfo?.versionCode ?: 1
+                }
+            } catch (_: Exception) {
+                1
+            }
+            val currentVersionName = currentPackageInfo?.versionName ?: "1.0.0"
+
+            withContext(Dispatchers.Main) {
+                if (activity.isFinishing || activity.isDestroyed) return@withContext
+
+                val normRemote = normalizeVersion(versionInfo?.latestVersionName ?: "")
+                val normLocal = normalizeVersion(currentVersionName)
+                val isSameVersion = normRemote.isNotBlank() && normRemote == normLocal
+                val isNewer = isNewerVersion(normRemote, normLocal)
+
+                val hasUpdate = versionInfo != null && !isSameVersion && (
+                    isNewer || (versionInfo.latestVersionCode > currentVersionCode && versionInfo.latestVersionCode < 1000)
+                )
+
+                onResult(hasUpdate, normRemote.ifBlank { normLocal })
+            }
+        }
+    }
+
     private fun normalizeVersion(ver: String): String {
         return ver.replace(Regex("^(user-)?v?", RegexOption.IGNORE_CASE), "").trim()
     }

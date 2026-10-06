@@ -552,6 +552,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // 4-2. 📋 스마트 통합 할 일 허브 전용 화면 열기 (옵션 B)
+        binding.btnOpenTasksHub.setOnClickListener {
+            val intent = Intent(this, TasksActivity::class.java)
+            startActivity(intent)
+        }
+
         // 5. 계정 삭제 버튼 (화면 최하단 Danger Zone)
         binding.btnUnlink.setOnClickListener {
             AlertDialog.Builder(this)
@@ -1186,6 +1192,10 @@ class MainActivity : AppCompatActivity() {
             UpdateManager.checkForUpdates(this, showToastIfLatest = true)
         }
 
+        binding.tvAppVersionBadge.setOnClickListener {
+            UpdateManager.checkForUpdates(this, showToastIfLatest = true)
+        }
+
         // 8. AOD 올웨이즈 블랙 모드 진입 및 더블 탭 제스처
         aodGestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
@@ -1520,6 +1530,7 @@ class MainActivity : AppCompatActivity() {
             binding.layoutUnpairedControls.visibility = View.GONE
             checkServerAndQueueStatus(showToast = false)
             loadWalletBalance(email)
+            refreshTasksBadge(email)
         } else {
             binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
             binding.tvStatusTitle.text = "⚠️ 미연동 상태"
@@ -1529,6 +1540,28 @@ class MainActivity : AppCompatActivity() {
             binding.layoutUnlinkZone.visibility = View.GONE
             binding.layoutWalletCard.visibility = View.GONE
             binding.layoutUnpairedControls.visibility = View.VISIBLE
+        }
+
+        checkAppUpdateBadge()
+    }
+
+    /**
+     * 상단 우측 앱 버전 뱃지의 업데이트 감지 및 시각적 알림 표시 (v2.1.20)
+     */
+    private fun checkAppUpdateBadge() {
+        UpdateManager.checkUpdateSilently(this) { hasUpdate, _ ->
+            if (!isFinishing && !isDestroyed) {
+                val verName = getAppVersionName()
+                if (hasUpdate) {
+                    binding.tvAppVersionBadge.text = "v$verName (UPDATE 🔴)"
+                    binding.tvAppVersionBadge.setBackgroundResource(R.drawable.bg_badge_version_update)
+                    binding.tvAppVersionBadge.setTextColor(Color.parseColor("#FCA5A5"))
+                } else {
+                    binding.tvAppVersionBadge.text = "v$verName"
+                    binding.tvAppVersionBadge.setBackgroundResource(R.drawable.bg_badge_version)
+                    binding.tvAppVersionBadge.setTextColor(Color.parseColor("#10B981"))
+                }
+            }
         }
     }
 
@@ -1559,6 +1592,29 @@ class MainActivity : AppCompatActivity() {
             } else {
                 if (isManualRefresh) {
                     Toast.makeText(this@MainActivity, "잔액 조회 실패: ${result.error}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    /**
+     * 📋 스마트 통합 할 일 허브 실시간 미완료 과업 뱃지 갱신 (옵션 B)
+     */
+    private fun refreshTasksBadge(userEmail: String) {
+        activityScope.launch(Dispatchers.IO) {
+            val result = ApiClient.fetchTasks(userEmail, "PENDING")
+            withContext(Dispatchers.Main) {
+                if (!isFinishing && !isDestroyed && result.success) {
+                    val count = result.pendingCount
+                    if (count > 0) {
+                        binding.tvTasksHubBadge.text = "대기 $count건 ›"
+                        binding.tvTasksHubBadge.setBackgroundColor(Color.parseColor("#B45309")) // Amber
+                        binding.tvTasksHubSubtitle.text = "현재 진행해야 할 후속 과업이 ${count}건 있습니다."
+                    } else {
+                        binding.tvTasksHubBadge.text = "완료됨 ✓"
+                        binding.tvTasksHubBadge.setBackgroundColor(Color.parseColor("#047857")) // Emerald
+                        binding.tvTasksHubSubtitle.text = "모든 후속 조치 및 할 일이 완료되었습니다."
+                    }
                 }
             }
         }

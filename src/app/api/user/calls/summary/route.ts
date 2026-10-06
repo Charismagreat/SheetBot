@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
-import { callSheetsTool } from "@/lib/egdesk-helpers";
+import { callSheetsTool, queryTable } from "@/lib/egdesk-helpers";
 
 interface CallSummaryCacheEntry {
   timestamp: number;
@@ -268,6 +268,44 @@ async function handleCallSummary(req: NextRequest) {
       console.warn("[CallSummary] Missed call sheet lookup warning:", e?.message);
     }
 
+    // 5. [TASK_HUB] sheetbot_tasks에서 해당 고객의 미완료 할 일(Action Items) 실시간 조회
+    let pendingTasks: any[] = [];
+    try {
+      const taskRes = await queryTable("sheetbot_tasks", {
+        filters: {
+          user_email: resolvedEmail,
+          status: "PENDING",
+        },
+        limit: 30,
+        orderBy: "id",
+        orderDirection: "DESC",
+      }).catch(() => ({ rows: [] }));
+
+      const allPending = (taskRes.rows || []).filter((t: any) => !t.deleted_at);
+      pendingTasks = allPending.filter((t: any) => {
+        const phone = (t.contact_phone || t.contact_name || "").replace(/\D/g, "");
+        if (phone && (phone.includes(cleanPhone) || cleanPhone.includes(phone) || (last8.length === 8 && phone.endsWith(last8)))) {
+          return true;
+        }
+        if (customerName && t.contact_name && t.contact_name.includes(customerName)) {
+          return true;
+        }
+        return false;
+      });
+
+      // 만약 시트에 기록된 actionItems가 비어있거나 구버전이라면, 최신 Task Hub의 할 일 목록으로 강화
+      if (pendingTasks.length > 0) {
+        const taskSummaries = pendingTasks.map((t: any) => {
+          const badge = t.badge_text ? `[${t.badge_text}] ` : "";
+          const due = t.due_date ? ` (${t.due_date})` : "";
+          return `📌 ${badge}${t.title}${due}`;
+        });
+        actionItems = taskSummaries.join("\n");
+      }
+    } catch (taskErr: any) {
+      console.warn("[CallSummary] Task Hub lookup warning:", taskErr.message);
+    }
+
     const responsePayload = {
       success: true,
       found: isFoundInSheet,
@@ -280,6 +318,14 @@ async function handleCallSummary(req: NextRequest) {
       lastCallTime: lastCallTime.trim(),
       lastCallSummary: lastCallSummary.trim(),
       actionItems: actionItems.trim(),
+      pendingTasks: pendingTasks.map((t: any) => ({
+        id: t.id,
+        title: t.title,
+        dueDate: t.due_date,
+        priority: t.priority,
+        badgeText: t.badge_text,
+        sourceType: t.source_type,
+      })),
       lastMissedCallTime: lastMissedCallTime.trim(),
       checkedAt: new Date().toISOString(),
     };

@@ -54,7 +54,7 @@ import {
   Bot, Plus, FileCode, Clock, Calendar, RefreshCw, CheckCircle2, AlertTriangle,
   X, ArrowRight, ExternalLink, Sparkles, Layers, ShieldCheck, Trash2, Smartphone, Edit3,
   Globe, Star, Coins, Activity, Cpu, Settings, FileSpreadsheet, Copy, Briefcase, Send,
-  KeyRound, LogOut
+  KeyRound, LogOut, CheckSquare
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import nextDynamic from "next/dynamic";
@@ -748,6 +748,16 @@ export default function DashboardPage() {
                 </span>
                 <RefreshCw className={`w-3 h-3 text-slate-400 group-hover:text-emerald-600 transition-colors shrink-0 ${loading ? "animate-spin text-emerald-600" : ""}`} />
               </button>
+
+              {/* 스마트 통합 할 일 허브 바로가기 */}
+              <Link
+                href="/tasks"
+                className="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/90 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-2xs whitespace-nowrap cursor-pointer"
+                data-easybot-hint="스마트 통합 할 일 허브: 통화 녹음, 부재중 전화, 주문 지연에서 추출된 모든 후속 과업을 한곳에서 관리합니다."
+              >
+                <CheckSquare className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>할 일 허브</span>
+              </Link>
 
               {/* 에이전트 API 키 */}
               <button

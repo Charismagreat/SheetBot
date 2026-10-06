@@ -21,6 +21,7 @@ import {
   X,
   Smartphone,
   Trash2,
+  CheckSquare,
 } from "lucide-react";
 import SheetBotLogo from "@/components/SheetBotLogo";
 import WithdrawModal from "@/components/WithdrawModal";
@@ -266,6 +267,21 @@ export default function Navbar() {
               >
                 <Bot className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                 <span>내 워크스페이스</span>
+              </Link>
+
+              {/* 스마트 통합 할 일 허브 바로가기 */}
+              <Link
+                href="/tasks"
+                prefetch={false}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all shadow-2xs whitespace-nowrap shrink-0 border ${
+                  pathname === "/tasks"
+                    ? "bg-emerald-600 text-white border-emerald-600"
+                    : "text-slate-700 bg-white hover:bg-slate-50 border-slate-200 hover:text-emerald-700"
+                }`}
+                data-easybot-hint="스마트 통합 할 일 허브: 통화 녹음, 부재중 전화, 간편 주문 지연 등 AI가 추출한 후속 업무를 한곳에서 관리합니다."
+              >
+                <CheckSquare className={`w-3.5 h-3.5 shrink-0 ${pathname === "/tasks" ? "text-white" : "text-emerald-600"}`} />
+                <span>할 일 허브</span>
               </Link>
 
               {isAdmin && (
@@ -555,6 +571,26 @@ export default function Navbar() {
                 <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                   Google 인증됨
                 </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <Link
+                  href="/dashboard"
+                  prefetch={false}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold hover:bg-emerald-100 transition-colors"
+                >
+                  <Bot className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>내 워크스페이스</span>
+                </Link>
+                <Link
+                  href="/tasks"
+                  prefetch={false}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors shadow-2xs"
+                >
+                  <CheckSquare className="w-3.5 h-3.5 text-white" />
+                  <span>할 일 허브</span>
+                </Link>
               </div>
               <div className="flex items-center gap-2 pt-1">
                 <button

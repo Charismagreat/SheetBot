@@ -12,6 +12,7 @@ import { deductTokens } from './token-wallet';
 import { recordAiUsageLog } from './ai-usage';
 import { getKoreanTimeString } from './date-utils';
 import { resolveSafeTargetRow } from './sheet-fingerprint-guard';
+import { createTaskItem, parseActionItems, autoResolveMissedCallTasks } from './task-hub-helper';
 
 function formatBusinessNumber(raw: any): string {
   if (!raw) return "미기재";
@@ -318,6 +319,38 @@ export async function processPendingBatchJobs(): Promise<{
                   }).catch(() => {});
                 }
               } catch {}
+            }
+
+            // [스마트 통합 할 일 허브 (Task Hub) 연동]
+            try {
+              let detectedContact = fileName;
+              const cleanName = fileName.replace(/^\[SheetBot\]\s*/i, '').replace(/\.[^.]+$/, '');
+              const m = cleanName.match(/^([^_]+)_(\d{9,12})_(\d{8,14})$/);
+              if (m) {
+                detectedContact = `${m[1].trim()} (${m[2].trim()})`;
+              }
+
+              // 1. 기존 부재중 전화 할 일 자동 해결(DONE)
+              await autoResolveMissedCallTasks(userEmail, detectedContact).catch((e: any) =>
+                console.warn("[BatchSweeper] autoResolveMissedCallTasks error:", e.message)
+              );
+
+              // 2. 추출된 Action Items를 스마트 할 일 대장에 자동 등록
+              const parsedTasks = parseActionItems(actionItems);
+              for (const task of parsedTasks) {
+                await createTaskItem({
+                  userEmail,
+                  sourceType: "CALL_RECORDING",
+                  sourceRef: fileName,
+                  contactName: detectedContact,
+                  taskTitle: task.title,
+                  dueDate: task.dueDate,
+                  priority: task.priority,
+                  badgeText: "통화 녹음",
+                }).catch((e: any) => console.warn("[BatchSweeper] createTaskItem error:", e.message));
+              }
+            } catch (taskErr: any) {
+              console.warn("[BatchSweeper] Task Hub integration error:", taskErr.message);
             }
 
             const promptLen = 4500;

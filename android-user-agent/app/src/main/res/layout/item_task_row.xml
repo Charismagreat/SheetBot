@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:background="@drawable/bg_card_scenario"
+    android:padding="12dp"
+    android:layout_marginVertical="4dp"
+    android:gravity="top">
+
+    <!-- 완료 토글 버튼 -->
+    <ImageView
+        android:id="@+id/btnTaskCheck"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:src="@android:drawable/checkbox_off_background"
+        android:contentDescription="완료 여부"
+        android:layout_marginEnd="10dp"
+        android:layout_marginTop="2dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless" />
+
+    <!-- 본문 내용 -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <!-- 상단 뱃지 라인 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="4dp">
+
+            <TextView
+                android:id="@+id/tvTaskSourceBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🎙️ 통화 녹음"
+                android:textColor="#34D399"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:background="@drawable/bg_badge_version"
+                android:backgroundTint="#064E3B"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="1dp"
+                android:layout_marginEnd="6dp" />
+
+            <TextView
+                android:id="@+id/tvTaskStateBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="(안내문자 발송됨)"
+                android:textColor="#E0F2FE"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:background="@drawable/bg_badge_version"
+                android:backgroundTint="#0284C7"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="1dp"
+                android:visibility="gone"
+                android:layout_marginEnd="6dp" />
+
+            <TextView
+                android:id="@+id/tvTaskDueDate"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="2026-10-07"
+                android:textColor="#94A3B8"
+                android:textSize="10.5sp"
+                android:gravity="end" />
+        </LinearLayout>
+
+        <!-- 할 일 제목 -->
+        <TextView
+            android:id="@+id/tvTaskTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="홍길동 대표님 견적서 수정본 송부 요망"
+            android:textColor="#F8FAFC"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="6dp" />
+
+        <!-- 고객명 및 연락처 다이얼러 바 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/tvTaskCustomer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="고객: 홍길동"
+                android:textColor="#CBD5E1"
+                android:textSize="11sp"
+                android:visibility="gone"
+                android:layout_marginEnd="8dp" />
+
+            <TextView
+                android:id="@+id/btnCallCustomer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📞 010-1234-5678"
+                android:textColor="#38BDF8"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:background="?android:attr/selectableItemBackground"
+                android:padding="2dp"
+                android:visibility="gone" />
+        </LinearLayout>
+    </LinearLayout>
+
+</LinearLayout>

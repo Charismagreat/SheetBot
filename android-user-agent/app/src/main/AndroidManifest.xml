@@ -111,6 +111,13 @@
             android:showWhenLocked="true"
             android:turnScreenOn="true" />
 
+        <!-- 스마트 통합 할 일 허브 전용 액티비티 -->
+        <activity
+            android:name=".TasksActivity"
+            android:exported="false"
+            android:theme="@style/Theme.SheetBotDepositAgent"
+            android:launchMode="singleTop" />
+
         <!-- 포그라운드 킵얼라이브 서비스 -->
         <service
             android:name=".KeepAliveService"

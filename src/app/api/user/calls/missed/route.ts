@@ -12,6 +12,7 @@ import { realtimeHub } from "@/lib/realtime-hub";
 import { maskPhoneNumber, formatZeroRetentionContent } from "@/lib/privacy";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { getKoreanTimeString } from "@/lib/date-utils";
+import { createTaskItem } from "@/lib/task-hub-helper";
 
 interface MissedCallCacheEntry {
   timestamp: number;
@@ -162,7 +163,27 @@ export async function POST(req: NextRequest) {
       },
     ]).catch((err) => console.warn("[MissedCalls] DB log insert warning:", err.message));
 
-    // 3. 실시간 SSE 브로드캐스트
+    // 3. [스마트 통합 할 일 허브 (Task Hub) 연동]
+    // 주소록/기존 거래처(이름이 확인된 고객)만 선별하여 부재중 콜백 할 일로 자동 등록
+    const isKnownContact = contactName && contactName.trim().length > 0 && contactName.trim() !== "미등록 연락처" && contactName.trim() !== "미등록";
+    if (isKnownContact) {
+      try {
+        await createTaskItem({
+          userEmail: cleanEmail,
+          sourceType: "MISSED_CALL",
+          sourceRef: callerPhone,
+          contactName: `${displayName} (${callerPhone})`,
+          taskTitle: `[부재중] ${displayName}님 콜백(회신) 요망`,
+          dueDate: callTime.slice(0, 10),
+          priority: "HIGH",
+          badgeText: autoReplied ? "안내문자 발송됨" : undefined,
+        });
+      } catch (taskErr: any) {
+        console.warn("[MissedCalls] Task Hub auto-register warning:", taskErr.message);
+      }
+    }
+
+    // 4. 실시간 SSE 브로드캐스트
     try {
       realtimeHub.broadcast("sms", {
         type: "DATA_CHANGED",
@@ -175,7 +196,7 @@ export async function POST(req: NextRequest) {
       });
     } catch {}
 
-    // 4. 15초 멱등성 캐시 등록
+    // 5. 15초 멱등성 캐시 등록
     recentMissedCallsCache.set(idempotencyKey, {
       timestamp: Date.now(),
       spreadsheetUrl,
