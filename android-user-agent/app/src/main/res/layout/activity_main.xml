@@ -1479,6 +1479,228 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- ⚖️ AI 법률/계약서 팩트체크 (법제처 & 판례 심층 자문 카드) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_scenario"
+            android:padding="13dp"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="⚖️ AI 법률/계약서 팩트체크"
+                    android:textColor="#F59E0B"
+                    android:textSize="13.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="7dp"
+                    android:paddingVertical="2dp"
+                    android:text="🏛️ 법제처 &amp; 판례"
+                    android:textColor="#FBBF24"
+                    android:textSize="9.5sp"
+                    android:textStyle="bold"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btnToggleLawAdvisoryDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="자연어 질문과 계약서/내용증명 사진을 올리면, 대한민국 법제처 법령 및 대법원 리딩 판례를 팩트체크하여 3줄 진단과 심층 보고서를 생성합니다."
+                android:textColor="#94A3B8"
+                android:textSize="11sp"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:id="@+id/layoutLawAdvisoryDetails"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <EditText
+                    android:id="@+id/etLawQuery"
+                    android:layout_width="match_parent"
+                    android:layout_height="64dp"
+                    android:background="#1E293B"
+                    android:hint="질문 입력 (예: 퇴사 후 인수인계 거부 손해배상 가능 여부, 상가 권리금 회수 방해 등)"
+                    android:textColorHint="#64748B"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:gravity="top|start"
+                    android:padding="8dp"
+                    android:layout_marginBottom="6dp"
+                    android:inputType="textMultiLine" />
+
+                <!-- 서류/계약서 사진 첨부 버튼 & 상태 바 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="6dp">
+
+                    <Button
+                        android:id="@+id/btnAttachLawFile"
+                        android:layout_width="wrap_content"
+                        android:layout_height="34dp"
+                        android:backgroundTint="#334155"
+                        android:text="📷 서류/계약서 첨부"
+                        android:textColor="#E2E8F0"
+                        android:textSize="11sp" />
+
+                    <LinearLayout
+                        android:id="@+id/layoutLawAttachedFile"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:background="#0F172A"
+                        android:paddingHorizontal="8dp"
+                        android:layout_marginStart="6dp"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:id="@+id/tvLawAttachedName"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="contract.jpg"
+                            android:textColor="#38BDF8"
+                            android:textSize="11sp"
+                            android:singleLine="true"
+                            android:ellipsize="middle" />
+
+                        <TextView
+                            android:id="@+id/btnRemoveLawAttachedFile"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="✕"
+                            android:textColor="#EF4444"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:padding="4dp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btnStartLawAdvisory"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:backgroundTint="#D97706"
+                    android:text="⚖️ 법률·판례 자문 및 보고서 생성"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <!-- 진행 상태 표시 -->
+                <ProgressBar
+                    android:id="@+id/pbLawLoading"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="8dp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/tvLawStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:textColor="#F59E0B"
+                    android:textSize="11sp"
+                    android:layout_marginTop="4dp"
+                    android:visibility="gone" />
+
+                <!-- 결과 표시 컨테이너 -->
+                <LinearLayout
+                    android:id="@+id/layoutLawResultContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#1E293B"
+                    android:padding="10dp"
+                    android:layout_marginTop="10dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/tvLawMatchedBadge"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="🏛️ 근거 법령: 근로기준법 | 판례: 대법원 2026다201337"
+                        android:textColor="#FBBF24"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp" />
+
+                    <TextView
+                        android:id="@+id/tvLawExecutiveSummary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="1. [법적 효력] ...\n2. [핵심 리스크] ...\n3. [권고 조치] ..."
+                        android:textColor="#F1F5F9"
+                        android:textSize="11sp"
+                        android:lineSpacingExtra="2.5dp"
+                        android:layout_marginBottom="8dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/btnOpenLawReport"
+                            android:layout_width="0dp"
+                            android:layout_height="34dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#4F46E5"
+                            android:text="📄 심층 검토 보고서 열기"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp"
+                            android:layout_marginEnd="4dp" />
+
+                        <Button
+                            android:id="@+id/btnOpenLawSheet"
+                            android:layout_width="0dp"
+                            android:layout_height="34dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#059669"
+                            android:text="📊 법률 검토 대장 열기"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
         <!-- 독립 카드: in_call_summary (수신 전화 시 '고객 시트 요약' 인콜 플로팅 팝업) -->
         <LinearLayout
             android:layout_width="match_parent"

@@ -17,6 +17,7 @@ export type SheetBindingType =
   | "RECORDING"
   | "MEETING"
   | "COMPANY_RESEARCH"
+  | "LAW_ADVISORY"
   | "FILE_UPLOAD"
   | "RECEIPT"
   | "BUSINESS_CARD"

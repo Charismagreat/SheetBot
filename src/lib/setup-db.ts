@@ -777,6 +777,26 @@ export async function setupDatabase(force = false): Promise<void> {
       { tableName: 'sheetbot_ai_batch_jobs' }
     );
 
+    // 25. sheetbot_law_advisories 테이블 생성 (법률·계약 자문 및 심층 보고서 관리 대장)
+    await safeCreateTable(
+      'SheetBot 법률·계약 자문 및 심층 보고서 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'query', type: 'TEXT' },
+        { name: 'file_name', type: 'TEXT' },
+        { name: 'file_drive_url', type: 'TEXT' },
+        { name: 'document_ocr_summary', type: 'TEXT' },
+        { name: 'related_laws', type: 'TEXT' },
+        { name: 'related_precedents', type: 'TEXT' },
+        { name: 'executive_summary', type: 'TEXT' },
+        { name: 'full_report_json', type: 'TEXT' },
+        { name: 'status', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_law_advisories' }
+    );
+
     try {
       await executeSQL(`ALTER TABLE sheetbot_ai_batch_jobs ADD COLUMN job_type TEXT;`);
     } catch {}
