@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+                android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_scenario"
+            android:padding="13dp"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:id="@+id/layoutInstaHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="📸 AI 인스타그램 피드 &amp; 해시태그"
+                    android:textColor="#EC4899"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btnToggleInstaDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="▼"
+                    android:textColor="#94A3B8"
+                    android:textSize="12sp"
+                    android:padding="4dp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="사진(1~10장) + 주제 + 키워드를 AI가 분석하여 스크롤을 멈추는 훅, 감성 캡션, 타깃 해시태그 25개를 자동 생성하고 인스타그램 대장 시트에 적재합니다."
+                android:textColor="#94A3B8"
+                android:textSize="11sp"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:id="@+id/layoutInstaDetails"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <!-- 1. 사진 복수 선택 버튼 & 상태 표시 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <Button
+                        android:id="@+id/btnSelectInstaImages"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#DB2777"
+                        android:text="📷 인스타 사진 선택 (복수 1~10장)"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11sp"
+                        android:layout_marginEnd="6dp" />
+
+                    <Button
+                        android:id="@+id/btnResetInstaImages"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:backgroundTint="#475569"
+                        android:text="초기화"
+                        android:textColor="#E2E8F0"
+                        android:textSize="11sp"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvInstaSelectedImagesCount"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="첨부된 사진: 0장 (선택 시 1600px 85% 자동 압축)"
+                    android:textColor="#FBCFE8"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- 2. 주제 입력 -->
+                <EditText
+                    android:id="@+id/etInstaTopic"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:background="@drawable/bg_input_field"
+                    android:hint="포스팅 주제 (예: 성수동 신상 디저트 카페 솔직 후기)"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#64748B"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- 3. 핵심 키워드 입력 -->
+                <EditText
+                    android:id="@+id/etInstaKeywords"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:background="@drawable/bg_input_field"
+                    android:hint="핵심 키워드 (예: 성수동 카페, 소금빵 맛집, 주말 데이트)"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#64748B"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- 4. 톤앤매너 입력 -->
+                <EditText
+                    android:id="@+id/etInstaTone"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:background="@drawable/bg_input_field"
+                    android:hint="톤앤매너 (예: 감성 &amp; 친근한 후기, 꿀팁 정보, 프로모션)"
+                    android:text="감성 &amp; 친근한 후기"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#64748B"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- 5. 벤치마킹 참고 링크 -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="벤치마킹 참고 링크/계정 (최대 3개, 선택사항):"
+                    android:textColor="#94A3B8"
+                    android:textSize="10.5sp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etInstaRefUrl1"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_input_field"
+                    android:hint="참고 인스타 URL 1 (선택)"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#64748B"
+                    android:textSize="11sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etInstaRefUrl2"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_input_field"
+                    android:hint="참고 인스타 URL 2 (선택)"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#64748B"
+                    android:textSize="11sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etInstaRefUrl3"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_input_field"
+                    android:hint="참고 인스타 URL 3 (선택)"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#64748B"
+                    android:textSize="11sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="10dp" />
+
+                <!-- 6. 실행 버튼 -->
+                <Button
+                    android:id="@+id/btnStartInstaAutomation"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:backgroundTint="#EC4899"
+                    android:text="🚀 AI 인스타 피드 &amp; 해시태그 생성"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- 로딩 표시 -->
+                <ProgressBar
+                    android:id="@+id/pbInstaLoading"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:indeterminateTint="#EC4899"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/tvInstaStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:text="AI가 인스타그램 훅 카피와 해시태그를 생성 중입니다..."
+                    android:textColor="#EC4899"
+                    android:textSize="11sp"
+                    android:visibility="gone"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- 결과 표시 컨테이너 -->
+                <LinearLayout
+                    android:id="@+id/layoutInstaResultContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#26101D"
+                    android:padding="10dp"
+                    android:layout_marginTop="4dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/tvInstaResultHook"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="첫 줄 훅 카피"
+                        android:textColor="#F472B6"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp" />
+
+                    <TextView
+                        android:id="@+id/tvInstaResultCaption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="피드 캡션 미리보기..."
+                        android:textColor="#E2E8F0"
+                        android:textSize="11sp"
+                        android:maxLines="3"
+                        android:ellipsize="end"
+                        android:layout_marginBottom="4dp" />
+
+                    <TextView
+                        android:id="@+id/tvInstaResultHashtags"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="#해시태그..."
+                        android:textColor="#FBCFE8"
+                        android:textSize="10.5sp"
+                        android:layout_marginBottom="8dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/btnOpenInstaViewer"
+                            android:layout_width="0dp"
+                            android:layout_height="34dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#4F46E5"
+                            android:text="📱 피드 뷰어"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp"
+                            android:layout_marginEnd="4dp" />
+
+                        <Button
+                            android:id="@+id/btnOpenInstaSheet"
+                            android:layout_width="0dp"
+                            android:layout_height="34dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#059669"
+                            android:text="📊 대장 시트"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp"
+                            android:layout_marginEnd="4dp" />
+
+                        <Button
+                            android:id="@+id/btnOpenInstagramApp"
+                            android:layout_width="0dp"
+                            android:layout_height="34dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#DB2777"
+                            android:text="🚀 인스타 열기"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
