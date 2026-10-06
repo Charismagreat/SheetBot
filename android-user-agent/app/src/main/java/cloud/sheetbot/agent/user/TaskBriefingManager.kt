@@ -68,7 +68,7 @@ object TaskBriefingManager {
                         .putString(PREF_KEY_LAST_BRIEFING_DATE, todayStr)
                         .apply()
 
-                    Log.i(TAG, "🎉 [데일리 할 일 모닝 브리핑 발행 완료] 미완료: ${pendingTasks.size}건, 오늘마감: $dueTodayCount건")
+                    Log.i(TAG, "🎉 [데일리 할 일 모닝 브리핑 발행 완료] 미완료: ${pendingTasks.size}건, 오늘마감: ${dueTodayCount}건")
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "모닝 브리핑 체크 실패: ${e.localizedMessage}")

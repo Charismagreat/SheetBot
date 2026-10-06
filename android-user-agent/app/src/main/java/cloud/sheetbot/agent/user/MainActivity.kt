@@ -1607,7 +1607,7 @@ class MainActivity : AppCompatActivity() {
                 if (!isFinishing && !isDestroyed && result.success) {
                     val count = result.pendingCount
                     if (count > 0) {
-                        binding.tvTasksHubBadge.text = "대기 $count건 ›"
+                        binding.tvTasksHubBadge.text = "대기 ${count}건 ›"
                         binding.tvTasksHubBadge.setBackgroundColor(Color.parseColor("#B45309")) // Amber
                         binding.tvTasksHubSubtitle.text = "현재 진행해야 할 후속 과업이 ${count}건 있습니다."
                     } else {
