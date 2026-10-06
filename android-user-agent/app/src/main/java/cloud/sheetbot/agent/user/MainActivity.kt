@@ -21,6 +21,10 @@ import android.os.PowerManager
 import android.provider.ContactsContract
 import android.provider.Settings
 import android.speech.RecognizerIntent
+import android.media.MediaRecorder
+import android.media.MediaPlayer
+import android.os.CountDownTimer
+import android.widget.ProgressBar
 import android.util.Base64
 import android.util.Log
 import android.view.GestureDetector
@@ -127,6 +131,20 @@ class MainActivity : AppCompatActivity() {
     ) { uris ->
         if (!uris.isNullOrEmpty()) {
             uploadExternalRecordings(uris)
+        }
+    }
+
+    // 🎙️ 화자 분리용 내 목소리 녹음 마이크 권한 요청 런처
+    private val recordAudioPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            val email = prefs.userEmail
+            if (!email.isNullOrBlank()) {
+                showRecordVoiceProfileDialog(email)
+            }
+        } else {
+            Toast.makeText(this, "내 목소리 화자 등록을 위해 마이크 녹음 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -707,6 +725,9 @@ class MainActivity : AppCompatActivity() {
             externalRecordingPickerLauncher.launch("audio/*")
         }
 
+        // 🎙️ 화자 분리용 내 목소리(성문) 등록 UI 바인딩
+        setupVoiceProfileUI()
+
         // 사진 및 문서 파일 구글 드라이브 업로드 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchFileUploadSync.isChecked = prefs.isFileUploadSyncEnabled
 
@@ -1080,9 +1101,15 @@ class MainActivity : AppCompatActivity() {
             try {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("SheetBot Self Order Link", url))
-                Toast.makeText(this, "고객 주문 링크가 복사되었습니다! 카톡이나 문자로 전송하세요.", Toast.LENGTH_SHORT).show()
+                
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "간편 주문 링크")
+                    putExtra(Intent.EXTRA_TEXT, "간편 주문 링크: $url")
+                }
+                startActivity(Intent.createChooser(shareIntent, "주문 링크 공유"))
             } catch (e: Exception) {
-                Toast.makeText(this, "클립보드 복사 실패: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "주문 링크 공유 실패: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -1534,6 +1561,7 @@ class MainActivity : AppCompatActivity() {
             checkServerAndQueueStatus(showToast = false)
             loadWalletBalance(email)
             refreshTasksBadge(email)
+            refreshVoiceProfileStatus(email)
         } else {
             binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
             binding.tvStatusTitle.text = "⚠️ 미연동 상태"
@@ -4023,6 +4051,279 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * 🎙️ 통화 녹음 화자 구분을 위한 내 목소리(성문) 등록 UI 설정 (v2.1.84)
+     */
+    private fun setupVoiceProfileUI() {
+        val email = prefs.userEmail
+        refreshVoiceProfileStatus(email)
+
+        binding.btnRecordVoiceProfile.setOnClickListener {
+            val currentEmail = prefs.userEmail
+            if (currentEmail.isNullOrBlank()) {
+                Toast.makeText(this, "먼저 시트봇 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                showRecordVoiceProfileDialog(currentEmail)
+            } else {
+                recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        }
+
+        binding.btnDeleteVoiceProfile.setOnClickListener {
+            val currentEmail = prefs.userEmail ?: return@setOnClickListener
+            AlertDialog.Builder(this)
+                .setTitle("내 목소리 성문 삭제")
+                .setMessage("등록된 내 목소리(화자 프로필)를 삭제하시겠습니까?\n\n삭제 후에도 안드로이드 기본 2채널(Stereo) 물리 분리 기술은 정상 작동합니다.")
+                .setPositiveButton("삭제") { _, _ ->
+                    activityScope.launch(Dispatchers.IO) {
+                        val success = ApiClient.deleteVoiceProfile(currentEmail)
+                        withContext(Dispatchers.Main) {
+                            if (success) {
+                                Toast.makeText(this@MainActivity, "내 목소리 성문이 삭제되었습니다.", Toast.LENGTH_SHORT).show()
+                                refreshVoiceProfileStatus(currentEmail)
+                            } else {
+                                Toast.makeText(this@MainActivity, "성문 삭제에 실패했습니다.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+                .setNegativeButton("취소", null)
+                .show()
+        }
+    }
+
+    /**
+     * 🎙️ 내 목소리 성문 등록 여부 실시간 조회 및 상태 뱃지 갱신
+     */
+    private fun refreshVoiceProfileStatus(email: String?) {
+        if (email.isNullOrBlank()) {
+            binding.tvVoiceProfileStatus.text = "미연동"
+            binding.tvVoiceProfileStatus.setTextColor(Color.parseColor("#94A3B8"))
+            binding.btnDeleteVoiceProfile.visibility = View.GONE
+            return
+        }
+
+        activityScope.launch(Dispatchers.IO) {
+            val res = ApiClient.fetchVoiceProfile(email)
+            withContext(Dispatchers.Main) {
+                if (!isFinishing && !isDestroyed) {
+                    if (res.success && res.isEnrolled) {
+                        binding.tvVoiceProfileStatus.text = "🟢 등록됨 (${res.speakerName ?: "본인"})"
+                        binding.tvVoiceProfileStatus.setTextColor(Color.parseColor("#34D399"))
+                        binding.btnRecordVoiceProfile.text = "🎙️ 내 목소리 다시 녹음"
+                        binding.btnDeleteVoiceProfile.visibility = View.VISIBLE
+                    } else {
+                        binding.tvVoiceProfileStatus.text = "미등록 (녹음 권장)"
+                        binding.tvVoiceProfileStatus.setTextColor(Color.parseColor("#F59E0B"))
+                        binding.btnRecordVoiceProfile.text = "🎙️ 내 목소리 5초 녹음 등록"
+                        binding.btnDeleteVoiceProfile.visibility = View.GONE
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 🎙️ 5초 내 목소리 녹음 및 성문 등록 커스텀 다이얼로그
+     */
+    private fun showRecordVoiceProfileDialog(email: String) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_record_voice_profile, null)
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(false)
+            .create()
+
+        val btnClose = dialogView.findViewById<TextView>(R.id.btnCloseDialog)
+        val tvRecordStatus = dialogView.findViewById<TextView>(R.id.tvRecordStatus)
+        val tvTimerCount = dialogView.findViewById<TextView>(R.id.tvTimerCount)
+        val pbRecordProgress = dialogView.findViewById<ProgressBar>(R.id.pbRecordProgress)
+        val btnStartRecord = dialogView.findViewById<Button>(R.id.btnStartRecord)
+        val layoutPostRecord = dialogView.findViewById<View>(R.id.layoutPostRecordControls)
+        val btnPlayPreview = dialogView.findViewById<Button>(R.id.btnPlayPreview)
+        val btnReRecord = dialogView.findViewById<Button>(R.id.btnReRecord)
+        val btnUploadVoice = dialogView.findViewById<Button>(R.id.btnUploadVoiceProfile)
+
+        val outputFile = File(cacheDir, "voice_profile_sample.m4a")
+        var mediaRecorder: MediaRecorder? = null
+        var mediaPlayer: MediaPlayer? = null
+        var recordTimer: CountDownTimer? = null
+        var isRecording = false
+
+        fun cleanupRecorder() {
+            try {
+                if (isRecording) {
+                    mediaRecorder?.stop()
+                }
+            } catch (_: Exception) {}
+            try {
+                mediaRecorder?.release()
+            } catch (_: Exception) {}
+            mediaRecorder = null
+            recordTimer?.cancel()
+            recordTimer = null
+            isRecording = false
+        }
+
+        fun cleanupPlayer() {
+            try {
+                mediaPlayer?.stop()
+                mediaPlayer?.release()
+            } catch (_: Exception) {}
+            mediaPlayer = null
+        }
+
+        btnClose.setOnClickListener {
+            cleanupRecorder()
+            cleanupPlayer()
+            dialog.dismiss()
+        }
+
+        fun startRecording() {
+            cleanupRecorder()
+            cleanupPlayer()
+            try {
+                if (outputFile.exists()) outputFile.delete()
+
+                val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    MediaRecorder(this)
+                } else {
+                    @Suppress("DEPRECATION")
+                    MediaRecorder()
+                }
+                recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+                recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                recorder.setAudioSamplingRate(44100)
+                recorder.setAudioEncodingBitRate(128000)
+                recorder.setOutputFile(outputFile.absolutePath)
+                recorder.prepare()
+                recorder.start()
+
+                mediaRecorder = recorder
+                isRecording = true
+
+                btnStartRecord.isEnabled = false
+                btnStartRecord.text = "🎙️ 녹음 중... (평소 목소리로 읽어주세요)"
+                btnStartRecord.setBackgroundColor(Color.parseColor("#B91C1C"))
+                tvRecordStatus.text = "🔴 음성 수음 중... (5초 후 자동 완료)"
+                tvRecordStatus.setTextColor(Color.parseColor("#EF4444"))
+                pbRecordProgress.progress = 0
+
+                val totalDurationMs = 5000L
+                val intervalMs = 100L
+                recordTimer = object : CountDownTimer(totalDurationMs, intervalMs) {
+                    override fun onTick(millisUntilFinished: Long) {
+                        val elapsedMs = totalDurationMs - millisUntilFinished
+                        val progress = (elapsedMs * 50 / totalDurationMs).toInt()
+                        pbRecordProgress.progress = progress
+                        val seconds = (elapsedMs / 1000).toInt() + 1
+                        tvTimerCount.text = "${seconds}초 / 5초"
+                    }
+
+                    override fun onFinish() {
+                        pbRecordProgress.progress = 50
+                        tvTimerCount.text = "5초 / 5초"
+                        tvRecordStatus.text = "✓ 5초 녹음 완료! 아래에서 미리듣기 또는 등록하세요."
+                        tvRecordStatus.setTextColor(Color.parseColor("#34D399"))
+
+                        cleanupRecorder()
+
+                        btnStartRecord.visibility = View.GONE
+                        layoutPostRecord.visibility = View.VISIBLE
+                    }
+                }.start()
+
+            } catch (e: Exception) {
+                cleanupRecorder()
+                Toast.makeText(this, "마이크 녹음 시작 실패: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                tvRecordStatus.text = "녹음 오류 발생"
+                btnStartRecord.isEnabled = true
+                btnStartRecord.text = "🔴 다시 시도"
+            }
+        }
+
+        btnStartRecord.setOnClickListener {
+            startRecording()
+        }
+
+        btnReRecord.setOnClickListener {
+            cleanupPlayer()
+            layoutPostRecord.visibility = View.GONE
+            btnStartRecord.visibility = View.VISIBLE
+            btnStartRecord.isEnabled = true
+            btnStartRecord.text = "🔴 지금 5초 녹음 시작"
+            btnStartRecord.setBackgroundColor(Color.parseColor("#DC2626"))
+            tvRecordStatus.text = "준비 완료 (녹음 버튼을 눌러주세요)"
+            tvRecordStatus.setTextColor(Color.parseColor("#CBD5E1"))
+            pbRecordProgress.progress = 0
+            tvTimerCount.text = "0초 / 5초"
+        }
+
+        btnPlayPreview.setOnClickListener {
+            if (!outputFile.exists() || outputFile.length() == 0L) {
+                Toast.makeText(this, "녹음 파일이 없습니다.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            cleanupPlayer()
+            try {
+                val player = MediaPlayer()
+                player.setDataSource(outputFile.absolutePath)
+                player.prepare()
+                player.start()
+                btnPlayPreview.text = "🔊 재생 중..."
+                player.setOnCompletionListener {
+                    btnPlayPreview.text = "▶️ 다시 듣기"
+                    cleanupPlayer()
+                }
+                mediaPlayer = player
+            } catch (e: Exception) {
+                Toast.makeText(this, "재생 실패: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                btnPlayPreview.text = "▶️ 미리듣기"
+            }
+        }
+
+        btnUploadVoice.setOnClickListener {
+            if (!outputFile.exists() || outputFile.length() < 2048L) {
+                Toast.makeText(this, "유효한 녹음 데이터가 없습니다. 다시 녹음해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            cleanupPlayer()
+            btnUploadVoice.isEnabled = false
+            btnUploadVoice.text = "☁️ 성문 프로필 등록 중..."
+
+            activityScope.launch(Dispatchers.IO) {
+                try {
+                    val bytes = outputFile.readBytes()
+                    val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                    val result = ApiClient.enrollVoiceProfile(email, base64, "voice_profile_sample.m4a")
+
+                    withContext(Dispatchers.Main) {
+                        if (result.success) {
+                            Toast.makeText(this@MainActivity, "🎉 내 목소리(화자 프로필)가 성공적으로 등록되었습니다!", Toast.LENGTH_LONG).show()
+                            dialog.dismiss()
+                            refreshVoiceProfileStatus(email)
+                        } else {
+                            btnUploadVoice.isEnabled = true
+                            btnUploadVoice.text = "☁️ 내 목소리로 등록하기"
+                            Toast.makeText(this@MainActivity, "등록 실패: ${result.error}", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        btnUploadVoice.isEnabled = true
+                        btnUploadVoice.text = "☁️ 내 목소리로 등록하기"
+                        Toast.makeText(this@MainActivity, "전송 오류: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+
+        dialog.show()
     }
 
     /**

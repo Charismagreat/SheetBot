@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_card_scenario"
+    android:backgroundTint="#0F172A"
+    android:padding="20dp">
+
+    <!-- 타이틀 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="12dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🎙️ 내 목소리 5초 화자 등록"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnCloseDialog"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="✕"
+            android:textColor="#94A3B8"
+            android:textSize="18sp"
+            android:padding="4dp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="스마트폰 마이크 가까이에서 아래 가이드 문장을 평소 통화 목소리로 편안하게 읽어주세요:"
+        android:textColor="#94A3B8"
+        android:textSize="11.5sp"
+        android:layout_marginBottom="10dp" />
+
+    <!-- 읽을 문장 가이드 박스 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#1E293B"
+        android:padding="12dp"
+        android:layout_marginBottom="14dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="&quot;안녕하세요, 시트봇 통화 녹음 화자 구분을 위한 내 목소리 샘플입니다.&quot;"
+            android:textColor="#38BDF8"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:lineSpacingExtra="3dp" />
+    </LinearLayout>
+
+    <!-- 타이머 & 상태 텍스트 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="6dp">
+
+        <TextView
+            android:id="@+id/tvRecordStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="준비 완료 (녹음 버튼을 눌러주세요)"
+            android:textColor="#CBD5E1"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/tvTimerCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0초 / 5초"
+            android:textColor="#F59E0B"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- 진행 게이지 -->
+    <ProgressBar
+        android:id="@+id/pbRecordProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="8dp"
+        android:max="50"
+        android:progress="0"
+        android:progressTint="#2563EB"
+        android:backgroundTint="#334155"
+        android:layout_marginBottom="16dp" />
+
+    <!-- 녹음 시작 버튼 -->
+    <Button
+        android:id="@+id/btnStartRecord"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:backgroundTint="#DC2626"
+        android:text="🔴 지금 5초 녹음 시작"
+        android:textColor="#FFFFFF"
+        android:textSize="12.5sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp" />
+
+    <!-- 녹음 완료 후 컨트롤 영역 (초기엔 숨김) -->
+    <LinearLayout
+        android:id="@+id/layoutPostRecordControls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <Button
+                android:id="@+id/btnPlayPreview"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:backgroundTint="#334155"
+                android:text="▶️ 미리듣기"
+                android:textColor="#E2E8F0"
+                android:textSize="11.5sp"
+                android:layout_marginEnd="4dp" />
+
+            <Button
+                android:id="@+id/btnReRecord"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:backgroundTint="#1E293B"
+                android:text="🔄 다시 녹음"
+                android:textColor="#94A3B8"
+                android:textSize="11.5sp"
+                android:layout_marginStart="4dp" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnUploadVoiceProfile"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:backgroundTint="#059669"
+            android:text="☁️ 내 목소리로 등록하기"
+            android:textColor="#FFFFFF"
+            android:textSize="12.5sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+</LinearLayout>
