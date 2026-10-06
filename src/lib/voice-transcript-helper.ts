@@ -30,7 +30,8 @@ export async function callVoiceTranscriptTool(
 
   const json = await response.json().catch(() => null);
   if (!response.ok || !json) {
-    throw new Error(`Voice Transcript 도구 호출 실패 (HTTP ${response.status}): ${response.statusText}`);
+    const errorDetail = json?.error || json?.message || response.statusText;
+    throw new Error(`Voice Transcript 도구 호출 실패 (HTTP ${response.status}): ${errorDetail}`);
   }
 
   // MCP 표준 결과 언래핑

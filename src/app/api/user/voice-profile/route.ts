@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
 
     // 사용자 이메일과 일치하는 스피커 프로필 탐색
     const myProfile = speakers.find(
-      (s) => s.id === userEmail || s.name === `본인 (${userEmail})` || s.name === userEmail
+      (s) => s.id === userEmail || s.name === `본인 (${userEmail})` || s.name.includes(userEmail)
     );
 
     return NextResponse.json({
@@ -132,20 +132,29 @@ export async function POST(req: NextRequest) {
     targetPath = await getSafeVoiceUploadPath(fileName);
     fs.writeFileSync(targetPath, buffer);
 
+    // 기존 등록된 사용자 프로필 확인
+    const existingList = await listEnrolledSpeakers().catch(() => null);
+    const existingSpeaker = existingList?.speakers?.find(
+      (s: any) => s.id === userEmail || s.name === `본인 (${userEmail})` || s.name.includes(userEmail)
+    );
+
     // 이지데스크 Voice Transcript에 성문 등록
-    // speaker_id: userEmail, name: "본인"
+    // 신규 등록: speakerId 생략하고 name만 전달 (UUID 자동 발급)
+    // 기존 등록: existingSpeaker.id (UUID)를 전달하여 샘플 추가/융합
     const enrollResult = await enrollSpeakerVoice({
-      name: displayName,
+      name: `본인 (${userEmail})`,
       filePath: targetPath,
-      speakerId: userEmail,
+      speakerId: existingSpeaker ? existingSpeaker.id : undefined,
       force: true, // 짧은 온보딩 클립도 안전하게 통과
     });
+
+    const enrolledSpeaker = enrollResult?.speaker || existingSpeaker;
 
     return NextResponse.json({
       success: true,
       message: "🎉 '내 목소리' 성문 프로필이 안전하게 등록되었습니다! 이제 모든 통화 녹음에서 '나'가 자동으로 식별됩니다.",
-      speakerId: userEmail,
-      name: displayName,
+      speakerId: enrolledSpeaker?.id || userEmail,
+      name: enrolledSpeaker?.name || `본인 (${userEmail})`,
       details: enrollResult,
     });
   } catch (err: any) {
@@ -180,7 +189,17 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    await deleteSpeakerVoice(userEmail);
+    // 실제 등록된 화자 목록에서 ID 탐색
+    const listRes = await listEnrolledSpeakers().catch(() => null);
+    const targetSpeaker = listRes?.speakers?.find(
+      (s: any) => s.id === userEmail || s.name === `본인 (${userEmail})` || s.name.includes(userEmail)
+    );
+
+    if (targetSpeaker?.id) {
+      await deleteSpeakerVoice(targetSpeaker.id);
+    } else {
+      await deleteSpeakerVoice(userEmail).catch(() => null);
+    }
 
     return NextResponse.json({
       success: true,
