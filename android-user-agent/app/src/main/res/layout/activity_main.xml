@@ -995,14 +995,133 @@
                         android:checked="false" />
                 </LinearLayout>
 
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="💡 녹음 파일(.m4a, .mp3)을 직접 선택하여 시트에 백업 및 AI 전사합니다."
+                    android:textColor="#94A3B8"
+                    android:textSize="10sp"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="6dp" />
+
                 <Button
                     android:id="@+id/btnSyncRecordingsNow"
                     android:layout_width="match_parent"
                     android:layout_height="36dp"
                     android:backgroundTint="#059669"
-                    android:text="⚡ 새 녹음 파일 지금 바로 가져오기"
+                    android:text="📁 녹음 파일 직접 업로드"
                     android:textColor="#FFFFFF"
                     android:textSize="11.5sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 독립 카드: in_call_summary (수신 전화 시 '고객 시트 요약' 인콜 플로팅 팝업) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_scenario"
+            android:padding="13dp"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:id="@+id/layoutInCallSummaryHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="📞 수신 전화 시 '고객 시트 요약' 인콜 팝업"
+                    android:textColor="#38BDF8"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchInCallSummary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btnToggleInCallSummaryDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutInCallSummarySettings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0F172A"
+                android:padding="10dp"
+                android:layout_marginBottom="4dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="전화가 걸려올 때, 구글 시트에 기록된 '직전 통화 핵심 3줄 요약'과 '특이사항 메모'를 수신 화면 위에 플로팅 카드로 0.05초 만에 띄워줍니다."
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:lineSpacingExtra="2dp"
+                    android:layout_marginBottom="10dp" />
+
+                <!-- 권한 상태 및 안내 바 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="#1E293B"
+                    android:padding="8dp"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:id="@+id/tvOverlayPermissionStatus"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="• 다른 앱 위에 표시: 확인 중"
+                        android:textColor="#CBD5E1"
+                        android:textSize="11sp" />
+
+                    <Button
+                        android:id="@+id/btnRequestOverlayPermission"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:backgroundTint="#4F46E5"
+                        android:text="권한 설정 열기"
+                        android:textColor="#FFFFFF"
+                        android:textSize="10.5sp"
+                        android:paddingHorizontal="8dp" />
+                </LinearLayout>
+
+                <!-- 미리보기 테스트 버튼 -->
+                <Button
+                    android:id="@+id/btnPreviewInCallSummary"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:backgroundTint="#0284C7"
+                    android:text="🔍 인콜 플로팅 팝업 미리보기 테스트"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold" />
             </LinearLayout>
         </LinearLayout>
 

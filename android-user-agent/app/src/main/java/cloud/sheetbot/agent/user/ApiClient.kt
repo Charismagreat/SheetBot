@@ -705,7 +705,8 @@ object ApiClient {
         callTime: String,
         userEmail: String,
         folderName: String = "[SheetBot] 통화 녹음",
-        autoRecordSheet: Boolean = true
+        autoRecordSheet: Boolean = true,
+        channelCount: Int = 2
     ): UploadRecordingResult = withContext(Dispatchers.IO) {
         // 1. [1순위] 터널 안심 청크 분할 업로드 (ChunkedUploader)
         try {
@@ -718,10 +719,11 @@ object ApiClient {
                 autoRecordSheet = autoRecordSheet,
                 isCallRecording = true,
                 contactName = contactName,
-                callTime = callTime
+                callTime = callTime,
+                channelCount = channelCount
             )
             if (chunkResult.success) {
-                Log.i(TAG, "🎉 [통화 녹음 청크 업로드 성공] $fileName -> $folderName")
+                Log.i(TAG, "🎉 [통화 녹음 청크 업로드 성공] $fileName (channels=$channelCount) -> $folderName")
                 return@withContext UploadRecordingResult(
                     success = true,
                     fileId = chunkResult.fileId,
@@ -748,6 +750,7 @@ object ApiClient {
             put("callTime", callTime)
             put("folderName", folderName)
             put("autoRecordSheet", autoRecordSheet)
+            put("channelCount", channelCount)
             put("fileBase64", base64Str)
         }
         val requestBody = json.toString().toRequestBody(JSON_MEDIA_TYPE)
@@ -1827,7 +1830,79 @@ object ApiClient {
         }
         ContactSyncResult(success = false, error = lastError)
     }
+
+    /**
+     * 수신 전화 시 고객 시트 정보 및 직전 통화 AI 요약 조회 (In-Call Summary)
+     * 1차: PRIMARY_HOST -> 2차: FALLBACK_HOST
+     */
+    suspend fun fetchCallSummary(
+        userEmail: String,
+        callerPhone: String
+    ): CallSummaryResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastError = "고객 정보 조회 실패"
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/calls/summary"
+            try {
+                val json = JSONObject().apply {
+                    put("userEmail", userEmail)
+                    put("callerPhone", callerPhone)
+                }
+                val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(body)
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext CallSummaryResult(
+                        success = true,
+                        found = resJson.optBoolean("found", false),
+                        phone = resJson.optString("phone", callerPhone),
+                        cleanPhone = resJson.optString("cleanPhone", ""),
+                        name = resJson.optString("name", "신규 연락처"),
+                        company = resJson.optString("company", ""),
+                        position = resJson.optString("position", ""),
+                        memo = resJson.optString("memo", ""),
+                        lastCallTime = resJson.optString("lastCallTime", ""),
+                        lastCallSummary = resJson.optString("lastCallSummary", ""),
+                        actionItems = resJson.optString("actionItems", ""),
+                        lastMissedCallTime = resJson.optString("lastMissedCallTime", ""),
+                        rawJson = resStr
+                    )
+                } else {
+                    lastError = resJson.optString("error", "HTTP ${response.code}")
+                }
+            } catch (e: Exception) {
+                lastError = e.localizedMessage ?: "네트워크 연결 불가"
+            }
+        }
+        CallSummaryResult(success = false, phone = callerPhone, error = lastError)
+    }
 }
+
+data class CallSummaryResult(
+    val success: Boolean,
+    val found: Boolean = false,
+    val phone: String = "",
+    val cleanPhone: String = "",
+    val name: String = "",
+    val company: String = "",
+    val position: String = "",
+    val memo: String = "",
+    val lastCallTime: String = "",
+    val lastCallSummary: String = "",
+    val actionItems: String = "",
+    val lastMissedCallTime: String = "",
+    val rawJson: String? = null,
+    val error: String? = null
+)
 
 data class ContactSyncResult(
     val success: Boolean,

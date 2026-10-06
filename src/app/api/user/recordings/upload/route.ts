@@ -24,6 +24,7 @@ import { uploadDriveFileWithBridge } from "@/lib/drive-upload-helper";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import { processPendingBatchJobs } from "@/lib/ai-batch-sweeper";
 import { resolveSafeTargetRow } from "@/lib/sheet-fingerprint-guard";
+import { listEnrolledSpeakers } from "@/lib/voice-transcript-helper";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -124,6 +125,7 @@ export async function POST(req: NextRequest) {
     let rawFolderName = "[SheetBot] 통화 녹음";
     let autoRecordSheet = true;
     let bodyEmail: string | null = null;
+    let channelCount = 2; // 2단계: 안드로이드 통화녹음 기본 2채널(Stereo, Ch0=나/마이크, Ch1=상대방/수화기)
 
     if (contentType.includes("application/json")) {
       const json = await req.json();
@@ -133,13 +135,16 @@ export async function POST(req: NextRequest) {
       callTime = json.callTime || callTime;
       rawFolderName = json.folderName || rawFolderName;
       autoRecordSheet = json.autoRecordSheet !== false;
+      if (json.channelCount !== undefined) {
+        channelCount = Number(json.channelCount) || 2;
+      }
 
       const rawBase64 = json.fileBase64 || json.base64 || json.audioBase64 || "";
       if (rawBase64) {
         const cleanBase64 = rawBase64.replace(/^data:[^;]+;base64,/, "");
         buffer = Buffer.from(cleanBase64, "base64");
       }
-      writeDebugLog(`Parsed JSON: fileName=${rawFileName}, contactName=${contactName}, bufferSize=${buffer?.length}, bodyEmail=${bodyEmail}`);
+      writeDebugLog(`Parsed JSON: fileName=${rawFileName}, contactName=${contactName}, channels=${channelCount}, bufferSize=${buffer?.length}, bodyEmail=${bodyEmail}`);
     } else {
       const formData = await req.formData();
       const file = formData.get("file") as File | null;
@@ -149,12 +154,16 @@ export async function POST(req: NextRequest) {
       callTime = (formData.get("callTime") as string | null) || callTime;
       rawFolderName = (formData.get("folderName") as string | null) || rawFolderName;
       autoRecordSheet = formData.get("autoRecordSheet") !== "false";
+      const formChannels = formData.get("channelCount");
+      if (formChannels) {
+        channelCount = Number(formChannels) || 2;
+      }
 
       if (file) {
         const arrayBuffer = await file.arrayBuffer();
         buffer = Buffer.from(arrayBuffer);
       }
-      writeDebugLog(`Parsed form: fileName=${rawFileName}, contactName=${contactName}, fileSize=${file?.size}, bodyEmail=${bodyEmail}`);
+      writeDebugLog(`Parsed form: fileName=${rawFileName}, contactName=${contactName}, channels=${channelCount}, fileSize=${file?.size}, bodyEmail=${bodyEmail}`);
     }
 
     const userEmail = (bodyEmail && bodyEmail.includes("@"))
@@ -246,6 +255,7 @@ export async function POST(req: NextRequest) {
           tempFilePath: savedTempFilePath,
           base64Audio,
           dedupeKey,
+          channelCount,
         });
       } catch (bgErr: any) {
         writeDebugLog(`Background full pipeline error: ${bgErr.message}`);
@@ -284,6 +294,7 @@ async function executeBackgroundFullPipeline(params: {
   tempFilePath: string;
   base64Audio: string;
   dedupeKey: string;
+  channelCount: number;
 }) {
   const {
     cleanEmail,
@@ -295,6 +306,7 @@ async function executeBackgroundFullPipeline(params: {
     tempFilePath,
     base64Audio,
     dedupeKey,
+    channelCount,
   } = params;
 
   try {
@@ -349,6 +361,7 @@ async function executeBackgroundFullPipeline(params: {
       try {
         writeDebugLog(`Step 2: Uploading file to Google Drive: ${targetFileName}...`);
         const uploadRes = await uploadDriveFileWithBridge({
+          buffer: Buffer.from(base64Audio, "base64"),
           fileName: targetFileName,
           folderId: targetFolderId || undefined,
           tempFilePath,
@@ -516,13 +529,15 @@ async function executeBackgroundFullPipeline(params: {
 
     // 5. 백그라운드 AI 음성 전사(STT) 및 3줄 요약 실행
     if (targetSpreadsheetId) {
-      await triggerAiAudioAnalysis(
+      await triggerAiAudioAnalysis({
         base64Audio,
-        targetFileName,
-        targetSpreadsheetId,
-        targetRowIndex,
-        cleanEmail
-      ).catch((e) => writeDebugLog(`Background AI error: ${e.message}`));
+        fileName: targetFileName,
+        spreadsheetId: targetSpreadsheetId,
+        rowIndex: targetRowIndex,
+        userEmail: cleanEmail,
+        contactName,
+        channelCount,
+      }).catch((e) => writeDebugLog(`Background AI error: ${e.message}`));
     }
   } catch (err: any) {
     writeDebugLog(`[BackgroundPipeline] Fatal error: ${err.message}`);
@@ -539,14 +554,28 @@ async function executeBackgroundFullPipeline(params: {
 
 /**
  * 백그라운드 AI 음성 전사(STT) 및 핵심 3줄 요약 & Action Items 파이프라인
+ * 2단계: 안드로이드 2채널(Stereo) 물리 채널 분리 가이드 (Ch0=본인, Ch1=상대방)
+ * 3단계: 이지데스크 Voice Transcript 성문 프로필 연동 및 화자 자동 바인딩
  */
-async function triggerAiAudioAnalysis(
-  base64Audio: string,
-  fileName: string,
-  spreadsheetId: string,
-  rowIndex: number | null,
-  userEmail: string
-) {
+async function triggerAiAudioAnalysis(params: {
+  base64Audio: string;
+  fileName: string;
+  spreadsheetId: string;
+  rowIndex: number | null;
+  userEmail: string;
+  contactName: string;
+  channelCount?: number;
+}) {
+  const {
+    base64Audio,
+    fileName,
+    spreadsheetId,
+    rowIndex,
+    userEmail,
+    contactName,
+    channelCount = 2,
+  } = params;
+
   try {
     const cleanEmail = userEmail.toLowerCase().trim();
 
@@ -586,6 +615,16 @@ async function triggerAiAudioAnalysis(
       targetModel = "gemini-2.5-flash";
     }
 
+    // [3단계] 이지데스크 Voice Transcript 등록된 성문 프로필 확인
+    let hasVoiceProfile = false;
+    try {
+      const voiceProfileRes = await listEnrolledSpeakers().catch(() => null);
+      const speakers = voiceProfileRes?.speakers || [];
+      hasVoiceProfile = speakers.some(
+        (s: any) => s.id === cleanEmail || s.name === `본인 (${cleanEmail})` || s.name === cleanEmail || s.name === "본인"
+      );
+    } catch {}
+
     // 파일 확장자에 따른 적정 MIME 타입 매핑
     let mimeType = "audio/mp4";
     const lowerName = fileName.toLowerCase();
@@ -595,17 +634,42 @@ async function triggerAiAudioAnalysis(
     else if (lowerName.endsWith(".ogg")) mimeType = "audio/ogg";
     else if (lowerName.endsWith(".flac")) mimeType = "audio/flac";
 
+    const isStereo = channelCount === 2;
+    const channelGuide = isStereo
+      ? `• [물리 오디오 채널 정보 (2채널 Stereo)]
+  - 본 녹음은 2채널(Stereo)로 녹음된 스마트폰 통화 녹음 파일입니다.
+  - Channel 0 (좌측, Left 채널)은 스마트폰 마이크 입력으로 '본인 (기기 소유자)'의 목소리입니다.
+  - Channel 1 (우측, Right 채널)은 수화기 RIL(Downlink) 수신 음성으로 '상대방 (${contactName})'의 목소리입니다.
+  - 좌/우 채널의 음성 분리와 발화 맥락을 엄격히 일치시켜 본인과 상대방을 100% 무오차로 분리하세요.`
+      : `• [1채널 Mono 음원 화자 분리]
+  - 본 녹음은 1채널(Mono)로 믹싱된 음원입니다.
+  - 음성의 음색, 높낮이, 대화 주도 관계를 정밀 분석하여 본인과 상대방(${contactName})을 명확히 분리하세요.`;
+
+    const voiceProfileHint = hasVoiceProfile
+      ? `• [3단계 성문 프로필 연동] 기기 소유자인 '본인'의 음성 성문 프로필이 등록되어 있습니다. 본인 특유의 억양과 상대방(${contactName})을 부르는 호칭 관계를 기반으로 정확하게 라벨링하세요.`
+      : `• 통화 상대방의 이름 및 전화번호는 "${contactName}"입니다.`;
+
     const prompt = `당신은 비즈니스 통화 녹음 정밀 분석 및 화자 분리(Speaker Diarization) 전문 AI입니다.
-첨부된 통화 녹음 파일("${fileName}")의 음성을 분석하여, 통화 참여자인 두 사람의 발화를 타임라인 순서대로 명확히 구분(화자 분리)하여 다음 JSON 포맷으로만 답변하세요. 마크다운 따옴표나 기타 텍스트 없이 순수 JSON만 반환하세요:
+첨부된 통화 녹음 파일("${fileName}")의 음성을 분석하여, 통화 참여자인 '본인(기기 소유자)'과 '상대방(${contactName})'의 발화를 타임라인 순서대로 명확히 구분하여 다음 JSON 포맷으로만 답변하세요. 마크다운 따옴표나 기타 텍스트 없이 순수 JSON만 반환하세요:
 {
-  "summary": "1. [고객 주요 문의 내용]\\n2. [협의 및 결정 사항]\\n3. [기타 중요 사항]",
+  "summary": "1. [주요 문의 및 통화 목적]\\n2. [협의 및 결정 사항]\\n3. [기타 특이사항]",
   "actionItems": "• [후속 조치 1]\\n• [후속 조치 2]",
-  "transcript": "[화자 1 (상대방)]: [발화 내용]\\n[화자 2 (본인)]: [발화 내용]\\n..."
+  "transcript": "[상대방 (${contactName})]: [발화 내용]\\n[본인]: [발화 내용]\\n..."
 }
 
-주의사항:
-- 'transcript'는 반드시 두 참여자의 대화를 한 문장/발화 단위로 번갈아가며 화자 분리하여 전사해야 합니다. 화자 분리 없이 한 문단으로 뭉뚱그려 작성하면 안 됩니다.
-- 음성의 억양과 대화 맥락을 정확히 분석하여 상대방(고객)과 본인의 발화를 매칭하세요.`;
+화자 판별 및 전사 필수 준수사항:
+1. 전사 라벨(Label) 명칭:
+   - 절대로 '화자 1', '화자 2'와 같은 불명확한 명칭을 사용하지 마세요.
+   - 반드시 '[본인]: [발화]'와 '[상대방 (${contactName})]: [발화]'로 명시하세요.
+2. 참여자 관계 및 역할 판별:
+   - 본 통화의 참여자는 단 2명입니다:
+     ① 본인 (스마트폰 기기 소유자 / SheetBot 사용자)
+     ② 상대방 (${contactName})
+   - 전화를 걸었거나 받은 주체, 회사/서비스 소개를 하거나 용건에 답하는 비즈니스 응대 주체가 '본인'입니다.
+   - 용건을 문의하거나 자신의 신원을 밝히는 고객/거래처 주체가 '상대방 (${contactName})'입니다.
+${channelGuide}
+${voiceProfileHint}
+3. 전사(transcript)는 반드시 두 참여자의 대화를 한 문장/발화 단위로 번갈아가며 타임라인 순으로 화자 분리하여 전사해야 합니다. 화자 분리 없이 한 문단으로 뭉뚱그려 작성하면 안 됩니다.`;
 
     let rawText = "";
     let isBatchSuccess = false;

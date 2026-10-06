@@ -83,6 +83,12 @@ object SmsSenderUtil {
                 return Pair(false, messageText)
             }
 
+            // 🛡️ 상대방 번호가 한국 휴대전화가 아닌 경우(유선전화, 대표번호, 인터넷전화 등) SMS 발송 원천 제외
+            if (!ContactHelper.isMobilePhoneNumber(cleanPhone)) {
+                Log.w(TAG, "⏭️ [SMS 발송 제외] 한국 휴대전화 번호가 아닙니다: $cleanPhone (유선전화/대표번호 등 문자 수신 불가 번호 자동 제외)")
+                return Pair(false, messageText)
+            }
+
             val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 context.getSystemService(SmsManager::class.java)
             } else {
@@ -158,6 +164,13 @@ object SmsSenderUtil {
         for (receipt in pendingList) {
             if (receipt.recipientPhone.isBlank() || receipt.message.isBlank()) {
                 Log.w(TAG, "영수증 정보 불완전 (ID: ${receipt.id}) - 건너뜀")
+                continue
+            }
+
+            // 🛡️ 휴대전화가 아닌 경우 대기열 무한 재시도 방지를 위해 완료(스킵) 처리 후 건너뜀
+            if (!ContactHelper.isMobilePhoneNumber(receipt.recipientPhone)) {
+                Log.w(TAG, "⏭️ [대기열 영수증 제외] 상대방 번호가 휴대전화가 아닙니다: ${receipt.recipientPhone} (ID: ${receipt.id}, 유선/대표번호 자동 제외)")
+                ApiClient.markReceiptSent(receipt.id, false)
                 continue
             }
 

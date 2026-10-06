@@ -253,7 +253,7 @@ object CallRecordingManager {
 
                 Log.i(TAG, "🚀 [통화 녹음 업로드 개시] 파일: $fileName / 상대방: $contactName / 대상 폴더: $targetFolder")
 
-                // 구글 드라이브로 파일 업로드
+                // 구글 드라이브로 파일 업로드 (2단계: 오디오 채널 수 함께 전달)
                 val uploadResult = ApiClient.uploadCallRecording(
                     file = file,
                     fileName = fileName,
@@ -261,7 +261,8 @@ object CallRecordingManager {
                     callTime = callTimeStr,
                     userEmail = userEmail,
                     folderName = targetFolder,
-                    autoRecordSheet = autoRecordSheet
+                    autoRecordSheet = autoRecordSheet,
+                    channelCount = parsedInfo.channelCount
                 )
 
                 if (uploadResult.success) {
@@ -319,11 +320,130 @@ object CallRecordingManager {
     }
 
     /**
-     * 파일명에서 상대방(이름/번호) 및 통화 일시 추출 (삼성, 에이닷, T전화, Cube ACR, 전 어플 지원)
+     * 다른 폰에서 녹음되어 카카오톡/메일/다운로드 등으로 전달받은 녹음 파일(복수 URI)을 직접 선택하여
+     * 구글 드라이브 지정 폴더에 업로드하고 시트 대장에 AI 전사/요약 등록
+     */
+    suspend fun uploadExternalRecordingsFromUris(
+        context: Context,
+        uris: List<android.net.Uri>
+    ): RecordingSyncResult = withContext(Dispatchers.IO) {
+        val prefs = PreferencesManager(context)
+        if (!prefs.isPaired) {
+            return@withContext RecordingSyncResult(
+                uploadedCount = 0,
+                totalFound = uris.size,
+                alreadySyncedCount = 0,
+                message = "시트봇 계정이 연동되어 있지 않습니다. 먼저 계정을 연동해 주세요."
+            )
+        }
+
+        val userEmail = prefs.userEmail
+        if (userEmail.isNullOrBlank()) {
+            return@withContext RecordingSyncResult(
+                uploadedCount = 0,
+                totalFound = uris.size,
+                alreadySyncedCount = 0,
+                message = "연동된 사용자 계정 이메일이 없습니다."
+            )
+        }
+
+        val targetFolder = prefs.callRecordingDriveFolder.takeIf { it.isNotBlank() } ?: "[SheetBot] 통화 녹음"
+        val autoRecordSheet = prefs.isCallRecordingSheetEnabled
+
+        var uploadedCount = 0
+        var uploadFailedCount = 0
+        var lastErrorMessage: String? = null
+
+        for (uri in uris) {
+            val meta = FileUploadManager.resolveUriMetadata(context, uri)
+            var rawFileName = meta.fileName.ifBlank { "다른폰_통화녹음_${System.currentTimeMillis()}.m4a" }
+            if (!rawFileName.contains(".")) {
+                rawFileName = "$rawFileName.m4a"
+            }
+
+            val tempFile = File(context.cacheDir, "ext_rec_${System.currentTimeMillis()}_$rawFileName")
+            try {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    java.io.FileOutputStream(tempFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+
+                if (!tempFile.exists() || tempFile.length() == 0L) {
+                    uploadFailedCount++
+                    lastErrorMessage = "파일을 읽을 수 없거나 0바이트입니다: $rawFileName"
+                    continue
+                }
+
+                val parsedInfo = parseRecordingFileInfo(tempFile)
+                var contactName = parsedInfo.contactName
+                if (contactName == "미지정 연락처") {
+                    val cleanBase = rawFileName.substringBeforeLast(".")
+                    contactName = cleanContactName(cleanBase).ifBlank { "외부 통화녹음" }
+                }
+                val callTimeStr = parsedInfo.callTime
+                val channelCount = parsedInfo.channelCount
+
+                Log.i(TAG, "🚀 [다른 폰 녹음 파일 업로드 개시] $rawFileName / 상대방: $contactName / 채널: $channelCount")
+
+                val uploadResult = ApiClient.uploadCallRecording(
+                    file = tempFile,
+                    fileName = rawFileName,
+                    contactName = contactName,
+                    callTime = callTimeStr,
+                    userEmail = userEmail,
+                    folderName = targetFolder,
+                    autoRecordSheet = autoRecordSheet,
+                    channelCount = channelCount
+                )
+
+                if (uploadResult.success) {
+                    uploadedCount++
+                    showUploadSuccessNotification(context, contactName, rawFileName, targetFolder)
+                    if (prefs.isTtsEnabled) {
+                        TtsManager.speak(context, "${contactName}님과의 녹음 파일이 구글 드라이브에 안전하게 보관되었습니다.")
+                    }
+                } else {
+                    uploadFailedCount++
+                    lastErrorMessage = uploadResult.error ?: "통신 응답 실패"
+                }
+            } catch (e: Exception) {
+                uploadFailedCount++
+                lastErrorMessage = e.localizedMessage ?: "파일 처리 예외"
+            } finally {
+                try {
+                    if (tempFile.exists()) tempFile.delete()
+                } catch (_: Exception) {}
+            }
+        }
+
+        val msg = when {
+            uploadedCount > 0 -> {
+                val failInfo = if (uploadFailedCount > 0) "\n(⚠️ ${uploadFailedCount}건 업로드 실패: $lastErrorMessage)" else ""
+                "🎉 선택한 ${uris.size}개 중 ${uploadedCount}개의 다른 폰 녹음 파일이 구글 드라이브 '${targetFolder}'에 안전하게 백업 및 AI 전사 접수되었습니다!$failInfo"
+            }
+            else -> {
+                "⚠️ 선택한 녹음 파일 업로드에 실패했습니다.\n\n• 오류: ${lastErrorMessage ?: "알 수 없는 오류"}\n💡 인터넷 연결 상태를 확인 후 다시 시도해 주세요."
+            }
+        }
+
+        RecordingSyncResult(
+            uploadedCount = uploadedCount,
+            totalFound = uris.size,
+            alreadySyncedCount = 0,
+            uploadFailedCount = uploadFailedCount,
+            lastErrorMessage = lastErrorMessage,
+            message = msg
+        )
+    }
+
+    /**
+     * 파일명에서 상대방(이름/번호) 및 통화 일시 추출 및 오디오 채널 수 감지
      */
     private fun parseRecordingFileInfo(file: File): RecordingFileInfo {
         val fileName = file.name
         val nameWithoutExt = fileName.substringBeforeLast(".")
+        val channelCount = detectAudioChannelCount(file) // 2단계: 2채널(Stereo) 여부 감지
 
         // 1. 삼성 갤럭시: 통화 녹음 [상대방]_[YYMMDD]_[HHMMSS]
         val samsungMatch = SAMSUNG_REGEX.find(fileName)
@@ -340,7 +460,8 @@ object CallRecordingManager {
 
             return RecordingFileInfo(
                 contactName = cleanContactName(rawContact),
-                callTime = parsedTime ?: formatLastModified(file)
+                callTime = parsedTime ?: formatLastModified(file),
+                channelCount = channelCount
             )
         }
 
@@ -360,7 +481,8 @@ object CallRecordingManager {
 
             return RecordingFileInfo(
                 contactName = cleanContactName(rawContact),
-                callTime = parsedTime ?: formatLastModified(file)
+                callTime = parsedTime ?: formatLastModified(file),
+                channelCount = channelCount
             )
         }
 
@@ -379,7 +501,8 @@ object CallRecordingManager {
 
             return RecordingFileInfo(
                 contactName = cleanContactName(rawContact),
-                callTime = parsedTime ?: formatLastModified(file)
+                callTime = parsedTime ?: formatLastModified(file),
+                channelCount = channelCount
             )
         }
 
@@ -402,7 +525,8 @@ object CallRecordingManager {
 
             return RecordingFileInfo(
                 contactName = cleanContactName(fullContactName),
-                callTime = parsedTime ?: formatLastModified(file)
+                callTime = parsedTime ?: formatLastModified(file),
+                channelCount = channelCount
             )
         }
 
@@ -412,7 +536,8 @@ object CallRecordingManager {
             val rawContact = cubeMatch.groupValues[1].trim()
             return RecordingFileInfo(
                 contactName = cleanContactName(rawContact),
-                callTime = formatLastModified(file)
+                callTime = formatLastModified(file),
+                channelCount = channelCount
             )
         }
 
@@ -436,7 +561,8 @@ object CallRecordingManager {
 
         return RecordingFileInfo(
             contactName = cleanContactName(detectedContact),
-            callTime = formatLastModified(file)
+            callTime = formatLastModified(file),
+            channelCount = channelCount
         )
     }
 
@@ -487,7 +613,29 @@ object CallRecordingManager {
             }
         }
 
-        return false
+    /**
+     * 오디오 파일의 채널 수(1: Mono, 2: Stereo) 감지
+     * 안드로이드 하드웨어 표준: 삼성 갤럭시 / T전화 통화녹음은 기본 2채널(Stereo)
+     */
+    private fun detectAudioChannelCount(file: File): Int {
+        val extractor = android.media.MediaExtractor()
+        return try {
+            extractor.setDataSource(file.absolutePath)
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(android.media.MediaFormat.KEY_MIME) ?: ""
+                if (mime.startsWith("audio/")) {
+                    if (format.containsKey(android.media.MediaFormat.KEY_CHANNEL_COUNT)) {
+                        return format.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT)
+                    }
+                }
+            }
+            2
+        } catch (_: Exception) {
+            2
+        } finally {
+            try { extractor.release() } catch (_: Exception) {}
+        }
     }
 
     private fun showUploadSuccessNotification(context: Context, contactName: String, fileName: String, folderName: String) {
@@ -518,7 +666,8 @@ object CallRecordingManager {
 
 data class RecordingFileInfo(
     val contactName: String,
-    val callTime: String
+    val callTime: String,
+    val channelCount: Int = 2
 )
 
 data class RecordingSyncResult(

@@ -1,5 +1,20 @@
 # Project Agent Rules
 
+<!-- BEGIN:knowledge-wiki-logging-rules -->
+## 이지데스크 지식 위키(Knowledge Wiki) 대화 및 작업 내역 상시 기록 표준 원칙 (절대 원칙)
+
+1. **프로젝트별 단일 아카이빙 파일 영구 누적 기록 (Single Project Archive Standard)**:
+   - 사용자와 나누는 모든 대화, 문제 해결 과정, 아키텍처 분석, 코드 변경 및 디버깅 내역은 날짜별로 여러 개의 분할 파일을 만들지 않고, **프로젝트당 단 1개의 통합 아카이빙 마크다운 파일**에 지속적으로 누적 업데이트(최신 작업 섹션을 상단에 Prepend/Insert)해야 합니다:
+     - **경로**: `C:\Users\CHARISMA\OneDrive\Documents\EGDesk\Knowledge Wiki\Work Logs\<프로젝트명>.md` (예: `SheetBot.md`)
+2. **저장 필수 포함 항목**:
+   - 사용자 요청 및 핵심 질의 사항
+   - 아키텍처/코드 분석 결과 및 기술적 의사결정 이유
+   - 생성/수정/삭제된 파일 경로 및 핵심 코드 요약
+   - 실행된 터미널/MCP 도구 및 디버깅 해결 과정
+3. **실시간 인덱싱 동기화 (`obsidian_index`)**:
+   - 위키 문서를 작성하거나 갱신한 직후에는 누락 없이 반드시 `egdesk-knowledge-wiki`의 `obsidian_index` 도구를 호출하여 SQLite 지식 DB(`knowledge-wiki.db`)에 즉시 반영해야 합니다.
+<!-- END:knowledge-wiki-logging-rules -->
+
 <!-- BEGIN:egdesk-server-and-tunnel-infrastructure-rules -->
 ## 이지데스크(EGDesk) 서버 운영 인프라 및 도메인 터널링 표준 원칙 (절대 원칙)
 
@@ -379,3 +394,18 @@
    - 호스트 PC의 EGDesk 터널 클라이언트와 로컬 서버 간의 파이프 연결이 유지되고 있는 상태에서, 터미널 명령으로 포트 프로세스를 강제 종료(`Stop-Process -Force`, `kill -9`)하면 터널 소켓 핸드셰이크가 파괴되어 60초 게이트웨이 타임아웃(Hang)이 발생합니다.
    - 서버 기동 및 갱신은 반드시 이지데스크 공식 관리 도구(`coding_start_server`)를 통해 규격화된 절차로만 안전하게 수행해야 합니다.
 <!-- END:egdesk-auto-managed-files-and-tunnel-stability-rules -->
+
+<!-- BEGIN:sheetbot-gas-coder-archive-rules -->
+## 시트봇(SheetBot) 래핑 주소 기반 개발 의뢰 시 아카이빙 시트 선제 확인 및 대화 자동 기록 표준 원칙 (절대 원칙)
+
+1. **아카이빙 시트 선제 확인 원칙 (Read History First)**:
+   - 사용자가 시트봇 사이트에서 래핑된 브릿지 주소(`.../api/agent/gas-bridge?token=...` 또는 시트 URL)와 함께 개발 요구사항을 전달했을 때, 코드를 작성하기 전에 **반드시 가장 먼저 대상 계정(A)의 구글 드라이브에서 `[SheetBot] 아카이빙` 스프레드시트를 탐색(`drive_list_files`)하고 최근 작업 이력을 조회(`sheets_get_range`)**해야 합니다.
+   - 이전 작업에서 주입된 함수명(`onEdit`, 트리거 등), 과거 요청사항, 고유 비즈니스 규칙을 사전 파악하여 기존 기능 훼손·코드 충돌(Regression)을 원천 차단하고 완벽한 연속성을 유지합니다.
+   - 시트가 존재하지 않을 경우에는 최초 등록 계정으로 인지하고 정상 진행합니다.
+
+2. **[SheetBot] 아카이빙 시트 대화 및 작업 이력 사후 자동 기록 원칙 (Append Archive)**:
+   - Apps Script 코드 주입(Step 3) 또는 반복 수정(Step 4)이 성공적으로 완료되면, **해당 계정의 `[SheetBot] 아카이빙` 시트에 이번 작업에서 나눈 대화 요약과 주입 내역을 1개 행으로 자동 기록(`sheets_append_values`)**해야 합니다.
+   - 시트가 없을 경우 `sheets_create_spreadsheet`로 신규 생성 후 표준 8대 헤더(`작업 일시`, `대상 시트명 (링크)`, `사용자 요청 사항`, `안티그라비티 조치 요약`, `주입된 주요 함수/트리거`, `작업 결과`, `대화 핵심 요약`, `세션 ID`) 및 서식(`sheets_format_headers`)을 자동 주입합니다.
+   - 작업 완료 보고 시 아카이빙 시트 바로가기 링크를 사용자에게 함께 제공하여 투명한 작업 이력을 확인하도록 안내해야 합니다.
+<!-- END:sheetbot-gas-coder-archive-rules -->
+
