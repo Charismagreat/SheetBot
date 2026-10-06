@@ -797,6 +797,28 @@ export async function setupDatabase(force = false): Promise<void> {
       { tableName: 'sheetbot_law_advisories' }
     );
 
+    // 26. sheetbot_blog_posts 테이블 생성 (AI 네이버 블로그 자동 포스팅 관리 대장)
+    await safeCreateTable(
+      'SheetBot 블로그 마케팅 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'title', type: 'TEXT' },
+        { name: 'topic', type: 'TEXT' },
+        { name: 'keywords', type: 'TEXT' },
+        { name: 'ref_urls_json', type: 'TEXT' },
+        { name: 'image_drive_urls_json', type: 'TEXT' },
+        { name: 'content_html', type: 'TEXT' },
+        { name: 'summary', type: 'TEXT' },
+        { name: 'naver_post_url', type: 'TEXT' },
+        { name: 'char_count', type: 'INTEGER' },
+        { name: 'image_count', type: 'INTEGER' },
+        { name: 'status', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_blog_posts' }
+    );
+
     try {
       await executeSQL(`ALTER TABLE sheetbot_ai_batch_jobs ADD COLUMN job_type TEXT;`);
     } catch {}

@@ -18,6 +18,7 @@ export type SheetBindingType =
   | "MEETING"
   | "COMPANY_RESEARCH"
   | "LAW_ADVISORY"
+  | "NAVER_BLOG"
   | "FILE_UPLOAD"
   | "RECEIPT"
   | "BUSINESS_CARD"

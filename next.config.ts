@@ -2,31 +2,6 @@ import type { NextConfig } from "next";
 
 console.log('🔍 DEBUG next.config: EGDESK_BASE_PATH env var =', process.env.EGDESK_BASE_PATH);
 
-/**
- * 🔍 Automatically detect local IPv4 addresses to allow LAN access.
- */
-const getLocalIPs = () => {
-  try {
-    const os = require('os');
-    const interfaces = os.networkInterfaces();
-    const ips = ['localhost', '127.0.0.1'];
-    for (const name of Object.keys(interfaces)) {
-      for (const iface of interfaces[name]) {
-        if (iface.family === 'IPv4' && !iface.internal) {
-          ips.push(iface.address);
-          const parts = iface.address.split('.');
-          if (parts.length === 4) {
-            ips.push(`${parts[0]}.${parts[1]}.${parts[2]}.*`);
-          }
-        }
-      }
-    }
-    return Array.from(new Set(ips));
-  } catch (e) {
-    return ['localhost', '127.0.0.1', '192.168.0.*', '192.168.1.*', '10.0.0.*'];
-  }
-};
-
 const nextConfig: any = {
   eslint: {
     // Always skip ESLint errors to prevent blocking on auto-generated files
@@ -36,7 +11,33 @@ const nextConfig: any = {
   basePath: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
   assetPrefix: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
   // Allow LAN/IP access to the dev server (Next.js 15+)
-  allowedDevOrigins: process.env.NODE_ENV === 'development' ? getLocalIPs() : [],
+  allowedDevOrigins: process.env.NODE_ENV === 'development' ? (() => {
+    /**
+     * 🔍 Automatically detect local IPv4 addresses to allow LAN access.
+     */
+    const getLocalIPs = () => {
+      try {
+        const os = require('os');
+        const interfaces = os.networkInterfaces();
+        const ips = ['localhost', '127.0.0.1'];
+        for (const name of Object.keys(interfaces)) {
+          for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+              ips.push(iface.address);
+              const parts = iface.address.split('.');
+              if (parts.length === 4) {
+                ips.push(`${parts[0]}.${parts[1]}.${parts[2]}.*`);
+              }
+            }
+          }
+        }
+        return Array.from(new Set(ips));
+      } catch (e) {
+        return ['localhost', '127.0.0.1', '192.168.0.*', '192.168.1.*', '10.0.0.*'];
+      }
+    };
+    return getLocalIPs();
+  })() : [],
   typescript: {
     // Always skip TypeScript errors to prevent blocking on auto-generated files
     ignoreBuildErrors: true,
