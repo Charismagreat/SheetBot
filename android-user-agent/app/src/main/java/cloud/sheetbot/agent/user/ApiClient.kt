@@ -986,6 +986,82 @@ object ApiClient {
     }
 
     /**
+     * ✍️ AI 네이버 블로그 자동 포스팅 및 원고 집필 요청 (사진 복수 첨부 + 벤치마킹 URL 3개 스크래핑 분석)
+     */
+    suspend fun requestBlogAutomation(
+        topic: String,
+        keywords: String,
+        refUrl1: String = "",
+        refUrl2: String = "",
+        refUrl3: String = "",
+        files: List<File> = emptyList(),
+        userEmail: String
+    ): BlogPostResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastErr = "블로그 포스팅 원고 작성 요청 실패"
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/blog/post"
+            try {
+                val multipartBuilder = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("userEmail", userEmail)
+                    .addFormDataPart("topic", topic)
+                    .addFormDataPart("keywords", keywords)
+                    .addFormDataPart("refUrl1", refUrl1)
+                    .addFormDataPart("refUrl2", refUrl2)
+                    .addFormDataPart("refUrl3", refUrl3)
+
+                for (f in files) {
+                    if (f.exists()) {
+                        val fileBody = f.asRequestBody("image/jpeg".toMediaTypeOrNull())
+                        multipartBuilder.addFormDataPart("files", f.name, fileBody)
+                    }
+                }
+
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(multipartBuilder.build())
+                    .build()
+
+                val response = longTimeoutClient.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val tagsArray = resJson.optJSONArray("tags")
+                    val tagsList = mutableListOf<String>()
+                    if (tagsArray != null) {
+                        for (i in 0 until tagsArray.length()) {
+                            tagsList.add(tagsArray.optString(i))
+                        }
+                    }
+
+                    return@withContext BlogPostResult(
+                        success = true,
+                        blogId = resJson.optString("blogId", ""),
+                        title = resJson.optString("title", ""),
+                        summary = resJson.optString("summary", ""),
+                        charCount = resJson.optInt("charCount", 0),
+                        imageCount = resJson.optInt("imageCount", 0),
+                        reportUrl = resJson.optString("reportUrl", ""),
+                        sheetUrl = resJson.optString("sheetUrl", ""),
+                        naverPostUrl = resJson.optString("naverPostUrl", ""),
+                        driveFolderUrl = resJson.optString("driveFolderUrl", ""),
+                        tags = tagsList
+                    )
+                } else {
+                    val msg = resJson.optString("error", "HTTP ${response.code}")
+                    lastErr = "$host: $msg"
+                }
+            } catch (e: Exception) {
+                lastErr = "$host: ${e.message}"
+            }
+        }
+        BlogPostResult(success = false, error = lastErr)
+    }
+
+    /**
      * 사진 및 일반 파일 구글 드라이브 및 [SheetBot] 파일 업로드 대장 시트 업로드 (AI OCR 지원)
      */
     suspend fun uploadGenericFile(
@@ -2644,5 +2720,20 @@ data class LawAdvisoryResult(
     val sheetUrl: String = "",
     val fileDriveUrl: String = "",
     val documentSummary: String = "",
+    val error: String? = null
+)
+
+data class BlogPostResult(
+    val success: Boolean,
+    val blogId: String = "",
+    val title: String = "",
+    val summary: String = "",
+    val charCount: Int = 0,
+    val imageCount: Int = 0,
+    val reportUrl: String = "",
+    val sheetUrl: String = "",
+    val naverPostUrl: String = "",
+    val driveFolderUrl: String = "",
+    val tags: List<String> = emptyList(),
     val error: String? = null
 )

@@ -1701,6 +1701,271 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- 독립 카드: blog_automation (✍️ AI 네이버 블로그 자동 포스팅 및 원고 집필) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_scenario"
+            android:padding="13dp"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:id="@+id/layoutBlogHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="✍️ AI 네이버 블로그 자동 포스팅"
+                    android:textColor="#10B981"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btnToggleBlogDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="▼"
+                    android:textColor="#94A3B8"
+                    android:textSize="12sp"
+                    android:padding="4dp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="사진 복수(3~10장) + 주제/키워드 + 상위 벤치마킹 블로그 3개를 AI가 분석하여 DIA+ 검색 상위 노출 원고를 자동 집필하고 구글 시트에 적재합니다."
+                android:textColor="#94A3B8"
+                android:textSize="11sp"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:id="@+id/layoutBlogDetails"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <!-- 1. 사진 복수 선택 버튼 & 상태 표시 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <Button
+                        android:id="@+id/btnSelectBlogImages"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#059669"
+                        android:text="📷 블로그 사진 선택 (복수 3~10장)"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11sp"
+                        android:layout_marginEnd="6dp" />
+
+                    <Button
+                        android:id="@+id/btnResetBlogImages"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:backgroundTint="#475569"
+                        android:text="초기화"
+                        android:textColor="#E2E8F0"
+                        android:textSize="11sp"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvBlogSelectedImagesCount"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="첨부된 사진: 0장 (선택 시 1600px 85% 자동 압축)"
+                    android:textColor="#A7F3D0"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- 2. 주제 입력 -->
+                <EditText
+                    android:id="@+id/etBlogTopic"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:background="@drawable/bg_input_field"
+                    android:hint="포스팅 주제 (예: 강남역 숙성 삼겹살 맛집 솔직 후기)"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#64748B"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- 3. 타깃 키워드 입력 -->
+                <EditText
+                    android:id="@+id/etBlogKeywords"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:background="@drawable/bg_input_field"
+                    android:hint="핵심 키워드 (예: 강남역 맛집, 강남 삼겹살 추천, 단체 모임)"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#64748B"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- 4. 참고 블로그 URL 3개 -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="벤치마킹 참고 블로그 URL (최대 3개, 구조/체류시간 요소 분석):"
+                    android:textColor="#94A3B8"
+                    android:textSize="10.5sp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etBlogRefUrl1"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_input_field"
+                    android:hint="참고 블로그 URL 1 (선택)"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#64748B"
+                    android:textSize="11sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etBlogRefUrl2"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_input_field"
+                    android:hint="참고 블로그 URL 2 (선택)"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#64748B"
+                    android:textSize="11sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etBlogRefUrl3"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_input_field"
+                    android:hint="참고 블로그 URL 3 (선택)"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#64748B"
+                    android:textSize="11sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="10dp" />
+
+                <!-- 5. 실행 버튼 -->
+                <Button
+                    android:id="@+id/btnStartBlogAutomation"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:backgroundTint="#10B981"
+                    android:text="🚀 AI 블로그 원고 작성 &amp; 시트 적재"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- 로딩 표시 -->
+                <ProgressBar
+                    android:id="@+id/pbBlogLoading"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:indeterminateTint="#10B981"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/tvBlogStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:text="AI가 참고 글을 스크래핑하고 네이버 블로그 원고를 집필 중입니다..."
+                    android:textColor="#10B981"
+                    android:textSize="11sp"
+                    android:visibility="gone"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- 결과 표시 컨테이너 -->
+                <LinearLayout
+                    android:id="@+id/layoutBlogResultContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#0F2B20"
+                    android:padding="10dp"
+                    android:layout_marginTop="4dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/tvBlogResultTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="완성된 포스팅 제목"
+                        android:textColor="#6EE7B7"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp" />
+
+                    <TextView
+                        android:id="@+id/tvBlogResultSummary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="핵심 요약..."
+                        android:textColor="#E2E8F0"
+                        android:textSize="11sp"
+                        android:layout_marginBottom="8dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/btnOpenBlogViewer"
+                            android:layout_width="0dp"
+                            android:layout_height="34dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#4F46E5"
+                            android:text="📱 원고 뷰어 열기"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp"
+                            android:layout_marginEnd="4dp" />
+
+                        <Button
+                            android:id="@+id/btnOpenBlogSheet"
+                            android:layout_width="0dp"
+                            android:layout_height="34dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#059669"
+                            android:text="📊 블로그 대장 열기"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp"
+                            android:layout_marginEnd="4dp" />
+
+                        <Button
+                            android:id="@+id/btnOpenNaverWrite"
+                            android:layout_width="0dp"
+                            android:layout_height="34dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#16A34A"
+                            android:text="✍️ 네이버 글쓰기"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
         <!-- 독립 카드: in_call_summary (수신 전화 시 '고객 시트 요약' 인콜 플로팅 팝업) -->
         <LinearLayout
             android:layout_width="match_parent"

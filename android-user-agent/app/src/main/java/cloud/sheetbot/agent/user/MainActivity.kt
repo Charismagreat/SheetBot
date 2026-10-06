@@ -195,6 +195,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ✍️ AI 네이버 블로그 자동 포스팅 사진 복수 첨부 런처 (v2.1.89)
+    private val selectedBlogFiles = mutableListOf<File>()
+    private val blogImagesPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (!uris.isNullOrEmpty()) {
+            handleBlogImagesSelected(uris)
+        }
+    }
+
     // 카카오톡 대화 내용 내보내기(.txt) 파일 선택 런처 (v2.1.11)
     private val kakaoChatPickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
@@ -861,6 +871,9 @@ class MainActivity : AppCompatActivity() {
 
         // ⚖️ AI 법률/계약서 팩트체크 카드 초기화
         setupLawAdvisoryCard()
+
+        // ✍️ AI 네이버 블로그 자동 포스팅 카드 초기화
+        setupBlogAutomationCard()
 
         // 사진 및 문서 파일 구글 드라이브 업로드 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchFileUploadSync.isChecked = prefs.isFileUploadSyncEnabled
@@ -5088,5 +5101,192 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    /**
+     * ✍️ AI 네이버 블로그 다중 사진 선택 처리 (1600px 리사이즈 및 85% JPEG 압축 표준 준수)
+     */
+    private fun handleBlogImagesSelected(uris: List<Uri>) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val processedFiles = mutableListOf<File>()
+                for ((index, uri) in uris.withIndex()) {
+                    var displayName = "blog_photo_${System.currentTimeMillis()}_${index}.jpg"
+                    contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                            if (nameIndex != -1) {
+                                displayName = cursor.getString(nameIndex) ?: displayName
+                            }
+                        }
+                    }
+
+                    // 1600px 샘플링 디코딩
+                    val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, boundsOpts) }
+
+                    val maxDimension = 1600
+                    var inSampleSize = 1
+                    val origW = boundsOpts.outWidth
+                    val origH = boundsOpts.outHeight
+                    if (origW > maxDimension || origH > maxDimension) {
+                        val halfW = origW / 2
+                        val halfH = origH / 2
+                        while ((halfW / inSampleSize) >= maxDimension && (halfH / inSampleSize) >= maxDimension) {
+                            inSampleSize *= 2
+                        }
+                    }
+
+                    val decodeOpts = BitmapFactory.Options().apply { this.inSampleSize = inSampleSize }
+                    val decoded = contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, decodeOpts) }
+
+                    if (decoded != null) {
+                        val tempFile = File(cacheDir, "blog_${System.currentTimeMillis()}_${index}.jpg")
+                        val fos = java.io.FileOutputStream(tempFile)
+                        decoded.compress(Bitmap.CompressFormat.JPEG, 85, fos)
+                        fos.flush()
+                        fos.close()
+                        processedFiles.add(tempFile)
+                    }
+                }
+
+                selectedBlogFiles.clear()
+                selectedBlogFiles.addAll(processedFiles)
+
+                val totalKb = selectedBlogFiles.sumOf { it.length() } / 1024
+
+                withContext(Dispatchers.Main) {
+                    binding.tvBlogSelectedImagesCount.text = "📷 첨부된 사진: ${selectedBlogFiles.size}장 (${totalKb} KB)"
+                    binding.btnResetBlogImages.visibility = if (selectedBlogFiles.isNotEmpty()) View.VISIBLE else View.GONE
+                    Toast.makeText(this@MainActivity, "사진 ${selectedBlogFiles.size}장 최적화 압축 완료!", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "사진 처리 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    /**
+     * ✍️ AI 네이버 블로그 자동 포스팅 카드 이벤트 바인딩
+     */
+    private fun setupBlogAutomationCard() {
+        var isCollapsed = false
+        binding.btnToggleBlogDetails.setOnClickListener {
+            isCollapsed = !isCollapsed
+            binding.layoutBlogDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
+            binding.btnToggleBlogDetails.text = if (isCollapsed) "▶" else "▼"
+        }
+
+        binding.btnSelectBlogImages.setOnClickListener {
+            try {
+                blogImagesPickerLauncher.launch("image/*")
+            } catch (e: Exception) {
+                Toast.makeText(this, "사진 선택 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        binding.btnResetBlogImages.setOnClickListener {
+            selectedBlogFiles.clear()
+            binding.tvBlogSelectedImagesCount.text = "첨부된 사진: 0장 (선택 시 1600px 85% 자동 압축)"
+            binding.btnResetBlogImages.visibility = View.GONE
+            Toast.makeText(this, "사진 첨부가 취소되었습니다.", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnStartBlogAutomation.setOnClickListener {
+            val topic = binding.etBlogTopic.text.toString().trim()
+            val keywords = binding.etBlogKeywords.text.toString().trim()
+            val refUrl1 = binding.etBlogRefUrl1.text.toString().trim()
+            val refUrl2 = binding.etBlogRefUrl2.text.toString().trim()
+            val refUrl3 = binding.etBlogRefUrl3.text.toString().trim()
+
+            if (topic.isBlank()) {
+                Toast.makeText(this, "포스팅 주제를 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val userEmail = PreferencesManager.getInstance(this).userEmail
+            if (userEmail.isBlank()) {
+                Toast.makeText(this, "로그인 정보(사용자 이메일)가 없습니다.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            binding.pbBlogLoading.visibility = View.VISIBLE
+            binding.tvBlogStatus.visibility = View.VISIBLE
+            binding.tvBlogStatus.text = "AI가 참고 글을 스크래핑하고 네이버 블로그 원고를 집필 중입니다..."
+            binding.btnStartBlogAutomation.isEnabled = false
+            binding.layoutBlogResultContainer.visibility = View.GONE
+
+            lifecycleScope.launch {
+                try {
+                    val result = ApiClient.requestBlogAutomation(
+                        topic = topic,
+                        keywords = keywords,
+                        refUrl1 = refUrl1,
+                        refUrl2 = refUrl2,
+                        refUrl3 = refUrl3,
+                        files = selectedBlogFiles.toList(),
+                        userEmail = userEmail
+                    )
+
+                    binding.pbBlogLoading.visibility = View.GONE
+                    binding.tvBlogStatus.visibility = View.GONE
+                    binding.btnStartBlogAutomation.isEnabled = true
+
+                    if (result.success) {
+                        binding.layoutBlogResultContainer.visibility = View.VISIBLE
+                        binding.tvBlogResultTitle.text = "✍️ [원고 완성] ${result.title} (${result.charCount}자)"
+                        binding.tvBlogResultSummary.text = result.summary
+
+                        if (result.reportUrl.isNotBlank()) {
+                            binding.btnOpenBlogViewer.visibility = View.VISIBLE
+                            binding.btnOpenBlogViewer.setOnClickListener {
+                                try {
+                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.reportUrl)))
+                                } catch (e: Exception) {
+                                    Toast.makeText(this@MainActivity, "원고 뷰어 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } else {
+                            binding.btnOpenBlogViewer.visibility = View.GONE
+                        }
+
+                        if (result.sheetUrl.isNotBlank()) {
+                            binding.btnOpenBlogSheet.visibility = View.VISIBLE
+                            binding.btnOpenBlogSheet.setOnClickListener {
+                                try {
+                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.sheetUrl)))
+                                } catch (e: Exception) {
+                                    Toast.makeText(this@MainActivity, "대장 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } else {
+                            binding.btnOpenBlogSheet.visibility = View.GONE
+                        }
+
+                        binding.btnOpenNaverWrite.visibility = View.VISIBLE
+                        binding.btnOpenNaverWrite.setOnClickListener {
+                            try {
+                                val targetUrl = if (result.naverPostUrl.isNotBlank()) result.naverPostUrl else "https://blog.naver.com/GoBlogWrite.naver"
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)))
+                            } catch (e: Exception) {
+                                Toast.makeText(this@MainActivity, "네이버 글쓰기 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+
+                        Toast.makeText(this@MainActivity, "🎉 AI 블로그 원고 작성 및 시트 적재 완료!", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, "작성 실패: ${result.error ?: "오류 발생"}", Toast.LENGTH_LONG).show()
+                    }
+                } catch (e: Exception) {
+                    binding.pbBlogLoading.visibility = View.GONE
+                    binding.tvBlogStatus.visibility = View.GONE
+                    binding.btnStartBlogAutomation.isEnabled = true
+                    Toast.makeText(this@MainActivity, "블로그 원고 처리 오류: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
 }
+
 
