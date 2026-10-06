@@ -204,65 +204,6 @@
                             android:textStyle="bold" />
                     </LinearLayout>
 
-                    <!-- 📋 스마트 통합 할 일 허브 바로가기 카드 (옵션 B) -->
-                    <LinearLayout
-                        android:id="@+id/btnOpenTasksHub"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:paddingVertical="9dp"
-                        android:paddingHorizontal="12dp"
-                        android:background="@drawable/bg_card_web_dashboard"
-                        android:backgroundTint="#064E3B"
-                        android:layout_marginTop="6dp"
-                        android:clickable="true"
-                        android:focusable="true">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="📋"
-                            android:textSize="18sp"
-                            android:layout_marginEnd="10dp" />
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="스마트 통합 할 일 허브"
-                                android:textColor="#FFFFFF"
-                                android:textSize="13sp"
-                                android:textStyle="bold" />
-
-                            <TextView
-                                android:id="@+id/tvTasksHubSubtitle"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="통화 녹음·부재중·주문 지연 실시간 과업 관리"
-                                android:textColor="#A7F3D0"
-                                android:textSize="10sp"
-                                android:layout_marginTop="1dp" />
-                        </LinearLayout>
-
-                        <TextView
-                            android:id="@+id/tvTasksHubBadge"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:background="@drawable/bg_badge_version"
-                            android:backgroundTint="#047857"
-                            android:paddingHorizontal="8dp"
-                            android:paddingVertical="3dp"
-                            android:text="할 일 확인 ›"
-                            android:textColor="#ECFDF5"
-                            android:textSize="11sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
 
                     <!-- 구분선 -->
                     <View
@@ -460,6 +401,71 @@
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
+
+        <!-- 📋 스마트 통합 할 일 허브 독립 카드 (옵션 B) -->
+        <LinearLayout
+            android:id="@+id/cardTasksHub"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_scenario"
+            android:padding="13dp"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:id="@+id/btnOpenTasksHub"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📋"
+                    android:textSize="20sp"
+                    android:layout_marginEnd="10dp" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="스마트 통합 할 일 허브"
+                        android:textColor="#38BDF8"
+                        android:textSize="13.5sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvTasksHubSubtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="통화 녹음·부재중·주문 지연 실시간 과업 관리"
+                        android:textColor="#94A3B8"
+                        android:textSize="10.5sp"
+                        android:layout_marginTop="2dp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvTasksHubBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#047857"
+                    android:paddingHorizontal="9dp"
+                    android:paddingVertical="4dp"
+                    android:text="할 일 확인 ›"
+                    android:textColor="#ECFDF5"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
 
         <!-- 자연어 AI 시트 코파일럿 제어 센터 -->
         <LinearLayout

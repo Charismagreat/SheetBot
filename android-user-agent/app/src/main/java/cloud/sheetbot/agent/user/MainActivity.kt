@@ -553,10 +553,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         // 4-2. 📋 스마트 통합 할 일 허브 전용 화면 열기 (옵션 B)
-        binding.btnOpenTasksHub.setOnClickListener {
+        val openTasksHub = {
             val intent = Intent(this, TasksActivity::class.java)
             startActivity(intent)
         }
+        binding.btnOpenTasksHub.setOnClickListener { openTasksHub() }
+        binding.cardTasksHub.setOnClickListener { openTasksHub() }
 
         // 5. 계정 삭제 버튼 (화면 최하단 Danger Zone)
         binding.btnUnlink.setOnClickListener {
@@ -1527,6 +1529,7 @@ class MainActivity : AppCompatActivity() {
             binding.btnToggleStatusDetails.visibility = View.VISIBLE
             binding.layoutUnlinkZone.visibility = View.VISIBLE
             binding.layoutWalletCard.visibility = View.VISIBLE
+            binding.cardTasksHub.visibility = View.VISIBLE
             binding.layoutUnpairedControls.visibility = View.GONE
             checkServerAndQueueStatus(showToast = false)
             loadWalletBalance(email)
@@ -1539,6 +1542,7 @@ class MainActivity : AppCompatActivity() {
             binding.btnToggleStatusDetails.visibility = View.GONE
             binding.layoutUnlinkZone.visibility = View.GONE
             binding.layoutWalletCard.visibility = View.GONE
+            binding.cardTasksHub.visibility = View.GONE
             binding.layoutUnpairedControls.visibility = View.VISIBLE
         }
 
