@@ -28,19 +28,20 @@ const getLocalIPs = () => {
 };
 
 const nextConfig: any = {
-  // Only use basePath in production mode, not in dev mode
-  basePath: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
-  assetPrefix: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
-  // Allow LAN/IP access to the dev server (Next.js 15+)
-  allowedDevOrigins: getLocalIPs(),
-  typescript: {
-    // Always skip TypeScript errors to prevent blocking on auto-generated files
-    ignoreBuildErrors: true,
-  },
   eslint: {
     // Always skip ESLint errors to prevent blocking on auto-generated files
     ignoreDuringBuilds: true,
   },
+  // Only use basePath in production mode, not in dev mode
+  basePath: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
+  assetPrefix: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
+  // Allow LAN/IP access to the dev server (Next.js 15+)
+  allowedDevOrigins: process.env.NODE_ENV === 'development' ? getLocalIPs() : [],
+  typescript: {
+    // Always skip TypeScript errors to prevent blocking on auto-generated files
+    ignoreBuildErrors: true,
+  },
+
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb',

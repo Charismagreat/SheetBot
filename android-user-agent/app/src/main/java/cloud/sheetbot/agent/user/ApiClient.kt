@@ -912,8 +912,77 @@ object ApiClient {
             } catch (e: Exception) {
                 lastErr = "$host: ${e.message}"
             }
-        }
         CompanyResearchResult(success = false, error = lastErr)
+    }
+
+    /**
+     * AI 법률·계약 자문, 독소 조항 분석 및 심층 보고서 요청 (사진/파일 첨부 지원)
+     */
+    suspend fun requestLawAdvisory(
+        query: String,
+        userEmail: String,
+        file: File? = null,
+        fileName: String? = null,
+        mimeType: String = "image/jpeg"
+    ): LawAdvisoryResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastErr = "법률 자문 요청 실패"
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/law-advisory"
+            try {
+                val request = if (file != null && file.exists()) {
+                    val actualMime = mimeType.toMediaTypeOrNull() ?: "application/octet-stream".toMediaTypeOrNull()!!
+                    val fileBody = file.asRequestBody(actualMime)
+                    val multipartBody = MultipartBody.Builder()
+                        .setType(MultipartBody.FORM)
+                        .addFormDataPart("userEmail", userEmail)
+                        .addFormDataPart("query", query)
+                        .addFormDataPart("file", fileName ?: file.name, fileBody)
+                        .build()
+
+                    Request.Builder()
+                        .url(endpoint)
+                        .post(multipartBody)
+                        .build()
+                } else {
+                    val json = JSONObject().apply {
+                        put("userEmail", userEmail)
+                        put("query", query)
+                    }
+                    Request.Builder()
+                        .url(endpoint)
+                        .post(json.toString().toRequestBody(JSON_MEDIA_TYPE))
+                        .build()
+                }
+
+                val response = longTimeoutClient.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext LawAdvisoryResult(
+                        success = true,
+                        advisoryId = resJson.optString("advisoryId", ""),
+                        executiveSummary = resJson.optString("executiveSummary", ""),
+                        lawTitle = resJson.optString("lawTitle", ""),
+                        lawLink = resJson.optString("lawLink", ""),
+                        caseNumber = resJson.optString("caseNumber", ""),
+                        rulingSummary = resJson.optString("rulingSummary", ""),
+                        reportUrl = resJson.optString("reportUrl", ""),
+                        sheetUrl = resJson.optString("sheetUrl", ""),
+                        fileDriveUrl = resJson.optString("fileDriveUrl", ""),
+                        documentSummary = resJson.optString("documentSummary", "")
+                    )
+                } else {
+                    val msg = resJson.optString("error", "HTTP ${response.code}")
+                    lastErr = "$host: $msg"
+                }
+            } catch (e: Exception) {
+                lastErr = "$host: ${e.message}"
+            }
+        }
+        LawAdvisoryResult(success = false, error = lastErr)
     }
 
     /**
@@ -2563,6 +2632,17 @@ data class KakaoImportResult(
     val error: String? = null
 )
 
-
-
-
+data class LawAdvisoryResult(
+    val success: Boolean,
+    val advisoryId: String = "",
+    val executiveSummary: String = "",
+    val lawTitle: String = "",
+    val lawLink: String = "",
+    val caseNumber: String = "",
+    val rulingSummary: String = "",
+    val reportUrl: String = "",
+    val sheetUrl: String = "",
+    val fileDriveUrl: String = "",
+    val documentSummary: String = "",
+    val error: String? = null
+)

@@ -184,6 +184,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ⚖️ AI 법률/계약서 팩트체크 서류 첨부 런처 (v2.1.88)
+    private var selectedLawFile: File? = null
+    private var selectedLawFileName: String? = null
+    private val lawAdvisoryFilePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            handleLawFileSelected(uri)
+        }
+    }
+
     // 카카오톡 대화 내용 내보내기(.txt) 파일 선택 런처 (v2.1.11)
     private val kakaoChatPickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
@@ -847,6 +858,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+
+        // ⚖️ AI 법률/계약서 팩트체크 카드 초기화
+        setupLawAdvisoryCard()
 
         // 사진 및 문서 파일 구글 드라이브 업로드 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchFileUploadSync.isChecked = prefs.isFileUploadSyncEnabled
@@ -4907,4 +4921,172 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    /**
+     * ⚖️ AI 법률/계약서 서류 첨부 파일 처리 (1600px 리사이즈 및 85% JPEG 압축 표준 준수)
+     */
+    private fun handleLawFileSelected(uri: Uri) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                var displayName = "contract_${System.currentTimeMillis()}.jpg"
+                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex != -1) {
+                            displayName = cursor.getString(nameIndex) ?: displayName
+                        }
+                    }
+                }
+
+                // 1600px 샘플링 디코딩
+                val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, boundsOpts) }
+
+                val maxDimension = 1600
+                var inSampleSize = 1
+                val origW = boundsOpts.outWidth
+                val origH = boundsOpts.outHeight
+                if (origW > maxDimension || origH > maxDimension) {
+                    val halfW = origW / 2
+                    val halfH = origH / 2
+                    while ((halfW / inSampleSize) >= maxDimension && (halfH / inSampleSize) >= maxDimension) {
+                        inSampleSize *= 2
+                    }
+                }
+
+                val decodeOpts = BitmapFactory.Options().apply { this.inSampleSize = inSampleSize }
+                val decoded = contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, decodeOpts) }
+
+                if (decoded == null) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@MainActivity, "이미지 파일을 읽을 수 없습니다.", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+
+                val tempFile = File(cacheDir, "law_${System.currentTimeMillis()}.jpg")
+                val fos = java.io.FileOutputStream(tempFile)
+                decoded.compress(Bitmap.CompressFormat.JPEG, 85, fos)
+                fos.flush()
+                fos.close()
+
+                selectedLawFile = tempFile
+                selectedLawFileName = displayName
+
+                withContext(Dispatchers.Main) {
+                    binding.layoutLawAttachedFile.visibility = View.VISIBLE
+                    binding.tvLawAttachedName.text = "📎 $displayName (${tempFile.length() / 1024} KB)"
+                    Toast.makeText(this@MainActivity, "서류 첨부 완료: $displayName", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "서류 첨부 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    /**
+     * ⚖️ AI 법률/계약서 팩트체크 카드 이벤트 바인딩
+     */
+    private fun setupLawAdvisoryCard() {
+        var isCollapsed = false
+        binding.btnToggleLawAdvisoryDetails.setOnClickListener {
+            isCollapsed = !isCollapsed
+            binding.layoutLawAdvisoryDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
+            binding.btnToggleLawAdvisoryDetails.text = if (isCollapsed) "▼" else "▲"
+        }
+
+        binding.btnAttachLawFile.setOnClickListener {
+            try {
+                lawAdvisoryFilePickerLauncher.launch("image/*")
+            } catch (e: Exception) {
+                Toast.makeText(this, "갤러리 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        binding.btnRemoveLawAttachedFile.setOnClickListener {
+            selectedLawFile = null
+            selectedLawFileName = null
+            binding.layoutLawAttachedFile.visibility = View.GONE
+            Toast.makeText(this, "첨부 서류가 제거되었습니다.", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnStartLawAdvisory.setOnClickListener {
+            val query = binding.etLawQuery.text.toString().trim()
+            if (query.isBlank() && selectedLawFile == null) {
+                Toast.makeText(this, "법률 질의 내용 또는 서류 사진을 첨부해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val userEmail = prefs.userEmail ?: ""
+            if (!prefs.isPaired || userEmail.isBlank()) {
+                Toast.makeText(this, "시트봇 계정 연동 후 자문이 가능합니다.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            binding.pbLawLoading.visibility = View.VISIBLE
+            binding.tvLawStatus.visibility = View.VISIBLE
+            binding.tvLawStatus.text = "🏛️ 대한민국 법제처 법령 및 대법원 리딩 판례 팩트체크 중..."
+            binding.btnStartLawAdvisory.isEnabled = false
+            binding.layoutLawResultContainer.visibility = View.GONE
+
+            lifecycleScope.launch {
+                try {
+                    val result = ApiClient.requestLawAdvisory(
+                        query = query,
+                        userEmail = userEmail,
+                        file = selectedLawFile,
+                        fileName = selectedLawFileName
+                    )
+
+                    binding.pbLawLoading.visibility = View.GONE
+                    binding.tvLawStatus.visibility = View.GONE
+                    binding.btnStartLawAdvisory.isEnabled = true
+
+                    if (result.success) {
+                        binding.layoutLawResultContainer.visibility = View.VISIBLE
+                        binding.tvLawMatchedBadge.text = "🏛️ ${result.lawTitle} | 판례: ${result.caseNumber}"
+                        binding.tvLawExecutiveSummary.text = result.executiveSummary
+
+                        if (result.reportUrl.isNotBlank()) {
+                            binding.btnOpenLawReport.visibility = View.VISIBLE
+                            binding.btnOpenLawReport.setOnClickListener {
+                                try {
+                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.reportUrl)))
+                                } catch (e: Exception) {
+                                    Toast.makeText(this@MainActivity, "보고서 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } else {
+                            binding.btnOpenLawReport.visibility = View.GONE
+                        }
+
+                        if (result.sheetUrl.isNotBlank()) {
+                            binding.btnOpenLawSheet.visibility = View.VISIBLE
+                            binding.btnOpenLawSheet.setOnClickListener {
+                                try {
+                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.sheetUrl)))
+                                } catch (e: Exception) {
+                                    Toast.makeText(this@MainActivity, "대장 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } else {
+                            binding.btnOpenLawSheet.visibility = View.GONE
+                        }
+
+                        Toast.makeText(this@MainActivity, "🎉 AI 법률 자문 및 심층 보고서 작성이 완료되었습니다!", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, "자문 실패: ${result.error ?: "오류 발생"}", Toast.LENGTH_LONG).show()
+                    }
+                } catch (e: Exception) {
+                    binding.pbLawLoading.visibility = View.GONE
+                    binding.tvLawStatus.visibility = View.GONE
+                    binding.btnStartLawAdvisory.isEnabled = true
+                    Toast.makeText(this@MainActivity, "자문 처리 중 오류: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
 }
+
