@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#0B132B">
+
+    <!-- 상단 앱바 툴바 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:background="#1C2541">
+
+        <ImageView
+            android:id="@+id/btnBack"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:src="@android:drawable/ic_menu_revert"
+            android:contentDescription="뒤로가기"
+            app:tint="#E2E8F0"
+            android:background="?android:attr/selectableItemBackgroundBorderless" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="📋 스마트 통합 할 일 허브"
+            android:textColor="#F8FAFC"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:layout_marginStart="12dp" />
+
+        <ImageView
+            android:id="@+id/btnRefreshTasks"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:src="@android:drawable/ic_popup_sync"
+            android:contentDescription="새로고침"
+            app:tint="#38BDF8"
+            android:layout_marginEnd="8dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless" />
+
+        <ImageView
+            android:id="@+id/btnOpenWebTasks"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:src="@android:drawable/ic_menu_share"
+            android:contentDescription="웹 대시보드 열기"
+            app:tint="#34D399"
+            android:background="?android:attr/selectableItemBackgroundBorderless" />
+    </LinearLayout>
+
+    <!-- 요약 통계 바 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="12dp"
+        android:background="#16203B">
+
+        <LinearLayout
+            android:id="@+id/cardFilterPending"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="8dp"
+            android:background="@drawable/bg_card_scenario">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="진행 중"
+                android:textColor="#94A3B8"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/tvStatPendingCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0"
+                android:textColor="#34D399"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <View android:layout_width="8dp" android:layout_height="0dp" />
+
+        <LinearLayout
+            android:id="@+id/cardFilterUrgent"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="8dp"
+            android:background="@drawable/bg_card_scenario">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="긴급/높음"
+                android:textColor="#94A3B8"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/tvStatUrgentCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0"
+                android:textColor="#FB7185"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <View android:layout_width="8dp" android:layout_height="0dp" />
+
+        <LinearLayout
+            android:id="@+id/cardFilterDone"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="8dp"
+            android:background="@drawable/bg_card_scenario">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="완료됨"
+                android:textColor="#94A3B8"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/tvStatDoneCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0"
+                android:textColor="#CBD5E1"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 필터 탭 (진행 중 / 완료 / 전체) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/tabPending"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="미완료"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_badge_version"
+            android:backgroundTint="#059669"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="6dp"
+            android:layout_marginEnd="8dp" />
+
+        <TextView
+            android:id="@+id/tabDone"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="완료됨"
+            android:textColor="#94A3B8"
+            android:textSize="12sp"
+            android:background="@drawable/bg_badge_version"
+            android:backgroundTint="#1E293B"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="6dp"
+            android:layout_marginEnd="8dp" />
+
+        <TextView
+            android:id="@+id/tabAll"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="전체"
+            android:textColor="#94A3B8"
+            android:textSize="12sp"
+            android:background="@drawable/bg_badge_version"
+            android:backgroundTint="#1E293B"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="6dp" />
+
+        <View android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+
+        <Button
+            android:id="@+id/btnAddNewTask"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="＋ 추가"
+            android:textSize="11.5sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#0284C7"
+            android:paddingHorizontal="12dp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- 로딩 바 -->
+        <ProgressBar
+            android:id="@+id/pbLoadingTasks"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:indeterminateTint="#10B981" />
+
+        <!-- 할 일 목록 리사이클러뷰 -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvTasksList"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:paddingHorizontal="12dp"
+            android:clipToPadding="false"
+            android:paddingBottom="16dp" />
+
+        <!-- 빈 목록 안내 뷰 -->
+        <LinearLayout
+            android:id="@+id/llEmptyTasks"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="24dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🎉"
+                android:textSize="36sp"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="모든 할 일이 완료되었습니다!"
+                android:textColor="#F8FAFC"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="통화 녹음, 부재중 전화, 주문 지연 시 AI가 자동으로 이곳에 실시간 등록합니다."
+                android:textColor="#94A3B8"
+                android:textSize="12sp"
+                android:gravity="center"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+    </FrameLayout>
+
+</LinearLayout>

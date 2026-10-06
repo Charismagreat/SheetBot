@@ -145,6 +145,9 @@ class KeepAliveService : Service() {
                         }
                     }
                 }
+                // 📋 데일리 모닝 브리핑 점검 (아침 9시 전후 1회 상단바 알림)
+                TaskBriefingManager.checkAndNotifyDailyBriefing(this@KeepAliveService)
+
                 // 1분(60초)마다 생존 신호 전송
                 delay(60 * 1000L)
             }

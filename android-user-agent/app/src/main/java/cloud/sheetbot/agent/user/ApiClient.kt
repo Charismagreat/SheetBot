@@ -1861,6 +1861,24 @@ object ApiClient {
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
 
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val tasksList = mutableListOf<TaskItemDto>()
+                    val pArray = resJson.optJSONArray("pendingTasks")
+                    if (pArray != null) {
+                        for (i in 0 until pArray.length()) {
+                            val tObj = pArray.optJSONObject(i) ?: continue
+                            tasksList.add(
+                                TaskItemDto(
+                                    id = tObj.optLong("id", 0L),
+                                    title = tObj.optString("title", ""),
+                                    dueDate = tObj.optString("dueDate", null),
+                                    priority = tObj.optString("priority", "NORMAL ⚪"),
+                                    badgeText = tObj.optString("badgeText", null),
+                                    sourceType = tObj.optString("sourceType", "SMS")
+                                )
+                            )
+                        }
+                    }
+
                     return@withContext CallSummaryResult(
                         success = true,
                         found = resJson.optBoolean("found", false),
@@ -1873,6 +1891,7 @@ object ApiClient {
                         lastCallTime = resJson.optString("lastCallTime", ""),
                         lastCallSummary = resJson.optString("lastCallSummary", ""),
                         actionItems = resJson.optString("actionItems", ""),
+                        pendingTasks = tasksList,
                         lastMissedCallTime = resJson.optString("lastMissedCallTime", ""),
                         rawJson = resStr
                     )
@@ -1885,7 +1904,174 @@ object ApiClient {
         }
         CallSummaryResult(success = false, phone = callerPhone, error = lastError)
     }
+
+    /**
+     * 스마트 통합 할 일 허브 목록 조회 (GET /api/user/tasks)
+     */
+    suspend fun fetchTasks(
+        userEmail: String,
+        status: String = "ALL",
+        source: String = "ALL"
+    ): TaskListResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastError = "할 일 목록 조회 실패"
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/tasks?status=$status&source=$source"
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .get()
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val taskList = mutableListOf<TaskItemDto>()
+                    val tasksArr = resJson.optJSONArray("tasks")
+                    if (tasksArr != null) {
+                        for (i in 0 until tasksArr.length()) {
+                            val obj = tasksArr.optJSONObject(i) ?: continue
+                            taskList.add(
+                                TaskItemDto(
+                                    id = obj.optLong("id", 0L),
+                                    title = obj.optString("title", ""),
+                                    description = obj.optString("description", null),
+                                    contactName = obj.optString("contact_name", null),
+                                    contactPhone = obj.optString("contact_phone", null),
+                                    dueDate = obj.optString("due_date", null),
+                                    priority = obj.optString("priority", "NORMAL ⚪"),
+                                    status = obj.optString("status", "PENDING"),
+                                    badgeText = obj.optString("badge_text", null),
+                                    sourceType = obj.optString("source_type", "SMS"),
+                                    createdAt = obj.optString("created_at", "")
+                                )
+                            )
+                        }
+                    }
+
+                    return@withContext TaskListResult(
+                        success = true,
+                        tasks = taskList,
+                        totalCount = resJson.optInt("totalCount", taskList.size),
+                        pendingCount = resJson.optInt("pendingCount", 0),
+                        doneCount = resJson.optInt("doneCount", 0),
+                        spreadsheetUrl = resJson.optString("spreadsheetUrl", null)
+                    )
+                } else {
+                    lastError = resJson.optString("error", "HTTP ${response.code}")
+                }
+            } catch (e: Exception) {
+                lastError = e.localizedMessage ?: "네트워크 연결 불가"
+            }
+        }
+
+        TaskListResult(success = false, error = lastError)
+    }
+
+    /**
+     * 할 일 완료 상태 토글 (PATCH /api/user/tasks)
+     */
+    suspend fun toggleTaskStatus(
+        userEmail: String,
+        taskId: Long,
+        nextStatus: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            val endpoint = "$host/api/user/tasks"
+            try {
+                val json = JSONObject().apply {
+                    put("taskId", taskId)
+                    put("status", nextStatus)
+                }
+                val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .patch(body)
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext true
+                }
+            } catch (_: Exception) {}
+        }
+        false
+    }
+
+    /**
+     * 신규 할 일 수동 등록 (POST /api/user/tasks)
+     */
+    suspend fun createTask(
+        userEmail: String,
+        title: String,
+        contactName: String? = null,
+        contactPhone: String? = null,
+        dueDate: String? = null,
+        priority: String = "HIGH 🟡",
+        badgeText: String = "모바일 등록"
+    ): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            val endpoint = "$host/api/user/tasks"
+            try {
+                val json = JSONObject().apply {
+                    put("title", title)
+                    if (!contactName.isNullOrBlank()) put("contactName", contactName)
+                    if (!contactPhone.isNullOrBlank()) put("contactPhone", contactPhone)
+                    if (!dueDate.isNullOrBlank()) put("dueDate", dueDate)
+                    put("priority", priority)
+                    put("badgeText", badgeText)
+                }
+                val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(body)
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext true
+                }
+            } catch (_: Exception) {}
+        }
+        false
+    }
 }
+
+data class TaskItemDto(
+    val id: Long,
+    val title: String,
+    val description: String? = null,
+    val contactName: String? = null,
+    val contactPhone: String? = null,
+    val dueDate: String? = null,
+    val priority: String = "NORMAL ⚪",
+    val status: String = "PENDING",
+    val badgeText: String? = null,
+    val sourceType: String = "SMS",
+    val createdAt: String = ""
+)
+
+data class TaskListResult(
+    val success: Boolean,
+    val tasks: List<TaskItemDto> = emptyList(),
+    val totalCount: Int = 0,
+    val pendingCount: Int = 0,
+    val doneCount: Int = 0,
+    val spreadsheetUrl: String? = null,
+    val error: String? = null
+)
 
 data class CallSummaryResult(
     val success: Boolean,
@@ -1899,6 +2085,7 @@ data class CallSummaryResult(
     val lastCallTime: String = "",
     val lastCallSummary: String = "",
     val actionItems: String = "",
+    val pendingTasks: List<TaskItemDto> = emptyList(),
     val lastMissedCallTime: String = "",
     val rawJson: String? = null,
     val error: String? = null

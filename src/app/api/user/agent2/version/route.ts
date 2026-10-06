@@ -14,16 +14,16 @@ interface CachedVersion {
 }
 
 let versionCache: CachedVersion | null = null;
-const CACHE_TTL_MS = 30 * 1000; // 30초 캐시 (GitHub API Rate Limit 방어)
+const CACHE_TTL_MS = 5 * 1000; // 5초 캐시 (실시간 릴리즈 즉시 반영)
 
 function parseVersionToCode(versionName: string): number {
   const clean = versionName.replace(/^(user-)?v?/i, "").trim();
   const parts = clean.split(".").map((p) => parseInt(p, 10) || 0);
   if (parts.length >= 3) {
-    // 2.1.76 기준 versionCode 97 매핑
+    // 2.1.76 기준 versionCode 97 매핑 (2.1.81 = 102)
     return 97 + (parts[2] - 76);
   }
-  return 97;
+  return 102;
 }
 
 /**
@@ -41,10 +41,10 @@ export async function GET() {
     );
   }
 
-  let latestName = "2.1.81";
-  let latestCode = 102;
+  let latestName = "2.1.82";
+  let latestCode = 103;
   let apkUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";
-  let releaseNotes = "녹음 파일 직접 업로드 개편 및 모바일 명함/부재중 답장/영수증 문자 유선전화 제외 필터가 적용되었습니다.";
+  let releaseNotes = "스마트 통합 할 일 허브(Task Hub), 통화 화면 플로팅 할 일, 모바일 표시 문구 직관화 및 상단 업데이트 알림 뱃지가 적용되었습니다.";
 
   try {
     const ghRes = await fetch("https://api.github.com/repos/Charismagreat/SheetBot/releases/latest", {
@@ -52,7 +52,7 @@ export async function GET() {
         Accept: "application/vnd.github.v3+json",
         "User-Agent": "SheetBot-Version-Checker",
       },
-      next: { revalidate: 30 },
+      cache: "no-store",
     });
 
     if (ghRes.ok) {

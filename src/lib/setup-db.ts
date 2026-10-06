@@ -781,7 +781,32 @@ export async function setupDatabase(force = false): Promise<void> {
       await executeSQL(`ALTER TABLE sheetbot_ai_batch_jobs ADD COLUMN job_type TEXT;`);
     } catch {}
 
-    // 25. 기본 추천 프롬프트 시딩
+    // 25. sheetbot_tasks 테이블 생성 (전사적 시트 데이터 기반 스마트 통합 할 일 허브)
+    await safeCreateTable(
+      'SheetBot 스마트 통합 할 일 허브',
+      [
+        { name: 'id', type: 'INTEGER', notNull: true, primaryKey: true },
+        { name: 'uuid', type: 'TEXT' },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'title', type: 'TEXT', notNull: true },
+        { name: 'description', type: 'TEXT' },
+        { name: 'source_type', type: 'TEXT', notNull: true }, // 'CALL_RECORDING' | 'MISSED_CALL' | 'ORDER_DELAY' | 'KAKAO' | 'SMS'
+        { name: 'source_id', type: 'TEXT' },
+        { name: 'contact_name', type: 'TEXT' },
+        { name: 'contact_phone', type: 'TEXT' },
+        { name: 'due_date', type: 'TEXT' },
+        { name: 'priority', type: 'TEXT' }, // 'URGENT 🔴' | 'HIGH 🟡' | 'NORMAL ⚪'
+        { name: 'status', type: 'TEXT', notNull: true }, // 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'DISMISSED'
+        { name: 'badge_text', type: 'TEXT' }, // '안내문자 발송됨', '24시간 미입금', '48시간 출고지연'
+        { name: 'deep_link', type: 'TEXT' },
+        { name: 'completed_at', type: 'TEXT' },
+        { name: 'completed_by', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_tasks' }
+    );
+
+    // 26. 기본 추천 프롬프트 시딩
     await seedDefaultPromptTemplates();
 
     // 23. 레거시 데이터 마이그레이션 실행

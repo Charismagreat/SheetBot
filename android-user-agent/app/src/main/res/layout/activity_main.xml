@@ -204,6 +204,66 @@
                             android:textStyle="bold" />
                     </LinearLayout>
 
+                    <!-- 📋 스마트 통합 할 일 허브 바로가기 카드 (옵션 B) -->
+                    <LinearLayout
+                        android:id="@+id/btnOpenTasksHub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingVertical="9dp"
+                        android:paddingHorizontal="12dp"
+                        android:background="@drawable/bg_card_web_dashboard"
+                        android:backgroundTint="#064E3B"
+                        android:layout_marginTop="6dp"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="📋"
+                            android:textSize="18sp"
+                            android:layout_marginEnd="10dp" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="스마트 통합 할 일 허브"
+                                android:textColor="#FFFFFF"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvTasksHubSubtitle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="통화 녹음·부재중·주문 지연 실시간 과업 관리"
+                                android:textColor="#A7F3D0"
+                                android:textSize="10sp"
+                                android:layout_marginTop="1dp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tvTasksHubBadge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_badge_version"
+                            android:backgroundTint="#047857"
+                            android:paddingHorizontal="8dp"
+                            android:paddingVertical="3dp"
+                            android:text="할 일 확인 ›"
+                            android:textColor="#ECFDF5"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
                     <!-- 구분선 -->
                     <View
                         android:layout_width="match_parent"
@@ -733,7 +793,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="🎙️ 통화 녹음 드라이브 자동 저장"
+                    android:text="🎙️ 통화 녹음 자동 분석"
                     android:textColor="#E2E8F0"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -1038,7 +1098,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="📞 수신 전화 시 '고객 시트 요약' 인콜 팝업"
+                    android:text="📞 수신 전화 인콜 팝업"
                     android:textColor="#38BDF8"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -1156,7 +1216,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="📞 전화 못 받았을 때 자동 답장 문자 발송"
+                    android:text="📞 부재중 전화 자동 답장"
                     android:textColor="#F97316"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -1255,7 +1315,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="💼 통화 끝나면 내 모바일 명함 바로 보내기"
+                    android:text="💼 통화 종료후 모바일 명함 자동 발송"
                     android:textColor="#38BDF8"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -1567,7 +1627,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="💬 고객 문자 주고받은 내역 시트에 자동 기록"
+                    android:text="💬 문자 수발신 자동 기록"
                     android:textColor="#E2E8F0"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -1718,7 +1778,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="🟡 카카오톡 대화 내용 시트에 자동 기록"
+                    android:text="🟡 카톡 대화 자동 기록"
                     android:textColor="#FEE500"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -2115,7 +2175,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="📑 고객용 간편 주문서 &amp; 단가표 자동 안내"
+                    android:text="📑 간편 주문 접수 기록"
                     android:textColor="#2DD4BF"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -2757,8 +2817,18 @@
                     android:lineSpacingExtra="2dp"
                     android:layout_marginTop="4dp" />
             </LinearLayout>
+        </LinearLayout>
 
-            <!-- 📇 스마트폰 연락처 구글 시트 자동 동기화 (Contacts Sync) -->
+        <!-- 독립 카드: contacts_sync -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_scenario"
+            android:padding="13dp"
+            android:layout_marginBottom="12dp">
+
+            <!-- 스마트폰 연락처 구글 시트 자동 동기화 섹션 -->
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
@@ -2780,7 +2850,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="📇 스마트폰 연락처 구글 시트에 자동 백업"
+                    android:text="📇 연락처 백업"
                     android:textColor="#38BDF8"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -2812,8 +2882,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:background="#0F172A"
-                android:padding="10dp"
-                android:layout_marginBottom="12dp">
+                android:padding="10dp">
 
                 <TextView
                     android:layout_width="wrap_content"

@@ -25,6 +25,11 @@ import { getKoreanTimeString } from "@/lib/date-utils";
 import { processPendingBatchJobs } from "@/lib/ai-batch-sweeper";
 import { resolveSafeTargetRow } from "@/lib/sheet-fingerprint-guard";
 import { listEnrolledSpeakers } from "@/lib/voice-transcript-helper";
+import {
+  createTaskItem,
+  parseActionItems,
+  autoResolveMissedCallTasks,
+} from "@/lib/task-hub-helper";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -850,6 +855,27 @@ ${voiceProfileHint}
       } else {
         console.warn(`[AiAudioAnalysis] 🛑 Target row for ${fileName} was deleted by user (${guardRes.reason}). Skipping sheet update.`);
       }
+    }
+
+    // [스마트 통합 할 일 허브 (Task Hub) 연동]
+    // 1. 통화 완료 시 기존 부재중 전화 할 일이 있었다면 자동 해결(DONE) 처리
+    await autoResolveMissedCallTasks(cleanEmail, contactName).catch((e: any) =>
+      console.warn("[AiAudioAnalysis] autoResolveMissedCallTasks error:", e.message)
+    );
+
+    // 2. 추출된 Action Items를 스마트 할 일 대장에 자동 등록
+    const parsedTasks = parseActionItems(actionItems);
+    for (const task of parsedTasks) {
+      await createTaskItem({
+        userEmail: cleanEmail,
+        sourceType: "CALL_RECORDING",
+        sourceRef: fileName,
+        contactName,
+        taskTitle: task.title,
+        dueDate: task.dueDate,
+        priority: task.priority,
+        badgeText: "통화 녹음",
+      }).catch((e: any) => console.warn("[AiAudioAnalysis] createTaskItem error:", e.message));
     }
 
     console.log(`[AiAudioAnalysis] Audio ${fileName} analyzed via ${modeLabel} & ${usedTokens} tokens deducted for ${cleanEmail}.`);

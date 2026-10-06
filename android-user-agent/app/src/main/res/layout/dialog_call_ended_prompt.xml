@@ -106,6 +106,54 @@
             android:layout_marginTop="8dp" />
     </LinearLayout>
 
+    <!-- 📌 고객 관련 진행 중인 할 일 카드 (옵션 A) -->
+    <LinearLayout
+        android:id="@+id/llCustomerTaskContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#1E293B"
+        android:padding="10dp"
+        android:layout_marginBottom="12dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="4dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="📌 이 고객과 진행 중인 할 일"
+                android:textColor="#34D399"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/btnMarkTaskDone"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="✓ 완료 처리"
+                android:textColor="#10B981"
+                android:textSize="10.5sp"
+                android:textStyle="bold"
+                android:background="?android:attr/selectableItemBackground"
+                android:padding="4dp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvCallEndedTaskTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#F1F5F9"
+            android:textSize="11.5sp"
+            android:text="진행 중인 할 일이 있습니다." />
+    </LinearLayout>
+
     <!-- 하단 메인 액션 버튼: 지금 바로 발송 -->
     <Button
         android:id="@+id/btnSendBusinessCardNow"
