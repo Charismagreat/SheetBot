@@ -41,10 +41,10 @@ export async function GET() {
     );
   }
 
-  let latestName = "2.1.79";
-  let latestCode = 100;
+  let latestName = "2.1.81";
+  let latestCode = 102;
   let apkUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";
-  let releaseNotes = "카카오톡 단체 채팅방 판별 및 단톡방명 정밀 파싱 로직이 적용되었습니다.";
+  let releaseNotes = "녹음 파일 직접 업로드 개편 및 모바일 명함/부재중 답장/영수증 문자 유선전화 제외 필터가 적용되었습니다.";
 
   try {
     const ghRes = await fetch("https://api.github.com/repos/Charismagreat/SheetBot/releases/latest", {

@@ -122,7 +122,12 @@ object DepositQueueManager {
                     Log.i(TAG, "✅ [오프라인 큐 전송 성공] ID=${item.id}, 발신=${item.sender}")
                     // 영수증 문자 자동 전송
                     if (prefsManager.isReceiptSmsEnabled && !result.replySmsPhone.isNullOrBlank() && !result.replySmsText.isNullOrBlank()) {
-                        SmsSenderUtil.sendSms(context, result.replySmsPhone, result.replySmsText)
+                        // 🛡️ 상대방 번호가 한국 휴대전화가 아닌 경우(유선전화, 대표번호 등) 영수증 SMS 발송 제외
+                        if (!ContactHelper.isMobilePhoneNumber(result.replySmsPhone)) {
+                            Log.i(TAG, "⏭️ [오프라인 큐 영수증 SMS 제외] 휴대전화가 아닌 번호입니다: ${result.replySmsPhone} (유선/대표번호 자동 제외)")
+                        } else {
+                            SmsSenderUtil.sendSms(context, result.replySmsPhone, result.replySmsText)
+                        }
                     }
                 } else {
                     Log.w(TAG, "⚠️ [오프라인 큐 전송 실패] 서버 여전히 불안정 - 큐에 유지")

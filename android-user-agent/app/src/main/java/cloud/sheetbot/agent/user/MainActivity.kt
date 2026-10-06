@@ -121,6 +121,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 다른 폰/외부에서 전송받은 통화 녹음 파일(.m4a, .mp3 등) 직접 선택 런처
+    private val externalRecordingPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (!uris.isNullOrEmpty()) {
+            uploadExternalRecordings(uris)
+        }
+    }
+
     // 영수증 AI OCR 장부화 전용 이미지/문서 선택 런처 (v1.5)
     private val receiptPickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
@@ -404,6 +413,11 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Throwable) {
             android.util.Log.w("MainActivity", "refreshBusinessCardUi 방어: ${e.message}")
         }
+        try {
+            updateOverlayPermissionStatus()
+        } catch (e: Throwable) {
+            android.util.Log.w("MainActivity", "updateOverlayPermissionStatus 방어: ${e.message}")
+        }
     }
 
     override fun onPause() {
@@ -681,23 +695,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnSyncRecordingsNow.setOnClickListener {
-            checkAndRequestAllFilesAccess {
-                executeRecordingSync(forceReupload = false)
-            }
-        }
-
-        binding.btnSyncRecordingsNow.setOnLongClickListener {
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("🔄 통화 녹음 전체 강제 재동기화")
-                .setMessage("기존 백업 이력을 무시하고 스마트폰의 모든 통화 녹음 파일을 구글 드라이브로 다시 업로드하시겠습니까?")
-                .setPositiveButton("전체 재업로드") { _, _ ->
-                    checkAndRequestAllFilesAccess {
-                        executeRecordingSync(forceReupload = true)
-                    }
-                }
-                .setNegativeButton("취소", null)
-                .show()
-            true
+            // 다른 폰/외부에서 전송받은 통화 녹음 파일(.m4a, .mp3 등) 직접 선택
+            externalRecordingPickerLauncher.launch("audio/*")
         }
 
         // 사진 및 문서 파일 구글 드라이브 업로드 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
@@ -1079,6 +1078,32 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // 수신 전화 시 '고객 시트 요약' 인콜 플로팅 팝업 UI 바인딩
+        binding.switchInCallSummary.isChecked = prefs.isInCallSummaryEnabled
+        binding.switchInCallSummary.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isInCallSummaryEnabled = isChecked
+            val msg = if (isChecked) "수신 전화 시 '고객 시트 요약' 인콜 팝업이 켜졌습니다." else "수신 전화 인콜 팝업이 꺼졌습니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            if (isChecked && !InCallOverlayManager.canDrawOverlays(this)) {
+                requestOverlayPermission()
+            }
+        }
+
+        binding.btnRequestOverlayPermission.setOnClickListener {
+            requestOverlayPermission()
+        }
+
+        binding.btnPreviewInCallSummary.setOnClickListener {
+            if (!InCallOverlayManager.canDrawOverlays(this)) {
+                Toast.makeText(this, "먼저 '다른 앱 위에 표시' 권한을 허용해 주세요.", Toast.LENGTH_SHORT).show()
+                requestOverlayPermission()
+            } else {
+                Toast.makeText(this, "🔍 인콜 플로팅 팝업 미리보기를 실행합니다.", Toast.LENGTH_SHORT).show()
+                InCallOverlayManager.show(this, "010-1234-5678", previewMode = true)
+            }
+        }
+        updateOverlayPermissionStatus()
+
         // 부재중 전화(Missed Call) 0원 스마트 자동 회신 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchMissedCall.isChecked = prefs.isMissedCallAutoReplyEnabled
         binding.etMissedCallReply.setText(prefs.missedCallReplyTemplate)
@@ -1317,6 +1342,7 @@ class MainActivity : AppCompatActivity() {
         updateCardCollapseState(binding.layoutSmsSyncSettings, binding.btnToggleSmsSyncDetails, prefs.isSmsSyncDetailsHidden)
         updateCardCollapseState(binding.layoutKakaoSyncSettings, binding.btnToggleKakaoSyncDetails, prefs.isKakaoSyncDetailsHidden)
         updateCardCollapseState(binding.layoutQuoteSyncSettings, binding.btnToggleQuoteSyncDetails, prefs.isQuoteSyncDetailsHidden)
+        updateCardCollapseState(binding.layoutInCallSummarySettings, binding.btnToggleInCallSummaryDetails, prefs.isInCallSummaryDetailsHidden)
         updateCardCollapseState(binding.layoutMissedCallSettings, binding.btnToggleMissedCallDetails, prefs.isMissedCallDetailsHidden)
         updateCardCollapseState(binding.layoutCallEndedCardSettings, binding.btnToggleCallEndedCardDetails, prefs.isCallEndedCardDetailsHidden)
         updateCardCollapseState(binding.layoutWebsiteMonitorSettings, binding.btnToggleWebsiteMonitorDetails, prefs.isWebsiteMonitorDetailsHidden)
@@ -1398,6 +1424,14 @@ class MainActivity : AppCompatActivity() {
         binding.layoutQuoteSyncHeader.setOnClickListener { toggleQuoteSync() }
         binding.btnToggleQuoteSyncDetails.setOnClickListener { toggleQuoteSync() }
 
+        // 9-B. 인콜 고객 요약 카드
+        val toggleInCallSummary = {
+            prefs.isInCallSummaryDetailsHidden = !prefs.isInCallSummaryDetailsHidden
+            updateCardCollapseState(binding.layoutInCallSummarySettings, binding.btnToggleInCallSummaryDetails, prefs.isInCallSummaryDetailsHidden)
+        }
+        binding.layoutInCallSummaryHeader.setOnClickListener { toggleInCallSummary() }
+        binding.btnToggleInCallSummaryDetails.setOnClickListener { toggleInCallSummary() }
+
         // 10. 부재중 전화 카드
         val toggleMissedCall = {
             prefs.isMissedCallDetailsHidden = !prefs.isMissedCallDetailsHidden
@@ -1429,6 +1463,38 @@ class MainActivity : AppCompatActivity() {
         }
         binding.layoutContactsHeader.setOnClickListener { toggleContacts() }
         binding.btnToggleContactsDetails.setOnClickListener { toggleContacts() }
+    }
+
+    private fun updateOverlayPermissionStatus() {
+        if (!::binding.isInitialized) return
+        val hasPermission = InCallOverlayManager.canDrawOverlays(this)
+        if (hasPermission) {
+            binding.tvOverlayPermissionStatus.text = "• 다른 앱 위에 표시: 허용됨 (정상 작동 중)"
+            binding.tvOverlayPermissionStatus.setTextColor(Color.parseColor("#34D399"))
+            binding.btnRequestOverlayPermission.visibility = View.GONE
+        } else {
+            binding.tvOverlayPermissionStatus.text = "• 다른 앱 위에 표시: 권한 필요 (터치하여 허용)"
+            binding.tvOverlayPermissionStatus.setTextColor(Color.parseColor("#F59E0B"))
+            binding.btnRequestOverlayPermission.visibility = View.VISIBLE
+        }
+    }
+
+    private fun requestOverlayPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
+                startActivity(intent)
+                Toast.makeText(this, "SheetBot을 찾아 '다른 앱 위에 표시' 권한을 켜주세요.", Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                try {
+                    val fallbackIntent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+                    startActivity(fallbackIntent)
+                } catch (_: Exception) {}
+            }
+        }
     }
 
     private fun updateUiState() {
@@ -3854,8 +3920,46 @@ class MainActivity : AppCompatActivity() {
                 Log.e("MainActivity", "executeRecordingSync 오류: ${e.message}", e)
                 withContext(Dispatchers.Main) {
                     binding.btnSyncRecordingsNow.isEnabled = true
-                    binding.btnSyncRecordingsNow.text = "⚡ 지금 새 녹음 파일 즉시 동기화"
+                    binding.btnSyncRecordingsNow.text = "📁 녹음 파일 직접 업로드"
                     Toast.makeText(this@MainActivity, "동기화 중 오류가 발생했습니다: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    /**
+     * 📁 다른 폰/외부 녹음 파일(.m4a, .mp3 등) 직접 선택 업로드 처리
+     */
+    private fun uploadExternalRecordings(uris: List<Uri>) {
+        if (!prefs.isPaired) {
+            Toast.makeText(this, "⚠️ 시트봇 계정 연동 후 업로드할 수 있습니다.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        binding.btnSyncRecordingsNow.isEnabled = false
+        binding.btnSyncRecordingsNow.text = "⏳ 녹음 파일 업로드 중..."
+        Toast.makeText(this, "📁 ${uris.size}개의 녹음 파일을 구글 드라이브로 업로드합니다...", Toast.LENGTH_SHORT).show()
+
+        activityScope.launch(Dispatchers.IO) {
+            try {
+                val result = CallRecordingManager.uploadExternalRecordingsFromUris(this@MainActivity, uris)
+                withContext(Dispatchers.Main) {
+                    binding.btnSyncRecordingsNow.isEnabled = true
+                    binding.btnSyncRecordingsNow.text = "📁 녹음 파일 직접 업로드"
+
+                    val dialogTitle = if (result.uploadedCount > 0) "🎉 녹음 파일 업로드 완료" else "⚠️ 업로드 결과 안내"
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle(dialogTitle)
+                        .setMessage(result.message)
+                        .setPositiveButton("확인", null)
+                        .show()
+                }
+            } catch (e: Throwable) {
+                Log.e("MainActivity", "uploadExternalRecordings 오류: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    binding.btnSyncRecordingsNow.isEnabled = true
+                    binding.btnSyncRecordingsNow.text = "📁 녹음 파일 직접 업로드"
+                    Toast.makeText(this@MainActivity, "업로드 중 오류가 발생했습니다: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
         }

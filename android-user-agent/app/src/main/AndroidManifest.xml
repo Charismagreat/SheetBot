@@ -29,10 +29,11 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
-    <!-- 화면 깨우기 & 잠금화면 위 비상 알람 풀스크린 실행 -->
+    <!-- 화면 깨우기 & 잠금화면 위 비상 알람 풀스크린 실행 및 수신 통화 시 고객 요약 오버레이 카드 표출 -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <!-- 통화 녹음 파일 자동 감지 및 구글 드라이브 동기화, 연락처 이름 매칭 -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />

@@ -31,6 +31,30 @@ object ContactHelper {
     }
 
     /**
+     * 한국 표준 휴대전화 번호인지 엄격 판별 (010, 011, 016, 017, 018, 019 등)
+     * - 유선전화(02, 031 등), 대표번호(1588, 1544 등), 인터넷전화(070)는 false 반환
+     */
+    fun isMobilePhoneNumber(raw: String?): Boolean {
+        if (raw.isNullOrBlank()) return false
+        val cleanText = raw.trim()
+
+        // 한글이나 알파벳이 포함되어 있으면 전화번호가 아님
+        if (cleanText.any { it in '가'..'힣' || it in 'ㄱ'..'ㅎ' || it in 'a'..'z' || it in 'A'..'Z' }) {
+            return false
+        }
+
+        var digits = cleanText.replace(Regex("[^0-9+]"), "").trim()
+        if (digits.startsWith("+82")) {
+            digits = "0" + digits.removePrefix("+82")
+        } else if (digits.startsWith("82") && digits.length >= 10) {
+            digits = "0" + digits.removePrefix("82")
+        }
+
+        // 한국 휴대전화 규격: 010, 011, 016, 017, 018, 019 + 7~8자리 숫자 (총 10~11자리)
+        return digits.matches(Regex("^01[016789][0-9]{7,8}$"))
+    }
+
+    /**
      * 국가코드(82) 제거 및 한국 표준 전화번호 형식(010-XXXX-XXXX, 1599-XXXX 등)으로 변환
      */
     fun formatPhoneNumber(raw: String): String {

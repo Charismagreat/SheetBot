@@ -62,6 +62,7 @@ object ChunkedUploader {
         isCallRecording: Boolean = false,
         contactName: String? = null,
         callTime: String? = null,
+        channelCount: Int = 2,
         onProgress: ((uploadedChunks: Int, totalChunks: Int) -> Unit)? = null
     ): ChunkedUploadResult = withContext(Dispatchers.IO) {
         if (!file.exists() || file.length() == 0L) {
@@ -77,7 +78,7 @@ object ChunkedUploader {
 
         for (host in hosts) {
             try {
-                Log.i(TAG, "🚀 [청크 업로드 개시] $fileName (${totalBytes / 1024} KB) -> $host")
+                Log.i(TAG, "🚀 [청크 업로드 개시] $fileName (${totalBytes / 1024} KB, channels=$channelCount) -> $host")
 
                 // ==========================================
                 // 1단계: 세션 초기화 (POST /api/user/files/uploads)
@@ -100,6 +101,7 @@ object ChunkedUploader {
                     put("isCallRecording", isCallRecording)
                     if (!contactName.isNullOrBlank()) put("contactName", contactName)
                     if (!callTime.isNullOrBlank()) put("callTime", callTime)
+                    put("channelCount", channelCount)
                 }
 
                 val initRequest = Request.Builder()

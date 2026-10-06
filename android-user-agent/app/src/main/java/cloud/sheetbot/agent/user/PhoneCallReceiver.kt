@@ -65,6 +65,13 @@ class PhoneCallReceiver : BroadcastReceiver() {
          * 모바일 명함 문자 즉시 전송 (웹 명함 링크 모드 - 0원 무료 SMS)
          */
         fun sendBusinessCardSms(context: Context, phoneNumber: String, contactName: String?, onComplete: ((Boolean) -> Unit)? = null) {
+            // 🛡️ 상대방 번호가 휴대전화가 아닌 경우(유선전화, 대표번호 등) 발송 취소
+            if (!ContactHelper.isMobilePhoneNumber(phoneNumber)) {
+                Log.w(TAG, "⏭️ [모바일 명함 발송 제외] 상대방 번호가 휴대전화가 아닙니다: $phoneNumber (유선/대표번호 자동 제외)")
+                onComplete?.invoke(false)
+                return
+            }
+
             val prefs = PreferencesManager(context)
             val template = prefs.businessCardSmsTemplate.trim()
             val webLink = prefs.businessCardWebLink.trim()
@@ -119,6 +126,13 @@ class PhoneCallReceiver : BroadcastReceiver() {
          * 모바일 명함 갤러리 사진 첨부 발송 (MMS 모드 - 구글 시트 대장 기록 및 시스템 문자 앱 자동 실행)
          */
         fun sendBusinessCardMms(context: Context, phoneNumber: String, contactName: String?, onComplete: ((Boolean) -> Unit)? = null) {
+            // 🛡️ 상대방 번호가 휴대전화가 아닌 경우(유선전화, 대표번호 등) 발송 취소
+            if (!ContactHelper.isMobilePhoneNumber(phoneNumber)) {
+                Log.w(TAG, "⏭️ [모바일 명함 발송 제외] 상대방 번호가 휴대전화가 아닙니다: $phoneNumber (유선/대표번호 자동 제외)")
+                onComplete?.invoke(false)
+                return
+            }
+
             val prefs = PreferencesManager(context)
             val template = prefs.businessCardSmsTemplate.trim()
             val imagePath = prefs.businessCardImagePath
@@ -303,6 +317,12 @@ class PhoneCallReceiver : BroadcastReceiver() {
                 isIncomingAnswered = false
                 callStartTime = System.currentTimeMillis()
                 Log.d(TAG, "📞 [전화 수신 링 인입] 번호: $phoneNumber")
+
+                // 🔔 [수신 전화 시 '고객 시트 요약' 인콜 플로팅 팝업 표출]
+                val ringingPhone = phoneNumber ?: savedIncomingNumber
+                if (!ringingPhone.isNullOrBlank() && prefs.isInCallSummaryEnabled) {
+                    InCallOverlayManager.show(context, ringingPhone)
+                }
             }
 
             TelephonyManager.EXTRA_STATE_OFFHOOK -> {
@@ -312,7 +332,9 @@ class PhoneCallReceiver : BroadcastReceiver() {
             }
 
             TelephonyManager.EXTRA_STATE_IDLE -> {
-                // 통화 종료 또는 미수신 상태 전환
+                // 통화 종료 또는 미수신 상태 전환 시 인콜 플로팅 팝업 안전하게 닫기
+                InCallOverlayManager.dismiss(context)
+
                 val wasRingingNotAnswered = (lastState == TelephonyManager.EXTRA_STATE_RINGING && !isIncomingAnswered)
                 val wasOffhook = (lastState == TelephonyManager.EXTRA_STATE_OFFHOOK)
                 val candidatePhone = phoneNumber ?: savedIncomingNumber
@@ -436,14 +458,25 @@ class PhoneCallReceiver : BroadcastReceiver() {
 
         var autoReplied = false
         if (prefs.isMissedCallAutoReplyEnabled && replyTemplate.isNotBlank()) {
-            // 0원 안내 문자 자동 회신
-            autoReplied = SmsSenderUtil.sendSms(context, phone, replyTemplate)
-            if (autoReplied) {
-                Log.i(TAG, "📲 [부재중 자동 회신 완료] $phone")
-                if (prefs.isTtsEnabled) {
-                    TtsManager.speak(context, "부재중 전화가 감지되어 고객님께 안내 문자를 자동 회신했습니다.")
+            // 🛡️ 상대방 번호가 한국 휴대전화가 아닌 경우(유선전화, 대표번호, 인터넷전화 등) 자동 답장 문자 제외
+            if (!ContactHelper.isMobilePhoneNumber(phone)) {
+                Log.i(TAG, "⏭️ [부재중 자동 회신 제외] 상대방 번호가 휴대전화가 아닙니다: $phone (유선/대표번호 자동 답장 제외)")
+            } else {
+                // 0원 안내 문자 자동 회신
+                autoReplied = SmsSenderUtil.sendSms(context, phone, replyTemplate)
+                if (autoReplied) {
+                    Log.i(TAG, "📲 [부재중 자동 회신 완료] $phone")
+                    if (prefs.isTtsEnabled) {
+                        TtsManager.speak(context, "부재중 전화가 감지되어 고객님께 안내 문자를 자동 회신했습니다.")
+                    }
                 }
             }
+        }
+
+        val fallbackReplyMsg = when {
+            autoReplied -> replyTemplate
+            !ContactHelper.isMobilePhoneNumber(phone) -> "유선/대표번호(발송제외)"
+            else -> "미발송"
         }
 
         // 구글 시트 [SheetBot] 부재중 전화 대장에 기록
@@ -453,7 +486,7 @@ class PhoneCallReceiver : BroadcastReceiver() {
             contactName = contactName,
             callTime = callTime,
             autoReplied = autoReplied,
-            replyMessage = if (autoReplied) replyTemplate else "미발송",
+            replyMessage = fallbackReplyMsg,
             sheetTitle = prefs.missedCallDriveSheetTitle
         )
 
@@ -483,6 +516,12 @@ class PhoneCallReceiver : BroadcastReceiver() {
 
                 if (finalPhone.isBlank()) {
                     Log.w(TAG, "통화 종료를 감지했으나 상대방 번호를 획득하지 못해 명함 발송 처리를 건너뜁니다.")
+                    return@launch
+                }
+
+                // 🛡️ 상대방 번호가 한국 휴대전화가 아닌 경우(유선전화, 대표번호, 인터넷전화 등) 모바일 명함 팝업 및 발송 제외
+                if (!ContactHelper.isMobilePhoneNumber(finalPhone)) {
+                    Log.i(TAG, "⏭️ [통화 종료 명함 제외] 상대방 번호가 휴대전화가 아닙니다: $finalPhone (유선/대표번호 자동 제외)")
                     return@launch
                 }
 

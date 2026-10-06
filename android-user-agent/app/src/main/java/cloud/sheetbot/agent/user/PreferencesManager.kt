@@ -251,6 +251,27 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("business_card_drive_sheet_title", "[SheetBot] 스마트 명함 관리 대장") ?: "[SheetBot] 스마트 명함 관리 대장"
         set(value) = prefs.edit().putString("business_card_drive_sheet_title", value).apply()
 
+    // 수신 전화 시 '고객 시트 요약' 인콜(In-call) 플로팅 팝업 설정 (기본 켜짐: true)
+    var isInCallSummaryEnabled: Boolean
+        get() = prefs.getBoolean("is_in_call_summary_enabled", true)
+        set(value) = prefs.edit().putBoolean("is_in_call_summary_enabled", value).apply()
+
+    var isInCallSummaryExpanded: Boolean
+        get() = prefs.getBoolean("is_in_call_summary_expanded", true)
+        set(value) = prefs.edit().putBoolean("is_in_call_summary_expanded", value).apply()
+
+    var isInCallSummaryDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_in_call_summary_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_in_call_summary_details_hidden", value).apply()
+
+    fun saveCallSummaryCache(phoneKey: String, json: String) {
+        prefs.edit().putString("call_summary_cache_$phoneKey", json).apply()
+    }
+
+    fun getCallSummaryCache(phoneKey: String): String? {
+        return prefs.getString("call_summary_cache_$phoneKey", null)
+    }
+
     // 통화 종료 직후 모바일 명함 / 감사 문자 원터치 발송 설정 (신규 설치 시 기본 꺼짐: false)
     var isCallEndedCardPromptEnabled: Boolean
         get() = prefs.getBoolean("is_call_ended_card_prompt_enabled", false)

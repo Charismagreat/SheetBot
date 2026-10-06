@@ -26,11 +26,22 @@ description: Google 스프레드시트 분석 및 Google Apps Script(GAS) 자동
    - `spreadsheetAnalysis.tabs`: 각 탭의 이름, 행/열 크기, `suggestedHeaderRow`(예: 10행), `headers`(A열부터의 컬럼명)
    - `existingCode`: 현재 배포되어 있는 기존 `Code.gs` 및 `appsscript.json`
    - `codingInstructions.postEndpoint`: 완성된 코드를 제출할 엔드포인트 URL
+   - `userEmail` 또는 `spreadsheetInfo`: 계정 식별 정보
+
+### Step 1-1. [SheetBot] 아카이빙 시트 선제 확인 (Read History First, 절대 원칙)
+래핑 주소와 함께 요청사항이 들어오면 코드를 작성하기 전에 **반드시 가장 먼저 계정 A의 `[SheetBot] 아카이빙` 시트를 확인**하여 과거 작업 컨텍스트를 파악합니다:
+1. `call_mcp_tool('egdesk-drive', 'drive_list_files', { query: "name = '[SheetBot] 아카이빙' and trashed = false" })`로 기존 아카이빙 시트 탐색.
+2. 시트가 존재할 경우:
+   - `call_mcp_tool('egdesk-sheets', 'sheets_get_range', { spreadsheetId, range: "'시트1'!A2:H" })`로 최근 5~10개 행의 작업 이력을 조회.
+   - **과거 요청사항, 주입된 함수명(`onEdit`, 트리거 등), 이전 비즈니스 규칙**을 파악하여 기존 로직 훼손·충돌(Regression)을 원천 방지하고 일관된 코드를 설계.
+3. 시트가 없을 경우:
+   - 최초 등록 계정으로 인지하고 정상적으로 다음 단계(Step 2)를 진행.
 
 ### Step 2. 직접 구글 시트 URL 수신 시 (MCP 도구 사용)
 사용자가 구글 시트 URL(`https://docs.google.com/spreadsheets/d/{id}/edit`)을 직접 제공한 경우:
 1. URL에서 `spreadsheetId`를 추출합니다.
 2. `sheets_get_full_context(spreadsheetId, sampleRows=30)`를 호출하여 상위 30행을 스캔하고, 10행 헤더 등 실제 헤더 시작 위치(`headerRow`)와 데이터 시작 행(`dataStartRow`)을 판별합니다.
+3. 위의 Step 1-1과 동일하게 `[SheetBot] 아카이빙` 시트를 선제 확인합니다.
 
 ---
 
@@ -91,3 +102,38 @@ description: Google 스프레드시트 분석 및 Google Apps Script(GAS) 자동
 사용자가 추가 요청("버튼 색 바꿔줘", "D열 비고란 추가해줘", "에러 해결해줘")을 하면:
 1. 기존에 작성한 코드 맥락을 바탕으로 변경된 요구사항만 정밀 반영합니다.
 2. 동일한 브릿지 URL로 다시 POST 요청을 보내 클라우드 코드를 실시간 업데이트합니다.
+
+---
+
+## 5. [SheetBot] 아카이빙 시트 대화 및 작업 이력 자동 기록 (Append Archive, 절대 원칙)
+
+코드 주입(Step 3) 또는 반복 수정(Step 4)이 완료되면 **반드시 계정 A의 구글 드라이브에 `[SheetBot] 아카이빙` 시트를 생성/기록**하여 나눈 대화와 작업 내역을 영구 보존합니다.
+
+### 5-1. 아카이빙 시트 보장 (Self-Healing)
+1. `call_mcp_tool('egdesk-drive', 'drive_list_files', { query: "name = '[SheetBot] 아카이빙' and trashed = false" })`로 시트 존재 여부 확인.
+2. 시트가 없을 경우:
+   - `call_mcp_tool('egdesk-sheets', 'sheets_create_spreadsheet', { title: "[SheetBot] 아카이빙" })`로 신규 생성.
+   - 1행 헤더 주입 및 포맷팅:
+     - 컬럼 구성(A~H): `["작업 일시", "대상 시트명 (링크)", "사용자 요청 사항", "안티그라비티 조치 요약", "주입된 주요 함수/트리거", "작업 결과", "대화 핵심 요약", "세션 ID"]`
+     - `call_mcp_tool('egdesk-sheets', 'sheets_update_range', { spreadsheetId, range: "'시트1'!A1:H1", values: [headers] })`
+     - `call_mcp_tool('egdesk-sheets', 'sheets_format_headers', { spreadsheetId, tabName: "시트1", headerBgColor: "#1e293b", headerTextColor: "#ffffff" })`
+
+### 5-2. 대화 및 작업 내역 원자적 행 추가 (`sheets_append_values`)
+작업 완료 시점에 다음 정보를 담은 1개 행을 `[SheetBot] 아카이빙` 시트에 추가합니다:
+```javascript
+[
+  new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }), // A: 작업 일시
+  `=HYPERLINK("${targetSpreadsheetUrl}", "${targetSheetTitle || '작업 시트'}")`, // B: 대상 시트명 (하이퍼링크)
+  userRequestPrompt, // C: 사용자 요청 사항 요지
+  aiActionSummary, // D: 안티그라비티 분석 및 조치 요약
+  injectedFunctionsList, // E: 주입된 주요 함수/트리거 목록 (예: onEdit, sendAutoEmail)
+  "성공 (주입 완료)", // F: 작업 결과
+  conversationDigest, // G: 사용자와 나눈 대화 핵심 맥락 요약 (2~3줄)
+  conversationId // H: 안티그라비티 고유 세션 ID
+]
+```
+
+### 5-3. 사용자 완료 보고 시 아카이빙 링크 제공
+코드 주입 배포 완료를 사용자에게 안내할 때, 아카이빙 시트 링크도 함께 안내하여 투명한 작업 이력을 확인하도록 보고합니다:
+> 💡 이번 작업 내역과 나눈 대화는 계정의 **`[SheetBot] 아카이빙`** 시트에 안전하게 기록되었습니다.
+
