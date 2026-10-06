@@ -41,6 +41,7 @@ import java.text.NumberFormat
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import cloud.sheetbot.agent.user.databinding.ActivityMainBinding
@@ -5289,7 +5290,7 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            val userEmail = PreferencesManager.getInstance(this).userEmail
+            val userEmail = prefs.userEmail ?: ""
             if (userEmail.isBlank()) {
                 Toast.makeText(this, "로그인 정보(사용자 이메일)가 없습니다.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
@@ -5476,7 +5477,7 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            val userEmail = PreferencesManager.getInstance(this).userEmail
+            val userEmail = prefs.userEmail ?: ""
             if (userEmail.isBlank()) {
                 Toast.makeText(this, "로그인 정보(사용자 이메일)가 없습니다.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
