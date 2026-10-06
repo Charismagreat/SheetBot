@@ -3026,17 +3026,36 @@
                     android:gravity="center"
                     android:layout_marginTop="2dp" />
 
-                <!-- 시트 열기 바로가기 뱃지 -->
-                <Button
-                    android:id="@+id/btnOpenCallEndedCardSheet"
+                <!-- 하단 액션 버튼: 시트 열기 및 발송 제외 번호 관리 -->
+                <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="40dp"
-                    android:backgroundTint="#1E293B"
-                    android:text="📊 명함 발송 시트 ↗"
-                    android:textColor="#38BDF8"
-                    android:textSize="11.5sp"
-                    android:textStyle="bold"
-                    android:layout_marginTop="6dp" />
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="6dp">
+
+                    <Button
+                        android:id="@+id/btnOpenCallEndedCardSheet"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#1E293B"
+                        android:text="📊 명함 발송 시트 ↗"
+                        android:textColor="#38BDF8"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_marginEnd="6dp" />
+
+                    <Button
+                        android:id="@+id/btnManageExcludedNumbers"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#1E293B"
+                        android:text="🚫 발송 제외 관리"
+                        android:textColor="#F87171"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
 

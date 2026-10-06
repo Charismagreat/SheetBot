@@ -166,6 +166,18 @@
         android:textStyle="bold"
         android:layout_marginBottom="8dp" />
 
+    <!-- 🚫 이 번호는 앞으로 발송 제외 버튼 -->
+    <Button
+        android:id="@+id/btnExcludeThisNumber"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:backgroundTint="#1E293B"
+        android:text="🚫 이 번호는 앞으로 발송 제외"
+        android:textColor="#F87171"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="6dp" />
+
     <!-- 하단 닫기 텍스트 버튼 (카운트다운 포함) -->
     <TextView
         android:id="@+id/tvAutoCloseTimer"
