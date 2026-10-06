@@ -1062,6 +1062,76 @@ object ApiClient {
     }
 
     /**
+     * 📸 AI 인스타그램 피드 캡션 및 해시태그 생성 요청 (사진 복수 첨부 + 벤치마킹 링크 분석)
+     */
+    suspend fun requestInstagramAutomation(
+        topic: String,
+        keywords: String,
+        tone: String = "감성 & 친근한 후기",
+        refUrl1: String = "",
+        refUrl2: String = "",
+        refUrl3: String = "",
+        files: List<File> = emptyList(),
+        userEmail: String
+    ): InstagramPostResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastErr = "인스타그램 콘텐츠 생성 요청 실패"
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/instagram/post"
+            try {
+                val multipartBuilder = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("userEmail", userEmail)
+                    .addFormDataPart("topic", topic)
+                    .addFormDataPart("keywords", keywords)
+                    .addFormDataPart("tone", tone)
+                    .addFormDataPart("refUrl1", refUrl1)
+                    .addFormDataPart("refUrl2", refUrl2)
+                    .addFormDataPart("refUrl3", refUrl3)
+
+                for (f in files) {
+                    if (f.exists()) {
+                        val fileBody = f.asRequestBody("image/jpeg".toMediaTypeOrNull())
+                        multipartBuilder.addFormDataPart("files", f.name, fileBody)
+                    }
+                }
+
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(multipartBuilder.build())
+                    .build()
+
+                val response = longTimeoutClient.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext InstagramPostResult(
+                        success = true,
+                        instagramId = resJson.optString("instagramId", ""),
+                        hook = resJson.optString("hook", ""),
+                        caption = resJson.optString("caption", ""),
+                        hashtags = resJson.optString("hashtags", ""),
+                        summary = resJson.optString("summary", ""),
+                        imageCount = resJson.optInt("imageCount", 0),
+                        reportUrl = resJson.optString("reportUrl", ""),
+                        sheetUrl = resJson.optString("sheetUrl", ""),
+                        instagramPostUrl = resJson.optString("instagramPostUrl", ""),
+                        driveFolderUrl = resJson.optString("driveFolderUrl", "")
+                    )
+                } else {
+                    val msg = resJson.optString("error", "HTTP ${response.code}")
+                    lastErr = "$host: $msg"
+                }
+            } catch (e: Exception) {
+                lastErr = "$host: ${e.message}"
+            }
+        }
+        InstagramPostResult(success = false, error = lastErr)
+    }
+
+    /**
      * 사진 및 일반 파일 구글 드라이브 및 [SheetBot] 파일 업로드 대장 시트 업로드 (AI OCR 지원)
      */
     suspend fun uploadGenericFile(
@@ -2737,3 +2807,19 @@ data class BlogPostResult(
     val tags: List<String> = emptyList(),
     val error: String? = null
 )
+
+data class InstagramPostResult(
+    val success: Boolean,
+    val instagramId: String = "",
+    val hook: String = "",
+    val caption: String = "",
+    val hashtags: String = "",
+    val summary: String = "",
+    val imageCount: Int = 0,
+    val reportUrl: String = "",
+    val sheetUrl: String = "",
+    val instagramPostUrl: String = "",
+    val driveFolderUrl: String = "",
+    val error: String? = null
+)
+

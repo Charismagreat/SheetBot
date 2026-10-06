@@ -205,6 +205,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 📸 AI 인스타그램 피드 사진 복수 첨부 런처 (v2.1.90)
+    private val selectedInstaFiles = mutableListOf<File>()
+    private val instaImagesPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (!uris.isNullOrEmpty()) {
+            handleInstaImagesSelected(uris)
+        }
+    }
+
     // 카카오톡 대화 내용 내보내기(.txt) 파일 선택 런처 (v2.1.11)
     private val kakaoChatPickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
@@ -874,6 +884,9 @@ class MainActivity : AppCompatActivity() {
 
         // ✍️ AI 네이버 블로그 자동 포스팅 카드 초기화
         setupBlogAutomationCard()
+
+        // 📸 AI 인스타그램 피드 & 해시태그 카드 초기화
+        setupInstagramAutomationCard()
 
         // 사진 및 문서 파일 구글 드라이브 업로드 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchFileUploadSync.isChecked = prefs.isFileUploadSyncEnabled
@@ -5287,6 +5300,200 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    /**
+     * 📸 AI 인스타그램 다중 사진 선택 처리 (1600px 리사이즈 및 85% JPEG 압축 표준 준수)
+     */
+    private fun handleInstaImagesSelected(uris: List<Uri>) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val processedFiles = mutableListOf<File>()
+                for ((index, uri) in uris.withIndex()) {
+                    var displayName = "insta_photo_${System.currentTimeMillis()}_${index}.jpg"
+                    contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                            if (nameIndex != -1) {
+                                displayName = cursor.getString(nameIndex) ?: displayName
+                            }
+                        }
+                    }
+
+                    // 1600px 샘플링 디코딩
+                    val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, boundsOpts) }
+
+                    val maxDimension = 1600
+                    var inSampleSize = 1
+                    val origW = boundsOpts.outWidth
+                    val origH = boundsOpts.outHeight
+                    if (origW > maxDimension || origH > maxDimension) {
+                        val halfW = origW / 2
+                        val halfH = origH / 2
+                        while ((halfW / inSampleSize) >= maxDimension && (halfH / inSampleSize) >= maxDimension) {
+                            inSampleSize *= 2
+                        }
+                    }
+
+                    val decodeOpts = BitmapFactory.Options().apply { this.inSampleSize = inSampleSize }
+                    val decoded = contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, decodeOpts) }
+
+                    if (decoded != null) {
+                        val tempFile = File(cacheDir, "insta_${System.currentTimeMillis()}_${index}.jpg")
+                        val fos = java.io.FileOutputStream(tempFile)
+                        decoded.compress(Bitmap.CompressFormat.JPEG, 85, fos)
+                        fos.flush()
+                        fos.close()
+                        processedFiles.add(tempFile)
+                    }
+                }
+
+                selectedInstaFiles.clear()
+                selectedInstaFiles.addAll(processedFiles)
+
+                val totalKb = selectedInstaFiles.sumOf { it.length() } / 1024
+
+                withContext(Dispatchers.Main) {
+                    binding.tvInstaSelectedImagesCount.text = "📷 첨부된 사진: ${selectedInstaFiles.size}장 (${totalKb} KB)"
+                    binding.btnResetInstaImages.visibility = if (selectedInstaFiles.isNotEmpty()) View.VISIBLE else View.GONE
+                    Toast.makeText(this@MainActivity, "인스타 사진 ${selectedInstaFiles.size}장 최적화 압축 완료!", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "사진 처리 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    /**
+     * 📸 AI 인스타그램 피드 & 해시태그 카드 이벤트 바인딩
+     */
+    private fun setupInstagramAutomationCard() {
+        var isCollapsed = false
+        binding.btnToggleInstaDetails.setOnClickListener {
+            isCollapsed = !isCollapsed
+            binding.layoutInstaDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
+            binding.btnToggleInstaDetails.text = if (isCollapsed) "▶" else "▼"
+        }
+
+        binding.btnSelectInstaImages.setOnClickListener {
+            try {
+                instaImagesPickerLauncher.launch("image/*")
+            } catch (e: Exception) {
+                Toast.makeText(this, "사진 선택 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        binding.btnResetInstaImages.setOnClickListener {
+            selectedInstaFiles.clear()
+            binding.tvInstaSelectedImagesCount.text = "첨부된 사진: 0장 (선택 시 1600px 85% 자동 압축)"
+            binding.btnResetInstaImages.visibility = View.GONE
+            Toast.makeText(this, "사진 첨부가 취소되었습니다.", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnStartInstaAutomation.setOnClickListener {
+            val topic = binding.etInstaTopic.text.toString().trim()
+            val keywords = binding.etInstaKeywords.text.toString().trim()
+            val tone = binding.etInstaTone.text.toString().trim().ifBlank { "감성 & 친근한 후기" }
+            val refUrl1 = binding.etInstaRefUrl1.text.toString().trim()
+            val refUrl2 = binding.etInstaRefUrl2.text.toString().trim()
+            val refUrl3 = binding.etInstaRefUrl3.text.toString().trim()
+
+            if (topic.isBlank()) {
+                Toast.makeText(this, "포스팅 주제를 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val userEmail = PreferencesManager.getInstance(this).userEmail
+            if (userEmail.isBlank()) {
+                Toast.makeText(this, "로그인 정보(사용자 이메일)가 없습니다.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            binding.pbInstaLoading.visibility = View.VISIBLE
+            binding.tvInstaStatus.visibility = View.VISIBLE
+            binding.tvInstaStatus.text = "AI가 인스타그램 훅 카피와 해시태그를 생성 중입니다..."
+            binding.btnStartInstaAutomation.isEnabled = false
+            binding.layoutInstaResultContainer.visibility = View.GONE
+
+            lifecycleScope.launch {
+                try {
+                    val result = ApiClient.requestInstagramAutomation(
+                        topic = topic,
+                        keywords = keywords,
+                        tone = tone,
+                        refUrl1 = refUrl1,
+                        refUrl2 = refUrl2,
+                        refUrl3 = refUrl3,
+                        files = selectedInstaFiles.toList(),
+                        userEmail = userEmail
+                    )
+
+                    binding.pbInstaLoading.visibility = View.GONE
+                    binding.tvInstaStatus.visibility = View.GONE
+                    binding.btnStartInstaAutomation.isEnabled = true
+
+                    if (result.success) {
+                        binding.layoutInstaResultContainer.visibility = View.VISIBLE
+                        binding.tvInstaResultHook.text = "✨ ${result.hook}"
+                        binding.tvInstaResultCaption.text = result.caption
+                        binding.tvInstaResultHashtags.text = result.hashtags
+
+                        if (result.reportUrl.isNotBlank()) {
+                            binding.btnOpenInstaViewer.visibility = View.VISIBLE
+                            binding.btnOpenInstaViewer.setOnClickListener {
+                                try {
+                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.reportUrl)))
+                                } catch (e: Exception) {
+                                    Toast.makeText(this@MainActivity, "피드 뷰어 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } else {
+                            binding.btnOpenInstaViewer.visibility = View.GONE
+                        }
+
+                        if (result.sheetUrl.isNotBlank()) {
+                            binding.btnOpenInstaSheet.visibility = View.VISIBLE
+                            binding.btnOpenInstaSheet.setOnClickListener {
+                                try {
+                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.sheetUrl)))
+                                } catch (e: Exception) {
+                                    Toast.makeText(this@MainActivity, "대장 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } else {
+                            binding.btnOpenInstaSheet.visibility = View.GONE
+                        }
+
+                        binding.btnOpenInstagramApp.visibility = View.VISIBLE
+                        binding.btnOpenInstagramApp.setOnClickListener {
+                            try {
+                                val launchIntent = packageManager.getLaunchIntentForPackage("com.instagram.android")
+                                if (launchIntent != null) {
+                                    startActivity(launchIntent)
+                                } else {
+                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/")))
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(this@MainActivity, "인스타그램 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+
+                        Toast.makeText(this@MainActivity, "🎉 AI 인스타 피드 및 해시태그 완성!", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, "생성 실패: ${result.error ?: "오류 발생"}", Toast.LENGTH_LONG).show()
+                    }
+                } catch (e: Exception) {
+                    binding.pbInstaLoading.visibility = View.GONE
+                    binding.tvInstaStatus.visibility = View.GONE
+                    binding.btnStartInstaAutomation.isEnabled = true
+                    Toast.makeText(this@MainActivity, "인스타 피드 처리 오류: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
 }
+
 
 
