@@ -819,6 +819,32 @@ export async function setupDatabase(force = false): Promise<void> {
       { tableName: 'sheetbot_blog_posts' }
     );
 
+    // 27. sheetbot_instagram_posts 테이블 생성 (AI 인스타그램 피드 & 카드뉴스 관리 대장)
+    await safeCreateTable(
+      'SheetBot 인스타그램 마케팅 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'topic', type: 'TEXT' },
+        { name: 'keywords', type: 'TEXT' },
+        { name: 'tone', type: 'TEXT' },
+        { name: 'caption', type: 'TEXT' },
+        { name: 'hashtags', type: 'TEXT' },
+        { name: 'carousel_slides_json', type: 'TEXT' },
+        { name: 'summary', type: 'TEXT' },
+        { name: 'image_drive_urls_json', type: 'TEXT' },
+        { name: 'drive_folder_url', type: 'TEXT' },
+        { name: 'ref_urls_json', type: 'TEXT' },
+        { name: 'image_count', type: 'INTEGER' },
+        { name: 'report_url', type: 'TEXT' },
+        { name: 'sheet_url', type: 'TEXT' },
+        { name: 'instagram_post_url', type: 'TEXT' },
+        { name: 'status', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_instagram_posts' }
+    );
+
     try {
       await executeSQL(`ALTER TABLE sheetbot_ai_batch_jobs ADD COLUMN job_type TEXT;`);
     } catch {}

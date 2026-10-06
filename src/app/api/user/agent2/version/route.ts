@@ -41,8 +41,8 @@ export async function GET() {
     );
   }
 
-  let latestName = "2.1.89";
-  let latestCode = 110;
+  let latestName = "2.1.90";
+  let latestCode = 111;
   let apkUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";
   let releaseNotes = "스마트 통합 할 일 허브(Task Hub), 통화 화면 플로팅 할 일, 모바일 표시 문구 직관화 및 상단 업데이트 알림 뱃지가 적용되었습니다.";
 
