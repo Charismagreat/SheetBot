@@ -20,6 +20,7 @@ export type SheetBindingType =
   | "LAW_ADVISORY"
   | "NAVER_BLOG"
   | "INSTAGRAM"
+  | "MOBILE_SITE"
   | "FILE_UPLOAD"
   | "RECEIPT"
   | "BUSINESS_CARD"

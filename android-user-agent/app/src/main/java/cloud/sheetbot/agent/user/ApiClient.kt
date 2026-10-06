@@ -1132,6 +1132,119 @@ object ApiClient {
     }
 
     /**
+     * 🌐 AI 모바일 홈페이지 생성 요청 (사진 복수 첨부 + AI 맞춤 카피/메뉴 구성)
+     */
+    suspend fun requestCreateMobileSite(
+        title: String,
+        category: String = "카페 / 베이커리",
+        description: String = "",
+        phone: String = "",
+        address: String = "",
+        businessHours: String = "매일 10:00 ~ 22:00",
+        notice: String = "",
+        themeColor: String = "emerald",
+        files: List<File> = emptyList(),
+        userEmail: String
+    ): MobileSiteResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastErr = "모바일 홈페이지 생성 요청 실패"
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/site"
+            try {
+                val multipartBuilder = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("userEmail", userEmail)
+                    .addFormDataPart("title", title)
+                    .addFormDataPart("category", category)
+                    .addFormDataPart("description", description)
+                    .addFormDataPart("phone", phone)
+                    .addFormDataPart("address", address)
+                    .addFormDataPart("businessHours", businessHours)
+                    .addFormDataPart("notice", notice)
+                    .addFormDataPart("themeColor", themeColor)
+
+                for (f in files) {
+                    if (f.exists()) {
+                        val fileBody = f.asRequestBody("image/jpeg".toMediaTypeOrNull())
+                        multipartBuilder.addFormDataPart("files", f.name, fileBody)
+                    }
+                }
+
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(multipartBuilder.build())
+                    .build()
+
+                val response = longTimeoutClient.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext MobileSiteResult(
+                        success = true,
+                        siteId = resJson.optString("siteId", ""),
+                        title = resJson.optString("title", ""),
+                        slogan = resJson.optString("slogan", ""),
+                        description = resJson.optString("description", ""),
+                        category = resJson.optString("category", ""),
+                        siteUrl = resJson.optString("siteUrl", ""),
+                        sheetUrl = resJson.optString("sheetUrl", ""),
+                        notice = resJson.optString("notice", ""),
+                        bannerCount = resJson.optInt("bannerCount", 0),
+                        driveFolderUrl = resJson.optString("driveFolderUrl", "")
+                    )
+                } else {
+                    val msg = resJson.optString("error", "HTTP ${response.code}")
+                    lastErr = "$host: $msg"
+                }
+            } catch (e: Exception) {
+                lastErr = "$host: ${e.message}"
+            }
+        }
+        MobileSiteResult(success = false, error = lastErr)
+    }
+
+    /**
+     * 🌐 AI 모바일 홈페이지 정보 실시간 수정 (공지, 영업시간, 연락처 등)
+     */
+    suspend fun requestUpdateMobileSite(
+        siteId: String,
+        notice: String? = null,
+        businessHours: String? = null,
+        phone: String? = null,
+        address: String? = null,
+        slogan: String? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val json = JSONObject().apply {
+            put("siteId", siteId)
+            notice?.let { put("notice", it) }
+            businessHours?.let { put("businessHours", it) }
+            phone?.let { put("phone", it) }
+            address?.let { put("address", it) }
+            slogan?.let { put("slogan", it) }
+        }
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/site"
+            try {
+                val request = Request.Builder().url(endpoint).put(body).build()
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "홈페이지 수정 실패 ($host): ${e.message}")
+            }
+        }
+        false
+    }
+
+    /**
      * 사진 및 일반 파일 구글 드라이브 및 [SheetBot] 파일 업로드 대장 시트 업로드 (AI OCR 지원)
      */
     suspend fun uploadGenericFile(
@@ -2822,4 +2935,20 @@ data class InstagramPostResult(
     val driveFolderUrl: String = "",
     val error: String? = null
 )
+
+data class MobileSiteResult(
+    val success: Boolean,
+    val siteId: String = "",
+    val title: String = "",
+    val slogan: String = "",
+    val description: String = "",
+    val category: String = "",
+    val siteUrl: String = "",
+    val sheetUrl: String = "",
+    val notice: String = "",
+    val bannerCount: Int = 0,
+    val driveFolderUrl: String = "",
+    val error: String? = null
+)
+
 
