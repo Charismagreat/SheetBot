@@ -5667,7 +5667,7 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            val userEmail = PreferencesManager.getInstance(this).userEmail
+            val userEmail = prefs.userEmail ?: ""
             if (userEmail.isBlank()) {
                 Toast.makeText(this, "로그인 정보(사용자 이메일)가 없습니다.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
@@ -5679,7 +5679,7 @@ class MainActivity : AppCompatActivity() {
             binding.btnStartSiteCreation.isEnabled = false
             binding.layoutSiteResultContainer.visibility = View.GONE
 
-            lifecycleScope.launch {
+            activityScope.launch(Dispatchers.IO) {
                 try {
                     val result = ApiClient.requestCreateMobileSite(
                         title = title,
@@ -5692,65 +5692,69 @@ class MainActivity : AppCompatActivity() {
                         userEmail = userEmail
                     )
 
-                    binding.pbSiteLoading.visibility = View.GONE
-                    binding.tvSiteStatus.visibility = View.GONE
-                    binding.btnStartSiteCreation.isEnabled = true
+                    withContext(Dispatchers.Main) {
+                        binding.pbSiteLoading.visibility = View.GONE
+                        binding.tvSiteStatus.visibility = View.GONE
+                        binding.btnStartSiteCreation.isEnabled = true
 
-                    if (result.success) {
-                        binding.layoutSiteResultContainer.visibility = View.VISIBLE
-                        binding.tvSiteResultTitle.text = "🎉 ${result.title} - ${result.slogan}"
-                        binding.tvSiteResultUrl.text = result.siteUrl
+                        if (result.success) {
+                            binding.layoutSiteResultContainer.visibility = View.VISIBLE
+                            binding.tvSiteResultTitle.text = "🎉 ${result.title} - ${result.slogan}"
+                            binding.tvSiteResultUrl.text = result.siteUrl
 
-                        if (result.siteUrl.isNotBlank()) {
-                            binding.btnOpenMobileSite.visibility = View.VISIBLE
-                            binding.btnOpenMobileSite.setOnClickListener {
-                                try {
-                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.siteUrl)))
-                                } catch (e: Exception) {
-                                    Toast.makeText(this@MainActivity, "모바일 웹 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-
-                            binding.btnShareMobileSite.visibility = View.VISIBLE
-                            binding.btnShareMobileSite.setOnClickListener {
-                                try {
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/plain"
-                                        putExtra(Intent.EXTRA_SUBJECT, result.title)
-                                        putExtra(Intent.EXTRA_TEXT, "[${result.title}] 공식 모바일 홈페이지에 오신 것을 환영합니다!\n${result.siteUrl}")
+                            if (result.siteUrl.isNotBlank()) {
+                                binding.btnOpenMobileSite.visibility = View.VISIBLE
+                                binding.btnOpenMobileSite.setOnClickListener {
+                                    try {
+                                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.siteUrl)))
+                                    } catch (e: Exception) {
+                                        Toast.makeText(this@MainActivity, "모바일 웹 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
                                     }
-                                    startActivity(Intent.createChooser(shareIntent, "홈페이지 링크 공유"))
-                                } catch (e: Exception) {
-                                    Toast.makeText(this@MainActivity, "공유 실패: ${e.message}", Toast.LENGTH_SHORT).show()
                                 }
-                            }
-                        } else {
-                            binding.btnOpenMobileSite.visibility = View.GONE
-                            binding.btnShareMobileSite.visibility = View.GONE
-                        }
 
-                        if (result.sheetUrl.isNotBlank()) {
-                            binding.btnOpenSiteSheet.visibility = View.VISIBLE
-                            binding.btnOpenSiteSheet.setOnClickListener {
-                                try {
-                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.sheetUrl)))
-                                } catch (e: Exception) {
-                                    Toast.makeText(this@MainActivity, "대장 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                                binding.btnShareMobileSite.visibility = View.VISIBLE
+                                binding.btnShareMobileSite.setOnClickListener {
+                                    try {
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(Intent.EXTRA_SUBJECT, result.title)
+                                            putExtra(Intent.EXTRA_TEXT, "[${result.title}] 공식 모바일 홈페이지에 오신 것을 환영합니다!\n${result.siteUrl}")
+                                        }
+                                        startActivity(Intent.createChooser(shareIntent, "홈페이지 링크 공유"))
+                                    } catch (e: Exception) {
+                                        Toast.makeText(this@MainActivity, "공유 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
+                            } else {
+                                binding.btnOpenMobileSite.visibility = View.GONE
+                                binding.btnShareMobileSite.visibility = View.GONE
                             }
-                        } else {
-                            binding.btnOpenSiteSheet.visibility = View.GONE
-                        }
 
-                        Toast.makeText(this@MainActivity, "🎉 10초 모바일 홈페이지 생성 완료!", Toast.LENGTH_LONG).show()
-                    } else {
-                        Toast.makeText(this@MainActivity, "생성 실패: ${result.error ?: "오류 발생"}", Toast.LENGTH_LONG).show()
+                            if (result.sheetUrl.isNotBlank()) {
+                                binding.btnOpenSiteSheet.visibility = View.VISIBLE
+                                binding.btnOpenSiteSheet.setOnClickListener {
+                                    try {
+                                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.sheetUrl)))
+                                    } catch (e: Exception) {
+                                        Toast.makeText(this@MainActivity, "대장 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            } else {
+                                binding.btnOpenSiteSheet.visibility = View.GONE
+                            }
+
+                            Toast.makeText(this@MainActivity, "🎉 10초 모바일 홈페이지 생성 완료!", Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(this@MainActivity, "생성 실패: ${result.error ?: "오류 발생"}", Toast.LENGTH_LONG).show()
+                        }
                     }
                 } catch (e: Exception) {
-                    binding.pbSiteLoading.visibility = View.GONE
-                    binding.tvSiteStatus.visibility = View.GONE
-                    binding.btnStartSiteCreation.isEnabled = true
-                    Toast.makeText(this@MainActivity, "홈페이지 생성 오류: ${e.message}", Toast.LENGTH_LONG).show()
+                    withContext(Dispatchers.Main) {
+                        binding.pbSiteLoading.visibility = View.GONE
+                        binding.tvSiteStatus.visibility = View.GONE
+                        binding.btnStartSiteCreation.isEnabled = true
+                        Toast.makeText(this@MainActivity, "홈페이지 생성 오류: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         }

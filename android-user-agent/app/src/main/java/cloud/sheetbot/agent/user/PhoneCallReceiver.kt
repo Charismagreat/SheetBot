@@ -70,6 +70,8 @@ class PhoneCallReceiver : BroadcastReceiver() {
                 Log.w(TAG, "⏭️ [모바일 명함 발송 제외] 상대방 번호가 휴대전화가 아닙니다: $phoneNumber (유선/대표번호 자동 제외)")
                 onComplete?.invoke(false)
                 return
+            }
+
             val prefs = PreferencesManager(context)
             // 🛡️ 발송 제외 목록에 등록된 번호인 경우 발송 취소
             if (prefs.isBusinessCardExcluded(phoneNumber)) {
@@ -136,6 +138,8 @@ class PhoneCallReceiver : BroadcastReceiver() {
                 Log.w(TAG, "⏭️ [모바일 명함 발송 제외] 상대방 번호가 휴대전화가 아닙니다: $phoneNumber (유선/대표번호 자동 제외)")
                 onComplete?.invoke(false)
                 return
+            }
+
             val prefs = PreferencesManager(context)
             // 🛡️ 발송 제외 목록에 등록된 번호인 경우 발송 취소
             if (prefs.isBusinessCardExcluded(phoneNumber)) {
