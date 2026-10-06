@@ -918,7 +918,7 @@
                         android:layout_height="40dp"
                         android:layout_weight="1"
                         android:backgroundTint="#1E293B"
-                        android:text="📊 통화 기록 시트 열기 ↗"
+                        android:text="📊 통화 기록 시트 ↗"
                         android:textColor="#38BDF8"
                         android:textSize="11.5sp"
                         android:textStyle="bold"
@@ -930,7 +930,7 @@
                         android:layout_height="40dp"
                         android:layout_weight="1"
                         android:backgroundTint="#1E293B"
-                        android:text="📁 드라이브 폴더 열기 ↗"
+                        android:text="📁 통화 녹음 파일 폴더 ↗"
                         android:textColor="#A78BFA"
                         android:textSize="11.5sp"
                         android:textStyle="bold"
@@ -1010,7 +1010,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="통화가 끝나면 드라이브에 안전하게 보관하고 AI가 내용을 자동 요약해요."
+                            android:text="드라이브에 안전하게 보관하고 AI가 내용을 자동 요약해요."
                             android:textColor="#94A3B8"
                             android:textSize="10sp" />
                     </LinearLayout>
@@ -1059,6 +1059,82 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:checked="false" />
+                </LinearLayout>
+
+                <!-- 🎙️ 화자 분리용 내 목소리 등록 섹션 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#1E293B"
+                    android:padding="10dp"
+                    android:layout_marginBottom="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="4dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="🎙️ 화자 분리용 내 목소리 등록"
+                            android:textColor="#F1F5F9"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvVoiceProfileStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_badge_version"
+                            android:backgroundTint="#0F172A"
+                            android:paddingHorizontal="7dp"
+                            android:paddingVertical="2dp"
+                            android:text="확인 중..."
+                            android:textColor="#38BDF8"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="내 목소리를 5초간 녹음해 두면 1채널 모노나 외부 녹음에서도 '나'와 '상대방'을 더 정확히 구분해요."
+                        android:textColor="#94A3B8"
+                        android:textSize="10sp"
+                        android:layout_marginBottom="6dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/btnRecordVoiceProfile"
+                            android:layout_width="0dp"
+                            android:layout_height="38dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#2563EB"
+                            android:text="🎙️ 내 목소리 5초 녹음 등록"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:layout_marginEnd="4dp" />
+
+                        <Button
+                            android:id="@+id/btnDeleteVoiceProfile"
+                            android:layout_width="wrap_content"
+                            android:layout_height="38dp"
+                            android:backgroundTint="#7F1D1D"
+                            android:text="삭제"
+                            android:textColor="#FCA5A5"
+                            android:textSize="11sp"
+                            android:visibility="gone" />
+                    </LinearLayout>
                 </LinearLayout>
 
                 <TextView
@@ -1282,7 +1358,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 부재중 통화 시트 열기 ↗"
+                    android:text="📊 부재중 통화 시트 ↗"
                     android:textColor="#38BDF8"
                     android:textSize="11.5sp"
                     android:textStyle="bold"
@@ -1594,7 +1670,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 명함 발송 시트 열기 ↗"
+                    android:text="📊 명함 발송 시트 ↗"
                     android:textColor="#38BDF8"
                     android:textSize="11.5sp"
                     android:textStyle="bold"
@@ -1745,7 +1821,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 문자 내역 시트 열기 ↗"
+                    android:text="📊 문자 내역 시트 ↗"
                     android:textColor="#38BDF8"
                     android:textSize="11.5sp"
                     android:textStyle="bold"
@@ -1887,7 +1963,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 카카오톡 대화 시트 열기 ↗"
+                    android:text="📊 카카오톡 대화 시트 ↗"
                     android:textColor="#38BDF8"
                     android:textSize="11.5sp"
                     android:textStyle="bold"
@@ -1999,7 +2075,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="📲 고객에게 영수증 문자 자동으로 보내기"
+                        android:text="📲 영수증 문자 자동 발송"
                         android:textColor="#E2E8F0"
                         android:textSize="12sp"
                         android:textStyle="bold" />
@@ -2129,7 +2205,7 @@
                     android:layout_height="38dp"
                     android:layout_weight="1"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 결제 시트 열기 ↗"
+                    android:text="📊 결제 시트 ↗"
                     android:textColor="#38BDF8"
                     android:textSize="11sp"
                     android:textStyle="bold"
@@ -2141,7 +2217,7 @@
                     android:layout_height="38dp"
                     android:layout_weight="1"
                     android:backgroundTint="#1E293B"
-                    android:text="📜 영수증 문자 발송 시트 열기 ↗"
+                    android:text="📜 영수증 문자발송 시트 ↗"
                     android:textColor="#38BDF8"
                     android:textSize="11sp"
                     android:textStyle="bold"
@@ -2344,7 +2420,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:backgroundTint="#134E4A"
-                    android:text="📊 스마트 간편 주문 및 품목 대장 열기 ↗"
+                    android:text="📊 간편 주문 및 품목 시트 ↗"
                     android:textColor="#5EEAD4"
                     android:textSize="11.5sp"
                     android:textStyle="bold" />
@@ -2361,7 +2437,7 @@
                         android:layout_weight="1"
                         android:layout_height="38dp"
                         android:backgroundTint="#065F46"
-                        android:text="📱 내 주문 웹앱 열기"
+                        android:text="📱 내 주문 웹앱"
                         android:textColor="#34D399"
                         android:textSize="11sp"
                         android:textStyle="bold"
@@ -2373,7 +2449,7 @@
                         android:layout_weight="1"
                         android:layout_height="38dp"
                         android:backgroundTint="#1E293B"
-                        android:text="🔗 주문 링크 복사"
+                        android:text="🔗 주문 링크 공유"
                         android:textColor="#CBD5E1"
                         android:textSize="11sp"
                         android:textStyle="bold"
@@ -2451,7 +2527,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
                     android:backgroundTint="#4F46E5"
-                    android:text="📷/📁 사진·문서 바로 올려두기"
+                    android:text="📷/📁 사진 문서 파일 업로드"
                     android:textColor="#FFFFFF"
                     android:textSize="12sp"
                     android:textStyle="bold"
@@ -2470,7 +2546,7 @@
                         android:layout_height="44dp"
                         android:layout_weight="1"
                         android:backgroundTint="#059669"
-                        android:text="🧾 영수증 사진 ➔ AI 장부 자동 기입"
+                        android:text="🧾 영수증 사진 업로드"
                         android:textColor="#FFFFFF"
                         android:textSize="11.5sp"
                         android:textStyle="bold"
@@ -2482,7 +2558,7 @@
                         android:layout_height="44dp"
                         android:layout_weight="1"
                         android:backgroundTint="#2563EB"
-                        android:text="🪪 명함 사진 ➔ AI 연락처 자동 등록"
+                        android:text="🪪 명함 사진 업로드"
                         android:textColor="#FFFFFF"
                         android:textSize="11.5sp"
                         android:textStyle="bold"
@@ -2523,7 +2599,7 @@
                             android:layout_height="40dp"
                             android:layout_weight="1"
                             android:backgroundTint="#1E293B"
-                            android:text="📊 보관 파일 시트 열기 ↗"
+                            android:text="📊 사진 문서 보관 시트 ↗"
                             android:textColor="#38BDF8"
                             android:textSize="11.5sp"
                             android:textStyle="bold"
@@ -2535,7 +2611,7 @@
                             android:layout_height="40dp"
                             android:layout_weight="1"
                             android:backgroundTint="#1E293B"
-                            android:text="📁 보관 폴더 열기 ↗"
+                            android:text="📁 사진 문서 보관 폴더 ↗"
                             android:textColor="#A78BFA"
                             android:textSize="11.5sp"
                             android:textStyle="bold"
@@ -2555,7 +2631,7 @@
                             android:layout_height="40dp"
                             android:layout_weight="1"
                             android:backgroundTint="#1E293B"
-                            android:text="🧾 영수증 시트 열기 ↗"
+                            android:text="🧾 경비 영수증 시트 ↗"
                             android:textColor="#34D399"
                             android:textSize="11.5sp"
                             android:textStyle="bold"
@@ -2567,7 +2643,7 @@
                             android:layout_height="40dp"
                             android:layout_weight="1"
                             android:backgroundTint="#1E293B"
-                            android:text="🪪 명함 시트 열기 ↗"
+                            android:text="🪪 명함 관리 시트 ↗"
                             android:textColor="#60A5FA"
                             android:textSize="11.5sp"
                             android:textStyle="bold"
@@ -2657,7 +2733,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 링크 요약 시트 열기 ↗"
+                    android:text="📊 링크 요약 시트 ↗"
                     android:textColor="#38BDF8"
                     android:textSize="11.5sp"
                     android:textStyle="bold"
@@ -2807,7 +2883,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 웹사이트 장애 대장 시트 열기 ↗"
+                    android:text="📊 웹사이트 장애 기록 시트 ↗"
                     android:textColor="#F43F5E"
                     android:textSize="11.5sp"
                     android:textStyle="bold"
@@ -2919,7 +2995,7 @@
                         android:layout_height="42dp"
                         android:layout_weight="1"
                         android:backgroundTint="#0284C7"
-                        android:text="📇 지금 즉시 전체 동기화"
+                        android:text="📇 전체 동기화"
                         android:textColor="#FFFFFF"
                         android:textSize="11.5sp"
                         android:textStyle="bold"
@@ -2931,7 +3007,7 @@
                         android:layout_height="42dp"
                         android:layout_weight="1"
                         android:backgroundTint="#1E293B"
-                        android:text="📊 연락처 대장 열기"
+                        android:text="📊 연락처 백업 시트"
                         android:textColor="#38BDF8"
                         android:textSize="11.5sp"
                         android:textStyle="bold"

@@ -2047,6 +2047,118 @@ object ApiClient {
         }
         false
     }
+
+    /**
+     * 🎙️ 내 목소리(화자 성문 프로필) 등록 여부 조회 (GET /api/user/voice-profile)
+     */
+    suspend fun fetchVoiceProfile(userEmail: String): VoiceProfileResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastError = "성문 프로필 조회 실패"
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/voice-profile"
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .get()
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val isEnrolled = resJson.optBoolean("isEnrolled", false)
+                    val speakerObj = resJson.optJSONObject("speaker")
+                    val speakerName = speakerObj?.optString("name", "본인") ?: if (isEnrolled) "본인" else null
+                    return@withContext VoiceProfileResult(
+                        success = true,
+                        isEnrolled = isEnrolled,
+                        speakerName = speakerName
+                    )
+                } else {
+                    lastError = resJson.optString("error", "HTTP ${response.code}")
+                }
+            } catch (e: Exception) {
+                lastError = e.localizedMessage ?: "네트워크 오류"
+            }
+        }
+        VoiceProfileResult(success = false, error = lastError)
+    }
+
+    /**
+     * 🎙️ 5초 내 목소리 녹음 샘플 성문 영구 등록 (POST /api/user/voice-profile)
+     */
+    suspend fun enrollVoiceProfile(
+        userEmail: String,
+        audioBase64: String,
+        fileName: String = "voice_sample.m4a"
+    ): VoiceProfileEnrollResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastError = "성문 등록 실패"
+
+        val bodyJson = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("audioBase64", audioBase64)
+            put("fileName", fileName)
+            put("displayName", "본인")
+        }
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+        val requestBody = bodyJson.toString().toRequestBody(mediaType)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/voice-profile"
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(requestBody)
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext VoiceProfileEnrollResult(
+                        success = true,
+                        message = resJson.optString("message", "내 목소리가 성공적으로 등록되었습니다.")
+                    )
+                } else {
+                    lastError = resJson.optString("error", "HTTP ${response.code}")
+                }
+            } catch (e: Exception) {
+                lastError = e.localizedMessage ?: "네트워크 오류"
+            }
+        }
+        VoiceProfileEnrollResult(success = false, error = lastError)
+    }
+
+    /**
+     * 🎙️ 등록된 성문 프로필 삭제 (DELETE /api/user/voice-profile)
+     */
+    suspend fun deleteVoiceProfile(userEmail: String): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            val endpoint = "$host/api/user/voice-profile"
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .delete()
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext true
+                }
+            } catch (_: Exception) {}
+        }
+        false
+    }
 }
 
 data class TaskItemDto(
@@ -2070,6 +2182,19 @@ data class TaskListResult(
     val pendingCount: Int = 0,
     val doneCount: Int = 0,
     val spreadsheetUrl: String? = null,
+    val error: String? = null
+)
+
+data class VoiceProfileResult(
+    val success: Boolean,
+    val isEnrolled: Boolean = false,
+    val speakerName: String? = null,
+    val error: String? = null
+)
+
+data class VoiceProfileEnrollResult(
+    val success: Boolean,
+    val message: String? = null,
     val error: String? = null
 )
 
