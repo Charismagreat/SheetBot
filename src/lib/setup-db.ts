@@ -845,6 +845,35 @@ export async function setupDatabase(force = false): Promise<void> {
       { tableName: 'sheetbot_instagram_posts' }
     );
 
+    // 28. sheetbot_sites 테이블 생성 (AI 모바일 홈페이지 및 랜딩페이지 관리 대장)
+    await safeCreateTable(
+      'SheetBot 모바일 홈페이지 관리 대장',
+      [
+        { name: 'id', type: 'INTEGER', notNull: true, primaryKey: true },
+        { name: 'uuid', type: 'TEXT' },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'site_slug', type: 'TEXT' },
+        { name: 'title', type: 'TEXT', notNull: true },
+        { name: 'category', type: 'TEXT' },
+        { name: 'slogan', type: 'TEXT' },
+        { name: 'description', type: 'TEXT' },
+        { name: 'phone', type: 'TEXT' },
+        { name: 'address', type: 'TEXT' },
+        { name: 'business_hours', type: 'TEXT' },
+        { name: 'banner_images_json', type: 'TEXT' },
+        { name: 'menu_items_json', type: 'TEXT' },
+        { name: 'notice', type: 'TEXT' },
+        { name: 'social_links_json', type: 'TEXT' },
+        { name: 'theme_color', type: 'TEXT' },
+        { name: 'site_url', type: 'TEXT' },
+        { name: 'sheet_url', type: 'TEXT' },
+        { name: 'drive_folder_url', type: 'TEXT' },
+        { name: 'status', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_sites' }
+    );
+
     try {
       await executeSQL(`ALTER TABLE sheetbot_ai_batch_jobs ADD COLUMN job_type TEXT;`);
     } catch {}

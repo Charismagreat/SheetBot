@@ -215,6 +215,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 🌐 AI 모바일 홈페이지 사진 복수 첨부 런처 (v2.1.91)
+    private val selectedSiteFiles = mutableListOf<File>()
+    private val siteImagesPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (!uris.isNullOrEmpty()) {
+            handleSiteImagesSelected(uris)
+        }
+    }
+
     // 카카오톡 대화 내용 내보내기(.txt) 파일 선택 런처 (v2.1.11)
     private val kakaoChatPickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
@@ -887,6 +897,9 @@ class MainActivity : AppCompatActivity() {
 
         // 📸 AI 인스타그램 피드 & 해시태그 카드 초기화
         setupInstagramAutomationCard()
+
+        // 🌐 AI 모바일 홈페이지 제작 & 관리 카드 초기화
+        setupMobileSiteCard()
 
         // 사진 및 문서 파일 구글 드라이브 업로드 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchFileUploadSync.isChecked = prefs.isFileUploadSyncEnabled
@@ -5493,7 +5506,199 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    /**
+     * 🌐 AI 모바일 홈페이지 다중 사진 선택 처리 (1600px 리사이즈 및 85% JPEG 압축 표준 준수)
+     */
+    private fun handleSiteImagesSelected(uris: List<Uri>) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val processedFiles = mutableListOf<File>()
+                for ((index, uri) in uris.withIndex()) {
+                    var displayName = "site_photo_${System.currentTimeMillis()}_${index}.jpg"
+                    contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                            if (nameIndex != -1) {
+                                displayName = cursor.getString(nameIndex) ?: displayName
+                            }
+                        }
+                    }
+
+                    val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, boundsOpts) }
+
+                    val maxDimension = 1600
+                    var inSampleSize = 1
+                    val origW = boundsOpts.outWidth
+                    val origH = boundsOpts.outHeight
+                    if (origW > maxDimension || origH > maxDimension) {
+                        val halfW = origW / 2
+                        val halfH = origH / 2
+                        while ((halfW / inSampleSize) >= maxDimension && (halfH / inSampleSize) >= maxDimension) {
+                            inSampleSize *= 2
+                        }
+                    }
+
+                    val decodeOpts = BitmapFactory.Options().apply { this.inSampleSize = inSampleSize }
+                    val decoded = contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, decodeOpts) }
+
+                    if (decoded != null) {
+                        val tempFile = File(cacheDir, "site_${System.currentTimeMillis()}_${index}.jpg")
+                        val fos = java.io.FileOutputStream(tempFile)
+                        decoded.compress(Bitmap.CompressFormat.JPEG, 85, fos)
+                        fos.flush()
+                        fos.close()
+                        processedFiles.add(tempFile)
+                    }
+                }
+
+                selectedSiteFiles.clear()
+                selectedSiteFiles.addAll(processedFiles)
+
+                val totalKb = selectedSiteFiles.sumOf { it.length() } / 1024
+
+                withContext(Dispatchers.Main) {
+                    binding.tvSiteSelectedImagesCount.text = "📷 첨부된 사진: ${selectedSiteFiles.size}장 (${totalKb} KB)"
+                    binding.btnResetSiteImages.visibility = if (selectedSiteFiles.isNotEmpty()) View.VISIBLE else View.GONE
+                    Toast.makeText(this@MainActivity, "사진 ${selectedSiteFiles.size}장 최적화 압축 완료!", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "사진 처리 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    /**
+     * 🌐 AI 모바일 홈페이지 제작 & 관리 카드 이벤트 바인딩
+     */
+    private fun setupMobileSiteCard() {
+        var isCollapsed = false
+        binding.btnToggleSiteDetails.setOnClickListener {
+            isCollapsed = !isCollapsed
+            binding.layoutSiteDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
+            binding.btnToggleSiteDetails.text = if (isCollapsed) "▶" else "▼"
+        }
+
+        binding.btnSelectSiteImages.setOnClickListener {
+            try {
+                siteImagesPickerLauncher.launch("image/*")
+            } catch (e: Exception) {
+                Toast.makeText(this, "사진 선택 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        binding.btnResetSiteImages.setOnClickListener {
+            selectedSiteFiles.clear()
+            binding.tvSiteSelectedImagesCount.text = "첨부된 사진: 0장 (선택 시 1600px 85% 자동 압축)"
+            binding.btnResetSiteImages.visibility = View.GONE
+            Toast.makeText(this, "사진 첨부가 취소되었습니다.", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnStartSiteCreation.setOnClickListener {
+            val title = binding.etSiteTitle.text.toString().trim()
+            val category = binding.etSiteCategory.text.toString().trim().ifBlank { "카페 / 베이커리" }
+            val phone = binding.etSitePhone.text.toString().trim()
+            val address = binding.etSiteAddress.text.toString().trim()
+            val businessHours = binding.etSiteHours.text.toString().trim().ifBlank { "매일 10:00 ~ 22:00" }
+
+            if (title.isBlank()) {
+                Toast.makeText(this, "상호명(홈페이지 이름)을 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val userEmail = PreferencesManager.getInstance(this).userEmail
+            if (userEmail.isBlank()) {
+                Toast.makeText(this, "로그인 정보(사용자 이메일)가 없습니다.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            binding.pbSiteLoading.visibility = View.VISIBLE
+            binding.tvSiteStatus.visibility = View.VISIBLE
+            binding.tvSiteStatus.text = "AI가 브랜드 스토리와 메뉴 구성을 기획하고 웹사이트를 발행 중입니다..."
+            binding.btnStartSiteCreation.isEnabled = false
+            binding.layoutSiteResultContainer.visibility = View.GONE
+
+            lifecycleScope.launch {
+                try {
+                    val result = ApiClient.requestCreateMobileSite(
+                        title = title,
+                        category = category,
+                        description = "",
+                        phone = phone,
+                        address = address,
+                        businessHours = businessHours,
+                        files = selectedSiteFiles.toList(),
+                        userEmail = userEmail
+                    )
+
+                    binding.pbSiteLoading.visibility = View.GONE
+                    binding.tvSiteStatus.visibility = View.GONE
+                    binding.btnStartSiteCreation.isEnabled = true
+
+                    if (result.success) {
+                        binding.layoutSiteResultContainer.visibility = View.VISIBLE
+                        binding.tvSiteResultTitle.text = "🎉 ${result.title} - ${result.slogan}"
+                        binding.tvSiteResultUrl.text = result.siteUrl
+
+                        if (result.siteUrl.isNotBlank()) {
+                            binding.btnOpenMobileSite.visibility = View.VISIBLE
+                            binding.btnOpenMobileSite.setOnClickListener {
+                                try {
+                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.siteUrl)))
+                                } catch (e: Exception) {
+                                    Toast.makeText(this@MainActivity, "모바일 웹 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+
+                            binding.btnShareMobileSite.visibility = View.VISIBLE
+                            binding.btnShareMobileSite.setOnClickListener {
+                                try {
+                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_SUBJECT, result.title)
+                                        putExtra(Intent.EXTRA_TEXT, "[${result.title}] 공식 모바일 홈페이지에 오신 것을 환영합니다!\n${result.siteUrl}")
+                                    }
+                                    startActivity(Intent.createChooser(shareIntent, "홈페이지 링크 공유"))
+                                } catch (e: Exception) {
+                                    Toast.makeText(this@MainActivity, "공유 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } else {
+                            binding.btnOpenMobileSite.visibility = View.GONE
+                            binding.btnShareMobileSite.visibility = View.GONE
+                        }
+
+                        if (result.sheetUrl.isNotBlank()) {
+                            binding.btnOpenSiteSheet.visibility = View.VISIBLE
+                            binding.btnOpenSiteSheet.setOnClickListener {
+                                try {
+                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.sheetUrl)))
+                                } catch (e: Exception) {
+                                    Toast.makeText(this@MainActivity, "대장 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } else {
+                            binding.btnOpenSiteSheet.visibility = View.GONE
+                        }
+
+                        Toast.makeText(this@MainActivity, "🎉 10초 모바일 홈페이지 생성 완료!", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, "생성 실패: ${result.error ?: "오류 발생"}", Toast.LENGTH_LONG).show()
+                    }
+                } catch (e: Exception) {
+                    binding.pbSiteLoading.visibility = View.GONE
+                    binding.tvSiteStatus.visibility = View.GONE
+                    binding.btnStartSiteCreation.isEnabled = true
+                    Toast.makeText(this@MainActivity, "홈페이지 생성 오류: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
 }
+
 
 
 
