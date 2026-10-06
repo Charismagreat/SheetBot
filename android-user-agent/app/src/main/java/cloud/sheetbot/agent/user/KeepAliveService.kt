@@ -336,8 +336,13 @@ class KeepAliveService : Service() {
                     if (result.uploadedCount > 0) {
                         Log.i(TAG, "🎙️ [통화 녹음 백업] 신규 통화 녹음 ${result.uploadedCount}건 구글 드라이브 업로드 완료")
                     }
+
+                    val meetingResult = MeetingRecordingManager.scanAndUploadNewMeetingRecordings(this@KeepAliveService)
+                    if (meetingResult.uploadedCount > 0) {
+                        Log.i(TAG, "🎙️ [회의 녹음 백업] 신규 회의 녹음 ${meetingResult.uploadedCount}건 구글 드라이브 및 회의록 대장 업로드 완료")
+                    }
                 } catch (e: Exception) {
-                    Log.w(TAG, "통화 녹음 백업 감시 중 오류: ${e.message}")
+                    Log.w(TAG, "녹음 백업 감시 중 오류: ${e.message}")
                 }
                 // 25초마다 신규 통화 녹음 파일 감시
                 delay(25 * 1000L)

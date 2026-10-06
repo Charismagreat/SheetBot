@@ -164,6 +164,23 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_recording_upload_only_on_wifi", false)
         set(value) = prefs.edit().putBoolean("is_recording_upload_only_on_wifi", value).apply()
 
+    // 회의 녹음 파일 구글 드라이브 자동 백업 및 회의록 대장 설정 (신규 설치 시 기본 꺼짐: false)
+    var isMeetingRecordingSyncEnabled: Boolean
+        get() = prefs.getBoolean("is_meeting_recording_sync_enabled", false)
+        set(value) = prefs.edit().putBoolean("is_meeting_recording_sync_enabled", value).apply()
+
+    var meetingRecordingDriveFolder: String
+        get() = prefs.getString("meeting_recording_drive_folder", "[SheetBot] 회의 녹음") ?: "[SheetBot] 회의 녹음"
+        set(value) = prefs.edit().putString("meeting_recording_drive_folder", value).apply()
+
+    var meetingRecordingCustomFolder: String
+        get() = prefs.getString("meeting_recording_custom_folder", "") ?: ""
+        set(value) = prefs.edit().putString("meeting_recording_custom_folder", value).apply()
+
+    var isMeetingRecordingDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_meeting_recording_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_meeting_recording_details_hidden", value).apply()
+
     // 사진 및 일반 파일 구글 드라이브 업로드 관련 설정
     var isFileUploadSyncEnabled: Boolean
         get() = prefs.getBoolean("is_file_upload_sync_enabled", false)
