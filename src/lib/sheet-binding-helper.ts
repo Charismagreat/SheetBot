@@ -71,6 +71,10 @@ const KNOWN_DEFAULT_BINDINGS: Record<string, Partial<Record<SheetBindingType, st
     RECEIPT: "14t6C-90zNNN-NTXexP37fMOKX85gP9iTe3MIlM83RC4",
     BUSINESS_CARD: "1GPMcTd7hxU2-ORZ32OX7Qz0tOnxMDNtSPqwKzqiS_AI",
     QUOTE: "1XCQMxao3uIhbXGh5kYlnXE5g9vH5mFBQ0cohJGyMl1U",
+    MOBILE_SITE: "1hxYuqBrYGVmeX_W09izu8-ga9xMqZt0ssMu8TLaSPrg",
+  },
+  "charismagreat@gmail.com": {
+    MOBILE_SITE: "1hxYuqBrYGVmeX_W09izu8-ga9xMqZt0ssMu8TLaSPrg",
   },
 };
 
