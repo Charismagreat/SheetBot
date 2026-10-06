@@ -85,36 +85,28 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: "id 파라미터가 필요합니다." }, { status: 400 });
     }
 
-    let rows = await queryTable<any>("sheetbot_instagram_posts", {
-      where: { uuid: id, deleted_at: null },
+    const rowsRes = await queryTable<any>("sheetbot_instagram_posts", {
+      filters: { uuid: id },
       limit: 1,
-    });
+    }).catch(() => ({ rows: [] }));
 
-    if (!rows || rows.length === 0) {
-      if (!isNaN(Number(id))) {
-        rows = await queryTable<any>("sheetbot_instagram_posts", {
-          where: { id: Number(id), deleted_at: null },
-          limit: 1,
-        });
-      }
-    }
+    let row = rowsRes.rows?.[0];
 
-    if (!rows || rows.length === 0) {
+    if (!row) {
       // 최근 등록건 중 일치하는 레코드 탐색 (폴백)
-      const allRows = await queryTable<any>("sheetbot_instagram_posts", {
+      const allRowsRes = await queryTable<any>("sheetbot_instagram_posts", {
         limit: 10,
         orderBy: "id",
         orderDirection: "DESC",
-      });
-      const matched = allRows.find((r: any) => r.uuid === id || String(r.id) === id);
-      if (matched) rows = [matched];
+      }).catch(() => ({ rows: [] }));
+      const matched = allRowsRes.rows?.find((r: any) => r.uuid === id || String(r.id) === id);
+      if (matched) row = matched;
     }
 
-    if (!rows || rows.length === 0) {
+    if (!row) {
       return NextResponse.json({ success: false, error: "해당 인스타그램 포스팅을 찾을 수 없습니다." }, { status: 404 });
     }
 
-    const row = rows[0];
     let imageList: Array<{ name: string; url: string }> = [];
     let carouselSlides: Array<{ slide: number; title: string; text: string }> = [];
     let refUrls: string[] = [];
