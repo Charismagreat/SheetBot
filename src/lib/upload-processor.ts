@@ -160,7 +160,7 @@ export async function processGenericFile(input: ProcessGenericFileInput): Promis
         limit: 1,
       });
       if (bindingQuery?.rows?.[0]?.folder_id) {
-        targetFolderId = bindingQuery.rows[0].folder_id;
+        targetFolderId = String(bindingQuery.rows[0].folder_id);
         folderCache.set(targetFolderName, targetFolderId);
       }
     } catch {}

@@ -10,6 +10,7 @@ import {
   callAiCaller,
   findOrCreateEgdeskFolder,
   findOrCreateEgdeskSubfolder,
+  createDriveFolder,
   insertRows,
   queryTable,
   callDriveTool,
@@ -232,8 +233,8 @@ export async function POST(req: NextRequest) {
 
     try {
       const parentFolder = await findOrCreateEgdeskFolder("[SheetBot] 연동 데이터");
-      const instaFolder = await findOrCreateSubfolder("[SheetBot] 인스타그램 사진 보관함", parentFolder.id);
-      driveFolderUrl = instaFolder.id ? `https://drive.google.com/drive/folders/${instaFolder.id}` : "";
+      const instaFolder = await createDriveFolder("[SheetBot] 인스타그램 사진 보관함", parentFolder?.id);
+      driveFolderUrl = instaFolder?.id ? `https://drive.google.com/drive/folders/${instaFolder.id}` : "";
 
       await Promise.allSettled(
         uploadedFiles.map(async (file, idx) => {

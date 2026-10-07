@@ -58,7 +58,7 @@ type TabType = "users" | "inquiries" | "reviews" | "faqs" | "tax_invoices" | "pr
 
 export default function AdminDashboardPage() {
   const { data: session, status } = useSession();
-  const { user, userEmail, isLoggedIn, isAdmin: isContextAdmin, isLoading: isAuthLoading } = useAuthAdmin();
+  const { user, userEmail, isLoggedIn, isAdmin: isContextAdmin, isLoading: isAuthLoading, refreshAdminStatus } = useAuthAdmin();
 
   // ⚡ SWR 관리자 권한 복원: 상위 Context 및 세션 스토리지에서 즉시 상속 (0초 렌더링)
   const [isAdmin, setIsAdmin] = useState<boolean | null>(() => {
@@ -285,6 +285,13 @@ export default function AdminDashboardPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const checkAdmin = async (force = false) => {
+    try {
+      await refreshAdminStatus();
+    } catch {}
+    await fetchAdminBootstrap(force);
   };
 
   // ⚡ 탭 전환 시 온디맨드로 해당 탭 데이터만 로드 (이미 불러온 탭은 중복 요청 방지 캐싱)

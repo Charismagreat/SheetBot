@@ -15,8 +15,11 @@ export interface PricingModelItem {
   inputCostPer1M: number;
   outputCostPer1M: number;
   multiplier: number;
+  tokenMultiplier?: number;
   badge?: string;
+  description?: string;
   isDefault?: boolean;
+  [key: string]: any;
 }
 
 export interface PricingCostConfig {

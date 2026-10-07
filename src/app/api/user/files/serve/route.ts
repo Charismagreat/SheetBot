@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 2. 전체 파일 바이너리 스트리밍 반환
-    return new NextResponse(fileResult.buffer, {
+    return new NextResponse(new Uint8Array(fileResult.buffer), {
       status: 200,
       headers: {
         "Content-Type": fileResult.mimeType,

@@ -17,6 +17,7 @@ export interface AuthAdminContextValue {
   isLoggedIn: boolean;
   isAdmin: boolean;
   isLoading: boolean;
+  session?: any;
   refreshAdminStatus: () => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -246,10 +247,11 @@ export function AuthAdminProvider({ children }: { children: React.ReactNode }) {
       isLoggedIn: Boolean(effectiveEmail),
       isAdmin,
       isLoading: status === "loading" && isLoading,
+      session,
       refreshAdminStatus,
       logout,
     };
-  }, [user, session?.user?.email, isAdmin, status, isLoading, refreshAdminStatus, logout]);
+  }, [user, session?.user?.email, session, isAdmin, status, isLoading, refreshAdminStatus, logout]);
 
   return (
     <AuthAdminContext.Provider value={value}>

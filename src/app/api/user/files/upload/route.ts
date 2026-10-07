@@ -213,9 +213,10 @@ export async function POST(req: NextRequest) {
           filters: { user_email: cleanEmail, sheet_type: bindingSheetType },
           limit: 1,
         });
-        if (bindingQuery?.rows?.[0]?.folder_id) {
-          targetFolderId = bindingQuery.rows[0].folder_id;
-          folderCache.set(targetFolderName, targetFolderId);
+        const foundFolderId = bindingQuery?.rows?.[0]?.folder_id;
+        if (foundFolderId && typeof foundFolderId === "string") {
+          targetFolderId = foundFolderId;
+          folderCache.set(targetFolderName, foundFolderId);
         }
       } catch {}
     }
@@ -479,7 +480,7 @@ export async function POST(req: NextRequest) {
                 userEmail: cleanEmail,
                 caller: "sheetbot-card-direct",
                 purpose: `명함 초고속 AI 인맥 등록 (gemini-2.5-flash-lite)`,
-                model: configuredModel,
+                model: "gemini-2.5-flash-lite",
                 promptTokens: 450,
                 completionTokens: 250,
                 totalTokens: usedTokens,
@@ -529,7 +530,7 @@ export async function POST(req: NextRequest) {
         const uploadRes = await uploadDriveFileWithBridge({
           buffer,
           fileName: targetFileName,
-          folderId: targetFolderId,
+          folderId: targetFolderId || undefined,
           mimeType,
           tempFilePath,
           preferOAuth: true,
