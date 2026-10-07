@@ -276,9 +276,9 @@ async function setupEstimateSpreadsheet(spreadsheetId: string, primaryTabName: s
   // 1. 첫 번째 탭: '단가표' 헤더 및 표준 샘플 품목 주입 (10개 열)
   const sampleCatalogRows = [
     ["카테고리", "품목코드", "품목명", "규격/단위", "기준단가(원)", "할인단가(원)", "대표사진", "상세설명", "최소수량", "비고"],
-    ["에어컨 세척", "EST-AC01", "스탠드 에어컨 분해세척", "1대", 150000, 140000, "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=500", "필터 및 열교환기 고압 살균 분해세척", 1, "가정/사무실"],
-    ["에어컨 세척", "EST-AC02", "천장형 시스템 에어컨 (4WAY)", "1대", 130000, 120000, "https://images.unsplash.com/photo-1545259741-2ea3ebf61fa3?w=500", "드레인판 세척 및 친환경 핀세정", 1, "사업장/매장"],
-    ["에어컨 세척", "EST-AC03", "벽걸이 에어컨 고압세척", "1대", 80000, 80000, "https://images.unsplash.com/photo-1585338107529-13afc5f02586?w=500", "완전 분해 살균 세척", 1, "원룸/오피스텔"],
+    ["에어컨 세척", "EST-AC01", "스탠드 에어컨 분해세척", "1대", 150000, 140000, "https://sheetbot.cloud/api/user/files/serve?file=ac_stand.webp&cat=catalog&email=common", "필터 및 열교환기 고압 살균 분해세척", 1, "가정/사무실"],
+    ["에어컨 세척", "EST-AC02", "천장형 시스템 에어컨 (4WAY)", "1대", 130000, 120000, "https://sheetbot.cloud/api/user/files/serve?file=ac_ceiling.webp&cat=catalog&email=common", "드레인판 세척 및 친환경 핀세정", 1, "사업장/매장"],
+    ["에어컨 세척", "EST-AC03", "벽걸이 에어컨 고압세척", "1대", 80000, 80000, "https://sheetbot.cloud/api/user/files/serve?file=ac_wall.webp&cat=catalog&email=common", "완전 분해 살균 세척", 1, "원룸/오피스텔"],
     ["추가 시공", "EST-OPT01", "실외기 고압 세척", "1대", 30000, 30000, "", "실외기 방열판 이물질 및 먼지 제거", 1, "선택 옵션"],
     ["서비스/방역", "EST-OPT02", "공간 피톤치드 연무 살균", "1식", 30000, 0, "", "실내 전체 항균 탈취 연무 시공", 1, "프로모션 무료 제공"],
   ];
@@ -361,7 +361,7 @@ async function setupEstimateSpreadsheet(spreadsheetId: string, primaryTabName: s
     ["고객센터 연락처", "010-7216-5884"],
     ["대표 e메일", "chachogreat@gmail.com"],
     ["홈페이지/SNS", "https://sheetbot.cloud"],
-    ["직인/도장 이미지 URL", "https://sheetbot.cloud/seal.png"],
+    ["직인/도장 이미지 URL", "https://sheetbot.cloud/api/user/files/serve?file=official_seal.png&cat=seal&email=common"],
     ["기본 견적 유효기간(일)", "14"],
     ["결제 및 시공 안내", "견적 승인 후 일정 협의 및 착수금(30%) 입금 시 작업이 확정됩니다."],
     ["특약 및 주의사항", "현장 여건(배관 연장, 고소 작업 등)에 따라 추가 비용이 발생할 수 있습니다."],

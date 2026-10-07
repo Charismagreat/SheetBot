@@ -3,9 +3,11 @@ export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
-import { queryTable, updateRows, insertRows } from "@/lib/egdesk-helpers";
+import { queryTable, updateRows, insertRows, callSheetsTool } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { resolveUserEmailFromKey } from "@/lib/user-key-helper";
+import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
+import { clearEstimateCatalogCache } from "@/lib/estimate-catalog-helper";
 import fs from "fs";
 import path from "path";
 
@@ -340,6 +342,78 @@ export async function POST(req: NextRequest) {
     } catch (uErr: any) {
       console.warn("[QuoteImage POST] sheetbot_users update warning:", uErr?.message);
     }
+
+    // 3. 구글 스프레드시트 '사업자정보' 탭(ESTIMATE 및 QUOTE) 자동 동기화
+    try {
+      const sheetTypes = ["ESTIMATE", "QUOTE"] as const;
+      for (const st of sheetTypes) {
+        try {
+          const resolved = await resolveUserSpreadsheet({
+            userEmail: targetEmail,
+            sheetType: st,
+            defaultTitle: st === "ESTIMATE" ? "[SheetBot] 스마트 간편 견적 및 단가 대장" : "[SheetBot] 스마트 간편 주문 및 품목 대장",
+          });
+          if (resolved?.spreadsheetId) {
+            const spreadsheetId = resolved.spreadsheetId;
+            const bizRes = await callSheetsTool(
+              "sheets_get_range",
+              {
+                spreadsheetId,
+                range: "사업자정보!A1:B25",
+                preferOAuth: true,
+              },
+              { preferOAuth: true }
+            ).catch(() => null);
+
+            let targetRowIndex = -1;
+            if (bizRes?.values && bizRes.values.length > 0) {
+              bizRes.values.forEach((row: any[], idx: number) => {
+                if (!row || !row[0]) return;
+                const k = String(row[0]).trim();
+                if (
+                  k.includes("카카오톡 미리보기") ||
+                  k.includes("대표 이미지") ||
+                  k.includes("미리보기") ||
+                  k.includes("OG") ||
+                  k.includes("썸네일")
+                ) {
+                  targetRowIndex = idx + 1; // 1-indexed
+                }
+              });
+            }
+
+            if (targetRowIndex > 0) {
+              await callSheetsTool(
+                "sheets_update_range",
+                {
+                  spreadsheetId,
+                  range: `사업자정보!B${targetRowIndex}`,
+                  values: [[imageUrl]],
+                  preferOAuth: true,
+                },
+                { preferOAuth: true }
+              ).catch(() => null);
+            } else {
+              await callSheetsTool(
+                "sheets_append_values",
+                {
+                  spreadsheetId,
+                  range: "사업자정보!A:B",
+                  values: [["카카오톡 미리보기 사진 URL", imageUrl]],
+                  preferOAuth: true,
+                },
+                { preferOAuth: true }
+              ).catch(() => null);
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (sheetSyncErr: any) {
+      console.warn("[QuoteImage POST] Sheet sync warning:", sheetSyncErr?.message);
+    }
+
+    // 4. 캐시 즉시 무효화
+    clearEstimateCatalogCache(targetEmail);
 
     return NextResponse.json({
       success: true,

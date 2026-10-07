@@ -1314,7 +1314,13 @@ class MainActivity : AppCompatActivity() {
 
         // 🚀 사장님 즉시 견적서 발행 웹페이지
         binding.btnIssueEstimateWeb.setOnClickListener {
-            val url = "https://sheetbot.cloud/estimate/issue"
+            val email = prefs.userEmail
+            val url = if (!email.isNullOrBlank()) {
+                val slug = Base64.encodeToString(email.toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+                "https://sheetbot.cloud/estimate/issue?userKey=$slug"
+            } else {
+                "https://sheetbot.cloud/estimate/issue"
+            }
             try {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -1366,6 +1372,16 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Toast.makeText(this, "견적 링크 공유 실패: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
             }
+        }
+
+        // 📸 카카오톡 미리보기 사진 등록/변경
+        binding.btnRegisterEstimateOgImage.setOnClickListener {
+            val email = prefs.userEmail
+            if (email.isNullOrBlank()) {
+                Toast.makeText(this, "먼저 시트봇 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            quoteImagePickerLauncher.launch("image/*")
         }
 
         // 수신 전화 시 '고객 시트 요약' 인콜 플로팅 팝업 UI 바인딩

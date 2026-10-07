@@ -31,6 +31,7 @@ export interface EstimateBusinessInfo {
   email?: string;
   website?: string;
   sealImageUrl?: string;
+  previewImageUrl?: string;
   defaultValidDays?: number;
   paymentNotice?: string;
   extraNotice?: string;
@@ -54,7 +55,7 @@ export const DEFAULT_ESTIMATE_CATALOG: EstimateCatalogItem[] = [
     spec: "1대",
     unitPrice: 150000,
     discountPrice: 140000,
-    photoUrl: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=500",
+    photoUrl: "https://sheetbot.cloud/api/user/files/serve?file=ac_stand.webp&cat=catalog&email=common",
     description: "필터 및 열교환기 고압 살균 분해세척",
     minQty: 1,
     note: "가정/사무실",
@@ -66,7 +67,7 @@ export const DEFAULT_ESTIMATE_CATALOG: EstimateCatalogItem[] = [
     spec: "1대",
     unitPrice: 130000,
     discountPrice: 120000,
-    photoUrl: "https://images.unsplash.com/photo-1545259741-2ea3ebf61fa3?w=500",
+    photoUrl: "https://sheetbot.cloud/api/user/files/serve?file=ac_ceiling.webp&cat=catalog&email=common",
     description: "드레인판 세척 및 친환경 핀세정",
     minQty: 1,
     note: "사업장/매장",
@@ -78,7 +79,7 @@ export const DEFAULT_ESTIMATE_CATALOG: EstimateCatalogItem[] = [
     spec: "1대",
     unitPrice: 80000,
     discountPrice: 80000,
-    photoUrl: "https://images.unsplash.com/photo-1585338107529-13afc5f02586?w=500",
+    photoUrl: "https://sheetbot.cloud/api/user/files/serve?file=ac_wall.webp&cat=catalog&email=common",
     description: "완전 분해 살균 세척",
     minQty: 1,
     note: "원룸/오피스텔",
@@ -196,7 +197,7 @@ export async function getEstimateCatalogData(options: {
     phone: phone,
     email: targetEmail,
     website: "https://sheetbot.cloud",
-    sealImageUrl: "https://sheetbot.cloud/seal.png",
+    sealImageUrl: "https://sheetbot.cloud/api/user/files/serve?file=official_seal.png&cat=seal&email=common",
     defaultValidDays: 14,
     paymentNotice: "견적 승인 후 작업 일정이 조율됩니다.",
     extraNotice: "현장 상황에 따라 추가 작업 비용이 발생할 수 있습니다.",
@@ -310,6 +311,10 @@ export async function getEstimateCatalogData(options: {
           else if (k.includes("메일")) businessInfo.email = v;
           else if (k.includes("홈페이지") || k.includes("SNS")) businessInfo.website = v;
           else if (k.includes("직인") || k.includes("도장")) businessInfo.sealImageUrl = v;
+          else if (k.includes("미리보기") || k.includes("대표 이미지") || k.includes("로고") || k.includes("OG") || k.includes("썸네일")) {
+            businessInfo.previewImageUrl = v;
+            merchantImageUrl = v;
+          }
           else if (k.includes("유효기간")) businessInfo.defaultValidDays = parseInt(v.replace(/[^0-9]/g, ""), 10) || 14;
           else if (k.includes("결제") || k.includes("시공")) businessInfo.paymentNotice = v;
           else if (k.includes("특약") || k.includes("주의사항")) businessInfo.extraNotice = v;
@@ -341,7 +346,7 @@ export async function getEstimateCatalogData(options: {
       businessName,
       phone,
       email: targetEmail,
-      imageUrl: merchantImageUrl,
+      imageUrl: businessInfo.previewImageUrl || merchantImageUrl || "https://sheetbot.cloud/images/og-default.png",
     },
     businessInfo,
     categories,

@@ -903,7 +903,26 @@ export async function setupDatabase(force = false): Promise<void> {
       { tableName: 'sheetbot_tasks' }
     );
 
-    // 26. 기본 추천 프롬프트 시딩
+    // 26. sheetbot_user_files 테이블 생성 (이용자 파일 스토리지 및 서빙 메타데이터 대장)
+    await safeCreateTable(
+      '이용자 파일 스토리지 대장',
+      [
+        { name: 'id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'uuid', type: 'TEXT' },
+        { name: 'user_email', type: 'TEXT', notNull: true },
+        { name: 'category', type: 'TEXT', notNull: true },
+        { name: 'original_name', type: 'TEXT' },
+        { name: 'stored_filename', type: 'TEXT', notNull: true },
+        { name: 'file_size', type: 'INTEGER' },
+        { name: 'mime_type', type: 'TEXT' },
+        { name: 'storage_path', type: 'TEXT' },
+        { name: 'public_url', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_user_files' }
+    );
+
+    // 27. 기본 추천 프롬프트 시딩
     await seedDefaultPromptTemplates();
 
     // 23. 레거시 데이터 마이그레이션 실행

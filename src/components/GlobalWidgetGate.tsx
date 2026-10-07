@@ -16,9 +16,10 @@ const LazyEasyBot = nextDynamic(() => import("@/components/EasyBot"), { ssr: fal
 export default function GlobalWidgetGate() {
   const pathname = usePathname() || "";
 
-  // 고객용 전용 화면에서는 관리자용 위젯 전체 숨김
+  // 고객용 전용 화면 및 모바일 웹앱에서는 관리자용 위젯 전체 숨김
   const isCustomerPortal = 
     pathname.startsWith("/order") || 
+    pathname.startsWith("/estimate") || 
     pathname.startsWith("/q/") || 
     pathname.startsWith("/m/");
 
