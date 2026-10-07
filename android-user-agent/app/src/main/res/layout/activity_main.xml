@@ -2843,6 +2843,17 @@
                     android:textColor="#94A3B8"
                     android:textSize="10.5sp"
                     android:layout_marginTop="4dp" />
+
+                <Button
+                    android:id="@+id/btnRegisterEstimateOgImage"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:backgroundTint="#F59E0B"
+                    android:text="📸 카카오톡 미리보기 사진 등록/변경"
+                    android:textColor="#FFFFFF"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="4dp" />
             </LinearLayout>
         </LinearLayout>
 
