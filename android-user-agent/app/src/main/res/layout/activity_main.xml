@@ -2788,19 +2788,19 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="구글 시트 단가표를 기반으로 직인 날인 공인 전자 견적서를 즉시 발행하고 고객 승인을 추적합니다."
+                    android:text="구글 시트 단가표를 기반으로 사장님이 터치하여 30초 만에 공인 전자 견적서를 즉시 발행하고 고객 승인을 추적합니다."
                     android:textColor="#94A3B8"
                     android:textSize="11sp"
                     android:layout_marginBottom="8dp" />
 
                 <Button
-                    android:id="@+id/btnOpenEstimateSheet"
+                    android:id="@+id/btnIssueEstimateWeb"
                     android:layout_width="match_parent"
-                    android:layout_height="40dp"
-                    android:backgroundTint="#0369A1"
-                    android:text="📊 간편 견적 및 단가 시트 ↗"
-                    android:textColor="#E0F2FE"
-                    android:textSize="11.5sp"
+                    android:layout_height="44dp"
+                    android:backgroundTint="#0284C7"
+                    android:text="🚀 공인 전자 견적서 즉시 발행"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12.5sp"
                     android:textStyle="bold" />
 
                 <LinearLayout
@@ -2810,50 +2810,29 @@
                     android:layout_marginTop="6dp">
 
                     <Button
-                        android:id="@+id/btnIssueEstimateWeb"
+                        android:id="@+id/btnOpenEstimateSheet"
                         android:layout_width="0dp"
                         android:layout_weight="1"
                         android:layout_height="38dp"
-                        android:backgroundTint="#0284C7"
-                        android:text="🚀 견적서 즉시 발행"
-                        android:textColor="#FFFFFF"
+                        android:backgroundTint="#0369A1"
+                        android:text="📊 견적 시트 ↗"
+                        android:textColor="#E0F2FE"
                         android:textSize="11sp"
                         android:textStyle="bold"
                         android:layout_marginEnd="4dp" />
 
                     <Button
-                        android:id="@+id/btnOpenSelfEstimateWeb"
+                        android:id="@+id/btnRegisterEstimateOgImage"
                         android:layout_width="0dp"
                         android:layout_weight="1"
                         android:layout_height="38dp"
-                        android:backgroundTint="#1E293B"
-                        android:text="📱 고객 셀프 견적기"
-                        android:textColor="#BAE6FD"
+                        android:backgroundTint="#D97706"
+                        android:text="📸 카톡 미리보기 사진"
+                        android:textColor="#FFFFFF"
                         android:textSize="11sp"
                         android:textStyle="bold"
                         android:layout_marginStart="4dp" />
                 </LinearLayout>
-
-                <Button
-                    android:id="@+id/btnCopySelfEstimateLink"
-                    android:layout_width="match_parent"
-                    android:layout_height="36dp"
-                    android:backgroundTint="#0F172A"
-                    android:text="🔗 견적 신청 링크 공유"
-                    android:textColor="#94A3B8"
-                    android:textSize="10.5sp"
-                    android:layout_marginTop="4dp" />
-
-                <Button
-                    android:id="@+id/btnRegisterEstimateOgImage"
-                    android:layout_width="match_parent"
-                    android:layout_height="36dp"
-                    android:backgroundTint="#F59E0B"
-                    android:text="📸 카카오톡 미리보기 사진 등록/변경"
-                    android:textColor="#FFFFFF"
-                    android:textSize="10.5sp"
-                    android:textStyle="bold"
-                    android:layout_marginTop="4dp" />
             </LinearLayout>
         </LinearLayout>
 

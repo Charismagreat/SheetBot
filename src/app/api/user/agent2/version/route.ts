@@ -41,10 +41,10 @@ export async function GET() {
     );
   }
 
-  let latestName = "2.1.95";
-  let latestCode = 116;
+  let latestName = "2.1.96";
+  let latestCode = 117;
   let apkUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";
-  let releaseNotes = "스마트 간편 견적서 발행 대장 카드 신규 탑재 (단가표 기반 공인 전자 견적서 0초 발행, 직인 날인, 인쇄/PDF, 고객 승인 추적)";
+  let releaseNotes = "간편 견적서 대장 사장님 전용 즉시 발행 UI 최적화 및 카카오톡 미리보기 연동 완비";
 
   try {
     const ghRes = await fetch("https://api.github.com/repos/Charismagreat/SheetBot/releases/latest", {
