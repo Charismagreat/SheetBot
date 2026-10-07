@@ -1157,229 +1157,6 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- 독립 카드: 원클릭 기업 심층 리서치 및 문서화 (Company Research Doc Canvas) -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@drawable/bg_card_scenario"
-            android:padding="13dp"
-            android:layout_marginBottom="12dp">
-
-            <!-- 상단 구분선 -->
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="#334155"
-                android:layout_marginTop="6dp"
-                android:layout_marginBottom="10dp" />
-
-            <LinearLayout
-                android:id="@+id/layoutCompanyResearchHeader"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="8dp"
-                android:clickable="true"
-                android:focusable="true">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="🔍 원클릭 기업 리서치 문서화"
-                    android:textColor="#38BDF8"
-                    android:textSize="12.5sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/btnToggleCompanyResearchDetails"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_badge_version"
-                    android:backgroundTint="#0F172A"
-                    android:paddingHorizontal="8dp"
-                    android:paddingVertical="3dp"
-                    android:text="▲"
-                    android:textColor="#E2E8F0"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/layoutCompanyResearchSettings"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="#0F172A"
-                android:padding="10dp"
-                android:layout_marginBottom="12dp">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="회사명 또는 홈페이지 주소 중 1개 이상을 입력하면 국민연금·국세청·나라장터 데이터를 분석하여 Google Docs 심층 리서치 보고서를 자동 생성합니다."
-                    android:textColor="#94A3B8"
-                    android:textSize="10.5sp"
-                    android:layout_marginBottom="8dp" />
-
-                <EditText
-                    android:id="@+id/etResearchCompanyName"
-                    android:layout_width="match_parent"
-                    android:layout_height="38dp"
-                    android:background="#1E293B"
-                    android:hint="🏢 회사명 (상호) 입력 (예: 삼성전자, 카카오)"
-                    android:textColorHint="#64748B"
-                    android:textColor="#FFFFFF"
-                    android:textSize="12sp"
-                    android:paddingHorizontal="10dp"
-                    android:layout_marginBottom="6dp"
-                    android:inputType="text" />
-
-                <EditText
-                    android:id="@+id/etResearchDomain"
-                    android:layout_width="match_parent"
-                    android:layout_height="38dp"
-                    android:background="#1E293B"
-                    android:hint="🌐 홈페이지 주소 입력 (예: naver.com)"
-                    android:textColorHint="#64748B"
-                    android:textColor="#FFFFFF"
-                    android:textSize="12sp"
-                    android:paddingHorizontal="10dp"
-                    android:layout_marginBottom="10dp"
-                    android:inputType="textUri" />
-
-                <Button
-                    android:id="@+id/btnStartCompanyResearch"
-                    android:layout_width="match_parent"
-                    android:layout_height="38dp"
-                    android:backgroundTint="#0284C7"
-                    android:text="🚀 기업 심층 리서치 문서 생성"
-                    android:textColor="#FFFFFF"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
-
-                <!-- 진행 상태 표시 -->
-                <ProgressBar
-                    android:id="@+id/pbResearchLoading"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center_horizontal"
-                    android:layout_marginTop="8dp"
-                    android:visibility="gone" />
-
-                <TextView
-                    android:id="@+id/tvResearchStatus"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center"
-                    android:textColor="#38BDF8"
-                    android:textSize="11sp"
-                    android:layout_marginTop="4dp"
-                    android:visibility="gone" />
-
-                <!-- 결과 표시 컨테이너 -->
-                <LinearLayout
-                    android:id="@+id/layoutResearchResultContainer"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:background="#1E293B"
-                    android:padding="10dp"
-                    android:layout_marginTop="10dp"
-                    android:visibility="gone">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:layout_marginBottom="4dp">
-
-                        <TextView
-                            android:id="@+id/tvResultCompanyTitle"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="회사명"
-                            android:textColor="#F1F5F9"
-                            android:textSize="12sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/tvResultTaxBadge"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:background="@drawable/bg_badge_version"
-                            android:backgroundTint="#0F172A"
-                            android:paddingHorizontal="6dp"
-                            android:paddingVertical="1dp"
-                            android:text="계속사업자"
-                            android:textColor="#38BDF8"
-                            android:textSize="10sp" />
-                    </LinearLayout>
-
-                    <TextView
-                        android:id="@+id/tvResultMetrics"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="임직원 00명 | 평균 급여 ~00만원 | 조달계약 0건"
-                        android:textColor="#94A3B8"
-                        android:textSize="10.5sp"
-                        android:layout_marginBottom="6dp" />
-
-                    <TextView
-                        android:id="@+id/tvResultAiSummary"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="AI 리서치 요약 내용..."
-                        android:textColor="#E2E8F0"
-                        android:textSize="11sp"
-                        android:layout_marginBottom="10dp" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal">
-
-                        <Button
-                            android:id="@+id/btnOpenResearchDoc"
-                            android:layout_width="0dp"
-                            android:layout_height="34dp"
-                            android:layout_weight="1"
-                            android:backgroundTint="#2563EB"
-                            android:text="📄 구글 문서 보고서 열기"
-                            android:textColor="#FFFFFF"
-                            android:textSize="11sp"
-                            android:layout_marginEnd="4dp" />
-
-                        <Button
-                            android:id="@+id/btnOpenResearchSheet"
-                            android:layout_width="0dp"
-                            android:layout_height="34dp"
-                            android:layout_weight="1"
-                            android:backgroundTint="#059669"
-                            android:text="📊 리서치 대장 시트"
-                            android:textColor="#FFFFFF"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <!-- 상시 노출 구글 시트 대장 열기 버튼 -->
-                <Button
-                    android:id="@+id/btnOpenResearchSheetAlways"
-                    android:layout_width="match_parent"
-                    android:layout_height="40dp"
-                    android:backgroundTint="#1E293B"
-                    android:text="📊 기업 심층 리서치 대장 시트 ↗"
-                    android:textColor="#38BDF8"
-                    android:textSize="11.5sp"
-                    android:textStyle="bold"
-                    android:layout_marginTop="8dp" />
-            </LinearLayout>
-        </LinearLayout>
-
         <!-- 독립 카드: in_call_summary (수신 전화 시 '고객 시트 요약' 인콜 플로팅 팝업) -->
         <LinearLayout
             android:layout_width="match_parent"
@@ -2793,6 +2570,61 @@
                     android:textSize="11sp"
                     android:layout_marginBottom="8dp" />
 
+                <!-- 📸 견적 카톡 미리보기 대표 사진 등록 및 썸네일 (v2.1.98) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="#1E293B"
+                    android:padding="8dp"
+                    android:layout_marginBottom="8dp">
+
+                    <ImageView
+                        android:id="@+id/ivEstimateImagePreview"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:background="#0F172A"
+                        android:scaleType="centerCrop"
+                        android:contentDescription="견적 대표 썸네일 미리보기"
+                        android:src="@android:drawable/ic_menu_gallery"
+                        android:layout_marginEnd="10dp" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="📸 견적 카톡 미리보기 사진"
+                            android:textColor="#E2E8F0"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvEstimateImageStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="미등록 (기본 로고)"
+                            android:textColor="#94A3B8"
+                            android:textSize="9.5sp"
+                            android:layout_marginTop="2dp" />
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/btnRegisterEstimateOgImage"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:backgroundTint="#D97706"
+                        android:text="사진 선택"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
                 <Button
                     android:id="@+id/btnIssueEstimateWeb"
                     android:layout_width="match_parent"
@@ -2803,36 +2635,16 @@
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
 
-                <LinearLayout
+                <Button
+                    android:id="@+id/btnOpenEstimateSheet"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginTop="6dp">
-
-                    <Button
-                        android:id="@+id/btnOpenEstimateSheet"
-                        android:layout_width="0dp"
-                        android:layout_weight="1"
-                        android:layout_height="38dp"
-                        android:backgroundTint="#0369A1"
-                        android:text="📊 견적 시트 ↗"
-                        android:textColor="#E0F2FE"
-                        android:textSize="11sp"
-                        android:textStyle="bold"
-                        android:layout_marginEnd="4dp" />
-
-                    <Button
-                        android:id="@+id/btnRegisterEstimateOgImage"
-                        android:layout_width="0dp"
-                        android:layout_weight="1"
-                        android:layout_height="38dp"
-                        android:backgroundTint="#D97706"
-                        android:text="📸 카톡 미리보기 사진"
-                        android:textColor="#FFFFFF"
-                        android:textSize="11sp"
-                        android:textStyle="bold"
-                        android:layout_marginStart="4dp" />
-                </LinearLayout>
+                    android:layout_height="38dp"
+                    android:backgroundTint="#0369A1"
+                    android:text="📊 스마트 견적 및 단가 대장 구글 시트 열기 ↗"
+                    android:textColor="#E0F2FE"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="6dp" />
             </LinearLayout>
         </LinearLayout>
 
@@ -3538,6 +3350,229 @@
         <include
             android:id="@+id/cardSite"
             layout="@layout/card_mobile_site" />
+
+        <!-- 독립 카드: 원클릭 기업 심층 리서치 (Company Research Doc Canvas) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_scenario"
+            android:padding="13dp"
+            android:layout_marginBottom="12dp">
+
+            <!-- 상단 구분선 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:id="@+id/layoutCompanyResearchHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="🔍 원클릭 기업 리서치"
+                    android:textColor="#38BDF8"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btnToggleCompanyResearchDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutCompanyResearchSettings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0F172A"
+                android:padding="10dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="회사명 또는 홈페이지 주소 중 1개 이상을 입력하면 국민연금·국세청·나라장터 데이터를 분석하여 Google Docs 심층 리서치 보고서를 자동 생성합니다."
+                    android:textColor="#94A3B8"
+                    android:textSize="10.5sp"
+                    android:layout_marginBottom="8dp" />
+
+                <EditText
+                    android:id="@+id/etResearchCompanyName"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:background="#1E293B"
+                    android:hint="🏢 회사명 (상호) 입력 (예: 삼성전자, 카카오)"
+                    android:textColorHint="#64748B"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="6dp"
+                    android:inputType="text" />
+
+                <EditText
+                    android:id="@+id/etResearchDomain"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:background="#1E293B"
+                    android:hint="🌐 홈페이지 주소 입력 (예: naver.com)"
+                    android:textColorHint="#64748B"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="10dp"
+                    android:layout_marginBottom="10dp"
+                    android:inputType="textUri" />
+
+                <Button
+                    android:id="@+id/btnStartCompanyResearch"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:backgroundTint="#0284C7"
+                    android:text="🚀 기업 심층 리서치 문서 생성"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <!-- 진행 상태 표시 -->
+                <ProgressBar
+                    android:id="@+id/pbResearchLoading"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="8dp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/tvResearchStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:textColor="#38BDF8"
+                    android:textSize="11sp"
+                    android:layout_marginTop="4dp"
+                    android:visibility="gone" />
+
+                <!-- 결과 표시 컨테이너 -->
+                <LinearLayout
+                    android:id="@+id/layoutResearchResultContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#1E293B"
+                    android:padding="10dp"
+                    android:layout_marginTop="10dp"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="4dp">
+
+                        <TextView
+                            android:id="@+id/tvResultCompanyTitle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="회사명"
+                            android:textColor="#F1F5F9"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvResultTaxBadge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_badge_version"
+                            android:backgroundTint="#0F172A"
+                            android:paddingHorizontal="6dp"
+                            android:paddingVertical="1dp"
+                            android:text="계속사업자"
+                            android:textColor="#38BDF8"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvResultMetrics"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="임직원 00명 | 평균 급여 ~00만원 | 조달계약 0건"
+                        android:textColor="#94A3B8"
+                        android:textSize="10.5sp"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:id="@+id/tvResultAiSummary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="AI 리서치 요약 내용..."
+                        android:textColor="#E2E8F0"
+                        android:textSize="11sp"
+                        android:layout_marginBottom="10dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/btnOpenResearchDoc"
+                            android:layout_width="0dp"
+                            android:layout_height="34dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#2563EB"
+                            android:text="📄 구글 문서 보고서 열기"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp"
+                            android:layout_marginEnd="4dp" />
+
+                        <Button
+                            android:id="@+id/btnOpenResearchSheet"
+                            android:layout_width="0dp"
+                            android:layout_height="34dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="#059669"
+                            android:text="📊 리서치 대장 시트"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- 상시 노출 구글 시트 대장 열기 버튼 -->
+                <Button
+                    android:id="@+id/btnOpenResearchSheetAlways"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="📊 기업 심층 리서치 대장 시트 ↗"
+                    android:textColor="#38BDF8"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
+        </LinearLayout>
 
         <!-- 독립 카드: website_monitor -->
         <LinearLayout

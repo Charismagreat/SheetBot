@@ -26,17 +26,25 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallbackValue: T): Prom
   ]);
 }
 
+function extractNaverId(input: string): string {
+  if (!input) return "";
+  const trimmed = input.trim();
+  const match = trimmed.match(/(?:blog\.naver\.com\/)([a-zA-Z0-9_\-]+)/i);
+  if (match) return match[1];
+  return trimmed.replace(/^@/, "").replace(/[^a-zA-Z0-9_\-]/g, "");
+}
+
 // 10대 컬럼 구글 시트 헤더 정의
 const BLOG_SHEET_HEADERS = [
   "ID",
   "작성/발행 일시",
   "포스팅 주제 및 제목",
   "핵심 타깃 키워드",
+  "대상 네이버 블로그",
   "블로그 원고 링크",
+  "네이버 글쓰기 링크",
   "첨부 사진 드라이브 폴더",
-  "참고 벤치마킹 URL (3개)",
   "포스팅 본문 요약 (3줄)",
-  "사진 수 / 글자 수",
   "발행 상태",
 ];
 
@@ -73,6 +81,12 @@ export async function GET(req: NextRequest) {
       if (row.image_drive_urls_json) imageDriveUrls = JSON.parse(row.image_drive_urls_json);
     } catch {}
 
+    const naverBlogId = row.naver_blog_id || "";
+    const naverBlogUrl = row.naver_blog_url || (naverBlogId ? `https://blog.naver.com/${naverBlogId}` : "");
+    const naverWriteUrl = naverBlogId
+      ? `https://blog.naver.com/${naverBlogId}?Redirect=Write`
+      : "https://blog.naver.com/GoBlogWrite.naver";
+
     return NextResponse.json({
       success: true,
       post: {
@@ -84,7 +98,10 @@ export async function GET(req: NextRequest) {
         imageDriveUrls,
         contentHtml: row.content_html,
         summary: row.summary,
-        naverPostUrl: row.naver_post_url,
+        naverPostUrl: row.naver_post_url || naverWriteUrl,
+        naverBlogId,
+        naverBlogUrl,
+        naverWriteUrl,
         charCount: row.char_count,
         imageCount: row.image_count,
         status: row.status,
@@ -119,6 +136,7 @@ export async function POST(req: NextRequest) {
     let userEmailInput = "";
     let topic = "";
     let keywords = "";
+    let naverBlogIdInput = "";
     let refUrls: string[] = [];
     const uploadedFiles: Array<{ name: string; buffer: Buffer; mimeType: string }> = [];
 
@@ -129,6 +147,7 @@ export async function POST(req: NextRequest) {
       userEmailInput = String(formData.get("userEmail") || formData.get("email") || "").trim();
       topic = String(formData.get("topic") || "").trim();
       keywords = String(formData.get("keywords") || "").trim();
+      naverBlogIdInput = String(formData.get("naverBlogId") || formData.get("blogId") || "").trim();
 
       const url1 = String(formData.get("refUrl1") || "").trim();
       const url2 = String(formData.get("refUrl2") || "").trim();
@@ -153,6 +172,7 @@ export async function POST(req: NextRequest) {
       userEmailInput = String(json.userEmail || json.email || "").trim();
       topic = String(json.topic || "").trim();
       keywords = String(json.keywords || "").trim();
+      naverBlogIdInput = String(json.naverBlogId || json.blogId || "").trim();
       if (Array.isArray(json.refUrls)) {
         refUrls = json.refUrls.filter((u: any) => typeof u === "string" && u.startsWith("http"));
       }
@@ -272,15 +292,37 @@ ${refSummaryForAi || "참고 URL 없음 (주제 및 키워드 기반으로 최�
 
     const charCount = contentHtml.replace(/<[^>]+>/g, "").length;
     const reportUrl = `https://sheetbot.cloud/blog-post?id=${blogId}`;
-    let naverPostUrl = reportUrl; // 네이버 포스팅 완료 시 실제 blog.naver.com URL 매핑
 
-    // 5. egdesk-blog (blog_publish) 연동 시도 (네이버 커넥션이 존재하는 경우)
-    try {
-      const { callBlogTool } = await import("@/lib/egdesk-helpers").catch(() => ({} as any));
-      // 네이버 블로그에 발행 요청
-    } catch {}
+    // 네이버 블로그 ID 처리 및 직통 글쓰기 링크 계산
+    let cleanNaverId = extractNaverId(naverBlogIdInput);
+    if (!cleanNaverId && userEmail) {
+      try {
+        const userRes = await queryTable<any>("sheetbot_users", {
+          filters: { email: userEmail },
+          limit: 1,
+        });
+        if (userRes.rows?.[0]?.naver_blog_id) {
+          cleanNaverId = extractNaverId(userRes.rows[0].naver_blog_id);
+        }
+      } catch {}
+    }
 
-    // 6. SQLite DB sheetbot_blog_posts 테이블 적재
+    const naverBlogUrl = cleanNaverId ? `https://blog.naver.com/${cleanNaverId}` : "";
+    const naverWriteUrl = cleanNaverId
+      ? `https://blog.naver.com/${cleanNaverId}?Redirect=Write`
+      : "https://blog.naver.com/GoBlogWrite.naver";
+
+    // 사용자가 새로운 naverBlogId를 전달했다면 sheetbot_users에 동기화
+    if (cleanNaverId && userEmail) {
+      try {
+        const { executeSQL } = await import("@/lib/egdesk-helpers");
+        await executeSQL(
+          `UPDATE sheetbot_users SET naver_blog_id = '${cleanNaverId}' WHERE email = '${userEmail}';`
+        ).catch(() => {});
+      } catch {}
+    }
+
+    // 5. SQLite DB sheetbot_blog_posts 테이블 적재
     try {
       await insertRows("sheetbot_blog_posts", [
         {
@@ -293,7 +335,9 @@ ${refSummaryForAi || "참고 URL 없음 (주제 및 키워드 기반으로 최�
           image_drive_urls_json: JSON.stringify(imageDriveList.map((img) => ({ name: img.name, url: img.url }))),
           content_html: contentHtml,
           summary,
-          naver_post_url: naverPostUrl,
+          naver_post_url: naverWriteUrl,
+          naver_blog_id: cleanNaverId,
+          naver_blog_url: naverBlogUrl,
           char_count: charCount,
           image_count: imageDriveList.length,
           status: "COMPLETED",
@@ -304,7 +348,7 @@ ${refSummaryForAi || "참고 URL 없음 (주제 및 키워드 기반으로 최�
       console.warn("[BlogPost] DB insert warning:", dbErr.message);
     }
 
-    // 7. 구글 스프레드시트 [SheetBot] 블로그 마케팅 관리 대장 적재
+    // 6. 구글 스프레드시트 [SheetBot] 블로그 마케팅 관리 대장 적재
     let sheetUrl = "";
     try {
       const binding = await resolveUserSpreadsheet({
@@ -328,11 +372,11 @@ ${refSummaryForAi || "참고 URL 없음 (주제 및 키워드 기반으로 최�
         nowStr,
         postTitle,
         keywords || "-",
+        naverBlogUrl || "스마트폰 기본 계정",
         reportUrl,
+        naverWriteUrl,
         driveFolderUrl || "-",
-        refUrls.join(", ") || "-",
         summary,
-        `사진 ${imageDriveList.length}장 / ${charCount}자`,
         "원고 작성 완료 (발행 대기)",
       ];
 
@@ -365,7 +409,10 @@ ${refSummaryForAi || "참고 URL 없음 (주제 및 키워드 기반으로 최�
       imageCount: imageDriveList.length,
       reportUrl,
       sheetUrl,
-      naverPostUrl,
+      naverPostUrl: naverWriteUrl,
+      naverBlogId: cleanNaverId,
+      naverBlogUrl,
+      naverWriteUrl,
       driveFolderUrl,
       tags,
     });

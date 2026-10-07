@@ -41,10 +41,10 @@ export async function GET() {
     );
   }
 
-  let latestName = "2.1.97";
-  let latestCode = 118;
+  let latestName = "2.1.99";
+  let latestCode = 120;
   let apkUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";
-  let releaseNotes = "구글 시트 연동 기반 기본 템플릿 모바일 홈페이지 자동 서빙 및 상시 열기 기능 신규 탑재";
+  let releaseNotes = "간편주문 및 간편견적 카카오톡 미리보기(OG) 대표 사진 독립 분리 및 맞춤형 썸네일 등록 지원";
 
   try {
     const ghRes = await fetch("https://api.github.com/repos/Charismagreat/SheetBot/releases/latest", {

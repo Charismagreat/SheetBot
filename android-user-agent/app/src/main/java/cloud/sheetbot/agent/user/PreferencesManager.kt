@@ -259,6 +259,10 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("estimate_drive_sheet_title", "[SheetBot] 스마트 간편 견적 및 단가 대장") ?: "[SheetBot] 스마트 간편 견적 및 단가 대장"
         set(value) = prefs.edit().putString("estimate_drive_sheet_title", value).apply()
 
+    var estimateImageUrl: String
+        get() = prefs.getString("estimate_image_url", "") ?: ""
+        set(value) = prefs.edit().putString("estimate_image_url", value).apply()
+
     // 부재중 전화(Missed Call) 감지 시 0원 스마트 안내 문자 자동 회신 설정 (신규 설치 시 기본 꺼짐: false)
     var isMissedCallAutoReplyEnabled: Boolean
         get() = prefs.getBoolean("is_missed_call_auto_reply_enabled", false)
@@ -477,6 +481,14 @@ class PreferencesManager(context: Context) {
     fun getSheetId(sheetType: String): String? {
         return prefs.getString("sheet_id_${sheetType.uppercase()}", null)
     }
+
+    var naverBlogId: String
+        get() = prefs.getString("naver_blog_id", "") ?: ""
+        set(value) = prefs.edit().putString("naver_blog_id", value).apply()
+
+    var instagramId: String
+        get() = prefs.getString("instagram_id", "") ?: ""
+        set(value) = prefs.edit().putString("instagram_id", value).apply()
 
     fun clear() {
         prefs.edit().clear().apply()

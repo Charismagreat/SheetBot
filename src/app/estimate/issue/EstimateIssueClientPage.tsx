@@ -18,10 +18,6 @@ import {
   Sparkles,
   Building2,
   RotateCcw,
-  Camera,
-  Upload,
-  X,
-  ImageIcon,
 } from "lucide-react";
 import type { EstimateCatalogResult, EstimateCatalogItem } from "@/lib/estimate-catalog-helper";
 
@@ -59,104 +55,6 @@ export default function EstimateIssueClientPage({ userKey, initialData }: Props)
       }
     }
   }, []);
-
-  // 📸 카카오톡 미리보기 사진 관리 상태
-  const [previewImageUrl, setPreviewImageUrl] = useState<string>(
-    initialData.businessInfo?.previewImageUrl ||
-    initialData.merchant?.imageUrl ||
-    "https://sheetbot.cloud/images/og-default.png"
-  );
-  const [showPreviewModal, setShowPreviewModal] = useState(false);
-  const [uploadingPreview, setUploadingPreview] = useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
-
-  const handleUploadPreview = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      alert("이미지 파일(PNG, JPG, WEBP)만 업로드할 수 있습니다.");
-      return;
-    }
-
-    try {
-      setUploadingPreview(true);
-
-      // 브라우저 캔버스를 이용한 스마트 다운스케일링 및 JPEG 압축 (간편 주문 웹앱 표준 규격: max 1200px, 85%)
-      const reader = new FileReader();
-      reader.onload = (re) => {
-        const img = new Image();
-        img.onload = async () => {
-          try {
-            const maxDim = 1200;
-            let width = img.width;
-            let height = img.height;
-
-            if (width > maxDim || height > maxDim) {
-              if (width >= height) {
-                height = Math.round((height * maxDim) / width);
-                width = maxDim;
-              } else {
-                width = Math.round((width * maxDim) / height);
-                height = maxDim;
-              }
-            }
-
-            const canvas = document.createElement("canvas");
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext("2d");
-            if (ctx) {
-              ctx.drawImage(img, 0, 0, width, height);
-            }
-            const compressedBase64 = canvas.toDataURL("image/jpeg", 0.85);
-
-            const res = await apiFetch("/api/user/quote/image", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                email: initialData.merchant?.email || "chachogreat@gmail.com",
-                imageBase64: compressedBase64,
-                fileName: file.name.replace(/\.[^/.]+$/, "") + ".jpg",
-              }),
-            });
-
-            const data = await res.json();
-            if (data.success && data.imageUrl) {
-              setPreviewImageUrl(data.imageUrl);
-              alert("🎉 카카오톡 미리보기 사진이 성공적으로 등록되었습니다!\n구글 시트 사업자정보 탭에도 실시간 자동 반영되었습니다.");
-            } else {
-              alert(data.error || "이미지 업로드에 실패했습니다.");
-            }
-          } catch (err: any) {
-            alert("업로드 중 오류: " + err.message);
-          } finally {
-            setUploadingPreview(false);
-            if (fileInputRef.current) {
-              fileInputRef.current.value = "";
-            }
-          }
-        };
-
-        img.onerror = () => {
-          alert("이미지 로드에 실패했습니다.");
-          setUploadingPreview(false);
-        };
-
-        img.src = re.target?.result as string;
-      };
-
-      reader.onerror = () => {
-        alert("파일 읽기 실패");
-        setUploadingPreview(false);
-      };
-
-      reader.readAsDataURL(file);
-    } catch {
-      alert("업로드 중 오류가 발생했습니다.");
-      setUploadingPreview(false);
-    }
-  };
 
   // 고객 입력 폼
   const [customerName, setCustomerName] = useState("");
@@ -318,18 +216,9 @@ export default function EstimateIssueClientPage({ userKey, initialData }: Props)
                 품목과 수량을 터치하여 30초 만에 공인 전자 견적서를 발행하고 고객에게 문자로 전송합니다.
               </p>
             </div>
-            <div className="flex flex-col sm:items-end gap-2">
-              <div className="text-right">
-                <span className="text-xs text-slate-400 block">발행 공급자</span>
-                <span className="text-base sm:text-lg font-bold text-amber-300">{merchantName}</span>
-              </div>
-              <button
-                onClick={() => setShowPreviewModal(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-bold border border-indigo-400/40 shadow-xs transition-all active:scale-95"
-              >
-                <Camera className="w-3.5 h-3.5" />
-                카톡 미리보기 사진 등록
-              </button>
+            <div className="flex flex-col sm:items-end">
+              <span className="text-xs text-slate-400 block">발행 공급자</span>
+              <span className="text-base sm:text-lg font-bold text-amber-300">{merchantName}</span>
             </div>
           </div>
         </div>
@@ -728,114 +617,6 @@ export default function EstimateIssueClientPage({ userKey, initialData }: Props)
                   className="w-full py-3 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700"
                 >
                   새로운 견적서 계속 발행하기
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 4. 사장님 카카오톡 미리보기 사진 등록 & 시뮬레이터 모달 */}
-        {showPreviewModal && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center">
-                    <Camera className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-extrabold text-slate-900">
-                      카카오톡 미리보기 사진 등록
-                    </h3>
-                    <p className="text-[11px] text-slate-400">
-                      링크 공유 시 카카오톡 채팅창에 표시되는 대표 카드 이미지
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowPreviewModal(false)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* 카카오톡 링크 카드 시뮬레이터 */}
-              <div className="space-y-1.5">
-                <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
-                  💬 카카오톡 공유 시 표시되는 모습 (실시간 미리보기)
-                </span>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden shadow-xs">
-                  {/* 대표 이미지 영역 */}
-                  <div className="w-full h-44 bg-slate-200 relative overflow-hidden flex items-center justify-center">
-                    {previewImageUrl ? (
-                      <img
-                        src={previewImageUrl}
-                        alt="카카오톡 미리보기"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="text-center text-slate-400 text-xs flex flex-col items-center gap-1">
-                        <ImageIcon className="w-8 h-8 opacity-40" />
-                        <span>등록된 사진 없음 (기본 이미지 적용)</span>
-                      </div>
-                    )}
-                  </div>
-                  {/* 카카오톡 하단 카드 텍스트 */}
-                  <div className="p-3 bg-white space-y-1">
-                    <h4 className="text-xs font-bold text-slate-900 truncate">
-                      [{merchantName}] 스마트 간편 견적서 발행
-                    </h4>
-                    <p className="text-[11px] text-slate-500 line-clamp-1">
-                      단가표 기반 품목과 수량을 터치하여 30초 만에 공인 전자 견적서를 즉시 발행합니다.
-                    </p>
-                    <span className="text-[10px] text-slate-400 block pt-0.5">
-                      sheetbot.cloud
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 업로드 컨트롤 영역 */}
-              <div className="space-y-2 pt-1">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleUploadPreview}
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  className="hidden"
-                />
-
-                <button
-                  type="button"
-                  disabled={uploadingPreview}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md active:scale-[0.99] transition-all disabled:opacity-50"
-                >
-                  {uploadingPreview ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      1600px 85% 자동 압축 및 영구 스토리지 업로드 중...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-4 h-4" />
-                      사진 파일 선택하여 변경하기
-                    </>
-                  )}
-                </button>
-
-                <p className="text-[10px] text-slate-400 text-center">
-                  💡 스마트폰 사진(8~15MB)도 1600px 85% 자동 압축되어 구글 시트와 클라우드에 0.2초 만에 영구 저장됩니다.
-                </p>
-              </div>
-
-              <div className="border-t border-slate-100 pt-3">
-                <button
-                  onClick={() => setShowPreviewModal(false)}
-                  className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-all"
-                >
-                  확인 완료
                 </button>
               </div>
             </div>

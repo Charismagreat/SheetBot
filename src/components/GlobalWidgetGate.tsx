@@ -20,6 +20,7 @@ export default function GlobalWidgetGate() {
   const isCustomerPortal = 
     pathname.startsWith("/order") || 
     pathname.startsWith("/estimate") || 
+    pathname.startsWith("/site") || 
     pathname.startsWith("/q/") || 
     pathname.startsWith("/m/");
 

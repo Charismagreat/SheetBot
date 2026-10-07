@@ -173,20 +173,71 @@ export async function getEstimateCatalogData(options: {
   let phone = "";
   let merchantImageUrl = "";
 
-  // 1. 프로필 세팅 조회
+  // 1. 프로필 세팅 조회 (estimate_profile_ 우선 확인 후 quote_profile_ 확인)
   try {
-    const settingRes = await queryTable("sheetbot_settings", {
-      filters: { key: `quote_profile_${targetEmail}` },
-      limit: 1,
-    }).catch(() => ({ rows: [] }));
+    const keysToCheck = [`estimate_profile_${targetEmail}`, `quote_profile_${targetEmail}`];
+    for (const key of keysToCheck) {
+      const settingRes = await queryTable("sheetbot_settings", {
+        filters: { key },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
 
-    if (settingRes.rows && settingRes.rows.length > 0) {
-      const val = JSON.parse(settingRes.rows[0].value || "{}");
-      if (val.businessName && val.businessName.trim()) businessName = val.businessName.trim();
-      if (val.phone && val.phone.trim()) phone = val.phone.trim();
-      if (val.imageUrl) merchantImageUrl = val.imageUrl;
+      if (settingRes.rows && settingRes.rows.length > 0) {
+        const val = JSON.parse(settingRes.rows[0].value || "{}");
+        if (val.businessName && val.businessName.trim()) businessName = val.businessName.trim();
+        if (val.phone && val.phone.trim()) phone = val.phone.trim();
+        if (val.estimateImageUrl) {
+          merchantImageUrl = val.estimateImageUrl;
+        } else if (!merchantImageUrl && val.imageUrl) {
+          merchantImageUrl = val.imageUrl;
+        }
+        if (merchantImageUrl) break;
+      }
     }
   } catch (_) {}
+
+  // 1-2. sheetbot_users 테이블에서 견적 전용 이미지 확인
+  if (!merchantImageUrl) {
+    try {
+      const userRes = await queryTable("sheetbot_users", {
+        filters: { email: targetEmail },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+
+      if (userRes.rows && userRes.rows.length > 0) {
+        const u = userRes.rows[0];
+        if (u.estimate_image_url) {
+          merchantImageUrl = u.estimate_image_url;
+        } else if (u.quote_image_url) {
+          merchantImageUrl = u.quote_image_url;
+        }
+        if (!phone && u.phone) phone = u.phone;
+        if (u.business_name && businessName === "스마트 간편 견적 센터") businessName = u.business_name.trim();
+      }
+    } catch (_) {}
+  }
+
+  // 1-3. 로컬 업로드 폴더(public/uploads/quote-images)에서 최신 estimate_ 이미지 탐색 (Auto-healing)
+  if (!merchantImageUrl) {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const safePrefixEstimate = `estimate_${targetEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
+      const uploadDir = path.join(process.cwd(), "public", "uploads", "quote-images");
+      if (fs.existsSync(uploadDir)) {
+        const files = fs.readdirSync(uploadDir)
+          .filter((f) => f.startsWith(safePrefixEstimate) && /\.(jpg|jpeg|png|webp)$/i.test(f))
+          .sort((a, b) => {
+            const statA = fs.statSync(path.join(uploadDir, a));
+            const statB = fs.statSync(path.join(uploadDir, b));
+            return statB.mtimeMs - statA.mtimeMs;
+          });
+        if (files.length > 0) {
+          merchantImageUrl = `https://sheetbot.cloud/uploads/quote-images/${files[0]}`;
+        }
+      }
+    } catch (_) {}
+  }
 
   let catalog: EstimateCatalogItem[] = [...DEFAULT_ESTIMATE_CATALOG];
   const businessInfo: EstimateBusinessInfo = {
@@ -340,15 +391,30 @@ export async function getEstimateCatalogData(options: {
   });
   const categories = ["전체", ...Array.from(categorySet)];
 
+  let finalImageUrl = businessInfo.previewImageUrl || merchantImageUrl || "";
+  if (finalImageUrl) {
+    const match = finalImageUrl.match(/(?:estimate|quote)_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
+    if (match) {
+      finalImageUrl = `https://cdn.jsdelivr.net/gh/Charismagreat/SheetBot@main/public/uploads/quote-images/${match[0]}`;
+    } else if (finalImageUrl.endsWith(".svg")) {
+      finalImageUrl = "https://cdn.jsdelivr.net/gh/Charismagreat/SheetBot@main/public/images/og-default.png";
+    }
+  } else {
+    finalImageUrl = "https://cdn.jsdelivr.net/gh/Charismagreat/SheetBot@main/public/images/og-default.png";
+  }
+
   const result: EstimateCatalogResult = {
     success: true,
     merchant: {
       businessName,
       phone,
       email: targetEmail,
-      imageUrl: businessInfo.previewImageUrl || merchantImageUrl || "https://sheetbot.cloud/images/og-default.png",
+      imageUrl: finalImageUrl,
     },
-    businessInfo,
+    businessInfo: {
+      ...businessInfo,
+      previewImageUrl: finalImageUrl,
+    },
     categories,
     catalog,
     cached: false,

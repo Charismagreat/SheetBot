@@ -32,7 +32,7 @@ export async function generateMetadata(
   } catch (_) {}
 
   // 🚀 카카오톡/SNS 스크랩 봇 전용: 터널 바이너리 부하를 100% 우회하는 글로벌 초고속 CDN 직통 URL
-  const fileMatch = ogImageUrl.match(/quote_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
+  const fileMatch = ogImageUrl.match(/(?:order|quote)_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
   if (fileMatch) {
     ogImageUrl = `https://cdn.jsdelivr.net/gh/Charismagreat/SheetBot@main/public/uploads/quote-images/${fileMatch[0]}`;
   } else if (!ogImageUrl || ogImageUrl.endsWith(".svg")) {

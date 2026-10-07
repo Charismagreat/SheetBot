@@ -31,6 +31,14 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
     }
   } catch (_) {}
 
+  // 🚀 카카오톡/SNS 스크랩 봇 전용: 글로벌 초고속 CDN 직통 URL
+  const fileMatch = ogImageUrl.match(/(?:estimate|quote)_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
+  if (fileMatch) {
+    ogImageUrl = `https://cdn.jsdelivr.net/gh/Charismagreat/SheetBot@main/public/uploads/quote-images/${fileMatch[0]}`;
+  } else if (!ogImageUrl || ogImageUrl.endsWith(".svg")) {
+    ogImageUrl = "https://cdn.jsdelivr.net/gh/Charismagreat/SheetBot@main/public/images/og-default.png";
+  }
+
   const title = `[${businessName}] 스마트 간편 견적서 발행`;
   const description = "단가표 기반 품목과 수량을 터치하여 30초 만에 공인 전자 견적서를 즉시 발행합니다.";
   const pageUrl = `https://sheetbot.cloud/estimate/issue${userKey ? `?userKey=${userKey}` : ""}`;
