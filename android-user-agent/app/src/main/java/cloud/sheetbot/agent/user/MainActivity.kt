@@ -3314,6 +3314,10 @@ class MainActivity : AppCompatActivity() {
             val presetId = when (sheetType.uppercase()) {
                 "RECEIPT" -> if (userEmail.equals("chachogreat@gmail.com", ignoreCase = true)) "14t6C-90zNNN-NTXexP37fMOKX85gP9iTe3MIlM83RC4" else null
                 "BUSINESS_CARD" -> if (userEmail.equals("chachogreat@gmail.com", ignoreCase = true)) "1GPMcTd7hxU2-ORZ32OX7Qz0tOnxMDNtSPqwKzqiS_AI" else null
+                "LAW_ADVISORY" -> "1wpMUfSeV2nn0RRiEZKKU8vopBrx5iHCc67ltxNhKP3M"
+                "NAVER_BLOG" -> "14nqZrqndHdz4gGpxBAqluss1kKnQSeSPk10koHYDSgI"
+                "INSTAGRAM" -> "1iVleM1QedmtH7wLA0cVM4qhBNjJ3oL-PIrion4gwg2M"
+                "MOBILE_SITE" -> "1hxYuqBrYGVmeX_W09izu8-ga9xMqZt0ssMu8TLaSPrg"
                 else -> null
             }
             if (presetId != null) {
@@ -5185,6 +5189,10 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+
+        binding.btnOpenLawSheetAlways.setOnClickListener {
+            showOpenSheetChooserDialog("LAW_ADVISORY", "[SheetBot] 법률·계약 검토 대장")
+        }
     }
 
     /**
@@ -5370,6 +5378,10 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, "블로그 원고 처리 오류: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
+        }
+
+        binding.cardBlog.btnOpenBlogSheetAlways.setOnClickListener {
+            showOpenSheetChooserDialog("NAVER_BLOG", "[SheetBot] 블로그 마케팅 관리 대장")
         }
     }
 
@@ -5563,6 +5575,10 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, "인스타 피드 처리 오류: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
+        }
+
+        binding.cardInsta.btnOpenInstaSheetAlways.setOnClickListener {
+            showOpenSheetChooserDialog("INSTAGRAM", "[SheetBot] 인스타그램 마케팅 관리 대장")
         }
     }
 
@@ -5758,6 +5774,10 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
+        }
+
+        binding.cardSite.btnOpenSiteSheetAlways.setOnClickListener {
+            showOpenSheetChooserDialog("MOBILE_SITE", "[SheetBot] 모바일 홈페이지 관리 대장")
         }
     }
 }
