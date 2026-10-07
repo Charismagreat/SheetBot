@@ -106,6 +106,10 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_quote_sync_details_hidden", false)
         set(value) = prefs.edit().putBoolean("is_quote_sync_details_hidden", value).apply()
 
+    var isEstimateSyncDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_estimate_sync_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_estimate_sync_details_hidden", value).apply()
+
     var isMissedCallDetailsHidden: Boolean
         get() = prefs.getBoolean("is_missed_call_details_hidden", false)
         set(value) = prefs.edit().putBoolean("is_missed_call_details_hidden", value).apply()
@@ -245,6 +249,15 @@ class PreferencesManager(context: Context) {
     var quoteImageUrl: String
         get() = prefs.getString("quote_image_url", "") ?: ""
         set(value) = prefs.edit().putString("quote_image_url", value).apply()
+
+    // 스마트 간편 견적 및 단가 대장 구글 시트 연동 설정 (신규 설치 시 기본 꺼짐: false)
+    var isEstimateSheetSyncEnabled: Boolean
+        get() = prefs.getBoolean("is_estimate_sheet_sync_enabled", false)
+        set(value) = prefs.edit().putBoolean("is_estimate_sheet_sync_enabled", value).apply()
+
+    var estimateDriveSheetTitle: String
+        get() = prefs.getString("estimate_drive_sheet_title", "[SheetBot] 스마트 간편 견적 및 단가 대장") ?: "[SheetBot] 스마트 간편 견적 및 단가 대장"
+        set(value) = prefs.edit().putString("estimate_drive_sheet_title", value).apply()
 
     // 부재중 전화(Missed Call) 감지 시 0원 스마트 안내 문자 자동 회신 설정 (신규 설치 시 기본 꺼짐: false)
     var isMissedCallAutoReplyEnabled: Boolean

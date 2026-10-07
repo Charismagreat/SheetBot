@@ -894,6 +894,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.btnOpenResearchSheetAlways.setOnClickListener {
+            showOpenSheetChooserDialog("COMPANY_RESEARCH", "[SheetBot] 기업 리서치 관리 대장")
+        }
+
         // ⚖️ AI 법률/계약서 팩트체크 카드 초기화
         setupLawAdvisoryCard()
 
@@ -1291,6 +1295,79 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // 📑 AI 스마트 간편 견적서 발행 대장 연동 UI 바인딩 (v2.1.95)
+        binding.switchEstimateSync.isChecked = prefs.isEstimateSheetSyncEnabled
+        binding.switchEstimateSync.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isEstimateSheetSyncEnabled = isChecked
+            prefs.isEstimateSyncDetailsHidden = !isChecked
+            updateCardCollapseState(binding.layoutEstimateSyncSettings, binding.btnToggleEstimateSyncDetails, !isChecked)
+            val msg = if (isChecked) "스마트 간편 견적서 발행 대장이 켜졌습니다." else "간편 견적서 발행 대장이 꺼졌습니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            if (isChecked) {
+                provisionSheetAsync("ESTIMATE", prefs.estimateDriveSheetTitle)
+            }
+        }
+
+        binding.btnOpenEstimateSheet.setOnClickListener {
+            showOpenSheetChooserDialog("ESTIMATE", prefs.estimateDriveSheetTitle)
+        }
+
+        // 🚀 사장님 즉시 견적서 발행 웹페이지
+        binding.btnIssueEstimateWeb.setOnClickListener {
+            val url = "https://sheetbot.cloud/estimate/issue"
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(this, "웹 브라우저를 열 수 없습니다: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // 📱 고객 셀프 견적기 웹앱
+        binding.btnOpenSelfEstimateWeb.setOnClickListener {
+            val email = prefs.userEmail
+            if (email.isNullOrBlank()) {
+                Toast.makeText(this, "먼저 시트봇 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val slug = Base64.encodeToString(email.toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+            val url = "https://sheetbot.cloud/estimate/$slug"
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(this, "웹 브라우저를 열 수 없습니다: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // 🔗 견적 신청 링크 공유
+        binding.btnCopySelfEstimateLink.setOnClickListener {
+            val email = prefs.userEmail
+            if (email.isNullOrBlank()) {
+                Toast.makeText(this, "먼저 시트봇 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val slug = Base64.encodeToString(email.toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+            val url = "https://sheetbot.cloud/estimate/$slug"
+            try {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("SheetBot Estimate Link", url))
+
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "간편 견적서 발급 링크")
+                    putExtra(Intent.EXTRA_TEXT, "실시간 스마트 간편 견적서 발급: $url")
+                }
+                startActivity(Intent.createChooser(shareIntent, "견적 신청 링크 공유"))
+            } catch (e: Exception) {
+                Toast.makeText(this, "견적 링크 공유 실패: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         // 수신 전화 시 '고객 시트 요약' 인콜 플로팅 팝업 UI 바인딩
         binding.switchInCallSummary.isChecked = prefs.isInCallSummaryEnabled
         binding.switchInCallSummary.setOnCheckedChangeListener { _, isChecked ->
@@ -1316,6 +1393,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
         updateOverlayPermissionStatus()
+
+        binding.btnOpenInCallSummarySheet.setOnClickListener {
+            showOpenSheetChooserDialog("RECORDING", "[SheetBot] 통화 녹음 및 고객 메모 대장")
+        }
 
         // 부재중 전화(Missed Call) 0원 스마트 자동 회신 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchMissedCall.isChecked = prefs.isMissedCallAutoReplyEnabled
@@ -1561,6 +1642,7 @@ class MainActivity : AppCompatActivity() {
         updateCardCollapseState(binding.layoutSmsSyncSettings, binding.btnToggleSmsSyncDetails, prefs.isSmsSyncDetailsHidden)
         updateCardCollapseState(binding.layoutKakaoSyncSettings, binding.btnToggleKakaoSyncDetails, prefs.isKakaoSyncDetailsHidden)
         updateCardCollapseState(binding.layoutQuoteSyncSettings, binding.btnToggleQuoteSyncDetails, prefs.isQuoteSyncDetailsHidden)
+        updateCardCollapseState(binding.layoutEstimateSyncSettings, binding.btnToggleEstimateSyncDetails, prefs.isEstimateSyncDetailsHidden)
         updateCardCollapseState(binding.layoutInCallSummarySettings, binding.btnToggleInCallSummaryDetails, prefs.isInCallSummaryDetailsHidden)
         updateCardCollapseState(binding.layoutMissedCallSettings, binding.btnToggleMissedCallDetails, prefs.isMissedCallDetailsHidden)
         updateCardCollapseState(binding.layoutCallEndedCardSettings, binding.btnToggleCallEndedCardDetails, prefs.isCallEndedCardDetailsHidden)
@@ -1642,6 +1724,14 @@ class MainActivity : AppCompatActivity() {
         }
         binding.layoutQuoteSyncHeader.setOnClickListener { toggleQuoteSync() }
         binding.btnToggleQuoteSyncDetails.setOnClickListener { toggleQuoteSync() }
+
+        // 9-A. 간편 견적서 발행 카드 (v2.1.95)
+        val toggleEstimateSync = {
+            prefs.isEstimateSyncDetailsHidden = !prefs.isEstimateSyncDetailsHidden
+            updateCardCollapseState(binding.layoutEstimateSyncSettings, binding.btnToggleEstimateSyncDetails, prefs.isEstimateSyncDetailsHidden)
+        }
+        binding.layoutEstimateSyncHeader.setOnClickListener { toggleEstimateSync() }
+        binding.btnToggleEstimateSyncDetails.setOnClickListener { toggleEstimateSync() }
 
         // 9-B. 인콜 고객 요약 카드
         val toggleInCallSummary = {
@@ -2876,7 +2966,7 @@ class MainActivity : AppCompatActivity() {
                     AlertDialog.Builder(this@MainActivity)
                         .setTitle("🎉 카톡 대화 파일 가져오기 완료!")
                         .setMessage("${roomMsg}• 동기화 대화: 총 ${countFormatted}건${periodMsg}\n\n구글 시트 [${prefs.kakaoDriveSheetTitle}]에 구간 덮어쓰기되었습니다.")
-                        .setPositiveButton("시트 열기") { _, _ ->
+                        .setPositiveButton("시트") { _, _ ->
                             showOpenSheetChooserDialog("KAKAO", prefs.kakaoDriveSheetTitle)
                         }
                         .setNegativeButton("닫기", null)
@@ -3322,6 +3412,7 @@ class MainActivity : AppCompatActivity() {
                 "NAVER_BLOG" -> "14nqZrqndHdz4gGpxBAqluss1kKnQSeSPk10koHYDSgI"
                 "INSTAGRAM" -> "1iVleM1QedmtH7wLA0cVM4qhBNjJ3oL-PIrion4gwg2M"
                 "MOBILE_SITE" -> "1hxYuqBrYGVmeX_W09izu8-ga9xMqZt0ssMu8TLaSPrg"
+                "COMPANY_RESEARCH" -> "1K-SkmE7dyA2tDtl8YKz0QVyog7J7FJIc0vDQIAEOXag"
                 else -> null
             }
             if (presetId != null) {
@@ -3356,8 +3447,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         val items = arrayOf(
-            "📊 구글 스프레드시트 원본 열기",
-            "🌐 모바일 스마트 웹앱 열기 (모바일 최적화)"
+            "📊 구글 스프레드시트 원본",
+            "🌐 모바일 스마트 웹앱 (모바일 최적화)"
         )
 
         AlertDialog.Builder(this)
@@ -5097,10 +5188,19 @@ class MainActivity : AppCompatActivity() {
      */
     private fun setupLawAdvisoryCard() {
         var isCollapsed = false
-        binding.btnToggleLawAdvisoryDetails.setOnClickListener {
+        val toggleLaw = {
             isCollapsed = !isCollapsed
             binding.layoutLawAdvisoryDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
             binding.btnToggleLawAdvisoryDetails.text = if (isCollapsed) "▼" else "▲"
+        }
+        binding.layoutLawAdvisoryHeader.setOnClickListener { toggleLaw() }
+        binding.btnToggleLawAdvisoryDetails.setOnClickListener { toggleLaw() }
+        binding.switchLawAdvisory.setOnCheckedChangeListener { _, isChecked ->
+            isCollapsed = !isChecked
+            binding.layoutLawAdvisoryDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
+            binding.btnToggleLawAdvisoryDetails.text = if (isCollapsed) "▼" else "▲"
+            val msg = if (isChecked) "AI 법률/계약서 팩트체크 기능이 켜졌습니다." else "AI 법률/계약서 팩트체크 기능이 꺼졌습니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
 
         binding.btnAttachLawFile.setOnClickListener {
@@ -5269,10 +5369,19 @@ class MainActivity : AppCompatActivity() {
      */
     private fun setupBlogAutomationCard() {
         var isCollapsed = false
-        binding.cardBlog.btnToggleBlogDetails.setOnClickListener {
+        val toggleBlog = {
             isCollapsed = !isCollapsed
             binding.cardBlog.layoutBlogDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
-            binding.cardBlog.btnToggleBlogDetails.text = if (isCollapsed) "▶" else "▼"
+            binding.cardBlog.btnToggleBlogDetails.text = if (isCollapsed) "▼" else "▲"
+        }
+        binding.cardBlog.layoutBlogHeader.setOnClickListener { toggleBlog() }
+        binding.cardBlog.btnToggleBlogDetails.setOnClickListener { toggleBlog() }
+        binding.cardBlog.switchBlogAutomation.setOnCheckedChangeListener { _, isChecked ->
+            isCollapsed = !isChecked
+            binding.cardBlog.layoutBlogDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
+            binding.cardBlog.btnToggleBlogDetails.text = if (isCollapsed) "▼" else "▲"
+            val msg = if (isChecked) "AI 네이버 블로그 자동 포스팅 기능이 켜졌습니다." else "AI 네이버 블로그 자동 포스팅 기능이 꺼졌습니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
 
         binding.cardBlog.btnSelectBlogImages.setOnClickListener {
@@ -5459,10 +5568,19 @@ class MainActivity : AppCompatActivity() {
      */
     private fun setupInstagramAutomationCard() {
         var isCollapsed = false
-        binding.cardInsta.btnToggleInstaDetails.setOnClickListener {
+        val toggleInsta = {
             isCollapsed = !isCollapsed
             binding.cardInsta.layoutInstaDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
-            binding.cardInsta.btnToggleInstaDetails.text = if (isCollapsed) "▶" else "▼"
+            binding.cardInsta.btnToggleInstaDetails.text = if (isCollapsed) "▼" else "▲"
+        }
+        binding.cardInsta.layoutInstaHeader.setOnClickListener { toggleInsta() }
+        binding.cardInsta.btnToggleInstaDetails.setOnClickListener { toggleInsta() }
+        binding.cardInsta.switchInstaAutomation.setOnCheckedChangeListener { _, isChecked ->
+            isCollapsed = !isChecked
+            binding.cardInsta.layoutInstaDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
+            binding.cardInsta.btnToggleInstaDetails.text = if (isCollapsed) "▼" else "▲"
+            val msg = if (isChecked) "AI 인스타그램 피드 & 해시태그 기능이 켜졌습니다." else "AI 인스타그램 피드 & 해시태그 기능이 꺼졌습니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
 
         binding.cardInsta.btnSelectInstaImages.setOnClickListener {
@@ -5655,10 +5773,19 @@ class MainActivity : AppCompatActivity() {
      */
     private fun setupMobileSiteCard() {
         var isCollapsed = false
-        binding.cardSite.btnToggleSiteDetails.setOnClickListener {
+        val toggleSite = {
             isCollapsed = !isCollapsed
             binding.cardSite.layoutSiteDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
-            binding.cardSite.btnToggleSiteDetails.text = if (isCollapsed) "▶" else "▼"
+            binding.cardSite.btnToggleSiteDetails.text = if (isCollapsed) "▼" else "▲"
+        }
+        binding.cardSite.layoutSiteHeader.setOnClickListener { toggleSite() }
+        binding.cardSite.btnToggleSiteDetails.setOnClickListener { toggleSite() }
+        binding.cardSite.switchSiteAutomation.setOnCheckedChangeListener { _, isChecked ->
+            isCollapsed = !isChecked
+            binding.cardSite.layoutSiteDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
+            binding.cardSite.btnToggleSiteDetails.text = if (isCollapsed) "▼" else "▲"
+            val msg = if (isChecked) "AI 모바일 홈페이지 제작 & 관리 기능이 켜졌습니다." else "AI 모바일 홈페이지 제작 & 관리 기능이 꺼졌습니다."
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
 
         binding.cardSite.btnSelectSiteImages.setOnClickListener {

@@ -1166,6 +1166,14 @@
             android:padding="13dp"
             android:layout_marginBottom="12dp">
 
+            <!-- 상단 구분선 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="10dp" />
+
             <LinearLayout
                 android:id="@+id/layoutCompanyResearchHeader"
                 android:layout_width="match_parent"
@@ -1181,7 +1189,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="🔍 원클릭 기업 리서치 문서화"
-                    android:textColor="#E2E8F0"
+                    android:textColor="#38BDF8"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
 
@@ -1205,7 +1213,8 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:background="#0F172A"
-                android:padding="10dp">
+                android:padding="10dp"
+                android:layout_marginBottom="12dp">
 
                 <TextView
                     android:layout_width="match_parent"
@@ -1351,11 +1360,23 @@
                             android:layout_height="34dp"
                             android:layout_weight="1"
                             android:backgroundTint="#059669"
-                            android:text="📊 리서치 대장 열기"
+                            android:text="📊 리서치 대장 시트"
                             android:textColor="#FFFFFF"
                             android:textSize="11sp" />
                     </LinearLayout>
                 </LinearLayout>
+
+                <!-- 상시 노출 구글 시트 대장 열기 버튼 -->
+                <Button
+                    android:id="@+id/btnOpenResearchSheetAlways"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="📊 기업 심층 리서치 대장 시트 ↗"
+                    android:textColor="#38BDF8"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="8dp" />
             </LinearLayout>
         </LinearLayout>
 
@@ -1367,6 +1388,14 @@
             android:background="@drawable/bg_card_scenario"
             android:padding="13dp"
             android:layout_marginBottom="12dp">
+
+            <!-- 상단 구분선 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="10dp" />
 
             <LinearLayout
                 android:id="@+id/layoutInCallSummaryHeader"
@@ -1415,7 +1444,7 @@
                 android:orientation="vertical"
                 android:background="#0F172A"
                 android:padding="10dp"
-                android:layout_marginBottom="4dp">
+                android:layout_marginBottom="12dp">
 
                 <TextView
                     android:layout_width="match_parent"
@@ -1464,6 +1493,18 @@
                     android:backgroundTint="#0284C7"
                     android:text="🔍 인콜 플로팅 팝업 미리보기 테스트"
                     android:textColor="#FFFFFF"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- 상시 노출 구글 시트 대장 열기 버튼 -->
+                <Button
+                    android:id="@+id/btnOpenInCallSummarySheet"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="📊 통화 기록 및 고객 메모 시트 ↗"
+                    android:textColor="#38BDF8"
                     android:textSize="11.5sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -2679,6 +2720,132 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- 독립 카드: 스마트 간편 견적서 발행 대장 (v2.1.95) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_scenario"
+            android:padding="13dp"
+            android:layout_marginBottom="12dp">
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:id="@+id/layoutEstimateSyncHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="📑 간편 견적서 발행 대장"
+                    android:textColor="#38BDF8"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchEstimateSync"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="false"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btnToggleEstimateSyncDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutEstimateSyncSettings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0F172A"
+                android:padding="10dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="구글 시트 단가표를 기반으로 직인 날인 공인 전자 견적서를 즉시 발행하고 고객 승인을 추적합니다."
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="8dp" />
+
+                <Button
+                    android:id="@+id/btnOpenEstimateSheet"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:backgroundTint="#0369A1"
+                    android:text="📊 간편 견적 및 단가 시트 ↗"
+                    android:textColor="#E0F2FE"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="6dp">
+
+                    <Button
+                        android:id="@+id/btnIssueEstimateWeb"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="38dp"
+                        android:backgroundTint="#0284C7"
+                        android:text="🚀 견적서 즉시 발행"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btnOpenSelfEstimateWeb"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="38dp"
+                        android:backgroundTint="#1E293B"
+                        android:text="📱 고객 셀프 견적기"
+                        android:textColor="#BAE6FD"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_marginStart="4dp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btnCopySelfEstimateLink"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:backgroundTint="#0F172A"
+                    android:text="🔗 견적 신청 링크 공유"
+                    android:textColor="#94A3B8"
+                    android:textSize="10.5sp"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+        </LinearLayout>
+
         <!-- 독립 카드: file_upload -->
         <LinearLayout
             android:layout_width="match_parent"
@@ -2979,6 +3146,14 @@
             android:padding="13dp"
             android:layout_marginBottom="12dp">
 
+            <!-- 상단 구분선 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="10dp" />
+
             <LinearLayout
                 android:id="@+id/layoutMeetingRecordingHeader"
                 android:layout_width="match_parent"
@@ -2994,7 +3169,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="🎙️ 회의 녹음 자동 회의록"
-                    android:textColor="#E2E8F0"
+                    android:textColor="#38BDF8"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
 
@@ -3025,7 +3200,8 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:background="#0F172A"
-                android:padding="10dp">
+                android:padding="10dp"
+                android:layout_marginBottom="12dp">
 
                 <TextView
                     android:layout_width="match_parent"
@@ -3093,9 +3269,9 @@
                 <Button
                     android:id="@+id/btnOpenMeetingSheetAlways"
                     android:layout_width="match_parent"
-                    android:layout_height="38dp"
+                    android:layout_height="40dp"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 AI 회의록 대장 시트 열기"
+                    android:text="📊 AI 회의록 대장 시트 ↗"
                     android:textColor="#38BDF8"
                     android:textSize="11.5sp"
                     android:textStyle="bold"
@@ -3112,12 +3288,23 @@
             android:padding="13dp"
             android:layout_marginBottom="12dp">
 
+            <!-- 상단 구분선 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="10dp" />
+
             <LinearLayout
+                android:id="@+id/layoutLawAdvisoryHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="6dp">
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
 
                 <TextView
                     android:layout_width="0dp"
@@ -3125,7 +3312,7 @@
                     android:layout_weight="1"
                     android:text="⚖️ AI 법률/계약서 팩트체크"
                     android:textColor="#F59E0B"
-                    android:textSize="13.5sp"
+                    android:textSize="12.5sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -3139,6 +3326,13 @@
                     android:textColor="#FBBF24"
                     android:textSize="9.5sp"
                     android:textStyle="bold"
+                    android:layout_marginEnd="6dp" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchLawAdvisory"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="false"
                     android:layout_marginEnd="6dp" />
 
                 <TextView
@@ -3155,19 +3349,22 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="자연어 질문과 계약서/내용증명 사진을 올리면, 대한민국 법제처 법령 및 대법원 리딩 판례를 팩트체크하여 3줄 진단과 심층 보고서를 생성합니다."
-                android:textColor="#94A3B8"
-                android:textSize="11sp"
-                android:layout_marginBottom="8dp" />
-
             <LinearLayout
                 android:id="@+id/layoutLawAdvisoryDetails"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical">
+                android:orientation="vertical"
+                android:background="#0F172A"
+                android:padding="10dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="자연어 질문과 계약서/내용증명 사진을 올리면, 대한민국 법제처 법령 및 대법원 리딩 판례를 팩트체크하여 3줄 진단과 심층 보고서를 생성합니다."
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="8dp" />
 
                 <EditText
                     android:id="@+id/etLawQuery"
@@ -3317,7 +3514,7 @@
                             android:layout_height="34dp"
                             android:layout_weight="1"
                             android:backgroundTint="#059669"
-                            android:text="📊 법률 검토 대장 열기"
+                            android:text="📊 법률 검토 대장 시트"
                             android:textColor="#FFFFFF"
                             android:textSize="11sp" />
                     </LinearLayout>
@@ -3327,9 +3524,9 @@
                 <Button
                     android:id="@+id/btnOpenLawSheetAlways"
                     android:layout_width="match_parent"
-                    android:layout_height="38dp"
+                    android:layout_height="40dp"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 AI 법률·계약 검토 대장 시트 열기"
+                    android:text="📊 AI 법률·계약 검토 대장 시트 ↗"
                     android:textColor="#F59E0B"
                     android:textSize="11.5sp"
                     android:textStyle="bold"
