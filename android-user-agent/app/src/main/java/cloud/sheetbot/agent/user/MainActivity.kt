@@ -5761,6 +5761,25 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
 
+        // 🌐 내 공식 모바일 홈페이지 열기 (기본 템플릿 즉시 오픈)
+        binding.cardSite.btnOpenDefaultMobileSite.setOnClickListener {
+            val email = prefs.userEmail
+            if (email.isNullOrBlank()) {
+                Toast.makeText(this, "먼저 시트봇 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val slug = Base64.encodeToString(email.toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+            val url = "https://sheetbot.cloud/site/$slug"
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(this, "웹 브라우저를 열 수 없습니다: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         binding.cardSite.btnSelectSiteImages.setOnClickListener {
             try {
                 siteImagesPickerLauncher.launch("image/*")
@@ -5832,23 +5851,8 @@ class MainActivity : AppCompatActivity() {
                                         Toast.makeText(this@MainActivity, "모바일 웹 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
                                     }
                                 }
-
-                                binding.cardSite.btnShareMobileSite.visibility = View.VISIBLE
-                                binding.cardSite.btnShareMobileSite.setOnClickListener {
-                                    try {
-                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                            type = "text/plain"
-                                            putExtra(Intent.EXTRA_SUBJECT, result.title)
-                                            putExtra(Intent.EXTRA_TEXT, "[${result.title}] 공식 모바일 홈페이지에 오신 것을 환영합니다!\n${result.siteUrl}")
-                                        }
-                                        startActivity(Intent.createChooser(shareIntent, "홈페이지 링크 공유"))
-                                    } catch (e: Exception) {
-                                        Toast.makeText(this@MainActivity, "공유 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
                             } else {
                                 binding.cardSite.btnOpenMobileSite.visibility = View.GONE
-                                binding.cardSite.btnShareMobileSite.visibility = View.GONE
                             }
 
                             if (result.sheetUrl.isNotBlank()) {

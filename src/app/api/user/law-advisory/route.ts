@@ -12,6 +12,7 @@ import {
   uploadDriveFile,
   findOrCreateEgdeskFolder,
   findOrCreateEgdeskSubfolder,
+  createDriveFolder,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
@@ -174,7 +175,7 @@ export async function POST(req: NextRequest) {
 
         // 대상 폴더 격리: [SheetBot] 법률·계약 증빙 보관함
         const parentFolder = await findOrCreateEgdeskFolder("[SheetBot] 연동 데이터");
-        const lawFolder = await findOrCreateSubfolder("[SheetBot] 법률·계약 증빙 보관함", parentFolder.id);
+        const lawFolder = await createDriveFolder("[SheetBot] 법률·계약 증빙 보관함", parentFolder?.id);
 
         const uploadRes = await uploadDriveFile({
           name: fileName,

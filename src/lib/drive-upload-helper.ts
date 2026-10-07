@@ -1,4 +1,4 @@
-import { callDriveTool, uploadFile } from "@/lib/egdesk-helpers";
+import { callDriveTool, getServerEgdeskApiUrl } from "@/lib/egdesk-helpers";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -16,13 +16,14 @@ export async function uploadDriveFileWithBridge(options: {
   mimeType?: string;
   tempFilePath?: string;
   preferOAuth?: boolean;
+  userEmail?: string;
 }): Promise<{
   id: string | null;
   fileId?: string | null;
   webViewLink: string;
   name?: string;
 }> {
-  const { buffer, fileName, folderId, mimeType, tempFilePath, preferOAuth = true } = options;
+  const { buffer, fileName, folderId, mimeType, tempFilePath, preferOAuth = true, userEmail } = options;
 
   let localPathToUse = tempFilePath || "";
 
@@ -49,8 +50,20 @@ export async function uploadDriveFileWithBridge(options: {
       const base64Content = buffer.toString("base64");
       const safeBasename = path.basename(fileName).replace(/[/\\?%*:|"<>]/g, "_");
       const uniqueBasename = `sb_${Date.now()}_${safeBasename}`;
-
-      const fsRes = await uploadFile(uniqueBasename, base64Content, "base64");
+      const apiUrl = getServerEgdeskApiUrl();
+      const fsCallRes = await fetch(`${apiUrl}/filesystem/tools/call`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tool: "fs_upload_file",
+          arguments: {
+            filename: uniqueBasename,
+            content: base64Content,
+            encoding: "base64",
+          },
+        }),
+      });
+      const fsRes = await fsCallRes.json().catch(() => null);
 
       const fsText = typeof fsRes === "string"
         ? fsRes

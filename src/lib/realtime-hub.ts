@@ -42,6 +42,7 @@ const TABLE_TOPIC_MAP: Record<string, RealtimeTopic[]> = {
   sheetbot_schedules: ['schedules', 'all'],
   sheetbot_projects: ['projects', 'all'],
   sheetbot_users: ['wallet', 'all'],
+  sheetbot_tasks: ['all'],
 };
 
 class SheetBotRealtimeHub {
@@ -166,6 +167,22 @@ class SheetBotRealtimeHub {
 
     for (const id of deadClients) {
       this.unregisterClient(id);
+    }
+  }
+
+  /**
+   * 서버 내부에서 직접 테이블 변경 알림을 브로드캐스트할 때 호출
+   */
+  public notifyTableChanged(tableName: string, action = 'update'): void {
+    const topics = TABLE_TOPIC_MAP[tableName] || ['all'];
+    for (const topic of topics) {
+      this.broadcast(topic, {
+        type: 'DATA_CHANGED',
+        source: 'internal_hub',
+        tableName,
+        action,
+        timestamp: new Date().toISOString(),
+      });
     }
   }
 

@@ -223,7 +223,7 @@ export default function DashboardPage() {
                   type: "success",
                   text: `🎉 초대 보너스 10,000 토큰이 지갑에 성공적으로 충전되었습니다! (추천인: ${pendingRef})`,
                 });
-                void fetchBootstrapData();
+                void fetchData(true);
               } else if (claimData.error === "ALREADY_CLAIMED" || claimData.error === "SELF_REFERRAL_FORBIDDEN") {
                 localStorage.removeItem("pending_ref");
               }

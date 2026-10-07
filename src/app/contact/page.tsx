@@ -32,7 +32,7 @@ interface Inquiry {
 
 export default function ContactPage() {
   // ⚡ [인헤릿 최상위 상속] NextAuth 세션 및 사용자 정보 즉시 상속 (중복 로딩 0ms)
-  const { session, userEmail } = useAuthAdmin();
+  const { user, userEmail } = useAuthAdmin();
 
   // ⚡ [SWR 캐시 복원] 브라우저 세션 스토리지에서 이전 문의 내역 즉시 복원 (화면 깜빡임 0ms)
   const [cachedInquiries] = useState<Inquiry[]>(() => {
@@ -46,7 +46,7 @@ export default function ContactPage() {
   });
 
   const [form, setForm] = useState({
-    name: session?.user?.name || "",
+    name: user?.name || "",
     email: userEmail || "",
     category: "GAS_ERROR",
     title: "",
@@ -67,11 +67,11 @@ export default function ContactPage() {
     if (userEmail) {
       setForm((prev) => ({
         ...prev,
-        name: prev.name || session?.user?.name || "",
+        name: prev.name || user?.name || "",
         email: prev.email || userEmail,
       }));
     }
-  }, [userEmail, session?.user?.name]);
+  }, [userEmail, user?.name]);
 
   // ⚡ [문의 대장 단일 조회 헬퍼] 중복 호출 방지 및 SWR 캐시 동기화
   const fetchMyInquiries = useCallback(async (silent = false) => {

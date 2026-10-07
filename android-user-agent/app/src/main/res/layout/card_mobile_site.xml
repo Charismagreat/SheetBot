@@ -81,12 +81,38 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="사진 1~5장 + 상호명 + 업종을 입력하면 AI가 슬로건, 브랜드 스토리, 대표 메뉴 5종을 자동 구성하여 10초 만에 공식 모바일 웹페이지를 즉시 발행합니다."
+            android:text="구글 시트 연동 즉시 내 공식 모바일 홈페이지가 기본 완성되어 있습니다. 구글 시트 내용을 수정하면 0초 만에 실시간 반영됩니다."
             android:textColor="#94A3B8"
             android:textSize="11sp"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btnOpenDefaultMobileSite"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:backgroundTint="#0891B2"
+            android:text="🌐 내 공식 모바일 홈페이지 열기"
+            android:textColor="#FFFFFF"
+            android:textSize="12.5sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="12dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#1E293B"
             android:layout_marginBottom="10dp" />
 
-                <!-- 1. 사진 복수 선택 버튼 & 상태 표시 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="✨ AI 프리미엄 리디자인 (매장/상품 사진을 등록하면 AI가 감성 슬로건과 메뉴 구성을 자동 생성하여 업그레이드합니다)"
+            android:textColor="#67E8F9"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <!-- 1. 사진 복수 선택 버튼 & 상태 표시 -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -262,34 +288,26 @@
                         <Button
                             android:id="@+id/btnOpenMobileSite"
                             android:layout_width="0dp"
-                            android:layout_height="34dp"
+                            android:layout_height="38dp"
                             android:layout_weight="1"
                             android:backgroundTint="#0891B2"
-                            android:text="🌐 모바일웹 열기"
+                            android:text="🌐 완성된 홈페이지 열기"
                             android:textColor="#FFFFFF"
-                            android:textSize="11sp"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold"
                             android:layout_marginEnd="4dp" />
 
                         <Button
                             android:id="@+id/btnOpenSiteSheet"
                             android:layout_width="0dp"
-                            android:layout_height="34dp"
+                            android:layout_height="38dp"
                             android:layout_weight="1"
                             android:backgroundTint="#059669"
-                            android:text="📊 대장 시트"
+                            android:text="📊 관리 대장 시트 ↗"
                             android:textColor="#FFFFFF"
-                            android:textSize="11sp"
-                            android:layout_marginEnd="4dp" />
-
-                        <Button
-                            android:id="@+id/btnShareMobileSite"
-                            android:layout_width="0dp"
-                            android:layout_height="34dp"
-                            android:layout_weight="1"
-                            android:backgroundTint="#4F46E5"
-                            android:text="🔗 링크 공유"
-                            android:textColor="#FFFFFF"
-                            android:textSize="11sp" />
+                            android:textSize="11.5sp"
+                            android:textStyle="bold"
+                            android:layout_marginStart="4dp" />
                     </LinearLayout>
                 </LinearLayout>
 

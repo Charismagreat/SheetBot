@@ -4,14 +4,15 @@ import { setupDatabase } from './setup-db';
 export interface AiUsageLogInput {
   userEmail: string;
   userName?: string;
-  caller: 'sheetbot-script-generator' | 'sheetbot-easybot' | 'sheetbot-contextual-help' | string;
-  purpose: string;
+  caller?: 'sheetbot-script-generator' | 'sheetbot-easybot' | 'sheetbot-contextual-help' | string;
+  purpose?: string;
   model?: string;
   promptText?: string;
   responseText?: string;
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+  [key: string]: any;
 }
 
 // 1 USD = 1,350 KRW 기준
@@ -92,8 +93,8 @@ export async function recordAiUsageLog(input: AiUsageLogInput): Promise<void> {
       uuid: crypto.randomUUID(),
       user_email: (input.userEmail || 'guest').toLowerCase().trim(),
       user_name: input.userName || '사용자',
-      caller: input.caller,
-      purpose: input.purpose,
+      caller: input.caller || input.action || 'system',
+      purpose: input.purpose || input.action || 'AI 연동 작업',
       model,
       prompt_tokens: pTokens,
       completion_tokens: cTokens,

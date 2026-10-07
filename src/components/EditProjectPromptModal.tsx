@@ -452,7 +452,7 @@ export default function EditProjectPromptModal({
                   </div>
                   {pricingModels.find((m) => m.id === selectedModel) && (
                     <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
-                      토큰 차감 {pricingModels.find((m) => m.id === selectedModel)?.tokenMultiplier}배
+                      토큰 차감 {pricingModels.find((m) => m.id === selectedModel)?.multiplier ?? pricingModels.find((m) => m.id === selectedModel)?.tokenMultiplier}배
                     </span>
                   )}
                 </div>

@@ -472,8 +472,8 @@ export async function POST(req: Request) {
     const userEmail = (await getCurrentUserEmail()) || headerEmail || "chachogreat@gmail.com";
 
     // 토큰 잔액 점검
-    const balance = await checkTokenBalance(userEmail);
-    if (balance <= 0) {
+    const tokenCheck = await checkTokenBalance(userEmail);
+    if (!tokenCheck.allowed || tokenCheck.balance <= 0) {
       return NextResponse.json({
         success: false,
         error: "토큰 잔액이 부족합니다. 코파일럿 사이드바에서 토큰을 충전해 주세요.",

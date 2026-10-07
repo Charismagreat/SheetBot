@@ -15,6 +15,7 @@ export type SheetBindingType =
   | "KAKAO"
   | "MISSED_CALL"
   | "RECORDING"
+  | "CALL_RECORDING"
   | "MEETING"
   | "COMPANY_RESEARCH"
   | "LAW_ADVISORY"
@@ -37,7 +38,7 @@ export type SheetBindingType =
 export interface ResolveSheetOptions {
   userEmail: string;
   sheetType: SheetBindingType;
-  defaultTitle: string;
+  defaultTitle?: string;
   requestedTitle?: string | null;
   folderId?: string | null;
   folderName?: string | null;

@@ -228,7 +228,9 @@ export async function checkTokenBalance(
  */
 export async function deductTokens(
   userEmail: string,
-  usedTokens: number
+  usedTokens: number,
+  description?: string,
+  ...extraArgs: any[]
 ): Promise<{ success: boolean; newBalance: number }> {
   try {
     const wallet = await getOrCreateUserWallet(userEmail);

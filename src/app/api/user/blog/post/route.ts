@@ -10,6 +10,7 @@ import {
   uploadDriveFile,
   findOrCreateEgdeskFolder,
   findOrCreateEgdeskSubfolder,
+  createDriveFolder,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
@@ -178,8 +179,8 @@ export async function POST(req: NextRequest) {
 
     try {
       const parentFolder = await findOrCreateEgdeskFolder("[SheetBot] 연동 데이터");
-      const blogFolder = await findOrCreateSubfolder("[SheetBot] 블로그 사진 보관함", parentFolder.id);
-      driveFolderUrl = blogFolder.id ? `https://drive.google.com/drive/folders/${blogFolder.id}` : "";
+      const blogFolder = await createDriveFolder("[SheetBot] 블로그 사진 보관함", parentFolder?.id);
+      driveFolderUrl = blogFolder?.id ? `https://drive.google.com/drive/folders/${blogFolder.id}` : "";
 
       // 사진들을 병렬로 드라이브에 업로드
       await Promise.allSettled(

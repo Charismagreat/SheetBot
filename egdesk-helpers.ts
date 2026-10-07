@@ -380,7 +380,7 @@ export async function callUserDataTool(
 /**
  * Query table data
  */
-export async function queryTable(
+export async function queryTable<T = any>(
   tableName: string,
   options: {
     filters?: Record<string, string>;
@@ -388,8 +388,9 @@ export async function queryTable(
     offset?: number;
     orderBy?: string;
     orderDirection?: 'ASC' | 'DESC';
+    [key: string]: any;
   } = {}
-) {
+): Promise<{ rows: T[]; [key: string]: any }> {
   return callUserDataTool('user_data_query', {
     tableName,
     ...options
@@ -886,7 +887,7 @@ export async function uploadFile(
   const decodedBytes = estimateBase64DecodedBytes(data);
   if (typeof window !== 'undefined' && decodedBytes > UPLOAD_CHUNKED_THRESHOLD_BYTES) {
     const bytes = base64ToUint8Array(data);
-    const blob = new Blob([bytes], { type: options.mimeType || 'application/octet-stream' });
+    const blob = new Blob([bytes as any], { type: options.mimeType || 'application/octet-stream' });
     const file = new File([blob], filename, { type: options.mimeType || blob.type });
     return uploadFileChunked(tableName, rowId, columnName, file, options);
   }
@@ -3645,11 +3646,15 @@ export async function setDriveTargetFolders(folderIds: string[]) {
  * own (e.g. writing into a personal Gmail account without domain-wide delegation).
  */
 export async function uploadDriveFile(options: {
-  filePath: string;
+  filePath?: string;
   folderId?: string;
   destName?: string;
+  name?: string;
+  content?: string;
+  encoding?: string;
   mimeType?: string;
   preferOAuth?: boolean;
+  [key: string]: any;
 }) {
   return callDriveTool('drive_upload', options);
 }
@@ -3661,6 +3666,8 @@ export async function listDriveFiles(
     query?: string;
     pageSize?: number;
     pageToken?: string;
+    preferOAuth?: boolean;
+    [key: string]: any;
   } = {},
   callOptions: WorkspaceVisitorCallOptions = {},
 ) {
@@ -3683,6 +3690,9 @@ export async function getDriveFile(fileId: string, options: WorkspaceVisitorCall
 export async function createDriveFolder(name: string, parentId?: string, preferOAuth?: boolean) {
   return callDriveTool('drive_create_folder', { name, parentId, preferOAuth });
 }
+
+/** Alias for creating subfolders */
+export const findOrCreateSubfolder = createDriveFolder;
 
 /** Download a Drive file to a local path. Pass preferOAuth: true to act as the signed-in Google user. */
 export async function downloadDriveFile(fileId: string, destPath: string, preferOAuth?: boolean) {
@@ -3715,8 +3725,8 @@ export async function trashDriveFile(fileId: string, preferOAuth?: boolean) {
 }
 
 /** Find or create the top-level EGDesk Drive folder */
-export async function findOrCreateEgdeskFolder() {
-  return callDriveTool('drive_find_or_create_egdesk_folder', {});
+export async function findOrCreateEgdeskFolder(folderName?: string) {
+  return callDriveTool('drive_find_or_create_egdesk_folder', folderName ? { folderName } : {});
 }
 
 /** Find or create EGDesk/Dev, Transactions, or Tax Invoices */
@@ -4583,16 +4593,30 @@ export async function syncPhoneContacts(deviceId: string) {
   return callPhoneTool('phone_sync_contacts', { deviceId });
 }
 
-export async function sendPhoneSms(options: {
-  deviceId: string;
-  phoneNumber: string;
-  message: string;
-  snapshotId?: string;
-  scheduledAt?: number;
-  isMarketing?: boolean;
-  brandName?: string;
-}) {
-  return callPhoneTool('phone_send', options);
+export async function sendPhoneSms(
+  optionsOrUserEmail:
+    | {
+        deviceId?: string;
+        phoneNumber: string;
+        message: string;
+        snapshotId?: string;
+        scheduledAt?: number;
+        isMarketing?: boolean;
+        brandName?: string;
+        [key: string]: any;
+      }
+    | string,
+  phoneNumber?: string,
+  message?: string
+) {
+  if (typeof optionsOrUserEmail === 'string') {
+    return callPhoneTool('phone_send', {
+      deviceId: 'default',
+      phoneNumber: phoneNumber || '',
+      message: message || '',
+    });
+  }
+  return callPhoneTool('phone_send', optionsOrUserEmail);
 }
 
 /** Alias of sendPhoneSms — enqueues an SMS job for the background worker. */

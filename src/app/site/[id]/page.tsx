@@ -34,6 +34,9 @@ interface SiteData {
   driveFolderUrl: string;
   status: string;
   createdAt: string;
+  isDefaultTemplate?: boolean;
+  estimateUrl?: string;
+  orderUrl?: string;
 }
 
 export default function MobileSitePage({ params }: { params: Promise<{ id: string }> }) {
@@ -196,6 +199,45 @@ export default function MobileSitePage({ params }: { params: Promise<{ id: strin
             </a>
           ) : null}
         </div>
+
+        {/* 2-1. 스마트 간편 견적 & 주문 원터치 배너 */}
+        {(site.estimateUrl || site.orderUrl) && (
+          <div className="p-3 bg-slate-900/90 border-b border-slate-800/80 grid grid-cols-2 gap-2">
+            {site.estimateUrl && (
+              <a
+                href={site.estimateUrl}
+                className="py-2.5 px-3 rounded-xl bg-indigo-600/90 hover:bg-indigo-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition"
+              >
+                <span>🚀</span>
+                <span>실시간 간편 견적</span>
+              </a>
+            )}
+            {site.orderUrl && (
+              <a
+                href={site.orderUrl}
+                className="py-2.5 px-3 rounded-xl bg-emerald-600/90 hover:bg-emerald-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition"
+              >
+                <span>📱</span>
+                <span>간편 주문하기</span>
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* 2-2. 기본 템플릿 실시간 동기화 안내 배너 */}
+        {site.isDefaultTemplate && (
+          <div className="mx-4 mt-4 p-3 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 flex items-start gap-2.5">
+            <span className="text-base flex-shrink-0">🌿</span>
+            <div className="flex-1">
+              <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block">
+                Google Sheets Live Sync
+              </span>
+              <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
+                구글 스프레드시트의 <b>[사업자정보]</b> 및 <b>[품목/단가표]</b>가 0초 만에 실시간 반영되는 공식 모바일 웹페이지입니다.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* 3. 실시간 공지/이벤트 배너 */}
         {site.notice && (

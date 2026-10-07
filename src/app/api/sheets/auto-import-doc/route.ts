@@ -478,9 +478,9 @@ export async function POST(request: Request) {
 
     const tokenCost = 15;
     const hasEnough = await checkTokenBalance(userEmail, tokenCost);
-    if (!hasEnough) {
+    if (!hasEnough.allowed) {
       return NextResponse.json(
-        { success: false, error: "토큰 잔액이 부족합니다. 충전 후 다시 시도해 주세요." },
+        { success: false, error: hasEnough.reason || "토큰 잔액이 부족합니다. 충전 후 다시 시도해 주세요." },
         { status: 402 }
       );
     }
