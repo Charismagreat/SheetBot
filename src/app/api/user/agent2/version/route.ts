@@ -41,10 +41,10 @@ export async function GET() {
     );
   }
 
-  let latestName = "2.1.92";
-  let latestCode = 113;
+  let latestName = "2.1.93";
+  let latestCode = 114;
   let apkUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";
-  let releaseNotes = "통화 종료 모바일 명함 발송 팝업에서 특정 번호 발송 제외 옵션 및 메인 화면 발송 제외 번호 관리 기능이 탑재되었습니다.";
+  let releaseNotes = "AI 법률 자문, 네이버 블로그, 인스타그램, 모바일 홈페이지 카드 내 상시 구글 시트 대장 열기 버튼 공식 탑재";
 
   try {
     const ghRes = await fetch("https://api.github.com/repos/Charismagreat/SheetBot/releases/latest", {

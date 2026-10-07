@@ -1699,6 +1699,18 @@
                             android:textSize="11sp" />
                     </LinearLayout>
                 </LinearLayout>
+
+                <!-- 상시 노출 구글 시트 대장 열기 버튼 -->
+                <Button
+                    android:id="@+id/btnOpenLawSheetAlways"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="📊 AI 법률·계약 검토 대장 시트 열기"
+                    android:textColor="#F59E0B"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="8dp" />
             </LinearLayout>
         </LinearLayout>
 
