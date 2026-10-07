@@ -1331,49 +1331,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 📱 고객 셀프 견적기 웹앱
-        binding.btnOpenSelfEstimateWeb.setOnClickListener {
-            val email = prefs.userEmail
-            if (email.isNullOrBlank()) {
-                Toast.makeText(this, "먼저 시트봇 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            val slug = Base64.encodeToString(email.toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
-            val url = "https://sheetbot.cloud/estimate/$slug"
-            try {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                startActivity(intent)
-            } catch (e: Exception) {
-                Toast.makeText(this, "웹 브라우저를 열 수 없습니다: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        // 🔗 견적 신청 링크 공유
-        binding.btnCopySelfEstimateLink.setOnClickListener {
-            val email = prefs.userEmail
-            if (email.isNullOrBlank()) {
-                Toast.makeText(this, "먼저 시트봇 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            val slug = Base64.encodeToString(email.toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
-            val url = "https://sheetbot.cloud/estimate/$slug"
-            try {
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("SheetBot Estimate Link", url))
-
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_SUBJECT, "간편 견적서 발급 링크")
-                    putExtra(Intent.EXTRA_TEXT, "실시간 스마트 간편 견적서 발급: $url")
-                }
-                startActivity(Intent.createChooser(shareIntent, "견적 신청 링크 공유"))
-            } catch (e: Exception) {
-                Toast.makeText(this, "견적 링크 공유 실패: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-            }
-        }
-
         // 📸 카카오톡 미리보기 사진 등록/변경
         binding.btnRegisterEstimateOgImage.setOnClickListener {
             val email = prefs.userEmail
