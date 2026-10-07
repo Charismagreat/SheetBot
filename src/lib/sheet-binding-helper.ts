@@ -31,6 +31,7 @@ export type SheetBindingType =
   | "WEBSITE_MONITOR"
   | "DISPATCH_LOG"
   | "QUOTE"
+  | "ESTIMATE"
   | "CONTACTS";
 
 export interface ResolveSheetOptions {

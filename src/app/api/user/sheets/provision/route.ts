@@ -82,6 +82,11 @@ export const SHEET_DEFINITIONS: Record<string, SheetDefinition> = {
     headers: ["카테고리", "품목코드", "품목명", "규격/단위", "단가(원)", "할인가(원)", "대표사진", "상세이미지", "품절표시", "비고/설명"],
     range: "A1:J1",
   },
+  ESTIMATE: {
+    defaultTitle: "[SheetBot] 스마트 간편 견적 및 단가 대장",
+    headers: ["카테고리", "품목코드", "품목명", "규격/단위", "기준단가(원)", "할인단가(원)", "대표사진", "상세설명", "최소수량", "비고"],
+    range: "A1:J1",
+  },
   CONTACTS: {
     defaultTitle: "[SheetBot] 스마트폰 연락처 대장",
     headers: ["ID", "이름", "휴대전화", "추가 번호", "이메일", "회사/상호", "직함/부서", "메모", "주소", "동기화 기기", "최종 갱신일시"],
@@ -265,6 +270,128 @@ async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: stri
 }
 
 /**
+ * 스마트 간편 견적 및 단가 대장 (ESTIMATE) 전용 3종 탭(단가표, 견적발행대장, 사업자정보) 자동 생성 함수
+ */
+async function setupEstimateSpreadsheet(spreadsheetId: string, primaryTabName: string): Promise<void> {
+  // 1. 첫 번째 탭: '단가표' 헤더 및 표준 샘플 품목 주입 (10개 열)
+  const sampleCatalogRows = [
+    ["카테고리", "품목코드", "품목명", "규격/단위", "기준단가(원)", "할인단가(원)", "대표사진", "상세설명", "최소수량", "비고"],
+    ["에어컨 세척", "EST-AC01", "스탠드 에어컨 분해세척", "1대", 150000, 140000, "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=500", "필터 및 열교환기 고압 살균 분해세척", 1, "가정/사무실"],
+    ["에어컨 세척", "EST-AC02", "천장형 시스템 에어컨 (4WAY)", "1대", 130000, 120000, "https://images.unsplash.com/photo-1545259741-2ea3ebf61fa3?w=500", "드레인판 세척 및 친환경 핀세정", 1, "사업장/매장"],
+    ["에어컨 세척", "EST-AC03", "벽걸이 에어컨 고압세척", "1대", 80000, 80000, "https://images.unsplash.com/photo-1585338107529-13afc5f02586?w=500", "완전 분해 살균 세척", 1, "원룸/오피스텔"],
+    ["추가 시공", "EST-OPT01", "실외기 고압 세척", "1대", 30000, 30000, "", "실외기 방열판 이물질 및 먼지 제거", 1, "선택 옵션"],
+    ["서비스/방역", "EST-OPT02", "공간 피톤치드 연무 살균", "1식", 30000, 0, "", "실내 전체 항균 탈취 연무 시공", 1, "프로모션 무료 제공"],
+  ];
+
+  await callSheetsTool(
+    "sheets_update_range",
+    {
+      spreadsheetId,
+      range: `${primaryTabName}!A1:J6`,
+      values: sampleCatalogRows,
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch((err: any) => console.warn(`[ProvisionEstimate] Catalog insert warning:`, err.message));
+
+  await callSheetsTool(
+    "sheets_format_headers",
+    {
+      spreadsheetId,
+      sheetName: primaryTabName,
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch(() => {});
+
+  // 2. 두 번째 탭: '견적발행대장' 생성 및 13개 열 헤더 주입
+  const logTabName = "견적발행대장";
+  await callSheetsTool(
+    "sheets_create_tab",
+    {
+      spreadsheetId,
+      title: logTabName,
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch((err: any) => console.warn(`[ProvisionEstimate] Create log tab warning:`, err.message));
+
+  const logHeaders = [
+    ["견적번호", "발행일시", "견적유효기간", "고객명", "연락처", "시공/납품주소", "견적내용(품목/수량)", "공급가액(원)", "부가세(원)", "총견적금액(원)", "견적상태", "고객열람일시", "승인일시"]
+  ];
+  await callSheetsTool(
+    "sheets_update_range",
+    {
+      spreadsheetId,
+      range: `${logTabName}!A1:M1`,
+      values: logHeaders,
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch(() => {});
+
+  await callSheetsTool(
+    "sheets_format_headers",
+    {
+      spreadsheetId,
+      sheetName: logTabName,
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch(() => {});
+
+  // 3. 세 번째 탭: '사업자정보' 생성 및 설정 항목 주입
+  const infoTabName = "사업자정보";
+  await callSheetsTool(
+    "sheets_create_tab",
+    {
+      spreadsheetId,
+      title: infoTabName,
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch((err: any) => console.warn(`[ProvisionEstimate] Create info tab warning:`, err.message));
+
+  const sampleInfoRows = [
+    ["설정항목", "안내내용 및 설정값 (자유롭게 수정 가능)"],
+    ["회사명(상호)", "chachogreat 견적센터"],
+    ["대표자명", "차호석"],
+    ["사업자등록번호", "123-45-67890"],
+    ["사업장 주소", "서울특별시 서초구 반포대로 10, 3층"],
+    ["고객센터 연락처", "010-7216-5884"],
+    ["대표 e메일", "chachogreat@gmail.com"],
+    ["홈페이지/SNS", "https://sheetbot.cloud"],
+    ["직인/도장 이미지 URL", "https://sheetbot.cloud/seal.png"],
+    ["기본 견적 유효기간(일)", "14"],
+    ["결제 및 시공 안내", "견적 승인 후 일정 협의 및 착수금(30%) 입금 시 작업이 확정됩니다."],
+    ["특약 및 주의사항", "현장 여건(배관 연장, 고소 작업 등)에 따라 추가 비용이 발생할 수 있습니다."],
+  ];
+
+  await callSheetsTool(
+    "sheets_update_range",
+    {
+      spreadsheetId,
+      range: `${infoTabName}!A1:B13`,
+      values: sampleInfoRows,
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch(() => {});
+
+  await callSheetsTool(
+    "sheets_format_headers",
+    {
+      spreadsheetId,
+      sheetName: infoTabName,
+      preferOAuth: true,
+    },
+    { preferOAuth: true }
+  ).catch(() => {});
+
+  console.log(`[ProvisionEstimate] ✅ Successfully initialized 3 tabs (단가표, 견적발행대장, 사업자정보) for ESTIMATE spreadsheet.`);
+}
+
+/**
  * POST /api/user/sheets/provision
  * 기능 스위치 ON 시 헤더가 포함된 구글 스프레드시트 대장 및 드라이브 폴더 선제 생성 (Eager Provisioning)
  */
@@ -374,6 +501,8 @@ export async function POST(req: NextRequest) {
       if (!hasHeaderOrData) {
         if (typeKey === "QUOTE") {
           await setupQuoteSpreadsheet(targetSpreadsheetId, primaryTabName);
+        } else if (typeKey === "ESTIMATE") {
+          await setupEstimateSpreadsheet(targetSpreadsheetId, primaryTabName);
         } else {
           const updateRange = `${primaryTabName}!${def.range}`;
           console.log(`[ProvisionSheet] Injecting headers to ${updateRange} for ${typeKey}...`);

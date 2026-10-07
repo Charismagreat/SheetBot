@@ -1,55 +1,90 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-                android:layout_width="match_parent"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_card_scenario"
+    android:padding="13dp"
+    android:layout_marginBottom="12dp">
+
+    <!-- 상단 구분선 -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#334155"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="10dp" />
+
+    <LinearLayout
+        android:id="@+id/layoutSiteHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="8dp"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@drawable/bg_card_scenario"
-            android:padding="13dp"
-            android:layout_marginBottom="12dp">
+            android:layout_weight="1"
+            android:text="🌐 AI 모바일 홈페이지 제작 &amp; 관리"
+            android:textColor="#06B6D4"
+            android:textSize="12.5sp"
+            android:textStyle="bold" />
 
-            <LinearLayout
-                android:id="@+id/layoutSiteHeader"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="8dp"
-                android:clickable="true"
-                android:focusable="true">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_badge_version"
+            android:backgroundTint="#0F172A"
+            android:paddingHorizontal="7dp"
+            android:paddingVertical="2dp"
+            android:text="10초 즉시발행"
+            android:textColor="#22D3EE"
+            android:textSize="9.5sp"
+            android:textStyle="bold"
+            android:layout_marginEnd="6dp" />
 
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="🌐 AI 모바일 홈페이지 제작 &amp; 관리"
-                    android:textColor="#06B6D4"
-                    android:textSize="12.5sp"
-                    android:textStyle="bold" />
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switchSiteAutomation"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:checked="false"
+            android:layout_marginEnd="6dp" />
 
-                <TextView
-                    android:id="@+id/btnToggleSiteDetails"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="▼"
-                    android:textColor="#94A3B8"
-                    android:textSize="12sp"
-                    android:padding="4dp" />
-            </LinearLayout>
+        <TextView
+            android:id="@+id/btnToggleSiteDetails"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_badge_version"
+            android:backgroundTint="#0F172A"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="3dp"
+            android:text="▲"
+            android:textColor="#E2E8F0"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="사진 1~5장 + 상호명 + 업종을 입력하면 AI가 슬로건, 브랜드 스토리, 대표 메뉴 5종을 자동 구성하여 10초 만에 공식 모바일 웹페이지를 즉시 발행합니다."
-                android:textColor="#94A3B8"
-                android:textSize="11sp"
-                android:layout_marginBottom="10dp" />
+    <LinearLayout
+        android:id="@+id/layoutSiteDetails"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#0F172A"
+        android:padding="10dp"
+        android:layout_marginBottom="12dp">
 
-            <LinearLayout
-                android:id="@+id/layoutSiteDetails"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="사진 1~5장 + 상호명 + 업종을 입력하면 AI가 슬로건, 브랜드 스토리, 대표 메뉴 5종을 자동 구성하여 10초 만에 공식 모바일 웹페이지를 즉시 발행합니다."
+            android:textColor="#94A3B8"
+            android:textSize="11sp"
+            android:layout_marginBottom="10dp" />
 
                 <!-- 1. 사진 복수 선택 버튼 & 상태 표시 -->
                 <LinearLayout
@@ -262,9 +297,9 @@
                 <Button
                     android:id="@+id/btnOpenSiteSheetAlways"
                     android:layout_width="match_parent"
-                    android:layout_height="38dp"
+                    android:layout_height="40dp"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 모바일 홈페이지 관리 대장 시트 열기"
+                    android:text="📊 모바일 홈페이지 관리 대장 시트 ↗"
                     android:textColor="#06B6D4"
                     android:textSize="11.5sp"
                     android:textStyle="bold"
