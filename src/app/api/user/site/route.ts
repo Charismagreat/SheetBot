@@ -247,8 +247,8 @@ async function fetchDefaultTemplateSite(idOrKey: string) {
     const bInfo = catalogData?.businessInfo || {};
     const merchant = catalogData?.merchant || {};
 
-    const title = bInfo.companyName || merchant.businessName || "스마트 공식 모바일 웹";
-    const category = catalogData?.categories?.find((c) => c !== "전체") || "전문 비즈니스 / 스마트 오더";
+    const title = bInfo.companyName || merchant.businessName || "공식 모바일 웹";
+    const category = catalogData?.categories?.find((c) => c !== "전체") || "맞춤 전문 서비스";
 
     // 3. 대표 이미지 선정 (카카오톡 미리보기 사진 > 로고 > 고화질 비즈니스 기본 커버)
     const bannerUrl =
@@ -256,34 +256,31 @@ async function fetchDefaultTemplateSite(idOrKey: string) {
       merchant.imageUrl ||
       "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80";
 
-    // 4. 대표 품목 6~8종 추출
+    // 4. 대표 서비스 / 시공 / 제품 목록 6~8종 추출
     const catalogItems = catalogData?.catalog || [];
     const menuItems = catalogItems.slice(0, 8).map((item) => ({
       name: item.name + (item.spec ? ` (${item.spec})` : ""),
       price: (item.discountPrice > 0 ? item.discountPrice : item.unitPrice).toLocaleString() + "원",
-      description: item.description || item.category || "정성을 다하는 대표 품목",
-      badge: item.discountPrice > 0 ? "할인" : "대표",
+      description: item.description || item.category || "정성을 다하는 전문 서비스",
+      badge: item.discountPrice > 0 ? "인기" : "추천",
     }));
-
-    // 5. slug 생성 (링크 연동용)
-    const slug = Buffer.from(userEmail).toString("base64url");
 
     const defaultSiteData = {
       id: idOrKey,
       updatedAt: getKoreanTimeString(),
       title,
       category,
-      slogan: "정성을 다하는 고객 맞춤 전문 서비스",
-      description: `${title} 공식 모바일 홈페이지에 오신 것을 환영합니다.\n구글 스프레드시트와 실시간 연동되어 대표 품목 및 서비스 단가를 투명하게 안내해 드리며, 견적 신청 및 주문 상담을 빠르고 편리하게 이용하실 수 있습니다.`,
-      notice: bInfo.extraNotice || "실시간 온라인 상담 및 견적 신청을 24시간 언제든 이용하실 수 있습니다.",
-      businessHours: "평일 09:00 ~ 18:00 (주말/공휴일 상담 환영)",
+      slogan: "정직과 신뢰를 바탕으로 최상의 만족을 약속드립니다",
+      description: `${title}에 오신 것을 환영합니다.\n저희는 언제나 고객의 입장에서 생각하며 철저한 품질 관리와 책임감 있는 서비스로 보답하겠습니다.\n궁금하신 사항은 언제든 편안하게 문의해 주세요.`,
+      notice: bInfo.extraNotice || "고객 만족을 위해 언제나 정성을 다해 친절하게 상담해 드립니다.",
+      businessHours: "평일 09:00 ~ 18:00 (사전 예약 및 상담 환영)",
       phone: bInfo.phone || merchant.phone || "",
       address: bInfo.address || "",
       themeColor: "indigo",
       menuItems,
       bannerImages: [
         {
-          name: "대표 이미지",
+          name: "대표 비주얼",
           url: bannerUrl,
         },
       ],
@@ -291,10 +288,8 @@ async function fetchDefaultTemplateSite(idOrKey: string) {
       siteUrl: `https://sheetbot.cloud/site/${idOrKey}`,
       driveFolderUrl: "",
       status: "ACTIVE",
-      sheetUrl: `https://sheetbot.cloud/m/estimate`,
+      sheetUrl: "",
       isDefaultTemplate: true,
-      estimateUrl: `https://sheetbot.cloud/estimate/issue?userKey=${slug}`,
-      orderUrl: `https://sheetbot.cloud/order/${slug}`,
     };
 
     return defaultSiteData;

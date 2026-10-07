@@ -26,6 +26,9 @@ interface BlogPostData {
   contentHtml: string;
   summary: string;
   naverPostUrl?: string;
+  naverBlogId?: string;
+  naverBlogUrl?: string;
+  naverWriteUrl?: string;
   charCount: number;
   imageCount: number;
   status: string;
@@ -163,20 +166,43 @@ function BlogPostViewerContent() {
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={handleCopyContent}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 shadow-sm transition"
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 shadow-sm transition"
               >
                 {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 {copied ? "클립보드 복사 완료!" : "전체 원고 복사"}
               </button>
               <a
-                href="https://blog.naver.com"
+                href={post.naverWriteUrl || "https://blog.naver.com/GoBlogWrite.naver"}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-white bg-[#03C75A] rounded-xl hover:bg-[#02b350] shadow-sm transition"
               >
-                <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
-                네이버 블로그 열기
+                <ExternalLink className="w-3.5 h-3.5" />
+                ✍️ 네이버 글쓰기 열기
               </a>
+              {post.naverBlogUrl && (
+                <a
+                  href={post.naverBlogUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition"
+                >
+                  내 블로그 홈 ↗
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* 발행 안내 가이드 배너 */}
+          <div className="mt-4 p-3.5 bg-emerald-50/70 border border-emerald-200/80 rounded-xl flex items-start gap-2.5 text-xs text-emerald-900 leading-relaxed">
+            <span className="text-base flex-shrink-0">💡</span>
+            <div>
+              <span className="font-bold">발행 방법:</span> 위 <span className="font-bold underline text-emerald-800">[전체 원고 복사]</span> 버튼을 누른 뒤, 바로 옆 <span className="font-bold underline text-[#028a3d]">[✍️ 네이버 글쓰기 열기]</span>를 클릭하세요. 열리는 사장님의 네이버 스마트에디터 화면에서 마우스 우클릭 후 <b>'붙여넣기'</b>를 하시고 <b>'발행'</b>만 누르시면 1분 만에 블로그 포스팅이 완성됩니다.
+              {post.naverBlogId && (
+                <span className="block mt-1 font-semibold text-emerald-800">
+                  📍 대상 블로그: <span className="underline">{post.naverBlogUrl}</span>
+                </span>
+              )}
             </div>
           </div>
 

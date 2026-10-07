@@ -32,6 +32,8 @@ interface InstagramPostData {
   reportUrl: string;
   sheetUrl: string;
   instagramPostUrl: string;
+  instagramHandle?: string;
+  instagramAccountUrl?: string;
   status: string;
   createdAt: string;
 }
@@ -144,13 +146,26 @@ function InstagramPostContent() {
               </a>
             )}
             <a
-              href="https://www.instagram.com/"
+              href={post.instagramAccountUrl || "https://www.instagram.com/"}
               target="_blank"
               rel="noreferrer"
               className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg text-xs font-semibold shadow-sm transition"
             >
               🚀 인스타 열기
             </a>
+          </div>
+        </div>
+
+        {/* 발행 안내 가이드 배너 */}
+        <div className="p-3.5 bg-pink-950/40 border border-pink-500/30 rounded-2xl flex items-start gap-2.5 text-xs text-pink-200 leading-relaxed">
+          <span className="text-base flex-shrink-0">💡</span>
+          <div>
+            <span className="font-bold text-pink-100">발행 가이드:</span> 아래 <span className="font-bold underline text-white">[캡션 복사]</span>와 <span className="font-bold underline text-white">[해시태그 복사]</span>를 누른 뒤, 상단의 <span className="font-bold underline text-pink-300">[🚀 인스타 열기]</span>를 클릭하여 스마트폰 인스타 앱에서 사진과 함께 붙여넣고 게시하세요.
+            {post.instagramHandle && (
+              <span className="block mt-1 font-semibold text-pink-300">
+                👤 연결 계정: @{post.instagramHandle}
+              </span>
+            )}
           </div>
         </div>
 
@@ -170,13 +185,17 @@ function InstagramPostContent() {
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-900">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-full p-[2px] bg-gradient-to-tr from-amber-400 via-rose-500 to-purple-600">
-                <div className="w-full h-full rounded-full bg-slate-900 flex items-center justify-center text-xs font-bold text-white">
-                  SB
+                <div className="w-full h-full rounded-full bg-slate-900 flex items-center justify-center text-xs font-bold text-white uppercase">
+                  {post.instagramHandle ? post.instagramHandle.slice(0, 2) : "SB"}
                 </div>
               </div>
               <div>
-                <div className="text-xs font-bold text-white leading-tight">sheetbot_official</div>
-                <div className="text-[10px] text-slate-400">SheetBot Creator Studio</div>
+                <div className="text-xs font-bold text-white leading-tight">
+                  {post.instagramHandle ? `@${post.instagramHandle}` : "sheetbot_official"}
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  {post.instagramHandle ? "내 인스타그램 계정" : "SheetBot Creator Studio"}
+                </div>
               </div>
             </div>
             <span className="text-slate-500 text-sm">•••</span>

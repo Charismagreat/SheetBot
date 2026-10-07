@@ -81,10 +81,63 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:text="💡 인스타그램 정책상 무인 직접 게시를 차단하므로, AI가 감성 피드·해시태그를 완성하고 공식 앱으로 1초 만에 붙여넣어 안전하게 게시할 수 있도록 지원합니다."
+            android:textColor="#F472B6"
+            android:textSize="10.5sp"
+            android:background="#831843"
+            android:padding="7dp"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:text="사진(1~10장) + 주제 + 키워드를 AI가 분석하여 스크롤을 멈추는 훅, 감성 캡션, 타깃 해시태그 25개를 자동 생성하고 인스타그램 대장 시트에 적재합니다."
             android:textColor="#94A3B8"
             android:textSize="11sp"
-            android:layout_marginBottom="10dp" />
+            android:layout_marginBottom="8dp" />
+
+        <!-- 0. 내 인스타그램 계정 ID 설정 섹션 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="#1E293B"
+            android:padding="6dp"
+            android:layout_marginBottom="10dp">
+
+            <EditText
+                android:id="@+id/etInstagramId"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_input_field"
+                android:hint="내 인스타그램 아이디 (예: @my_account)"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#64748B"
+                android:textSize="11sp"
+                android:paddingHorizontal="8dp"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btnSaveInstagramId"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:backgroundTint="#DB2777"
+                android:text="저장"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:layout_marginEnd="4dp" />
+
+            <Button
+                android:id="@+id/btnOpenMyInsta"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:backgroundTint="#334155"
+                android:text="내 인스타 ↗"
+                android:textColor="#E2E8F0"
+                android:textSize="11sp" />
+        </LinearLayout>
 
                 <!-- 1. 사진 복수 선택 버튼 & 상태 표시 -->
                 <LinearLayout

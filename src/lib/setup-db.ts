@@ -202,6 +202,24 @@ export async function setupDatabase(force = false): Promise<void> {
             try {
               await executeSQL('ALTER TABLE sheetbot_users ADD COLUMN phone TEXT;');
             } catch {}
+            try {
+              await executeSQL('ALTER TABLE sheetbot_users ADD COLUMN estimate_image_url TEXT;');
+            } catch {}
+            try {
+              await executeSQL('ALTER TABLE sheetbot_users ADD COLUMN naver_blog_id TEXT;');
+            } catch {}
+            try {
+              await executeSQL('ALTER TABLE sheetbot_users ADD COLUMN instagram_id TEXT;');
+            } catch {}
+            try {
+              await executeSQL('ALTER TABLE sheetbot_blog_posts ADD COLUMN naver_blog_id TEXT;');
+            } catch {}
+            try {
+              await executeSQL('ALTER TABLE sheetbot_blog_posts ADD COLUMN naver_blog_url TEXT;');
+            } catch {}
+            try {
+              await executeSQL('ALTER TABLE sheetbot_instagram_posts ADD COLUMN instagram_id TEXT;');
+            } catch {}
             isDbInitialized = true;
             return;
           }
@@ -470,7 +488,8 @@ export async function setupDatabase(force = false): Promise<void> {
         { name: 'role', type: 'TEXT' }, // 'USER', 'ADMIN'
         { name: 'business_name', type: 'TEXT' }, // 상호명 / 업체명 / 브랜드명
         { name: 'phone', type: 'TEXT' }, // 대표 연락처
-        { name: 'quote_image_url', type: 'TEXT' }, // 견적 웹앱 대표 썸네일/로고 이미지 URL
+        { name: 'quote_image_url', type: 'TEXT' }, // 주문 웹앱 대표 썸네일/로고 이미지 URL
+        { name: 'estimate_image_url', type: 'TEXT' }, // 간편 견적서 발행 웹앱 대표 썸네일/로고 이미지 URL
         { name: 'status', type: 'TEXT' }, // 'ACTIVE', 'SUSPENDED'
         { name: 'tier', type: 'TEXT' }, // 'FREE', 'PRO', 'ENTERPRISE'
         { name: 'note', type: 'TEXT' },
@@ -481,7 +500,7 @@ export async function setupDatabase(force = false): Promise<void> {
       { tableName: 'sheetbot_users' }
     );
 
-    // sheetbot_users에 visitor_session_id, business_name, phone, quote_image_url 컬럼 마이그레이션 보장
+    // sheetbot_users에 visitor_session_id, business_name, phone, quote_image_url, estimate_image_url 컬럼 마이그레이션 보장
     try {
       await executeSQL(`ALTER TABLE sheetbot_users ADD COLUMN visitor_session_id TEXT;`);
     } catch {}
@@ -493,6 +512,15 @@ export async function setupDatabase(force = false): Promise<void> {
     } catch {}
     try {
       await executeSQL(`ALTER TABLE sheetbot_users ADD COLUMN quote_image_url TEXT;`);
+    } catch {}
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_users ADD COLUMN estimate_image_url TEXT;`);
+    } catch {}
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_users ADD COLUMN naver_blog_id TEXT;`);
+    } catch {}
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_users ADD COLUMN instagram_id TEXT;`);
     } catch {}
 
     // 12. sheetbot_dispatch_logs 테이블 생성 (알림 발송 이력 대장)
@@ -811,6 +839,8 @@ export async function setupDatabase(force = false): Promise<void> {
         { name: 'content_html', type: 'TEXT' },
         { name: 'summary', type: 'TEXT' },
         { name: 'naver_post_url', type: 'TEXT' },
+        { name: 'naver_blog_id', type: 'TEXT' },
+        { name: 'naver_blog_url', type: 'TEXT' },
         { name: 'char_count', type: 'INTEGER' },
         { name: 'image_count', type: 'INTEGER' },
         { name: 'status', type: 'TEXT' },
@@ -818,6 +848,13 @@ export async function setupDatabase(force = false): Promise<void> {
       ],
       { tableName: 'sheetbot_blog_posts' }
     );
+
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_blog_posts ADD COLUMN naver_blog_id TEXT;`);
+    } catch {}
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_blog_posts ADD COLUMN naver_blog_url TEXT;`);
+    } catch {}
 
     // 27. sheetbot_instagram_posts 테이블 생성 (AI 인스타그램 피드 & 카드뉴스 관리 대장)
     await safeCreateTable(
@@ -839,11 +876,16 @@ export async function setupDatabase(force = false): Promise<void> {
         { name: 'report_url', type: 'TEXT' },
         { name: 'sheet_url', type: 'TEXT' },
         { name: 'instagram_post_url', type: 'TEXT' },
+        { name: 'instagram_id', type: 'TEXT' },
         { name: 'status', type: 'TEXT' },
         { name: 'created_at', type: 'TEXT' },
       ],
       { tableName: 'sheetbot_instagram_posts' }
     );
+
+    try {
+      await executeSQL(`ALTER TABLE sheetbot_instagram_posts ADD COLUMN instagram_id TEXT;`);
+    } catch {}
 
     // 28. sheetbot_sites 테이블 생성 (AI 모바일 홈페이지 및 랜딩페이지 관리 대장)
     await safeCreateTable(

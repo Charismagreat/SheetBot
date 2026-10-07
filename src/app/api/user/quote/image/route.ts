@@ -8,6 +8,7 @@ import { setupDatabase } from "@/lib/setup-db";
 import { resolveUserEmailFromKey } from "@/lib/user-key-helper";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { clearEstimateCatalogCache } from "@/lib/estimate-catalog-helper";
+import { clearCatalogCache } from "@/lib/order-catalog-helper";
 import fs from "fs";
 import path from "path";
 
@@ -114,6 +115,8 @@ export async function GET(req: NextRequest) {
     const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
     const userKey = url.searchParams.get("userKey") || url.searchParams.get("u");
     const emailParam = url.searchParams.get("email");
+    const typeParam = (url.searchParams.get("type") || "").toLowerCase().trim();
+    const isEstimate = typeParam === "estimate";
 
     let targetEmail = "";
     if (userKey) {
@@ -129,25 +132,38 @@ export async function GET(req: NextRequest) {
     }
 
     let imageUrl = "";
-    let businessName = "스마트 견적 & 주문 센터";
+    let businessName = isEstimate ? "스마트 간편 견적 센터" : "스마트 견적 & 주문 센터";
 
     // 1. sheetbot_settings 조회
     try {
-      const settingRes = await queryTable("sheetbot_settings", {
-        filters: { key: `quote_profile_${targetEmail}` },
-        limit: 1,
-      }).catch(() => ({ rows: [] }));
+      const settingKeys = isEstimate
+        ? [`estimate_profile_${targetEmail}`, `quote_profile_${targetEmail}`]
+        : [`quote_profile_${targetEmail}`];
 
-      if (settingRes.rows && settingRes.rows.length > 0) {
-        const val = JSON.parse(settingRes.rows[0].value || "{}");
-        if (val.ogImageUrl) imageUrl = val.ogImageUrl;
-        else if (val.imageUrl) imageUrl = val.imageUrl;
-        if (val.businessName && val.businessName.trim()) businessName = val.businessName.trim();
+      for (const sKey of settingKeys) {
+        const settingRes = await queryTable("sheetbot_settings", {
+          filters: { key: sKey },
+          limit: 1,
+        }).catch(() => ({ rows: [] }));
+
+        if (settingRes.rows && settingRes.rows.length > 0) {
+          const val = JSON.parse(settingRes.rows[0].value || "{}");
+          if (isEstimate) {
+            if (val.estimateImageUrl) imageUrl = val.estimateImageUrl;
+            else if (!imageUrl && val.imageUrl) imageUrl = val.imageUrl;
+          } else {
+            if (val.orderImageUrl) imageUrl = val.orderImageUrl;
+            else if (val.ogImageUrl) imageUrl = val.ogImageUrl;
+            else if (val.imageUrl) imageUrl = val.imageUrl;
+          }
+          if (val.businessName && val.businessName.trim()) businessName = val.businessName.trim();
+          if (imageUrl) break;
+        }
       }
     } catch (_) {}
 
     // 2. sheetbot_users 조회
-    if (!imageUrl || businessName === "스마트 견적 & 주문 센터") {
+    if (!imageUrl || businessName === "스마트 견적 & 주문 센터" || businessName === "스마트 간편 견적 센터") {
       try {
         const userRes = await queryTable("sheetbot_users", {
           filters: { email: targetEmail },
@@ -156,8 +172,16 @@ export async function GET(req: NextRequest) {
 
         if (userRes.rows && userRes.rows.length > 0) {
           const u = userRes.rows[0];
-          if (!imageUrl && u.quote_image_url) imageUrl = u.quote_image_url;
-          if (businessName === "스마트 견적 & 주문 센터" && u.business_name) {
+          if (!imageUrl) {
+            if (isEstimate && u.estimate_image_url) {
+              imageUrl = u.estimate_image_url;
+            } else if (!isEstimate && u.quote_image_url) {
+              imageUrl = u.quote_image_url;
+            } else if (u.quote_image_url) {
+              imageUrl = u.quote_image_url;
+            }
+          }
+          if (u.business_name && (businessName === "스마트 견적 & 주문 센터" || businessName === "스마트 간편 견적 센터")) {
             businessName = u.business_name.trim();
           }
         }
@@ -167,6 +191,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       email: targetEmail,
+      type: isEstimate ? "estimate" : "order",
       imageUrl: imageUrl || "https://sheetbot.cloud/favicon.svg",
       hasCustomImage: !!imageUrl,
       businessName,
@@ -186,15 +211,19 @@ export async function POST(req: NextRequest) {
     const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
     const headerEmail = req.headers.get("x-sheetbot-user-email");
     const contentType = req.headers.get("content-type") || "";
+    const url = new URL(req.url);
+    const urlType = url.searchParams.get("type") || "";
 
     let targetEmail = "";
     let buffer: Buffer;
     let fileName = "";
     let ext = "jpg";
+    let requestedType = urlType;
 
     if (contentType.includes("application/json")) {
       const body = await req.json().catch(() => ({}));
       targetEmail = (body.email || body.userEmail || sessionEmail || headerEmail || "").toLowerCase().trim();
+      if (body.type) requestedType = body.type;
       const imageBase64 = body.imageBase64 || body.image || "";
       if (!imageBase64) {
         return NextResponse.json({ success: false, error: "이미지 데이터(base64)가 필요합니다." }, { status: 400 });
@@ -211,12 +240,12 @@ export async function POST(req: NextRequest) {
       }
 
       buffer = Buffer.from(cleanBase64, "base64");
-      const safeEmail = targetEmail.replace(/[^a-zA-Z0-9]/g, "_");
-      fileName = `quote_${safeEmail}_${Date.now()}.${ext}`;
     } else {
       const formData = await req.formData();
       const file = formData.get("file") as File | null;
       const directEmail = (formData.get("email") || formData.get("userEmail")) as string | null;
+      const formType = formData.get("type") as string | null;
+      if (formType) requestedType = formType;
 
       targetEmail = (
         directEmail ||
@@ -237,9 +266,6 @@ export async function POST(req: NextRequest) {
         ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
       }
 
-      const safeEmail = targetEmail.replace(/[^a-zA-Z0-9]/g, "_");
-      fileName = `quote_${safeEmail}_${Date.now()}.${ext}`;
-
       const arrayBuffer = await file.arrayBuffer();
       buffer = Buffer.from(arrayBuffer);
     }
@@ -257,6 +283,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "이미지 파일 크기는 10MB 이하여야 합니다." }, { status: 400 });
     }
 
+    const isEstimate = requestedType.toLowerCase().trim() === "estimate";
+    const prefix = isEstimate ? "estimate" : "quote";
+    const safeEmail = targetEmail.replace(/[^a-zA-Z0-9]/g, "_");
+    fileName = `${prefix}_${safeEmail}_${Date.now()}.${ext}`;
+
     // 디렉터리 다중 저장 (프로덕션 런타임 및 개발 소스 폴더 모두 저장)
     const dirs = getUploadDirectories();
     for (const d of dirs) {
@@ -272,7 +303,7 @@ export async function POST(req: NextRequest) {
     // 1. sheetbot_settings 동기화
     let businessName = "";
     try {
-      const settingKey = `quote_profile_${targetEmail}`;
+      const settingKey = isEstimate ? `estimate_profile_${targetEmail}` : `quote_profile_${targetEmail}`;
       const settingRes = await queryTable("sheetbot_settings", {
         filters: { key: settingKey },
         limit: 1,
@@ -286,8 +317,14 @@ export async function POST(req: NextRequest) {
         if (existingVal.businessName) businessName = existingVal.businessName;
       }
 
-      existingVal.ogImageUrl = imageUrl;
-      existingVal.imageUrl = imageUrl;
+      if (isEstimate) {
+        existingVal.estimateImageUrl = imageUrl;
+        existingVal.imageUrl = imageUrl;
+      } else {
+        existingVal.orderImageUrl = imageUrl;
+        existingVal.ogImageUrl = imageUrl;
+        existingVal.imageUrl = imageUrl;
+      }
       existingVal.updatedAt = now;
 
       const payload = JSON.stringify(existingVal);
@@ -299,10 +336,27 @@ export async function POST(req: NextRequest) {
             id: Math.floor(Date.now() / 1000),
             key: settingKey,
             value: payload,
-            description: `견적 프로필 (${targetEmail})`,
+            description: isEstimate ? `간편견적 프로필 (${targetEmail})` : `주문 프로필 (${targetEmail})`,
             created_at: now,
           },
         ]);
+      }
+
+      // 견적 이미지 등록인 경우 기존 quote_profile_${targetEmail}에도 estimateImageUrl 보조 기록
+      if (isEstimate) {
+        try {
+          const qKey = `quote_profile_${targetEmail}`;
+          const qRes = await queryTable("sheetbot_settings", {
+            filters: { key: qKey },
+            limit: 1,
+          }).catch(() => ({ rows: [] }));
+          if (qRes.rows && qRes.rows.length > 0) {
+            const qVal = JSON.parse(qRes.rows[0].value || "{}");
+            qVal.estimateImageUrl = imageUrl;
+            qVal.updatedAt = now;
+            await updateRows("sheetbot_settings", { value: JSON.stringify(qVal), updated_at: now }, { filters: { key: qKey } });
+          }
+        } catch (_) {}
       }
     } catch (sErr: any) {
       console.warn("[QuoteImage POST] sheetbot_settings update warning:", sErr?.message);
@@ -315,14 +369,17 @@ export async function POST(req: NextRequest) {
         limit: 1,
       }).catch(() => ({ rows: [] }));
 
+      const userUpdatePayload: any = { updated_at: now };
+      if (isEstimate) {
+        userUpdatePayload.estimate_image_url = imageUrl;
+      } else {
+        userUpdatePayload.quote_image_url = imageUrl;
+      }
+
       if (userRes.rows && userRes.rows.length > 0) {
         const u = userRes.rows[0];
         if (!businessName && u.business_name) businessName = u.business_name;
-        await updateRows(
-          "sheetbot_users",
-          { quote_image_url: imageUrl, updated_at: now },
-          { filters: { email: targetEmail } }
-        );
+        await updateRows("sheetbot_users", userUpdatePayload, { filters: { email: targetEmail } });
       } else {
         await insertRows("sheetbot_users", [
           {
@@ -330,7 +387,8 @@ export async function POST(req: NextRequest) {
             email: targetEmail,
             name: targetEmail.split("@")[0],
             business_name: businessName,
-            quote_image_url: imageUrl,
+            quote_image_url: isEstimate ? "" : imageUrl,
+            estimate_image_url: isEstimate ? imageUrl : "",
             role: "USER",
             status: "ACTIVE",
             tier: "FREE",
@@ -343,9 +401,9 @@ export async function POST(req: NextRequest) {
       console.warn("[QuoteImage POST] sheetbot_users update warning:", uErr?.message);
     }
 
-    // 3. 구글 스프레드시트 '사업자정보' 탭(ESTIMATE 및 QUOTE) 자동 동기화
+    // 3. 구글 스프레드시트 '사업자정보' 탭 독립 동기화 (견적은 ESTIMATE만, 주문은 QUOTE만)
     try {
-      const sheetTypes = ["ESTIMATE", "QUOTE"] as const;
+      const sheetTypes = isEstimate ? (["ESTIMATE"] as const) : (["QUOTE"] as const);
       for (const st of sheetTypes) {
         try {
           const resolved = await resolveUserSpreadsheet({
@@ -412,15 +470,20 @@ export async function POST(req: NextRequest) {
       console.warn("[QuoteImage POST] Sheet sync warning:", sheetSyncErr?.message);
     }
 
-    // 4. 캐시 즉시 무효화
-    clearEstimateCatalogCache(targetEmail);
+    // 4. 캐시 즉시 무효화 (해당되는 카탈로그 캐시만 안전하게 초기화)
+    if (isEstimate) {
+      clearEstimateCatalogCache(targetEmail);
+    } else {
+      clearCatalogCache(targetEmail);
+    }
 
     return NextResponse.json({
       success: true,
       email: targetEmail,
+      type: isEstimate ? "estimate" : "order",
       imageUrl,
       businessName,
-      message: "대표 미리보기 이미지가 성공적으로 등록되었습니다!",
+      message: `${isEstimate ? "간편견적" : "간편주문"} 대표 미리보기 이미지가 성공적으로 등록되었습니다!`,
     });
   } catch (err: any) {
     console.error("[QuoteImage POST] Error:", err);

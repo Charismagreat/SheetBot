@@ -140,6 +140,8 @@ export async function GET(req: NextRequest) {
         reportUrl: row.report_url,
         sheetUrl: row.sheet_url,
         instagramPostUrl: row.instagram_post_url,
+        instagramHandle: row.instagram_id || "",
+        instagramAccountUrl: row.instagram_id ? `https://www.instagram.com/${row.instagram_id.replace(/^@/, '')}/` : "",
         status: row.status,
         createdAt: row.created_at,
       },
@@ -172,6 +174,7 @@ export async function POST(req: NextRequest) {
     let topic = "";
     let keywords = "";
     let tone = "감성 & 친근한 후기";
+    let instagramIdInput = "";
     let refUrls: string[] = [];
     const uploadedFiles: Array<{ name: string; buffer: Buffer; mimeType: string }> = [];
 
@@ -183,6 +186,7 @@ export async function POST(req: NextRequest) {
       topic = String(formData.get("topic") || "").trim();
       keywords = String(formData.get("keywords") || "").trim();
       tone = String(formData.get("tone") || "감성 & 친근한 후기").trim();
+      instagramIdInput = String(formData.get("instagramId") || formData.get("handle") || "").trim();
 
       const url1 = String(formData.get("refUrl1") || "").trim();
       const url2 = String(formData.get("refUrl2") || "").trim();
@@ -207,6 +211,7 @@ export async function POST(req: NextRequest) {
       topic = String(json.topic || "").trim();
       keywords = String(json.keywords || "").trim();
       tone = String(json.tone || "감성 & 친근한 후기").trim();
+      instagramIdInput = String(json.instagramId || json.handle || "").trim();
       if (Array.isArray(json.refUrls)) {
         refUrls = json.refUrls.filter((u: any) => typeof u === "string" && u.startsWith("http"));
       }
@@ -383,6 +388,31 @@ ${refSummaryForAi}
       console.warn("[InstagramPost] Sheets append warning:", sheetErr.message);
     }
 
+    // 인스타그램 계정 핸들 처리
+    let cleanHandle = instagramIdInput.trim().replace(/^@/, "").replace(/[^a-zA-Z0-9._]/g, "");
+    if (!cleanHandle && userEmail) {
+      try {
+        const userRes = await queryTable<any>("sheetbot_users", {
+          filters: { email: userEmail },
+          limit: 1,
+        });
+        if (userRes.rows?.[0]?.instagram_id) {
+          cleanHandle = userRes.rows[0].instagram_id.trim().replace(/^@/, "").replace(/[^a-zA-Z0-9._]/g, "");
+        }
+      } catch {}
+    }
+
+    if (cleanHandle && userEmail) {
+      try {
+        const { executeSQL } = await import("@/lib/egdesk-helpers");
+        await executeSQL(
+          `UPDATE sheetbot_users SET instagram_id = '${cleanHandle}' WHERE email = '${userEmail}';`
+        ).catch(() => {});
+      } catch {}
+    }
+
+    const instagramAccountUrl = cleanHandle ? `https://www.instagram.com/${cleanHandle}/` : "";
+
     // 5. SQLite DB sheetbot_instagram_posts 적재
     try {
       await insertRows("sheetbot_instagram_posts", [
@@ -403,6 +433,7 @@ ${refSummaryForAi}
           report_url: reportUrl,
           sheet_url: sheetUrl,
           instagram_post_url: instagramPostUrl,
+          instagram_id: cleanHandle,
           status: "CREATED",
           created_at: nowStr,
         },
@@ -410,7 +441,6 @@ ${refSummaryForAi}
     } catch (dbErr: any) {
       console.warn("[InstagramPost] DB insert warning:", dbErr.message);
     }
-
 
     // 토큰 정산 (10토큰 차감)
     void deductTokens(userEmail, 10, "INSTAGRAM_POST", instagramId).catch(() => {});
@@ -435,6 +465,8 @@ ${refSummaryForAi}
       reportUrl,
       sheetUrl,
       instagramPostUrl,
+      instagramHandle: cleanHandle,
+      instagramAccountUrl,
       driveFolderUrl,
     });
   } catch (error: any) {

@@ -235,7 +235,8 @@ export async function getOrderCatalogData(options: {
           }
           if (!merchantPhone && val.phone) merchantPhone = val.phone;
           if (!merchantImage) {
-            if (val.ogImageUrl) merchantImage = val.ogImageUrl;
+            if (val.orderImageUrl) merchantImage = val.orderImageUrl;
+            else if (val.ogImageUrl) merchantImage = val.ogImageUrl;
             else if (val.imageUrl) merchantImage = val.imageUrl;
           }
         } catch (_) {}
@@ -267,11 +268,12 @@ export async function getOrderCatalogData(options: {
     try {
       const fs = await import("fs");
       const path = await import("path");
-      const safePrefix = `quote_${targetEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
+      const safePrefixQuote = `quote_${targetEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
+      const safePrefixOrder = `order_${targetEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
       const uploadDir = path.join(process.cwd(), "public", "uploads", "quote-images");
       if (fs.existsSync(uploadDir)) {
         const files = fs.readdirSync(uploadDir)
-          .filter((f) => f.startsWith(safePrefix) && /\.(jpg|jpeg|png|webp)$/i.test(f))
+          .filter((f) => (f.startsWith(safePrefixOrder) || f.startsWith(safePrefixQuote)) && /\.(jpg|jpeg|png|webp)$/i.test(f))
           .sort((a, b) => {
             const statA = fs.statSync(path.join(uploadDir, a));
             const statB = fs.statSync(path.join(uploadDir, b));
@@ -285,7 +287,7 @@ export async function getOrderCatalogData(options: {
   }
 
   if (merchantImage) {
-    const match = merchantImage.match(/quote_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
+    const match = merchantImage.match(/(?:quote|order)_[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|gif)/i);
     if (match) {
       merchantImage = `https://cdn.jsdelivr.net/gh/Charismagreat/SheetBot@main/public/uploads/quote-images/${match[0]}`;
     } else if (merchantImage.endsWith(".svg")) {

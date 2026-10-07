@@ -996,6 +996,7 @@ object ApiClient {
         refUrl1: String = "",
         refUrl2: String = "",
         refUrl3: String = "",
+        naverBlogId: String = "",
         files: List<File> = emptyList(),
         userEmail: String
     ): BlogPostResult = withContext(Dispatchers.IO) {
@@ -1013,6 +1014,7 @@ object ApiClient {
                     .addFormDataPart("refUrl1", refUrl1)
                     .addFormDataPart("refUrl2", refUrl2)
                     .addFormDataPart("refUrl3", refUrl3)
+                    .addFormDataPart("naverBlogId", naverBlogId)
 
                 for (f in files) {
                     if (f.exists()) {
@@ -1049,6 +1051,9 @@ object ApiClient {
                         reportUrl = resJson.optString("reportUrl", ""),
                         sheetUrl = resJson.optString("sheetUrl", ""),
                         naverPostUrl = resJson.optString("naverPostUrl", ""),
+                        naverBlogId = resJson.optString("naverBlogId", naverBlogId),
+                        naverBlogUrl = resJson.optString("naverBlogUrl", ""),
+                        naverWriteUrl = resJson.optString("naverWriteUrl", ""),
                         driveFolderUrl = resJson.optString("driveFolderUrl", ""),
                         tags = tagsList
                     )
@@ -1073,6 +1078,7 @@ object ApiClient {
         refUrl1: String = "",
         refUrl2: String = "",
         refUrl3: String = "",
+        instagramId: String = "",
         files: List<File> = emptyList(),
         userEmail: String
     ): InstagramPostResult = withContext(Dispatchers.IO) {
@@ -1091,6 +1097,7 @@ object ApiClient {
                     .addFormDataPart("refUrl1", refUrl1)
                     .addFormDataPart("refUrl2", refUrl2)
                     .addFormDataPart("refUrl3", refUrl3)
+                    .addFormDataPart("instagramId", instagramId)
 
                 for (f in files) {
                     if (f.exists()) {
@@ -1120,6 +1127,8 @@ object ApiClient {
                         reportUrl = resJson.optString("reportUrl", ""),
                         sheetUrl = resJson.optString("sheetUrl", ""),
                         instagramPostUrl = resJson.optString("instagramPostUrl", ""),
+                        instagramHandle = resJson.optString("instagramHandle", instagramId),
+                        instagramAccountUrl = resJson.optString("instagramAccountUrl", ""),
                         driveFolderUrl = resJson.optString("driveFolderUrl", "")
                     )
                 } else {
@@ -2097,14 +2106,14 @@ object ApiClient {
     }
 
     /**
-     * 사장님 상호명/프로필 조회
+     * 사장님 상호명/프로필 조회 (type: "order" 또는 "estimate")
      */
-    suspend fun getBusinessProfile(email: String): BusinessProfileResult = withContext(Dispatchers.IO) {
+    suspend fun getBusinessProfile(email: String, type: String = "order"): BusinessProfileResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         var lastError = "프로필 조회 실패"
 
         for (host in hosts) {
-            val endpoint = "$host/api/user/profile?email=$email"
+            val endpoint = "$host/api/user/quote/image?email=$email&type=$type"
             try {
                 val request = Request.Builder()
                     .url(endpoint)
@@ -2165,13 +2174,14 @@ object ApiClient {
     }
 
     /**
-     * 견적 웹앱 및 카카오톡 미리보기용 대표 이미지 파일 업로드
+     * 주문/견적 웹앱 및 카카오톡 미리보기용 대표 이미지 파일 업로드 (type: "order" 또는 "estimate")
      */
     suspend fun uploadQuoteImage(
         fileBytes: ByteArray,
         fileName: String,
         mimeType: String,
-        userEmail: String
+        userEmail: String,
+        type: String = "order"
     ): UploadQuoteImageResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val base64Str = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)
@@ -2179,6 +2189,7 @@ object ApiClient {
             put("email", userEmail)
             put("userEmail", userEmail)
             put("fileName", fileName)
+            put("type", type)
             put("imageBase64", "data:$mimeType;base64,$base64Str")
         }
         val requestBody = json.toString().toRequestBody(JSON_MEDIA_TYPE)
@@ -2197,7 +2208,7 @@ object ApiClient {
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
                     val imageUrl = resJson.optString("imageUrl", "")
                     val bName = resJson.optString("businessName", "")
-                    Log.i(TAG, "📷 [견적 대표 이미지 업로드 성공] $imageUrl")
+                    Log.i(TAG, "📷 [${if (type == "estimate") "견적" else "주문"} 대표 이미지 업로드 성공] $imageUrl")
                     return@withContext UploadQuoteImageResult(
                         success = true,
                         imageUrl = imageUrl,
@@ -2209,7 +2220,7 @@ object ApiClient {
                 }
             } catch (e: Exception) {
                 lastError = e.localizedMessage ?: "네트워크 통신 오류"
-                Log.w(TAG, "[$endpoint] 견적 이미지 업로드 예외: ${e.message}")
+                Log.w(TAG, "[$endpoint] 이미지 업로드 예외: ${e.message}")
             }
         }
         UploadQuoteImageResult(success = false, error = lastError)
@@ -2918,6 +2929,9 @@ data class BlogPostResult(
     val reportUrl: String = "",
     val sheetUrl: String = "",
     val naverPostUrl: String = "",
+    val naverBlogId: String = "",
+    val naverBlogUrl: String = "",
+    val naverWriteUrl: String = "",
     val driveFolderUrl: String = "",
     val tags: List<String> = emptyList(),
     val error: String? = null
@@ -2934,6 +2948,8 @@ data class InstagramPostResult(
     val reportUrl: String = "",
     val sheetUrl: String = "",
     val instagramPostUrl: String = "",
+    val instagramHandle: String = "",
+    val instagramAccountUrl: String = "",
     val driveFolderUrl: String = "",
     val error: String? = null
 )
