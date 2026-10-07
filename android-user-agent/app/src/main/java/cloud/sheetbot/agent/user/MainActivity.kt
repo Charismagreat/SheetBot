@@ -805,6 +805,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.btnOpenMeetingSheetAlways.setOnClickListener {
+            showOpenSheetChooserDialog("MEETING", "[SheetBot] 회의록 대장")
+        }
+
         // 🔍 원클릭 기업 심층 리서치 및 문서화 UI 바인딩
         binding.layoutCompanyResearchHeader.setOnClickListener {
             val isHidden = binding.layoutCompanyResearchSettings.visibility != View.VISIBLE

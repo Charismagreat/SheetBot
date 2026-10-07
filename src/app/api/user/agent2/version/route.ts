@@ -41,10 +41,10 @@ export async function GET() {
     );
   }
 
-  let latestName = "2.1.93";
-  let latestCode = 114;
+  let latestName = "2.1.94";
+  let latestCode = 115;
   let apkUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";
-  let releaseNotes = "AI 법률 자문, 네이버 블로그, 인스타그램, 모바일 홈페이지 카드 내 상시 구글 시트 대장 열기 버튼 공식 탑재";
+  let releaseNotes = "카드 노출 순서 재배치(웹링크 카드와 웹사이트 감시 카드 사이에 회의록, 법률, 블로그, 인스타, 모바일 홈페이지 배치) 및 회의록 카드 상시 시트 열기 버튼 탑재";
 
   try {
     const ghRes = await fetch("https://api.github.com/repos/Charismagreat/SheetBot/releases/latest", {
