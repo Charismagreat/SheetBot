@@ -80,6 +80,7 @@ import java.util.Locale
 import kotlin.random.Random
 import cloud.sheetbot.agent.user.card.PaymentReceiptCardController
 import cloud.sheetbot.agent.user.card.CallRecordCardController
+import cloud.sheetbot.agent.user.card.MeetingRecordingCardController
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -278,6 +279,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var businessCardController: BusinessCardSyncCardController
     private lateinit var paymentReceiptCardController: PaymentReceiptCardController
     private lateinit var callRecordCardController: CallRecordCardController
+    private lateinit var meetingRecordingCardController: MeetingRecordingCardController
 
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
@@ -724,44 +726,8 @@ class MainActivity : AppCompatActivity() {
         // 통화 녹음 구글 드라이브 자동 백업 및 AI 전사 카드 초기화
         setupCallRecordCard()
 
-        // 🎙️ 회의 녹음 구글 드라이브 및 [SheetBot] 회의록 대장 자동 백업 UI 바인딩
-        binding.switchMeetingRecording.isChecked = prefs.isMeetingRecordingSyncEnabled
-        updateCardCollapseState(binding.layoutMeetingRecordingSettings, binding.btnToggleMeetingRecordingDetails, prefs.isMeetingRecordingDetailsHidden)
-
-        binding.switchMeetingRecording.setOnCheckedChangeListener { _, isChecked ->
-            prefs.isMeetingRecordingSyncEnabled = isChecked
-            prefs.isMeetingRecordingDetailsHidden = !isChecked
-            updateCardCollapseState(binding.layoutMeetingRecordingSettings, binding.btnToggleMeetingRecordingDetails, !isChecked)
-            val msg = if (isChecked) "회의 녹음 드라이브 백업 및 AI 회의록 작성이 켜졌습니다." else "회의 녹음 동기화가 꺼졌습니다."
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-            if (isChecked) {
-                checkAndRequestAllFilesAccess()
-                provisionSheetAsync("MEETING", "[SheetBot] 회의록 대장", prefs.meetingRecordingDriveFolder)
-            }
-        }
-
-        binding.layoutMeetingRecordingHeader.setOnClickListener {
-            val nextState = !prefs.isMeetingRecordingDetailsHidden
-            prefs.isMeetingRecordingDetailsHidden = nextState
-            updateCardCollapseState(binding.layoutMeetingRecordingSettings, binding.btnToggleMeetingRecordingDetails, nextState)
-        }
-        binding.btnToggleMeetingRecordingDetails.setOnClickListener {
-            val nextState = !prefs.isMeetingRecordingDetailsHidden
-            prefs.isMeetingRecordingDetailsHidden = nextState
-            updateCardCollapseState(binding.layoutMeetingRecordingSettings, binding.btnToggleMeetingRecordingDetails, nextState)
-        }
-
-        binding.btnSyncMeetingRecordingsNow.setOnClickListener {
-            lifecycleScope.launch {
-                Toast.makeText(this@MainActivity, "신규 회의 녹음 파일 동기화를 시작합니다...", Toast.LENGTH_SHORT).show()
-                val result = MeetingRecordingManager.scanAndUploadNewMeetingRecordings(this@MainActivity, forceReupload = true)
-                Toast.makeText(this@MainActivity, result.message, Toast.LENGTH_LONG).show()
-            }
-        }
-
-        binding.btnOpenMeetingSheetAlways.setOnClickListener {
-            showOpenSheetChooserDialog("MEETING", "[SheetBot] 회의록 대장")
-        }
+        // 🎙️ 회의 녹음 구글 드라이브 및 [SheetBot] 회의록 대장 자동 백업 카드 초기화
+        setupMeetingRecordingCard()
 
         // 🔍 원클릭 기업 심층 리서치 및 문서화 카드 초기화 (v2.1.99 리팩토링 모듈화)
         setupCompanyResearchCard()
@@ -3013,6 +2979,20 @@ class MainActivity : AppCompatActivity() {
             updateCardCollapseState = { layout, button, isHidden -> updateCardCollapseState(layout, button, isHidden) }
         )
         callRecordCardController.setup()
+    }
+
+    private fun setupMeetingRecordingCard() {
+        meetingRecordingCardController = MeetingRecordingCardController(
+            activity = this,
+            binding = binding,
+            prefs = prefs,
+            scope = activityScope,
+            checkAndRequestAllFilesAccess = { checkAndRequestAllFilesAccess() },
+            provisionSheetAsync = { type, defaultTitle, folderName -> provisionSheetAsync(type, defaultTitle, folderName) },
+            showOpenSheetChooserDialog = { type, title -> showOpenSheetChooserDialog(type, title) },
+            updateCardCollapseState = { layout, button, isHidden -> updateCardCollapseState(layout, button, isHidden) }
+        )
+        meetingRecordingCardController.setup()
     }
 
 }
