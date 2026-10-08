@@ -88,6 +88,7 @@ import cloud.sheetbot.agent.user.card.AccountPairingController
 import cloud.sheetbot.agent.user.card.ServerStatusCardController
 import cloud.sheetbot.agent.user.card.SheetActionController
 import cloud.sheetbot.agent.user.card.TargetFilterController
+import cloud.sheetbot.agent.user.card.PermissionController
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -129,12 +130,9 @@ class MainActivity : AppCompatActivity() {
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val smsGranted = permissions[Manifest.permission.RECEIVE_SMS] == true
-        if (smsGranted) {
-            Toast.makeText(this, "SMS 감지 권한이 승인되었습니다.", Toast.LENGTH_SHORT).show()
+        if (::permissionController.isInitialized) {
+            permissionController.onPermissionResult(permissions)
         }
-        checkAndRequestBatteryOptimization()
-        checkNotificationListenerPermission()
     }
 
     // 사진 및 일반 파일 다중 선택 런처
@@ -293,6 +291,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var serverStatusCardController: ServerStatusCardController
     private lateinit var sheetActionController: SheetActionController
     private lateinit var targetFilterController: TargetFilterController
+    private lateinit var permissionController: PermissionController
 
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
@@ -415,6 +414,13 @@ class MainActivity : AppCompatActivity() {
                 getSmsSyncController = { smsSyncCardController }
             )
 
+            permissionController = PermissionController(
+                activity = this,
+                binding = binding,
+                launchPermissionRequest = { perms -> permissionLauncher.launch(perms) }
+            )
+            permissionController.setup()
+
             setupListeners()
             updateUiState()
             checkPermissions()
@@ -468,14 +474,12 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         try {
-            checkNotificationListenerPermission()
+            if (::permissionController.isInitialized) {
+                permissionController.checkNotificationListenerPermission()
+                permissionController.checkAndRequestBatteryOptimization()
+            }
         } catch (e: Throwable) {
-            android.util.Log.w("MainActivity", "checkNotificationListenerPermission 방어: ${e.message}")
-        }
-        try {
-            checkAndRequestBatteryOptimization()
-        } catch (e: Throwable) {
-            android.util.Log.w("MainActivity", "checkAndRequestBatteryOptimization 방어: ${e.message}")
+            android.util.Log.w("MainActivity", "권한 및 배터리 최적화 확인 방어: ${e.message}")
         }
         try {
             if (::serverStatusCardController.isInitialized) {
@@ -590,16 +594,6 @@ class MainActivity : AppCompatActivity() {
         // 2. 수동 6자리 핀코드 입력 버튼
         binding.btnManualPin.setOnClickListener {
             accountPairingController.showManualPinDialog()
-        }
-
-        // 3. 배터리 최적화 예외 요청 버튼
-        binding.btnBatteryOpt.setOnClickListener {
-            requestIgnoreBatteryOptimization()
-        }
-
-        // 금융사 앱 푸시 감지 권한 요청 버튼
-        binding.btnNotificationPermission.setOnClickListener {
-            requestNotificationListenerPermission()
         }
 
         // 5. 계정 삭제 버튼 (화면 최하단 Danger Zone)
@@ -943,107 +937,9 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {}
     }
 
-    private fun checkPermissions() {
-        val permissionsToRequest = mutableListOf<String>()
-
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) != PackageManager.PERMISSION_GRANTED) {
-            permissionsToRequest.add(Manifest.permission.RECEIVE_SMS)
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
-            permissionsToRequest.add(Manifest.permission.READ_SMS)
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-            permissionsToRequest.add(Manifest.permission.SEND_SMS)
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            permissionsToRequest.add(Manifest.permission.CAMERA)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(Manifest.permission.READ_MEDIA_AUDIO)
-            }
-        } else {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-            }
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
-            permissionsToRequest.add(Manifest.permission.READ_PHONE_STATE)
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
-            permissionsToRequest.add(Manifest.permission.READ_CALL_LOG)
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
-            permissionsToRequest.add(Manifest.permission.READ_CONTACTS)
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
-            permissionsToRequest.add(Manifest.permission.WRITE_CONTACTS)
-        }
-
-        if (permissionsToRequest.isNotEmpty()) {
-            permissionLauncher.launch(permissionsToRequest.toTypedArray())
-        } else {
-            checkAndRequestBatteryOptimization()
-            checkNotificationListenerPermission()
-        }
-    }
-
-    private fun isNotificationListenerEnabled(): Boolean {
-        val enabledPackages = NotificationManagerCompat.getEnabledListenerPackages(this)
-        return enabledPackages.contains(packageName)
-    }
-
-    private fun checkNotificationListenerPermission() {
-        if (!isNotificationListenerEnabled()) {
-            binding.btnNotificationPermission.visibility = View.VISIBLE
-        } else {
-            binding.btnNotificationPermission.visibility = View.GONE
-        }
-    }
-
-    private fun requestNotificationListenerPermission() {
-        AlertDialog.Builder(this)
-            .setTitle("🔔 알림 접근 권한 필요")
-            .setMessage("구글 메시지(RCS 채팅 포함), 카카오톡 및 은행 입금 푸시 알림을 0원으로 실시간 감지하여 구글 시트에 자동 기록하기 위해 '알림 접근 권한'을 허용해 주세요.\n\n[설정으로 이동]을 누른 후 'SheetBot Agent'를 활성화해 주시면 됩니다.")
-            .setPositiveButton("설정으로 이동") { _, _ ->
-                try {
-                    val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                    startActivity(intent)
-                } catch (_: Exception) {
-                    Toast.makeText(this, "알림 접근 설정 화면을 열 수 없습니다.", Toast.LENGTH_SHORT).show()
-                }
-            }
-            .setNegativeButton("나중에", null)
-            .show()
-    }
-
-    private fun checkAndRequestBatteryOptimization() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
-                binding.btnBatteryOpt.visibility = View.VISIBLE
-            } else {
-                binding.btnBatteryOpt.visibility = View.GONE
-            }
-        }
-    }
-
-    private fun requestIgnoreBatteryOptimization() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            try {
-                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                    data = Uri.parse("package:$packageName")
-                }
-                startActivity(intent)
-            } catch (_: Exception) {
-                val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                startActivity(intent)
-            }
-        }
-    }
+    // 🛡️ 시스템 권한 및 배터리 최적화 예외 위임 메서드 (PermissionController 전담)
+    private fun checkPermissions() =
+        permissionController.checkPermissions()
 
     /**
      * 외부 앱(갤러리, 파일 탐색기 등)에서 [공유하기]를 통해 SheetBot Agent로 전달된 파일 인텐트 처리
@@ -1176,46 +1072,8 @@ class MainActivity : AppCompatActivity() {
         contactsCardController.setup()
     }
 
-        /**
-     * 안드로이드 11+ (API 30+) 환경에서 서드파티 통화 녹음(에이닷, T전화 등) 폴더 파일 읽기를 위한
-     * '모든 파일에 대한 접근'(MANAGE_EXTERNAL_STORAGE) 권한 점검 및 안내 다이얼로그 (v2.1.27)
-     */
-    private fun checkAndRequestAllFilesAccess(onGranted: (() -> Unit)? = null) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (Environment.isExternalStorageManager()) {
-                onGranted?.invoke()
-            } else {
-                AlertDialog.Builder(this)
-                    .setTitle("📁 모든 파일 관리 권한 허용 안내")
-                    .setMessage("에이닷(A.), T전화 등 별도 통화 녹음 어플에 저장된 녹음 파일을 구글 드라이브로 자동 백업하기 위해 '모든 파일에 대한 접근' 권한이 필요합니다.\n\n[설정으로 이동]을 누른 후 '모든 파일 관리 허용' 스위치를 켜주세요.")
-                    .setPositiveButton("설정으로 이동") { _, _ ->
-                        try {
-                            val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                                data = Uri.fromParts("package", packageName, null)
-                            }
-                            startActivity(intent)
-                        } catch (e: Exception) {
-                            try {
-                                val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                                startActivity(intent)
-                            } catch (e2: Exception) {
-                                Toast.makeText(this, "설정 화면을 열 수 없습니다: ${e2.message}", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
-                    .setNegativeButton("나중에", null)
-                    .show()
-            }
-        } else {
-            // Android 10 이하
-            val perm = Manifest.permission.READ_EXTERNAL_STORAGE
-            if (ContextCompat.checkSelfPermission(this, perm) == PackageManager.PERMISSION_GRANTED) {
-                onGranted?.invoke()
-            } else {
-                androidx.core.app.ActivityCompat.requestPermissions(this, arrayOf(perm, Manifest.permission.WRITE_EXTERNAL_STORAGE), 1099)
-            }
-        }
-    }
+    private fun checkAndRequestAllFilesAccess(onGranted: (() -> Unit)? = null) =
+        permissionController.checkAndRequestAllFilesAccess(onGranted)
 
     /**
      * 통화 녹음 파일 구글 드라이브 즉시 동기화 실행 (v2.1.27)
