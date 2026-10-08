@@ -164,8 +164,8 @@ class MainActivity : AppCompatActivity() {
     private val receiptPickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri ->
-        if (uri != null) {
-            uploadReceipt(uri)
+        if (uri != null && ::receiptCardController.isInitialized) {
+            receiptCardController.uploadReceipt(uri)
         }
     }
 
@@ -268,6 +268,9 @@ class MainActivity : AppCompatActivity() {
 
     // 📞 수신 전화 시 고객 시트 요약 인콜 플로팅 팝업 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var inCallSummaryCardController: InCallSummaryCardController
+
+    // 🧾 영수증 Gemini AI OCR 자동 장부화 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
+    private lateinit var receiptCardController: ReceiptSyncCardController
 
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
@@ -911,10 +914,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnOpenFileFolder.setOnClickListener {
             openDriveFolder("FILE_UPLOAD", prefs.fileUploadDriveFolder)
         }
-        binding.btnOpenReceiptSheet.setOnClickListener {
-            showOpenSheetChooserDialog("RECEIPT", prefs.receiptDriveSheetTitle)
-        }
-        binding.btnOpenBusinessCardSheet.setOnClickListener {
+                binding.btnOpenBusinessCardSheet.setOnClickListener {
             showOpenSheetChooserDialog("BUSINESS_CARD", prefs.businessCardDriveSheetTitle)
         }
 
@@ -951,13 +951,8 @@ class MainActivity : AppCompatActivity() {
             filePickerLauncher.launch("*/*")
         }
 
-        binding.btnPickReceipt.setOnClickListener {
-            if (!prefs.isPaired) {
-                Toast.makeText(this, "먼저 시트봇 워크스페이스와 연동해 주세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            receiptPickerLauncher.launch("image/*")
-        }
+        // 🧾 영수증 AI OCR 자동 장부화 카드 초기화 (v2.1.99 리팩토링 모듈화)
+        setupReceiptCard()
 
         binding.btnPickBusinessCard.setOnClickListener {
             if (!prefs.isPaired) {
@@ -2093,46 +2088,6 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 binding.progressBar.visibility = View.GONE
                 Toast.makeText(this@MainActivity, "업로드 처리 중 예외 발생: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    /**
-     * 영수증 사진을 전송하여 Gemini AI OCR로 결제 금액/상호명/품목을 분석하고 [SheetBot] 스마트 경비 영수증 대장에 자동 기록
-     */
-    private fun uploadReceipt(uri: Uri) {
-        if (!prefs.isPaired) {
-            Toast.makeText(this, "⚠️ 시트봇 계정 연동 후 이용할 수 있습니다.", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        binding.progressBar.visibility = View.VISIBLE
-        Toast.makeText(this, "🧾 영수증을 업로드하고 AI 분석을 시작합니다...", Toast.LENGTH_SHORT).show()
-
-        activityScope.launch {
-            try {
-                val result = FileUploadManager.uploadOcrReceipt(this@MainActivity, uri)
-                binding.progressBar.visibility = View.GONE
-
-                if (result.success) {
-                    val ocr = result.ocrData
-                    val merchant = ocr?.optString("merchantName", "영수증") ?: "영수증"
-                    val rawAmt = ocr?.optString("amount")
-                    val amount = if (!rawAmt.isNullOrBlank()) "${rawAmt}원" else ""
-                    Toast.makeText(
-                        this@MainActivity,
-                        "🎉 [영수증 장부화 완료] $merchant $amount\n구글 시트에 자동 기록되었습니다!",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    addLogItem("🧾 영수증 OCR", "$merchant $amount -> 경비 대장", true)
-                } else {
-                    val err = result.error ?: "영수증 분석 실패"
-                    Toast.makeText(this@MainActivity, "⚠️ 영수증 분석 실패: $err", Toast.LENGTH_LONG).show()
-                    addLogItem("영수증 오류", err, false)
-                }
-            } catch (e: Exception) {
-                binding.progressBar.visibility = View.GONE
-                Toast.makeText(this@MainActivity, "영수증 처리 예외: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -4118,6 +4073,21 @@ class MainActivity : AppCompatActivity() {
             onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
         )
         inCallSummaryCardController.setup()
+    }
+
+    /**
+     * 🧾 영수증 AI OCR 자동 장부화 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
+     */
+    private fun setupReceiptCard() {
+        receiptCardController = ReceiptSyncCardController(
+            activity = this,
+            binding = binding,
+            prefs = prefs,
+            onPickReceiptImage = { receiptPickerLauncher.launch("image/*") },
+            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
+            onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) }
+        )
+        receiptCardController.setup()
     }
 }
 
