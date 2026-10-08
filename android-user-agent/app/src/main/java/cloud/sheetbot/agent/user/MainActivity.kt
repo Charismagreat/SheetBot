@@ -599,45 +599,6 @@ class MainActivity : AppCompatActivity() {
 
 
 
-        // 1. QR 코드 스캔 버튼
-        binding.btnScanQr.setOnClickListener {
-            val options = ScanOptions().apply {
-                setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                setPrompt("시트봇 워크스페이스 모니터 화면의 연동 QR코드를 비춰주세요")
-                setCameraId(0)
-                setBeepEnabled(true)
-                setBarcodeImageEnabled(false)
-                setOrientationLocked(true)
-            }
-            barcodeLauncher.launch(options)
-        }
-
-        // 2. 수동 6자리 핀코드 입력 버튼
-        binding.btnManualPin.setOnClickListener {
-            accountPairingController.showManualPinDialog()
-        }
-
-        // 5. 계정 삭제 버튼 (화면 최하단 Danger Zone)
-        binding.btnUnlink.setOnClickListener {
-            AlertDialog.Builder(this)
-                .setTitle("계정 삭제")
-                .setMessage("시트봇 계정 및 등록된 스마트폰 기기 정보를 삭제하시겠습니까?\n삭제 시 더 이상 고객 알림 및 구글 시트 자동화가 연동되지 않습니다.")
-                .setPositiveButton("삭제") { _, _ ->
-                    val emailToUnlink = prefs.userEmail
-                    if (!emailToUnlink.isNullOrBlank()) {
-                        activityScope.launch {
-                            ApiClient.unlinkDevice(emailToUnlink, "${Build.MANUFACTURER} ${Build.MODEL}")
-                        }
-                    }
-                    prefs.clear()
-                    KeepAliveService.stop(this)
-                    updateUiState()
-                    Toast.makeText(this, "계정 정보가 삭제되고 연동이 해제되었습니다.", Toast.LENGTH_SHORT).show()
-                }
-                .setNegativeButton("취소", null)
-                .show()
-        }
-
         // 6. 매장 결제 & 영수증 문자 전송 스위치
         setupPaymentReceiptCard()
 
@@ -1161,12 +1122,28 @@ class MainActivity : AppCompatActivity() {
             googleSignInClient = googleSignInClient,
             launchGoogleSignIn = { intent -> googleSignInLauncher.launch(intent) },
             launchAccountPicker = { intent -> accountPickerLauncher.launch(intent) },
+            launchQrScan = { launchQrScanner() },
             onPairingSuccess = { email ->
+                updateUiState()
+            },
+            onUnlinkSuccess = {
                 updateUiState()
             },
             addLogItem = { title, detail, success -> addLogItem(title, detail, success) }
         )
         accountPairingController.setup()
+    }
+
+    private fun launchQrScanner() {
+        val options = ScanOptions().apply {
+            setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+            setPrompt("시트봇 워크스페이스 모니터 화면의 연동 QR코드를 비춰주세요")
+            setCameraId(0)
+            setBeepEnabled(true)
+            setBarcodeImageEnabled(false)
+            setOrientationLocked(true)
+        }
+        barcodeLauncher.launch(options)
     }
 
     private fun setupServerStatusCard() {
