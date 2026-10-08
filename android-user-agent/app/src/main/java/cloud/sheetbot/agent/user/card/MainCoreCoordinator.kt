@@ -43,6 +43,7 @@ class MainCoreCoordinator(
     lateinit var localLogViewController: LocalLogViewController
     lateinit var appUpdateController: AppUpdateController
     lateinit var smsObserverController: SmsObserverController
+    lateinit var cardDrawerController: CardDrawerController
     lateinit var googleSignInClient: GoogleSignInClient
 
     val isTargetFilterInitialized get() = ::targetFilterController.isInitialized
@@ -152,6 +153,13 @@ class MainCoreCoordinator(
 
         // 24종 카드 컨트롤러 초기화 콜백 트리거
         onInitCardCoordinator(googleSignInClient)
+
+        // 📦 추가 기능 보관함 (Card Drawer) 및 사용자 맞춤 대시보드 가시성 제어 초기화
+        cardDrawerController = CardDrawerController(
+            activity = activity,
+            prefs = prefs
+        )
+        cardDrawerController.setup()
 
         updateUiState()
         checkPermissions()
