@@ -490,7 +490,35 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("instagram_id", "") ?: ""
         set(value) = prefs.edit().putString("instagram_id", value).apply()
 
+    /**
+     * 📦 추가 기능 보관함에 숨겨진 카드 키 목록 (미설정 시 기본 숨김 프리셋 적용)
+     */
+    var hiddenCardKeys: Set<String>
+        get() = prefs.getStringSet("hidden_card_keys", null) ?: DEFAULT_HIDDEN_CARDS
+        set(value) = prefs.edit().putStringSet("hidden_card_keys", value).apply()
+
     fun clear() {
         prefs.edit().clear().apply()
+    }
+
+    companion object {
+        val DEFAULT_HIDDEN_CARDS = setOf(
+            "cardInCallSummary",
+            "cardMissedCall",
+            "cardCallEnded",
+            "cardMeetingRecording",
+            "cardLawAdvisory",
+            "cardBlog",
+            "cardInsta",
+            "cardSite",
+            "cardCompanyResearch",
+            "cardPaymentReceipt",
+            "cardQuoteSync",
+            "cardEstimateSync",
+            "cardLinkScrap",
+            "cardWebsiteMonitor",
+            "cardContactsBackup",
+            "cardDepositMonitor"
+        )
     }
 }
