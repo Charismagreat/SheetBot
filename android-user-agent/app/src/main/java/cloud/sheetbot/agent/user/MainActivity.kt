@@ -82,6 +82,7 @@ import cloud.sheetbot.agent.user.card.PaymentReceiptCardController
 import cloud.sheetbot.agent.user.card.CallRecordCardController
 import cloud.sheetbot.agent.user.card.MeetingRecordingCardController
 import cloud.sheetbot.agent.user.card.FileUploadCardController
+import cloud.sheetbot.agent.user.card.AiCopilotCardController
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -282,6 +283,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var callRecordCardController: CallRecordCardController
     private lateinit var meetingRecordingCardController: MeetingRecordingCardController
     private lateinit var fileUploadCardController: FileUploadCardController
+    private lateinit var aiCopilotCardController: AiCopilotCardController
 
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
@@ -310,7 +312,7 @@ class MainActivity : AppCompatActivity() {
             if (!matches.isNullOrEmpty()) {
                 val spokenText = matches[0]
                 binding.etAiCommand.setText(spokenText)
-                executeAiCommand(spokenText)
+                aiCopilotCardController.executeAiCommand(spokenText)
             }
         }
     }
@@ -752,27 +754,8 @@ class MainActivity : AppCompatActivity() {
         // 🌐 웹 링크 & 유튜브 영상 AI 자동 스크랩 카드 초기화 (v2.1.99 리팩토링 모듈화)
         setupLinkScrapCard()
 
-        // 자연어 AI 시트 코파일럿 UI 리스너 (v1.7)
-        binding.btnVoiceCommand.setOnClickListener {
-            if (!prefs.isPaired) {
-                Toast.makeText(this, "먼저 시트봇 워크스페이스와 연동해 주세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            startVoiceRecognition()
-        }
-
-        binding.btnExecuteCommand.setOnClickListener {
-            if (!prefs.isPaired) {
-                Toast.makeText(this, "먼저 시트봇 워크스페이스와 연동해 주세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            val cmd = binding.etAiCommand.text.toString().trim()
-            if (cmd.isBlank()) {
-                Toast.makeText(this, "구글 시트에 내릴 명령을 입력해 주세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            executeAiCommand(cmd)
-        }
+        // 자연어 AI 시트 코파일럿 카드 초기화
+        setupAiCopilotCard()
 
 
         // 🧾 영수증 AI OCR 자동 장부화 카드 초기화 (v2.1.99 리팩토링 모듈화)
@@ -964,7 +947,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshAllCardsCollapseState() {
         updateCardCollapseState(binding.layoutWalletDetails, binding.btnToggleWalletDetails, prefs.isWalletDetailsHidden)
-        updateCardCollapseState(binding.layoutCopilotDetails, binding.btnToggleCopilotDetails, prefs.isCopilotDetailsHidden)
+        aiCopilotCardController.refreshCollapseState()
         paymentReceiptCardController.refreshCollapseState()
         callRecordCardController.refreshCollapseState()
         fileUploadCardController.refreshCollapseState()
@@ -1008,12 +991,8 @@ class MainActivity : AppCompatActivity() {
         binding.btnToggleWalletDetails.setOnClickListener { toggleWallet() }
 
         // 2. AI 비서 카드
-        val toggleCopilot = {
-            prefs.isCopilotDetailsHidden = !prefs.isCopilotDetailsHidden
-            updateCardCollapseState(binding.layoutCopilotDetails, binding.btnToggleCopilotDetails, prefs.isCopilotDetailsHidden)
-        }
-        binding.layoutCopilotHeader.setOnClickListener { toggleCopilot() }
-        binding.btnToggleCopilotDetails.setOnClickListener { toggleCopilot() }
+        binding.layoutCopilotHeader.setOnClickListener { aiCopilotCardController.toggleCollapse() }
+        binding.btnToggleCopilotDetails.setOnClickListener { aiCopilotCardController.toggleCollapse() }
 
         // 3. 매장 결제 & 영수증 카드
         binding.layoutPaymentReceiptHeader.setOnClickListener { paymentReceiptCardController.toggleCollapse() }
@@ -1798,76 +1777,6 @@ class MainActivity : AppCompatActivity() {
         try {
             setIntent(Intent())
         } catch (_: Throwable) {}
-    }
-
-    /**
-     * 선택되거나 공유된 파일들을 구글 드라이브로 백그라운드 업로드
-     */
-
-    /**
-     * 구글 음성 인식 다이얼로그 호출 (v1.7)
-     */
-    private fun startVoiceRecognition() {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "구글 시트에 내릴 명령을 말씀해 주세요...\n(예: 홍길동 고객에게 결제 안내 문자 보내줘)")
-        }
-        try {
-            speechRecognizerLauncher.launch(intent)
-        } catch (e: Exception) {
-            Toast.makeText(this, "음성 인식을 지원하지 않는 기기이거나 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    /**
-     * 자연어 명령을 시트봇 서버로 전송하여 구글 시트 Apps Script 원격 구동 (v1.7)
-     */
-    private fun executeAiCommand(command: String) {
-        val userEmail = prefs.userEmail
-        if (userEmail.isNullOrBlank()) {
-            Toast.makeText(this, "⚠️ 연동된 계정 이메일이 없습니다.", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        binding.progressBar.visibility = View.VISIBLE
-        binding.layoutAiCommandResult.visibility = View.GONE
-        Toast.makeText(this, "🤖 AI가 시트 명령을 분석하고 원격 실행합니다...", Toast.LENGTH_SHORT).show()
-
-        activityScope.launch {
-            try {
-                val res = ApiClient.executeAiCommand(
-                    userEmail = userEmail,
-                    command = command
-                )
-                binding.progressBar.visibility = View.GONE
-
-                if (res.success) {
-                    binding.layoutAiCommandResult.visibility = View.VISIBLE
-                    binding.tvAiCommandExplanation.text = "✅ ${res.explanation}"
-                    binding.tvAiCommandSpoken.text = "🗣️ ${res.spokenResult}"
-
-                    Toast.makeText(
-                        this@MainActivity,
-                        "🎉 [시트 실행 완료]\n${res.explanation}",
-                        Toast.LENGTH_LONG
-                    ).show()
-
-                    addLogItem("AI 시트실행", "${res.actionType}: ${res.explanation}", true)
-
-                    if (prefs.isTtsEnabled) {
-                        TtsManager.speak(this@MainActivity, res.spokenResult ?: "명령 처리가 완료되었습니다.")
-                    }
-                } else {
-                    val err = res.error ?: "명령 실행 실패"
-                    Toast.makeText(this@MainActivity, "⚠️ 시트 명령 실행 실패: $err", Toast.LENGTH_LONG).show()
-                    addLogItem("시트실행 실패", err, false)
-                }
-            } catch (e: Exception) {
-                binding.progressBar.visibility = View.GONE
-                Toast.makeText(this@MainActivity, "명령 실행 예외: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
     }
 
     /**
@@ -2942,6 +2851,19 @@ class MainActivity : AppCompatActivity() {
             updateCardCollapseState = { layout, button, isHidden -> updateCardCollapseState(layout, button, isHidden) }
         )
         fileUploadCardController.setup()
+    }
+
+    private fun setupAiCopilotCard() {
+        aiCopilotCardController = AiCopilotCardController(
+            activity = this,
+            binding = binding,
+            prefs = prefs,
+            scope = activityScope,
+            launchSpeechRecognizer = { intent -> speechRecognizerLauncher.launch(intent) },
+            addLogItem = { title, detail, success -> addLogItem(title, detail, success) },
+            updateCardCollapseState = { layout, button, isHidden -> updateCardCollapseState(layout, button, isHidden) }
+        )
+        aiCopilotCardController.setup()
     }
 
 }
