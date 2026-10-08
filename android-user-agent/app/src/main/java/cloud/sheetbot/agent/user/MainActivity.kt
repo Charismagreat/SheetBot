@@ -53,6 +53,7 @@ import cloud.sheetbot.agent.user.card.CompanyResearchCardController
 import cloud.sheetbot.agent.user.card.WebsiteMonitorCardController
 import cloud.sheetbot.agent.user.card.ContactsBackupCardController
 import cloud.sheetbot.agent.user.card.LinkScrapCardController
+import cloud.sheetbot.agent.user.card.MissedCallCardController
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -244,6 +245,9 @@ class MainActivity : AppCompatActivity() {
 
     // 🌐 웹 링크 & 유튜브 영상 AI 자동 스크랩 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var linkScrapCardController: LinkScrapCardController
+
+    // 📵 부재중 전화 0원 스마트 자동 답장 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
+    private lateinit var missedCallCardController: MissedCallCardController
 
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
@@ -1315,28 +1319,8 @@ class MainActivity : AppCompatActivity() {
             showOpenSheetChooserDialog("RECORDING", "[SheetBot] 통화 녹음 및 고객 메모 대장")
         }
 
-        // 부재중 전화(Missed Call) 0원 스마트 자동 회신 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
-        binding.switchMissedCall.isChecked = prefs.isMissedCallAutoReplyEnabled
-        binding.etMissedCallReply.setText(prefs.missedCallReplyTemplate)
-
-        binding.switchMissedCall.setOnCheckedChangeListener { _, isChecked ->
-            prefs.isMissedCallAutoReplyEnabled = isChecked
-            prefs.isMissedCallDetailsHidden = !isChecked
-            updateCardCollapseState(binding.layoutMissedCallSettings, binding.btnToggleMissedCallDetails, !isChecked)
-            val msg = if (isChecked) "전화 못 받았을 때 자동 답장 문자 발송이 켜졌습니다." else "전화 못 받았을 때 자동 답장이 꺼졌습니다."
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-            if (isChecked) {
-                provisionSheetAsync("MISSED_CALL", prefs.missedCallDriveSheetTitle)
-            }
-        }
-
-        binding.etMissedCallReply.doAfterTextChanged {
-            prefs.missedCallReplyTemplate = it?.toString()?.trim() ?: ""
-        }
-
-        binding.btnOpenMissedCallSheet.setOnClickListener {
-            showOpenSheetChooserDialog("MISSED_CALL", prefs.missedCallDriveSheetTitle)
-        }
+        // 📵 부재중 전화(Missed Call) 0원 스마트 자동 회신 카드 초기화 (v2.1.99 리팩토링 모듈화)
+        setupMissedCallCard()
 
         // 통화 종료 직후 모바일 명함 원터치 발송 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
         binding.switchCallEndedCard.isChecked = prefs.isCallEndedCardPromptEnabled
@@ -1652,13 +1636,7 @@ class MainActivity : AppCompatActivity() {
         binding.layoutInCallSummaryHeader.setOnClickListener { toggleInCallSummary() }
         binding.btnToggleInCallSummaryDetails.setOnClickListener { toggleInCallSummary() }
 
-        // 10. 부재중 전화 카드
-        val toggleMissedCall = {
-            prefs.isMissedCallDetailsHidden = !prefs.isMissedCallDetailsHidden
-            updateCardCollapseState(binding.layoutMissedCallSettings, binding.btnToggleMissedCallDetails, prefs.isMissedCallDetailsHidden)
-        }
-        binding.layoutMissedCallHeader.setOnClickListener { toggleMissedCall() }
-        binding.btnToggleMissedCallDetails.setOnClickListener { toggleMissedCall() }
+        // 10. 부재중 전화 카드 (MissedCallCardController 전담 바인딩)
 
         // 11. 모바일 명함 카드
         val toggleCallEndedCard = {
@@ -4967,6 +4945,20 @@ class MainActivity : AppCompatActivity() {
             onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) }
         )
         linkScrapCardController.setup()
+    }
+
+    /**
+     * 📵 부재중 전화 0원 스마트 자동 답장 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
+     */
+    private fun setupMissedCallCard() {
+        missedCallCardController = MissedCallCardController(
+            activity = this,
+            binding = binding,
+            prefs = prefs,
+            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
+            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) }
+        )
+        missedCallCardController.setup()
     }
 }
 
