@@ -106,8 +106,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var aodGestureDetector: GestureDetector
     private var smsSentObserver: SmsSentObserver? = null
     private var isDepositReceiverRegistered = false
-    private var lastHandledShareUrl: String? = null
-    private var lastHandledShareTime: Long = 0L
 
     // 입금 감지 시 실시간 화면 갱신 리시버 (ANR 방어를 위해 가벼운 로그만 갱신)
     private val depositUpdateReceiver = object : BroadcastReceiver() {
@@ -294,6 +292,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var targetFilterController: TargetFilterController
     private lateinit var permissionController: PermissionController
     private lateinit var cardAccordionController: CardAccordionController
+    private lateinit var sharedIntentRouter: SharedIntentRouter
 
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
@@ -439,6 +438,21 @@ class MainActivity : AppCompatActivity() {
                 getEstimate = { estimateCardController },
                 isInCallSummaryInitialized = { ::inCallSummaryCardController.isInitialized },
                 getInCallSummary = { inCallSummaryCardController }
+            )
+
+            sharedIntentRouter = SharedIntentRouter(
+                context = this,
+                onBookmarkUrl = { url, rawText ->
+                    if (::linkScrapCardController.isInitialized) {
+                        linkScrapCardController.bookmarkSharedUrl(url, rawText)
+                    }
+                },
+                onUploadFiles = { uris, sourceTag ->
+                    fileUploadCardController.uploadFiles(uris, sourceTag)
+                },
+                onClearIntent = {
+                    setIntent(Intent())
+                }
             )
 
             setupListeners()
@@ -888,67 +902,8 @@ class MainActivity : AppCompatActivity() {
     /**
      * 외부 앱(갤러리, 파일 탐색기 등)에서 [공유하기]를 통해 SheetBot Agent로 전달된 파일 인텐트 처리
      */
-    private fun handleSharedIntent(intent: Intent?) {
-        if (intent == null) return
-        val action = intent.action
-        if (action == null) return
-
-        if (Intent.ACTION_SEND == action) {
-            val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
-                ?: intent.clipData?.getItemAt(0)?.text?.toString()
-
-            val streamUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
-            }
-
-            val clipUri = intent.clipData?.getItemAt(0)?.uri
-            val urlRegex = Regex("https?://[a-zA-Z0-9.-]+(?:/[^\\s]*)?")
-            val matchedUrlInText = if (!sharedText.isNullOrBlank()) urlRegex.find(sharedText)?.value else null
-            val isWebUri = clipUri?.scheme in listOf("http", "https")
-            val targetUrl = matchedUrlInText ?: (if (isWebUri && clipUri != null) clipUri.toString() else null)
-
-            // 1순위: 텍스트에 웹 링크가 포함되어 있거나 clipUri가 웹 주소인 경우 -> 웹 링크 & 유튜브 자동 스크랩
-            if (targetUrl != null) {
-                val now = System.currentTimeMillis()
-                if (targetUrl == lastHandledShareUrl && (now - lastHandledShareTime) < 10000) {
-                    android.util.Log.d("MainActivity", "동일 URL 10초 이내 중복 공유 무시: $targetUrl")
-                } else {
-                    lastHandledShareUrl = targetUrl
-                    lastHandledShareTime = now
-                    if (::linkScrapCardController.isInitialized) linkScrapCardController.bookmarkSharedUrl(targetUrl, sharedText)
-                }
-            } else {
-                // 2순위: 실제 로컬 파일(content:// 또는 file://) 스트림인 경우 -> 구글 드라이브 파일 업로드
-                val fileUri = streamUri ?: clipUri?.takeIf { it.scheme in listOf("content", "file") }
-                if (fileUri != null) {
-                    fileUploadCardController.uploadFiles(listOf(fileUri), "스마트폰 공유하기(Share) 1초 연동")
-                } else if (!sharedText.isNullOrBlank()) {
-                    Toast.makeText(this, "공유된 텍스트에서 링크(URL)를 찾을 수 없습니다.", Toast.LENGTH_SHORT).show()
-                }
-            }
-        } else if (Intent.ACTION_SEND_MULTIPLE == action) {
-            val uris = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
-            } ?: emptyList<Uri>()
-
-            val validFileUris = uris.filter { it.scheme in listOf("content", "file") }
-            if (validFileUris.isNotEmpty()) {
-                fileUploadCardController.uploadFiles(validFileUris, "스마트폰 공유하기(Share) 다중 연동")
-            }
-        }
-
-        // 인텐트 중복 소비 방지 (소진 처리)
-        intent.action = null
-        try {
-            setIntent(Intent())
-        } catch (_: Throwable) {}
-    }
+    private fun handleSharedIntent(intent: Intent?) =
+        sharedIntentRouter.handleSharedIntent(intent)
 
     // 📊 구글 스프레드시트 대장 프로비저닝 & 대장 열기 위임 메서드 (SheetActionController 전담)
     private fun showOpenSheetChooserDialog(sheetType: String, defaultTitle: String) =
