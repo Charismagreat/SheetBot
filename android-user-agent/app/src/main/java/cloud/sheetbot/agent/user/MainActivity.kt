@@ -49,6 +49,7 @@ import cloud.sheetbot.agent.user.card.BlogAutomationCardController
 import cloud.sheetbot.agent.user.card.InstagramAutomationCardController
 import cloud.sheetbot.agent.user.card.MobileSiteCardController
 import cloud.sheetbot.agent.user.card.LawAdvisoryCardController
+import cloud.sheetbot.agent.user.card.CompanyResearchCardController
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -229,6 +230,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     // 🌐 AI 모바일 홈페이지 제작 & 관리 카드 전담 컨트롤러 및 사진 복수 첨부 런처 (v2.1.91 / 리팩토링 모듈화)
+    // 🔍 원클릭 기업 심층 리서치 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
+    private lateinit var companyResearchCardController: CompanyResearchCardController
+
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetMultipleContents()
@@ -821,94 +825,8 @@ class MainActivity : AppCompatActivity() {
             showOpenSheetChooserDialog("MEETING", "[SheetBot] 회의록 대장")
         }
 
-        // 🔍 원클릭 기업 심층 리서치 및 문서화 UI 바인딩
-        binding.layoutCompanyResearchHeader.setOnClickListener {
-            val isHidden = binding.layoutCompanyResearchSettings.visibility != View.VISIBLE
-            updateCardCollapseState(binding.layoutCompanyResearchSettings, binding.btnToggleCompanyResearchDetails, !isHidden)
-        }
-        binding.btnToggleCompanyResearchDetails.setOnClickListener {
-            val isHidden = binding.layoutCompanyResearchSettings.visibility != View.VISIBLE
-            updateCardCollapseState(binding.layoutCompanyResearchSettings, binding.btnToggleCompanyResearchDetails, !isHidden)
-        }
-
-        binding.btnStartCompanyResearch.setOnClickListener {
-            val companyName = binding.etResearchCompanyName.text.toString().trim()
-            val domain = binding.etResearchDomain.text.toString().trim()
-            val userEmail = prefs.userEmail
-
-            if (companyName.isBlank() && domain.isBlank()) {
-                Toast.makeText(this, "회사명 또는 홈페이지 주소 중 1개 이상을 입력해 주세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            if (!prefs.isPaired || userEmail.isNullOrBlank()) {
-                Toast.makeText(this, "시트봇 계정 연동 후 조사가 가능합니다.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            binding.pbResearchLoading.visibility = View.VISIBLE
-            binding.tvResearchStatus.visibility = View.VISIBLE
-            binding.tvResearchStatus.text = "🔍 국민연금·국세청·나라장터 실시간 분석 및 Google Docs 리서치 보고서 생성 중..."
-            binding.btnStartCompanyResearch.isEnabled = false
-            binding.layoutResearchResultContainer.visibility = View.GONE
-
-            lifecycleScope.launch {
-                try {
-                    val result = ApiClient.requestCompanyResearch(companyName, domain, userEmail)
-                    binding.pbResearchLoading.visibility = View.GONE
-                    binding.tvResearchStatus.visibility = View.GONE
-                    binding.btnStartCompanyResearch.isEnabled = true
-
-                    if (result.success) {
-                        binding.layoutResearchResultContainer.visibility = View.VISIBLE
-                        binding.tvResultCompanyTitle.text = result.companyName
-                        binding.tvResultTaxBadge.text = result.taxStatus
-                        binding.tvResultMetrics.text = "고용: ${result.employeeCount} | 급여: ${result.avgSalary} | 계약: ${result.contractSummary}"
-                        binding.tvResultAiSummary.text = result.summary
-
-                        if (result.docUrl.isNotBlank()) {
-                            binding.btnOpenResearchDoc.visibility = View.VISIBLE
-                            binding.btnOpenResearchDoc.setOnClickListener {
-                                try {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(result.docUrl))
-                                    startActivity(intent)
-                                } catch (e: Exception) {
-                                    Toast.makeText(this@MainActivity, "문서 링크 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        } else {
-                            binding.btnOpenResearchDoc.visibility = View.GONE
-                        }
-
-                        if (result.sheetUrl.isNotBlank()) {
-                            binding.btnOpenResearchSheet.visibility = View.VISIBLE
-                            binding.btnOpenResearchSheet.setOnClickListener {
-                                try {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(result.sheetUrl))
-                                    startActivity(intent)
-                                } catch (e: Exception) {
-                                    Toast.makeText(this@MainActivity, "시트 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        } else {
-                            binding.btnOpenResearchSheet.visibility = View.GONE
-                        }
-
-                        Toast.makeText(this@MainActivity, "🎉 ${result.companyName} 기업 리서치 보고서가 생성되었습니다!", Toast.LENGTH_LONG).show()
-                    } else {
-                        Toast.makeText(this@MainActivity, "기업 리서치 실패: ${result.error ?: "오류 발생"}", Toast.LENGTH_LONG).show()
-                    }
-                } catch (e: Exception) {
-                    binding.pbResearchLoading.visibility = View.GONE
-                    binding.tvResearchStatus.visibility = View.GONE
-                    binding.btnStartCompanyResearch.isEnabled = true
-                    Toast.makeText(this@MainActivity, "조사 중 오류: ${e.message}", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-
-        binding.btnOpenResearchSheetAlways.setOnClickListener {
-            showOpenSheetChooserDialog("COMPANY_RESEARCH", "[SheetBot] 기업 리서치 관리 대장")
-        }
+        // 🔍 원클릭 기업 심층 리서치 및 문서화 카드 초기화 (v2.1.99 리팩토링 모듈화)
+        setupCompanyResearchCard()
 
         // ⚖️ AI 법률/계약서 팩트체크 카드 초기화
         setupLawAdvisoryCard()
@@ -5314,6 +5232,19 @@ class MainActivity : AppCompatActivity() {
             onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
         )
         siteCardController.setup()
+    }
+
+    /**
+     * 🔍 원클릭 기업 심층 리서치 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
+     */
+    private fun setupCompanyResearchCard() {
+        companyResearchCardController = CompanyResearchCardController(
+            activity = this,
+            binding = binding,
+            prefs = prefs,
+            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
+        )
+        companyResearchCardController.setup()
     }
 }
 
