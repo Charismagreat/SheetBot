@@ -224,6 +224,15 @@ object CardSearchRegistry {
             chosung = "ㅇㄷㅇㅌㅎㅇㅂㅇㅂㅈ",
             keywords = listOf("업데이트", "버전", "aod", "올웨이즈", "블랙모드", "번인", "최신버전"),
             cardResId = R.id.cardUtility
+        ),
+        SearchableCard(
+            index = 21,
+            key = "cardFeatureRequest",
+            title = "맞춤 기능 제작 의뢰",
+            icon = "💡",
+            chosung = "ㅁㅊㄱㄴㅈㅈㅇㄹ",
+            keywords = listOf("의뢰", "기능의뢰", "개발의뢰", "제작의뢰", "아이디어", "제안", "세금계산서", "재고", "출퇴근", "리뷰답글", "커스텀"),
+            cardResId = R.id.cardFeatureRequest
         )
     )
 
