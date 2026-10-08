@@ -47,6 +47,7 @@ import androidx.core.content.ContextCompat
 import cloud.sheetbot.agent.user.databinding.ActivityMainBinding
 import cloud.sheetbot.agent.user.card.BlogAutomationCardController
 import cloud.sheetbot.agent.user.card.InstagramAutomationCardController
+import cloud.sheetbot.agent.user.card.MobileSiteCardController
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -227,13 +228,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 🌐 AI 모바일 홈페이지 사진 복수 첨부 런처 (v2.1.91)
-    private val selectedSiteFiles = mutableListOf<File>()
+    // 🌐 AI 모바일 홈페이지 제작 & 관리 카드 전담 컨트롤러 및 사진 복수 첨부 런처 (v2.1.91 / 리팩토링 모듈화)
+    private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetMultipleContents()
     ) { uris ->
-        if (!uris.isNullOrEmpty()) {
-            handleSiteImagesSelected(uris)
+        if (!uris.isNullOrEmpty() && ::siteCardController.isInitialized) {
+            siteCardController.handleImagesSelected(uris)
         }
     }
 
@@ -5466,216 +5467,19 @@ class MainActivity : AppCompatActivity() {
         instaCardController.setup()
     }
 
-    /**
-     * 🌐 AI 모바일 홈페이지 다중 사진 선택 처리 (1600px 리사이즈 및 85% JPEG 압축 표준 준수)
-     */
-    private fun handleSiteImagesSelected(uris: List<Uri>) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val processedFiles = mutableListOf<File>()
-                for ((index, uri) in uris.withIndex()) {
-                    var displayName = "site_photo_${System.currentTimeMillis()}_${index}.jpg"
-                    contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                        if (cursor.moveToFirst()) {
-                            val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                            if (nameIndex != -1) {
-                                displayName = cursor.getString(nameIndex) ?: displayName
-                            }
-                        }
-                    }
-
-                    val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, boundsOpts) }
-
-                    val maxDimension = 1600
-                    var inSampleSize = 1
-                    val origW = boundsOpts.outWidth
-                    val origH = boundsOpts.outHeight
-                    if (origW > maxDimension || origH > maxDimension) {
-                        val halfW = origW / 2
-                        val halfH = origH / 2
-                        while ((halfW / inSampleSize) >= maxDimension && (halfH / inSampleSize) >= maxDimension) {
-                            inSampleSize *= 2
-                        }
-                    }
-
-                    val decodeOpts = BitmapFactory.Options().apply { this.inSampleSize = inSampleSize }
-                    val decoded = contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, decodeOpts) }
-
-                    if (decoded != null) {
-                        val tempFile = File(cacheDir, "site_${System.currentTimeMillis()}_${index}.jpg")
-                        val fos = java.io.FileOutputStream(tempFile)
-                        decoded.compress(Bitmap.CompressFormat.JPEG, 85, fos)
-                        fos.flush()
-                        fos.close()
-                        processedFiles.add(tempFile)
-                    }
-                }
-
-                selectedSiteFiles.clear()
-                selectedSiteFiles.addAll(processedFiles)
-
-                val totalKb = selectedSiteFiles.sumOf { it.length() } / 1024
-
-                withContext(Dispatchers.Main) {
-                    binding.cardSite.tvSiteSelectedImagesCount.text = "📷 첨부된 사진: ${selectedSiteFiles.size}장 (${totalKb} KB)"
-                    binding.cardSite.btnResetSiteImages.visibility = if (selectedSiteFiles.isNotEmpty()) View.VISIBLE else View.GONE
-                    Toast.makeText(this@MainActivity, "사진 ${selectedSiteFiles.size}장 최적화 압축 완료!", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "사진 처리 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    }
 
     /**
-     * 🌐 AI 모바일 홈페이지 제작 & 관리 카드 이벤트 바인딩
+     * 🌐 AI 모바일 홈페이지 제작 & 관리 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
      */
     private fun setupMobileSiteCard() {
-        var isCollapsed = false
-        val toggleSite = {
-            isCollapsed = !isCollapsed
-            binding.cardSite.layoutSiteDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
-            binding.cardSite.btnToggleSiteDetails.text = if (isCollapsed) "▼" else "▲"
-        }
-        binding.cardSite.layoutSiteHeader.setOnClickListener { toggleSite() }
-        binding.cardSite.btnToggleSiteDetails.setOnClickListener { toggleSite() }
-        binding.cardSite.switchSiteAutomation.setOnCheckedChangeListener { _, isChecked ->
-            isCollapsed = !isChecked
-            binding.cardSite.layoutSiteDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
-            binding.cardSite.btnToggleSiteDetails.text = if (isCollapsed) "▼" else "▲"
-            val msg = if (isChecked) "AI 모바일 홈페이지 제작 & 관리 기능이 켜졌습니다." else "AI 모바일 홈페이지 제작 & 관리 기능이 꺼졌습니다."
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-        }
-
-        // 🌐 내 공식 모바일 홈페이지 열기 (기본 템플릿 즉시 오픈)
-        binding.cardSite.btnOpenDefaultMobileSite.setOnClickListener {
-            val email = prefs.userEmail
-            if (email.isNullOrBlank()) {
-                Toast.makeText(this, "먼저 시트봇 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            val slug = Base64.encodeToString(email.toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
-            val url = "https://sheetbot.cloud/site/$slug"
-            try {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                startActivity(intent)
-            } catch (e: Exception) {
-                Toast.makeText(this, "웹 브라우저를 열 수 없습니다: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        binding.cardSite.btnSelectSiteImages.setOnClickListener {
-            try {
-                siteImagesPickerLauncher.launch("image/*")
-            } catch (e: Exception) {
-                Toast.makeText(this, "사진 선택 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        binding.cardSite.btnResetSiteImages.setOnClickListener {
-            selectedSiteFiles.clear()
-            binding.cardSite.tvSiteSelectedImagesCount.text = "첨부된 사진: 0장 (선택 시 1600px 85% 자동 압축)"
-            binding.cardSite.btnResetSiteImages.visibility = View.GONE
-            Toast.makeText(this, "사진 첨부가 취소되었습니다.", Toast.LENGTH_SHORT).show()
-        }
-
-        binding.cardSite.btnStartSiteCreation.setOnClickListener {
-            val title = binding.cardSite.etSiteTitle.text.toString().trim()
-            val category = binding.cardSite.etSiteCategory.text.toString().trim().ifBlank { "카페 / 베이커리" }
-            val phone = binding.cardSite.etSitePhone.text.toString().trim()
-            val address = binding.cardSite.etSiteAddress.text.toString().trim()
-            val businessHours = binding.cardSite.etSiteHours.text.toString().trim().ifBlank { "매일 10:00 ~ 22:00" }
-
-            if (title.isBlank()) {
-                Toast.makeText(this, "상호명(홈페이지 이름)을 입력해 주세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            val userEmail = prefs.userEmail ?: ""
-            if (userEmail.isBlank()) {
-                Toast.makeText(this, "로그인 정보(사용자 이메일)가 없습니다.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            binding.cardSite.pbSiteLoading.visibility = View.VISIBLE
-            binding.cardSite.tvSiteStatus.visibility = View.VISIBLE
-            binding.cardSite.tvSiteStatus.text = "AI가 브랜드 스토리와 메뉴 구성을 기획하고 웹사이트를 발행 중입니다..."
-            binding.cardSite.btnStartSiteCreation.isEnabled = false
-            binding.cardSite.layoutSiteResultContainer.visibility = View.GONE
-
-            activityScope.launch(Dispatchers.IO) {
-                try {
-                    val result = ApiClient.requestCreateMobileSite(
-                        title = title,
-                        category = category,
-                        description = "",
-                        phone = phone,
-                        address = address,
-                        businessHours = businessHours,
-                        files = selectedSiteFiles.toList(),
-                        userEmail = userEmail
-                    )
-
-                    withContext(Dispatchers.Main) {
-                        binding.cardSite.pbSiteLoading.visibility = View.GONE
-                        binding.cardSite.tvSiteStatus.visibility = View.GONE
-                        binding.cardSite.btnStartSiteCreation.isEnabled = true
-
-                        if (result.success) {
-                            binding.cardSite.layoutSiteResultContainer.visibility = View.VISIBLE
-                            binding.cardSite.tvSiteResultTitle.text = "🎉 ${result.title} - ${result.slogan}"
-                            binding.cardSite.tvSiteResultUrl.text = result.siteUrl
-
-                            if (result.siteUrl.isNotBlank()) {
-                                binding.cardSite.btnOpenMobileSite.visibility = View.VISIBLE
-                                binding.cardSite.btnOpenMobileSite.setOnClickListener {
-                                    try {
-                                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.siteUrl)))
-                                    } catch (e: Exception) {
-                                        Toast.makeText(this@MainActivity, "모바일 웹 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            } else {
-                                binding.cardSite.btnOpenMobileSite.visibility = View.GONE
-                            }
-
-                            if (result.sheetUrl.isNotBlank()) {
-                                binding.cardSite.btnOpenSiteSheet.visibility = View.VISIBLE
-                                binding.cardSite.btnOpenSiteSheet.setOnClickListener {
-                                    try {
-                                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.sheetUrl)))
-                                    } catch (e: Exception) {
-                                        Toast.makeText(this@MainActivity, "대장 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            } else {
-                                binding.cardSite.btnOpenSiteSheet.visibility = View.GONE
-                            }
-
-                            Toast.makeText(this@MainActivity, "🎉 10초 모바일 홈페이지 생성 완료!", Toast.LENGTH_LONG).show()
-                        } else {
-                            Toast.makeText(this@MainActivity, "생성 실패: ${result.error ?: "오류 발생"}", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                } catch (e: Exception) {
-                    withContext(Dispatchers.Main) {
-                        binding.cardSite.pbSiteLoading.visibility = View.GONE
-                        binding.cardSite.tvSiteStatus.visibility = View.GONE
-                        binding.cardSite.btnStartSiteCreation.isEnabled = true
-                        Toast.makeText(this@MainActivity, "홈페이지 생성 오류: ${e.message}", Toast.LENGTH_LONG).show()
-                    }
-                }
-            }
-        }
-
-        binding.cardSite.btnOpenSiteSheetAlways.setOnClickListener {
-            showOpenSheetChooserDialog("MOBILE_SITE", "[SheetBot] 모바일 홈페이지 관리 대장")
-        }
+        siteCardController = MobileSiteCardController(
+            activity = this,
+            binding = binding.cardSite,
+            prefs = prefs,
+            onPickImages = { siteImagesPickerLauncher.launch("image/*") },
+            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
+        )
+        siteCardController.setup()
     }
 }
 
