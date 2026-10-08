@@ -38,7 +38,9 @@ class AccountPairingController(
     private val googleSignInClient: GoogleSignInClient,
     private val launchGoogleSignIn: (Intent) -> Unit,
     private val launchAccountPicker: (Intent) -> Unit,
+    private val launchQrScan: () -> Unit,
     private val onPairingSuccess: (email: String) -> Unit,
+    private val onUnlinkSuccess: () -> Unit,
     private val addLogItem: (title: String, detail: String, success: Boolean) -> Unit
 ) {
 
@@ -51,6 +53,41 @@ class AccountPairingController(
             showManualEmailPairDialog()
             true
         }
+
+        // 1. QR 코드 스캔 버튼
+        binding.btnScanQr.setOnClickListener {
+            launchQrScan()
+        }
+
+        // 2. 수동 6자리 핀코드 입력 버튼
+        binding.btnManualPin.setOnClickListener {
+            showManualPinDialog()
+        }
+
+        // 5. 계정 삭제 버튼 (화면 최하단 Danger Zone)
+        binding.btnUnlink.setOnClickListener {
+            showUnlinkConfirmDialog()
+        }
+    }
+
+    fun showUnlinkConfirmDialog() {
+        AlertDialog.Builder(activity)
+            .setTitle("계정 삭제")
+            .setMessage("시트봇 계정 및 등록된 스마트폰 기기 정보를 삭제하시겠습니까?\n삭제 시 더 이상 고객 알림 및 구글 시트 자동화가 연동되지 않습니다.")
+            .setPositiveButton("삭제") { _, _ ->
+                val emailToUnlink = prefs.userEmail
+                if (!emailToUnlink.isNullOrBlank()) {
+                    scope.launch {
+                        ApiClient.unlinkDevice(emailToUnlink, "${Build.MANUFACTURER} ${Build.MODEL}")
+                    }
+                }
+                prefs.clear()
+                KeepAliveService.stop(activity)
+                onUnlinkSuccess()
+                Toast.makeText(activity, "계정 정보가 삭제되고 연동이 해제되었습니다.", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("취소", null)
+            .show()
     }
 
     fun startGoogleSignIn() {
