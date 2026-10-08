@@ -84,6 +84,7 @@ import cloud.sheetbot.agent.user.card.MeetingRecordingCardController
 import cloud.sheetbot.agent.user.card.FileUploadCardController
 import cloud.sheetbot.agent.user.card.AiCopilotCardController
 import cloud.sheetbot.agent.user.card.TokenWalletCardController
+import cloud.sheetbot.agent.user.card.AccountPairingController
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -118,7 +119,7 @@ class MainActivity : AppCompatActivity() {
     // QR 코드 스캐너 런처 (ZXing Embedded)
     private val barcodeLauncher = registerForActivityResult(ScanContract()) { result ->
         if (result.contents != null) {
-            handleQrScanResult(result.contents)
+            accountPairingController.handleQrScanResult(result.contents)
         }
     }
 
@@ -286,6 +287,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fileUploadCardController: FileUploadCardController
     private lateinit var aiCopilotCardController: AiCopilotCardController
     private lateinit var tokenWalletCardController: TokenWalletCardController
+    private lateinit var accountPairingController: AccountPairingController
 
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
@@ -350,16 +352,8 @@ class MainActivity : AppCompatActivity() {
     private val googleSignInLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-        try {
-            val account = task.getResult(ApiException::class.java)
-            val email = account?.email
-            val idToken = account?.idToken
-            if (!email.isNullOrBlank()) {
-                handleGoogleSignInSuccess(idToken, email)
-            } else {
-                launchAccountPickerOrManualDialog("구글 계정 이메일을 가져올 수 없어 기기 계정 선택창으로 전환합니다.")
-            }
+        accountPairingController.handleGoogleSignInResult(result.data)
+    }
         } catch (e: ApiException) {
             android.util.Log.w("MainActivity", "Google sign-in failed: statusCode=${e.statusCode}")
             if (e.statusCode == 12501) { // 12501은 사용자 단순 취소
@@ -375,62 +369,12 @@ class MainActivity : AppCompatActivity() {
     private val accountPickerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            val email = result.data?.getStringExtra(android.accounts.AccountManager.KEY_ACCOUNT_NAME)
-            if (!email.isNullOrBlank()) {
-                handleGoogleSignInSuccess(null, email)
-                return@registerForActivityResult
-            }
+        accountPairingController.handleAccountPickerResult(result.resultCode, result.data)
+    }
         }
         showManualEmailPairDialog()
     }
 
-    private fun launchAccountPickerOrManualDialog(guideMsg: String? = null) {
-        if (!guideMsg.isNullOrBlank()) {
-            Toast.makeText(this, guideMsg, Toast.LENGTH_LONG).show()
-        }
-        try {
-            val intent = android.accounts.AccountManager.newChooseAccountIntent(
-                null,
-                null,
-                arrayOf("com.google"),
-                false,
-                null,
-                null,
-                null,
-                null
-            )
-            accountPickerLauncher.launch(intent)
-        } catch (_: Exception) {
-            showManualEmailPairDialog()
-        }
-    }
-
-    /**
-     * 구글 계정 이메일 직접 입력 간편 연동 다이얼로그 (v2.0.1)
-     */
-    private fun showManualEmailPairDialog(initialEmail: String = "") {
-        val input = EditText(this).apply {
-            hint = "example@gmail.com"
-            setText(initialEmail)
-            inputType = android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS or android.text.InputType.TYPE_CLASS_TEXT
-            setPadding(50, 40, 50, 40)
-        }
-        AlertDialog.Builder(this)
-            .setTitle("구글 계정 이메일로 1초 연동")
-            .setMessage("시트봇(SheetBot) 대시보드에서 사용하는 구글 이메일을 입력해 주세요.\n(SHA-1 지문 등록 없이도 1초 만에 즉시 연동됩니다)")
-            .setView(input)
-            .setPositiveButton("즉시 연동") { _, _ ->
-                val email = input.text.toString().trim()
-                if (email.contains("@")) {
-                    handleGoogleSignInSuccess(null, email)
-                } else {
-                    Toast.makeText(this, "올바른 구글 이메일 형식을 입력해 주세요.", Toast.LENGTH_SHORT).show()
-                }
-            }
-            .setNegativeButton("취소", null)
-            .show()
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -604,19 +548,8 @@ class MainActivity : AppCompatActivity() {
         setupCardCollapseExpandListeners()
 
 
-        // 0. Google 원클릭 로그인 버튼 (v1.8.0 / v2.0.1 무중단 연동 강화)
-        binding.btnGoogleSignIn.setOnClickListener {
-            try {
-                val signInIntent = googleSignInClient.signInIntent
-                googleSignInLauncher.launch(signInIntent)
-            } catch (e: Exception) {
-                launchAccountPickerOrManualDialog("기기 계정 선택창으로 즉시 전환합니다.")
-            }
-        }
-        binding.btnGoogleSignIn.setOnLongClickListener {
-            showManualEmailPairDialog()
-            true
-        }
+        // 0. Google 원클릭 로그인 및 계정 연동 초기화
+        setupAccountPairing()
 
         // 0-1. AI 토큰 지갑 및 추천인 리워드 카드 초기화
         setupTokenWalletCard()
@@ -638,7 +571,7 @@ class MainActivity : AppCompatActivity() {
 
         // 2. 수동 6자리 핀코드 입력 버튼
         binding.btnManualPin.setOnClickListener {
-            showManualPinDialog()
+            accountPairingController.showManualPinDialog()
         }
 
         // 3. 배터리 최적화 예외 요청 버튼
@@ -1075,197 +1008,6 @@ class MainActivity : AppCompatActivity() {
                         binding.tvTasksHubSubtitle.text = "모든 후속 조치 및 할 일이 완료되었습니다."
                     }
                 }
-            }
-        }
-    }
-
-
-
-    private fun handleQrScanResult(contents: String) {
-        val parsed = parseQrContents(contents)
-        if (parsed != null) {
-            val (email, token, pinCode) = parsed
-            performPairing(email, token = token, pinCode = pinCode)
-        } else {
-            AlertDialog.Builder(this)
-                .setTitle("잘못된 QR코드")
-                .setMessage("시트봇 알림 센터 전용 QR코드가 아닙니다.\n화면의 QR코드를 다시 확인해 주세요.")
-                .setPositiveButton("확인", null)
-                .show()
-        }
-    }
-
-    private fun parseQrContents(contents: String): Triple<String, String?, String?>? {
-        val trimmed = contents.trim()
-
-        // 1. JSON 형태 (대시보드 SheetBot Agent2 규격)
-        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-            try {
-                val json = org.json.JSONObject(trimmed)
-                val email = json.optString("userEmail", json.optString("email", ""))
-                val token = json.optString("token").takeIf { it.isNotBlank() }
-                val pinCode = json.optString("pinCode").takeIf { it.isNotBlank() }
-                if (email.isNotBlank()) {
-                    return Triple(email, token, pinCode)
-                }
-            } catch (e: Exception) {
-                android.util.Log.w("UserMainActivity", "QR JSON 파싱 오류: ${e.message}")
-            }
-        }
-
-        // 2. URI 형태
-        try {
-            val uri = Uri.parse(trimmed)
-            val scheme = uri.scheme
-            val host = uri.host
-
-            if (scheme == "sheetbot" && host == "pair") {
-                val email = uri.getQueryParameter("email") ?: return null
-                val token = uri.getQueryParameter("token")
-                val pin = uri.getQueryParameter("pin")
-                return Triple(email, token, pin)
-            }
-
-            if (trimmed.contains("sheetbot.cloud") || trimmed.contains("/pair")) {
-                val email = uri.getQueryParameter("email")
-                val token = uri.getQueryParameter("token")
-                val pin = uri.getQueryParameter("pin")
-                if (!email.isNullOrBlank()) return Triple(email, token, pin)
-            }
-        } catch (_: Exception) {}
-
-        return null
-    }
-
-    private fun showManualPinDialog() {
-        val dialogView = layoutInflater.inflate(R.layout.dialog_manual_pin, null)
-        val etEmail = dialogView.findViewById<EditText>(R.id.etDialogEmail)
-        val etPin = dialogView.findViewById<EditText>(R.id.etDialogPin)
-
-        AlertDialog.Builder(this)
-            .setTitle("6자리 핀코드로 연동")
-            .setView(dialogView)
-            .setPositiveButton("연동하기") { _, _ ->
-                val email = etEmail.text.toString().trim()
-                val pin = etPin.text.toString().trim()
-                if (email.isBlank() || pin.isBlank()) {
-                    Toast.makeText(this, "이메일과 핀코드를 모두 입력해 주세요.", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                performPairing(email, pinCode = pin)
-            }
-            .setNegativeButton("취소", null)
-            .show()
-    }
-
-    private fun performPairing(email: String, token: String? = null, pinCode: String? = null) {
-        binding.progressBar.visibility = View.VISIBLE
-        activityScope.launch {
-            val result = withTimeoutOrNull(8000L) {
-                ApiClient.pairDevice(email, token, pinCode)
-            }
-            binding.progressBar.visibility = View.GONE
-
-            if (result == null) {
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("통신 시간 초과")
-                    .setMessage("서버 응답이 8초 이상 지연되었습니다.\n네트워크 연결을 확인하신 후 다시 시도해 주세요.")
-                    .setPositiveButton("확인", null)
-                    .show()
-                return@launch
-            }
-
-            if (result.success) {
-                prefs.userEmail = email
-                prefs.isPaired = true
-                if (!result.webhookUrl.isNullOrBlank()) prefs.webhookUrl = result.webhookUrl
-                if (!result.fallbackWebhookUrl.isNullOrBlank()) prefs.fallbackWebhookUrl = result.fallbackWebhookUrl
-                if (!result.heartbeatUrl.isNullOrBlank()) prefs.heartbeatUrl = result.heartbeatUrl
-                if (!result.fallbackHeartbeatUrl.isNullOrBlank()) prefs.fallbackHeartbeatUrl = result.fallbackHeartbeatUrl
-                if (!result.deviceToken.isNullOrBlank()) prefs.deviceToken = result.deviceToken
-
-                KeepAliveService.start(this@MainActivity)
-                updateUiState()
-
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("🎉 시트봇 에이전트 연동 성공!")
-                    .setMessage("${email} 계정과의 구글 시트 1:1 연동이 완료되었습니다.\n\n• 스마트폰으로 수신된 고객 문자가 구글 시트에 실시간 기록됩니다.\n• 구글 시트에서 0원 문자 일괄 발송이 가능합니다.")
-                    .setPositiveButton("확인", null)
-                    .show()
-            } else {
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("연동 실패")
-                    .setMessage(result.error ?: "서버와의 통신에 실패했습니다.")
-                    .setPositiveButton("확인", null)
-                    .show()
-            }
-        }
-    }
-
-    /**
-     * Google 원클릭 로그인 완료 시 시트봇 서버와 0초 자동 페어링 처리 (v1.8.0)
-     */
-    private fun handleGoogleSignInSuccess(idToken: String?, email: String) {
-        binding.progressBar.visibility = View.VISIBLE
-        Toast.makeText(this, "구글 계정($email)으로 시트봇 연동 중...", Toast.LENGTH_SHORT).show()
-
-        var detectedRefCode: String? = null
-        try {
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = clipboard.primaryClip
-            if (clip != null && clip.itemCount > 0) {
-                val clipText = clip.getItemAt(0).text?.toString()?.trim() ?: ""
-                if (clipText.contains("ref=")) {
-                    detectedRefCode = clipText.substringAfter("ref=").substringBefore("&").substringBefore(" ").trim()
-                } else if (clipText.length in 4..12 && !clipText.contains(" ") && !clipText.contains("\n")) {
-                    detectedRefCode = clipText
-                }
-            }
-        } catch (_: Exception) {}
-
-        activityScope.launch {
-            val result = withTimeoutOrNull(10000L) {
-                ApiClient.pairWithGoogle(idToken, email, referralCode = detectedRefCode)
-            }
-            binding.progressBar.visibility = View.GONE
-
-            if (result == null) {
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("연동 시간 초과")
-                    .setMessage("서버 응답이 10초 이상 지연되었습니다.\n네트워크 상태를 확인하신 후 다시 시도해 주세요.")
-                    .setPositiveButton("확인", null)
-                    .show()
-                return@launch
-            }
-
-            if (result.success) {
-                val finalEmail = result.userEmail ?: email
-                prefs.userEmail = finalEmail
-                prefs.isPaired = true
-                if (!result.webhookUrl.isNullOrBlank()) prefs.webhookUrl = result.webhookUrl
-                if (!result.fallbackWebhookUrl.isNullOrBlank()) prefs.fallbackWebhookUrl = result.fallbackWebhookUrl
-                if (!result.deviceToken.isNullOrBlank()) prefs.deviceToken = result.deviceToken
-
-                KeepAliveService.start(this@MainActivity)
-                updateUiState()
-
-                addLogItem("구글로그인", "$finalEmail 계정 자동 연동 성공", true)
-
-                if (prefs.isTtsEnabled) {
-                    TtsManager.speak(this@MainActivity, "구글 계정으로 성공적으로 연동되었습니다.")
-                }
-
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("🎉 Google 원클릭 연동 완료!")
-                    .setMessage("${finalEmail} 계정으로 시트봇 에이전트가 0초 만에 연동되었습니다.\n\nPC 화면의 QR 코드를 스캔할 필요 없이 스마트폰 단독으로 연동이 완료되었습니다.\n지금부터 문자/통화/사진/링크가 구글 시트와 실시간 동기화됩니다.")
-                    .setPositiveButton("시작하기", null)
-                    .show()
-            } else {
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("구글 연동 실패")
-                    .setMessage(result.error ?: "구글 계정 연동 처리에 실패했습니다.")
-                    .setPositiveButton("확인", null)
-                    .show()
             }
         }
     }
@@ -2554,6 +2296,23 @@ class MainActivity : AppCompatActivity() {
             updateCardCollapseState = { layout, button, isHidden -> updateCardCollapseState(layout, button, isHidden) }
         )
         tokenWalletCardController.setup()
+    }
+
+    private fun setupAccountPairing() {
+        accountPairingController = AccountPairingController(
+            activity = this,
+            binding = binding,
+            prefs = prefs,
+            scope = activityScope,
+            googleSignInClient = googleSignInClient,
+            launchGoogleSignIn = { intent -> googleSignInLauncher.launch(intent) },
+            launchAccountPicker = { intent -> accountPickerLauncher.launch(intent) },
+            onPairingSuccess = { email ->
+                updateUiState()
+            },
+            addLogItem = { title, detail, success -> addLogItem(title, detail, success) }
+        )
+        accountPairingController.setup()
     }
 
 }
