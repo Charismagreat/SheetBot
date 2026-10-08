@@ -6,6 +6,7 @@
     android:background="#0F172A">
 
     <ScrollView
+        android:id="@+id/mainScrollView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:fillViewport="true">
@@ -33,18 +34,34 @@
                 android:textSize="20sp"
                 android:textStyle="bold" />
 
-                <TextView
-                    android:id="@+id/tvAppVersionBadge"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_badge_version"
-                    android:paddingHorizontal="10dp"
-                    android:paddingVertical="4dp"
-                    android:text="v2.1.12"
-                    android:textColor="#10B981"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
+            <TextView
+                android:id="@+id/btnSearchCards"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_badge_version"
+                android:backgroundTint="#1E293B"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp"
+                android:text="🔍 기능 찾기"
+                android:textColor="#38BDF8"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:layout_marginEnd="6dp"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/tvAppVersionBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_badge_version"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp"
+                android:text="v2.1.12"
+                android:textColor="#10B981"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+        </LinearLayout>
  
             <!-- 🟢 통합 올인원 상태 관제 카드 (접기/펼치기 지원: 한 줄로 접기 가능) -->
             <LinearLayout

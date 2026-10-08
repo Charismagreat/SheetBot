@@ -161,6 +161,16 @@ class MainCoreCoordinator(
         )
         cardDrawerController.setup()
 
+        // 🔍 자연어·초성·숫자 다중 카드 빠른 검색 바텀시트 연동 (v2.1.99)
+        binding.btnSearchCards.setOnClickListener {
+            CardSearchBottomSheetDialog(
+                activity = activity,
+                prefs = prefs,
+                cardDrawerController = cardDrawerController,
+                scrollView = binding.mainScrollView
+            ).show()
+        }
+
         updateUiState()
         checkPermissions()
 
