@@ -52,6 +52,7 @@ import cloud.sheetbot.agent.user.card.LawAdvisoryCardController
 import cloud.sheetbot.agent.user.card.CompanyResearchCardController
 import cloud.sheetbot.agent.user.card.WebsiteMonitorCardController
 import cloud.sheetbot.agent.user.card.ContactsBackupCardController
+import cloud.sheetbot.agent.user.card.LinkScrapCardController
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -240,6 +241,9 @@ class MainActivity : AppCompatActivity() {
 
     // 📇 스마트폰 연락처 구글 시트 자동 동기화 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var contactsCardController: ContactsBackupCardController
+
+    // 🌐 웹 링크 & 유튜브 영상 AI 자동 스크랩 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
+    private lateinit var linkScrapCardController: LinkScrapCardController
 
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
@@ -878,23 +882,8 @@ class MainActivity : AppCompatActivity() {
             showOpenSheetChooserDialog("BUSINESS_CARD", prefs.businessCardDriveSheetTitle)
         }
 
-        // 웹 링크 & 유튜브 영상 AI 자동 스크랩 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
-        binding.switchLinkScrap.isChecked = prefs.isLinkScrapEnabled
-
-        binding.switchLinkScrap.setOnCheckedChangeListener { _, isChecked ->
-            prefs.isLinkScrapEnabled = isChecked
-            prefs.isLinkScrapDetailsHidden = !isChecked
-            updateCardCollapseState(binding.layoutLinkScrapSettings, binding.btnToggleLinkScrapDetails, !isChecked)
-            val msg = if (isChecked) "웹 링크 & 유튜브 AI 자동 스크랩이 켜졌습니다." else "웹 링크 & 유튜브 자동 스크랩이 꺼졌습니다."
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-            if (isChecked) {
-                provisionSheetAsync("LINK_BOOKMARK", prefs.linkScrapDriveSheetTitle)
-            }
-        }
-
-        binding.btnOpenLinkScrapSheet.setOnClickListener {
-            showOpenSheetChooserDialog("LINK_BOOKMARK", prefs.linkScrapDriveSheetTitle)
-        }
+        // 🌐 웹 링크 & 유튜브 영상 AI 자동 스크랩 카드 초기화 (v2.1.99 리팩토링 모듈화)
+        setupLinkScrapCard()
 
         // 자연어 AI 시트 코파일럿 UI 리스너 (v1.7)
         binding.btnVoiceCommand.setOnClickListener {
@@ -1621,13 +1610,7 @@ class MainActivity : AppCompatActivity() {
         binding.layoutFileUploadHeader.setOnClickListener { toggleFileUpload() }
         binding.btnToggleFileUploadDetails.setOnClickListener { toggleFileUpload() }
 
-        // 6. 웹 링크 & 유튜브 카드
-        val toggleLinkScrap = {
-            prefs.isLinkScrapDetailsHidden = !prefs.isLinkScrapDetailsHidden
-            updateCardCollapseState(binding.layoutLinkScrapSettings, binding.btnToggleLinkScrapDetails, prefs.isLinkScrapDetailsHidden)
-        }
-        binding.layoutLinkScrapHeader.setOnClickListener { toggleLinkScrap() }
-        binding.btnToggleLinkScrapDetails.setOnClickListener { toggleLinkScrap() }
+        // 6. 웹 링크 & 유튜브 카드 (LinkScrapCardController 전담 바인딩)
 
         // 7. 문자(SMS) 카드
         val toggleSmsSync = {
@@ -2440,7 +2423,7 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     lastHandledShareUrl = targetUrl
                     lastHandledShareTime = now
-                    bookmarkSharedUrl(targetUrl, sharedText)
+                    if (::linkScrapCardController.isInitialized) linkScrapCardController.bookmarkSharedUrl(targetUrl, sharedText)
                 }
             } else {
                 // 2순위: 실제 로컬 파일(content:// 또는 file://) 스트림인 경우 -> 구글 드라이브 파일 업로드
@@ -3039,69 +3022,6 @@ class MainActivity : AppCompatActivity() {
                 binding.progressBar.visibility = View.GONE
                 android.util.Log.e("MainActivity", "카톡 대화 파일 가져오기 실패: ${e.message}", e)
                 Toast.makeText(this@MainActivity, "파일 처리 중 오류: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    /**
-     * 외부 앱에서 공유된 웹 링크 또는 유튜브 링크를 구글 스프레드시트에 자동 스크랩 및 AI 3줄 요약 기록 (v1.6)
-     */
-    private fun bookmarkSharedUrl(url: String, rawText: String?) {
-        if (!prefs.isPaired) {
-            Toast.makeText(this, "⚠️ 시트봇 계정 연동 후 링크를 스크랩할 수 있습니다.", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        if (!prefs.isLinkScrapEnabled) {
-            Toast.makeText(this, "⚠️ 웹 링크 & 유튜브 AI 스크랩 기능이 꺼져 있습니다. 앱 설정에서 켜주세요.", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        val userEmail = prefs.userEmail
-        if (userEmail.isNullOrBlank()) {
-            Toast.makeText(this, "⚠️ 연동된 계정 이메일이 없습니다.", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        val isYouTube = url.contains("youtube.com", ignoreCase = true) || url.contains("youtu.be", ignoreCase = true)
-        val tagMsg = if (isYouTube) "🔴 유튜브 영상" else "🌐 웹 링크"
-
-        binding.progressBar.visibility = View.VISIBLE
-        Toast.makeText(this, "🚀 $tagMsg 정보를 분석하여 구글 시트에 스크랩합니다...", Toast.LENGTH_SHORT).show()
-
-        activityScope.launch {
-            try {
-                val result = ApiClient.bookmarkLink(
-                    userEmail = userEmail,
-                    url = url,
-                    rawText = rawText,
-                    memo = "스마트폰 공유하기(Share) 스크랩"
-                )
-                binding.progressBar.visibility = View.GONE
-
-                if (result.success) {
-                    val title = result.title ?: url
-                    val cat = result.category
-                    Toast.makeText(
-                        this@MainActivity,
-                        "🎉 [$cat] $title\n구글 스프레드시트에 안전하게 스크랩되었습니다!",
-                        Toast.LENGTH_LONG
-                    ).show()
-
-                    addLogItem("링크 스크랩", "$cat $title -> 스크랩 대장", true)
-
-                    if (prefs.isTtsEnabled) {
-                        val voiceMsg = if (isYouTube) "유튜브 영상이 스크랩 대장에 기록되었습니다." else "웹사이트 링크가 스크랩 대장에 기록되었습니다."
-                        TtsManager.speak(this@MainActivity, voiceMsg)
-                    }
-                } else {
-                    val err = result.error ?: "스크랩 실패"
-                    Toast.makeText(this@MainActivity, "⚠️ 링크 스크랩 실패: $err", Toast.LENGTH_LONG).show()
-                    addLogItem("스크랩 실패", err, false)
-                }
-            } catch (e: Exception) {
-                binding.progressBar.visibility = View.GONE
-                Toast.makeText(this@MainActivity, "링크 스크랩 예외: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -5032,6 +4952,21 @@ class MainActivity : AppCompatActivity() {
             onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
         )
         companyResearchCardController.setup()
+    }
+
+    /**
+     * 🌐 웹 링크 & 유튜브 3줄 요약 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
+     */
+    private fun setupLinkScrapCard() {
+        linkScrapCardController = LinkScrapCardController(
+            activity = this,
+            binding = binding,
+            prefs = prefs,
+            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
+            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) },
+            onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) }
+        )
+        linkScrapCardController.setup()
     }
 }
 
