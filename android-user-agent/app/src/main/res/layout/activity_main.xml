@@ -770,6 +770,7 @@
         <!-- Phase 1 & 2: 매장 결제 & 영수증 문자 전송 제어 패널 (v2.0.6) -->
                 <!-- 독립 카드: call_rec -->
         <LinearLayout
+            android:id="@+id/cardCallRecording"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -1159,6 +1160,7 @@
 
         <!-- 독립 카드: in_call_summary (수신 전화 시 '고객 시트 요약' 인콜 플로팅 팝업) -->
         <LinearLayout
+            android:id="@+id/cardInCallSummary"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -1289,6 +1291,7 @@
 
         <!-- 독립 카드: missed_call -->
         <LinearLayout
+            android:id="@+id/cardMissedCall"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -1388,6 +1391,7 @@
 
         <!-- 독립 카드: call_ended -->
         <LinearLayout
+            android:id="@+id/cardCallEnded"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -1719,6 +1723,7 @@
 
         <!-- 독립 카드: sms -->
         <LinearLayout
+            android:id="@+id/cardSmsSync"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -1870,6 +1875,7 @@
 
         <!-- 독립 카드: kakao -->
         <LinearLayout
+            android:id="@+id/cardKakaoSync"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -2012,6 +2018,7 @@
 
         <!-- 독립 카드: payment -->
         <LinearLayout
+            android:id="@+id/cardPaymentReceipt"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -2267,6 +2274,7 @@
 
         <!-- 독립 카드: quote -->
         <LinearLayout
+            android:id="@+id/cardQuoteSync"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -2499,6 +2507,7 @@
 
         <!-- 독립 카드: 스마트 간편 견적서 발행 대장 (v2.1.95) -->
         <LinearLayout
+            android:id="@+id/cardEstimateSync"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -2650,6 +2659,7 @@
 
         <!-- 독립 카드: file_upload -->
         <LinearLayout
+            android:id="@+id/cardFileUpload"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -2853,6 +2863,7 @@
 
         <!-- 독립 카드: link_scrap -->
         <LinearLayout
+            android:id="@+id/cardLinkScrap"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -2941,6 +2952,7 @@
 
         <!-- 독립 카드: 회의 녹음 자동 회의록 (음성 녹음기 감지 및 [SheetBot] 회의록 대장) -->
         <LinearLayout
+            android:id="@+id/cardMeetingRecording"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -3083,6 +3095,7 @@
 
         <!-- ⚖️ AI 법률/계약서 팩트체크 (법제처 & 판례 심층 자문 카드) -->
         <LinearLayout
+            android:id="@+id/cardLawAdvisory"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -3353,6 +3366,7 @@
 
         <!-- 독립 카드: 원클릭 기업 심층 리서치 (Company Research Doc Canvas) -->
         <LinearLayout
+            android:id="@+id/cardCompanyResearch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -3576,6 +3590,7 @@
 
         <!-- 독립 카드: website_monitor -->
         <LinearLayout
+            android:id="@+id/cardWebsiteMonitor"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -3728,6 +3743,7 @@
 
         <!-- 독립 카드: contacts_sync -->
         <LinearLayout
+            android:id="@+id/cardContactsBackup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -3852,6 +3868,7 @@
 
         <!-- 독립 카드: utility -->
         <LinearLayout
+            android:id="@+id/cardUtility"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -3967,6 +3984,99 @@
             android:fadeScrollbars="false"
             android:overScrollMode="always"
             android:text="대기 중... 은행 입금 알림, 결제 푸시, 고객 SMS가 수신되면 실시간 기록됩니다.\n" />
+
+        <!-- 📦 추가 기능 보관함 (Card Drawer) -->
+        <LinearLayout
+            android:id="@+id/cardDrawerBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_scenario"
+            android:padding="13dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:id="@+id/layoutDrawerHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:id="@+id/tvDrawerTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="📦 추가 기능 보관함 (0개 보관 중)"
+                    android:textColor="#38BDF8"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btnDrawerManage"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#1E293B"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="4dp"
+                    android:text="⚙️ 대시보드 편집"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:layout_marginEnd="6dp"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <TextView
+                    android:id="@+id/btnToggleDrawer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="▼"
+                    android:textColor="#E2E8F0"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvDrawerSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="자주 쓰지 않는 기능을 보관함에 모아 메인 화면을 깔끔하게 유지합니다. 언제든 [+ 꺼내기]하여 메인에 배치할 수 있습니다."
+                android:textColor="#64748B"
+                android:textSize="10.5sp"
+                android:layout_marginTop="4dp" />
+
+            <!-- 보관된 카드 목록 컨테이너 (접힘 기본: gone) -->
+            <LinearLayout
+                android:id="@+id/layoutDrawerContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="10dp"
+                android:visibility="gone">
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="#334155"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- 동적으로 추가되는 보관 카드 항목들 -->
+                <LinearLayout
+                    android:id="@+id/layoutDrawerItems"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </LinearLayout>
+        </LinearLayout>
 
         <!-- 계정 연동 해제 (실수 터치 방지 최하단 배치) -->
         <LinearLayout
