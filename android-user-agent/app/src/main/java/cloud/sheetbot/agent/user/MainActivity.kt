@@ -102,8 +102,6 @@ class MainActivity : AppCompatActivity() {
     }
     private val activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob() + coroutineExceptionHandler)
 
-    private var aodJob: Job? = null
-    private lateinit var aodGestureDetector: GestureDetector
     private var smsSentObserver: SmsSentObserver? = null
     private var isDepositReceiverRegistered = false
 
@@ -293,6 +291,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var permissionController: PermissionController
     private lateinit var cardAccordionController: CardAccordionController
     private lateinit var sharedIntentRouter: SharedIntentRouter
+    private lateinit var aodModeController: AodModeController
 
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
@@ -455,6 +454,13 @@ class MainActivity : AppCompatActivity() {
                 }
             )
 
+            aodModeController = AodModeController(
+                activity = this,
+                binding = binding,
+                scope = activityScope
+            )
+            aodModeController.setup()
+
             setupListeners()
             updateUiState()
             checkPermissions()
@@ -577,7 +583,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        try { aodJob?.cancel() } catch (_: Throwable) {}
+        try { if (::aodModeController.isInitialized) aodModeController.destroy() } catch (_: Throwable) {}
         try {
             if (::serverStatusCardController.isInitialized) {
                 serverStatusCardController.stopServerMonitorLoop()
@@ -726,23 +732,6 @@ class MainActivity : AppCompatActivity() {
             UpdateManager.checkForUpdates(this, showToastIfLatest = true)
         }
 
-        // 8. AOD 올웨이즈 블랙 모드 진입 및 더블 탭 제스처
-        aodGestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                exitAodMode()
-                return true
-            }
-        })
-
-        binding.layoutAod.setOnTouchListener { _, event ->
-            aodGestureDetector.onTouchEvent(event)
-            true
-        }
-
-        binding.btnEnterAod.setOnClickListener {
-            enterAodMode()
-        }
-
         // 9. 실시간 감지 로그 (최대 1,000건 로컬 영구 보관 + 부드러운 전용 스크롤 + 비우기)
         try {
             binding.tvLogs.movementMethod = ScrollingMovementMethod()
@@ -780,40 +769,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun enterAodMode() {
-        binding.layoutAod.visibility = View.VISIBLE
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        val lp = window.attributes
-        lp.screenBrightness = 0.01f
-        window.attributes = lp
-        startAodClockLoop()
-        Toast.makeText(this, "AOD 블랙 모드가 시작되었습니다.\n화면을 두 번 탭하면 복귀합니다.", Toast.LENGTH_SHORT).show()
-    }
+    private fun enterAodMode() =
+        aodModeController.enterAodMode()
 
-    private fun exitAodMode() {
-        aodJob?.cancel()
-        aodJob = null
-        binding.layoutAod.visibility = View.GONE
-        val lp = window.attributes
-        lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-        window.attributes = lp
-        Toast.makeText(this, "AOD 모드가 해제되었습니다.", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun startAodClockLoop() {
-        aodJob?.cancel()
-        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-        aodJob = activityScope.launch {
-            while (isActive) {
-                binding.tvAodClock.text = timeFormat.format(Date())
-                val shiftX = Random.nextInt(-30, 31).toFloat()
-                val shiftY = Random.nextInt(-30, 31).toFloat()
-                binding.containerAodContent.translationX = shiftX
-                binding.containerAodContent.translationY = shiftY
-                delay(60000L)
-            }
-        }
-    }
+    private fun exitAodMode() =
+        aodModeController.exitAodMode()
 
     private fun updateCardCollapseState(container: View, toggleBtn: TextView, isHidden: Boolean) =
         cardAccordionController.updateCardCollapseState(container, toggleBtn, isHidden)
