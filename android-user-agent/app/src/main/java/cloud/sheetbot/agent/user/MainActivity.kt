@@ -50,6 +50,7 @@ import cloud.sheetbot.agent.user.card.InstagramAutomationCardController
 import cloud.sheetbot.agent.user.card.MobileSiteCardController
 import cloud.sheetbot.agent.user.card.LawAdvisoryCardController
 import cloud.sheetbot.agent.user.card.CompanyResearchCardController
+import cloud.sheetbot.agent.user.card.WebsiteMonitorCardController
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -232,6 +233,9 @@ class MainActivity : AppCompatActivity() {
     // 🌐 AI 모바일 홈페이지 제작 & 관리 카드 전담 컨트롤러 및 사진 복수 첨부 런처 (v2.1.91 / 리팩토링 모듈화)
     // 🔍 원클릭 기업 심층 리서치 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var companyResearchCardController: CompanyResearchCardController
+
+    // 🌐 내 웹사이트 실시간 장애 감시 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
+    private lateinit var websiteMonitorCardController: WebsiteMonitorCardController
 
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
@@ -475,9 +479,12 @@ class MainActivity : AppCompatActivity() {
             android.util.Log.w("MainActivity", "preloadActiveSheetUrls 방어: ${e.message}")
         }
         try {
-            updateWebsiteMonitorStatusText()
+            if (::websiteMonitorCardController.isInitialized) {
+                websiteMonitorCardController.updateStatusText()
+            }
         } catch (e: Throwable) {
             android.util.Log.w("MainActivity", "updateWebsiteMonitorStatusText 방어: ${e.message}")
+        }")
         }
         try {
             refreshQuoteImageUi()
@@ -1390,7 +1397,7 @@ class MainActivity : AppCompatActivity() {
         setupBusinessCardExcludedNumbersUI()
 
         // 🌐 내 웹사이트 실시간 장애 감시 (Uptime Sentinel) UI 바인딩
-        setupWebsiteMonitorUI()
+        setupWebsiteMonitorCard()
 
         // 📇 스마트폰 연락처 구글 시트 자동 동기화 UI 바인딩
         setupContactsSyncUI()
@@ -1674,13 +1681,7 @@ class MainActivity : AppCompatActivity() {
         binding.layoutCallEndedCardHeader.setOnClickListener { toggleCallEndedCard() }
         binding.btnToggleCallEndedCardDetails.setOnClickListener { toggleCallEndedCard() }
 
-        // 12. 웹사이트 모니터링 카드
-        val toggleWebsiteMonitor = {
-            prefs.isWebsiteMonitorDetailsHidden = !prefs.isWebsiteMonitorDetailsHidden
-            updateCardCollapseState(binding.layoutWebsiteMonitorSettings, binding.btnToggleWebsiteMonitorDetails, prefs.isWebsiteMonitorDetailsHidden)
-        }
-        binding.layoutWebsiteMonitorHeader.setOnClickListener { toggleWebsiteMonitor() }
-        binding.btnToggleWebsiteMonitorDetails.setOnClickListener { toggleWebsiteMonitor() }
+        // 12. 웹사이트 모니터링 카드 (WebsiteMonitorCardController 전담 바인딩)
 
         // 13. 스마트폰 연락처 백업 카드
         val toggleContacts = {
@@ -4072,127 +4073,20 @@ class MainActivity : AppCompatActivity() {
 
     // ==========================================
     // 🌐 내 웹사이트 실시간 장애 감시 (Uptime Sentinel) UI 바인딩
-    // ==========================================
-    private fun setupWebsiteMonitorUI() {
-        binding.switchWebsiteMonitor.isChecked = prefs.isWebsiteMonitorEnabled
-        binding.etTargetWebsiteUrl.setText(prefs.targetWebsiteUrl)
-        binding.cbWebsiteEmergencyAlarm.isChecked = prefs.isWebsiteEmergencyAlarmEnabled
-        updateWebsiteMonitorStatusText()
-
-        binding.switchWebsiteMonitor.setOnCheckedChangeListener { _, isChecked ->
-            prefs.isWebsiteMonitorEnabled = isChecked
-            prefs.isWebsiteMonitorDetailsHidden = !isChecked
-            updateCardCollapseState(binding.layoutWebsiteMonitorSettings, binding.btnToggleWebsiteMonitorDetails, !isChecked)
-            val msg = if (isChecked) "내 웹사이트 실시간 접속 장애 감시가 켜졌습니다." else "웹사이트 접속 장애 감시가 꺼졌습니다."
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-            updateWebsiteMonitorStatusText()
-
-            if (isChecked) {
-                provisionSheetAsync("WEBSITE_MONITOR", "[SheetBot] 웹사이트 모니터링 & 장애 대장")
-                if (prefs.targetWebsiteUrl.isNotBlank()) {
-                    checkWebsiteHealthImmediate()
-                }
-            }
-        }
-
-        binding.btnOpenWebsiteMonitorSheet.setOnClickListener {
-            showOpenSheetChooserDialog("WEBSITE_MONITOR", "[SheetBot] 웹사이트 모니터링 & 장애 대장")
-        }
-
-        binding.etTargetWebsiteUrl.doAfterTextChanged {
-            val url = it?.toString()?.trim() ?: ""
-            prefs.targetWebsiteUrl = url
-            updateWebsiteMonitorStatusText()
-        }
-
-        binding.cbWebsiteEmergencyAlarm.setOnCheckedChangeListener { _, isChecked ->
-            prefs.isWebsiteEmergencyAlarmEnabled = isChecked
-        }
-
-        binding.btnCheckWebsiteNow.setOnClickListener {
-            checkWebsiteHealthImmediate()
-        }
+    /**
+     * 🌐 내 웹사이트 실시간 장애 감시 (Uptime Sentinel) 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
+     */
+    private fun setupWebsiteMonitorCard() {
+        websiteMonitorCardController = WebsiteMonitorCardController(
+            activity = this,
+            binding = binding,
+            prefs = prefs,
+            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
+            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) }
+        )
+        websiteMonitorCardController.setup()
     }
 
-    private fun updateWebsiteMonitorStatusText() {
-        try {
-            if (!::binding.isInitialized) return
-            if (!prefs.isWebsiteMonitorEnabled) {
-                binding.tvWebsiteMonitorStatus.text = "상태: 감시 꺼짐 (스위치를 켜면 활성화됩니다)"
-                binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#94A3B8"))
-                return
-            }
-
-            val url = prefs.targetWebsiteUrl
-            if (url.isBlank()) {
-                binding.tvWebsiteMonitorStatus.text = "상태: URL 미등록 (감시할 웹사이트 주소를 입력하세요)"
-                binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#FBBF24"))
-                return
-            }
-
-            val lastStatus = prefs.lastWebsiteCheckStatus
-            val lastCode = prefs.lastWebsiteCheckStatusCode
-            val lastTime = prefs.lastWebsiteCheckTime
-
-            val timeStr = if (lastTime > 0) {
-                val sdf = SimpleDateFormat("HH:mm:ss", Locale.KOREA)
-                " (최근 점검: ${sdf.format(Date(lastTime))})"
-            } else ""
-
-            if (lastCode in 200..399 || lastStatus.contains("정상")) {
-                binding.tvWebsiteMonitorStatus.text = "🟢 $lastStatus$timeStr"
-                binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#34D399"))
-            } else if (lastStatus == "미설정") {
-                binding.tvWebsiteMonitorStatus.text = "🟡 3분 주기 감시 대기 중$timeStr"
-                binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#FBBF24"))
-            } else {
-                binding.tvWebsiteMonitorStatus.text = "🔴 $lastStatus$timeStr"
-                binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#F87171"))
-            }
-        } catch (e: Throwable) {
-            android.util.Log.w("MainActivity", "updateWebsiteMonitorStatusText 방어: ${e.message}")
-        }
-    }
-
-    private fun checkWebsiteHealthImmediate() {
-        val url = prefs.targetWebsiteUrl.trim()
-        if (url.isBlank()) {
-            Toast.makeText(this, "점검할 웹사이트 URL을 먼저 입력해 주세요.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        binding.btnCheckWebsiteNow.isEnabled = false
-        binding.btnCheckWebsiteNow.text = "점검 중..."
-        binding.tvWebsiteMonitorStatus.text = "🔄 실시간 응답 점검 중..."
-        binding.tvWebsiteMonitorStatus.setTextColor(android.graphics.Color.parseColor("#38BDF8"))
-
-        activityScope.launch {
-            val result = ApiClient.checkWebsiteHealth(url)
-            binding.btnCheckWebsiteNow.isEnabled = true
-            binding.btnCheckWebsiteNow.text = "⚡ 지금 점검"
-
-            prefs.lastWebsiteCheckStatusCode = result.statusCode
-            prefs.lastWebsiteCheckTime = System.currentTimeMillis()
-
-            if (result.isOnline) {
-                prefs.lastWebsiteCheckStatus = "정상 응답 (HTTP ${result.statusCode}, ${result.responseTimeMs}ms)"
-                Toast.makeText(this@MainActivity, "🎉 [정상 응답] ${result.checkedUrl} (${result.responseTimeMs}ms)", Toast.LENGTH_SHORT).show()
-            } else {
-                val isNetOk = ApiClient.verifyInternetConnectivity()
-                val errText = if (isNetOk) {
-                    "사이트 접속 불가 (${result.errorMessage ?: "HTTP " + result.statusCode})"
-                } else {
-                    "스마트폰 인터넷 연결 불안정"
-                }
-                prefs.lastWebsiteCheckStatus = errText
-                Toast.makeText(this@MainActivity, "⚠️ [접속 실패] $errText", Toast.LENGTH_LONG).show()
-            }
-            updateWebsiteMonitorStatusText()
-        }
-    }
-
-    // ==========================================
-    // 📇 스마트폰 연락처 구글 시트 자동 동기화 UI (Contacts Sync)
     // ==========================================
     private fun setupContactsSyncUI() {
         binding.switchContactsSync.isChecked = prefs.isContactsSyncEnabled
