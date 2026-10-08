@@ -104,32 +104,36 @@ class MainActivity : AppCompatActivity() {
 
 
 
-    // 🎛️ 카드별/기능별 전담 컨트롤러 프로퍼티
-    private lateinit var lawCardController: LawAdvisoryCardController
-    private lateinit var blogCardController: BlogAutomationCardController
-    private lateinit var instaCardController: InstagramAutomationCardController
-    private lateinit var siteCardController: MobileSiteCardController
-    private lateinit var companyResearchCardController: CompanyResearchCardController
-    private lateinit var websiteMonitorCardController: WebsiteMonitorCardController
-    private lateinit var contactsCardController: ContactsBackupCardController
-    private lateinit var linkScrapCardController: LinkScrapCardController
-    private lateinit var missedCallCardController: MissedCallCardController
-    private lateinit var kakaoCardController: KakaoSyncCardController
-    private lateinit var callEndedCardController: CallEndedCardController
-    private lateinit var smsSyncCardController: SmsSyncCardController
-    private lateinit var quoteCardController: QuoteSyncCardController
-    private lateinit var estimateCardController: EstimateSyncCardController
-    private lateinit var inCallSummaryCardController: InCallSummaryCardController
-    private lateinit var receiptCardController: ReceiptSyncCardController
-    private lateinit var businessCardController: BusinessCardSyncCardController
-    private lateinit var paymentReceiptCardController: PaymentReceiptCardController
-    private lateinit var callRecordCardController: CallRecordCardController
-    private lateinit var meetingRecordingCardController: MeetingRecordingCardController
-    private lateinit var fileUploadCardController: FileUploadCardController
-    private lateinit var aiCopilotCardController: AiCopilotCardController
-    private lateinit var tokenWalletCardController: TokenWalletCardController
-    private lateinit var accountPairingController: AccountPairingController
-    private lateinit var serverStatusCardController: ServerStatusCardController
+    // 🎛️ 전 카드 초기화 및 생명주기 관리 전담 코디네이터 (v2.1.99 모듈화)
+    private lateinit var cardCoordinator: CardSetupCoordinator
+
+    // 하위 호환성 및 기존 참조 보존용 위임 프로퍼티 (v2.1.99 모듈화)
+    private val lawCardController get() = cardCoordinator.lawCardController
+    private val blogCardController get() = cardCoordinator.blogCardController
+    private val instaCardController get() = cardCoordinator.instaCardController
+    private val siteCardController get() = cardCoordinator.siteCardController
+    private val companyResearchCardController get() = cardCoordinator.companyResearchCardController
+    private val websiteMonitorCardController get() = cardCoordinator.websiteMonitorCardController
+    private val contactsCardController get() = cardCoordinator.contactsCardController
+    private val linkScrapCardController get() = cardCoordinator.linkScrapCardController
+    private val missedCallCardController get() = cardCoordinator.missedCallCardController
+    private val kakaoCardController get() = cardCoordinator.kakaoCardController
+    private val callEndedCardController get() = cardCoordinator.callEndedCardController
+    private val smsSyncCardController get() = cardCoordinator.smsSyncCardController
+    private val quoteCardController get() = cardCoordinator.quoteCardController
+    private val estimateCardController get() = cardCoordinator.estimateCardController
+    private val inCallSummaryCardController get() = cardCoordinator.inCallSummaryCardController
+    private val receiptCardController get() = cardCoordinator.receiptCardController
+    private val businessCardController get() = cardCoordinator.businessCardController
+    private val paymentReceiptCardController get() = cardCoordinator.paymentReceiptCardController
+    private val callRecordCardController get() = cardCoordinator.callRecordCardController
+    private val meetingRecordingCardController get() = cardCoordinator.meetingRecordingCardController
+    private val fileUploadCardController get() = cardCoordinator.fileUploadCardController
+    private val aiCopilotCardController get() = cardCoordinator.aiCopilotCardController
+    private val tokenWalletCardController get() = cardCoordinator.tokenWalletCardController
+    private val accountPairingController get() = cardCoordinator.accountPairingController
+    private val serverStatusCardController get() = cardCoordinator.serverStatusCardController
+
     private lateinit var sheetActionController: SheetActionController
     private lateinit var targetFilterController: TargetFilterController
     private lateinit var permissionController: PermissionController
@@ -149,33 +153,33 @@ class MainActivity : AppCompatActivity() {
             binding.etAiCommand.setText(spokenText)
             aiCopilotCardController.executeAiCommand(spokenText)
         },
-        isAccountPairingInitialized = { ::accountPairingController.isInitialized },
+        isAccountPairingInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isAccountPairingInitialized },
         getAccountPairing = { accountPairingController },
         isPermissionInitialized = { ::permissionController.isInitialized },
         getPermission = { permissionController },
-        isFileUploadInitialized = { ::fileUploadCardController.isInitialized },
+        isFileUploadInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isFileUploadInitialized },
         getFileUpload = { fileUploadCardController },
-        isCallRecordInitialized = { ::callRecordCardController.isInitialized },
+        isCallRecordInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isCallRecordInitialized },
         getCallRecord = { callRecordCardController },
-        isReceiptInitialized = { ::receiptCardController.isInitialized },
+        isReceiptInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isReceiptInitialized },
         getReceipt = { receiptCardController },
-        isBusinessCardInitialized = { ::businessCardController.isInitialized },
+        isBusinessCardInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isBusinessCardInitialized },
         getBusinessCard = { businessCardController },
-        isCallEndedInitialized = { ::callEndedCardController.isInitialized },
+        isCallEndedInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isCallEndedInitialized },
         getCallEnded = { callEndedCardController },
-        isQuoteInitialized = { ::quoteCardController.isInitialized },
+        isQuoteInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isQuoteInitialized },
         getQuote = { quoteCardController },
-        isEstimateInitialized = { ::estimateCardController.isInitialized },
+        isEstimateInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isEstimateInitialized },
         getEstimate = { estimateCardController },
-        isLawInitialized = { ::lawCardController.isInitialized },
+        isLawInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isLawInitialized },
         getLaw = { lawCardController },
-        isBlogInitialized = { ::blogCardController.isInitialized },
+        isBlogInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isBlogInitialized },
         getBlog = { blogCardController },
-        isInstaInitialized = { ::instaCardController.isInitialized },
+        isInstaInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isInstaInitialized },
         getInsta = { instaCardController },
-        isSiteInitialized = { ::siteCardController.isInitialized },
+        isSiteInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isSiteInitialized },
         getSite = { siteCardController },
-        isKakaoInitialized = { ::kakaoCardController.isInitialized },
+        isKakaoInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isKakaoInitialized },
         getKakao = { kakaoCardController },
         isTargetFilterInitialized = { ::targetFilterController.isInitialized },
         getTargetFilter = { targetFilterController }
@@ -218,7 +222,7 @@ class MainActivity : AppCompatActivity() {
                 binding = binding,
                 launchContactPickerIntent = { intent -> launchers.contactPickerLauncher.launch(intent) },
                 requestContactPermission = { launchers.contactPermissionLauncher.launch(Manifest.permission.READ_CONTACTS) },
-                isSmsSyncControllerInitialized = { ::smsSyncCardController.isInitialized },
+                isSmsSyncControllerInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isSmsSyncInitialized },
                 getSmsSyncController = { smsSyncCardController }
             )
 
@@ -237,20 +241,20 @@ class MainActivity : AppCompatActivity() {
                 getPaymentReceipt = { paymentReceiptCardController },
                 getCallRecord = { callRecordCardController },
                 getFileUpload = { fileUploadCardController },
-                isSmsSyncInitialized = { ::smsSyncCardController.isInitialized },
+                isSmsSyncInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isSmsSyncInitialized },
                 getSmsSync = { smsSyncCardController },
-                isQuoteInitialized = { ::quoteCardController.isInitialized },
+                isQuoteInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isQuoteInitialized },
                 getQuote = { quoteCardController },
-                isEstimateInitialized = { ::estimateCardController.isInitialized },
+                isEstimateInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isEstimateInitialized },
                 getEstimate = { estimateCardController },
-                isInCallSummaryInitialized = { ::inCallSummaryCardController.isInitialized },
+                isInCallSummaryInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isInCallSummaryInitialized },
                 getInCallSummary = { inCallSummaryCardController }
             )
 
             sharedIntentRouter = SharedIntentRouter(
                 context = this,
                 onBookmarkUrl = { url, rawText ->
-                    if (::linkScrapCardController.isInitialized) {
+                    if (::cardCoordinator.isInitialized && cardCoordinator.isLinkScrapInitialized) {
                         linkScrapCardController.bookmarkSharedUrl(url, rawText)
                     }
                 },
@@ -325,73 +329,30 @@ class MainActivity : AppCompatActivity() {
             android.util.Log.w("MainActivity", "권한 및 배터리 최적화 확인 방어: ${e.message}")
         }
         try {
-            if (::serverStatusCardController.isInitialized) {
-                serverStatusCardController.startServerMonitorLoop()
-            }
-        } catch (e: Throwable) {
-            android.util.Log.w("MainActivity", "startServerMonitorLoop 방어: ${e.message}")
-        }
-        try {
             if (::sheetActionController.isInitialized) {
                 sheetActionController.preloadActiveSheetUrls()
             }
         } catch (e: Throwable) {
             android.util.Log.w("MainActivity", "preloadActiveSheetUrls 방어: ${e.message}")
         }
-        try {
-            if (::websiteMonitorCardController.isInitialized) {
-                websiteMonitorCardController.updateStatusText()
-            }
-        } catch (e: Throwable) {
-            android.util.Log.w("MainActivity", "updateWebsiteMonitorStatusText 방어: ${e.message}")
-        }
-        try {
-            if (::quoteCardController.isInitialized) {
-                quoteCardController.refreshQuoteImageUi()
-            }
-        } catch (e: Throwable) {
-            android.util.Log.w("MainActivity", "refreshQuoteImageUi 방어: ${e.message}")
-        }
-        try {
-            if (::estimateCardController.isInitialized) {
-                estimateCardController.refreshEstimateImageUi()
-            }
-        } catch (e: Throwable) {
-            android.util.Log.w("MainActivity", "refreshEstimateImageUi 방어: ${e.message}")
-        }
-        try {
-            if (::callEndedCardController.isInitialized) {
-                callEndedCardController.refreshUi()
-            }
-        } catch (e: Throwable) {
-            android.util.Log.w("MainActivity", "callEndedCardController refreshUi 방어: ${e.message}")
-        }
-        try {
-            if (::inCallSummaryCardController.isInitialized) {
-                inCallSummaryCardController.updateOverlayPermissionStatus()
-            }
-        } catch (e: Throwable) {
-            android.util.Log.w("MainActivity", "updateOverlayPermissionStatus 방어: ${e.message}")
+        if (::cardCoordinator.isInitialized) {
+            cardCoordinator.onResume()
         }
     }
 
     override fun onPause() {
         super.onPause()
-        try {
-            if (::serverStatusCardController.isInitialized) {
-                serverStatusCardController.stopServerMonitorLoop()
-            }
-        } catch (_: Throwable) {}
+        if (::cardCoordinator.isInitialized) {
+            cardCoordinator.onPause()
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         try { if (::aodModeController.isInitialized) aodModeController.destroy() } catch (_: Throwable) {}
-        try {
-            if (::serverStatusCardController.isInitialized) {
-                serverStatusCardController.stopServerMonitorLoop()
-            }
-        } catch (_: Throwable) {}
+        if (::cardCoordinator.isInitialized) {
+            cardCoordinator.onDestroy()
+        }
         try { activityScope.coroutineContext.cancelChildren() } catch (_: Throwable) {}
         try {
             if (::smsObserverController.isInitialized) {
@@ -401,87 +362,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        // 0-0. 통합 모바일 에이전트 & 서버 관제 상태 카드 초기화 (v2.1.54 / 리팩토링)
-        setupServerStatusCard()
-
-        // 0-0-1. 전 카드 상시 접기/펼치기 아코디언 토글 초기화 및 리스너 등록 (v2.1.54)
-        setupCardCollapseExpandListeners()
-
-
-        // 0. Google 원클릭 로그인 및 계정 연동 초기화
-        setupAccountPairing()
-
-        // 0-1. AI 토큰 지갑 및 추천인 리워드 카드 초기화
-        setupTokenWalletCard()
-
-
-
-        // 6. 매장 결제 & 영수증 문자 전송 스위치
-        setupPaymentReceiptCard()
-
-        // 통화 녹음 구글 드라이브 자동 백업 및 AI 전사 카드 초기화
-        setupCallRecordCard()
-
-        // 🎙️ 회의 녹음 구글 드라이브 및 [SheetBot] 회의록 대장 자동 백업 카드 초기화
-        setupMeetingRecordingCard()
-
-        // 🔍 원클릭 기업 심층 리서치 및 문서화 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupCompanyResearchCard()
-
-        // ⚖️ AI 법률/계약서 팩트체크 카드 초기화
-        setupLawAdvisoryCard()
-
-        // ✍️ AI 네이버 블로그 자동 포스팅 카드 초기화
-        setupBlogAutomationCard()
-
-        // 📸 AI 인스타그램 피드 & 해시태그 카드 초기화
-        setupInstagramAutomationCard()
-
-        // 🌐 AI 모바일 홈페이지 제작 & 관리 카드 초기화
-        setupMobileSiteCard()
-
-        // 사진 및 문서 파일 구글 드라이브 업로드 카드 초기화
-        setupFileUploadCard()
-                
-        // 🌐 웹 링크 & 유튜브 영상 AI 자동 스크랩 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupLinkScrapCard()
-
-        // 자연어 AI 시트 코파일럿 카드 초기화
-        setupAiCopilotCard()
-
-
-        // 🧾 영수증 AI OCR 자동 장부화 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupReceiptCard()
-
-        // 🪪 명함 AI OCR 자동 인맥 등록 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupBusinessCardSyncCard()
-
-        // 🎯 문자(SMS/LMS) 송수신 구글 시트 동기화 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupSmsCard()
-
-        // 💬 카카오톡 수신 메시지 구글 시트 동기화 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupKakaoSyncCard()
-
-        // 📑 AI 스마트 견적 및 단가표 대장 연동 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupQuoteCard()
-        
-
-        // 📑 AI 스마트 간편 견적서 발행 대장 연동 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupEstimateCard()
-        // 📞 수신 전화 시 고객 시트 요약 인콜 플로팅 팝업 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupInCallSummaryCard()
-
-        // 📵 부재중 전화(Missed Call) 0원 스마트 자동 회신 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupMissedCallCard()
-
-        // 💼 통화 종료 직후 모바일 명함 원터치 발송 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupCallEndedCard()
-
-        // 🌐 내 웹사이트 실시간 장애 감시 (Uptime Sentinel) UI 바인딩
-        setupWebsiteMonitorCard()
-
-        // 📇 스마트폰 연락처 구글 시트 자동 동기화 UI 바인딩
-        setupContactsSyncCard()
+        cardCoordinator = CardSetupCoordinator(
+            activity = this,
+            binding = binding,
+            prefs = prefs,
+            scope = activityScope,
+            launchers = launchers,
+            googleSignInClient = googleSignInClient,
+            showOpenSheetChooserDialog = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
+            provisionSheetAsync = { sheetType, sheetTitle, folderName -> provisionSheetAsync(sheetType, sheetTitle, folderName) },
+            addLogItem = { sender, body, success -> addLogItem(sender, body, success) },
+            updateTargetBadges = { updateTargetBadges() },
+            showTargetManageDialog = { title, editText, targetType -> showTargetManageDialog(title, editText, targetType) },
+            checkAndLaunchContactPicker = { targetType -> checkAndLaunchContactPicker(targetType) },
+            openDriveFolder = { sheetType, defaultFolderName -> openDriveFolder(sheetType, defaultFolderName) },
+            checkAndRequestAllFilesAccess = { onGranted -> checkAndRequestAllFilesAccess(onGranted) },
+            isNotificationListenerEnabled = { isNotificationListenerEnabled() },
+            requestNotificationListenerPermission = { requestNotificationListenerPermission() },
+            updateCardCollapseState = { container, toggleBtn, isHidden -> updateCardCollapseState(container, toggleBtn, isHidden) },
+            updateUiState = { updateUiState() },
+            setupCardCollapseExpandListeners = { setupCardCollapseExpandListeners() }
+        )
+        cardCoordinator.setupAllCards()
     }
 
     private fun enterAodMode() =
@@ -510,7 +412,7 @@ class MainActivity : AppCompatActivity() {
         refreshAllCardsCollapseState()
         updateTargetBadges()
 
-        if (::serverStatusCardController.isInitialized) {
+        if (::cardCoordinator.isInitialized && cardCoordinator.isServerStatusInitialized) {
             serverStatusCardController.updateCardStatus(isPaired, email)
         }
 
@@ -574,407 +476,6 @@ class MainActivity : AppCompatActivity() {
     private fun showTargetManageDialog(dialogTitle: String, editText: EditText, targetType: String) =
         targetFilterController.showTargetManageDialog(dialogTitle, editText, targetType)
 
-    // ==========================================
-    // 🌐 내 웹사이트 실시간 장애 감시 (Uptime Sentinel) UI 바인딩
-    /**
-     * 🌐 내 웹사이트 실시간 장애 감시 (Uptime Sentinel) 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
-     */
-    private fun setupWebsiteMonitorCard() {
-        websiteMonitorCardController = WebsiteMonitorCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
-            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) }
-        )
-        websiteMonitorCardController.setup()
-    }
-
-    // ==========================================
-/**
-     * 📇 스마트폰 연락처 구글 시트 자동 동기화 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
-     */
-    private fun setupContactsSyncCard() {
-        contactsCardController = ContactsBackupCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
-            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) },
-            onRequestPermission = { permission, requestCode ->
-                androidx.core.app.ActivityCompat.requestPermissions(this, arrayOf(permission), requestCode)
-            }
-        )
-        contactsCardController.setup()
-    }
-
     private fun checkAndRequestAllFilesAccess(onGranted: (() -> Unit)? = null) =
         permissionController.checkAndRequestAllFilesAccess(onGranted)
-
-    private fun setupLawAdvisoryCard() {
-        lawCardController = LawAdvisoryCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            onPickFile = { launchers.lawAdvisoryFilePickerLauncher.launch("image/*") },
-            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
-        )
-        lawCardController.setup()
-    }
-
-    /**
-     * ✍️ AI 네이버 블로그 자동 포스팅 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
-     */
-    private fun setupBlogAutomationCard() {
-        blogCardController = BlogAutomationCardController(
-            activity = this,
-            binding = binding.cardBlog,
-            prefs = prefs,
-            onPickImages = { launchers.blogImagesPickerLauncher.launch("image/*") },
-            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
-        )
-        blogCardController.setup()
-    }
-
-    /**
-     * 📸 AI 인스타그램 피드 & 해시태그 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
-     */
-    private fun setupInstagramAutomationCard() {
-        instaCardController = InstagramAutomationCardController(
-            activity = this,
-            binding = binding.cardInsta,
-            prefs = prefs,
-            onPickImages = { launchers.instaImagesPickerLauncher.launch("image/*") },
-            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
-        )
-        instaCardController.setup()
-    }
-
-
-    /**
-     * 🌐 AI 모바일 홈페이지 제작 & 관리 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
-     */
-    private fun setupMobileSiteCard() {
-        siteCardController = MobileSiteCardController(
-            activity = this,
-            binding = binding.cardSite,
-            prefs = prefs,
-            onPickImages = { launchers.siteImagesPickerLauncher.launch("image/*") },
-            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
-        )
-        siteCardController.setup()
-    }
-
-    /**
-     * 🔍 원클릭 기업 심층 리서치 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
-     */
-    private fun setupCompanyResearchCard() {
-        companyResearchCardController = CompanyResearchCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
-        )
-        companyResearchCardController.setup()
-    }
-
-    /**
-     * 🌐 웹 링크 & 유튜브 3줄 요약 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
-     */
-    private fun setupLinkScrapCard() {
-        linkScrapCardController = LinkScrapCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
-            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) },
-            onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) }
-        )
-        linkScrapCardController.setup()
-    }
-
-    /**
-     * 📵 부재중 전화 0원 스마트 자동 답장 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
-     */
-    private fun setupMissedCallCard() {
-        missedCallCardController = MissedCallCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
-            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) }
-        )
-        missedCallCardController.setup()
-    }
-
-    /**
-     * 💬 카카오톡 대화 내용 구글 시트 자동 동기화 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
-     */
-    private fun setupKakaoSyncCard() {
-        kakaoCardController = KakaoSyncCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            onPickChatFile = {
-                try {
-                    launchers.kakaoChatPickerLauncher.launch("*/*")
-                } catch (_: Exception) {
-                    try {
-                        launchers.kakaoChatPickerLauncher.launch("text/*")
-                    } catch (e: Exception) {
-                        Toast.makeText(this, "파일 탐색기를 열 수 없습니다: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            },
-            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
-            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) },
-            onShowTargetManageDialog = { title, editText, targetType -> showTargetManageDialog(title, editText, targetType) },
-            onUpdateTargetBadges = { updateTargetBadges() },
-            onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) }
-        )
-        kakaoCardController.setup()
-    }
-
-    /**
-     * 💼 통화 종료 직후 모바일 명함 원터치 발송 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
-     */
-    private fun setupCallEndedCard() {
-        callEndedCardController = CallEndedCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            onPickImage = { launchers.callEndedImagePickerLauncher.launch("image/*") },
-            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
-            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) },
-            onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) }
-        )
-        callEndedCardController.setup()
-    }
-
-    /**
-     * 🎯 문자(SMS/LMS) 송수신 구글 시트 동기화 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
-     */
-    private fun setupSmsCard() {
-        smsSyncCardController = SmsSyncCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            onPickContact = { checkAndLaunchContactPicker("SMS") },
-            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
-            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) },
-            onShowTargetManageDialog = { title, editText, targetType -> showTargetManageDialog(title, editText, targetType) },
-            isNotificationListenerEnabled = { isNotificationListenerEnabled() },
-            requestNotificationListenerPermission = { requestNotificationListenerPermission() }
-        )
-        smsSyncCardController.setup()
-    }
-
-    /**
-     * 📑 AI 스마트 간편 주문서 & 단가표 대장 연동 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
-     */
-    private fun setupQuoteCard() {
-        quoteCardController = QuoteSyncCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            onPickQuoteImage = { launchers.quoteImagePickerLauncher.launch("image/*") },
-            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
-            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) }
-        )
-        quoteCardController.setup()
-    }
-
-    /**
-     * 📑 AI 스마트 간편 견적서 발행 대장 연동 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
-     */
-    private fun setupEstimateCard() {
-        estimateCardController = EstimateSyncCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            onPickEstimateImage = { launchers.estimateImagePickerLauncher.launch("image/*") },
-            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
-            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) }
-        )
-        estimateCardController.setup()
-    }
-
-    /**
-     * 📞 수신 전화 시 고객 시트 요약 인콜 플로팅 팝업 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
-     */
-    private fun setupInCallSummaryCard() {
-        inCallSummaryCardController = InCallSummaryCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
-        )
-        inCallSummaryCardController.setup()
-    }
-
-    /**
-     * 🧾 영수증 AI OCR 자동 장부화 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
-     */
-    private fun setupReceiptCard() {
-        receiptCardController = ReceiptSyncCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            onPickReceiptImage = { launchers.receiptPickerLauncher.launch("image/*") },
-            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
-            onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) }
-        )
-        receiptCardController.setup()
-    }
-
-    /**
-     * 🪪 명함 AI OCR 자동 인맥 등록 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
-     */
-    private fun setupBusinessCardSyncCard() {
-        businessCardController = BusinessCardSyncCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            onPickBusinessCardImage = { launchers.businessCardPickerLauncher.launch("image/*") },
-            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
-            onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) }
-        )
-        businessCardController.setup()
-    }
-    private fun setupPaymentReceiptCard() {
-        paymentReceiptCardController = PaymentReceiptCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            scope = activityScope,
-            isNotificationListenerEnabled = { isNotificationListenerEnabled() },
-            requestNotificationListenerPermission = { requestNotificationListenerPermission() },
-            provisionSheetAsync = { type, defaultTitle -> provisionSheetAsync(type, defaultTitle) },
-            showOpenSheetChooserDialog = { type, title -> showOpenSheetChooserDialog(type, title) },
-            updateCardCollapseState = { layout, button, isHidden -> updateCardCollapseState(layout, button, isHidden) }
-        )
-        paymentReceiptCardController.setup()
-    }
-
-    private fun setupCallRecordCard() {
-        callRecordCardController = CallRecordCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            scope = activityScope,
-            checkAndRequestAllFilesAccess = { checkAndRequestAllFilesAccess() },
-            provisionSheetAsync = { type, defaultTitle, folderName -> provisionSheetAsync(type, defaultTitle, folderName) },
-            checkAndLaunchContactPicker = { type -> checkAndLaunchContactPicker(type) },
-            showTargetManageDialog = { title, targetEditText, type -> showTargetManageDialog(title, targetEditText, type) },
-            updateTargetBadges = { updateTargetBadges() },
-            showOpenSheetChooserDialog = { type, title -> showOpenSheetChooserDialog(type, title) },
-            openDriveFolder = { type, folderName -> openDriveFolder(type, folderName) },
-            launchExternalRecordingPicker = { launchers.externalRecordingPickerLauncher.launch("audio/*") },
-            requestRecordAudioPermission = { launchers.recordAudioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO) },
-            updateCardCollapseState = { layout, button, isHidden -> updateCardCollapseState(layout, button, isHidden) }
-        )
-        callRecordCardController.setup()
-    }
-
-    private fun setupMeetingRecordingCard() {
-        meetingRecordingCardController = MeetingRecordingCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            scope = activityScope,
-            checkAndRequestAllFilesAccess = { checkAndRequestAllFilesAccess() },
-            provisionSheetAsync = { type, defaultTitle, folderName -> provisionSheetAsync(type, defaultTitle, folderName) },
-            showOpenSheetChooserDialog = { type, title -> showOpenSheetChooserDialog(type, title) },
-            updateCardCollapseState = { layout, button, isHidden -> updateCardCollapseState(layout, button, isHidden) }
-        )
-        meetingRecordingCardController.setup()
-    }
-
-    private fun setupFileUploadCard() {
-        fileUploadCardController = FileUploadCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            scope = activityScope,
-            launchFilePicker = { launchers.filePickerLauncher.launch("*/*") },
-            provisionSheetAsync = { type, defaultTitle, folderName -> provisionSheetAsync(type, defaultTitle, folderName) },
-            showOpenSheetChooserDialog = { type, title -> showOpenSheetChooserDialog(type, title) },
-            openDriveFolder = { type, folderName -> openDriveFolder(type, folderName) },
-            addLogItem = { title, detail, success -> addLogItem(title, detail, success) },
-            updateCardCollapseState = { layout, button, isHidden -> updateCardCollapseState(layout, button, isHidden) }
-        )
-        fileUploadCardController.setup()
-    }
-
-    private fun setupAiCopilotCard() {
-        aiCopilotCardController = AiCopilotCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            scope = activityScope,
-            launchSpeechRecognizer = { intent -> launchers.speechRecognizerLauncher.launch(intent) },
-            addLogItem = { title, detail, success -> addLogItem(title, detail, success) },
-            updateCardCollapseState = { layout, button, isHidden -> updateCardCollapseState(layout, button, isHidden) }
-        )
-        aiCopilotCardController.setup()
-    }
-
-    private fun setupTokenWalletCard() {
-        tokenWalletCardController = TokenWalletCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            scope = activityScope,
-            updateCardCollapseState = { layout, button, isHidden -> updateCardCollapseState(layout, button, isHidden) }
-        )
-        tokenWalletCardController.setup()
-    }
-
-    private fun setupAccountPairing() {
-        accountPairingController = AccountPairingController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            scope = activityScope,
-            googleSignInClient = googleSignInClient,
-            launchGoogleSignIn = { intent -> launchers.googleSignInLauncher.launch(intent) },
-            launchAccountPicker = { intent -> launchers.accountPickerLauncher.launch(intent) },
-            launchQrScan = { launchQrScanner() },
-            onPairingSuccess = { email ->
-                updateUiState()
-            },
-            onUnlinkSuccess = {
-                updateUiState()
-            },
-            addLogItem = { title, detail, success -> addLogItem(title, detail, success) }
-        )
-        accountPairingController.setup()
-    }
-
-    private fun launchQrScanner() {
-        val options = ScanOptions().apply {
-            setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-            setPrompt("시트봇 워크스페이스 모니터 화면의 연동 QR코드를 비춰주세요")
-            setCameraId(0)
-            setBeepEnabled(true)
-            setBarcodeImageEnabled(false)
-            setOrientationLocked(true)
-        }
-        launchers.barcodeLauncher.launch(options)
-    }
-
-    private fun setupServerStatusCard() {
-        serverStatusCardController = ServerStatusCardController(
-            activity = this,
-            binding = binding,
-            prefs = prefs,
-            scope = activityScope
-        )
-        serverStatusCardController.setup()
-    }
-
 }
-
-
-
-
