@@ -104,167 +104,23 @@ class MainActivity : AppCompatActivity() {
 
 
 
-    // QR 코드 스캐너 런처 (ZXing Embedded)
-    private val barcodeLauncher = registerForActivityResult(ScanContract()) { result ->
-        if (result.contents != null) {
-            accountPairingController.handleQrScanResult(result.contents)
-        }
-    }
-
-    // 런타임 권한 요청 런처 (SMS, 카메라, 알림)
-    private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        if (::permissionController.isInitialized) {
-            permissionController.onPermissionResult(permissions)
-        }
-    }
-
-    // 사진 및 일반 파일 다중 선택 런처
-    private val filePickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetMultipleContents()
-    ) { uris ->
-        if (!uris.isNullOrEmpty()) {
-            fileUploadCardController.uploadFiles(uris, "앱 내 직접 선택 파일 업로드")
-        }
-    }
-
-    // 다른 폰/외부에서 전송받은 통화 녹음 파일(.m4a, .mp3 등) 직접 선택 런처
-    private val externalRecordingPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetMultipleContents()
-    ) { uris ->
-        if (!uris.isNullOrEmpty()) {
-            callRecordCardController.uploadExternalRecordings(uris)
-        }
-    }
-
-    // 🎙️ 화자 분리용 내 목소리 녹음 마이크 권한 요청 런처
-    private val recordAudioPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            val email = prefs.userEmail
-            if (!email.isNullOrBlank()) {
-                callRecordCardController.showRecordVoiceProfileDialog(email)
-            }
-        } else {
-            Toast.makeText(this, "내 목소리 화자 등록을 위해 마이크 녹음 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    // 영수증 AI OCR 장부화 전용 이미지/문서 선택 런처 (v1.5)
-    private val receiptPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null && ::receiptCardController.isInitialized) {
-            receiptCardController.uploadReceipt(uri)
-        }
-    }
-
-    // 명함 AI OCR 인맥 등록 전용 이미지/문서 선택 런처 (v1.5)
-    private val businessCardPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null && ::businessCardController.isInitialized) {
-            businessCardController.uploadBusinessCard(uri)
-        }
-    }
-
-    // 통화 종료 모바일 명함 발송용 첨부 이미지(MMS) 선택 런처 (v2.0.7)
-    private val callEndedImagePickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null && ::callEndedCardController.isInitialized) {
-            callEndedCardController.handleImageSelected(uri)
-        }
-    }
-
-    // 📷 간편주문 웹앱 및 카카오톡 미리보기용 대표 이미지 선택 런처 (v2.1.18)
-    private val quoteImagePickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null && ::quoteCardController.isInitialized) {
-            quoteCardController.handleImageSelected(uri)
-        }
-    }
-
-    // 📸 간편견적 웹앱 및 카카오톡 미리보기용 대표 이미지 선택 런처 (v2.1.98)
-    private val estimateImagePickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null && ::estimateCardController.isInitialized) {
-            estimateCardController.handleImageSelected(uri)
-        }
-    }
-
-    // ⚖️ AI 법률/계약서 팩트체크 카드 전담 컨트롤러 및 서류 첨부 런처 (v2.1.88 / 리팩토링 모듈화)
+    // 🎛️ 카드별/기능별 전담 컨트롤러 프로퍼티
     private lateinit var lawCardController: LawAdvisoryCardController
-    private val lawAdvisoryFilePickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null && ::lawCardController.isInitialized) {
-            lawCardController.handleFileSelected(uri)
-        }
-    }
-
-    // ✍️ AI 네이버 블로그 자동 포스팅 카드 전담 컨트롤러 및 사진 복수 첨부 런처 (v2.1.89 / 리팩토링 모듈화)
     private lateinit var blogCardController: BlogAutomationCardController
-    private val blogImagesPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetMultipleContents()
-    ) { uris ->
-        if (!uris.isNullOrEmpty() && ::blogCardController.isInitialized) {
-            blogCardController.handleImagesSelected(uris)
-        }
-    }
-
-    // 📸 AI 인스타그램 피드 & 해시태그 카드 전담 컨트롤러 및 사진 복수 첨부 런처 (v2.1.90 / 리팩토링 모듈화)
     private lateinit var instaCardController: InstagramAutomationCardController
-    private val instaImagesPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetMultipleContents()
-    ) { uris ->
-        if (!uris.isNullOrEmpty() && ::instaCardController.isInitialized) {
-            instaCardController.handleImagesSelected(uris)
-        }
-    }
-
-    // 🌐 AI 모바일 홈페이지 제작 & 관리 카드 전담 컨트롤러 및 사진 복수 첨부 런처 (v2.1.91 / 리팩토링 모듈화)
-    // 🔍 원클릭 기업 심층 리서치 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
+    private lateinit var siteCardController: MobileSiteCardController
     private lateinit var companyResearchCardController: CompanyResearchCardController
-
-    // 🌐 내 웹사이트 실시간 장애 감시 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var websiteMonitorCardController: WebsiteMonitorCardController
-
-    // 📇 스마트폰 연락처 구글 시트 자동 동기화 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var contactsCardController: ContactsBackupCardController
-
-    // 🌐 웹 링크 & 유튜브 영상 AI 자동 스크랩 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var linkScrapCardController: LinkScrapCardController
-
-    // 📵 부재중 전화 0원 스마트 자동 답장 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var missedCallCardController: MissedCallCardController
-
-    // 💬 카카오톡 대화 내용 구글 시트 자동 동기화 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var kakaoCardController: KakaoSyncCardController
-
-    // 💼 통화 종료 직후 모바일 명함 원터치 발송 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var callEndedCardController: CallEndedCardController
-
-    // 🎯 문자(SMS/LMS) 송수신 구글 시트 자동 동기화 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var smsSyncCardController: SmsSyncCardController
-
-    // 📑 AI 스마트 견적 및 단가표 대장 연동 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var quoteCardController: QuoteSyncCardController
-
-    // 📑 AI 스마트 간편 견적서 발행 대장 연동 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var estimateCardController: EstimateSyncCardController
-
-    // 📞 수신 전화 시 고객 시트 요약 인콜 플로팅 팝업 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var inCallSummaryCardController: InCallSummaryCardController
-
-    // 🧾 영수증 Gemini AI OCR 자동 장부화 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var receiptCardController: ReceiptSyncCardController
-
-    // 🪪 명함 Gemini AI OCR 자동 인맥 등록 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var businessCardController: BusinessCardSyncCardController
     private lateinit var paymentReceiptCardController: PaymentReceiptCardController
     private lateinit var callRecordCardController: CallRecordCardController
@@ -283,86 +139,47 @@ class MainActivity : AppCompatActivity() {
     private lateinit var localLogViewController: LocalLogViewController
     private lateinit var appUpdateController: AppUpdateController
     private lateinit var smsObserverController: SmsObserverController
-
-    private lateinit var siteCardController: MobileSiteCardController
-    private val siteImagesPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetMultipleContents()
-    ) { uris ->
-        if (!uris.isNullOrEmpty() && ::siteCardController.isInitialized) {
-            siteCardController.handleImagesSelected(uris)
-        }
-    }
-
-    // 카카오톡 대화 내용 내보내기(.txt) 파일 선택 런처 (v2.1.11)
-    private val kakaoChatPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null && ::kakaoCardController.isInitialized) {
-            kakaoCardController.handleFileSelected(uri)
-        }
-    }
-
-    // 자연어 AI 시트 코파일럿 음성 인식 런처 (v1.7)
-    private val speechRecognizerLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            val matches = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            if (!matches.isNullOrEmpty()) {
-                val spokenText = matches[0]
-                binding.etAiCommand.setText(spokenText)
-                aiCopilotCardController.executeAiCommand(spokenText)
-            }
-        }
-    }
-
-    // 연락처 선택 런처 (v2.1.1 기록 대상 주소록 피커)
-    private val contactPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            val contactUri = result.data?.data
-            if (contactUri != null && ::targetFilterController.isInitialized) {
-                targetFilterController.handlePickedContact(contactUri)
-            }
-        }
-    }
-
-    private val contactPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (::targetFilterController.isInitialized) {
-            targetFilterController.onPermissionResult(isGranted)
-        }
-    }
-
-    // Google 원클릭 로그인 런처 (v1.8.0)
     private lateinit var googleSignInClient: GoogleSignInClient
-    private val googleSignInLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        accountPairingController.handleGoogleSignInResult(result.data)
-    }
-        } catch (e: ApiException) {
-            android.util.Log.w("MainActivity", "Google sign-in failed: statusCode=${e.statusCode}")
-            if (e.statusCode == 12501) { // 12501은 사용자 단순 취소
-                Toast.makeText(this, "구글 로그인이 취소되었습니다.", Toast.LENGTH_SHORT).show()
-            } else {
-                // StatusCode 10 (DEVELOPER_ERROR) 등 발생 시 기기 계정 선택기 또는 간편 이메일 연동창으로 자동 전환
-                launchAccountPickerOrManualDialog("구글 보안 인증(코드 ${e.statusCode})으로 인해 스마트폰 계정 선택창으로 안전하게 전환합니다.")
-            }
-        }
-    }
 
-    // 안드로이드 시스템 구글 계정 선택기 런처 (v2.0.1 무중단 연동 폴백)
-    private val accountPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        accountPairingController.handleAccountPickerResult(result.resultCode, result.data)
-    }
-        }
-        showManualEmailPairDialog()
-    }
+    // 🚀 액티비티 결과 런처(ActivityResultLauncher) 20종 통합 레지스트리 (v2.1.99 모듈화)
+    private val launchers = ActivityLauncherRegistry(
+        activity = this,
+        getPrefsUserEmail = { prefs.userEmail },
+        onAiCommandReceived = { spokenText ->
+            binding.etAiCommand.setText(spokenText)
+            aiCopilotCardController.executeAiCommand(spokenText)
+        },
+        isAccountPairingInitialized = { ::accountPairingController.isInitialized },
+        getAccountPairing = { accountPairingController },
+        isPermissionInitialized = { ::permissionController.isInitialized },
+        getPermission = { permissionController },
+        isFileUploadInitialized = { ::fileUploadCardController.isInitialized },
+        getFileUpload = { fileUploadCardController },
+        isCallRecordInitialized = { ::callRecordCardController.isInitialized },
+        getCallRecord = { callRecordCardController },
+        isReceiptInitialized = { ::receiptCardController.isInitialized },
+        getReceipt = { receiptCardController },
+        isBusinessCardInitialized = { ::businessCardController.isInitialized },
+        getBusinessCard = { businessCardController },
+        isCallEndedInitialized = { ::callEndedCardController.isInitialized },
+        getCallEnded = { callEndedCardController },
+        isQuoteInitialized = { ::quoteCardController.isInitialized },
+        getQuote = { quoteCardController },
+        isEstimateInitialized = { ::estimateCardController.isInitialized },
+        getEstimate = { estimateCardController },
+        isLawInitialized = { ::lawCardController.isInitialized },
+        getLaw = { lawCardController },
+        isBlogInitialized = { ::blogCardController.isInitialized },
+        getBlog = { blogCardController },
+        isInstaInitialized = { ::instaCardController.isInitialized },
+        getInsta = { instaCardController },
+        isSiteInitialized = { ::siteCardController.isInitialized },
+        getSite = { siteCardController },
+        isKakaoInitialized = { ::kakaoCardController.isInitialized },
+        getKakao = { kakaoCardController },
+        isTargetFilterInitialized = { ::targetFilterController.isInitialized },
+        getTargetFilter = { targetFilterController }
+    )
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -399,8 +216,8 @@ class MainActivity : AppCompatActivity() {
             targetFilterController = TargetFilterController(
                 activity = this,
                 binding = binding,
-                launchContactPickerIntent = { intent -> contactPickerLauncher.launch(intent) },
-                requestContactPermission = { contactPermissionLauncher.launch(Manifest.permission.READ_CONTACTS) },
+                launchContactPickerIntent = { intent -> launchers.contactPickerLauncher.launch(intent) },
+                requestContactPermission = { launchers.contactPermissionLauncher.launch(Manifest.permission.READ_CONTACTS) },
                 isSmsSyncControllerInitialized = { ::smsSyncCardController.isInitialized },
                 getSmsSyncController = { smsSyncCardController }
             )
@@ -408,7 +225,7 @@ class MainActivity : AppCompatActivity() {
             permissionController = PermissionController(
                 activity = this,
                 binding = binding,
-                launchPermissionRequest = { perms -> permissionLauncher.launch(perms) }
+                launchPermissionRequest = { perms -> launchers.permissionLauncher.launch(perms) }
             )
             permissionController.setup()
 
@@ -799,7 +616,7 @@ class MainActivity : AppCompatActivity() {
             activity = this,
             binding = binding,
             prefs = prefs,
-            onPickFile = { lawAdvisoryFilePickerLauncher.launch("image/*") },
+            onPickFile = { launchers.lawAdvisoryFilePickerLauncher.launch("image/*") },
             onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
         )
         lawCardController.setup()
@@ -813,7 +630,7 @@ class MainActivity : AppCompatActivity() {
             activity = this,
             binding = binding.cardBlog,
             prefs = prefs,
-            onPickImages = { blogImagesPickerLauncher.launch("image/*") },
+            onPickImages = { launchers.blogImagesPickerLauncher.launch("image/*") },
             onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
         )
         blogCardController.setup()
@@ -827,7 +644,7 @@ class MainActivity : AppCompatActivity() {
             activity = this,
             binding = binding.cardInsta,
             prefs = prefs,
-            onPickImages = { instaImagesPickerLauncher.launch("image/*") },
+            onPickImages = { launchers.instaImagesPickerLauncher.launch("image/*") },
             onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
         )
         instaCardController.setup()
@@ -842,7 +659,7 @@ class MainActivity : AppCompatActivity() {
             activity = this,
             binding = binding.cardSite,
             prefs = prefs,
-            onPickImages = { siteImagesPickerLauncher.launch("image/*") },
+            onPickImages = { launchers.siteImagesPickerLauncher.launch("image/*") },
             onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
         )
         siteCardController.setup()
@@ -900,10 +717,10 @@ class MainActivity : AppCompatActivity() {
             prefs = prefs,
             onPickChatFile = {
                 try {
-                    kakaoChatPickerLauncher.launch("*/*")
+                    launchers.kakaoChatPickerLauncher.launch("*/*")
                 } catch (_: Exception) {
                     try {
-                        kakaoChatPickerLauncher.launch("text/*")
+                        launchers.kakaoChatPickerLauncher.launch("text/*")
                     } catch (e: Exception) {
                         Toast.makeText(this, "파일 탐색기를 열 수 없습니다: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
                     }
@@ -926,7 +743,7 @@ class MainActivity : AppCompatActivity() {
             activity = this,
             binding = binding,
             prefs = prefs,
-            onPickImage = { callEndedImagePickerLauncher.launch("image/*") },
+            onPickImage = { launchers.callEndedImagePickerLauncher.launch("image/*") },
             onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
             onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) },
             onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) }
@@ -960,7 +777,7 @@ class MainActivity : AppCompatActivity() {
             activity = this,
             binding = binding,
             prefs = prefs,
-            onPickQuoteImage = { quoteImagePickerLauncher.launch("image/*") },
+            onPickQuoteImage = { launchers.quoteImagePickerLauncher.launch("image/*") },
             onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
             onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) }
         )
@@ -975,7 +792,7 @@ class MainActivity : AppCompatActivity() {
             activity = this,
             binding = binding,
             prefs = prefs,
-            onPickEstimateImage = { estimateImagePickerLauncher.launch("image/*") },
+            onPickEstimateImage = { launchers.estimateImagePickerLauncher.launch("image/*") },
             onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
             onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) }
         )
@@ -1003,7 +820,7 @@ class MainActivity : AppCompatActivity() {
             activity = this,
             binding = binding,
             prefs = prefs,
-            onPickReceiptImage = { receiptPickerLauncher.launch("image/*") },
+            onPickReceiptImage = { launchers.receiptPickerLauncher.launch("image/*") },
             onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
             onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) }
         )
@@ -1018,7 +835,7 @@ class MainActivity : AppCompatActivity() {
             activity = this,
             binding = binding,
             prefs = prefs,
-            onPickBusinessCardImage = { businessCardPickerLauncher.launch("image/*") },
+            onPickBusinessCardImage = { launchers.businessCardPickerLauncher.launch("image/*") },
             onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
             onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) }
         )
@@ -1052,8 +869,8 @@ class MainActivity : AppCompatActivity() {
             updateTargetBadges = { updateTargetBadges() },
             showOpenSheetChooserDialog = { type, title -> showOpenSheetChooserDialog(type, title) },
             openDriveFolder = { type, folderName -> openDriveFolder(type, folderName) },
-            launchExternalRecordingPicker = { externalRecordingPickerLauncher.launch("audio/*") },
-            requestRecordAudioPermission = { recordAudioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO) },
+            launchExternalRecordingPicker = { launchers.externalRecordingPickerLauncher.launch("audio/*") },
+            requestRecordAudioPermission = { launchers.recordAudioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO) },
             updateCardCollapseState = { layout, button, isHidden -> updateCardCollapseState(layout, button, isHidden) }
         )
         callRecordCardController.setup()
@@ -1079,7 +896,7 @@ class MainActivity : AppCompatActivity() {
             binding = binding,
             prefs = prefs,
             scope = activityScope,
-            launchFilePicker = { filePickerLauncher.launch("*/*") },
+            launchFilePicker = { launchers.filePickerLauncher.launch("*/*") },
             provisionSheetAsync = { type, defaultTitle, folderName -> provisionSheetAsync(type, defaultTitle, folderName) },
             showOpenSheetChooserDialog = { type, title -> showOpenSheetChooserDialog(type, title) },
             openDriveFolder = { type, folderName -> openDriveFolder(type, folderName) },
@@ -1095,7 +912,7 @@ class MainActivity : AppCompatActivity() {
             binding = binding,
             prefs = prefs,
             scope = activityScope,
-            launchSpeechRecognizer = { intent -> speechRecognizerLauncher.launch(intent) },
+            launchSpeechRecognizer = { intent -> launchers.speechRecognizerLauncher.launch(intent) },
             addLogItem = { title, detail, success -> addLogItem(title, detail, success) },
             updateCardCollapseState = { layout, button, isHidden -> updateCardCollapseState(layout, button, isHidden) }
         )
@@ -1120,8 +937,8 @@ class MainActivity : AppCompatActivity() {
             prefs = prefs,
             scope = activityScope,
             googleSignInClient = googleSignInClient,
-            launchGoogleSignIn = { intent -> googleSignInLauncher.launch(intent) },
-            launchAccountPicker = { intent -> accountPickerLauncher.launch(intent) },
+            launchGoogleSignIn = { intent -> launchers.googleSignInLauncher.launch(intent) },
+            launchAccountPicker = { intent -> launchers.accountPickerLauncher.launch(intent) },
             launchQrScan = { launchQrScanner() },
             onPairingSuccess = { email ->
                 updateUiState()
@@ -1143,7 +960,7 @@ class MainActivity : AppCompatActivity() {
             setBarcodeImageEnabled(false)
             setOrientationLocked(true)
         }
-        barcodeLauncher.launch(options)
+        launchers.barcodeLauncher.launch(options)
     }
 
     private fun setupServerStatusCard() {
