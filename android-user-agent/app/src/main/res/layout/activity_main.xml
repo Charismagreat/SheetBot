@@ -4002,6 +4002,67 @@
             android:overScrollMode="always"
             android:text="대기 중... 은행 입금 알림, 결제 푸시, 고객 SMS가 수신되면 실시간 기록됩니다.\n" />
 
+        <!-- 💡 맞춤 기능 제작 의뢰 / 아이디어 제안함 (v2.1.99) -->
+        <LinearLayout
+            android:id="@+id/cardFeatureRequest"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_scenario"
+            android:padding="14dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="4dp">
+
+            <LinearLayout
+                android:id="@+id/layoutFeatureRequestHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="💡 우리 가게·회사 맞춤 기능 제작 의뢰"
+                    android:textColor="#38BDF8"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="7dp"
+                    android:paddingVertical="2dp"
+                    android:text="1:1 다이렉트 접수"
+                    android:textColor="#34D399"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="전자세금계산서 자동 발행, 실시간 재고 관리, 직원 출퇴근 체크, 배달앱 리뷰 AI 답글 등 사장님 업무에 꼭 필요한 맞춤 기능을 직접 만들어 드립니다. 아이디어를 편하게 남겨주시면 시트봇 전담 엔지니어가 신속히 제작해 드립니다."
+                android:textColor="#94A3B8"
+                android:textSize="11sp"
+                android:lineSpacingExtra="2.5dp"
+                android:layout_marginBottom="10dp" />
+
+            <Button
+                android:id="@+id/btnOpenFeatureRequestDialog"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:backgroundTint="#0284C7"
+                android:text="🚀 나만의 맞춤 기능 의뢰하기"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
         <!-- 📦 추가 기능 보관함 (Card Drawer) -->
         <LinearLayout
             android:id="@+id/cardDrawerBox"
