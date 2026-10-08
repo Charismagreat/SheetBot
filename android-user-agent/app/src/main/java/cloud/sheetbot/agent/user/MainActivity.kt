@@ -257,6 +257,9 @@ class MainActivity : AppCompatActivity() {
     // 💼 통화 종료 직후 모바일 명함 원터치 발송 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var callEndedCardController: CallEndedCardController
 
+    // 🎯 문자(SMS/LMS) 송수신 구글 시트 자동 동기화 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
+    private lateinit var smsSyncCardController: SmsSyncCardController
+
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetMultipleContents()
@@ -1001,39 +1004,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 문자(SMS/LMS) 송수신 구글 시트 동기화 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
-        binding.switchSmsSync.isChecked = prefs.isSmsSheetSyncEnabled
-        binding.etSmsTargetFilter.setText(prefs.smsTargetFilter)
-
-        binding.switchSmsSync.setOnCheckedChangeListener { _, isChecked ->
-            prefs.isSmsSheetSyncEnabled = isChecked
-            prefs.isSmsSyncDetailsHidden = !isChecked
-            updateCardCollapseState(binding.layoutSmsSyncSettings, binding.btnToggleSmsSyncDetails, !isChecked)
-            val msg = if (isChecked) "고객 문자 시트 자동 기록이 켜졌습니다." else "고객 문자 시트 기록이 꺼졌습니다."
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-            if (isChecked) {
-                provisionSheetAsync("SMS", prefs.smsDriveSheetTitle)
-                if (!isNotificationListenerEnabled()) {
-                    requestNotificationListenerPermission()
-                }
-            }
-        }
-
-        binding.btnPickSmsContact.setOnClickListener {
-            checkAndLaunchContactPicker("SMS")
-        }
-        binding.btnManageSmsTargets.setOnClickListener {
-            showTargetManageDialog("🎯 SMS 기록 대상 관리", binding.etSmsTargetFilter, "SMS")
-        }
-
-        binding.etSmsTargetFilter.doAfterTextChanged {
-            prefs.smsTargetFilter = it?.toString()?.trim() ?: ""
-            updateTargetBadges()
-        }
-
-        binding.btnOpenSmsSheet.setOnClickListener {
-            showOpenSheetChooserDialog("SMS", prefs.smsDriveSheetTitle)
-        }
+        // 🎯 문자(SMS/LMS) 송수신 구글 시트 동기화 카드 초기화 (v2.1.99 리팩토링 모듈화)
+        setupSmsCard()
 
         // 💬 카카오톡 수신 메시지 구글 시트 동기화 카드 초기화 (v2.1.99 리팩토링 모듈화)
         setupKakaoSyncCard()
@@ -1461,7 +1433,11 @@ class MainActivity : AppCompatActivity() {
         updateCardCollapseState(binding.layoutCallRecordingSettings, binding.btnToggleCallRecordingDetails, prefs.isCallRecordingDetailsHidden)
         updateCardCollapseState(binding.layoutFileUploadDetails, binding.btnToggleFileUploadDetails, prefs.isFileUploadDetailsHidden)
         updateCardCollapseState(binding.layoutLinkScrapSettings, binding.btnToggleLinkScrapDetails, prefs.isLinkScrapDetailsHidden)
-        updateCardCollapseState(binding.layoutSmsSyncSettings, binding.btnToggleSmsSyncDetails, prefs.isSmsSyncDetailsHidden)
+        if (::smsSyncCardController.isInitialized) {
+            smsSyncCardController.refreshCollapseState()
+        } else {
+            updateCardCollapseState(binding.layoutSmsSyncSettings, binding.btnToggleSmsSyncDetails, prefs.isSmsSyncDetailsHidden)
+        }
         updateCardCollapseState(binding.layoutKakaoSyncSettings, binding.btnToggleKakaoSyncDetails, prefs.isKakaoSyncDetailsHidden)
         updateCardCollapseState(binding.layoutQuoteSyncSettings, binding.btnToggleQuoteSyncDetails, prefs.isQuoteSyncDetailsHidden)
         updateCardCollapseState(binding.layoutEstimateSyncSettings, binding.btnToggleEstimateSyncDetails, prefs.isEstimateSyncDetailsHidden)
@@ -1517,13 +1493,8 @@ class MainActivity : AppCompatActivity() {
 
         // 6. 웹 링크 & 유튜브 카드 (LinkScrapCardController 전담 바인딩)
 
-        // 7. 문자(SMS) 카드
-        val toggleSmsSync = {
-            prefs.isSmsSyncDetailsHidden = !prefs.isSmsSyncDetailsHidden
-            updateCardCollapseState(binding.layoutSmsSyncSettings, binding.btnToggleSmsSyncDetails, prefs.isSmsSyncDetailsHidden)
-        }
-        binding.layoutSmsSyncHeader.setOnClickListener { toggleSmsSync() }
-        binding.btnToggleSmsSyncDetails.setOnClickListener { toggleSmsSync() }
+        // 7. 문자(SMS) 카드 (SmsSyncCardController 전담 바인딩)
+
 
         // 8. 카카오톡 카드 (KakaoSyncCardController 전담 바인딩)
 
@@ -3390,16 +3361,20 @@ class MainActivity : AppCompatActivity() {
      */
     private fun updateTargetBadges() {
         // SMS 대상
-        val smsList = binding.etSmsTargetFilter.text.toString().split(",", ";")
-            .map { it.trim() }.filter { it.isNotBlank() }
-        if (smsList.isEmpty()) {
-            binding.tvSmsTargetCountBadge.text = "전체 기록"
-            binding.tvSmsTargetCountBadge.setTextColor(Color.parseColor("#38BDF8"))
-            binding.btnManageSmsTargets.text = "📋 등록 대상 확인 / 제외"
+        if (::smsSyncCardController.isInitialized) {
+            smsSyncCardController.updateTargetBadge()
         } else {
-            binding.tvSmsTargetCountBadge.text = "${smsList.size}건 지정"
-            binding.tvSmsTargetCountBadge.setTextColor(Color.parseColor("#34D399"))
-            binding.btnManageSmsTargets.text = "📋 등록 대상 확인 / 제외 (${smsList.size}건)"
+            val smsList = binding.etSmsTargetFilter.text.toString().split(",", ";")
+                .map { it.trim() }.filter { it.isNotBlank() }
+            if (smsList.isEmpty()) {
+                binding.tvSmsTargetCountBadge.text = "전체 기록"
+                binding.tvSmsTargetCountBadge.setTextColor(Color.parseColor("#38BDF8"))
+                binding.btnManageSmsTargets.text = "📋 등록 대상 확인 / 제외"
+            } else {
+                binding.tvSmsTargetCountBadge.text = "${smsList.size}건 지정"
+                binding.tvSmsTargetCountBadge.setTextColor(Color.parseColor("#34D399"))
+                binding.btnManageSmsTargets.text = "📋 등록 대상 확인 / 제외 (${smsList.size}건)"
+            }
         }
 
         // 통화 녹음 대상
@@ -4680,6 +4655,24 @@ class MainActivity : AppCompatActivity() {
             onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) }
         )
         callEndedCardController.setup()
+    }
+
+    /**
+     * 🎯 문자(SMS/LMS) 송수신 구글 시트 동기화 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
+     */
+    private fun setupSmsCard() {
+        smsSyncCardController = SmsSyncCardController(
+            activity = this,
+            binding = binding,
+            prefs = prefs,
+            onPickContact = { checkAndLaunchContactPicker("SMS") },
+            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
+            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) },
+            onShowTargetManageDialog = { title, editText, targetType -> showTargetManageDialog(title, editText, targetType) },
+            isNotificationListenerEnabled = { isNotificationListenerEnabled() },
+            requestNotificationListenerPermission = { requestNotificationListenerPermission() }
+        )
+        smsSyncCardController.setup()
     }
 }
 
