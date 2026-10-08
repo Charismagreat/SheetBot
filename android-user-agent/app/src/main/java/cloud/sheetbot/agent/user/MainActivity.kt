@@ -81,6 +81,7 @@ import kotlin.random.Random
 import cloud.sheetbot.agent.user.card.PaymentReceiptCardController
 import cloud.sheetbot.agent.user.card.CallRecordCardController
 import cloud.sheetbot.agent.user.card.MeetingRecordingCardController
+import cloud.sheetbot.agent.user.card.FileUploadCardController
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -136,7 +137,7 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.GetMultipleContents()
     ) { uris ->
         if (!uris.isNullOrEmpty()) {
-            uploadFiles(uris, "앱 내 직접 선택 파일 업로드")
+            fileUploadCardController.uploadFiles(uris, "앱 내 직접 선택 파일 업로드")
         }
     }
 
@@ -280,6 +281,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var paymentReceiptCardController: PaymentReceiptCardController
     private lateinit var callRecordCardController: CallRecordCardController
     private lateinit var meetingRecordingCardController: MeetingRecordingCardController
+    private lateinit var fileUploadCardController: FileUploadCardController
 
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
@@ -744,26 +746,8 @@ class MainActivity : AppCompatActivity() {
         // 🌐 AI 모바일 홈페이지 제작 & 관리 카드 초기화
         setupMobileSiteCard()
 
-        // 사진 및 문서 파일 구글 드라이브 업로드 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
-        binding.switchFileUploadSync.isChecked = prefs.isFileUploadSyncEnabled
-
-        binding.switchFileUploadSync.setOnCheckedChangeListener { _, isChecked ->
-            prefs.isFileUploadSyncEnabled = isChecked
-            prefs.isFileUploadDetailsHidden = !isChecked
-            updateCardCollapseState(binding.layoutFileUploadDetails, binding.btnToggleFileUploadDetails, !isChecked)
-            val msg = if (isChecked) "사진 및 문서 드라이브 보관함이 켜졌습니다." else "사진 및 문서 드라이브 보관함이 꺼졌습니다."
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-            if (isChecked) {
-                provisionSheetAsync("FILE_UPLOAD", "[SheetBot] 파일 업로드 대장", prefs.fileUploadDriveFolder)
-            }
-        }
-
-        binding.btnOpenFileSheet.setOnClickListener {
-            showOpenSheetChooserDialog("FILE_UPLOAD", "[SheetBot] 파일 업로드 대장")
-        }
-        binding.btnOpenFileFolder.setOnClickListener {
-            openDriveFolder("FILE_UPLOAD", prefs.fileUploadDriveFolder)
-        }
+        // 사진 및 문서 파일 구글 드라이브 업로드 카드 초기화
+        setupFileUploadCard()
                 
         // 🌐 웹 링크 & 유튜브 영상 AI 자동 스크랩 카드 초기화 (v2.1.99 리팩토링 모듈화)
         setupLinkScrapCard()
@@ -790,11 +774,6 @@ class MainActivity : AppCompatActivity() {
             executeAiCommand(cmd)
         }
 
-        binding.btnPickAndUploadFile.setOnClickListener {
-            if (!prefs.isPaired) {
-                Toast.makeText(this, "먼저 시트봇 워크스페이스와 연동해 주세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
             filePickerLauncher.launch("*/*")
         }
 
@@ -991,7 +970,7 @@ class MainActivity : AppCompatActivity() {
         updateCardCollapseState(binding.layoutCopilotDetails, binding.btnToggleCopilotDetails, prefs.isCopilotDetailsHidden)
         paymentReceiptCardController.refreshCollapseState()
         callRecordCardController.refreshCollapseState()
-        updateCardCollapseState(binding.layoutFileUploadDetails, binding.btnToggleFileUploadDetails, prefs.isFileUploadDetailsHidden)
+        fileUploadCardController.refreshCollapseState()
         updateCardCollapseState(binding.layoutLinkScrapSettings, binding.btnToggleLinkScrapDetails, prefs.isLinkScrapDetailsHidden)
         if (::smsSyncCardController.isInitialized) {
             smsSyncCardController.refreshCollapseState()
@@ -1048,12 +1027,8 @@ class MainActivity : AppCompatActivity() {
         binding.btnToggleCallRecordingDetails.setOnClickListener { callRecordCardController.toggleCollapse() }
 
         // 5. 사진 & 문서 보관 카드
-        val toggleFileUpload = {
-            prefs.isFileUploadDetailsHidden = !prefs.isFileUploadDetailsHidden
-            updateCardCollapseState(binding.layoutFileUploadDetails, binding.btnToggleFileUploadDetails, prefs.isFileUploadDetailsHidden)
-        }
-        binding.layoutFileUploadHeader.setOnClickListener { toggleFileUpload() }
-        binding.btnToggleFileUploadDetails.setOnClickListener { toggleFileUpload() }
+        binding.layoutFileUploadHeader.setOnClickListener { fileUploadCardController.toggleCollapse() }
+        binding.btnToggleFileUploadDetails.setOnClickListener { fileUploadCardController.toggleCollapse() }
 
         // 6. 웹 링크 & 유튜브 카드 (LinkScrapCardController 전담 바인딩)
 
@@ -1802,7 +1777,7 @@ class MainActivity : AppCompatActivity() {
                 // 2순위: 실제 로컬 파일(content:// 또는 file://) 스트림인 경우 -> 구글 드라이브 파일 업로드
                 val fileUri = streamUri ?: clipUri?.takeIf { it.scheme in listOf("content", "file") }
                 if (fileUri != null) {
-                    uploadFiles(listOf(fileUri), "스마트폰 공유하기(Share) 1초 연동")
+                    fileUploadCardController.uploadFiles(listOf(fileUri), "스마트폰 공유하기(Share) 1초 연동")
                 } else if (!sharedText.isNullOrBlank()) {
                     Toast.makeText(this, "공유된 텍스트에서 링크(URL)를 찾을 수 없습니다.", Toast.LENGTH_SHORT).show()
                 }
@@ -1817,7 +1792,7 @@ class MainActivity : AppCompatActivity() {
 
             val validFileUris = uris.filter { it.scheme in listOf("content", "file") }
             if (validFileUris.isNotEmpty()) {
-                uploadFiles(validFileUris, "스마트폰 공유하기(Share) 다중 연동")
+                fileUploadCardController.uploadFiles(validFileUris, "스마트폰 공유하기(Share) 다중 연동")
             }
         }
 
@@ -1831,45 +1806,6 @@ class MainActivity : AppCompatActivity() {
     /**
      * 선택되거나 공유된 파일들을 구글 드라이브로 백그라운드 업로드
      */
-    private fun uploadFiles(uris: List<Uri>, memo: String) {
-        if (!prefs.isPaired) {
-            Toast.makeText(this, "⚠️ 시트봇 계정 연동 후 파일을 업로드할 수 있습니다.", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        binding.progressBar.visibility = View.VISIBLE
-        Toast.makeText(this, "🚀 ${uris.size}건의 파일을 구글 드라이브로 업로드합니다...", Toast.LENGTH_SHORT).show()
-
-        activityScope.launch {
-            try {
-                val results = FileUploadManager.uploadMultipleUris(this@MainActivity, uris, memo)
-                binding.progressBar.visibility = View.GONE
-                val successCount = results.count { it.success }
-
-                if (successCount > 0) {
-                    val targetFolder = prefs.fileUploadDriveFolder.takeIf { it.isNotBlank() } ?: "[SheetBot] 파일 보관함"
-                    Toast.makeText(
-                        this@MainActivity,
-                        "🎉 ${successCount}건의 파일이 구글 드라이브 '${targetFolder}'에 안전하게 업로드되었습니다!",
-                        Toast.LENGTH_LONG
-                    ).show()
-
-                    for (r in results.filter { it.success }) {
-                        val fileName = r.fileName ?: "알 수 없는 파일"
-                        val folder = r.folderName ?: targetFolder
-                        addLogItem("파일 업로드", "$fileName -> $folder", true)
-                    }
-                } else {
-                    val firstErr = results.firstOrNull()?.error ?: "알 수 없는 오류"
-                    Toast.makeText(this@MainActivity, "⚠️ 파일 업로드 실패: $firstErr", Toast.LENGTH_LONG).show()
-                    addLogItem("파일 업로드 실패", firstErr, false)
-                }
-            } catch (e: Exception) {
-                binding.progressBar.visibility = View.GONE
-                Toast.makeText(this@MainActivity, "업로드 처리 중 예외 발생: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
 
     /**
      * 구글 음성 인식 다이얼로그 호출 (v1.7)
@@ -2993,6 +2929,22 @@ class MainActivity : AppCompatActivity() {
             updateCardCollapseState = { layout, button, isHidden -> updateCardCollapseState(layout, button, isHidden) }
         )
         meetingRecordingCardController.setup()
+    }
+
+    private fun setupFileUploadCard() {
+        fileUploadCardController = FileUploadCardController(
+            activity = this,
+            binding = binding,
+            prefs = prefs,
+            scope = activityScope,
+            launchFilePicker = { filePickerLauncher.launch("*/*") },
+            provisionSheetAsync = { type, defaultTitle, folderName -> provisionSheetAsync(type, defaultTitle, folderName) },
+            showOpenSheetChooserDialog = { type, title -> showOpenSheetChooserDialog(type, title) },
+            openDriveFolder = { type, folderName -> openDriveFolder(type, folderName) },
+            addLogItem = { title, detail, success -> addLogItem(title, detail, success) },
+            updateCardCollapseState = { layout, button, isHidden -> updateCardCollapseState(layout, button, isHidden) }
+        )
+        fileUploadCardController.setup()
     }
 
 }
