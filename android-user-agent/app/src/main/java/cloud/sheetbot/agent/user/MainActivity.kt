@@ -54,6 +54,7 @@ import cloud.sheetbot.agent.user.card.WebsiteMonitorCardController
 import cloud.sheetbot.agent.user.card.ContactsBackupCardController
 import cloud.sheetbot.agent.user.card.LinkScrapCardController
 import cloud.sheetbot.agent.user.card.MissedCallCardController
+import cloud.sheetbot.agent.user.card.KakaoSyncCardController
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -249,6 +250,9 @@ class MainActivity : AppCompatActivity() {
     // 📵 부재중 전화 0원 스마트 자동 답장 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var missedCallCardController: MissedCallCardController
 
+    // 💬 카카오톡 대화 내용 구글 시트 자동 동기화 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
+    private lateinit var kakaoCardController: KakaoSyncCardController
+
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetMultipleContents()
@@ -262,8 +266,8 @@ class MainActivity : AppCompatActivity() {
     private val kakaoChatPickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri ->
-        if (uri != null) {
-            importKakaoChatFile(uri)
+        if (uri != null && ::kakaoCardController.isInitialized) {
+            kakaoCardController.handleFileSelected(uri)
         }
     }
 
@@ -1025,49 +1029,8 @@ class MainActivity : AppCompatActivity() {
             showOpenSheetChooserDialog("SMS", prefs.smsDriveSheetTitle)
         }
 
-        // 카카오톡 수신 메시지 구글 시트 동기화 UI 바인딩 및 실시간 자동 저장 (Auto-Save)
-        binding.switchKakaoSync.isChecked = prefs.isKakaoSheetSyncEnabled
-        binding.etKakaoTargetFilter.setText(prefs.kakaoTargetFilter)
-
-        binding.switchKakaoSync.setOnCheckedChangeListener { _, isChecked ->
-            prefs.isKakaoSheetSyncEnabled = isChecked
-            prefs.isKakaoSyncDetailsHidden = !isChecked
-            updateCardCollapseState(binding.layoutKakaoSyncSettings, binding.btnToggleKakaoSyncDetails, !isChecked)
-            val msg = if (isChecked) "카카오톡 대화 시트 자동 기록이 켜졌습니다." else "카카오톡 시트 기록이 꺼졌습니다."
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-            if (isChecked) {
-                provisionSheetAsync("KAKAO", prefs.kakaoDriveSheetTitle)
-            }
-        }
-
-        binding.btnManageKakaoTargets.setOnClickListener {
-            showTargetManageDialog("🟡 카카오톡 기록 대상 관리", binding.etKakaoTargetFilter, "KAKAO")
-        }
-
-        binding.etKakaoTargetFilter.doAfterTextChanged {
-            prefs.kakaoTargetFilter = it?.toString()?.trim() ?: ""
-            updateTargetBadges()
-        }
-
-        binding.btnImportKakaoChat.setOnClickListener {
-            if (!prefs.isPaired || prefs.userEmail.isNullOrBlank()) {
-                Toast.makeText(this, "먼저 시트봇 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            try {
-                kakaoChatPickerLauncher.launch("*/*")
-            } catch (_: Exception) {
-                try {
-                    kakaoChatPickerLauncher.launch("text/*")
-                } catch (e: Exception) {
-                    Toast.makeText(this, "파일 탐색기를 열 수 없습니다: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-
-        binding.btnOpenKakaoSheet.setOnClickListener {
-            showOpenSheetChooserDialog("KAKAO", prefs.kakaoDriveSheetTitle)
-        }
+        // 💬 카카오톡 수신 메시지 구글 시트 동기화 카드 초기화 (v2.1.99 리팩토링 모듈화)
+        setupKakaoSyncCard()
 
         // 📑 AI 스마트 견적 및 단가표 대장 연동 UI 바인딩 및 자동 저장 (Auto-Save)
         binding.switchQuoteSync.isChecked = prefs.isQuoteSheetSyncEnabled
@@ -1604,13 +1567,7 @@ class MainActivity : AppCompatActivity() {
         binding.layoutSmsSyncHeader.setOnClickListener { toggleSmsSync() }
         binding.btnToggleSmsSyncDetails.setOnClickListener { toggleSmsSync() }
 
-        // 8. 카카오톡 카드
-        val toggleKakaoSync = {
-            prefs.isKakaoSyncDetailsHidden = !prefs.isKakaoSyncDetailsHidden
-            updateCardCollapseState(binding.layoutKakaoSyncSettings, binding.btnToggleKakaoSyncDetails, prefs.isKakaoSyncDetailsHidden)
-        }
-        binding.layoutKakaoSyncHeader.setOnClickListener { toggleKakaoSync() }
-        binding.btnToggleKakaoSyncDetails.setOnClickListener { toggleKakaoSync() }
+        // 8. 카카오톡 카드 (KakaoSyncCardController 전담 바인딩)
 
         // 9. 간편 주문서 카드
         val toggleQuoteSync = {
@@ -2917,89 +2874,6 @@ class MainActivity : AppCompatActivity() {
                     binding.progressBar.visibility = View.GONE
                     Toast.makeText(appContext, "명함 처리 예외: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
-            }
-        }
-    }
-
-    /**
-     * 카카오톡 대화 내용 내보내기(.txt) 파일을 읽어 구글 시트 [SheetBot] 카카오톡 메시지 대장에 구간 덮어쓰기 (v2.1.11)
-     */
-    private fun importKakaoChatFile(uri: Uri) {
-        val email = prefs.userEmail
-        if (!prefs.isPaired || email.isNullOrBlank()) {
-            Toast.makeText(this, "⚠️ 시트봇 계정 연동 후 이용할 수 있습니다.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        binding.progressBar.visibility = View.VISIBLE
-        Toast.makeText(this, "💬 카톡 대화 파일을 분석 중입니다...", Toast.LENGTH_SHORT).show()
-
-        activityScope.launch {
-            try {
-                var fileName = "KakaoTalkChats.txt"
-                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                    val nameIdx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    if (nameIdx >= 0 && cursor.moveToFirst()) {
-                        fileName = cursor.getString(nameIdx) ?: "KakaoTalkChats.txt"
-                    }
-                }
-
-                val textContent = withContext(Dispatchers.IO) {
-                    contentResolver.openInputStream(uri)?.use { stream ->
-                        val bytes = stream.readBytes()
-                        try {
-                            String(bytes, Charsets.UTF_8)
-                        } catch (_: Exception) {
-                            String(bytes, java.nio.charset.Charset.forName("EUC-KR"))
-                        }
-                    } ?: ""
-                }
-
-                if (textContent.isBlank()) {
-                    binding.progressBar.visibility = View.GONE
-                    Toast.makeText(this@MainActivity, "파일 내용이 비어있거나 읽을 수 없습니다.", Toast.LENGTH_LONG).show()
-                    return@launch
-                }
-
-                val result = ApiClient.importKakaoChat(
-                    userEmail = email,
-                    textContent = textContent,
-                    fileName = fileName,
-                    sheetTitle = prefs.kakaoDriveSheetTitle
-                )
-
-                binding.progressBar.visibility = View.GONE
-
-                if (result.success) {
-                    val countFormatted = NumberFormat.getNumberInstance(Locale.KOREA).format(result.insertedCount)
-                    val periodMsg = if (!result.startDate.isNullOrBlank() && !result.endDate.isNullOrBlank()) {
-                        "\n• 기간: ${result.startDate} ~ ${result.endDate}"
-                    } else ""
-                    val roomMsg = if (!result.chatRoomName.isNullOrBlank()) {
-                        "• 채팅방: ${result.chatRoomName}\n"
-                    } else ""
-
-                    addLogItem("💬 카톡 가져오기", "${result.chatRoomName ?: "채팅방"} ${countFormatted}건 시트 동기화 완료", true)
-
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle("🎉 카톡 대화 파일 가져오기 완료!")
-                        .setMessage("${roomMsg}• 동기화 대화: 총 ${countFormatted}건${periodMsg}\n\n구글 시트 [${prefs.kakaoDriveSheetTitle}]에 구간 덮어쓰기되었습니다.")
-                        .setPositiveButton("시트") { _, _ ->
-                            showOpenSheetChooserDialog("KAKAO", prefs.kakaoDriveSheetTitle)
-                        }
-                        .setNegativeButton("닫기", null)
-                        .show()
-                } else {
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle("가져오기 실패")
-                        .setMessage(result.error ?: "카카오톡 대화 내용 인식에 실패했습니다.\n카카오톡 [대화 내용 내보내기]로 생성된 .txt 파일인지 확인해 주세요.")
-                        .setPositiveButton("확인", null)
-                        .show()
-                }
-            } catch (e: Exception) {
-                binding.progressBar.visibility = View.GONE
-                android.util.Log.e("MainActivity", "카톡 대화 파일 가져오기 실패: ${e.message}", e)
-                Toast.makeText(this@MainActivity, "파일 처리 중 오류: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -4959,6 +4833,34 @@ class MainActivity : AppCompatActivity() {
             onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) }
         )
         missedCallCardController.setup()
+    }
+
+    /**
+     * 💬 카카오톡 대화 내용 구글 시트 자동 동기화 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
+     */
+    private fun setupKakaoSyncCard() {
+        kakaoCardController = KakaoSyncCardController(
+            activity = this,
+            binding = binding,
+            prefs = prefs,
+            onPickChatFile = {
+                try {
+                    kakaoChatPickerLauncher.launch("*/*")
+                } catch (_: Exception) {
+                    try {
+                        kakaoChatPickerLauncher.launch("text/*")
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "파일 탐색기를 열 수 없습니다: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
+            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) },
+            onShowTargetManageDialog = { title, editText, targetType -> showTargetManageDialog(title, editText, targetType) },
+            onUpdateTargetBadges = { updateTargetBadges() },
+            onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) }
+        )
+        kakaoCardController.setup()
     }
 }
 
