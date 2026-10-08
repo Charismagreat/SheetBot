@@ -292,6 +292,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cardAccordionController: CardAccordionController
     private lateinit var sharedIntentRouter: SharedIntentRouter
     private lateinit var aodModeController: AodModeController
+    private lateinit var localLogViewController: LocalLogViewController
 
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
@@ -460,6 +461,13 @@ class MainActivity : AppCompatActivity() {
                 scope = activityScope
             )
             aodModeController.setup()
+
+            localLogViewController = LocalLogViewController(
+                activity = this,
+                binding = binding,
+                logManager = logManager
+            )
+            localLogViewController.setup()
 
             setupListeners()
             updateUiState()
@@ -731,42 +739,6 @@ class MainActivity : AppCompatActivity() {
         binding.tvAppVersionBadge.setOnClickListener {
             UpdateManager.checkForUpdates(this, showToastIfLatest = true)
         }
-
-        // 9. 실시간 감지 로그 (최대 1,000건 로컬 영구 보관 + 부드러운 전용 스크롤 + 비우기)
-        try {
-            binding.tvLogs.movementMethod = ScrollingMovementMethod()
-            binding.tvLogs.setOnTouchListener { v, event ->
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                        v.parent.requestDisallowInterceptTouchEvent(true)
-                    }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        v.parent.requestDisallowInterceptTouchEvent(false)
-                    }
-                }
-                false
-            }
-            val initialLogs = logManager.loadLogs()
-            binding.tvLogs.text = initialLogs
-            updateLogCount()
-        } catch (e: Exception) {
-            android.util.Log.w("MainActivity", "로그 영역 초기화 예외: ${e.message}")
-        }
-
-        binding.btnClearLogs.setOnClickListener {
-            AlertDialog.Builder(this)
-                .setTitle("실시간 감지 로그 비우기")
-                .setMessage("스마트폰에 보관된 감지 로그(최대 1,000건)를 모두 비우시겠습니까?\n(구글 스프레드시트에 기록된 대장 내역은 안전하게 보존됩니다)")
-                .setPositiveButton("비우기") { _, _ ->
-                    logManager.clearLogs()
-                    binding.tvLogs.text = logManager.getFormattedLogs()
-                    binding.tvLogs.scrollTo(0, 0)
-                    updateLogCount()
-                    Toast.makeText(this, "로그가 모두 비워졌습니다.", Toast.LENGTH_SHORT).show()
-                }
-                .setNegativeButton("취소", null)
-                .show()
-        }
     }
 
     private fun enterAodMode() =
@@ -834,26 +806,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun addLogItem(sender: String, body: String, success: Boolean) {
-        try {
-            val formatted = logManager.addLog(sender, body, success)
-            binding.tvLogs.text = formatted
-            binding.tvLogs.post {
-                binding.tvLogs.scrollTo(0, 0)
-            }
-            updateLogCount()
-        } catch (e: Exception) {
-            android.util.Log.w("MainActivity", "로그 추가 예외: ${e.message}")
-        }
-    }
+    private fun addLogItem(sender: String, body: String, success: Boolean) =
+        localLogViewController.addLogItem(sender, body, success)
 
-    private fun updateLogCount() {
-        try {
-            val count = logManager.getLogCount()
-            val formattedCount = NumberFormat.getNumberInstance(Locale.KOREA).format(count)
-            binding.tvLogCount.text = "$formattedCount / 1,000건"
-        } catch (_: Exception) {}
-    }
+    private fun updateLogCount() =
+        localLogViewController.updateLogCount()
 
     // 🛡️ 시스템 권한 및 배터리 최적화 예외 위임 메서드 (PermissionController 전담)
     private fun checkPermissions() =
