@@ -191,8 +191,8 @@ class MainActivity : AppCompatActivity() {
     private val quoteImagePickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri ->
-        if (uri != null) {
-            handleQuoteImageSelected(uri)
+        if (uri != null && ::quoteCardController.isInitialized) {
+            quoteCardController.handleImageSelected(uri)
         }
     }
 
@@ -259,6 +259,9 @@ class MainActivity : AppCompatActivity() {
 
     // 🎯 문자(SMS/LMS) 송수신 구글 시트 자동 동기화 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var smsSyncCardController: SmsSyncCardController
+
+    // 📑 AI 스마트 견적 및 단가표 대장 연동 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
+    private lateinit var quoteCardController: QuoteSyncCardController
 
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
@@ -510,9 +513,12 @@ class MainActivity : AppCompatActivity() {
         }")
         }
         try {
-            refreshQuoteImageUi()
+            if (::quoteCardController.isInitialized) {
+                quoteCardController.refreshQuoteImageUi()
+            }
         } catch (e: Throwable) {
             android.util.Log.w("MainActivity", "refreshQuoteImageUi 방어: ${e.message}")
+        }")
         }
         try {
             if (::callEndedCardController.isInitialized) {
@@ -1010,177 +1016,8 @@ class MainActivity : AppCompatActivity() {
         // 💬 카카오톡 수신 메시지 구글 시트 동기화 카드 초기화 (v2.1.99 리팩토링 모듈화)
         setupKakaoSyncCard()
 
-        // 📑 AI 스마트 견적 및 단가표 대장 연동 UI 바인딩 및 자동 저장 (Auto-Save)
-        binding.switchQuoteSync.isChecked = prefs.isQuoteSheetSyncEnabled
-
-        binding.switchQuoteSync.setOnCheckedChangeListener { _, isChecked ->
-            prefs.isQuoteSheetSyncEnabled = isChecked
-            prefs.isQuoteSyncDetailsHidden = !isChecked
-            updateCardCollapseState(binding.layoutQuoteSyncSettings, binding.btnToggleQuoteSyncDetails, !isChecked)
-            val msg = if (isChecked) "고객용 간편 주문서 & 단가표 자동 안내가 켜졌습니다." else "간편 주문서 자동 안내가 꺼졌습니다."
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-            if (isChecked) {
-                provisionSheetAsync("QUOTE", prefs.quoteDriveSheetTitle)
-            }
-        }
-
-        // 📷 카톡 미리보기 및 웹앱 대표 썸네일 등록 (v2.1.18)
-        binding.btnSelectQuoteImage.setOnClickListener {
-            val email = prefs.userEmail
-            if (email.isNullOrBlank()) {
-                Toast.makeText(this, "먼저 시트봇 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
-            } else {
-                quoteImagePickerLauncher.launch("image/*")
-            }
-        }
-
-        refreshQuoteImageUi()
-
-        // 🏢 상호명/브랜드명 실시간 자동 저장 및 서버 동기화 (v2.1.17)
-        binding.etQuoteBusinessName.setText(prefs.quoteBusinessName)
-
-        val saveBusinessNameAction: (Boolean) -> Unit = { showToast ->
-            val newName = binding.etQuoteBusinessName.text?.toString()?.trim() ?: ""
-            prefs.quoteBusinessName = newName
-            binding.tvBusinessNameStatus.text = "저장 중..."
-            binding.tvBusinessNameStatus.setTextColor(Color.parseColor("#F59E0B"))
-            val email = prefs.userEmail
-            if (!email.isNullOrBlank()) {
-                activityScope.launch {
-                    val ok = ApiClient.updateBusinessProfile(email, newName)
-                    withContext(Dispatchers.Main) {
-                        if (ok) {
-                            binding.tvBusinessNameStatus.text = "실시간 반영됨 ✓"
-                            binding.tvBusinessNameStatus.setTextColor(Color.parseColor("#34D399"))
-                            if (showToast) {
-                                Toast.makeText(this@MainActivity, "🎉 상호명이 '$newName'(으)로 고객 견적 웹앱에 반영되었습니다!", Toast.LENGTH_SHORT).show()
-                            }
-                        } else {
-                            binding.tvBusinessNameStatus.text = "로컬 저장됨"
-                            binding.tvBusinessNameStatus.setTextColor(Color.parseColor("#94A3B8"))
-                            if (showToast) {
-                                Toast.makeText(this@MainActivity, "상호명이 저장되었습니다 (서버 동기화 대기 중)", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
-                }
-            } else {
-                binding.tvBusinessNameStatus.text = "로컬 저장됨"
-                binding.tvBusinessNameStatus.setTextColor(Color.parseColor("#94A3B8"))
-                if (showToast) {
-                    Toast.makeText(this@MainActivity, "먼저 시트봇 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-
-        binding.btnSaveBusinessName.setOnClickListener {
-            saveBusinessNameAction(true)
-        }
-
-        binding.etQuoteBusinessName.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
-                saveBusinessNameAction(true)
-                true
-            } else {
-                false
-            }
-        }
-
-        binding.etQuoteBusinessName.doAfterTextChanged {
-            val newName = it?.toString()?.trim() ?: ""
-            prefs.quoteBusinessName = newName
-            saveBusinessNameAction(false)
-        }
-
-        // 서버 프로필 로드하여 로컬 상호명 및 대표 이미지 자동 동기화 (주문 & 견적 각각 독립 조회)
-        val currentEmail = prefs.userEmail
-        if (!currentEmail.isNullOrBlank()) {
-            activityScope.launch {
-                try {
-                    // 1. 간편주문 프로필 및 대표 이미지
-                    val orderProfile = ApiClient.getBusinessProfile(currentEmail, "order")
-                    if (orderProfile.success) {
-                        withContext(Dispatchers.Main) {
-                            if (orderProfile.businessName.isNotBlank() && prefs.quoteBusinessName.isBlank()) {
-                                prefs.quoteBusinessName = orderProfile.businessName
-                                binding.etQuoteBusinessName.setText(orderProfile.businessName)
-                            }
-                            if (orderProfile.imageUrl.isNotBlank() && orderProfile.imageUrl != "https://sheetbot.cloud/favicon.svg") {
-                                prefs.quoteImageUrl = orderProfile.imageUrl
-                                if (!localQuoteImageFile.exists() || localQuoteImageFile.length() == 0L) {
-                                    loadQuoteImageThumbnail(orderProfile.imageUrl)
-                                }
-                            }
-                        }
-                    }
-
-                    // 2. 간편견적 프로필 및 대표 이미지 (독립 동기화)
-                    val estimateProfile = ApiClient.getBusinessProfile(currentEmail, "estimate")
-                    if (estimateProfile.success) {
-                        withContext(Dispatchers.Main) {
-                            if (estimateProfile.imageUrl.isNotBlank() && estimateProfile.imageUrl != "https://sheetbot.cloud/favicon.svg") {
-                                prefs.estimateImageUrl = estimateProfile.imageUrl
-                                if (!localEstimateImageFile.exists() || localEstimateImageFile.length() == 0L) {
-                                    loadEstimateImageThumbnail(estimateProfile.imageUrl)
-                                }
-                            }
-                        }
-                    }
-                } catch (_: Exception) {}
-            }
-        }
-
-        binding.btnOpenQuoteSheet.setOnClickListener {
-            // 과거 잘못된 구버전 시트 URL 캐시(1feIe5...)가 남아있다면 강제 무효화하여 최신 바인딩(1XCQMxao...) 동기화
-            val currentQuoteUrl = prefs.getSheetUrl("QUOTE")
-            val currentQuoteId = prefs.getSheetId("QUOTE")
-            if (currentQuoteUrl?.contains("1feIe5") == true || currentQuoteId?.contains("1feIe5") == true) {
-                prefs.setSheetUrl("QUOTE", "")
-                prefs.setSheetId("QUOTE", "")
-            }
-            showOpenSheetChooserDialog("QUOTE", prefs.quoteDriveSheetTitle)
-        }
-
-        // 📱 고객 주도형 모바일 셀프 견적 & 1초 주문 웹앱 바로가기 및 링크 복사
-        binding.btnOpenSelfOrderWeb.setOnClickListener {
-            val email = prefs.userEmail
-            if (email.isNullOrBlank()) {
-                Toast.makeText(this, "먼저 시트봇 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            val slug = Base64.encodeToString(email.toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
-            val url = "https://sheetbot.cloud/order/$slug"
-            try {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                startActivity(intent)
-            } catch (e: Exception) {
-                Toast.makeText(this, "웹 브라우저를 열 수 없습니다: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        binding.btnCopySelfOrderLink.setOnClickListener {
-            val email = prefs.userEmail
-            if (email.isNullOrBlank()) {
-                Toast.makeText(this, "먼저 시트봇 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            val slug = Base64.encodeToString(email.toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
-            val url = "https://sheetbot.cloud/order/$slug"
-            try {
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("SheetBot Self Order Link", url))
-                
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_SUBJECT, "간편 주문 링크")
-                    putExtra(Intent.EXTRA_TEXT, "간편 주문 링크: $url")
-                }
-                startActivity(Intent.createChooser(shareIntent, "주문 링크 공유"))
-            } catch (e: Exception) {
-                Toast.makeText(this, "주문 링크 공유 실패: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-            }
+        // 📑 AI 스마트 견적 및 단가표 대장 연동 카드 초기화 (v2.1.99 리팩토링 모듈화)
+        setupQuoteCard()
         }
 
         // 📑 AI 스마트 간편 견적서 발행 대장 연동 UI 바인딩 (v2.1.95)
@@ -1439,7 +1276,11 @@ class MainActivity : AppCompatActivity() {
             updateCardCollapseState(binding.layoutSmsSyncSettings, binding.btnToggleSmsSyncDetails, prefs.isSmsSyncDetailsHidden)
         }
         updateCardCollapseState(binding.layoutKakaoSyncSettings, binding.btnToggleKakaoSyncDetails, prefs.isKakaoSyncDetailsHidden)
-        updateCardCollapseState(binding.layoutQuoteSyncSettings, binding.btnToggleQuoteSyncDetails, prefs.isQuoteSyncDetailsHidden)
+        if (::quoteCardController.isInitialized) {
+            quoteCardController.refreshCollapseState()
+        } else {
+            updateCardCollapseState(binding.layoutQuoteSyncSettings, binding.btnToggleQuoteSyncDetails, prefs.isQuoteSyncDetailsHidden)
+        }
         updateCardCollapseState(binding.layoutEstimateSyncSettings, binding.btnToggleEstimateSyncDetails, prefs.isEstimateSyncDetailsHidden)
         updateCardCollapseState(binding.layoutInCallSummarySettings, binding.btnToggleInCallSummaryDetails, prefs.isInCallSummaryDetailsHidden)
         updateCardCollapseState(binding.layoutMissedCallSettings, binding.btnToggleMissedCallDetails, prefs.isMissedCallDetailsHidden)
@@ -1498,13 +1339,7 @@ class MainActivity : AppCompatActivity() {
 
         // 8. 카카오톡 카드 (KakaoSyncCardController 전담 바인딩)
 
-        // 9. 간편 주문서 카드
-        val toggleQuoteSync = {
-            prefs.isQuoteSyncDetailsHidden = !prefs.isQuoteSyncDetailsHidden
-            updateCardCollapseState(binding.layoutQuoteSyncSettings, binding.btnToggleQuoteSyncDetails, prefs.isQuoteSyncDetailsHidden)
-        }
-        binding.layoutQuoteSyncHeader.setOnClickListener { toggleQuoteSync() }
-        binding.btnToggleQuoteSyncDetails.setOnClickListener { toggleQuoteSync() }
+        // 9. 간편 주문서 카드 (QuoteSyncCardController 전담 바인딩)
 
         // 9-A. 간편 견적서 발행 카드 (v2.1.95)
         val toggleEstimateSync = {
@@ -2352,204 +2187,6 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 binding.progressBar.visibility = View.GONE
                 Toast.makeText(this@MainActivity, "업로드 처리 중 예외 발생: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    /**
-     * 📷 견적 웹앱 및 카카오톡 미리보기용 대표 이미지 로컬 영구 캐시 파일 (v2.1.25)
-     */
-    private val localQuoteImageFile: File
-        get() = File(filesDir, "quote_representative_image.jpg")
-
-    /**
-     * 📷 대표 썸네일 이미지 UI 새로고침 (0초 로컬 파일 우선 + 백그라운드 원격 동기화)
-     */
-    private fun refreshQuoteImageUi() {
-        // 1순위: 로컬 저장소에 영구 보존된 사진이 있다면 0.001초 만에 즉시 렌더링 (재부팅/오프라인 무결점)
-        val localFile = localQuoteImageFile
-        if (localFile.exists() && localFile.length() > 0) {
-            try {
-                val bmp = BitmapFactory.decodeFile(localFile.absolutePath)
-                if (bmp != null) {
-                    binding.ivQuoteImagePreview.setImageBitmap(bmp)
-                    binding.tvQuoteImageStatus.text = "등록됨 ✓"
-                    binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#34D399"))
-                    return
-                }
-            } catch (e: Exception) {
-                Log.w("MainActivity", "로컬 대표 이미지 디코딩 실패: ${e.message}")
-            }
-        }
-
-        // 2순위: 로컬 파일이 없고 원격 URL이 있다면 비동기 다운로드 및 로컬 캐싱
-        val remoteUrl = prefs.quoteImageUrl
-        if (remoteUrl.isNotBlank() && remoteUrl != "https://sheetbot.cloud/favicon.svg") {
-            loadQuoteImageThumbnail(remoteUrl)
-        } else {
-            binding.tvQuoteImageStatus.text = "미등록 (기본 로고)"
-            binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#94A3B8"))
-        }
-    }
-
-    /**
-     * 📷 견적 웹앱 및 카카오톡 미리보기용 대표 이미지 선택 처리 (v2.1.25 무손실 영구 캐시 적용)
-     */
-    private fun handleQuoteImageSelected(uri: Uri) {
-        val email = prefs.userEmail.takeIf { !it.isNullOrBlank() }
-            ?: "chachogreat@gmail.com"
-
-        binding.tvQuoteImageStatus.text = "이미지 처리 중..."
-        binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#F59E0B"))
-
-        activityScope.launch {
-            try {
-                // 1. 스마트 다운스케일링 및 고화질 압축 (카카오톡 og:image 최적 규격 max 1200px, JPEG 85%)
-                val (compressedBytes, displayBitmap) = withContext(Dispatchers.IO) {
-                    compressImageForQuote(uri)
-                }
-
-                if (compressedBytes.isEmpty() || displayBitmap == null) {
-                    withContext(Dispatchers.Main) {
-                        binding.tvQuoteImageStatus.text = "이미지 처리 실패"
-                        binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#EF4444"))
-                    }
-                    return@launch
-                }
-
-                // 2. [0초 즉각 렌더링 & 영구 로컬 저장] 업로드를 기다리지 않고 화면에 즉시 띄움!
-                withContext(Dispatchers.IO) {
-                    try {
-                        localQuoteImageFile.writeBytes(compressedBytes)
-                    } catch (fe: Exception) {
-                        Log.e("MainActivity", "로컬 이미지 파일 저장 실패: ${fe.message}")
-                    }
-                }
-
-                withContext(Dispatchers.Main) {
-                    binding.ivQuoteImagePreview.setImageBitmap(displayBitmap)
-                    binding.tvQuoteImageStatus.text = "저장됨 (클라우드 동기화 중...)"
-                    binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#F59E0B"))
-                }
-
-                // 3. 서버 업로드 및 클라우드 실시간 동기화
-                val fileName = "quote_image_" + System.currentTimeMillis() + ".jpg"
-                val mimeType = "image/jpeg"
-
-                val result = ApiClient.uploadQuoteImage(compressedBytes, fileName, mimeType, email)
-                withContext(Dispatchers.Main) {
-                    if (result.success && !result.imageUrl.isNullOrBlank()) {
-                        prefs.quoteImageUrl = result.imageUrl
-                        binding.tvQuoteImageStatus.text = "등록됨 ✓ (카톡 반영 완료)"
-                        binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#34D399"))
-                        Toast.makeText(this@MainActivity, "🎉 대표 이미지가 안전하게 저장되고 카카오톡 공유 링크에 반영되었습니다!", Toast.LENGTH_SHORT).show()
-                    } else {
-                        binding.tvQuoteImageStatus.text = "로컬 저장됨 (동기화 지연)"
-                        binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#F59E0B"))
-                        Toast.makeText(this@MainActivity, "사진이 기기에 안전하게 저장되었습니다. (네트워크 연결 시 클라우드 자동 동기화)", Toast.LENGTH_LONG).show()
-                    }
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    binding.tvQuoteImageStatus.text = "오류 발생: ${e.message}"
-                    binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#EF4444"))
-                }
-            }
-        }
-    }
-
-    /**
-     * 카카오톡 공유 미리보기 및 웹 최적화를 위한 스마트 다운스케일링 및 JPEG 압축
-     */
-    private fun compressImageForQuote(uri: Uri): Pair<ByteArray, Bitmap?> {
-        try {
-            val options = BitmapFactory.Options().apply {
-                inJustDecodeBounds = true
-            }
-            contentResolver.openInputStream(uri)?.use {
-                BitmapFactory.decodeStream(it, null, options)
-            }
-
-            val origWidth = options.outWidth
-            val origHeight = options.outHeight
-            if (origWidth <= 0 || origHeight <= 0) return Pair(ByteArray(0), null)
-
-            val maxDim = 1200 // 카카오톡 및 웹 OpenGraph 최적 규격
-            var inSampleSize = 1
-            if (origWidth > maxDim || origHeight > maxDim) {
-                val halfWidth = origWidth / 2
-                val halfHeight = origHeight / 2
-                while ((halfWidth / inSampleSize) >= maxDim && (halfHeight / inSampleSize) >= maxDim) {
-                    inSampleSize *= 2
-                }
-            }
-
-            val decodeOptions = BitmapFactory.Options().apply {
-                this.inSampleSize = inSampleSize
-            }
-
-            val decodedBitmap = contentResolver.openInputStream(uri)?.use {
-                BitmapFactory.decodeStream(it, null, decodeOptions)
-            } ?: return Pair(ByteArray(0), null)
-
-            // 정밀 스케일링 (1200px 초과 시 비율 유지 축소)
-            val currentW = decodedBitmap.width
-            val currentH = decodedBitmap.height
-            val scaledBitmap = if (currentW > maxDim || currentH > maxDim) {
-                val ratio = if (currentW >= currentH) maxDim.toFloat() / currentW else maxDim.toFloat() / currentH
-                val targetW = (currentW * ratio).toInt().coerceAtLeast(1)
-                val targetH = (currentH * ratio).toInt().coerceAtLeast(1)
-                Bitmap.createScaledBitmap(decodedBitmap, targetW, targetH, true)
-            } else {
-                decodedBitmap
-            }
-
-            val baos = java.io.ByteArrayOutputStream()
-            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 85, baos)
-            val compressedBytes = baos.toByteArray()
-
-            return Pair(compressedBytes, scaledBitmap)
-        } catch (e: Exception) {
-            Log.e("MainActivity", "이미지 압축 실패: ${e.message}", e)
-            return Pair(ByteArray(0), null)
-        }
-    }
-
-    /**
-     * 대표 썸네일 이미지 비동기 로드, 로컬 영구 파일 저장 및 표시
-     */
-    private fun loadQuoteImageThumbnail(url: String) {
-        if (url.isBlank() || url == "https://sheetbot.cloud/favicon.svg") return
-        activityScope.launch(Dispatchers.IO) {
-            try {
-                val conn = (java.net.URL(url).openConnection() as? java.net.HttpURLConnection) ?: return@launch
-                conn.connectTimeout = 10000
-                conn.readTimeout = 15000
-                conn.instanceFollowRedirects = true
-                conn.requestMethod = "GET"
-
-                if (conn.responseCode in 200..299) {
-                    val bytes = conn.inputStream.use { it.readBytes() }
-                    if (bytes.isNotEmpty()) {
-                        try {
-                            localQuoteImageFile.writeBytes(bytes)
-                        } catch (fe: Exception) {
-                            Log.w("MainActivity", "로컬 이미지 캐싱 실패: ${fe.message}")
-                        }
-
-                        val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        if (bmp != null) {
-                            withContext(Dispatchers.Main) {
-                                binding.ivQuoteImagePreview.setImageBitmap(bmp)
-                                binding.tvQuoteImageStatus.text = "등록됨 ✓"
-                                binding.tvQuoteImageStatus.setTextColor(Color.parseColor("#34D399"))
-                            }
-                        }
-                    }
-                }
-                conn.disconnect()
-            } catch (e: Exception) {
-                Log.w("MainActivity", "대표 썸네일 로드 예외: ${e.message}")
             }
         }
     }
@@ -4673,6 +4310,21 @@ class MainActivity : AppCompatActivity() {
             requestNotificationListenerPermission = { requestNotificationListenerPermission() }
         )
         smsSyncCardController.setup()
+    }
+
+    /**
+     * 📑 AI 스마트 간편 주문서 & 단가표 대장 연동 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
+     */
+    private fun setupQuoteCard() {
+        quoteCardController = QuoteSyncCardController(
+            activity = this,
+            binding = binding,
+            prefs = prefs,
+            onPickQuoteImage = { quoteImagePickerLauncher.launch("image/*") },
+            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
+            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle) }
+        )
+        quoteCardController.setup()
     }
 }
 
