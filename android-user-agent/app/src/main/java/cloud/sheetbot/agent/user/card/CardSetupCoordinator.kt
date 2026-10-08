@@ -65,6 +65,7 @@ class CardSetupCoordinator(
     lateinit var missedCallCardController: MissedCallCardController
     lateinit var websiteMonitorCardController: WebsiteMonitorCardController
     lateinit var contactsCardController: ContactsBackupCardController
+    lateinit var featureRequestCardController: FeatureRequestCardController
 
     // 🔍 초기화 여부 안전 확인 게터 프로퍼티
     val isAccountPairingInitialized get() = ::accountPairingController.isInitialized
@@ -91,6 +92,7 @@ class CardSetupCoordinator(
     val isMissedCallInitialized get() = ::missedCallCardController.isInitialized
     val isWebsiteMonitorInitialized get() = ::websiteMonitorCardController.isInitialized
     val isContactsInitialized get() = ::contactsCardController.isInitialized
+    val isFeatureRequestInitialized get() = ::featureRequestCardController.isInitialized
     val isServerStatusInitialized get() = ::serverStatusCardController.isInitialized
 
     /**
@@ -174,6 +176,9 @@ class CardSetupCoordinator(
 
         // 📇 스마트폰 연락처 구글 시트 자동 동기화 UI 바인딩
         setupContactsSyncCard()
+
+        // 💡 우리 가게·회사 맞춤 기능 제작 의뢰 카드 초기화 (v2.1.99)
+        setupFeatureRequestCard()
     }
 
     /**
@@ -589,5 +594,13 @@ class CardSetupCoordinator(
             }
         )
         contactsCardController.setup()
+    }
+
+    private fun setupFeatureRequestCard() {
+        featureRequestCardController = FeatureRequestCardController(
+            activity = activity,
+            prefs = prefs
+        )
+        featureRequestCardController.setup()
     }
 }

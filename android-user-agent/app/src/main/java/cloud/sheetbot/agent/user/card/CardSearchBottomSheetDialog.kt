@@ -72,14 +72,44 @@ class CardSearchBottomSheetDialog(
         tvCount.text = "${cards.size}개 일치"
 
         if (cards.isEmpty()) {
-            val emptyTv = TextView(activity).apply {
-                text = "검색 결과가 없습니다.\n다른 단어나 초성(예: ㅌㅎ, 9, 견적)을 입력해 보세요."
-                setTextColor(Color.parseColor("#94A3B8"))
-                textSize = 12f
+            val emptyLayout = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(0, 40, 0, 40)
+                setPadding(20, 24, 20, 24)
             }
-            container.addView(emptyTv)
+
+            val emptyTv = TextView(activity).apply {
+                text = "찾으시는 기능이 아직 없으신가요?"
+                setTextColor(Color.parseColor("#E2E8F0"))
+                textSize = 13f
+                paint.isFakeBoldText = true
+                gravity = Gravity.CENTER
+            }
+            emptyLayout.addView(emptyTv)
+
+            val subTv = TextView(activity).apply {
+                text = "세금계산서, 재고 관리, 출퇴근 체크 등 사장님께 꼭 필요한 자동화 카드를 시트봇이 직접 제작해 드립니다."
+                setTextColor(Color.parseColor("#94A3B8"))
+                textSize = 11f
+                gravity = Gravity.CENTER
+                setPadding(10, 8, 10, 16)
+            }
+            emptyLayout.addView(subTv)
+
+            val reqBtn = Button(activity).apply {
+                text = "💡 나만의 맞춤 기능 제작 의뢰하기"
+                setTextColor(Color.parseColor("#FFFFFF"))
+                setBackgroundColor(Color.parseColor("#0284C7"))
+                textSize = 11.5f
+                setPadding(24, 0, 24, 0)
+                setOnClickListener {
+                    dialog.dismiss()
+                    FeatureRequestCardController(activity, prefs).openRequestDialog()
+                }
+            }
+            emptyLayout.addView(reqBtn)
+
+            container.addView(emptyLayout)
             return
         }
 
@@ -163,6 +193,41 @@ class CardSearchBottomSheetDialog(
 
             container.addView(itemView)
         }
+
+        // 하단 맞춤 기능 의뢰 제안 푸터 배너
+        val footerBanner = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(Color.parseColor("#0F172A"))
+            setPadding(20, 16, 20, 16)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = 8
+                bottomMargin = 16
+            }
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                dialog.dismiss()
+                FeatureRequestCardController(activity, prefs).openRequestDialog()
+            }
+        }
+
+        val footerTv = TextView(activity).apply {
+            text = "💡 찾는 기능이 없나요? 나만의 맞춤 기능 의뢰하기 ➔"
+            setTextColor(Color.parseColor("#38BDF8"))
+            textSize = 11.5f
+            paint.isFakeBoldText = true
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+        footerBanner.addView(footerTv)
+        container.addView(footerBanner)
     }
 
     /**

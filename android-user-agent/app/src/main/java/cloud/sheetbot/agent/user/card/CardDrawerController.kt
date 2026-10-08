@@ -55,7 +55,8 @@ class CardDrawerController(
         CardInfo("cardCompanyResearch", "원클릭 기업 심층 리서치", "🏢", R.id.cardCompanyResearch, R.id.layoutCompanyResearchHeader),
         CardInfo("cardWebsiteMonitor", "웹사이트 실시간 장애 감시", "🚨", R.id.cardWebsiteMonitor, R.id.layoutWebsiteMonitorHeader),
         CardInfo("cardContactsBackup", "스마트폰 연락처 백업", "📇", R.id.cardContactsBackup, R.id.layoutContactsHeader),
-        CardInfo("cardUtility", "업데이트 확인 & 번인 방지", "🔄", R.id.cardUtility)
+        CardInfo("cardUtility", "업데이트 확인 & 번인 방지", "🔄", R.id.cardUtility),
+        CardInfo("cardFeatureRequest", "우리 가게 맞춤 기능 제작 의뢰", "💡", R.id.cardFeatureRequest, R.id.layoutFeatureRequestHeader)
     )
 
     // 보관함 UI 뷰 캐시
