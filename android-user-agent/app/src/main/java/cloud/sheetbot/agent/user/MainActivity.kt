@@ -173,8 +173,8 @@ class MainActivity : AppCompatActivity() {
     private val businessCardPickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri ->
-        if (uri != null) {
-            uploadBusinessCard(uri)
+        if (uri != null && ::businessCardController.isInitialized) {
+            businessCardController.uploadBusinessCard(uri)
         }
     }
 
@@ -271,6 +271,9 @@ class MainActivity : AppCompatActivity() {
 
     // 🧾 영수증 Gemini AI OCR 자동 장부화 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
     private lateinit var receiptCardController: ReceiptSyncCardController
+
+    // 🪪 명함 Gemini AI OCR 자동 인맥 등록 카드 전담 컨트롤러 (v2.1.99 / 리팩토링 모듈화)
+    private lateinit var businessCardController: BusinessCardSyncCardController
 
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
@@ -914,10 +917,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnOpenFileFolder.setOnClickListener {
             openDriveFolder("FILE_UPLOAD", prefs.fileUploadDriveFolder)
         }
-                binding.btnOpenBusinessCardSheet.setOnClickListener {
-            showOpenSheetChooserDialog("BUSINESS_CARD", prefs.businessCardDriveSheetTitle)
-        }
-
+                
         // 🌐 웹 링크 & 유튜브 영상 AI 자동 스크랩 카드 초기화 (v2.1.99 리팩토링 모듈화)
         setupLinkScrapCard()
 
@@ -954,68 +954,8 @@ class MainActivity : AppCompatActivity() {
         // 🧾 영수증 AI OCR 자동 장부화 카드 초기화 (v2.1.99 리팩토링 모듈화)
         setupReceiptCard()
 
-        binding.btnPickBusinessCard.setOnClickListener {
-            if (!prefs.isPaired) {
-                Toast.makeText(this, "먼저 시트봇 워크스페이스와 연동해 주세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            businessCardPickerLauncher.launch("image/*")
-        }
-
-        // 🧪 [디버깅] 명함 헤드업 알림 & 팝업 3초 카운트다운 테스트
-        binding.btnTestBusinessCardNotification.setOnClickListener {
-            val notiManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-            val isEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                notiManager.areNotificationsEnabled()
-            } else {
-                true
-            }
-
-            if (!isEnabled) {
-                Toast.makeText(this, "⚠️ 시트봇 앱 알림 권한이 꺼져 있습니다! 알림 설정 화면을 엽니다.", Toast.LENGTH_LONG).show()
-                try {
-                    val intent = Intent().apply {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            action = android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS
-                            putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
-                        } else {
-                            action = "android.settings.APP_NOTIFICATION_SETTINGS"
-                            putExtra("app_package", packageName)
-                            putExtra("app_uid", applicationInfo.uid)
-                        }
-                    }
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    Toast.makeText(this, "설정 화면 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-                return@setOnClickListener
-            }
-
-            Toast.makeText(this, "🧪 [3초 테스트 시작] 지금 바로 홈 버튼을 눌러 카카오톡 등 다른 앱으로 전환해 보세요!", Toast.LENGTH_LONG).show()
-
-            val appContext = applicationContext
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                kotlinx.coroutines.delay(3000)
-                val testCardJson = org.json.JSONObject().apply {
-                    put("name", "홍길동")
-                    put("title", "대표이사")
-                    put("company", "시트봇테크(주)")
-                    put("mobile", "010-1234-5678")
-                    put("email", "hong@sheetbot.cloud")
-                    put("tel", "02-123-4567")
-                    put("address", "서울특별시 강남구 테헤란로 123")
-                    put("details", "AI 비즈니스 인맥 자동화 테스트")
-                }
-                FileUploadManager.showBusinessCardActionNotification(
-                    appContext,
-                    "홍길동",
-                    "(시트봇테크)",
-                    testCardJson
-                )
-                try {
-                    CardActionActivity.start(this@MainActivity, testCardJson)
-                } catch (_: Exception) {}
-            }
+        // 🪪 명함 AI OCR 자동 인맥 등록 카드 초기화 (v2.1.99 리팩토링 모듈화)
+        setupBusinessCardSyncCard()
         }
 
         // 🎯 문자(SMS/LMS) 송수신 구글 시트 동기화 카드 초기화 (v2.1.99 리팩토링 모듈화)
@@ -2088,72 +2028,6 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 binding.progressBar.visibility = View.GONE
                 Toast.makeText(this@MainActivity, "업로드 처리 중 예외 발생: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    /**
-     * 명함 사진을 전송하여 Gemini AI OCR로 성함/직함/회사명/전화번호를 분석하고 [SheetBot] 스마트 명함 관리 대장에 자동 기록
-     */
-    private fun uploadBusinessCard(uri: Uri) {
-        if (!prefs.isPaired) {
-            Toast.makeText(this, "⚠️ 시트봇 계정 연동 후 이용할 수 있습니다.", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        // ★ [창 전환 권한 소멸 원천 방어] 액티비티가 살아있는 즉시 앱 캐시로 복사
-        val meta = FileUploadManager.resolveUriMetadata(this, uri)
-        val tempFile = FileUploadManager.copyUriToTempFile(this, uri, meta.fileName)
-        if (tempFile == null || !tempFile.exists()) {
-            Toast.makeText(this, "⚠️ 명함 이미지를 읽어올 수 없습니다.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        binding.progressBar.visibility = View.VISIBLE
-        Toast.makeText(this, "🪪 명함을 전송했습니다. 다른 앱을 이용하셔도 AI 분석 완료 시 상단 알림이 뜹니다.", Toast.LENGTH_SHORT).show()
-
-        val appContext = applicationContext
-        // 이제 로컬 파일이 캐시에 보관되어 있으므로 창 전환해도 100% 무중단 실행!
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            try {
-                val result = FileUploadManager.uploadPreparedBusinessCard(appContext, tempFile, meta)
-                withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    binding.progressBar.visibility = View.GONE
-                }
-
-                if (result.success) {
-                    val ocr = result.ocrData
-                    val name = ocr?.optString("name", "명함") ?: "명함"
-                    val rawComp = ocr?.optString("company")
-                    val comp = if (!rawComp.isNullOrBlank()) "($rawComp)" else ""
-
-                    withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        Toast.makeText(
-                            appContext,
-                            "🎉 [명함 등록 완료] $name $comp\n인맥 관리 대장에 자동 기록되었습니다!",
-                            Toast.LENGTH_LONG
-                        ).show()
-                        addLogItem("🪪 명함 OCR", "$name $comp -> 인맥 대장", true)
-
-                        // ★ [인맥 액션 다이얼로그 즉시 출현] 앱이 켜져 있을 때 연락처 저장 & 내 명함 발송 팝업창 다이렉트 표시!
-                        try {
-                            CardActionActivity.start(this@MainActivity, ocr ?: org.json.JSONObject())
-                        } catch (dialogErr: Exception) {
-                            android.util.Log.w("MainActivity", "CardActionActivity 다이얼로그 팝업 실패: ${dialogErr.message}")
-                        }
-                    }
-                } else {
-                    val err = result.error ?: "명함 분석 실패"
-                    withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        Toast.makeText(appContext, "⚠️ 명함 분석 실패: $err", Toast.LENGTH_LONG).show()
-                        addLogItem("명함 오류", err, false)
-                    }
-                }
-            } catch (e: Exception) {
-                withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    binding.progressBar.visibility = View.GONE
-                    Toast.makeText(appContext, "명함 처리 예외: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
             }
         }
     }
@@ -4088,6 +3962,21 @@ class MainActivity : AppCompatActivity() {
             onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) }
         )
         receiptCardController.setup()
+    }
+
+    /**
+     * 🪪 명함 AI OCR 자동 인맥 등록 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
+     */
+    private fun setupBusinessCardSyncCard() {
+        businessCardController = BusinessCardSyncCardController(
+            activity = this,
+            binding = binding,
+            prefs = prefs,
+            onPickBusinessCardImage = { businessCardPickerLauncher.launch("image/*") },
+            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
+            onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) }
+        )
+        businessCardController.setup()
     }
 }
 
