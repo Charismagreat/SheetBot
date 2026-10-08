@@ -45,6 +45,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import cloud.sheetbot.agent.user.databinding.ActivityMainBinding
+import cloud.sheetbot.agent.user.card.BlogAutomationCardController
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -205,13 +206,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ✍️ AI 네이버 블로그 자동 포스팅 사진 복수 첨부 런처 (v2.1.89)
-    private val selectedBlogFiles = mutableListOf<File>()
+    // ✍️ AI 네이버 블로그 자동 포스팅 카드 전담 컨트롤러 및 사진 복수 첨부 런처 (v2.1.89 / 리팩토링 모듈화)
+    private lateinit var blogCardController: BlogAutomationCardController
     private val blogImagesPickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetMultipleContents()
     ) { uris ->
-        if (!uris.isNullOrEmpty()) {
-            handleBlogImagesSelected(uris)
+        if (!uris.isNullOrEmpty() && ::blogCardController.isInitialized) {
+            blogCardController.handleImagesSelected(uris)
         }
     }
 
@@ -5437,227 +5438,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * ✍️ AI 네이버 블로그 다중 사진 선택 처리 (1600px 리사이즈 및 85% JPEG 압축 표준 준수)
-     */
-    private fun handleBlogImagesSelected(uris: List<Uri>) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val processedFiles = mutableListOf<File>()
-                for ((index, uri) in uris.withIndex()) {
-                    var displayName = "blog_photo_${System.currentTimeMillis()}_${index}.jpg"
-                    contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                        if (cursor.moveToFirst()) {
-                            val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                            if (nameIndex != -1) {
-                                displayName = cursor.getString(nameIndex) ?: displayName
-                            }
-                        }
-                    }
-
-                    // 1600px 샘플링 디코딩
-                    val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, boundsOpts) }
-
-                    val maxDimension = 1600
-                    var inSampleSize = 1
-                    val origW = boundsOpts.outWidth
-                    val origH = boundsOpts.outHeight
-                    if (origW > maxDimension || origH > maxDimension) {
-                        val halfW = origW / 2
-                        val halfH = origH / 2
-                        while ((halfW / inSampleSize) >= maxDimension && (halfH / inSampleSize) >= maxDimension) {
-                            inSampleSize *= 2
-                        }
-                    }
-
-                    val decodeOpts = BitmapFactory.Options().apply { this.inSampleSize = inSampleSize }
-                    val decoded = contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, decodeOpts) }
-
-                    if (decoded != null) {
-                        val tempFile = File(cacheDir, "blog_${System.currentTimeMillis()}_${index}.jpg")
-                        val fos = java.io.FileOutputStream(tempFile)
-                        decoded.compress(Bitmap.CompressFormat.JPEG, 85, fos)
-                        fos.flush()
-                        fos.close()
-                        processedFiles.add(tempFile)
-                    }
-                }
-
-                selectedBlogFiles.clear()
-                selectedBlogFiles.addAll(processedFiles)
-
-                val totalKb = selectedBlogFiles.sumOf { it.length() } / 1024
-
-                withContext(Dispatchers.Main) {
-                    binding.cardBlog.tvBlogSelectedImagesCount.text = "📷 첨부된 사진: ${selectedBlogFiles.size}장 (${totalKb} KB)"
-                    binding.cardBlog.btnResetBlogImages.visibility = if (selectedBlogFiles.isNotEmpty()) View.VISIBLE else View.GONE
-                    Toast.makeText(this@MainActivity, "사진 ${selectedBlogFiles.size}장 최적화 압축 완료!", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "사진 처리 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    }
-
-    /**
-     * ✍️ AI 네이버 블로그 자동 포스팅 카드 이벤트 바인딩
+     * ✍️ AI 네이버 블로그 자동 포스팅 카드 초기화 및 컨트롤러 바인딩 (v2.1.99 리팩토링 모듈화)
      */
     private fun setupBlogAutomationCard() {
-        var isCollapsed = false
-        val toggleBlog = {
-            isCollapsed = !isCollapsed
-            binding.cardBlog.layoutBlogDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
-            binding.cardBlog.btnToggleBlogDetails.text = if (isCollapsed) "▼" else "▲"
-        }
-        binding.cardBlog.layoutBlogHeader.setOnClickListener { toggleBlog() }
-        binding.cardBlog.btnToggleBlogDetails.setOnClickListener { toggleBlog() }
-        binding.cardBlog.switchBlogAutomation.setOnCheckedChangeListener { _, isChecked ->
-            isCollapsed = !isChecked
-            binding.cardBlog.layoutBlogDetails.visibility = if (isCollapsed) View.GONE else View.VISIBLE
-            binding.cardBlog.btnToggleBlogDetails.text = if (isCollapsed) "▼" else "▲"
-            val msg = if (isChecked) "AI 네이버 블로그 자동 포스팅 기능이 켜졌습니다." else "AI 네이버 블로그 자동 포스팅 기능이 꺼졌습니다."
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-        }
-
-        // 네이버 블로그 ID 초기값 바인딩 및 저장/바로가기 이벤트
-        binding.cardBlog.etNaverBlogId.setText(prefs.naverBlogId)
-        binding.cardBlog.btnSaveNaverBlogId.setOnClickListener {
-            val id = binding.cardBlog.etNaverBlogId.text.toString().trim()
-            prefs.naverBlogId = id
-            Toast.makeText(this, if (id.isNotBlank()) "네이버 블로그 ID 저장 완료: $id" else "네이버 블로그 ID가 초기화되었습니다.", Toast.LENGTH_SHORT).show()
-        }
-        binding.cardBlog.btnOpenMyBlog.setOnClickListener {
-            val id = binding.cardBlog.etNaverBlogId.text.toString().trim().ifBlank { prefs.naverBlogId }
-            val cleanId = id.replace("^@".toRegex(), "").trim()
-            val targetUrl = if (cleanId.isNotBlank()) "https://blog.naver.com/$cleanId" else "https://blog.naver.com"
-            try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)))
-            } catch (e: Exception) {
-                Toast.makeText(this, "블로그 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        binding.cardBlog.btnSelectBlogImages.setOnClickListener {
-            try {
-                blogImagesPickerLauncher.launch("image/*")
-            } catch (e: Exception) {
-                Toast.makeText(this, "사진 선택 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        binding.cardBlog.btnResetBlogImages.setOnClickListener {
-            selectedBlogFiles.clear()
-            binding.cardBlog.tvBlogSelectedImagesCount.text = "첨부된 사진: 0장 (선택 시 1600px 85% 자동 압축)"
-            binding.cardBlog.btnResetBlogImages.visibility = View.GONE
-            Toast.makeText(this, "사진 첨부가 취소되었습니다.", Toast.LENGTH_SHORT).show()
-        }
-
-        binding.cardBlog.btnStartBlogAutomation.setOnClickListener {
-            val topic = binding.cardBlog.etBlogTopic.text.toString().trim()
-            val keywords = binding.cardBlog.etBlogKeywords.text.toString().trim()
-            val refUrl1 = binding.cardBlog.etBlogRefUrl1.text.toString().trim()
-            val refUrl2 = binding.cardBlog.etBlogRefUrl2.text.toString().trim()
-            val refUrl3 = binding.cardBlog.etBlogRefUrl3.text.toString().trim()
-            val naverBlogId = binding.cardBlog.etNaverBlogId.text.toString().trim().ifBlank { prefs.naverBlogId }
-
-            if (topic.isBlank()) {
-                Toast.makeText(this, "포스팅 주제를 입력해 주세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            val userEmail = prefs.userEmail ?: ""
-            if (userEmail.isBlank()) {
-                Toast.makeText(this, "로그인 정보(사용자 이메일)가 없습니다.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            binding.cardBlog.pbBlogLoading.visibility = View.VISIBLE
-            binding.cardBlog.tvBlogStatus.visibility = View.VISIBLE
-            binding.cardBlog.tvBlogStatus.text = "AI가 참고 글을 스크래핑하고 네이버 블로그 원고를 집필 중입니다..."
-            binding.cardBlog.btnStartBlogAutomation.isEnabled = false
-            binding.cardBlog.layoutBlogResultContainer.visibility = View.GONE
-
-            lifecycleScope.launch {
-                try {
-                    val result = ApiClient.requestBlogAutomation(
-                        topic = topic,
-                        keywords = keywords,
-                        refUrl1 = refUrl1,
-                        refUrl2 = refUrl2,
-                        refUrl3 = refUrl3,
-                        naverBlogId = naverBlogId,
-                        files = selectedBlogFiles.toList(),
-                        userEmail = userEmail
-                    )
-
-                    binding.cardBlog.pbBlogLoading.visibility = View.GONE
-                    binding.cardBlog.tvBlogStatus.visibility = View.GONE
-                    binding.cardBlog.btnStartBlogAutomation.isEnabled = true
-
-                    if (result.success) {
-                        binding.cardBlog.layoutBlogResultContainer.visibility = View.VISIBLE
-                        binding.cardBlog.tvBlogResultTitle.text = "✍️ [원고 완성] ${result.title} (${result.charCount}자)"
-                        binding.cardBlog.tvBlogResultSummary.text = result.summary
-
-                        if (result.reportUrl.isNotBlank()) {
-                            binding.cardBlog.btnOpenBlogViewer.visibility = View.VISIBLE
-                            binding.cardBlog.btnOpenBlogViewer.setOnClickListener {
-                                try {
-                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.reportUrl)))
-                                } catch (e: Exception) {
-                                    Toast.makeText(this@MainActivity, "원고 뷰어 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        } else {
-                            binding.cardBlog.btnOpenBlogViewer.visibility = View.GONE
-                        }
-
-                        if (result.sheetUrl.isNotBlank()) {
-                            binding.cardBlog.btnOpenBlogSheet.visibility = View.VISIBLE
-                            binding.cardBlog.btnOpenBlogSheet.setOnClickListener {
-                                try {
-                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.sheetUrl)))
-                                } catch (e: Exception) {
-                                    Toast.makeText(this@MainActivity, "대장 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        } else {
-                            binding.cardBlog.btnOpenBlogSheet.visibility = View.GONE
-                        }
-
-                        binding.cardBlog.btnOpenNaverWrite.visibility = View.VISIBLE
-                        binding.cardBlog.btnOpenNaverWrite.setOnClickListener {
-                            try {
-                                val targetUrl = when {
-                                    result.naverWriteUrl.isNotBlank() -> result.naverWriteUrl
-                                    result.naverPostUrl.isNotBlank() -> result.naverPostUrl
-                                    naverBlogId.isNotBlank() -> "https://blog.naver.com/${naverBlogId.replace("^@".toRegex(), "")}?Redirect=Write"
-                                    else -> "https://blog.naver.com/GoBlogWrite.naver"
-                                }
-                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)))
-                            } catch (e: Exception) {
-                                Toast.makeText(this@MainActivity, "네이버 글쓰기 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-
-                        Toast.makeText(this@MainActivity, "🎉 AI 블로그 원고 작성 및 시트 적재 완료!", Toast.LENGTH_LONG).show()
-                    } else {
-                        Toast.makeText(this@MainActivity, "작성 실패: ${result.error ?: "오류 발생"}", Toast.LENGTH_LONG).show()
-                    }
-                } catch (e: Exception) {
-                    binding.cardBlog.pbBlogLoading.visibility = View.GONE
-                    binding.cardBlog.tvBlogStatus.visibility = View.GONE
-                    binding.cardBlog.btnStartBlogAutomation.isEnabled = true
-                    Toast.makeText(this@MainActivity, "블로그 원고 처리 오류: ${e.message}", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-
-        binding.cardBlog.btnOpenBlogSheetAlways.setOnClickListener {
-            showOpenSheetChooserDialog("NAVER_BLOG", "[SheetBot] 블로그 마케팅 관리 대장")
-        }
+        blogCardController = BlogAutomationCardController(
+            activity = this,
+            binding = binding.cardBlog,
+            prefs = prefs,
+            onPickImages = { blogImagesPickerLauncher.launch("image/*") },
+            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
+        )
+        blogCardController.setup()
     }
 
     /**
