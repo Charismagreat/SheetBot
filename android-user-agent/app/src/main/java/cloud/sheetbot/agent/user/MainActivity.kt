@@ -293,6 +293,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sharedIntentRouter: SharedIntentRouter
     private lateinit var aodModeController: AodModeController
     private lateinit var localLogViewController: LocalLogViewController
+    private lateinit var appUpdateController: AppUpdateController
 
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
@@ -468,6 +469,12 @@ class MainActivity : AppCompatActivity() {
                 logManager = logManager
             )
             localLogViewController.setup()
+
+            appUpdateController = AppUpdateController(
+                activity = this,
+                binding = binding
+            )
+            appUpdateController.setup()
 
             setupListeners()
             updateUiState()
@@ -731,14 +738,6 @@ class MainActivity : AppCompatActivity() {
 
         // 📇 스마트폰 연락처 구글 시트 자동 동기화 UI 바인딩
         setupContactsSyncCard()
-
-        binding.btnCheckUpdate.setOnClickListener {
-            UpdateManager.checkForUpdates(this, showToastIfLatest = true)
-        }
-
-        binding.tvAppVersionBadge.setOnClickListener {
-            UpdateManager.checkForUpdates(this, showToastIfLatest = true)
-        }
     }
 
     private fun enterAodMode() =
@@ -786,25 +785,8 @@ class MainActivity : AppCompatActivity() {
         checkAppUpdateBadge()
     }
 
-    /**
-     * 상단 우측 앱 버전 뱃지의 업데이트 감지 및 시각적 알림 표시 (v2.1.20)
-     */
-    private fun checkAppUpdateBadge() {
-        UpdateManager.checkUpdateSilently(this) { hasUpdate, _ ->
-            if (!isFinishing && !isDestroyed) {
-                val verName = getAppVersionName()
-                if (hasUpdate) {
-                    binding.tvAppVersionBadge.text = "v$verName (UPDATE 🔴)"
-                    binding.tvAppVersionBadge.setBackgroundResource(R.drawable.bg_badge_version_update)
-                    binding.tvAppVersionBadge.setTextColor(Color.parseColor("#FCA5A5"))
-                } else {
-                    binding.tvAppVersionBadge.text = "v$verName"
-                    binding.tvAppVersionBadge.setBackgroundResource(R.drawable.bg_badge_version)
-                    binding.tvAppVersionBadge.setTextColor(Color.parseColor("#10B981"))
-                }
-            }
-        }
-    }
+    private fun checkAppUpdateBadge() =
+        appUpdateController.checkAppUpdateBadge()
 
     private fun addLogItem(sender: String, body: String, success: Boolean) =
         localLogViewController.addLogItem(sender, body, success)
@@ -835,14 +817,8 @@ class MainActivity : AppCompatActivity() {
     private fun openDriveFolder(sheetType: String, defaultFolderName: String) =
         sheetActionController.openDriveFolder(sheetType, defaultFolderName)
 
-    private fun getAppVersionName(): String {
-        return try {
-            val pInfo = packageManager.getPackageInfo(packageName, 0)
-            pInfo.versionName ?: BuildConfig.VERSION_NAME
-        } catch (_: Exception) {
-            BuildConfig.VERSION_NAME
-        }
-    }
+    private fun getAppVersionName(): String =
+        appUpdateController.getAppVersionName()
 
     // 🎯 기록 대상(타겟) 필터 대장 및 연락처 피커/관리 위임 메서드 (TargetFilterController 전담)
     private fun checkAndLaunchContactPicker(targetType: String) =
@@ -891,52 +867,6 @@ class MainActivity : AppCompatActivity() {
     private fun checkAndRequestAllFilesAccess(onGranted: (() -> Unit)? = null) =
         permissionController.checkAndRequestAllFilesAccess(onGranted)
 
-    /**
-     * 통화 녹음 파일 구글 드라이브 즉시 동기화 실행 (v2.1.27)
-     * - forceReupload: 기존 백업 이력 무시하고 강제 재업로드 여부 (롱클릭 지원)
-     */
-    private fun executeRecordingSync(forceReupload: Boolean = false) {
-        val userEmail = prefs.userEmail
-        if (userEmail.isNullOrBlank()) {
-            Toast.makeText(this, "먼저 상단에서 구글 계정으로 로그인해 주세요.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        binding.btnSyncRecordingsNow.isEnabled = false
-        binding.btnSyncRecordingsNow.text = "🔄 녹음 파일 검사 및 업로드 중..."
-        Toast.makeText(this, "통화 녹음 파일 탐색을 시작합니다...", Toast.LENGTH_SHORT).show()
-
-        activityScope.launch(Dispatchers.IO) {
-            try {
-                val result = CallRecordingManager.scanAndUploadNewRecordings(this@MainActivity, forceReupload = forceReupload)
-                withContext(Dispatchers.Main) {
-                    binding.btnSyncRecordingsNow.isEnabled = true
-                    binding.btnSyncRecordingsNow.text = "⚡ 지금 새 녹음 파일 즉시 동기화"
-
-                    val dialogTitle = when {
-                        result.uploadedCount > 0 -> "🎉 통화 녹음 백업 완료"
-                        result.uploadFailedCount > 0 -> "⚠️ 전송 실패 안내"
-                        result.filterExcludedCount > 0 -> "🔍 필터 제외 안내"
-                        result.alreadySyncedCount > 0 -> "📁 이미 백업 완료됨"
-                        else -> "ℹ️ 동기화 결과"
-                    }
-
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle(dialogTitle)
-                        .setMessage(result.message)
-                        .setPositiveButton("확인", null)
-                        .show()
-                }
-            } catch (e: Throwable) {
-                Log.e("MainActivity", "executeRecordingSync 오류: ${e.message}", e)
-                withContext(Dispatchers.Main) {
-                    binding.btnSyncRecordingsNow.isEnabled = true
-                    binding.btnSyncRecordingsNow.text = "📁 녹음 파일 직접 업로드"
-                    Toast.makeText(this@MainActivity, "동기화 중 오류가 발생했습니다: ${e.message}", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-    }
     private fun setupLawAdvisoryCard() {
         lawCardController = LawAdvisoryCardController(
             activity = this,
