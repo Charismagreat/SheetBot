@@ -774,15 +774,12 @@ class MainActivity : AppCompatActivity() {
             executeAiCommand(cmd)
         }
 
-            filePickerLauncher.launch("*/*")
-        }
 
         // 🧾 영수증 AI OCR 자동 장부화 카드 초기화 (v2.1.99 리팩토링 모듈화)
         setupReceiptCard()
 
         // 🪪 명함 AI OCR 자동 인맥 등록 카드 초기화 (v2.1.99 리팩토링 모듈화)
         setupBusinessCardSyncCard()
-        }
 
         // 🎯 문자(SMS/LMS) 송수신 구글 시트 동기화 카드 초기화 (v2.1.99 리팩토링 모듈화)
         setupSmsCard()
