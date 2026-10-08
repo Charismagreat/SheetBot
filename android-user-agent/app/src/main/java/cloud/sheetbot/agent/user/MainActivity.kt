@@ -102,19 +102,7 @@ class MainActivity : AppCompatActivity() {
     }
     private val activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob() + coroutineExceptionHandler)
 
-    private var smsSentObserver: SmsSentObserver? = null
-    private var isDepositReceiverRegistered = false
 
-    // 입금 감지 시 실시간 화면 갱신 리시버 (ANR 방어를 위해 가벼운 로그만 갱신)
-    private val depositUpdateReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            val body = intent?.getStringExtra("smsBody") ?: ""
-            val sender = intent?.getStringExtra("sender") ?: ""
-            val success = intent?.getBooleanExtra("success", false) ?: false
-            addLogItem(sender, body, success)
-            updateTargetBadges()
-        }
-    }
 
     // QR 코드 스캐너 런처 (ZXing Embedded)
     private val barcodeLauncher = registerForActivityResult(ScanContract()) { result ->
@@ -294,6 +282,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var aodModeController: AodModeController
     private lateinit var localLogViewController: LocalLogViewController
     private lateinit var appUpdateController: AppUpdateController
+    private lateinit var smsObserverController: SmsObserverController
 
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
@@ -487,33 +476,15 @@ class MainActivity : AppCompatActivity() {
             // 외부 공유하기(Share) 인텐트 처리
             handleSharedIntent(intent)
 
-            // 스마트폰 직접 발신(Sent) 문자 실시간 감지 Observer 등록
-            try {
-                smsSentObserver = SmsSentObserver(this)
-                contentResolver.registerContentObserver(
-                    SmsSentObserver.SMS_CONTENT_URI,
-                    true,
-                    smsSentObserver!!
-                )
-            } catch (e: Exception) {
-                android.util.Log.w("MainActivity", "SmsSentObserver 등록 실패: ${e.message}")
-            }
-
-            // 실시간 고객 SMS 수신 및 입금 감지 브로드캐스트 리시버 등록
-            try {
-                val filter = IntentFilter().apply {
-                    addAction(SmsReceiver.ACTION_SMS_RECEIVED)
-                    addAction(SmsReceiver.ACTION_DEPOSIT_DETECTED)
+            // 스마트폰 발신 문자 및 실시간 수신 SMS/입금 감지 Observer/Receiver 등록 (v2.1.99)
+            smsObserverController = SmsObserverController(
+                context = this,
+                onDepositOrSmsReceived = { sender, body, success ->
+                    addLogItem(sender, body, success)
+                    updateTargetBadges()
                 }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    registerReceiver(depositUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-                } else {
-                    registerReceiver(depositUpdateReceiver, filter)
-                }
-                isDepositReceiverRegistered = true
-            } catch (e: Throwable) {
-                android.util.Log.w("MainActivity", "depositUpdateReceiver 등록 예외: ${e.message}")
-            }
+            )
+            smsObserverController.register()
         } catch (e: Throwable) {
             android.util.Log.e("MainActivity", "onCreate 초기화 중 오류 방어: ${e.message}", e)
             Toast.makeText(this, "에이전트 초기화 완료 (일부 항목 보호 모드 적용)", Toast.LENGTH_LONG).show()
@@ -606,13 +577,8 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Throwable) {}
         try { activityScope.coroutineContext.cancelChildren() } catch (_: Throwable) {}
         try {
-            smsSentObserver?.let { contentResolver.unregisterContentObserver(it) }
-            smsSentObserver = null
-        } catch (_: Throwable) {}
-        try {
-            if (isDepositReceiverRegistered) {
-                unregisterReceiver(depositUpdateReceiver)
-                isDepositReceiverRegistered = false
+            if (::smsObserverController.isInitialized) {
+                smsObserverController.unregister()
             }
         } catch (_: Throwable) {}
     }
