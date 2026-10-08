@@ -1,95 +1,38 @@
 package cloud.sheetbot.agent.user
 
 import android.Manifest
-import android.app.Activity
-import android.content.BroadcastReceiver
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.content.pm.PackageManager
-import android.content.res.ColorStateList
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Color
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.os.PowerManager
-import android.provider.ContactsContract
-import android.provider.Settings
-import android.speech.RecognizerIntent
-import android.media.MediaRecorder
-import android.media.MediaPlayer
-import android.os.CountDownTimer
-import android.widget.ProgressBar
-import android.util.Base64
-import android.util.Log
-import android.view.GestureDetector
-import android.view.MotionEvent
 import android.view.View
-import android.view.WindowManager
-import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
-import androidx.core.widget.doAfterTextChanged
-import java.io.File
-import java.text.NumberFormat
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
-import cloud.sheetbot.agent.user.databinding.ActivityMainBinding
-import cloud.sheetbot.agent.user.card.BlogAutomationCardController
-import cloud.sheetbot.agent.user.card.InstagramAutomationCardController
-import cloud.sheetbot.agent.user.card.MobileSiteCardController
-import cloud.sheetbot.agent.user.card.LawAdvisoryCardController
-import cloud.sheetbot.agent.user.card.CompanyResearchCardController
-import cloud.sheetbot.agent.user.card.WebsiteMonitorCardController
-import cloud.sheetbot.agent.user.card.ContactsBackupCardController
-import cloud.sheetbot.agent.user.card.LinkScrapCardController
-import cloud.sheetbot.agent.user.card.MissedCallCardController
-import cloud.sheetbot.agent.user.card.KakaoSyncCardController
-import cloud.sheetbot.agent.user.card.CallEndedCardController
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.ApiException
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
-import java.text.SimpleDateFormat
-import java.util.Date
-import android.text.method.ScrollingMovementMethod
-import java.util.Locale
-import kotlin.random.Random
-import cloud.sheetbot.agent.user.card.PaymentReceiptCardController
-import cloud.sheetbot.agent.user.card.CallRecordCardController
-import cloud.sheetbot.agent.user.card.MeetingRecordingCardController
-import cloud.sheetbot.agent.user.card.FileUploadCardController
-import cloud.sheetbot.agent.user.card.AiCopilotCardController
-import cloud.sheetbot.agent.user.card.TokenWalletCardController
-import cloud.sheetbot.agent.user.card.AccountPairingController
-import cloud.sheetbot.agent.user.card.ServerStatusCardController
-import cloud.sheetbot.agent.user.card.SheetActionController
-import cloud.sheetbot.agent.user.card.TargetFilterController
-import cloud.sheetbot.agent.user.card.PermissionController
+import cloud.sheetbot.agent.user.card.ActivityLauncherRegistry
+import cloud.sheetbot.agent.user.card.AodModeController
+import cloud.sheetbot.agent.user.card.AppUpdateController
 import cloud.sheetbot.agent.user.card.CardAccordionController
+import cloud.sheetbot.agent.user.card.CardSetupCoordinator
+import cloud.sheetbot.agent.user.card.LocalLogViewController
+import cloud.sheetbot.agent.user.card.PermissionController
+import cloud.sheetbot.agent.user.card.SharedIntentRouter
+import cloud.sheetbot.agent.user.card.SheetActionController
+import cloud.sheetbot.agent.user.card.SmsObserverController
+import cloud.sheetbot.agent.user.card.TargetFilterController
+import cloud.sheetbot.agent.user.databinding.ActivityMainBinding
+import cloud.sheetbot.agent.user.service.KeepAliveService
+import cloud.sheetbot.agent.user.storage.LocalLogManager
+import cloud.sheetbot.agent.user.storage.PreferencesManager
+import cloud.sheetbot.agent.user.util.TtsManager
+import cloud.sheetbot.agent.user.util.UpdateManager
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -106,33 +49,6 @@ class MainActivity : AppCompatActivity() {
 
     // 🎛️ 전 카드 초기화 및 생명주기 관리 전담 코디네이터 (v2.1.99 모듈화)
     private lateinit var cardCoordinator: CardSetupCoordinator
-
-    // 하위 호환성 및 기존 참조 보존용 위임 프로퍼티 (v2.1.99 모듈화)
-    private val lawCardController get() = cardCoordinator.lawCardController
-    private val blogCardController get() = cardCoordinator.blogCardController
-    private val instaCardController get() = cardCoordinator.instaCardController
-    private val siteCardController get() = cardCoordinator.siteCardController
-    private val companyResearchCardController get() = cardCoordinator.companyResearchCardController
-    private val websiteMonitorCardController get() = cardCoordinator.websiteMonitorCardController
-    private val contactsCardController get() = cardCoordinator.contactsCardController
-    private val linkScrapCardController get() = cardCoordinator.linkScrapCardController
-    private val missedCallCardController get() = cardCoordinator.missedCallCardController
-    private val kakaoCardController get() = cardCoordinator.kakaoCardController
-    private val callEndedCardController get() = cardCoordinator.callEndedCardController
-    private val smsSyncCardController get() = cardCoordinator.smsSyncCardController
-    private val quoteCardController get() = cardCoordinator.quoteCardController
-    private val estimateCardController get() = cardCoordinator.estimateCardController
-    private val inCallSummaryCardController get() = cardCoordinator.inCallSummaryCardController
-    private val receiptCardController get() = cardCoordinator.receiptCardController
-    private val businessCardController get() = cardCoordinator.businessCardController
-    private val paymentReceiptCardController get() = cardCoordinator.paymentReceiptCardController
-    private val callRecordCardController get() = cardCoordinator.callRecordCardController
-    private val meetingRecordingCardController get() = cardCoordinator.meetingRecordingCardController
-    private val fileUploadCardController get() = cardCoordinator.fileUploadCardController
-    private val aiCopilotCardController get() = cardCoordinator.aiCopilotCardController
-    private val tokenWalletCardController get() = cardCoordinator.tokenWalletCardController
-    private val accountPairingController get() = cardCoordinator.accountPairingController
-    private val serverStatusCardController get() = cardCoordinator.serverStatusCardController
 
     private lateinit var sheetActionController: SheetActionController
     private lateinit var targetFilterController: TargetFilterController
@@ -154,33 +70,33 @@ class MainActivity : AppCompatActivity() {
             aiCopilotCardController.executeAiCommand(spokenText)
         },
         isAccountPairingInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isAccountPairingInitialized },
-        getAccountPairing = { accountPairingController },
+        getAccountPairing = { cardCoordinator.accountPairingController },
         isPermissionInitialized = { ::permissionController.isInitialized },
         getPermission = { permissionController },
         isFileUploadInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isFileUploadInitialized },
-        getFileUpload = { fileUploadCardController },
+        getFileUpload = { cardCoordinator.fileUploadCardController },
         isCallRecordInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isCallRecordInitialized },
-        getCallRecord = { callRecordCardController },
+        getCallRecord = { cardCoordinator.callRecordCardController },
         isReceiptInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isReceiptInitialized },
-        getReceipt = { receiptCardController },
+        getReceipt = { cardCoordinator.receiptCardController },
         isBusinessCardInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isBusinessCardInitialized },
-        getBusinessCard = { businessCardController },
+        getBusinessCard = { cardCoordinator.businessCardController },
         isCallEndedInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isCallEndedInitialized },
-        getCallEnded = { callEndedCardController },
+        getCallEnded = { cardCoordinator.callEndedCardController },
         isQuoteInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isQuoteInitialized },
-        getQuote = { quoteCardController },
+        getQuote = { cardCoordinator.quoteCardController },
         isEstimateInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isEstimateInitialized },
-        getEstimate = { estimateCardController },
+        getEstimate = { cardCoordinator.estimateCardController },
         isLawInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isLawInitialized },
-        getLaw = { lawCardController },
+        getLaw = { cardCoordinator.lawCardController },
         isBlogInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isBlogInitialized },
-        getBlog = { blogCardController },
+        getBlog = { cardCoordinator.blogCardController },
         isInstaInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isInstaInitialized },
-        getInsta = { instaCardController },
+        getInsta = { cardCoordinator.instaCardController },
         isSiteInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isSiteInitialized },
-        getSite = { siteCardController },
+        getSite = { cardCoordinator.siteCardController },
         isKakaoInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isKakaoInitialized },
-        getKakao = { kakaoCardController },
+        getKakao = { cardCoordinator.kakaoCardController },
         isTargetFilterInitialized = { ::targetFilterController.isInitialized },
         getTargetFilter = { targetFilterController }
     )
@@ -223,7 +139,7 @@ class MainActivity : AppCompatActivity() {
                 launchContactPickerIntent = { intent -> launchers.contactPickerLauncher.launch(intent) },
                 requestContactPermission = { launchers.contactPermissionLauncher.launch(Manifest.permission.READ_CONTACTS) },
                 isSmsSyncControllerInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isSmsSyncInitialized },
-                getSmsSyncController = { smsSyncCardController }
+                getSmsSyncController = { cardCoordinator.smsSyncCardController }
             )
 
             permissionController = PermissionController(
@@ -236,30 +152,30 @@ class MainActivity : AppCompatActivity() {
             cardAccordionController = CardAccordionController(
                 binding = binding,
                 prefs = prefs,
-                getTokenWallet = { tokenWalletCardController },
-                getAiCopilot = { aiCopilotCardController },
-                getPaymentReceipt = { paymentReceiptCardController },
-                getCallRecord = { callRecordCardController },
-                getFileUpload = { fileUploadCardController },
+                getTokenWallet = { cardCoordinator.tokenWalletCardController },
+                getAiCopilot = { cardCoordinator.aiCopilotCardController },
+                getPaymentReceipt = { cardCoordinator.paymentReceiptCardController },
+                getCallRecord = { cardCoordinator.callRecordCardController },
+                getFileUpload = { cardCoordinator.fileUploadCardController },
                 isSmsSyncInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isSmsSyncInitialized },
-                getSmsSync = { smsSyncCardController },
+                getSmsSync = { cardCoordinator.smsSyncCardController },
                 isQuoteInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isQuoteInitialized },
-                getQuote = { quoteCardController },
+                getQuote = { cardCoordinator.quoteCardController },
                 isEstimateInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isEstimateInitialized },
-                getEstimate = { estimateCardController },
+                getEstimate = { cardCoordinator.estimateCardController },
                 isInCallSummaryInitialized = { ::cardCoordinator.isInitialized && cardCoordinator.isInCallSummaryInitialized },
-                getInCallSummary = { inCallSummaryCardController }
+                getInCallSummary = { cardCoordinator.inCallSummaryCardController }
             )
 
             sharedIntentRouter = SharedIntentRouter(
                 context = this,
                 onBookmarkUrl = { url, rawText ->
                     if (::cardCoordinator.isInitialized && cardCoordinator.isLinkScrapInitialized) {
-                        linkScrapCardController.bookmarkSharedUrl(url, rawText)
+                        cardCoordinator.linkScrapCardController.bookmarkSharedUrl(url, rawText)
                     }
                 },
                 onUploadFiles = { uris, sourceTag ->
-                    fileUploadCardController.uploadFiles(uris, sourceTag)
+                    cardCoordinator.fileUploadCardController.uploadFiles(uris, sourceTag)
                 },
                 onClearIntent = {
                     setIntent(Intent())
@@ -408,21 +324,28 @@ class MainActivity : AppCompatActivity() {
         val isPaired = prefs.isPaired
         val email = prefs.userEmail
 
-        tokenWalletCardController.updateTokenNoticeVisibility(prefs.isTokenNoticeDismissed)
-        refreshAllCardsCollapseState()
-        updateTargetBadges()
+        if (::cardCoordinator.isInitialized) {
+            if (cardCoordinator.isTokenWalletInitialized) {
+                cardCoordinator.tokenWalletCardController.updateTokenNoticeVisibility(prefs.isTokenNoticeDismissed)
+            }
+            refreshAllCardsCollapseState()
+            updateTargetBadges()
 
-        if (::cardCoordinator.isInitialized && cardCoordinator.isServerStatusInitialized) {
-            serverStatusCardController.updateCardStatus(isPaired, email)
-        }
+            if (cardCoordinator.isServerStatusInitialized) {
+                cardCoordinator.serverStatusCardController.updateCardStatus(isPaired, email)
+            }
 
-        if (isPaired && !email.isNullOrBlank()) {
-            binding.layoutUnlinkZone.visibility = View.VISIBLE
-            binding.layoutWalletCard.visibility = View.VISIBLE
-            binding.layoutUnpairedControls.visibility = View.GONE
-            tokenWalletCardController.loadWalletBalance(email)
-            callRecordCardController.refreshVoiceProfileStatus(email)
-        } else {
+            if (isPaired && !email.isNullOrBlank()) {
+                binding.layoutUnlinkZone.visibility = View.VISIBLE
+                binding.layoutWalletCard.visibility = View.VISIBLE
+                binding.layoutUnpairedControls.visibility = View.GONE
+                if (cardCoordinator.isTokenWalletInitialized) {
+                    cardCoordinator.tokenWalletCardController.loadWalletBalance(email)
+                }
+                if (cardCoordinator.isCallRecordInitialized) {
+                    cardCoordinator.callRecordCardController.refreshVoiceProfileStatus(email)
+                }
+            } else {
             binding.layoutUnlinkZone.visibility = View.GONE
             binding.layoutWalletCard.visibility = View.GONE
             binding.layoutUnpairedControls.visibility = View.VISIBLE
