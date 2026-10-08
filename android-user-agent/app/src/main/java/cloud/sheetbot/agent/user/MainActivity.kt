@@ -89,6 +89,7 @@ import cloud.sheetbot.agent.user.card.ServerStatusCardController
 import cloud.sheetbot.agent.user.card.SheetActionController
 import cloud.sheetbot.agent.user.card.TargetFilterController
 import cloud.sheetbot.agent.user.card.PermissionController
+import cloud.sheetbot.agent.user.card.CardAccordionController
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -292,6 +293,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sheetActionController: SheetActionController
     private lateinit var targetFilterController: TargetFilterController
     private lateinit var permissionController: PermissionController
+    private lateinit var cardAccordionController: CardAccordionController
 
     private lateinit var siteCardController: MobileSiteCardController
     private val siteImagesPickerLauncher = registerForActivityResult(
@@ -420,6 +422,24 @@ class MainActivity : AppCompatActivity() {
                 launchPermissionRequest = { perms -> permissionLauncher.launch(perms) }
             )
             permissionController.setup()
+
+            cardAccordionController = CardAccordionController(
+                binding = binding,
+                prefs = prefs,
+                getTokenWallet = { tokenWalletCardController },
+                getAiCopilot = { aiCopilotCardController },
+                getPaymentReceipt = { paymentReceiptCardController },
+                getCallRecord = { callRecordCardController },
+                getFileUpload = { fileUploadCardController },
+                isSmsSyncInitialized = { ::smsSyncCardController.isInitialized },
+                getSmsSync = { smsSyncCardController },
+                isQuoteInitialized = { ::quoteCardController.isInitialized },
+                getQuote = { quoteCardController },
+                isEstimateInitialized = { ::estimateCardController.isInitialized },
+                getEstimate = { estimateCardController },
+                isInCallSummaryInitialized = { ::inCallSummaryCardController.isInitialized },
+                getInCallSummary = { inCallSummaryCardController }
+            )
 
             setupListeners()
             updateUiState()
@@ -781,90 +801,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateCardCollapseState(container: View, toggleBtn: TextView, isHidden: Boolean) {
-        container.visibility = if (isHidden) View.GONE else View.VISIBLE
-        toggleBtn.text = if (isHidden) "▼" else "▲"
-    }
+    private fun updateCardCollapseState(container: View, toggleBtn: TextView, isHidden: Boolean) =
+        cardAccordionController.updateCardCollapseState(container, toggleBtn, isHidden)
 
-    private fun refreshAllCardsCollapseState() {
-        tokenWalletCardController.refreshCollapseState()
-        aiCopilotCardController.refreshCollapseState()
-        paymentReceiptCardController.refreshCollapseState()
-        callRecordCardController.refreshCollapseState()
-        fileUploadCardController.refreshCollapseState()
-        updateCardCollapseState(binding.layoutLinkScrapSettings, binding.btnToggleLinkScrapDetails, prefs.isLinkScrapDetailsHidden)
-        if (::smsSyncCardController.isInitialized) {
-            smsSyncCardController.refreshCollapseState()
-        } else {
-            updateCardCollapseState(binding.layoutSmsSyncSettings, binding.btnToggleSmsSyncDetails, prefs.isSmsSyncDetailsHidden)
-        }
-        updateCardCollapseState(binding.layoutKakaoSyncSettings, binding.btnToggleKakaoSyncDetails, prefs.isKakaoSyncDetailsHidden)
-        if (::quoteCardController.isInitialized) {
-            quoteCardController.refreshCollapseState()
-        } else {
-            updateCardCollapseState(binding.layoutQuoteSyncSettings, binding.btnToggleQuoteSyncDetails, prefs.isQuoteSyncDetailsHidden)
-        }
-        if (::estimateCardController.isInitialized) {
-            estimateCardController.refreshCollapseState()
-        } else {
-            updateCardCollapseState(binding.layoutEstimateSyncSettings, binding.btnToggleEstimateSyncDetails, prefs.isEstimateSyncDetailsHidden)
-        }
-        if (::inCallSummaryCardController.isInitialized) {
-            inCallSummaryCardController.refreshCollapseState()
-        } else {
-            updateCardCollapseState(binding.layoutInCallSummarySettings, binding.btnToggleInCallSummaryDetails, prefs.isInCallSummaryDetailsHidden)
-        }
-        updateCardCollapseState(binding.layoutMissedCallSettings, binding.btnToggleMissedCallDetails, prefs.isMissedCallDetailsHidden)
-        updateCardCollapseState(binding.layoutCallEndedCardSettings, binding.btnToggleCallEndedCardDetails, prefs.isCallEndedCardDetailsHidden)
-        updateCardCollapseState(binding.layoutWebsiteMonitorSettings, binding.btnToggleWebsiteMonitorDetails, prefs.isWebsiteMonitorDetailsHidden)
-        updateCardCollapseState(binding.layoutContactsDetails, binding.btnToggleContactsDetails, prefs.isContactsDetailsHidden)
-    }
+    private fun refreshAllCardsCollapseState() =
+        cardAccordionController.refreshAllCardsCollapseState()
 
-    private fun setupCardCollapseExpandListeners() {
-        refreshAllCardsCollapseState()
-
-        // 1. 토큰 지갑 카드
-        binding.layoutWalletHeader.setOnClickListener { tokenWalletCardController.toggleCollapse() }
-        binding.btnToggleWalletDetails.setOnClickListener { tokenWalletCardController.toggleCollapse() }
-
-        // 2. AI 비서 카드
-        binding.layoutCopilotHeader.setOnClickListener { aiCopilotCardController.toggleCollapse() }
-        binding.btnToggleCopilotDetails.setOnClickListener { aiCopilotCardController.toggleCollapse() }
-
-        // 3. 매장 결제 & 영수증 카드
-        binding.layoutPaymentReceiptHeader.setOnClickListener { paymentReceiptCardController.toggleCollapse() }
-        binding.btnTogglePaymentReceiptDetails.setOnClickListener { paymentReceiptCardController.toggleCollapse() }
-
-        // 4. 통화 녹음 카드
-        binding.layoutCallRecordingHeader.setOnClickListener { callRecordCardController.toggleCollapse() }
-        binding.btnToggleCallRecordingDetails.setOnClickListener { callRecordCardController.toggleCollapse() }
-
-        // 5. 사진 & 문서 보관 카드
-        binding.layoutFileUploadHeader.setOnClickListener { fileUploadCardController.toggleCollapse() }
-        binding.btnToggleFileUploadDetails.setOnClickListener { fileUploadCardController.toggleCollapse() }
-
-        // 6. 웹 링크 & 유튜브 카드 (LinkScrapCardController 전담 바인딩)
-
-        // 7. 문자(SMS) 카드 (SmsSyncCardController 전담 바인딩)
-
-
-        // 8. 카카오톡 카드 (KakaoSyncCardController 전담 바인딩)
-
-        // 9. 간편 주문서 카드 (QuoteSyncCardController 전담 바인딩)
-
-        // 9-A. 간편 견적서 발행 카드 (EstimateSyncCardController 전담 바인딩)
-
-        // 9-B. 인콜 고객 요약 카드
-        // 10. 수신 전화 시 고객 시트 요약 인콜 플로팅 카드 (InCallSummaryCardController 전담 바인딩)
-
-        // 10. 부재중 전화 카드 (MissedCallCardController 전담 바인딩)
-
-        // 11. 모바일 명함 카드 (CallEndedCardController 전담 바인딩)
-
-        // 12. 웹사이트 모니터링 카드 (WebsiteMonitorCardController 전담 바인딩)
-
-        // 13. 스마트폰 연락처 백업 카드 (ContactsBackupCardController 전담 바인딩)
-    }
+    private fun setupCardCollapseExpandListeners() =
+        cardAccordionController.setupCardCollapseExpandListeners()
 
     private fun updateUiState() {
         val verName = getAppVersionName()
