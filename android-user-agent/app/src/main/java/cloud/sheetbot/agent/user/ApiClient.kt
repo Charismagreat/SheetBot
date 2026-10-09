@@ -2684,6 +2684,10 @@ object ApiClient {
                 } else {
                     lastError = resJson.optString("error", "서버 응답 오류 (HTTP ${response.code})")
                 }
+            } catch (e: Exception) {
+                lastError = e.message ?: "네트워크 오류"
+                Log.w(TAG, "[카탈로그 조회 예외] host: $host, error: $lastError")
+            }
         }
         MarketplaceCatalogResult(success = false, error = lastError)
     }
