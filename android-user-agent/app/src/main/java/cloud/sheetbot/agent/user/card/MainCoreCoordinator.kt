@@ -155,27 +155,37 @@ class MainCoreCoordinator(
         onInitCardCoordinator(googleSignInClient)
 
         // 📦 추가 기능 보관함 (Card Drawer) 및 사용자 맞춤 대시보드 가시성 제어 초기화
-        cardDrawerController = CardDrawerController(
-            activity = activity,
-            prefs = prefs
-        )
-        cardDrawerController.setup()
-
-        // 🔍 자연어·초성·숫자 다중 카드 빠른 검색 바텀시트 연동 (v2.1.99)
-        binding.btnSearchCards.setOnClickListener {
-            CardSearchBottomSheetDialog(
+        try {
+            cardDrawerController = CardDrawerController(
                 activity = activity,
-                prefs = prefs,
-                cardDrawerController = cardDrawerController,
-                scrollView = binding.mainScrollView
-            ).show()
+                prefs = prefs
+            )
+            cardDrawerController.setup()
+        } catch (e: Throwable) {
+            android.util.Log.e("MainCoreCoordinator", "cardDrawerController 초기화 실패 방어", e)
         }
 
-        updateUiState()
-        checkPermissions()
+        // 🔍 자연어·초성·숫자 다중 카드 빠른 검색 바텀시트 연동 (v2.1.99)
+        try {
+            binding.btnSearchCards.setOnClickListener {
+                if (::cardDrawerController.isInitialized) {
+                    CardSearchBottomSheetDialog(
+                        activity = activity,
+                        prefs = prefs,
+                        cardDrawerController = cardDrawerController,
+                        scrollView = binding.mainScrollView
+                    ).show()
+                }
+            }
+        } catch (e: Throwable) {
+            android.util.Log.e("MainCoreCoordinator", "btnSearchCards 리스너 등록 실패 방어", e)
+        }
+
+        try { updateUiState() } catch (e: Throwable) { android.util.Log.e("MainCoreCoordinator", "updateUiState 실패 방어", e) }
+        try { checkPermissions() } catch (e: Throwable) { android.util.Log.e("MainCoreCoordinator", "checkPermissions 실패 방어", e) }
 
         if (prefs.isPaired) {
-            KeepAliveService.start(activity)
+            try { KeepAliveService.start(activity) } catch (_: Throwable) {}
         }
 
         // 외부 공유하기(Share) 인텐트 처리
@@ -207,6 +217,13 @@ class MainCoreCoordinator(
             }
         } catch (e: Throwable) {
             android.util.Log.w("MainCoreCoordinator", "preloadActiveSheetUrls 방어: ${e.message}")
+        }
+        try {
+            if (::appUpdateController.isInitialized) {
+                appUpdateController.updateVersionBadge()
+            }
+        } catch (e: Throwable) {
+            android.util.Log.w("MainCoreCoordinator", "앱 버전 뱃지 실시간 갱신 방어: ${e.message}")
         }
     }
 
