@@ -274,9 +274,9 @@ class CardMarketplaceController(
                                 val result = ApiClient.submitFeatureRequest(
                                     userEmail = userEmail,
                                     title = "[출시알림 예약] ${card.title}",
-                                    content = "신규 기능 카드 '${card.title}'(key: ${card.key}) 출시 알림 신청",
+                                    description = "신규 기능 카드 '${card.title}'(key: ${card.key}) 출시 알림 신청",
                                     requestType = "RELEASE_NOTIFY",
-                                    contactInfo = userEmail
+                                    contact = userEmail
                                 )
                                 withContext(Dispatchers.Main) {
                                     if (result.success) {
