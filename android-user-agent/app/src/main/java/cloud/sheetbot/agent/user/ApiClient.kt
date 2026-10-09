@@ -1530,13 +1530,21 @@ object ApiClient {
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
                     Log.i(TAG, "🎉 [자연어 명령 실행 성공] $command")
+                    val detailsObj = resJson.optJSONObject("details")
+                    val canPromote = resJson.optBoolean("canPromote", detailsObj?.optBoolean("canPromote", false) ?: false)
+                    val suggestedTitle = resJson.optString("suggestedFunctionTitle", detailsObj?.optString("suggestedFunctionTitle", "") ?: "")
+                    val targetSheetId = resJson.optString("spreadsheetId", detailsObj?.optString("spreadsheetId", "") ?: "")
+
                     return@withContext AiCommandResult(
                         success = true,
                         command = resJson.optString("command", command),
                         actionType = resJson.optString("actionType", "GENERAL_ASSIST"),
                         explanation = resJson.optString("explanation", "명령이 처리되었습니다."),
                         spokenResult = resJson.optString("spokenResult", "요청하신 시트 명령이 완료되었습니다."),
-                        details = resJson.optJSONObject("details")
+                        canPromote = canPromote,
+                        suggestedFunctionTitle = suggestedTitle.takeIf { it.isNotBlank() },
+                        spreadsheetId = targetSheetId.takeIf { it.isNotBlank() },
+                        details = detailsObj
                     )
                 } else {
                     val msg = resJson.optString("error", "HTTP ${response.code}")
@@ -1547,6 +1555,57 @@ object ApiClient {
             }
         }
         AiCommandResult(success = false, error = "자연어 시트 명령 실행에 실패했습니다.")
+    }
+
+    /**
+     * 선체험 1회성 작업을 구글 시트 상단 메뉴 및 Apps Script 영구 함수로 승격(Promote) (v2.2.7)
+     */
+    suspend fun promoteCommandToScript(
+        userEmail: String,
+        command: String,
+        spreadsheetId: String? = null,
+        functionTitle: String? = null
+    ): CommandPromoteResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("command", command)
+            if (!spreadsheetId.isNullOrBlank()) put("spreadsheetId", spreadsheetId)
+            if (!functionTitle.isNullOrBlank()) put("functionTitle", functionTitle)
+        }
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/commands/promote"
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .post(body)
+                    .build()
+
+                val response = longTimeoutClient.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    Log.i(TAG, "🎉 [영구 스크립트 승격 성공] ${resJson.optString("functionTitle")}")
+                    return@withContext CommandPromoteResult(
+                        success = true,
+                        functionName = resJson.optString("functionName"),
+                        functionTitle = resJson.optString("functionTitle"),
+                        message = resJson.optString("message", "구글 시트 메뉴에 영구 등록되었습니다!"),
+                        spokenResult = resJson.optString("spokenResult")
+                    )
+                } else {
+                    val msg = resJson.optString("error", "HTTP ${response.code}")
+                    Log.w(TAG, "영구 스크립트 승격 실패 ($host): $msg")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "영구 스크립트 승격 통신 예외 ($host): ${e.message}")
+            }
+        }
+        CommandPromoteResult(success = false, error = "영구 스크립트 등록에 실패했습니다.")
     }
 
     /**
@@ -3016,7 +3075,19 @@ data class AiCommandResult(
     val actionType: String = "GENERAL_ASSIST",
     val explanation: String? = null,
     val spokenResult: String? = null,
+    val canPromote: Boolean = false,
+    val suggestedFunctionTitle: String? = null,
+    val spreadsheetId: String? = null,
     val details: JSONObject? = null,
+    val error: String? = null
+)
+
+data class CommandPromoteResult(
+    val success: Boolean,
+    val functionName: String? = null,
+    val functionTitle: String? = null,
+    val message: String? = null,
+    val spokenResult: String? = null,
     val error: String? = null
 )
 

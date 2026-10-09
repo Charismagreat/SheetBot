@@ -213,6 +213,20 @@ class AiCopilotCardController(
                     binding.tvAiCommandExplanation.text = "✅ ${res.explanation}"
                     binding.tvAiCommandSpoken.text = "🗣️ ${res.spokenResult}"
 
+                    // 💾 1회성 작업을 구글 시트 상단 메뉴로 영구 저장(승격) 버튼 제어 (v2.2.7)
+                    val btnPromote = binding.root.findViewWithTag<android.widget.Button>("btnPromoteCommand")
+                    if (res.canPromote) {
+                        btnPromote?.visibility = View.VISIBLE
+                        btnPromote?.isEnabled = true
+                        val title = res.suggestedFunctionTitle ?: "이 기능"
+                        btnPromote?.text = "💾 [$title] 시트 메뉴로 영구 저장"
+                        btnPromote?.setOnClickListener {
+                            promoteCommand(command, res.spreadsheetId, title, btnPromote)
+                        }
+                    } else {
+                        btnPromote?.visibility = View.GONE
+                    }
+
                     Toast.makeText(
                         activity,
                         "🎉 [시트 명령 완료]\n${res.explanation}",
@@ -232,6 +246,53 @@ class AiCopilotCardController(
             } catch (e: Exception) {
                 binding.progressBar.visibility = View.GONE
                 Toast.makeText(activity, "명령 실행 예외: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /**
+     * 1회성 작업을 구글 스프레드시트 상단 메뉴 및 Apps Script 영구 함수로 승격(Promote) (v2.2.7)
+     */
+    private fun promoteCommand(
+        command: String,
+        spreadsheetId: String?,
+        functionTitle: String,
+        button: android.widget.Button
+    ) {
+        val userEmail = prefs.userEmail ?: return
+        button.isEnabled = false
+        button.text = "⏳ 구글 시트에 스크립트 주입 중..."
+        Toast.makeText(activity, "🤖 AI가 영구 Apps Script 코드를 작성하여 시트에 원격 주입 중입니다...", Toast.LENGTH_SHORT).show()
+
+        scope.launch {
+            try {
+                val pRes = ApiClient.promoteCommandToScript(
+                    userEmail = userEmail,
+                    command = command,
+                    spreadsheetId = spreadsheetId,
+                    functionTitle = functionTitle
+                )
+                if (pRes.success) {
+                    button.text = "✓ 영구 등록 완료 ('🚀 SheetBot 메뉴'에 추가됨)"
+                    button.setBackgroundColor(Color.parseColor("#065F46"))
+                    Toast.makeText(activity, pRes.message ?: "구글 시트 상단 메뉴에 영구 등록되었습니다!", Toast.LENGTH_LONG).show()
+                    addLogItem("스크립트 영구등록", "${pRes.functionTitle}: 시트 메뉴에 등록 완료", true)
+
+                    if (prefs.isTtsEnabled) {
+                        TtsManager.speak(activity, pRes.spokenResult ?: "구글 시트 상단 메뉴에 영구 등록되었습니다.")
+                    }
+                    // 상단 추천 칩 즉시 새로고침
+                    loadCapabilitiesFromServer()
+                } else {
+                    button.isEnabled = true
+                    button.text = "💾 다시 시도: 시트 메뉴로 영구 저장"
+                    val err = pRes.error ?: "등록 실패"
+                    Toast.makeText(activity, "⚠️ 영구 등록 실패: $err", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                button.isEnabled = true
+                button.text = "💾 다시 시도: 시트 메뉴로 영구 저장"
+                Toast.makeText(activity, "영구 등록 예외: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
