@@ -30,6 +30,22 @@
             android:textStyle="bold" />
 
         <TextView
+            android:id="@+id/btnOpenMarketplace"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_badge_version"
+            android:backgroundTint="#0284C7"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="4dp"
+            android:text="🛍️ 카드 스토어"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:layout_marginEnd="6dp"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
             android:id="@+id/btnDrawerManage"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -37,7 +53,7 @@
             android:backgroundTint="#1E293B"
             android:paddingHorizontal="8dp"
             android:paddingVertical="4dp"
-            android:text="⚙️ 대시보드 편집"
+            android:text="⚙️ 편집"
             android:textColor="#94A3B8"
             android:textSize="11sp"
             android:textStyle="bold"
