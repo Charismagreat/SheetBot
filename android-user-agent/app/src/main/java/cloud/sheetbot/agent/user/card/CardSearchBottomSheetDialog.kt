@@ -60,6 +60,12 @@ class CardSearchBottomSheetDialog(
             etInput.setText("")
         }
 
+        // 하단 카드 스토어 둘러보기 버튼
+        view.findViewById<View>(R.id.btnOpenStoreFromSearch)?.setOnClickListener {
+            dialog.dismiss()
+            CardMarketplaceController(activity, prefs, cardDrawerController).openMarketplace()
+        }
+
         dialog.show()
     }
 
@@ -97,18 +103,48 @@ class CardSearchBottomSheetDialog(
             }
             emptyLayout.addView(subTv)
 
+            val btnRow = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+            }
+
+            val storeBtn = Button(activity).apply {
+                text = "🛍️ 카드 스토어(Marketplace) 둘러보기"
+                setTextColor(Color.parseColor("#38BDF8"))
+                setBackgroundColor(Color.parseColor("#1E293B"))
+                textSize = 11.5f
+                setPadding(24, 0, 24, 0)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = 8
+                }
+                setOnClickListener {
+                    dialog.dismiss()
+                    CardMarketplaceController(activity, prefs, cardDrawerController).openMarketplace()
+                }
+            }
+            btnRow.addView(storeBtn)
+
             val reqBtn = Button(activity).apply {
                 text = "💡 나만의 맞춤 기능 제작 의뢰하기"
                 setTextColor(Color.parseColor("#FFFFFF"))
                 setBackgroundColor(Color.parseColor("#0284C7"))
                 textSize = 11.5f
                 setPadding(24, 0, 24, 0)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
                 setOnClickListener {
                     dialog.dismiss()
                     FeatureRequestCardController(activity, prefs).openRequestDialog()
                 }
             }
-            emptyLayout.addView(reqBtn)
+            btnRow.addView(reqBtn)
+
+            emptyLayout.addView(btnRow)
 
             container.addView(emptyLayout)
             return

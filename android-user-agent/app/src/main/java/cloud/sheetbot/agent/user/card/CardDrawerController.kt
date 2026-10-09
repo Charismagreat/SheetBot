@@ -9,6 +9,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.lifecycle.lifecycleScope
 import cloud.sheetbot.agent.user.PreferencesManager
 import cloud.sheetbot.agent.user.R
 
@@ -59,10 +60,10 @@ class CardDrawerController(
         CardInfo("cardFeatureRequest", "우리 가게 맞춤 기능 제작 의뢰", "💡", R.id.cardFeatureRequest, R.id.layoutFeatureRequestHeader)
     )
 
-    // 보관함 UI 뷰 캐시
     private var cardDrawerBox: View? = null
     private var layoutDrawerHeader: View? = null
     private var tvDrawerTitle: TextView? = null
+    private var btnOpenMarketplace: TextView? = null
     private var btnDrawerManage: TextView? = null
     private var btnToggleDrawer: TextView? = null
     private var layoutDrawerContent: View? = null
@@ -81,6 +82,7 @@ class CardDrawerController(
         cardDrawerBox = activity.findViewById(R.id.cardDrawerBox)
         layoutDrawerHeader = activity.findViewById(R.id.layoutDrawerHeader)
         tvDrawerTitle = activity.findViewById(R.id.tvDrawerTitle)
+        btnOpenMarketplace = activity.findViewById(R.id.btnOpenMarketplace)
         btnDrawerManage = activity.findViewById(R.id.btnDrawerManage)
         btnToggleDrawer = activity.findViewById(R.id.btnToggleDrawer)
         layoutDrawerContent = activity.findViewById(R.id.layoutDrawerContent)
@@ -91,6 +93,13 @@ class CardDrawerController(
         // 보관함 열기/접기 토글
         layoutDrawerHeader?.setOnClickListener {
             toggleDrawer()
+        }
+
+        // 🛍️ 시트봇 카드 스토어 열기
+        btnOpenMarketplace?.setOnClickListener {
+            val scope = (activity as? androidx.lifecycle.LifecycleOwner)?.lifecycleScope
+                ?: kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main)
+            CardMarketplaceController(activity, prefs, this, scope).openMarketplace()
         }
 
         // 전체 대시보드 편집 다이얼로그

@@ -97,7 +97,7 @@
     <!-- 검색 결과 스크롤 리스트 -->
     <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="320dp"
+        android:layout_height="300dp"
         android:fadeScrollbars="false"
         android:scrollbars="vertical">
 
@@ -107,5 +107,25 @@
             android:layout_height="wrap_content"
             android:orientation="vertical" />
     </ScrollView>
+
+    <!-- 하단 카드 스토어 바로가기 버튼 -->
+    <LinearLayout
+        android:id="@+id/btnOpenStoreFromSearch"
+        android:layout_width="match_parent"
+        android:layout_height="38dp"
+        android:background="@drawable/bg_secondary_button"
+        android:gravity="center"
+        android:layout_marginTop="10dp"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🛍️ 카드 스토어(Marketplace) 둘러보기"
+            android:textColor="#38BDF8"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
 </LinearLayout>

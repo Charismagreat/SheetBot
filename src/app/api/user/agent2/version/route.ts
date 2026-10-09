@@ -20,10 +20,17 @@ function parseVersionToCode(versionName: string): number {
   const clean = versionName.replace(/^(user-)?v?/i, "").trim();
   const parts = clean.split(".").map((p) => parseInt(p, 10) || 0);
   if (parts.length >= 3) {
-    // 2.1.76 기준 versionCode 97 매핑 (2.1.81 = 102)
-    return 97 + (parts[2] - 76);
+    const major = parts[0];
+    const minor = parts[1];
+    const patch = parts[2];
+    if (major === 2 && minor >= 2) {
+      return 121 + (minor - 2) * 100 + patch; // 2.2.0 = 121, 2.2.1 = 122
+    }
+    if (major === 2 && minor === 1) {
+      return 97 + (patch - 76);
+    }
   }
-  return 102;
+  return 122;
 }
 
 /**
@@ -41,10 +48,10 @@ export async function GET() {
     );
   }
 
-  let latestName = "2.1.99";
-  let latestCode = 120;
+  let latestName = "2.2.1";
+  let latestCode = 122;
   let apkUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";
-  let releaseNotes = "간편주문 및 간편견적 카카오톡 미리보기(OG) 대표 사진 독립 분리 및 맞춤형 썸네일 등록 지원";
+  let releaseNotes = "🛍️ 카드 스토어(Marketplace) 1단계 출시: 22종 업무 자동화 카드 카탈로그, 원클릭 설치 및 맞춤 제작 의뢰 지원";
 
   try {
     const ghRes = await fetch("https://api.github.com/repos/Charismagreat/SheetBot/releases/latest", {

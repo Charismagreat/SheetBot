@@ -2632,6 +2632,64 @@ object ApiClient {
         }
         false
     }
+
+    /**
+     * 🛍️ 카드 마켓플레이스 카탈로그 조회 (v2.2.0)
+     * - 전체 공개 카드 및 내 계정 전용(Private) 카드 목록 반환
+     */
+    suspend fun fetchCardCatalog(userEmail: String): MarketplaceCatalogResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastError = "카탈로그 조회 실패"
+
+        for (host in hosts) {
+            try {
+                val encodedEmail = java.net.URLEncoder.encode(userEmail, "UTF-8")
+                val endpoint = "$host/api/user/cards/catalog?email=$encodedEmail"
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .get()
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val cardsArray = resJson.optJSONArray("cards") ?: org.json.JSONArray()
+                    val cardsList = mutableListOf<MarketplaceCardItemDto>()
+                    for (i in 0 until cardsArray.length()) {
+                        val c = cardsArray.optJSONObject(i) ?: continue
+                        cardsList.add(
+                            MarketplaceCardItemDto(
+                                key = c.optString("key"),
+                                title = c.optString("title"),
+                                icon = c.optString("icon"),
+                                category = c.optString("category", "all"),
+                                categoryName = c.optString("categoryName", "일반"),
+                                description = c.optString("description"),
+                                badge = c.optString("badge").takeIf { it.isNotBlank() },
+                                author = c.optString("author", "시트봇 공식"),
+                                isExclusive = c.optBoolean("isExclusive", false),
+                                isInstalledByDefault = c.optBoolean("isInstalledByDefault", false),
+                                version = c.optString("version", "1.0.0")
+                            )
+                        )
+                    }
+                    return@withContext MarketplaceCatalogResult(
+                        success = true,
+                        totalCount = resJson.optInt("totalCount", cardsList.size),
+                        cards = cardsList
+                    )
+                } else {
+                    lastError = resJson.optString("error", "서버 응답 오류 (HTTP ${response.code})")
+                }
+            } catch (e: Exception) {
+                lastError = e.message ?: "네트워크 연결 오류"
+            }
+        }
+        MarketplaceCatalogResult(success = false, error = lastError)
+    }
 }
 
 data class TaskItemDto(
@@ -2966,6 +3024,27 @@ data class MobileSiteResult(
     val notice: String = "",
     val bannerCount: Int = 0,
     val driveFolderUrl: String = "",
+    val error: String? = null
+)
+
+data class MarketplaceCardItemDto(
+    val key: String,
+    val title: String,
+    val icon: String,
+    val category: String = "all",
+    val categoryName: String = "일반",
+    val description: String = "",
+    val badge: String? = null,
+    val author: String = "시트봇 공식",
+    val isExclusive: Boolean = false,
+    val isInstalledByDefault: Boolean = false,
+    val version: String = "1.0.0"
+)
+
+data class MarketplaceCatalogResult(
+    val success: Boolean,
+    val totalCount: Int = 0,
+    val cards: List<MarketplaceCardItemDto> = emptyList(),
     val error: String? = null
 )
 
