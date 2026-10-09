@@ -101,85 +101,85 @@ class CardSetupCoordinator(
      */
     fun setupAllCards() {
         // 0-0. 통합 모바일 에이전트 & 서버 관제 상태 카드 초기화 (v2.1.54 / 리팩토링)
-        setupServerStatusCard()
-
-        // 0-0-1. 전 카드 상시 접기/펼치기 아코디언 토글 초기화 및 리스너 등록 (v2.1.54)
-        setupCardCollapseExpandListeners()
+        try { setupServerStatusCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupServerStatusCard 실패 방어", e) }
 
         // 0. Google 원클릭 로그인 및 계정 연동 초기화
-        setupAccountPairing()
+        try { setupAccountPairing() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupAccountPairing 실패 방어", e) }
 
         // 0-1. AI 토큰 지갑 및 추천인 리워드 카드 초기화
-        setupTokenWalletCard()
+        try { setupTokenWalletCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupTokenWalletCard 실패 방어", e) }
 
         // 6. 매장 결제 & 영수증 문자 전송 스위치
-        setupPaymentReceiptCard()
+        try { setupPaymentReceiptCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupPaymentReceiptCard 실패 방어", e) }
 
         // 통화 녹음 구글 드라이브 자동 백업 및 AI 전사 카드 초기화
-        setupCallRecordCard()
+        try { setupCallRecordCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupCallRecordCard 실패 방어", e) }
 
         // 🎙️ 회의 녹음 구글 드라이브 및 [SheetBot] 회의록 대장 자동 백업 카드 초기화
-        setupMeetingRecordingCard()
+        try { setupMeetingRecordingCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupMeetingRecordingCard 실패 방어", e) }
 
         // 🔍 원클릭 기업 심층 리서치 및 문서화 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupCompanyResearchCard()
+        try { setupCompanyResearchCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupCompanyResearchCard 실패 방어", e) }
 
         // ⚖️ AI 법률/계약서 팩트체크 카드 초기화
-        setupLawAdvisoryCard()
+        try { setupLawAdvisoryCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupLawAdvisoryCard 실패 방어", e) }
 
         // ✍️ AI 네이버 블로그 자동 포스팅 카드 초기화
-        setupBlogAutomationCard()
+        try { setupBlogAutomationCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupBlogAutomationCard 실패 방어", e) }
 
         // 📸 AI 인스타그램 피드 & 해시태그 카드 초기화
-        setupInstagramAutomationCard()
+        try { setupInstagramAutomationCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupInstagramAutomationCard 실패 방어", e) }
 
         // 🌐 AI 모바일 홈페이지 제작 & 관리 카드 초기화
-        setupMobileSiteCard()
+        try { setupMobileSiteCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupMobileSiteCard 실패 방어", e) }
 
         // 사진 및 문서 파일 구글 드라이브 업로드 카드 초기화
-        setupFileUploadCard()
+        try { setupFileUploadCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupFileUploadCard 실패 방어", e) }
 
         // 🌐 웹 링크 & 유튜브 영상 AI 자동 스크랩 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupLinkScrapCard()
+        try { setupLinkScrapCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupLinkScrapCard 실패 방어", e) }
 
         // 자연어 AI 시트 코파일럿 카드 초기화
-        setupAiCopilotCard()
+        try { setupAiCopilotCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupAiCopilotCard 실패 방어", e) }
 
         // 🧾 영수증 AI OCR 자동 장부화 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupReceiptCard()
+        try { setupReceiptCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupReceiptCard 실패 방어", e) }
 
         // 🪪 명함 AI OCR 자동 인맥 등록 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupBusinessCardSyncCard()
+        try { setupBusinessCardSyncCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupBusinessCardSyncCard 실패 방어", e) }
 
         // 🎯 문자(SMS/LMS) 송수신 구글 시트 동기화 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupSmsCard()
+        try { setupSmsCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupSmsCard 실패 방어", e) }
 
         // 💬 카카오톡 수신 메시지 구글 시트 동기화 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupKakaoSyncCard()
+        try { setupKakaoSyncCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupKakaoSyncCard 실패 방어", e) }
 
         // 📑 AI 스마트 견적 및 단가표 대장 연동 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupQuoteCard()
+        try { setupQuoteCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupQuoteCard 실패 방어", e) }
 
         // 📑 AI 스마트 간편 견적서 발행 대장 연동 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupEstimateCard()
+        try { setupEstimateCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupEstimateCard 실패 방어", e) }
 
         // 📞 수신 전화 시 고객 시트 요약 인콜 플로팅 팝업 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupInCallSummaryCard()
+        try { setupInCallSummaryCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupInCallSummaryCard 실패 방어", e) }
 
         // 📵 부재중 전화(Missed Call) 0원 스마트 자동 회신 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupMissedCallCard()
+        try { setupMissedCallCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupMissedCallCard 실패 방어", e) }
 
         // 💼 통화 종료 직후 모바일 명함 원터치 발송 카드 초기화 (v2.1.99 리팩토링 모듈화)
-        setupCallEndedCard()
+        try { setupCallEndedCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupCallEndedCard 실패 방어", e) }
 
         // 🌐 내 웹사이트 실시간 장애 감시 (Uptime Sentinel) UI 바인딩
-        setupWebsiteMonitorCard()
+        try { setupWebsiteMonitorCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupWebsiteMonitorCard 실패 방어", e) }
 
         // 📇 스마트폰 연락처 구글 시트 자동 동기화 UI 바인딩
-        setupContactsSyncCard()
+        try { setupContactsSyncCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupContactsSyncCard 실패 방어", e) }
 
         // 💡 우리 가게·회사 맞춤 기능 제작 의뢰 카드 초기화 (v2.1.99)
-        setupFeatureRequestCard()
+        try { setupFeatureRequestCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupFeatureRequestCard 실패 방어", e) }
+
+        // ★ [중요] 모든 카드 컨트롤러 인스턴스 초기화가 완벽히 완료된 후 아코디언 토글 리스너 등록!
+        try { setupCardCollapseExpandListeners() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupCardCollapseExpandListeners 실패 방어", e) }
     }
 
     /**

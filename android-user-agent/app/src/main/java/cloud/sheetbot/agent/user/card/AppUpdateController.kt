@@ -26,6 +26,9 @@ class AppUpdateController(
         binding.tvAppVersionBadge.setOnClickListener {
             UpdateManager.checkForUpdates(activity, showToastIfLatest = true)
         }
+
+        // 초기 기동 시 상단 버전 뱃지 즉시 동적 반영 및 최신 업데이트 여부 감지
+        updateVersionBadge()
     }
 
     fun getAppVersionName(): String {

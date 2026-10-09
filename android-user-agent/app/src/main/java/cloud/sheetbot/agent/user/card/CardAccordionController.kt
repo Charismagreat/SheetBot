@@ -38,11 +38,11 @@ class CardAccordionController(
     }
 
     fun refreshAllCardsCollapseState() {
-        getTokenWallet().refreshCollapseState()
-        getAiCopilot().refreshCollapseState()
-        getPaymentReceipt().refreshCollapseState()
-        getCallRecord().refreshCollapseState()
-        getFileUpload().refreshCollapseState()
+        try { getTokenWallet().refreshCollapseState() } catch (_: Throwable) {}
+        try { getAiCopilot().refreshCollapseState() } catch (_: Throwable) {}
+        try { getPaymentReceipt().refreshCollapseState() } catch (_: Throwable) {}
+        try { getCallRecord().refreshCollapseState() } catch (_: Throwable) {}
+        try { getFileUpload().refreshCollapseState() } catch (_: Throwable) {}
         updateCardCollapseState(binding.layoutLinkScrapSettings, binding.btnToggleLinkScrapDetails, prefs.isLinkScrapDetailsHidden)
         if (isSmsSyncInitialized()) {
             getSmsSync().refreshCollapseState()
@@ -75,23 +75,23 @@ class CardAccordionController(
         refreshAllCardsCollapseState()
 
         // 1. 토큰 지갑 카드
-        binding.layoutWalletHeader.setOnClickListener { getTokenWallet().toggleCollapse() }
-        binding.btnToggleWalletDetails.setOnClickListener { getTokenWallet().toggleCollapse() }
+        binding.layoutWalletHeader.setOnClickListener { try { getTokenWallet().toggleCollapse() } catch (_: Throwable) {} }
+        binding.btnToggleWalletDetails.setOnClickListener { try { getTokenWallet().toggleCollapse() } catch (_: Throwable) {} }
 
         // 2. AI 비서 카드
-        binding.layoutCopilotHeader.setOnClickListener { getAiCopilot().toggleCollapse() }
-        binding.btnToggleCopilotDetails.setOnClickListener { getAiCopilot().toggleCollapse() }
+        binding.layoutCopilotHeader.setOnClickListener { try { getAiCopilot().toggleCollapse() } catch (_: Throwable) {} }
+        binding.btnToggleCopilotDetails.setOnClickListener { try { getAiCopilot().toggleCollapse() } catch (_: Throwable) {} }
 
         // 3. 매장 결제 & 영수증 카드
-        binding.layoutPaymentReceiptHeader.setOnClickListener { getPaymentReceipt().toggleCollapse() }
-        binding.btnTogglePaymentReceiptDetails.setOnClickListener { getPaymentReceipt().toggleCollapse() }
+        binding.layoutPaymentReceiptHeader.setOnClickListener { try { getPaymentReceipt().toggleCollapse() } catch (_: Throwable) {} }
+        binding.btnTogglePaymentReceiptDetails.setOnClickListener { try { getPaymentReceipt().toggleCollapse() } catch (_: Throwable) {} }
 
         // 4. 통화 녹음 카드
-        binding.layoutCallRecordingHeader.setOnClickListener { getCallRecord().toggleCollapse() }
-        binding.btnToggleCallRecordingDetails.setOnClickListener { getCallRecord().toggleCollapse() }
+        binding.layoutCallRecordingHeader.setOnClickListener { try { getCallRecord().toggleCollapse() } catch (_: Throwable) {} }
+        binding.btnToggleCallRecordingDetails.setOnClickListener { try { getCallRecord().toggleCollapse() } catch (_: Throwable) {} }
 
         // 5. 사진 & 문서 보관 카드
-        binding.layoutFileUploadHeader.setOnClickListener { getFileUpload().toggleCollapse() }
-        binding.btnToggleFileUploadDetails.setOnClickListener { getFileUpload().toggleCollapse() }
+        binding.layoutFileUploadHeader.setOnClickListener { try { getFileUpload().toggleCollapse() } catch (_: Throwable) {} }
+        binding.btnToggleFileUploadDetails.setOnClickListener { try { getFileUpload().toggleCollapse() } catch (_: Throwable) {} }
     }
 }
