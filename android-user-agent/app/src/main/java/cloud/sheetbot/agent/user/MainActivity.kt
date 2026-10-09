@@ -15,7 +15,6 @@ import cloud.sheetbot.agent.user.card.CardSetupCoordinator
 import cloud.sheetbot.agent.user.card.MainCoreCoordinator
 import cloud.sheetbot.agent.user.databinding.ActivityMainBinding
 import cloud.sheetbot.agent.user.storage.LocalLogManager
-import cloud.sheetbot.agent.user.storage.PreferencesManager
 
 /**
  * 📱 SheetBot 메인 액티비티 (MainActivity)
@@ -160,6 +159,12 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         cardCoordinator?.onPause()
+    }
+
+    fun updateCardCollapseState(container: android.view.View, toggleBtn: android.widget.TextView, isHidden: Boolean) {
+        if (::coreCoordinator.isInitialized) {
+            coreCoordinator.updateCardCollapseState(container, toggleBtn, isHidden)
+        }
     }
 
     override fun onDestroy() {
