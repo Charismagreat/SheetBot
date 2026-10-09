@@ -256,42 +256,62 @@ class CardMarketplaceController(
 
             if (!isRecognizedInLocal) {
                 // 아직 로컬에 빌드되지 않은 준비 중 카드 (세금계산서, 스마트재고 등)
-                text = "✨ 출시 알림"
-                setTextColor(Color.parseColor("#F59E0B"))
-                backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#1E293B"))
-                setOnClickListener {
-                    AlertDialog.Builder(activity)
-                        .setTitle("🚀 ${card.title}")
-                        .setMessage("'${card.title}' 기능은 정식 출시 준비 중입니다.\n\n출시 알림을 예약하시면 기능 오픈 즉시 알려드리며, 빠른 맞춤 제작을 원하시면 1:1 의뢰를 신청해 주세요.")
-                        .setPositiveButton("✨ 출시 알림 예약") { _, _ ->
-                            val userEmail = prefs.userEmail ?: ""
-                            if (userEmail.isBlank()) {
-                                Toast.makeText(activity, "로그인 후 알림 예약이 가능합니다.", Toast.LENGTH_SHORT).show()
-                                return@setPositiveButton
+                val isAlreadyReserved = prefs.reservedNotificationCardKeys.contains(card.key)
+                if (isAlreadyReserved) {
+                    text = "✓ 알림 예약됨"
+                    setTextColor(Color.parseColor("#34D399"))
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#064E3B"))
+                    setOnClickListener {
+                        val email = prefs.userEmail ?: "회원님"
+                        AlertDialog.Builder(activity)
+                            .setTitle("✅ ${card.title}")
+                            .setMessage("'${card.title}' 기능의 출시 알림이 이미 정상 예약되어 있습니다.\n\n기능이 오픈되면 등록하신 이메일($email)로 가장 먼저 안내해 드립니다.\n\n사전 맞춤 개발이나 특별 도입이 필요하시면 1:1 맞춤 제작을 의뢰해 주세요.")
+                            .setPositiveButton("확인", null)
+                            .setNeutralButton("💡 맞춤 제작 의뢰") { _, _ ->
+                                FeatureRequestCardController(activity, prefs).openRequestDialog(card.title)
                             }
-                            Toast.makeText(activity, "출시 알림을 예약하는 중입니다...", Toast.LENGTH_SHORT).show()
-                            scope.launch {
-                                val result = ApiClient.submitFeatureRequest(
-                                    userEmail = userEmail,
-                                    title = "[출시알림 예약] ${card.title}",
-                                    description = "신규 기능 카드 '${card.title}'(key: ${card.key}) 출시 알림 신청",
-                                    requestType = "RELEASE_NOTIFY",
-                                    contact = userEmail
-                                )
-                                withContext(Dispatchers.Main) {
-                                    if (result.success) {
-                                        Toast.makeText(activity, "🎉 '${card.title}' 출시 알림이 성공적으로 예약되었습니다!", Toast.LENGTH_LONG).show()
-                                    } else {
-                                        Toast.makeText(activity, "알림 예약 실패: ${result.message}", Toast.LENGTH_SHORT).show()
+                            .show()
+                    }
+                } else {
+                    text = "✨ 출시 알림"
+                    setTextColor(Color.parseColor("#F59E0B"))
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#1E293B"))
+                    setOnClickListener {
+                        AlertDialog.Builder(activity)
+                            .setTitle("🚀 ${card.title}")
+                            .setMessage("'${card.title}' 기능은 정식 출시 준비 중입니다.\n\n출시 알림을 예약하시면 기능 오픈 즉시 알려드리며, 빠른 맞춤 제작을 원하시면 1:1 의뢰를 신청해 주세요.")
+                            .setPositiveButton("✨ 출시 알림 예약") { _, _ ->
+                                val userEmail = prefs.userEmail ?: ""
+                                if (userEmail.isBlank()) {
+                                    Toast.makeText(activity, "로그인 후 알림 예약이 가능합니다.", Toast.LENGTH_SHORT).show()
+                                    return@setPositiveButton
+                                }
+                                Toast.makeText(activity, "출시 알림을 예약하는 중입니다...", Toast.LENGTH_SHORT).show()
+                                scope.launch {
+                                    val result = ApiClient.submitFeatureRequest(
+                                        userEmail = userEmail,
+                                        title = "[출시알림 예약] ${card.title}",
+                                        description = "신규 기능 카드 '${card.title}'(key: ${card.key}) 출시 알림 신청",
+                                        requestType = "RELEASE_NOTIFY",
+                                        contact = userEmail
+                                    )
+                                    withContext(Dispatchers.Main) {
+                                        if (result.success) {
+                                            prefs.addReservedNotificationCard(card.key)
+                                            Toast.makeText(activity, "🎉 '${card.title}' 출시 알림이 성공적으로 예약되었습니다!", Toast.LENGTH_LONG).show()
+                                            onStateChanged()
+                                        } else {
+                                            Toast.makeText(activity, "알림 예약 실패: ${result.message}", Toast.LENGTH_SHORT).show()
+                                        }
                                     }
                                 }
                             }
-                        }
-                        .setNeutralButton("💡 맞춤 제작 의뢰") { _, _ ->
-                            FeatureRequestCardController(activity, prefs).openRequestDialog(card.title)
-                        }
-                        .setNegativeButton("닫기", null)
-                        .show()
+                            .setNeutralButton("💡 맞춤 제작 의뢰") { _, _ ->
+                                FeatureRequestCardController(activity, prefs).openRequestDialog(card.title)
+                            }
+                            .setNegativeButton("닫기", null)
+                            .show()
+                    }
                 }
             } else if (isCardCurrentlyActive) {
                 // 이미 메인 화면에 활성화되어 있는 경우
