@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 📦 추가 기능 보관함 (Card Drawer) -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/cardDrawerBox"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_card_scenario"
+    android:padding="13dp"
+    android:layout_marginTop="16dp"
+    android:layout_marginBottom="12dp">
+
+    <LinearLayout
+        android:id="@+id/layoutDrawerHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:id="@+id/tvDrawerTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="📦 추가 기능 보관함 (0개 보관 중)"
+            android:textColor="#38BDF8"
+            android:textSize="12.5sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnDrawerManage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_badge_version"
+            android:backgroundTint="#1E293B"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="4dp"
+            android:text="⚙️ 대시보드 편집"
+            android:textColor="#94A3B8"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:layout_marginEnd="6dp"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:id="@+id/btnToggleDrawer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_badge_version"
+            android:backgroundTint="#0F172A"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="3dp"
+            android:text="▼"
+            android:textColor="#E2E8F0"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvDrawerSubtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="자주 쓰지 않는 기능을 보관함에 모아 메인 화면을 깔끔하게 유지합니다. 언제든 [+ 꺼내기]하여 메인에 배치할 수 있습니다."
+        android:textColor="#64748B"
+        android:textSize="10.5sp"
+        android:layout_marginTop="4dp" />
+
+    <!-- 보관된 카드 목록 컨테이너 (접힘 기본: gone) -->
+    <LinearLayout
+        android:id="@+id/layoutDrawerContent"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginTop="10dp"
+        android:visibility="gone">
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#334155"
+            android:layout_marginBottom="8dp" />
+
+        <!-- 동적으로 추가되는 보관 카드 항목들 -->
+        <LinearLayout
+            android:id="@+id/layoutDrawerItems"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </LinearLayout>
+</LinearLayout>
