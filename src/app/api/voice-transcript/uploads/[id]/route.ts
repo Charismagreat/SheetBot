@@ -7,7 +7,7 @@ export async function GET(
   ctx: { params: Promise<{ id: string }> | { id: string } },
 ) {
   const params = await Promise.resolve(ctx.params);
-  return proxyJson(`/user-data/uploads/${params.id}`, { method: 'GET' });
+  return proxyJson(`/voice-transcript/uploads/${params.id}`, { method: 'GET' });
 }
 
 /** DELETE — abort upload */
@@ -16,5 +16,5 @@ export async function DELETE(
   ctx: { params: Promise<{ id: string }> | { id: string } },
 ) {
   const params = await Promise.resolve(ctx.params);
-  return proxyJson(`/user-data/uploads/${params.id}`, { method: 'DELETE' });
+  return proxyJson(`/voice-transcript/uploads/${params.id}`, { method: 'DELETE' });
 }

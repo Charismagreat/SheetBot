@@ -2684,13 +2684,68 @@ object ApiClient {
                 } else {
                     lastError = resJson.optString("error", "서버 응답 오류 (HTTP ${response.code})")
                 }
+        }
+        MarketplaceCatalogResult(success = false, error = lastError)
+    }
+
+    /**
+     * 💡 맞춤 기능 제작 의뢰 및 신규 카드 출시 알림 예약 서버 DB 전송 (2중 안전망)
+     */
+    suspend fun submitFeatureRequest(
+        requestType: String = "FEATURE_CUSTOM",
+        cardKey: String? = null,
+        title: String,
+        description: String,
+        contact: String,
+        userEmail: String
+    ): FeatureRequestResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastError = "요청 접수 실패"
+
+        val bodyJson = JSONObject().apply {
+            put("requestType", requestType)
+            put("cardKey", cardKey ?: "")
+            put("title", title)
+            put("description", description)
+            put("contact", contact)
+            put("userEmail", userEmail)
+        }
+        val requestBody = bodyJson.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            try {
+                val endpoint = "$host/api/user/cards/request"
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(requestBody)
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext FeatureRequestResult(
+                        success = true,
+                        message = resJson.optString("message", "요청이 성공적으로 접수되었습니다.")
+                    )
+                } else {
+                    lastError = resJson.optString("error", "서버 응답 오류 (HTTP ${response.code})")
+                }
             } catch (e: Exception) {
                 lastError = e.message ?: "네트워크 연결 오류"
             }
         }
-        MarketplaceCatalogResult(success = false, error = lastError)
+        FeatureRequestResult(success = false, error = lastError)
     }
 }
+
+data class FeatureRequestResult(
+    val success: Boolean,
+    val message: String = "",
+    val error: String? = null
+)
 
 data class TaskItemDto(
     val id: Long,

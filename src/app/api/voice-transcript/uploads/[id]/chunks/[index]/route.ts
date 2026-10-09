@@ -10,7 +10,7 @@ export async function PUT(
   const buf = await request.arrayBuffer();
   const sha = request.headers.get('x-chunk-sha256');
   return proxyRaw(
-    `/user-data/uploads/${params.id}/chunks/${params.index}`,
+    `/voice-transcript/uploads/${params.id}/chunks/${params.index}`,
     'PUT',
     buf,
     {

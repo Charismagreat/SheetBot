@@ -945,6 +945,24 @@ export async function setupDatabase(force = false): Promise<void> {
       { tableName: 'sheetbot_tasks' }
     );
 
+    // 26. sheetbot_feature_requests 테이블 생성 (맞춤 기능 제작 의뢰 및 출시알림 접수 대장)
+    await safeCreateTable(
+      'SheetBot 맞춤 기능 제작 의뢰 및 출시알림 대장',
+      [
+        { name: 'id', type: 'INTEGER', notNull: true, primaryKey: true },
+        { name: 'request_type', type: 'TEXT', notNull: true }, // 'FEATURE_CUSTOM' | 'RELEASE_NOTIFY'
+        { name: 'card_key', type: 'TEXT' },
+        { name: 'title', type: 'TEXT', notNull: true },
+        { name: 'description', type: 'TEXT' },
+        { name: 'contact', type: 'TEXT', notNull: true },
+        { name: 'user_email', type: 'TEXT' },
+        { name: 'status', type: 'TEXT', notNull: true }, // 'PENDING' | 'IN_REVIEW' | 'DEVELOPING' | 'COMPLETED'
+        { name: 'admin_notes', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_feature_requests' }
+    );
+
     // 26. sheetbot_user_files 테이블 생성 (이용자 파일 스토리지 및 서빙 메타데이터 대장)
     await safeCreateTable(
       '이용자 파일 스토리지 대장',

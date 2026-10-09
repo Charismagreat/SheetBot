@@ -14,6 +14,13 @@ import android.widget.Toast
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import cloud.sheetbot.agent.user.PreferencesManager
 import cloud.sheetbot.agent.user.R
+import android.util.Log
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.lifecycleScope
+import cloud.sheetbot.agent.user.ApiClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -22,7 +29,8 @@ import java.util.Locale
  * 💡 맞춤 기능 제작 의뢰 및 아이디어 제안함 전담 컨트롤러
  *
  * 사장님이 필요한 업무 자동화 기능을 제안/의뢰하면
- * chachogreat@gmail.com으로 다이렉트 이메일 인텐트를 발송합니다.
+ * 서버 DB(sheetbot_feature_requests)에 실시간 적재하고,
+ * chachogreat@gmail.com으로 다이렉트 이메일 인텐트를 발송합니다 (2중 안전망).
  */
 class FeatureRequestCardController(
     private val activity: Activity,
@@ -82,6 +90,28 @@ class FeatureRequestCardController(
             }
 
             dialog.dismiss()
+
+            // 1. 서버 DB에 2중 안전망 실시간 영구 적재 (비동기)
+            val userEmail = prefs.userEmail ?: contact
+            val scope = (activity as? LifecycleOwner)?.lifecycleScope
+                ?: CoroutineScope(Dispatchers.Main)
+            scope.launch {
+                try {
+                    val res = ApiClient.submitFeatureRequest(
+                        requestType = "FEATURE_CUSTOM",
+                        cardKey = null,
+                        title = title,
+                        description = desc,
+                        contact = contact,
+                        userEmail = userEmail
+                    )
+                    Log.i("FeatureRequest", "서버 2중 안전망 접수 결과: success=${res.success}, msg=${res.message}")
+                } catch (e: Exception) {
+                    Log.w("FeatureRequest", "서버 접수 예외 발생 (이메일 인텐트는 정상 유지): ${e.message}")
+                }
+            }
+
+            // 2. 이메일 앱 인텐트 발송
             sendRequestEmail(title, desc, contact)
         }
 
