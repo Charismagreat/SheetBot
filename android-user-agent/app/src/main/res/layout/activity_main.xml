@@ -621,6 +621,36 @@
                     </LinearLayout>
                 </LinearLayout>
 
+                <!-- 💡 실행 가능한 추천 명령 칩 가이드 바 (v2.2.6) -->
+                <LinearLayout
+                    android:id="@+id/layoutCopilotSuggestions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="💡 실행 가능한 추천 명령 (터치 시 자동 입력):"
+                        android:textColor="#94A3B8"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="6dp" />
+
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:scrollbars="none">
+
+                        <LinearLayout
+                            android:id="@+id/layoutCopilotChipsContainer"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal" />
+                    </HorizontalScrollView>
+                </LinearLayout>
+
                 <!-- 🎨 옵션 A: 모던 올인원 프롬프트 카드 컨테이너 (텍스트 에디터 + 하단 액션 버튼 바 일체형) -->
                 <LinearLayout
                     android:layout_width="match_parent"
