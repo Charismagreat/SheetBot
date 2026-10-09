@@ -3,6 +3,8 @@ package cloud.sheetbot.agent.user
 import android.content.Context
 import android.content.SharedPreferences
 
+typealias AppPreferences = PreferencesManager
+
 class PreferencesManager(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("sheetbot_agent_prefs", Context.MODE_PRIVATE)

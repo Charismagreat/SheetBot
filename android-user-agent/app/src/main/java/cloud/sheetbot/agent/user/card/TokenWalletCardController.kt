@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.net.Uri
 import android.view.View
@@ -13,6 +14,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import java.text.NumberFormat
 import cloud.sheetbot.agent.user.ApiClient
 import cloud.sheetbot.agent.user.AppPreferences
 import cloud.sheetbot.agent.user.R
@@ -154,7 +156,7 @@ class TokenWalletCardController(
 
         // 초기 송금자명 세팅 (이메일 앞자리)
         val defaultName = email.substringBefore("@")
-        etDepositorName.setText(defaultName)
+        etDepositorName.setText(defaultName as CharSequence)
 
         fun updatePkgSelection(pkgId: String) {
             selectedPkgId = pkgId
@@ -218,12 +220,12 @@ class TokenWalletCardController(
             if (currentTossUrl.isNotBlank()) {
                 try {
                     val tossIntent = Intent(Intent.ACTION_VIEW, Uri.parse(currentTossUrl))
-                    startActivity(tossIntent)
+                    activity.startActivity(tossIntent)
                 } catch (e: Exception) {
                     Toast.makeText(activity, "토스 앱을 열 수 없어 웹 브라우저로 연결합니다.", Toast.LENGTH_SHORT).show()
                     try {
                         val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(currentTossUrl))
-                        startActivity(webIntent)
+                        activity.startActivity(webIntent)
                     } catch (_: Exception) {}
                 }
             }
@@ -309,7 +311,7 @@ class TokenWalletCardController(
                 putExtra(Intent.EXTRA_TEXT, textToSend)
                 type = "text/plain"
             }
-            startActivity(Intent.createChooser(sendIntent, "친구/동료에게 시트봇 초대장 보내기"))
+            activity.startActivity(Intent.createChooser(sendIntent, "친구/동료에게 시트봇 초대장 보내기"))
         }
 
         btnClose.setOnClickListener {
