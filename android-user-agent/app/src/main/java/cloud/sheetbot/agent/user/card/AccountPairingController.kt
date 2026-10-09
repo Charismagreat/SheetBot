@@ -1,8 +1,10 @@
 package cloud.sheetbot.agent.user.card
 
+import android.app.Activity
 import android.content.Context
 import android.content.ClipboardManager
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.view.View
 import android.widget.EditText
@@ -15,6 +17,7 @@ import com.google.android.gms.common.api.ApiException
 import cloud.sheetbot.agent.user.ApiClient
 import cloud.sheetbot.agent.user.AppPreferences
 import cloud.sheetbot.agent.user.KeepAliveService
+import cloud.sheetbot.agent.user.R
 import cloud.sheetbot.agent.user.TtsManager
 import cloud.sheetbot.agent.user.databinding.ActivityMainBinding
 import kotlinx.coroutines.CoroutineScope

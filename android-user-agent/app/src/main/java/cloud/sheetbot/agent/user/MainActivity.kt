@@ -14,7 +14,7 @@ import cloud.sheetbot.agent.user.card.ActivityLauncherRegistry
 import cloud.sheetbot.agent.user.card.CardSetupCoordinator
 import cloud.sheetbot.agent.user.card.MainCoreCoordinator
 import cloud.sheetbot.agent.user.databinding.ActivityMainBinding
-import cloud.sheetbot.agent.user.storage.LocalLogManager
+import cloud.sheetbot.agent.user.LocalLogManager
 
 /**
  * 📱 SheetBot 메인 액티비티 (MainActivity)
