@@ -1549,6 +1549,58 @@ object ApiClient {
     }
 
     /**
+     * 연동 대장 및 스크립트 기반 실행 가능 추천 명령(Capabilities) 조회 (v2.2.6)
+     */
+    suspend fun fetchCommandCapabilities(userEmail: String): CommandCapabilitiesResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val encodedEmail = java.net.URLEncoder.encode(userEmail, "UTF-8")
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/commands/capabilities?userEmail=$encodedEmail"
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .get()
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val rawSuggestions = resJson.optJSONArray("suggestions") ?: JSONArray()
+                    val suggestionsList = mutableListOf<CommandSuggestionItem>()
+
+                    for (i in 0 until rawSuggestions.length()) {
+                        val sObj = rawSuggestions.optJSONObject(i) ?: continue
+                        suggestionsList.add(
+                            CommandSuggestionItem(
+                                id = sObj.optString("id", "s_$i"),
+                                type = sObj.optString("type", "SHEET_QUERY"),
+                                label = sObj.optString("label", ""),
+                                command = sObj.optString("command", ""),
+                                description = sObj.optString("description", ""),
+                                functionName = sObj.optString("functionName").takeIf { it.isNotBlank() },
+                                projectName = sObj.optString("projectName").takeIf { it.isNotBlank() }
+                            )
+                        )
+                    }
+
+                    return@withContext CommandCapabilitiesResult(
+                        success = true,
+                        suggestions = suggestionsList,
+                        totalProjects = resJson.optInt("totalProjects", 0)
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "추천 명령 조회 통신 예외 ($host): ${e.message}")
+            }
+        }
+        CommandCapabilitiesResult(success = false, error = "추천 명령 목록 조회 실패")
+    }
+
+    /**
      * 문자(SMS/LMS) 송수신 내역 구글 시트 실시간 자동 기록
      */
     suspend fun sendSmsSync(
@@ -2964,6 +3016,23 @@ data class AiCommandResult(
     val explanation: String? = null,
     val spokenResult: String? = null,
     val details: JSONObject? = null,
+    val error: String? = null
+)
+
+data class CommandSuggestionItem(
+    val id: String,
+    val type: String,
+    val label: String,
+    val command: String,
+    val description: String = "",
+    val functionName: String? = null,
+    val projectName: String? = null
+)
+
+data class CommandCapabilitiesResult(
+    val success: Boolean,
+    val suggestions: List<CommandSuggestionItem> = emptyList(),
+    val totalProjects: Int = 0,
     val error: String? = null
 )
 
