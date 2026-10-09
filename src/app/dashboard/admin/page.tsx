@@ -25,6 +25,8 @@ import {
   Award,
   Coins,
   Clock,
+  ShoppingBag,
+  Bell,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { DEFAULT_FOOTER, FooterInfo } from "@/lib/default-footer";
@@ -40,7 +42,7 @@ const TabLoadingFallback = () => (
   </div>
 );
 
-// ⚡ 12개 탭 컴포넌트 비동기 동적 분할 로딩 (초기 번들 크기 70% 대폭 절감)
+// ⚡ 14개 탭 컴포넌트 비동기 동적 분할 로딩 (초기 번들 크기 70% 대폭 절감)
 const AdminDispatchLogsTab = dynamic(() => import("./components/AdminDispatchLogsTab"), { loading: TabLoadingFallback });
 const AdminSmartRulesTab = dynamic(() => import("./components/AdminSmartRulesTab"), { loading: TabLoadingFallback });
 const AdminSmsTab = dynamic(() => import("./components/AdminSmsTab"), { loading: TabLoadingFallback });
@@ -53,8 +55,10 @@ const AdminReviewsTab = dynamic(() => import("./components/AdminReviewsTab"), { 
 const AdminUsersTab = dynamic(() => import("./components/AdminUsersTab"), { loading: TabLoadingFallback });
 const AdminPricingCostTab = dynamic(() => import("./components/AdminPricingCostTab"), { loading: TabLoadingFallback });
 const AdminPromptsTab = dynamic(() => import("./components/AdminPromptsTab"), { loading: TabLoadingFallback });
+const AdminFeatureRequestsTab = dynamic(() => import("./components/AdminFeatureRequestsTab"), { loading: TabLoadingFallback });
+const AdminCardsCmsTab = dynamic(() => import("./components/AdminCardsCmsTab"), { loading: TabLoadingFallback });
 
-type TabType = "users" | "inquiries" | "reviews" | "faqs" | "tax_invoices" | "pricing_cost" | "footer" | "sms" | "email" | "smart_rules" | "dispatch_logs" | "prompts";
+type TabType = "users" | "feature_requests" | "cards_cms" | "inquiries" | "reviews" | "faqs" | "tax_invoices" | "pricing_cost" | "footer" | "sms" | "email" | "smart_rules" | "dispatch_logs" | "prompts";
 
 export default function AdminDashboardPage() {
   const { data: session, status } = useSession();
@@ -88,6 +92,12 @@ export default function AdminDashboardPage() {
   const [reviews, setReviews] = useState<any[]>([]);
   const [faqs, setFaqs] = useState<any[]>([]);
   const [taxInvoices, setTaxInvoices] = useState<any[]>([]);
+
+  // 🔔 사전 수요조사/출시알림 대장 및 🛍️ 카드 CMS 상태
+  const [featureRequests, setFeatureRequests] = useState<any[]>([]);
+  const [featureRequestsStats, setFeatureRequestsStats] = useState<any>(null);
+  const [cmsCards, setCmsCards] = useState<any[]>([]);
+  const [cmsCardsStats, setCmsCardsStats] = useState<any>(null);
 
   // 푸터 설정 상태
   const [footerForm, setFooterForm] = useState<FooterInfo>(DEFAULT_FOOTER);
@@ -321,6 +331,12 @@ export default function AdminDashboardPage() {
             await fetchUsers(force);
           }
           break;
+        case "feature_requests":
+          await fetchFeatureRequests();
+          break;
+        case "cards_cms":
+          await fetchCmsCards();
+          break;
         case "inquiries":
           await fetchInquiries();
           break;
@@ -433,6 +449,32 @@ export default function AdminDashboardPage() {
       if (data.success) setTaxInvoices(data.invoices || []);
     } catch (e) {
       console.warn("Failed to fetch admin tax invoices", e);
+    }
+  };
+
+  const fetchFeatureRequests = async () => {
+    try {
+      const res = await apiFetch("/api/admin/feature-requests");
+      const data = await res.json();
+      if (data.success) {
+        setFeatureRequests(data.requests || []);
+        if (data.stats) setFeatureRequestsStats(data.stats);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch admin feature requests", e);
+    }
+  };
+
+  const fetchCmsCards = async () => {
+    try {
+      const res = await apiFetch("/api/admin/cards");
+      const data = await res.json();
+      if (data.success) {
+        setCmsCards(data.cards || []);
+        if (data.stats) setCmsCardsStats(data.stats);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch admin cms cards", e);
     }
   };
 
@@ -1197,6 +1239,40 @@ export default function AdminDashboardPage() {
           </button>
 
           <button
+            onClick={() => setActiveTab("feature_requests")}
+            className={`px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all ${
+              activeTab === "feature_requests"
+                ? "bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-sm ring-2 ring-emerald-400/50"
+                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+            }`}
+          >
+            <Bell className="w-4 h-4 text-emerald-500" />
+            <span>출시알림 &amp; 수요조사 대장</span>
+            {featureRequestsStats?.pending > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black">
+                {featureRequestsStats.pending}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab("cards_cms")}
+            className={`px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all ${
+              activeTab === "cards_cms"
+                ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-sm ring-2 ring-indigo-400/50"
+                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+            }`}
+          >
+            <ShoppingBag className="w-4 h-4 text-indigo-400" />
+            <span>카드 스토어 CMS 관리</span>
+            {cmsCardsStats?.total > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-black">
+                {cmsCardsStats.total}
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveTab("inquiries")}
             className={`px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer transition-all ${
               activeTab === "inquiries"
@@ -1358,6 +1434,24 @@ export default function AdminDashboardPage() {
             {/* 0. 회원 관리 탭 내용 */}
             {activeTab === "users" && (
               <AdminUsersTab users={users} onRefresh={() => fetchTabData("users", true)} />
+            )}
+
+            {/* 0-1. 사전 수요조사 & 출시알림 대장 탭 */}
+            {activeTab === "feature_requests" && (
+              <AdminFeatureRequestsTab
+                requests={featureRequests}
+                stats={featureRequestsStats}
+                onRefresh={() => fetchTabData("feature_requests", true)}
+              />
+            )}
+
+            {/* 0-2. 마켓플레이스 카드 CMS 관리 탭 */}
+            {activeTab === "cards_cms" && (
+              <AdminCardsCmsTab
+                cards={cmsCards}
+                stats={cmsCardsStats}
+                onRefresh={() => fetchTabData("cards_cms", true)}
+              />
             )}
 
             {/* 1. 1:1 고객 문의 내역 탭 */}

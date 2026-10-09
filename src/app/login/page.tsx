@@ -106,7 +106,7 @@ export default function LoginPage() {
         new Promise((resolve) => setTimeout(resolve, 300)),
       ]);
 
-      // 1차 시도: EGDesk Visitor Google 로그인 (최대 4초 타임아웃 레이스)
+      // 1차 시도: EGDesk Visitor Google 로그인 (최대 20초 타임아웃 레이스 - 터널 콜드스타트 충분 대기)
       const visitorLoginPromise = startVisitorGoogleLogin({
         next: getTargetRedirectUrl(),
         forceConsent: true,
@@ -114,7 +114,7 @@ export default function LoginPage() {
       });
 
       const timeoutPromise = new Promise<{ timeout: boolean }>((resolve) =>
-        setTimeout(() => resolve({ timeout: true }), 4000)
+        setTimeout(() => resolve({ timeout: true }), 20000)
       );
 
       const raceResult = await Promise.race([visitorLoginPromise, timeoutPromise]);

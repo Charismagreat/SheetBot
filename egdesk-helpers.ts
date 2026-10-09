@@ -380,7 +380,7 @@ export async function callUserDataTool(
 /**
  * Query table data
  */
-export async function queryTable<T = any>(
+export async function queryTable(
   tableName: string,
   options: {
     filters?: Record<string, string>;
@@ -388,9 +388,8 @@ export async function queryTable<T = any>(
     offset?: number;
     orderBy?: string;
     orderDirection?: 'ASC' | 'DESC';
-    [key: string]: any;
   } = {}
-): Promise<{ rows: T[]; [key: string]: any }> {
+) {
   return callUserDataTool('user_data_query', {
     tableName,
     ...options
@@ -865,6 +864,290 @@ export async function uploadFileChunked(
   };
 }
 
+// ==========================================
+// VOICE TRANSCRIPT CHUNKED AUDIO UPLOAD
+// ==========================================
+
+/** EGDesk Voice Transcript MCP allowlist max (must match desktop audio-path.ts). */
+const VOICE_TRANSCRIPT_MAX_AUDIO_BYTES = 80 * 1024 * 1024;
+
+const VOICE_TRANSCRIPT_AUDIO_EXTENSIONS = [
+  '.wav',
+  '.mp3',
+  '.m4a',
+  '.aac',
+  '.ogg',
+  '.webm',
+  '.flac',
+];
+
+export type UploadVoiceTranscriptAudioOptions = {
+  mimeType?: string;
+  onProgress?: (p: { sentBytes: number; totalBytes: number; sentChunks: number; totalChunks: number }) => void;
+  signal?: AbortSignal;
+  parallelism?: number;
+};
+
+export type VoiceTranscriptAudioUploadResult = {
+  success: true;
+  uploadId: string;
+  filePath: string;
+  state: string;
+  sha256?: string;
+  filename: string;
+  resumed?: boolean;
+};
+
+function assertVoiceTranscriptFilename(filename: string): void {
+  const lower = filename.toLowerCase();
+  const ok = VOICE_TRANSCRIPT_AUDIO_EXTENSIONS.some((ext) => lower.endsWith(ext));
+  if (!ok) {
+    throw new Error(
+      `Unsupported audio extension for "${filename}". Allowed: ${VOICE_TRANSCRIPT_AUDIO_EXTENSIONS.join(', ')}`,
+    );
+  }
+}
+
+/**
+ * Chunked upload for call/meeting audio (tunnel-safe). Proxies to /api/voice-transcript/uploads/*
+ * and returns an absolute file_path on the EGDesk machine for voice_transcript_transcribe.
+ */
+export async function uploadVoiceTranscriptAudioChunked(
+  file: Blob | File,
+  options: UploadVoiceTranscriptAudioOptions = {},
+): Promise<VoiceTranscriptAudioUploadResult> {
+  if (typeof window === 'undefined') {
+    throw new Error(
+      'uploadVoiceTranscriptAudioChunked() is browser-only. On the server, POST to MCP /voice-transcript/uploads directly.',
+    );
+  }
+  const filename = (file as File).name || `recording-${Date.now()}.m4a`;
+  assertVoiceTranscriptFilename(filename);
+  const mimeType = options.mimeType || file.type || 'application/octet-stream';
+  const totalBytes = file.size;
+  if (totalBytes <= 0) throw new Error('Audio file is empty.');
+  if (totalBytes > VOICE_TRANSCRIPT_MAX_AUDIO_BYTES) {
+    throw new Error(
+      `Audio is too large (${totalBytes} bytes). Max ${VOICE_TRANSCRIPT_MAX_AUDIO_BYTES} bytes (80 MB).`,
+    );
+  }
+
+  const lastModified = Number((file as File).lastModified) || 0;
+  const resumeKey = `egdesk_voice_chunked_upload:${filename}|${totalBytes}|${lastModified}`;
+  const readResume = (): string => {
+    try {
+      return localStorage.getItem(resumeKey) || '';
+    } catch {
+      return '';
+    }
+  };
+  const writeResume = (id: string) => {
+    try {
+      localStorage.setItem(resumeKey, id);
+    } catch {
+      // ignore
+    }
+  };
+  const clearResume = () => {
+    try {
+      localStorage.removeItem(resumeKey);
+    } catch {
+      // ignore
+    }
+  };
+
+  const apiBase = '/api/voice-transcript/uploads';
+
+  let uploadId = readResume();
+  let chunkSize = 0;
+  let totalChunks = 0;
+
+  if (uploadId) {
+    const statusRes = await apiFetch(`${apiBase}/${uploadId}`, { signal: options.signal });
+    const statusJson = await statusRes.json().catch(() => ({}));
+    if (
+      statusRes.ok &&
+      statusJson.success !== false &&
+      (statusJson.state === 'receiving' || statusJson.state === 'finalizing') &&
+      Number(statusJson.size) === totalBytes
+    ) {
+      chunkSize = Number(statusJson.chunkSize);
+      totalChunks = Number(statusJson.totalChunks || Math.ceil(totalBytes / chunkSize));
+    } else if (statusRes.ok && statusJson.state === 'done' && (statusJson.filePath || statusJson.file?.filePath)) {
+      clearResume();
+      const filePath = String(statusJson.filePath || statusJson.file?.filePath);
+      return {
+        success: true,
+        uploadId,
+        filePath,
+        state: 'done',
+        sha256: statusJson.sha256,
+        filename,
+        resumed: true,
+      };
+    } else {
+      clearResume();
+      uploadId = '';
+    }
+  }
+
+  if (!uploadId) {
+    const initRes = await apiFetch(apiBase, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, size: totalBytes, mimeType }),
+      signal: options.signal,
+    });
+    const initJson = await initRes.json();
+    if (!initRes.ok || initJson.success === false) {
+      throw new Error(initJson.error || initJson.message || `Init upload failed (HTTP ${initRes.status})`);
+    }
+    uploadId = String(initJson.uploadId);
+    chunkSize = Number(initJson.chunkSize);
+    totalChunks = Number(initJson.totalChunks || Math.ceil(totalBytes / chunkSize));
+    writeResume(uploadId);
+  }
+
+  const parallelism = Math.max(1, Math.min(options.parallelism ?? 3, 3));
+  const statusRes = await apiFetch(`${apiBase}/${uploadId}`, { signal: options.signal });
+  const statusJson = await statusRes.json().catch(() => ({}));
+  const already = new Set<number>(Array.isArray(statusJson.received) ? statusJson.received : []);
+
+  let sentBytes = Math.min(totalBytes, already.size * chunkSize);
+  let sentChunks = already.size;
+  options.onProgress?.({ sentBytes, totalBytes, sentChunks, totalChunks });
+
+  const pending: number[] = [];
+  for (let i = 0; i < totalChunks; i++) {
+    if (!already.has(i)) pending.push(i);
+  }
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const backoffs = [500, 1500, 4000];
+
+  async function putOne(index: number): Promise<void> {
+    const start = index * chunkSize;
+    const end = Math.min(start + chunkSize, totalBytes);
+    const slice = file.slice(start, end);
+    const buf = await slice.arrayBuffer();
+    const sha = await sha256Hex(buf);
+    let lastErr: Error | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (options.signal?.aborted) throw new Error('Upload aborted');
+      try {
+        const res = await apiFetch(`${apiBase}/${uploadId}/chunks/${index}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            'x-chunk-sha256': sha,
+          },
+          body: buf,
+          signal: options.signal,
+        });
+        const json = await res.json().catch(() => ({}));
+        if (res.status === 401 && attempt < 2) {
+          await sleep(backoffs[attempt]);
+          continue;
+        }
+        if (!res.ok || json.success === false) {
+          throw new Error(json.error || json.message || `Chunk ${index} failed (HTTP ${res.status})`);
+        }
+        sentChunks += 1;
+        sentBytes = Math.min(totalBytes, sentBytes + (end - start));
+        options.onProgress?.({ sentBytes, totalBytes, sentChunks, totalChunks });
+        return;
+      } catch (e: any) {
+        lastErr = e instanceof Error ? e : new Error(String(e));
+        if (attempt < 2) await sleep(backoffs[attempt]);
+      }
+    }
+    throw lastErr || new Error(`Chunk ${index} failed`);
+  }
+
+  let cursor = 0;
+  async function worker() {
+    while (cursor < pending.length) {
+      const idx = pending[cursor++];
+      await putOne(idx);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(parallelism, pending.length || 1) }, () => worker()));
+
+  const completeRes = await apiFetch(`${apiBase}/${uploadId}/complete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+    signal: options.signal,
+  });
+  let completeJson = await completeRes.json();
+  if (!completeRes.ok && completeRes.status !== 202) {
+    throw new Error(completeJson.error || completeJson.message || `Complete failed (HTTP ${completeRes.status})`);
+  }
+
+  if (completeJson.state === 'finalizing' || completeRes.status === 202) {
+    for (let i = 0; i < 600; i++) {
+      if (options.signal?.aborted) throw new Error('Upload aborted');
+      await sleep(500);
+      const st = await apiFetch(`${apiBase}/${uploadId}`, { signal: options.signal });
+      const sj = await st.json();
+      if (sj.state === 'done') {
+        completeJson = sj;
+        break;
+      }
+      if (sj.state === 'failed') {
+        throw new Error(sj.error || 'Upload finalization failed');
+      }
+    }
+    if (completeJson.state !== 'done') {
+      throw new Error('Timed out waiting for voice upload finalization');
+    }
+  }
+
+  const filePath = String(
+    completeJson.filePath || completeJson.file?.filePath || '',
+  );
+  if (!filePath) {
+    throw new Error('Upload completed but filePath was missing from the response.');
+  }
+
+  clearResume();
+  return {
+    success: true,
+    uploadId,
+    filePath,
+    state: completeJson.state || 'done',
+    sha256: completeJson.sha256,
+    filename,
+  };
+}
+
+/**
+ * Upload audio for Voice Transcript (browser). Uses chunked upload for tunnel safety.
+ * Pass a File from a file picker (accept audio/*) or a Blob with a name.
+ */
+export async function uploadVoiceTranscriptAudio(
+  file: Blob | File,
+  options: UploadVoiceTranscriptAudioOptions = {},
+): Promise<VoiceTranscriptAudioUploadResult> {
+  return uploadVoiceTranscriptAudioChunked(file, options);
+}
+
+/**
+ * Upload audio from a Base64 or data-URL string (browser). Files larger than 4 MiB decoded
+ * use the chunked path automatically.
+ */
+export async function uploadVoiceTranscriptAudioFromBase64(
+  filename: string,
+  data: string,
+  options: UploadVoiceTranscriptAudioOptions = {},
+): Promise<VoiceTranscriptAudioUploadResult> {
+  assertVoiceTranscriptFilename(filename);
+  const bytes = base64ToUint8Array(data);
+  const blob = new Blob([bytes], { type: options.mimeType || 'application/octet-stream' });
+  const file = new File([blob], filename, { type: options.mimeType || blob.type });
+  return uploadVoiceTranscriptAudioChunked(file, options);
+}
+
 /**
  * Upload a file attachment for a table row.
  * Files are NOT table columns — they attach via a virtual columnName (e.g. "file").
@@ -887,7 +1170,7 @@ export async function uploadFile(
   const decodedBytes = estimateBase64DecodedBytes(data);
   if (typeof window !== 'undefined' && decodedBytes > UPLOAD_CHUNKED_THRESHOLD_BYTES) {
     const bytes = base64ToUint8Array(data);
-    const blob = new Blob([bytes as any], { type: options.mimeType || 'application/octet-stream' });
+    const blob = new Blob([bytes], { type: options.mimeType || 'application/octet-stream' });
     const file = new File([blob], filename, { type: options.mimeType || blob.type });
     return uploadFileChunked(tableName, rowId, columnName, file, options);
   }
@@ -3646,15 +3929,11 @@ export async function setDriveTargetFolders(folderIds: string[]) {
  * own (e.g. writing into a personal Gmail account without domain-wide delegation).
  */
 export async function uploadDriveFile(options: {
-  filePath?: string;
+  filePath: string;
   folderId?: string;
   destName?: string;
-  name?: string;
-  content?: string;
-  encoding?: string;
   mimeType?: string;
   preferOAuth?: boolean;
-  [key: string]: any;
 }) {
   return callDriveTool('drive_upload', options);
 }
@@ -3666,8 +3945,6 @@ export async function listDriveFiles(
     query?: string;
     pageSize?: number;
     pageToken?: string;
-    preferOAuth?: boolean;
-    [key: string]: any;
   } = {},
   callOptions: WorkspaceVisitorCallOptions = {},
 ) {
@@ -3690,9 +3967,6 @@ export async function getDriveFile(fileId: string, options: WorkspaceVisitorCall
 export async function createDriveFolder(name: string, parentId?: string, preferOAuth?: boolean) {
   return callDriveTool('drive_create_folder', { name, parentId, preferOAuth });
 }
-
-/** Alias for creating subfolders */
-export const findOrCreateSubfolder = createDriveFolder;
 
 /** Download a Drive file to a local path. Pass preferOAuth: true to act as the signed-in Google user. */
 export async function downloadDriveFile(fileId: string, destPath: string, preferOAuth?: boolean) {
@@ -3719,14 +3993,51 @@ export async function renameDriveFile(fileId: string, name: string, preferOAuth?
   return callDriveTool('drive_rename', { fileId, name, preferOAuth });
 }
 
+/** Invite a Google user to a Drive file or folder. Default preferOAuth: true. */
+export async function shareDriveFile(options: {
+  fileId: string;
+  shareType?: 'user' | 'anyone' | 'domain';
+  email?: string;
+  domain?: string;
+  role?: 'reader' | 'writer' | 'commenter';
+  allowFileDiscovery?: boolean;
+  sendNotificationEmail?: boolean;
+  preferOAuth?: boolean;
+}) {
+  const preferOAuth = options.preferOAuth ?? true;
+  return callDriveTool('drive_share_file', { ...options, preferOAuth }, { preferOAuth });
+}
+
+/** List non-owner permissions on a Drive file or folder. Default preferOAuth: true. */
+export async function listDriveFilePermissions(
+  fileId: string,
+  options: WorkspaceVisitorCallOptions = {},
+) {
+  const preferOAuth = options.preferOAuth ?? true;
+  return callDriveTool('drive_list_file_permissions', { fileId, preferOAuth }, { ...options, preferOAuth });
+}
+
+/** Remove a collaborator by permissionId or email. Default preferOAuth: true. */
+export async function revokeDriveFileAccess(options: {
+  fileId: string;
+  permissionId?: string;
+  email?: string;
+  shareType?: 'anyone' | 'domain';
+  domain?: string;
+  preferOAuth?: boolean;
+}) {
+  const preferOAuth = options.preferOAuth ?? true;
+  return callDriveTool('drive_revoke_file_access', { ...options, preferOAuth }, { preferOAuth });
+}
+
 /** Move a Drive file or folder to trash. Pass preferOAuth: true to act as the signed-in Google user. */
 export async function trashDriveFile(fileId: string, preferOAuth?: boolean) {
   return callDriveTool('drive_trash', { fileId, preferOAuth });
 }
 
 /** Find or create the top-level EGDesk Drive folder */
-export async function findOrCreateEgdeskFolder(folderName?: string) {
-  return callDriveTool('drive_find_or_create_egdesk_folder', folderName ? { folderName } : {});
+export async function findOrCreateEgdeskFolder() {
+  return callDriveTool('drive_find_or_create_egdesk_folder', {});
 }
 
 /** Find or create EGDesk/Dev, Transactions, or Tax Invoices */
@@ -4593,30 +4904,16 @@ export async function syncPhoneContacts(deviceId: string) {
   return callPhoneTool('phone_sync_contacts', { deviceId });
 }
 
-export async function sendPhoneSms(
-  optionsOrUserEmail:
-    | {
-        deviceId?: string;
-        phoneNumber: string;
-        message: string;
-        snapshotId?: string;
-        scheduledAt?: number;
-        isMarketing?: boolean;
-        brandName?: string;
-        [key: string]: any;
-      }
-    | string,
-  phoneNumber?: string,
-  message?: string
-) {
-  if (typeof optionsOrUserEmail === 'string') {
-    return callPhoneTool('phone_send', {
-      deviceId: 'default',
-      phoneNumber: phoneNumber || '',
-      message: message || '',
-    });
-  }
-  return callPhoneTool('phone_send', optionsOrUserEmail);
+export async function sendPhoneSms(options: {
+  deviceId: string;
+  phoneNumber: string;
+  message: string;
+  snapshotId?: string;
+  scheduledAt?: number;
+  isMarketing?: boolean;
+  brandName?: string;
+}) {
+  return callPhoneTool('phone_send', options);
 }
 
 /** Alias of sendPhoneSms — enqueues an SMS job for the background worker. */
