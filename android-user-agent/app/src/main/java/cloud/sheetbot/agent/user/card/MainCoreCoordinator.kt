@@ -12,11 +12,11 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import kotlinx.coroutines.CoroutineScope
 import cloud.sheetbot.agent.user.MainActivity
 import cloud.sheetbot.agent.user.databinding.ActivityMainBinding
-import cloud.sheetbot.agent.user.service.KeepAliveService
-import cloud.sheetbot.agent.user.storage.LocalLogManager
-import cloud.sheetbot.agent.user.storage.PreferencesManager
-import cloud.sheetbot.agent.user.util.TtsManager
-import cloud.sheetbot.agent.user.util.UpdateManager
+import cloud.sheetbot.agent.user.KeepAliveService
+import cloud.sheetbot.agent.user.LocalLogManager
+import cloud.sheetbot.agent.user.PreferencesManager
+import cloud.sheetbot.agent.user.TtsManager
+import cloud.sheetbot.agent.user.UpdateManager
 
 /**
  * 🏛️ 메인 액티비티 코어 시스템 및 생명주기 총괄 코디네이터 (MainCoreCoordinator)
@@ -265,7 +265,7 @@ class MainCoreCoordinator(
     fun enterAodMode() = aodModeController.enterAodMode()
     fun exitAodMode() = aodModeController.exitAodMode()
 
-    fun updateCardCollapseState(container: View, toggleBtn: TextView, isHidden: Boolean) =
+    fun updateCardCollapseState(container: View, toggleBtn: View, isHidden: Boolean) =
         cardAccordionController.updateCardCollapseState(container, toggleBtn, isHidden)
 
     fun refreshAllCardsCollapseState() =

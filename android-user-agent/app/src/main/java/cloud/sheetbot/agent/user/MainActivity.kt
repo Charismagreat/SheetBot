@@ -161,7 +161,7 @@ class MainActivity : AppCompatActivity() {
         cardCoordinator?.onPause()
     }
 
-    fun updateCardCollapseState(container: android.view.View, toggleBtn: android.widget.TextView, isHidden: Boolean) {
+    fun updateCardCollapseState(container: android.view.View, toggleBtn: android.view.View, isHidden: Boolean) {
         if (::coreCoordinator.isInitialized) {
             coreCoordinator.updateCardCollapseState(container, toggleBtn, isHidden)
         }

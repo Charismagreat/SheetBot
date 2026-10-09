@@ -11,7 +11,7 @@ import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.CoroutineScope
 import cloud.sheetbot.agent.user.MainActivity
 import cloud.sheetbot.agent.user.databinding.ActivityMainBinding
-import cloud.sheetbot.agent.user.storage.PreferencesManager
+import cloud.sheetbot.agent.user.PreferencesManager
 
 /**
  * 🎛️ 전 카드 초기화 및 생명주기 관리 전담 코디네이터 (CardSetupCoordinator)
@@ -36,7 +36,7 @@ class CardSetupCoordinator(
     private val checkAndRequestAllFilesAccess: (onGranted: (() -> Unit)?) -> Unit,
     private val isNotificationListenerEnabled: () -> Boolean,
     private val requestNotificationListenerPermission: () -> Unit,
-    private val updateCardCollapseState: (container: View, toggleBtn: TextView, isHidden: Boolean) -> Unit,
+    private val updateCardCollapseState: (container: View, toggleBtn: View, isHidden: Boolean) -> Unit,
     private val updateUiState: () -> Unit,
     private val setupCardCollapseExpandListeners: () -> Unit
 ) {
@@ -66,6 +66,7 @@ class CardSetupCoordinator(
     lateinit var websiteMonitorCardController: WebsiteMonitorCardController
     lateinit var contactsCardController: ContactsBackupCardController
     lateinit var featureRequestCardController: FeatureRequestCardController
+    lateinit var callEndedCardController: CallEndedCardController
 
     // 🔍 초기화 여부 안전 확인 게터 프로퍼티
     val isAccountPairingInitialized get() = ::accountPairingController.isInitialized
