@@ -333,6 +333,22 @@ const DEFAULT_CATALOG: MarketplaceCardItem[] = [
     version: '2.0.0',
     updatedAt: '2026-10-06',
   },
+  // 5. 나만의 맞춤 전용 카드 (chachogreat@gmail.com 전담)
+  {
+    key: 'cardVipCustomAuto',
+    title: '👑 VIP 프라이빗 자동화 센터 (차호석 대표님 전용)',
+    icon: '👑',
+    category: 'exclusive',
+    categoryName: '나만의 맞춤 카드',
+    description: '차호석 대표님(chachogreat@gmail.com)만을 위해 특별 설계된 맞춤형 올인원 비즈니스 대시보드 및 지능형 알림 관제 카드입니다.',
+    badge: 'VIP전용',
+    author: '시트봇 파트너스',
+    isExclusive: true,
+    allowedEmails: ['chachogreat@gmail.com', 'charismagreat@gmail.com'],
+    isInstalledByDefault: false,
+    version: '1.0.0',
+    updatedAt: '2026-10-09',
+  },
 ];
 
 /**
@@ -343,7 +359,12 @@ const DEFAULT_CATALOG: MarketplaceCardItem[] = [
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const userEmail = (searchParams.get('email') || '').trim().toLowerCase();
+    const userEmail = (
+      searchParams.get('email') ||
+      searchParams.get('userEmail') ||
+      req.headers.get('x-sheetbot-user-email') ||
+      ''
+    ).trim().toLowerCase();
 
     // 1. 기본 카탈로그에서 전체 공개 카드 필터링
     let resultCards: MarketplaceCardItem[] = DEFAULT_CATALOG.filter(card => {
