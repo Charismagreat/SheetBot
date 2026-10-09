@@ -35,8 +35,8 @@ class CardDrawerController(
         val headerResId: Int? = null
     )
 
-    // 관리 대상 카드 20종 목록
-    private val allCards = listOf(
+    // 관리 대상 카드 21종 목록
+    val allCards = listOf(
         CardInfo("cardCallRecording", "통화 녹음 자동 분석", "🎙️", R.id.cardCallRecording, R.id.layoutCallRecordingHeader),
         CardInfo("cardInCallSummary", "수신 통화 시 고객 요약 팝업", "📞", R.id.cardInCallSummary, R.id.layoutInCallSummaryHeader),
         CardInfo("cardMissedCall", "부재중 전화 자동 답장", "📞", R.id.cardMissedCall, R.id.layoutMissedCallHeader),

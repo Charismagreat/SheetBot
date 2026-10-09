@@ -37,7 +37,7 @@ class CardMarketplaceController(
     private val activity: Activity,
     private val prefs: PreferencesManager,
     private val cardDrawerController: CardDrawerController,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main)
 ) {
 
     private var allCatalogCards: List<MarketplaceCardItemDto> = emptyList()
