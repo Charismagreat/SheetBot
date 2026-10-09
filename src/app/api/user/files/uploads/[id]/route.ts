@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { proxyJson } from '../_proxy';
 
-/** GET /api/user/files/uploads/:id — status */
+/** GET — upload status */
 export async function GET(
   _request: NextRequest,
   ctx: { params: Promise<{ id: string }> | { id: string } },
@@ -10,7 +10,7 @@ export async function GET(
   return proxyJson(`/user-data/uploads/${params.id}`, { method: 'GET' });
 }
 
-/** DELETE /api/user/files/uploads/:id — abort */
+/** DELETE — abort upload */
 export async function DELETE(
   _request: NextRequest,
   ctx: { params: Promise<{ id: string }> | { id: string } },

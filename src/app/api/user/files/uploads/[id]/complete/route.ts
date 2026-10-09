@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { proxyJson } from '../../_proxy';
 
-/** POST /api/user/files/uploads/:id/complete */
+/** POST — finalize upload */
 export async function POST(
   _request: NextRequest,
   ctx: { params: Promise<{ id: string }> | { id: string } },

@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { proxyRaw } from '../../../_proxy';
 
-/** PUT /api/user/files/uploads/:id/chunks/:index — raw octet-stream chunk */
+/** PUT — raw octet-stream chunk */
 export async function PUT(
   request: NextRequest,
   ctx: { params: Promise<{ id: string; index: string }> | { id: string; index: string } },

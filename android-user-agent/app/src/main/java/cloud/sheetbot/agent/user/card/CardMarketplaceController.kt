@@ -261,9 +261,33 @@ class CardMarketplaceController(
                 backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#1E293B"))
                 setOnClickListener {
                     AlertDialog.Builder(activity)
-                        .setTitle("🚀 출시 준비 중인 기능")
-                        .setMessage("'${card.title}' 기능은 곧 정식 업데이트될 예정입니다.\n\n먼저 맞춤 제작을 원하시면 지금 바로 1:1 다이렉트 의뢰를 신청해 주세요!")
-                        .setPositiveButton("지금 의뢰하기") { _, _ ->
+                        .setTitle("🚀 ${card.title}")
+                        .setMessage("'${card.title}' 기능은 정식 출시 준비 중입니다.\n\n출시 알림을 예약하시면 기능 오픈 즉시 알려드리며, 빠른 맞춤 제작을 원하시면 1:1 의뢰를 신청해 주세요.")
+                        .setPositiveButton("✨ 출시 알림 예약") { _, _ ->
+                            val userEmail = prefs.userEmail ?: ""
+                            if (userEmail.isBlank()) {
+                                Toast.makeText(activity, "로그인 후 알림 예약이 가능합니다.", Toast.LENGTH_SHORT).show()
+                                return@setPositiveButton
+                            }
+                            Toast.makeText(activity, "출시 알림을 예약하는 중입니다...", Toast.LENGTH_SHORT).show()
+                            scope.launch {
+                                val result = ApiClient.submitFeatureRequest(
+                                    userEmail = userEmail,
+                                    title = "[출시알림 예약] ${card.title}",
+                                    content = "신규 기능 카드 '${card.title}'(key: ${card.key}) 출시 알림 신청",
+                                    requestType = "RELEASE_NOTIFY",
+                                    contactInfo = userEmail
+                                )
+                                withContext(Dispatchers.Main) {
+                                    if (result.success) {
+                                        Toast.makeText(activity, "🎉 '${card.title}' 출시 알림이 성공적으로 예약되었습니다!", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        Toast.makeText(activity, "알림 예약 실패: ${result.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        }
+                        .setNeutralButton("💡 맞춤 제작 의뢰") { _, _ ->
                             FeatureRequestCardController(activity, prefs).openRequestDialog(card.title)
                         }
                         .setNegativeButton("닫기", null)
