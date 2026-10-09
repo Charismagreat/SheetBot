@@ -29,6 +29,20 @@ function resolveEgdeskMcpApiUrl(): string {
   return (process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080').replace(/\/$/, '');
 }
 
+/**
+ * Visitor OAuth pending rows and sessions live on the tunnel gateway (Supabase).
+ * Do not use EGDESK_MCP_INTERNAL_URL here — desktop :8080 only keeps pending in memory.
+ */
+function resolveVisitorAuthMcpApiUrl(): string {
+  const tunnel = process.env.NEXT_PUBLIC_EGDESK_TUNNEL_URL;
+  if (tunnel && tunnel.trim()) return tunnel.replace(/\/$/, '');
+  const publicUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL;
+  if (publicUrl && publicUrl.trim()) return publicUrl.replace(/\/$/, '');
+  const internal = process.env.EGDESK_MCP_INTERNAL_URL;
+  if (internal && internal.trim()) return internal.replace(/\/$/, '');
+  return 'http://localhost:8080';
+}
+
 /** Forward this site's origin so EGDesk can bind visitor sessions to this site only. */
 function visitorForwardHeaders(request: NextRequest): Record<string, string> {
   const headers = buildEgdeskHeaders();
@@ -729,7 +743,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__visitor_auth_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = resolveEgdeskMcpApiUrl();
+      const apiUrl = resolveVisitorAuthMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/visitor-auth/tools/call`, {
         method: 'POST',
@@ -751,7 +765,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__visitor_google_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = resolveEgdeskMcpApiUrl();
+      const apiUrl = resolveVisitorAuthMcpApiUrl();
       const headers = visitorForwardHeaders(request);
       const authorization = request.headers.get('authorization');
       if (authorization) headers['Authorization'] = authorization;

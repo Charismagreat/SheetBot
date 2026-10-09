@@ -351,9 +351,12 @@ const DEFAULT_CATALOG: MarketplaceCardItem[] = [
   },
 ];
 
+import { queryTable } from '@/lib/egdesk-helpers';
+
 /**
  * 🛍️ GET /api/user/cards/catalog
  * - 전체 공개 카드 카탈로그 제공
+ * - sheetbot_marketplace_cards 테이블의 동적 CMS 등록 카드 자동 병합 (DB 카드 우선)
  * - 사용자 이메일 기준 특정 사용자 전용(Private/Exclusive) 카드 병합 필터링
  */
 export async function GET(req: NextRequest) {
@@ -366,8 +369,62 @@ export async function GET(req: NextRequest) {
       ''
     ).trim().toLowerCase();
 
-    // 1. 기본 카탈로그에서 전체 공개 카드 필터링
-    let resultCards: MarketplaceCardItem[] = DEFAULT_CATALOG.filter(card => {
+    // 1. 기본 카탈로그를 맵으로 초기화 (key 기준)
+    const cardMap = new Map<string, MarketplaceCardItem>();
+    for (const card of DEFAULT_CATALOG) {
+      cardMap.set(card.key, { ...card });
+    }
+
+    // 2. DB(sheetbot_marketplace_cards)에서 활성/출시준비 카드 조회 및 동적 병합
+    try {
+      const dbRes = await queryTable('sheetbot_marketplace_cards', {
+        orderBy: 'display_order',
+        orderDirection: 'ASC',
+        limit: 200,
+      });
+
+      if (dbRes?.rows && Array.isArray(dbRes.rows)) {
+        for (const r of dbRes.rows) {
+          // 소프트 삭제된 카드는 제외
+          if (r.deleted_at) continue;
+
+          // 비활성(INACTIVE) 상태인 경우 카탈로그에서 제거
+          if (r.status === 'INACTIVE') {
+            cardMap.delete(r.key);
+            continue;
+          }
+
+          // DB에 등록된 카드로 병합 (새 카드 추가 또는 기존 기본 카드 덮어쓰기)
+          const emails: string[] = r.allowed_emails
+            ? r.allowed_emails.split(',').map((e: string) => e.trim().toLowerCase()).filter(Boolean)
+            : [];
+
+          const dbCardItem: MarketplaceCardItem = {
+            key: r.key,
+            title: r.title,
+            icon: r.icon || '⚡',
+            category: (r.category || 'ai') as MarketplaceCardItem['category'],
+            categoryName: r.category_name || 'AI 자동화',
+            description: r.description || '',
+            badge: r.badge || undefined,
+            author: r.author || '시트봇 공식',
+            isExclusive: Boolean(r.is_exclusive),
+            allowedEmails: emails.length > 0 ? emails : undefined,
+            isInstalledByDefault: Boolean(r.is_installed_by_default),
+            version: r.version || '1.0.0',
+            updatedAt: r.updated_at ? r.updated_at.split('T')[0] : '2026-10-09',
+          };
+
+          cardMap.set(r.key, dbCardItem);
+        }
+      }
+    } catch (dbErr) {
+      console.warn('[Cards-Catalog] DB 동적 카드 조회 실패, 기본 카탈로그로 폴백:', dbErr);
+    }
+
+    // 3. 전체 카드 목록에서 권한(전용 카드 여부) 필터링
+    const allCards = Array.from(cardMap.values());
+    const resultCards: MarketplaceCardItem[] = allCards.filter(card => {
       // 전체 공개 카드인 경우 무조건 포함
       if (!card.isExclusive) return true;
 
@@ -379,7 +436,7 @@ export async function GET(req: NextRequest) {
       return false;
     });
 
-    // 2. 카테고리 메타데이터
+    // 4. 카테고리 메타데이터
     const categories = [
       { id: 'all', name: '전체 보기', icon: '🌟' },
       { id: 'store', name: '매장 · 정산', icon: '🏪' },
