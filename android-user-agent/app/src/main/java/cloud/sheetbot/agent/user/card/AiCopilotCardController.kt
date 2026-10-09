@@ -105,7 +105,7 @@ class AiCopilotCardController(
      * 가로 스크롤 추천 명령 칩 렌더링
      */
     private fun renderSuggestionChips(items: List<CommandSuggestionItem>) {
-        val container = binding.layoutCopilotChipsContainer
+        val container = binding.root.findViewWithTag<LinearLayout>("copilotChipsContainer") ?: return
         container.removeAllViews()
 
         for (item in items) {

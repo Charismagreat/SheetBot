@@ -621,9 +621,8 @@
                     </LinearLayout>
                 </LinearLayout>
 
-                <!-- 💡 실행 가능한 추천 명령 칩 가이드 바 (v2.2.6) -->
+                <!-- 💡 실행 가능한 추천 명령 칩 가이드 바 (v2.2.6, Tag 기반 바인딩 초과 방지) -->
                 <LinearLayout
-                    android:id="@+id/layoutCopilotSuggestions"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
@@ -644,7 +643,7 @@
                         android:scrollbars="none">
 
                         <LinearLayout
-                            android:id="@+id/layoutCopilotChipsContainer"
+                            android:tag="copilotChipsContainer"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:orientation="horizontal" />
