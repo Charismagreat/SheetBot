@@ -499,6 +499,16 @@ class PreferencesManager(context: Context) {
         get() = prefs.getStringSet("hidden_card_keys", null) ?: DEFAULT_HIDDEN_CARDS
         set(value) = prefs.edit().putStringSet("hidden_card_keys", value).apply()
 
+    var reservedNotificationCardKeys: Set<String>
+        get() = prefs.getStringSet("reserved_notification_card_keys", null) ?: setOf("cardInventory")
+        set(value) = prefs.edit().putStringSet("reserved_notification_card_keys", value).apply()
+
+    fun addReservedNotificationCard(cardKey: String) {
+        val current = reservedNotificationCardKeys.toMutableSet()
+        current.add(cardKey)
+        reservedNotificationCardKeys = current
+    }
+
     fun clear() {
         prefs.edit().clear().apply()
     }
