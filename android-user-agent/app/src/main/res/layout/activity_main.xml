@@ -736,6 +736,19 @@
                     android:layout_marginTop="4dp"
                     android:textColor="#E2E8F0"
                     android:textSize="11sp" />
+
+                <!-- 💾 1회성 작업을 구글 시트 상단 메뉴로 영구 저장(승격) 버튼 (v2.2.7, Tag 기반) -->
+                <Button
+                    android:tag="btnPromoteCommand"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:layout_marginTop="8dp"
+                    android:backgroundTint="#4F46E5"
+                    android:text="💾 이 기능을 구글 시트 메뉴로 영구 저장"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
             </LinearLayout>
         </LinearLayout>
 

@@ -459,13 +459,25 @@ ${sampleDataTexts.join("\n\n====================\n\n")}
       },
     ]).catch(() => {});
 
+    const canPromote = isSuccess && plan.actionType !== "APPS_SCRIPT_NOT_FOUND" && plan.actionType !== "APPS_SCRIPT_RUN";
+    const suggestedFunctionTitle = plan.suggestedFunctionTitle || (command.length > 15 ? command.slice(0, 12) + "..." : command);
+    const targetSheetId = userProjects[0]?.spreadsheet_id || "";
+
     return NextResponse.json({
       success: isSuccess,
       command,
       actionType: plan.actionType,
       explanation: plan.explanation || "명령이 성공적으로 처리되었습니다.",
       spokenResult: plan.spokenResult || "요청하신 시트 명령이 완료되었습니다.",
-      details: executionDetails,
+      canPromote,
+      suggestedFunctionTitle,
+      spreadsheetId: targetSheetId,
+      details: {
+        ...executionDetails,
+        canPromote,
+        suggestedFunctionTitle,
+        spreadsheetId: targetSheetId,
+      },
     });
   } catch (err: any) {
     console.error("[CommandExecute] Error:", err);
