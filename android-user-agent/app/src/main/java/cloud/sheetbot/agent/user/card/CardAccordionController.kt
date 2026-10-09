@@ -30,9 +30,11 @@ class CardAccordionController(
     private val getInCallSummary: () -> InCallSummaryCardController
 ) {
 
-    fun updateCardCollapseState(container: View, toggleBtn: TextView, isHidden: Boolean) {
+    fun updateCardCollapseState(container: View, toggleBtn: View, isHidden: Boolean) {
         container.visibility = if (isHidden) View.GONE else View.VISIBLE
-        toggleBtn.text = if (isHidden) "▼" else "▲"
+        if (toggleBtn is TextView) {
+            toggleBtn.text = if (isHidden) "▼" else "▲"
+        }
     }
 
     fun refreshAllCardsCollapseState() {
