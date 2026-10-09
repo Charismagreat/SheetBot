@@ -1,6 +1,7 @@
 package cloud.sheetbot.agent.user.card
 
-import android.app.Activity
+import android.content.Context
+import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Build
 import android.view.View
@@ -14,11 +15,13 @@ import com.google.android.gms.common.api.ApiException
 import cloud.sheetbot.agent.user.ApiClient
 import cloud.sheetbot.agent.user.AppPreferences
 import cloud.sheetbot.agent.user.KeepAliveService
+import cloud.sheetbot.agent.user.TtsManager
 import cloud.sheetbot.agent.user.databinding.ActivityMainBinding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 
 /**
@@ -283,7 +286,7 @@ class AccountPairingController(
                 if (!result.deviceToken.isNullOrBlank()) prefs.deviceToken = result.deviceToken
 
                 KeepAliveService.start(activity)
-            onPairingSuccess(finalEmail)
+                onPairingSuccess(email)
 
                 AlertDialog.Builder(activity)
                     .setTitle("🎉 시트봇 에이전트 연동 성공!")
@@ -309,7 +312,7 @@ class AccountPairingController(
 
         var detectedRefCode: String? = null
         try {
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = clipboard.primaryClip
             if (clip != null && clip.itemCount > 0) {
                 val clipText = clip.getItemAt(0).text?.toString()?.trim() ?: ""
