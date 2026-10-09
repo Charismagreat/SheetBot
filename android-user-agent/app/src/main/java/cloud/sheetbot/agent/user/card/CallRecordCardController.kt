@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.CountDownTimer
 import android.os.Environment
+import android.util.Base64
 import android.util.Log
 import android.view.View
 import android.widget.Button
@@ -142,6 +143,7 @@ class CallRecordCardController(
         refreshCollapseState()
     }
 
+    /**
      * 🎙️ 통화 녹음 감지 대상 어플 / 폴더 뱃지 갱신 (v2.1.26)
      */
     fun updateRecordingSourceFolderBadge() {
