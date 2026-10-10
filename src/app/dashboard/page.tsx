@@ -293,14 +293,6 @@ export default function DashboardPage() {
           setWallet(JSON.parse(savedWallet));
         }
       } catch {}
-
-      const hideUntil = localStorage.getItem("sheetbot_fde_recruit_hide_until");
-      if (!hideUntil || Date.now() > Number(hideUntil)) {
-        const timer = setTimeout(() => {
-          setIsFdeRecruitOpen(true);
-        }, 1000);
-        return () => clearTimeout(timer);
-      }
     }
   }, []);
 

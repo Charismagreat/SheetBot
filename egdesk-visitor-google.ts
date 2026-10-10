@@ -302,6 +302,9 @@ export async function startVisitorGoogleLogin(options: {
   next?: string;
   forceConsent?: boolean;
   scopes?: readonly string[] | VisitorScopePreset;
+  /** platform | operator:<label> | self (7b) — must match hosted project visitorGcp allow-list */
+  gcp?: string;
+  handle?: string;
 } = {}) {
   if (typeof window === 'undefined') {
     throw new Error('startVisitorGoogleLogin() must run in the browser');
@@ -320,12 +323,15 @@ export async function startVisitorGoogleLogin(options: {
   }
   const scopes = resolveVisitorLoginScopes(options.scopes);
 
-  const result = await callVisitorAuth('start', {
+  const startArgs: Record<string, unknown> = {
     returnTo: returnTo.toString(),
     egdeskPublicUrl,
     forceConsent: options.forceConsent === true,
     scopes,
-  });
+  };
+  if (options.gcp?.trim()) startArgs.gcp = options.gcp.trim();
+  if (options.handle?.trim()) startArgs.handle = options.handle.trim();
+  const result = await callVisitorAuth('start', startArgs);
   if (!result?.authUrl) {
     throw new Error(result?.error || 'Failed to start visitor Google login');
   }
@@ -362,6 +368,54 @@ export async function getVisitorGoogleStatus() {
   } catch {
     return { connected: false, email: null, message: 'Visitor is not signed in.' };
   }
+}
+
+export async function registerVisitorGcp(options: {
+  oauthClientJson: unknown;
+  handle?: string;
+  egdeskPublicUrl?: string;
+}) {
+  if (typeof window === 'undefined') {
+    throw new Error('registerVisitorGcp() must run in the browser');
+  }
+  const sampleReturnTo = new URL(resolveVisitorAppPath('/auth/callback'), window.location.origin).toString();
+  const egdeskPublicUrl = options.egdeskPublicUrl?.trim() || resolveEgdeskPublicUrl();
+  const result = await callVisitorAuth('register_gcp', {
+    oauthClientJson: options.oauthClientJson,
+    handle: options.handle,
+    egdeskPublicUrl,
+    sampleReturnTo,
+  });
+  return result;
+}
+
+export async function getVisitorGcpStatus(handle: string) {
+  if (typeof window === 'undefined') {
+    throw new Error('getVisitorGcpStatus() must run in the browser');
+  }
+  const sampleReturnTo = new URL(resolveVisitorAppPath('/auth/callback'), window.location.origin).toString();
+  return callVisitorAuth('gcp_status', { handle, sampleReturnTo });
+}
+
+export async function forgetVisitorGcp(handle: string) {
+  if (typeof window === 'undefined') {
+    throw new Error('forgetVisitorGcp() must run in the browser');
+  }
+  const sampleReturnTo = new URL(resolveVisitorAppPath('/auth/callback'), window.location.origin).toString();
+  return callVisitorAuth('forget_gcp', { handle, sampleReturnTo });
+}
+
+const VISITOR_GCP_HANDLE_KEY = 'egdesk_visitor_gcp_handle';
+
+export function getStoredVisitorGcpHandle(): string | null {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem(VISITOR_GCP_HANDLE_KEY);
+}
+
+export function setStoredVisitorGcpHandle(handle: string | null): void {
+  if (typeof window === 'undefined') return;
+  if (handle) window.localStorage.setItem(VISITOR_GCP_HANDLE_KEY, handle);
+  else window.localStorage.removeItem(VISITOR_GCP_HANDLE_KEY);
 }
 
 export async function listVisitorDriveFiles(options: { pageSize?: number; query?: string } = {}) {
