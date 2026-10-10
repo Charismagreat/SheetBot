@@ -4,8 +4,33 @@ import SessionWrapper from "@/components/SessionWrapper";
 import GlobalWidgetGate from "@/components/GlobalWidgetGate";
 
 export const metadata: Metadata = {
-  title: "SheetBot - AI 기반 Google Apps Script 자동화 SaaS",
-  description: "구글 계정으로 로그인하여 스프레드시트 자동화 Apps Script 프로젝트와 스케줄을 손쉽게 생성하고 관리하세요.",
+  metadataBase: new URL("https://sheetbot.cloud"),
+  title: "SheetBot (시트봇) - 구글 시트 AI 업무 자동화",
+  description: "복잡한 수식과 코딩 없이, 말 한마디로 구글 시트에 AI 비서를 달아보세요. 영수증·명함·문자·주문 자동화까지 한 번에!",
+  keywords: ["구글 시트 자동화", "스프레드시트 AI", "구글 시트 업무 자동화", "영수증 OCR", "명함 CRM", "시트봇", "SheetBot"],
+  openGraph: {
+    type: "website",
+    locale: "ko_KR",
+    url: "https://sheetbot.cloud",
+    siteName: "SheetBot (시트봇)",
+    title: "SheetBot (시트봇) - 구글 시트 AI 업무 자동화",
+    description: "복잡한 수식과 코딩 없이, 말 한마디로 구글 시트에 AI 비서를 달아보세요. 영수증·명함·문자·주문 자동화까지 한 번에!",
+    images: [
+      {
+        url: "https://sheetbot.cloud/images/og-sheetbot.png",
+        width: 1200,
+        height: 630,
+        alt: "SheetBot (시트봇) - 구글 시트 AI 업무 자동화",
+        type: "image/png",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SheetBot (시트봇) - 구글 시트 AI 업무 자동화",
+    description: "복잡한 수식과 코딩 없이, 말 한마디로 구글 시트에 AI 비서를 달아보세요. 영수증·명함·문자·주문 자동화까지 한 번에!",
+    images: ["https://sheetbot.cloud/images/og-sheetbot.png"],
+  },
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

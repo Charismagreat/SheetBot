@@ -104,6 +104,8 @@ export type WorkspaceVisitorCallOptions = {
   visitorOrigin?: string;
   /** Owner MCP: use personal Google login before service account when both are configured. */
   preferOAuth?: boolean;
+  /** Owner MCP: operator GCP connection (id or label). Overrides EGDESK_OWNER_OAUTH_PROFILE when set. */
+  oauthClientProfileId?: string;
 };
 
 function getBrowserVisitorSessionId(): string | null {
@@ -165,6 +167,18 @@ function withVisitorToolArgs(
   const out = { ...args };
   if (options.asVisitor) out.asVisitor = true;
   if (options.preferOAuth !== undefined) out.preferOAuth = options.preferOAuth;
+  if (!options.asVisitor) {
+    const explicit = options.oauthClientProfileId?.trim();
+    const fromEnv =
+      typeof process !== 'undefined' ? process.env?.EGDESK_OWNER_OAUTH_PROFILE?.trim() : '';
+    const pin = explicit || fromEnv;
+    if (pin && out.oauthClientProfileId === undefined && out.profileId === undefined) {
+      out.oauthClientProfileId = pin;
+    }
+  }
+  if (options.oauthClientProfileId?.trim()) {
+    out.oauthClientProfileId = options.oauthClientProfileId.trim();
+  }
   return out;
 }
 
