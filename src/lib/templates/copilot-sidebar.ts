@@ -1,6 +1,7 @@
 /**
  * SheetBot in-sheet copilot sidebar HTML (Apps Script HtmlService).
- * Exported as a string — do not load via fs at runtime.
+ * Served at GET /api/copilot/sidebar-template and loaded via UrlFetchApp + createHtmlOutput.
+ * Do not use GAS <? ?> scriptlets here — only plain HTML/JS (scriptlets require createTemplateFromFile().evaluate()).
  */
 
 export const COPILOT_SIDEBAR_HTML = `<!DOCTYPE html>
@@ -874,20 +875,13 @@ export const COPILOT_SIDEBAR_HTML = `<!DOCTYPE html>
     </div>
   </div>
 
-  <?
-    var _initBal = (typeof initialBalance !== 'undefined' && initialBalance !== null) ? Number(initialBalance) : 2495439;
-    var _initTier = (typeof initialTier !== 'undefined' && initialTier) ? initialTier : 'PRO';
-    var _initEmail = (typeof currentUserEmail !== 'undefined' && currentUserEmail) ? currentUserEmail : 'chachogreat@gmail.com';
-    var _formattedBal = _initBal.toLocaleString();
-  ?>
-
   <!-- [1-1] 스마트 하이브리드 지갑 미니 스트립 (평상시 슬림 표시 & 마스킹) -->
   <div class="wallet-mini-strip" id="wallet-mini-strip">
     <div class="wallet-mini-left" onclick="toggleWalletCard()" title="클릭하여 지갑 상세 카드 열기/닫기">
       <span class="wallet-mini-icon">🪙</span>
       <span class="wallet-mini-label">토큰</span>
-      <span class="wallet-mini-amount" id="token-amount-mini"><?= _formattedBal ?> T</span>
-      <span class="wallet-mini-tier" id="tier-badge-mini"><?= _initTier ?></span>
+      <span class="wallet-mini-amount" id="token-amount-mini">조회 중...</span>
+      <span class="wallet-mini-tier" id="tier-badge-mini">PRO</span>
       <span class="wallet-toggle-arrow" id="wallet-toggle-arrow">▼</span>
     </div>
     <div class="wallet-mini-right">
@@ -900,8 +894,8 @@ export const COPILOT_SIDEBAR_HTML = `<!DOCTYPE html>
   <div class="wallet-card" id="wallet-card-details" style="display: none;">
     <div class="wallet-top-row">
       <div style="display: flex; align-items: center; gap: 6px;">
-        <span class="tier-badge" id="tier-badge"><?= _initTier ?></span>
-        <span class="user-email-text" id="token-user"><?= _initEmail ?></span>
+        <span class="tier-badge" id="tier-badge">PRO</span>
+        <span class="user-email-text" id="token-user">조회 중...</span>
       </div>
       <div style="display: flex; align-items: center; gap: 4px;">
         <button class="refresh-icon-btn" onclick="refreshBalance()" title="실시간 잔액 새로고침">
@@ -915,7 +909,7 @@ export const COPILOT_SIDEBAR_HTML = `<!DOCTYPE html>
 
     <div class="wallet-balance-row">
       <div class="balance-num-box">
-        <span class="balance-val" id="token-amount"><?= _formattedBal ?></span>
+        <span class="balance-val" id="token-amount">조회 중...</span>
         <span class="balance-unit" id="balance-unit">Token</span>
       </div>
     </div>
@@ -970,16 +964,7 @@ export const COPILOT_SIDEBAR_HTML = `<!DOCTYPE html>
 
   <!-- [3-1] 전문가(FDE) 문의 버튼 -->
   <div style="margin-bottom: 7px;">
-    <?
-      var _initialSheetUrl = '';
-      try {
-        if (typeof currentSheetUrl !== 'undefined' && currentSheetUrl) {
-          _initialSheetUrl = currentSheetUrl;
-        }
-      } catch(e) {}
-      var _fdeHref = 'https://sheetbot.cloud/dashboard?modal=fde' + (_initialSheetUrl ? '&sheetUrl=' + encodeURIComponent(_initialSheetUrl) : '');
-    ?>
-    <a href="<?= _fdeHref ?>" target="_blank" class="btn-fde-request" id="btn-fde-request-link" onclick="handleFdeClick(event)" title="시트봇 전담 엔지니어에게 1:1 맞춤 제작 문의">
+    <a href="https://sheetbot.cloud/dashboard?modal=fde" target="_blank" class="btn-fde-request" id="btn-fde-request-link" onclick="handleFdeClick(event)" title="시트봇 전담 엔지니어에게 1:1 맞춤 제작 문의">
       <span>🛠️ 전문가에게 문의하기</span>
       <span style="font-size: 11px; opacity: 0.9;">↗</span>
     </a>
@@ -1081,8 +1066,8 @@ export const COPILOT_SIDEBAR_HTML = `<!DOCTYPE html>
   </footer>
 
   <script>
-    var currentEmail = '<?= _initEmail ?>';
-    var currentBalance = <?= _initBal ?>;
+    var currentEmail = '';
+    var currentBalance = null;
     var isMasked = false;
     var isDetailsOpen = false;
 
@@ -1090,12 +1075,7 @@ export const COPILOT_SIDEBAR_HTML = `<!DOCTYPE html>
       isMasked = localStorage.getItem('sheetbot_wallet_masked') === 'true';
     } catch(e) {}
 
-    applyBalanceDisplay(currentBalance);
-
-    // 사이드바 로드 즉시 브라우저에서 최신 잔액 백그라운드 갱신
-    setTimeout(function() {
-      fetchDirectWallet(currentEmail);
-    }, 20);
+    // 사이드바 로드 즉시 브라우저에서 최신 잔액 백그라운드 갱신 (initGasBridge에서 refreshBalance 호출)
 
     function toggleWalletCard() {
       var detailsEl = document.getElementById('wallet-card-details');
@@ -1130,6 +1110,9 @@ export const COPILOT_SIDEBAR_HTML = `<!DOCTYPE html>
           maskBtn.innerText = '🔒';
           maskBtn.title = '프라이버시 잔액 숨김 해제';
         }
+      } else if (currentBalance === null || isNaN(currentBalance)) {
+        if (miniEl) miniEl.innerText = '조회 중...';
+        if (fullEl) fullEl.innerText = '조회 중...';
       } else {
         var formatted = currentBalance.toLocaleString();
         if (miniEl) miniEl.innerText = formatted + ' T';
@@ -1319,12 +1302,7 @@ export const COPILOT_SIDEBAR_HTML = `<!DOCTYPE html>
 
 
     function copyReferralLink() {
-      var userEmail = '';
-      try {
-        if (typeof currentUserEmail !== 'undefined' && currentUserEmail) {
-          userEmail = currentUserEmail;
-        }
-      } catch(e) {}
+      var userEmail = currentEmail || '';
       if (!userEmail) {
         var userEl = document.getElementById('token-user');
         if (userEl && userEl.innerText && userEl.innerText.indexOf('@') !== -1) {
@@ -1351,11 +1329,6 @@ export const COPILOT_SIDEBAR_HTML = `<!DOCTYPE html>
 
     var BASE_DASHBOARD_URL = 'https://sheetbot.cloud/dashboard';
     var CURRENT_SHEET_URL = '';
-    try {
-      if (typeof currentSheetUrl !== 'undefined' && currentSheetUrl) {
-        CURRENT_SHEET_URL = currentSheetUrl;
-      }
-    } catch(e) {}
 
     function bindFdeSheetUrl(url) {
       if (!url) return;
@@ -1497,7 +1470,7 @@ export const COPILOT_SIDEBAR_HTML = `<!DOCTYPE html>
 
     // Google Apps Script 비동기 바인딩 감지 즉시 실행
     (function initGasBridge() {
-      applyBalanceDisplay(0);
+      applyBalanceDisplay(null);
       var attempts = 0;
       loadDynamicPromotions();
       var interval = setInterval(function() {
