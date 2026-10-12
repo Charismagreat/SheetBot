@@ -43,6 +43,7 @@ import {
   VISITOR_WORKSPACE_SCOPES,
   VISITOR_GOOGLE_OAUTH_SCOPES,
 } from "@/egdesk-visitor-google";
+import { PROJECT_DEPLOY_LOADING_LABEL } from "@/constants/project-deploy-ui";
 
 interface NewProjectModalProps {
   isOpen: boolean;
@@ -805,7 +806,10 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div
+      lang="ko"
+      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+    >
       <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
         {/* 모달 헤더 */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -2120,12 +2124,12 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                 type="button"
                 onClick={handleFinalDeploy}
                 disabled={loading || analyzing}
-                className="px-6 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white transition-all shadow-md shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="px-6 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white transition-all shadow-md shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 font-[inherit]"
               >
                 {loading ? (
                   <>
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>정밀 코드 생성 및 구글 시트 배포 중...</span>
+                    <span className="font-[inherit]">{PROJECT_DEPLOY_LOADING_LABEL}</span>
                   </>
                 ) : (
                   <>

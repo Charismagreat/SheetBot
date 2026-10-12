@@ -12,6 +12,7 @@ import {
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { ensureStandardManifest, generateSecureEgdeskConfig, generateStandardTokenRecharge } from "@/lib/gas-manifest";
+import { formatGasCloudPushUserError } from "@/lib/gas-deploy-errors";
 
 export interface SheetBotProject {
   id: string;
@@ -273,11 +274,6 @@ export async function POST(request: Request) {
         // 스크립트 코드가 제공된 경우 Code.gs 파일 덮어쓰기 및 구글 클라우드에 직접 푸시
         if (gasProjectId && scriptCode) {
           try {
-            await callAppsScriptTool("apps_script_delete_file", {
-              projectId: gasProjectId,
-              fileName: "undefined.gs",
-            }, visitorOptions).catch(() => null);
-
             await callAppsScriptTool("apps_script_write_file", {
               projectId: gasProjectId,
               fileName: "Code.gs",
@@ -347,8 +343,7 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             success: false,
-            error:
-              "Code.gs를 Google Apps Script에 푸시하지 못했습니다. EGDesk 로그에서 apps_script_write_file / apps_script_push_to_google 오류를 확인해 주세요.",
+            error: formatGasCloudPushUserError(gasDeployErrors),
             cloudDeploy: {
               ok: false,
               bound: true,
@@ -618,12 +613,6 @@ export async function PATCH(request: Request) {
       const targetManifest = updateData.manifest || projRow.manifest;
 
       if (gasProjId && targetScriptCode) {
-        // 비정상 파일이 남아있을 경우 푸시 충돌 방지를 위해 정리
-        await callAppsScriptTool("apps_script_delete_file", {
-          projectId: gasProjId,
-          fileName: "undefined.gs",
-        }, visitorOptions).catch(() => null);
-
         // 터널 클라이언트 인프라(EgdeskConfig.gs, EgdeskClient.gs) 최신화 보장 및 보안 정화
         await callAppsScriptTool("apps_script_setup_egdesk_tunnel", {
           projectId: gasProjId,

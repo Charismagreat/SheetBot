@@ -20,6 +20,7 @@ import {
   ExternalLink,
   Check,
 } from "lucide-react";
+import { PROJECT_REDEPLOY_LOADING_LABEL } from "@/constants/project-deploy-ui";
 
 interface EditProjectPromptModalProps {
   isOpen: boolean;
@@ -1016,7 +1017,7 @@ export default function EditProjectPromptModal({
                   {loading ? (
                     <>
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>조율된 계획으로 구글 시트에 코드 재배포 중...</span>
+                      <span className="font-[inherit]">{PROJECT_REDEPLOY_LOADING_LABEL}</span>
                     </>
                   ) : (
                     <>
