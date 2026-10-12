@@ -47,6 +47,8 @@ scratch/
 scratch*.gs
 *.sqlite
 *.db
+# Database dumps / exports (local only — never commit)
+*.sql
 test_image.jpg
 public/uploads/*
 !public/uploads/quote-images/
