@@ -749,7 +749,11 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
 
       const projJson = await projRes.json();
       if (!projJson.success) {
-        throw new Error(projJson.error || "프로젝트 저장에 실패했습니다.");
+        const detail =
+          Array.isArray(projJson.cloudDeploy?.errors) && projJson.cloudDeploy.errors.length > 0
+            ? `\n\n${projJson.cloudDeploy.errors.join("\n")}`
+            : "";
+        throw new Error((projJson.error || "프로젝트 저장에 실패했습니다.") + detail);
       }
 
       setGeneratedResult({

@@ -174,6 +174,15 @@ export async function POST(request: Request) {
 
     const spreadsheetId = extractSpreadsheetId(spreadsheetUrl) || "";
     const nowStr = new Date().toISOString();
+    const requiresGasCloud = Boolean(String(scriptCode || "").trim());
+    const gasDeployErrors: string[] = [];
+    let gasCloudPushed = false;
+
+    const noteGasDeployError = (step: string, err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      gasDeployErrors.push(`${step}: ${msg}`);
+      console.warn(`[Projects] ${step}:`, msg);
+    };
 
     // 1. 이지데스크 Apps Script MCP 도구를 통한 구글 시트 바인딩 프로젝트 생성
     let gasProjectId = "";
@@ -207,7 +216,7 @@ export async function POST(request: Request) {
               (p.spreadsheetUrl && p.spreadsheetUrl.includes(spreadsheetId))
           );
         } catch (listErr: any) {
-          console.warn("[Projects] list_projects check note:", listErr.message);
+          noteGasDeployError("list_projects", listErr);
         }
 
         if (existingGasProject && (existingGasProject.id || existingGasProject.projectId)) {
@@ -217,15 +226,21 @@ export async function POST(request: Request) {
           console.log(`[Projects] Reusing existing bound Apps Script project: ${gasProjectId}`);
         } else {
           // 기존 프로젝트가 없을 때만 신규 바운드 프로젝트 생성 (방문자 세션으로 유저 시트에 생성)
-          const boundRes = await callAppsScriptTool("apps_script_create_bound", {
-            fileId: spreadsheetId,
-            title: name.trim(),
-            scriptCode: scriptCode || undefined,
-          }, visitorOptions);
-          if (boundRes && (boundRes.id || boundRes.projectId)) {
-            gasProjectId = boundRes.id || boundRes.projectId;
-            scriptId = boundRes.scriptId || gasProjectId;
-            scriptUrl = boundRes.scriptUrl || `https://script.google.com/d/${scriptId}/edit`;
+          try {
+            const boundRes = await callAppsScriptTool("apps_script_create_bound", {
+              fileId: spreadsheetId,
+              title: name.trim(),
+              scriptCode: scriptCode || undefined,
+            }, visitorOptions);
+            if (boundRes && (boundRes.id || boundRes.projectId)) {
+              gasProjectId = boundRes.id || boundRes.projectId;
+              scriptId = boundRes.scriptId || gasProjectId;
+              scriptUrl = boundRes.scriptUrl || `https://script.google.com/d/${scriptId}/edit`;
+            } else {
+              noteGasDeployError("create_bound", "Apps Script create_bound returned no project id");
+            }
+          } catch (bindErr: any) {
+            noteGasDeployError("create_bound", bindErr);
           }
         }
 
@@ -257,54 +272,94 @@ export async function POST(request: Request) {
 
         // 스크립트 코드가 제공된 경우 Code.gs 파일 덮어쓰기 및 구글 클라우드에 직접 푸시
         if (gasProjectId && scriptCode) {
-          // 비정상 파일이 남아있을 경우 푸시 충돌 방지를 위해 정리
-          await callAppsScriptTool("apps_script_delete_file", {
-            projectId: gasProjectId,
-            fileName: "undefined.gs",
-          }, visitorOptions).catch(() => null);
+          try {
+            await callAppsScriptTool("apps_script_delete_file", {
+              projectId: gasProjectId,
+              fileName: "undefined.gs",
+            }, visitorOptions).catch(() => null);
 
-          await callAppsScriptTool("apps_script_write_file", {
-            projectId: gasProjectId,
-            fileName: "Code.gs",
-            content: scriptCode,
-          }, visitorOptions).catch((err: any) => console.warn("write Code.gs warning:", err.message));
+            await callAppsScriptTool("apps_script_write_file", {
+              projectId: gasProjectId,
+              fileName: "Code.gs",
+              content: scriptCode,
+            }, visitorOptions);
 
-          const validManifest = ensureStandardManifest(manifest);
-          await callAppsScriptTool("apps_script_write_file", {
-            projectId: gasProjectId,
-            fileName: "appsscript.json",
-            content: validManifest,
-          }, visitorOptions).catch((err: any) => console.warn("write appsscript.json warning:", err.message));
+            const validManifest = ensureStandardManifest(manifest);
+            await callAppsScriptTool("apps_script_write_file", {
+              projectId: gasProjectId,
+              fileName: "appsscript.json",
+              content: validManifest,
+            }, visitorOptions);
 
-          // 클라우드 최종 반영 (EgdeskConfig.gs, EgdeskClient.gs, Code.gs, appsscript.json 모두 푸시)
-          await callAppsScriptTool("apps_script_push_to_google", {
-            projectId: gasProjectId,
-          }, visitorOptions).catch((err: any) => console.warn("push to google warning:", err.message));
+            await callAppsScriptTool("apps_script_push_to_google", {
+              projectId: gasProjectId,
+            }, visitorOptions);
+            gasCloudPushed = true;
 
-          // 스크립트 코드에 doGet(e) 또는 Web App 폼이 포함된 경우 웹 앱 배포 자동 실행
-          if (scriptCode.includes("doGet") || scriptCode.includes("HtmlService")) {
-            try {
-              const deployRes = await callAppsScriptTool("apps_script_create_deployment", {
-                projectId: gasProjectId,
-                access: "ANYONE_ANONYMOUS",
-                executeAs: "USER_DEPLOYING",
-                description: `[SheetBot] 공개 웹 폼 배포 (${name.trim()})`,
-              }, visitorOptions);
-              if (deployRes) {
-                webAppUrl =
-                  deployRes.webAppUrl ||
-                  deployRes.url ||
-                  deployRes.entryPoints?.[0]?.webApp?.url ||
-                  (deployRes.deploymentId ? `https://script.google.com/macros/s/${deployRes.deploymentId}/exec` : "");
+            if (scriptCode.includes("doGet") || scriptCode.includes("HtmlService")) {
+              try {
+                const deployRes = await callAppsScriptTool("apps_script_create_deployment", {
+                  projectId: gasProjectId,
+                  access: "ANYONE_ANONYMOUS",
+                  executeAs: "USER_DEPLOYING",
+                  description: `[SheetBot] 공개 웹 폼 배포 (${name.trim()})`,
+                }, visitorOptions);
+                if (deployRes) {
+                  webAppUrl =
+                    deployRes.webAppUrl ||
+                    deployRes.url ||
+                    deployRes.entryPoints?.[0]?.webApp?.url ||
+                    (deployRes.deploymentId ? `https://script.google.com/macros/s/${deployRes.deploymentId}/exec` : "");
+                }
+              } catch (deployErr: any) {
+                console.warn("Apps Script web app deployment note:", deployErr.message);
               }
-            } catch (deployErr: any) {
-              console.warn("Apps Script web app deployment note:", deployErr.message);
             }
+          } catch (pushErr: any) {
+            noteGasDeployError("write_or_push", pushErr);
           }
         }
+      } else if (requiresGasCloud) {
+        noteGasDeployError("spreadsheet_id", "Could not parse spreadsheet id from spreadsheetUrl");
       }
     } catch (mcpErr: any) {
-      console.warn("Apps Script direct cloud binding note:", mcpErr.message);
+      noteGasDeployError("apps_script_mcp", mcpErr);
+    }
+
+    if (requiresGasCloud) {
+      if (!gasProjectId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Google Apps Script를 시트에 연결하지 못했습니다. EGDesk가 실행 중이고 Apps Script MCP가 활성화되어 있으며, Google Workspace(스크립트/시트) 권한이 승인되어 있는지 확인해 주세요.",
+            cloudDeploy: {
+              ok: false,
+              bound: false,
+              pushed: false,
+              errors: gasDeployErrors,
+            },
+          },
+          { status: 502 },
+        );
+      }
+      if (!gasCloudPushed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Code.gs를 Google Apps Script에 푸시하지 못했습니다. EGDesk 로그에서 apps_script_write_file / apps_script_push_to_google 오류를 확인해 주세요.",
+            cloudDeploy: {
+              ok: false,
+              bound: true,
+              gasProjectId,
+              pushed: false,
+              errors: gasDeployErrors,
+            },
+          },
+          { status: 502 },
+        );
+      }
     }
 
     const projectId = `proj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -318,8 +373,8 @@ export async function POST(request: Request) {
       description: summary || "AI 자동 생성 스프레드시트 프로젝트",
       spreadsheet_id: spreadsheetId,
       spreadsheet_url: spreadsheetUrl,
-      gas_project_id: gasProjectId || `gas_${Date.now()}`,
-      script_id: scriptId || gasProjectId,
+      gas_project_id: gasProjectId || (requiresGasCloud ? "" : `gas_${Date.now()}`),
+      script_id: scriptId || gasProjectId || "",
       script_url: scriptUrl || (scriptId ? `https://script.google.com/d/${scriptId}/edit` : ""),
       script_code: scriptCode || "",
       manifest: manifest || "",
@@ -343,6 +398,13 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message: "새 Apps Script 프로젝트가 성공적으로 생성 및 등록되었습니다.",
+      cloudDeploy: {
+        ok: !requiresGasCloud || gasCloudPushed,
+        bound: Boolean(gasProjectId),
+        gasProjectId: gasProjectId || undefined,
+        pushed: gasCloudPushed,
+        errors: gasDeployErrors.length > 0 ? gasDeployErrors : undefined,
+      },
       project: mapRowToProject(newRow),
     });
   } catch (error: any) {
