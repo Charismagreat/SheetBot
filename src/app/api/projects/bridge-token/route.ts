@@ -5,6 +5,7 @@ import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable } from "@/lib/egdesk-helpers";
 import { findSheetbotProjectByRef } from "@/lib/sheetbot-project-resolve";
 import { persistBridgeToken } from "@/lib/bridge-token-persist";
+import { resolveGasBridgePostEndpoint } from "@/lib/bridge-public-url";
 import { setupDatabase } from "@/lib/setup-db";
 import crypto from "crypto";
 
@@ -59,10 +60,7 @@ export async function POST(request: NextRequest) {
       await persistBridgeToken(canonicalId, token, userEmail);
     }
 
-    const host = request.headers.get("host") || request.nextUrl.host;
-    const protocol = request.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
-    const baseUrl = `${protocol}://${host}`;
-    const bridgeUrl = `${baseUrl}/api/agent/gas-bridge?token=${token}`;
+    const bridgeUrl = resolveGasBridgePostEndpoint(request, token);
 
     const promptTemplate = `아래 웹 주소를 통해 내 구글 시트의 헤더 구조와 기존 코드를 확인하고, 필요한 기능 코드를 주입해줘:
 웹 주소: ${bridgeUrl}

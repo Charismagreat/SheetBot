@@ -4,6 +4,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, insertRows, updateRows, getSpreadsheetFullContext } from "@/lib/egdesk-helpers";
 import { persistBridgeToken } from "@/lib/bridge-token-persist";
+import { resolveGasBridgePostEndpoint } from "@/lib/bridge-public-url";
 import { setupDatabase } from "@/lib/setup-db";
 import crypto from "crypto";
 
@@ -149,17 +150,7 @@ export async function POST(request: NextRequest) {
       await persistBridgeToken(project.id, token, userEmail);
     }
 
-    const forwardedHost = request.headers.get("x-forwarded-host");
-    const host = forwardedHost || request.headers.get("host") || request.nextUrl.host || "";
-
-    let baseUrl = "https://sheetbot.cloud";
-    if (host && host.includes("localhost")) {
-      baseUrl = `http://${host}`;
-    } else if (host) {
-      baseUrl = `https://${host}`;
-    }
-    baseUrl = baseUrl.replace(/\/$/, "");
-    const bridgeUrl = `${baseUrl}/api/agent/gas-bridge?token=${token}`;
+    const bridgeUrl = resolveGasBridgePostEndpoint(request, token);
 
     const defaultRequirement = presetPrompt || (
       isNewSheet
