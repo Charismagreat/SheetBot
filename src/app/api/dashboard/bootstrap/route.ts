@@ -4,52 +4,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable } from "@/lib/egdesk-helpers";
-
-// 프로젝트 경량 변환 헬퍼 (대시보드 카드 렌더링 전용)
-function mapLightProject(row: any) {
-  let parsedFeatures: string[] = [];
-  try {
-    parsedFeatures = typeof row.features === "string" ? JSON.parse(row.features) : row.features || [];
-  } catch {
-    parsedFeatures = [];
-  }
-
-  let parsedTriggers: any[] = [];
-  try {
-    parsedTriggers = typeof row.triggers === "string" ? JSON.parse(row.triggers) : row.triggers || [];
-  } catch {
-    parsedTriggers = [];
-  }
-
-  const rawId = String(row.id || "");
-  const normalizedId = rawId.endsWith(".0") ? rawId.slice(0, -2) : rawId;
-  const safeId = row.script_id || row.gas_project_id || row.spreadsheet_id || row.uuid || normalizedId || `proj_${Date.now()}`;
-
-  return {
-    id: safeId,
-    userEmail: row.user_email || row.userEmail || "",
-    name: row.name || "",
-    description: row.description || "",
-    spreadsheetId: row.spreadsheet_id || row.spreadsheetId || "",
-    spreadsheetUrl: row.spreadsheet_url || row.spreadsheetUrl || "",
-    gasProjectId: row.gas_project_id || row.gasProjectId || "",
-    scriptId: row.script_id || row.scriptId || "",
-    scriptUrl: row.script_url || row.scriptUrl || "",
-    scriptCode: "", // 대시보드 경량화
-    manifest: "", // 대시보드 경량화
-    summary: row.summary || "",
-    features: parsedFeatures,
-    triggers: parsedTriggers,
-    prompt: row.prompt || "",
-    webappUrl: row.webapp_url || row.webappUrl || "",
-    status: row.status || "ACTIVE",
-    created_at: row.created_at || "",
-    updated_at: row.updated_at || "",
-    createdAt: row.created_at || "",
-    updatedAt: row.updated_at || "",
-    deleted_at: row.deleted_at || null,
-  };
-}
+import { mapLightProject } from "@/app/dashboard/_lib/helpers";
 
 // ⚡ [초고속 SWR 메모리 캐시] 3초 이내 중복 호출 시 My DB 6개 쿼리를 생략하고 0ms 즉시 응답
 const bootstrapCache = new Map<string, { data: any; timestamp: number }>();

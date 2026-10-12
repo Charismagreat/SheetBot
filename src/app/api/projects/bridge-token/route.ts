@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse, NextRequest } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable } from "@/lib/egdesk-helpers";
+import { findSheetbotProjectByRef } from "@/lib/sheetbot-project-resolve";
 import { persistBridgeToken } from "@/lib/bridge-token-persist";
 import { setupDatabase } from "@/lib/setup-db";
 import crypto from "crypto";
@@ -23,15 +24,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "projectId가 필요합니다." }, { status: 400 });
     }
 
-    // 프로젝트 조회 (소유자 검증 및 소프트 삭제 제외)
-    const projectRes = await queryTable("sheetbot_projects", {
-      filters: { id: projectId },
-      limit: 1,
-    });
-
-    const project = (projectRes.rows || [])[0];
-    if (!project || project.deleted_at) {
+    const project = await findSheetbotProjectByRef(userEmail, projectId);
+    if (!project) {
       return NextResponse.json({ success: false, error: "존재하지 않는 프로젝트입니다." }, { status: 404 });
+    }
+
+    const canonicalId = String(project.id || "");
+    if (!canonicalId) {
+      return NextResponse.json(
+        { success: false, error: "프로젝트 레코드에 ID가 없습니다. 지원팀에 문의해 주세요." },
+        { status: 500 },
+      );
     }
 
     // 다중 사용자 격리 검증 (관리자나 개발 모드 제외)
@@ -39,11 +42,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "해당 프로젝트에 대한 접근 권한이 없습니다." }, { status: 403 });
     }
 
-    let token = project.bridge_token;
+    let token = project.bridge_token as string | undefined;
     if (!token) {
-      // 기존 발급된 토큰 확인
       const existingTokenRes = await queryTable("sheetbot_bridge_tokens", {
-        filters: { project_id: project.id },
+        filters: { project_id: canonicalId },
         limit: 1,
       }).catch(() => ({ rows: [] }));
 
@@ -51,10 +53,10 @@ export async function POST(request: NextRequest) {
         token = existingTokenRes.rows[0].token;
       } else {
         token = `sec_${crypto.randomBytes(16).toString("hex")}`;
-        await persistBridgeToken(project.id, token, userEmail);
+        await persistBridgeToken(canonicalId, token, userEmail);
       }
     } else {
-      await persistBridgeToken(project.id, token, userEmail);
+      await persistBridgeToken(canonicalId, token, userEmail);
     }
 
     const host = request.headers.get("host") || request.nextUrl.host;
@@ -72,7 +74,7 @@ export async function POST(request: NextRequest) {
       bridgeUrl,
       promptTemplate,
       project: {
-        id: project.id,
+        id: canonicalId,
         name: project.name,
         spreadsheetId: project.spreadsheet_id,
         spreadsheetUrl: project.spreadsheet_url,

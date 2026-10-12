@@ -13,6 +13,7 @@ import {
 import { setupDatabase } from "@/lib/setup-db";
 import { ensureStandardManifest, generateSecureEgdeskConfig, generateStandardTokenRecharge } from "@/lib/gas-manifest";
 import { formatGasCloudPushUserError } from "@/lib/gas-deploy-errors";
+import { normalizeSheetbotProjectId } from "@/lib/sheetbot-project-id";
 
 export interface SheetBotProject {
   id: string;
@@ -64,10 +65,10 @@ function mapRowToProject(row: any, includeCode = false): SheetBotProject {
     parsedTriggers = [];
   }
 
-  const safeId = row.id || row.uuid || row.gas_project_id || row.spreadsheet_id || `proj_${Date.now()}`;
+  const primaryId = normalizeSheetbotProjectId(row) || `proj_${Date.now()}`;
 
   return {
-    id: safeId,
+    id: primaryId,
     userEmail: row.user_email || row.userEmail || "",
     name: row.name || "",
     description: row.description || "",

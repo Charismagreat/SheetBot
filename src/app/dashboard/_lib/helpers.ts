@@ -1,3 +1,5 @@
+import { normalizeSheetbotProjectId } from "@/lib/sheetbot-project-id";
+
 // 프로젝트 경량 변환 헬퍼 (대시보드 렌더링 전용)
 export function mapLightProject(row: any) {
   let parsedFeatures: string[] = [];
@@ -14,10 +16,10 @@ export function mapLightProject(row: any) {
     parsedTriggers = [];
   }
 
-  const safeId = row.id || row.uuid || row.gas_project_id || row.spreadsheet_id || `proj_${Date.now()}`;
+  const primaryId = normalizeSheetbotProjectId(row);
 
   return {
-    id: safeId,
+    id: primaryId,
     userEmail: row.user_email || row.userEmail || "",
     name: row.name || "",
     description: row.description || "",
@@ -42,7 +44,7 @@ export function mapLightProject(row: any) {
   };
 }
 
-// 프로젝트 ID 표시 정제 헬퍼 (스프레드시트 ID 우선 및 부동소수점 .0 오염 정수화)
+// 카드에 표시할 참조 ID (GAS/시트). API 호출은 항상 proj.id(시트봇 PK)를 사용.
 export function getProjectDisplayId(proj: any): string {
   if (proj?.scriptId) return String(proj.scriptId);
   if (proj?.gasProjectId) return String(proj.gasProjectId);

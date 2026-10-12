@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, updateRows, callAppsScriptTool } from "@/lib/egdesk-helpers";
+import { findSheetbotProjectByRef } from "@/lib/sheetbot-project-resolve";
 import { generateStandardTokenRecharge } from "@/lib/gas-manifest";
 
 // 구글 스프레드시트 URL에서 ID 추출
@@ -38,13 +39,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 1. SheetBot DB에서 해당 프로젝트 조회 및 사용자 소유권 확인
-    const projRes = await queryTable("sheetbot_projects", {
-      filters: { id: projectId, user_email: userEmail.toLowerCase().trim() },
-      limit: 1,
-    }).catch(() => ({ rows: [] }));
-
-    const project = projRes.rows?.[0];
+    const project = await findSheetbotProjectByRef(userEmail, projectId);
     if (!project) {
       return NextResponse.json(
         { success: false, error: "프로젝트를 찾을 수 없거나 권한이 없습니다." },
