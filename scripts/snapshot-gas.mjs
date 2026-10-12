@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Snapshot all exports from @/lib/gas-manifest for byte-identical refactor checks.
- * Usage: node scripts/snapshot-gas.mjs [output.json]
+ * Usage: npx tsx scripts/snapshot-gas.mjs [output.json]
+ * Optional: GAS_MODULE=/path/to/gas-manifest.ts (or .mts)
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,7 +12,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const outPath = process.argv[2] || path.join('/tmp', 'gas-snapshot.json');
 
-// Deterministic if generators ever pick up time/random (they should not today).
 const fixedIso = '2000-01-01T00:00:00.000Z';
 const realDate = Date;
 // @ts-expect-error test stub
@@ -32,7 +32,6 @@ globalThis.Date = class extends realDate {
 };
 Math.random = () => 0.42;
 if (globalThis.crypto?.getRandomValues) {
-  const orig = globalThis.crypto.getRandomValues.bind(globalThis.crypto);
   globalThis.crypto.getRandomValues = (arr) => {
     for (let i = 0; i < arr.length; i++) arr[i] = 0;
     return arr;
@@ -45,10 +44,25 @@ const gasModule = process.env.GAS_MODULE
 const gasUrl = pathToFileURL(gasModule).href;
 const gas = await import(gasUrl);
 
-const sampleManifest = JSON.stringify(
+const manifestMinimal = JSON.stringify({ oauthScopes: [] }, null, 2);
+const manifestSample = JSON.stringify(
   {
     timeZone: 'America/New_York',
     oauthScopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    runtimeVersion: 'DEPRECATED',
+  },
+  null,
+  2,
+);
+const manifestFull = JSON.stringify(
+  {
+    timeZone: 'Asia/Seoul',
+    exceptionLogging: 'STACKDRIVER',
+    runtimeVersion: 'V8',
+    oauthScopes: [
+      'https://www.googleapis.com/auth/spreadsheets',
+      'https://www.googleapis.com/auth/script.send_mail',
+    ],
   },
   null,
   2,
@@ -56,14 +70,28 @@ const sampleManifest = JSON.stringify(
 
 const snapshot = {
   STANDARD_OAUTH_SCOPES: gas.STANDARD_OAUTH_SCOPES,
+  STANDARD_OAUTH_SCOPES_length: gas.STANDARD_OAUTH_SCOPES.length,
+
+  ensureStandardManifest_undefined: gas.ensureStandardManifest(undefined),
   ensureStandardManifest_null: gas.ensureStandardManifest(null),
   ensureStandardManifest_empty: gas.ensureStandardManifest(''),
+  ensureStandardManifest_whitespace: gas.ensureStandardManifest('   \n  '),
   ensureStandardManifest_invalid: gas.ensureStandardManifest('{not json'),
-  ensureStandardManifest_sample: gas.ensureStandardManifest(sampleManifest),
-  generateSecureEgdeskConfig: gas.generateSecureEgdeskConfig('snapshot.user@example.com'),
+  ensureStandardManifest_minimal: gas.ensureStandardManifest(manifestMinimal),
+  ensureStandardManifest_sample: gas.ensureStandardManifest(manifestSample),
+  ensureStandardManifest_full: gas.ensureStandardManifest(manifestFull),
+
+  generateSecureEgdeskConfig_user: gas.generateSecureEgdeskConfig('snapshot.user@example.com'),
   generateSecureEgdeskConfig_blank: gas.generateSecureEgdeskConfig(''),
-  generateStandardEgdeskClient: gas.generateStandardEgdeskClient(),
-  generateStandardTokenRecharge: gas.generateStandardTokenRecharge(),
+  generateSecureEgdeskConfig_whitespace: gas.generateSecureEgdeskConfig('  trimmed@x.com  '),
+
+  generateStandardEgdeskClient_a: gas.generateStandardEgdeskClient(),
+  generateStandardEgdeskClient_b: gas.generateStandardEgdeskClient(),
+  generateStandardEgdeskClient_c: gas.generateStandardEgdeskClient(),
+
+  generateStandardTokenRecharge_a: gas.generateStandardTokenRecharge(),
+  generateStandardTokenRecharge_b: gas.generateStandardTokenRecharge(),
+  generateStandardTokenRecharge_c: gas.generateStandardTokenRecharge(),
 };
 
 fs.writeFileSync(outPath, JSON.stringify(snapshot, null, 2) + '\n', 'utf8');

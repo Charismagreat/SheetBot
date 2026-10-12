@@ -1,4 +1,528 @@
 /**
  * GAS fragment: TokenRecharge.gs (user-data tools, deposit flows).
  */
-export const TOKEN_RECHARGE_GAS_DATA = "function _callUserDataTool(tool, args) {\n  _LAST_USER_DATA_ERROR = null;\n  try {\n    if (typeof egdeskToolsCall === 'function') {\n      var res = egdeskToolsCall('user-data', tool, args);\n      if (!res) return null;\n      var raw = (res.result && res.result.content) ? res.result.content : res.result;\n      if (Array.isArray(raw) && raw.length > 0 && raw[0].text) {\n        raw = raw[0].text;\n      }\n      if (typeof raw === 'string') {\n        try {\n          var parsed = JSON.parse(raw);\n          if (parsed && typeof parsed.content === 'string') {\n            try { return JSON.parse(parsed.content); } catch (e) { return parsed; }\n          }\n          return parsed;\n        } catch (e) {\n          return null;\n        }\n      }\n      return raw || res;\n    }\n  } catch (err) {\n    _LAST_USER_DATA_ERROR = err;\n    Logger.log(\"EGDesk user-data error (\" + tool + \"): \" + err.message);\n  }\n  return null;\n}\n\nfunction getUserTokenBalanceData() {\n  try {\n    var email = Session.getActiveUser().getEmail() || \"\";\n    if (!email) email = \"chachogreat@gmail.com\";\n    email = email.toLowerCase().trim();\n\n    var isAdmin = (email === \"chachogreat@gmail.com\" || email.indexOf(\"charisma\") !== -1 || email.indexOf(\"chacho\") !== -1);\n\n    // 1. 🌐 클라우드 서버 실시간 잔액 API 우선 조회 (0초 즉시 동기화)\n    try {\n      var balApiUrl = \"https://sheetbot.cloud/api/wallet/balance?userEmail=\" + encodeURIComponent(email);\n      var balRes = UrlFetchApp.fetch(balApiUrl, { muteHttpExceptions: true });\n      if (balRes.getResponseCode() === 200) {\n        var balData = JSON.parse(balRes.getContentText());\n        if (balData && balData.success && balData.balanceTokens !== undefined) {\n          var realBal = Number(balData.balanceTokens);\n          var realTier = balData.tier || (isAdmin ? \"PRO\" : \"STANDARD\");\n          try {\n            var props = PropertiesService.getScriptProperties();\n            if (props) {\n              props.setProperty(\"SHEETBOT_CACHED_BALANCE\", String(realBal));\n              props.setProperty(\"SHEETBOT_CACHED_TIER\", realTier);\n            }\n          } catch(e) {}\n          return {\n            success: true,\n            email: email,\n            balance: realBal,\n            tier: realTier,\n            isAdmin: isAdmin\n          };\n        }\n      }\n    } catch(fetchErr) {\n      Logger.log(\"실시간 잔액 API 호출 알림: \" + fetchErr.message);\n    }\n\n    // 2. 터널 My DB 직접 쿼리 폴백\n    var queryRes = _callUserDataTool('user_data_query', {\n      tableName: 'sheetbot_user_wallets',\n      filters: { user_email: email },\n      limit: 1\n    });\n\n    var rows = (queryRes && queryRes.rows) || [];\n    if (rows.length > 0 && rows[0].balance_tokens !== undefined) {\n      var bal = Number(rows[0].balance_tokens) || 0;\n      var tier = rows[0].tier || \"STANDARD\";\n      try {\n        var props = PropertiesService.getScriptProperties();\n        if (props) {\n          props.setProperty(\"SHEETBOT_CACHED_BALANCE\", String(bal));\n          props.setProperty(\"SHEETBOT_CACHED_TIER\", tier);\n        }\n      } catch (e) {}\n      return {\n        success: true,\n        email: email,\n        balance: bal,\n        tier: tier,\n        isAdmin: isAdmin\n      };\n    }\n\n    try {\n      var props = PropertiesService.getScriptProperties();\n      if (props) {\n        var cachedBal = props.getProperty(\"SHEETBOT_CACHED_BALANCE\");\n        var cachedTier = props.getProperty(\"SHEETBOT_CACHED_TIER\");\n        if (cachedBal) {\n          var numBal = Number(cachedBal) || 0;\n          if (isAdmin && numBal < 2095439) {\n            numBal = 2095439;\n            try { props.setProperty(\"SHEETBOT_CACHED_BALANCE\", \"2095439\"); } catch(e) {}\n          }\n          return {\n            success: true,\n            email: email,\n            balance: numBal,\n            tier: cachedTier || (isAdmin ? \"PRO\" : \"FREE\"),\n            isAdmin: isAdmin\n          };\n        }\n      }\n    } catch(storageErr) {\n      Logger.log(\"PropertiesService storage warning: \" + storageErr.message);\n    }\n\n    if (isAdmin) {\n      return { success: true, email: email, balance: 2095439, tier: \"PRO\", isAdmin: true };\n    }\n\n    return { success: true, email: email, balance: 20000, tier: \"FREE\", isAdmin: false };\n  } catch (err) {\n    return { success: true, email: \"chachogreat@gmail.com\", balance: 2095439, tier: \"PRO\", isAdmin: true };\n  }\n}\n\nfunction _getDynamicBankConfig() {\n  try {\n    var queryRes = _callUserDataTool('user_data_query', {\n      tableName: 'sheetbot_settings',\n      filters: { key: 'sheetbot_footer_info' },\n      limit: 1\n    });\n    var rows = (queryRes && queryRes.rows) || [];\n    if (rows.length > 0 && rows[0].value) {\n      var footer = JSON.parse(rows[0].value);\n      if (footer.deposit_account_number) {\n        return {\n          bankName: footer.deposit_bank_name || DEPOSIT_BANK_CONFIG.bankName,\n          accountNumber: footer.deposit_account_number || DEPOSIT_BANK_CONFIG.accountNumber,\n          holder: footer.deposit_account_holder || DEPOSIT_BANK_CONFIG.holder\n        };\n      }\n    }\n  } catch (err) {\n    Logger.log(\"Dynamic bank query error: \" + err.message);\n  }\n  return DEPOSIT_BANK_CONFIG;\n}\n\nfunction requestDirectDepositSession(packageId, depositorName, phoneNumber) {\n  try {\n    var email = Session.getActiveUser().getEmail() || \"chachogreat@gmail.com\";\n    email = email.toLowerCase().trim();\n    var userName = email.split('@')[0];\n\n    var cleanDepositor = (depositorName || \"\").trim();\n    if (!cleanDepositor || cleanDepositor.length < 2) {\n      return { success: false, error: \"실제 송금하실 분의 성함(입금자명)을 2글자 이상 입력해 주세요.\" };\n    }\n    var cleanPhone = (phoneNumber || \"\").replace(/[^0-9-]/g, \"\").trim();\n\n    // 1. 📲 서버 다이렉트 입금 세션 생성 API 우선 호출 (My DB 안전 적재 및 충돌 방지 100% 보장)\n    try {\n      var res = UrlFetchApp.fetch(\"https://sheetbot.cloud/api/wallet/direct-deposit\", {\n        method: \"post\",\n        contentType: \"application/json\",\n        payload: JSON.stringify({\n          packageId: packageId,\n          depositorName: cleanDepositor,\n          userEmail: email,\n          phoneNumber: cleanPhone\n        }),\n        muteHttpExceptions: true\n      });\n      if (res.getResponseCode() === 200) {\n        var data = JSON.parse(res.getContentText());\n        if (data && data.success) {\n          try {\n            var userProps = PropertiesService.getUserProperties();\n            userProps.setProperty(\"ACTIVE_DEPOSIT_CODE\", data.depositCode);\n            userProps.setProperty(\"ACTIVE_DEPOSITOR_NAME\", cleanDepositor);\n            userProps.setProperty(\"ACTIVE_REQUEST_ID\", data.requestId);\n          } catch(pe) {}\n          var origPrice = Number(data.originalPriceKrw || data.originalAmountKrw || (data.package && data.package.originalPriceKrw) || 12000);\n          var disc = Number(data.discountKrw || 0);\n          var finPrice = Number(data.finalPriceKrw || data.finalAmountKrw || data.amountKrw || (data.package && data.package.priceKrw) || (origPrice - disc));\n          var bankObj = data.bank || {};\n          var accNo = String(bankObj.accountNumber || \"3333-12-1695965\");\n          if (accNo.length === 13 && accNo.indexOf(\"-\") === -1) {\n            accNo = accNo.substring(0, 4) + \"-\" + accNo.substring(4, 6) + \"-\" + accNo.substring(6);\n          }\n          bankObj.accountNumber = accNo;\n\n          return {\n            success: true,\n            requestId: data.requestId,\n            depositCode: data.depositCode,\n            depositorName: data.depositorName,\n            originalPriceKrw: origPrice,\n            originalAmountKrw: origPrice,\n            discountKrw: disc,\n            finalPriceKrw: finPrice,\n            finalAmountKrw: finPrice,\n            amountKrw: finPrice,\n            package: data.package,\n            bank: bankObj,\n            qrImageUrl: data.qrImageUrl\n          };\n        }\n      }\n    } catch(fetchErr) {\n      Logger.log(\"원격 세션 발급 API 안내: \" + fetchErr.message);\n    }\n\n    // 2. 터널 및 로컬 연산 폴백\n    var pkg = TOKEN_PACKAGES_CONFIG[packageId] || TOKEN_PACKAGES_CONFIG.pkg_standard;\n    var activeBank = _getDynamicBankConfig();\n\n    // 1원 단위 난수 할인 계산 (1~99원 즉시 할인, 동시간대 중복 방지)\n    // 예: 5,000원 -> 4,987원 (13원 할인)\n    var discountKrw = Math.floor(1 + Math.random() * 99);\n    var finalPrice = pkg.price - discountKrw;\n\n    var randomNum = Math.floor(100 + Math.random() * 900);\n    var cleanChars = cleanDepositor.replace(/[^a-zA-Z0-9가-힣]/g, '');\n    var initialChar = cleanChars ? cleanChars.charAt(0).toUpperCase() : 'C';\n    var numericId = new Date().getTime();\n    var requestId = String(numericId);\n\n    try {\n      var userProps = PropertiesService.getUserProperties();\n      userProps.setProperty(\"ACTIVE_DEPOSIT_CODE\", depositCode);\n      userProps.setProperty(\"ACTIVE_DEPOSITOR_NAME\", cleanDepositor);\n      userProps.setProperty(\"ACTIVE_REQUEST_ID\", requestId);\n      userProps.setProperty(\"ACTIVE_PACKAGE_ID\", pkg.id);\n      userProps.setProperty(\"ACTIVE_AMOUNT\", String(finalPrice));\n      userProps.setProperty(\"ACTIVE_TOKENS\", String(pkg.tokens));\n    } catch (e) {}\n\n    var insertRes = _callUserDataTool('user_data_insert_rows', {\n      tableName: 'sheetbot_deposit_requests',\n      rows: [{\n        id: numericId,\n        uuid: \"dep_\" + numericId,\n        deposit_code: depositCode,\n        depositor_name: cleanDepositor,\n        user_email: email,\n        user_name: userName,\n        package_id: pkg.id,\n        package_name: pkg.name,\n        original_amount_krw: pkg.price,\n        discount_krw: discountKrw,\n        amount_krw: finalPrice,\n        tokens_to_credit: pkg.tokens,\n        bank_name: activeBank.bankName,\n        account_number: activeBank.accountNumber,\n        account_holder: activeBank.holder,\n        phone_number: cleanPhone || null,\n        status: \"PENDING\",\n        created_at: Utilities.formatDate(new Date(), \"Asia/Seoul\", \"yyyy-MM-dd HH:mm:ss\")\n      }]\n    });\n\n    if (!insertRes && _LAST_USER_DATA_ERROR && _LAST_USER_DATA_ERROR.isTunnelError) {\n      return {\n        success: false,\n        isTunnelError: true,\n        error: \"⚠️ [EGDesk 터널 통신 오류] 이지데스크 MCP 서버를 확인해 주세요.\"\n      };\n    }\n\n    var qrText = \"은행명 :\" + activeBank.bankName + \" / 계좌번호 :\" + activeBank.accountNumber + \" / 금액 :\" + finalPrice + \"원 / 입금자 :\" + cleanDepositor;\n    var qrUrl = \"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=\" + encodeURIComponent(qrText);\n\n    return {\n      success: true,\n      requestId: requestId,\n      depositCode: depositCode,\n      depositorName: cleanDepositor,\n      originalPriceKrw: pkg.price,\n      discountKrw: discountKrw,\n      finalPriceKrw: finalPrice,\n      package: {\n        id: pkg.id,\n        name: pkg.name,\n        tokens: pkg.tokens,\n        priceKrw: finalPrice,\n        originalPriceKrw: pkg.price\n      },\n      bank: {\n        bankName: activeBank.bankName,\n        accountNumber: activeBank.accountNumber,\n        accountHolder: activeBank.holder\n      },\n      qrImageUrl: qrUrl\n    };\n  } catch (err) {\n    return { success: false, isTunnelError: !!err.isTunnelError, error: err.message };\n  }\n}\n\nfunction checkDepositStatus(requestId, depositCode) {\n  try {\n    if (!requestId) {\n      return { success: true, status: \"PENDING\", message: \"세션 준비 중...\" };\n    }\n\n    var props = PropertiesService.getScriptProperties();\n    var currentBalance = Number(props.getProperty(\"SHEETBOT_CACHED_BALANCE\")) || 1147439;\n\n    // 1. 📲 서버 2중 안전망 API 우선 호출 (Google Messages 수신함 실시간 스크랩 & 매칭 엔진 트리거)\n    try {\n      var syncUrl = \"https://sheetbot.cloud/api/wallet/direct-deposit?requestId=\" + encodeURIComponent(requestId);\n      var apiRes = UrlFetchApp.fetch(syncUrl, { muteHttpExceptions: true });\n      if (apiRes.getResponseCode() === 200) {\n        var apiData = JSON.parse(apiRes.getContentText());\n        if (apiData && apiData.success && apiData.status === \"COMPLETED\") {\n          var newBal = Number(apiData.currentBalance) || (currentBalance + (Number(apiData.tokensToCredit) || 50000));\n          try {\n            props.setProperty(\"SHEETBOT_CACHED_BALANCE\", String(newBal));\n            props.setProperty(\"SHEETBOT_CACHED_TIER\", \"PRO\");\n          } catch(e) {}\n          return {\n            success: true,\n            status: \"COMPLETED\",\n            tokensToCredit: Number(apiData.tokensToCredit) || 50000,\n            currentBalance: newBal,\n            message: \"입금 확인 완료! \" + (Number(apiData.tokensToCredit) || 50000).toLocaleString() + \" 토큰이 성공적으로 충전되었습니다.\"\n          };\n        }\n      }\n    } catch(fetchErr) {\n      Logger.log(\"원격 입금 확인 API 호출 알림: \" + fetchErr.message);\n    }\n\n    // 2. 터널 DB 직접 조회 폴백\n    var rows = [];\n    var res = _callUserDataTool('user_data_query', {\n      tableName: 'sheetbot_deposit_requests',\n      filters: { id: requestId },\n      limit: 1\n    });\n\n    if (!res && _LAST_USER_DATA_ERROR && _LAST_USER_DATA_ERROR.isTunnelError) {\n      return {\n        success: false,\n        isTunnelError: true,\n        status: \"TUNNEL_ERROR\",\n        message: \"⚠️ [EGDesk 터널 통신 오류] 이지데스크 MCP 서버를 확인해 주세요.\"\n      };\n    }\n    rows = (res && res.rows) || [];\n\n    if (rows.length > 0) {\n      var row = rows[0];\n      if (row.status === \"COMPLETED\" || row.status === \"APPROVED\") {\n        var credited = Number(row.tokens_to_credit) || 50000;\n        var latestBal = currentBalance + credited;\n        try {\n          var wRes = _callUserDataTool('user_data_query', {\n            tableName: 'sheetbot_user_wallets',\n            filters: { user_email: 'chachogreat@gmail.com' },\n            limit: 1\n          });\n          if (wRes && wRes.rows && wRes.rows.length > 0 && wRes.rows[0].balance_tokens !== undefined) {\n            latestBal = Math.max(latestBal, Number(wRes.rows[0].balance_tokens));\n          }\n        } catch(e) {}\n        try {\n          props.setProperty(\"SHEETBOT_CACHED_BALANCE\", String(latestBal));\n          props.setProperty(\"SHEETBOT_CACHED_TIER\", \"PRO\");\n        } catch(e) {}\n\n        return {\n          success: true,\n          status: \"COMPLETED\",\n          tokensToCredit: credited,\n          currentBalance: latestBal,\n          message: \"입금 확인 완료! \" + credited.toLocaleString() + \" 토큰이 성공적으로 충전되었습니다.\"\n        };\n      } else if (row.status === \"PENDING\") {\n        // 아직 서버 웹훅이나 SMS 동기화가 진행 중인 경우 대기 안내 반환\n        return { success: true, status: \"PENDING\", message: \"실시간 입금 확인 중입니다... 잠시 후 다시 확인을 눌러주세요.\" };\n      }\n    }\n\n    if (depositCode && props.getProperty(\"SHEETBOT_ACTIVE_APPROVED_\" + depositCode)) {\n      props.deleteProperty(\"SHEETBOT_ACTIVE_APPROVED_\" + depositCode);\n      return {\n        success: true,\n        status: \"COMPLETED\",\n        tokensToCredit: 50000,\n        currentBalance: currentBalance,\n        message: \"입금 확인 완료! 50,000 토큰이 성공적으로 충전되었습니다.\"\n      };\n    }\n\n    return { success: true, status: \"PENDING\", message: \"실시간 입금 대기 중...\" };\n  } catch (err) {\n    return { success: false, isTunnelError: !!err.isTunnelError, error: err.message };\n  }\n}\n\nfunction getTunnelStatusData() {\n  var startTime = new Date().getTime();\n  try {\n    if (typeof egdeskUserDataListTables === 'function') {\n      egdeskUserDataListTables();\n    }\n    var elapsed = new Date().getTime() - startTime;\n    return { success: true, elapsed: elapsed, latency: elapsed, serverName: \"EGDesk Cloud\", message: \"정상 통신 준비 완료\" };\n  } catch (err) {\n    return { success: false, isTunnelError: true, error: err.message || \"통신 실패\", elapsed: new Date().getTime() - startTime, message: \"이지데스크 MCP 서버를 확인해 주세요.\" };\n  }\n}\n\nfunction simulateAdminDepositApproval(requestId, depositCode, pkgId) {\n  try {\n    var email = Session.getActiveUser().getEmail() || \"\";\n    email = email.toLowerCase().trim();\n\n    var isAuthorizedAdmin = (email === \"chachogreat@gmail.com\" || email.indexOf(\"charisma\") !== -1 || email.indexOf(\"chacho\") !== -1);\n    if (!isAuthorizedAdmin) {\n      return {\n        success: false,\n        error: \"권한 오류: 시뮬레이션 승인은 관리자 전용 디버깅 도구입니다. 실제 계좌 입금을 통해 안전하게 충전해 주세요.\"\n      };\n    }\n\n    var pkg = TOKEN_PACKAGES_CONFIG[pkgId] || TOKEN_PACKAGES_CONFIG.pkg_starter;\n    var tokensToAdd = pkg.tokens || 50000;\n    var codeUpper = depositCode ? String(depositCode).toUpperCase().trim() : \"SIM\" + Math.floor(100 + Math.random() * 900);\n\n    var reqRow = null;\n    var queryRes = _callUserDataTool('user_data_query', {\n      tableName: 'sheetbot_deposit_requests',\n      filters: { deposit_code: codeUpper },\n      limit: 1\n    });\n    var rows = (queryRes && queryRes.rows) || [];\n    if (rows.length > 0) {\n      reqRow = rows[0];\n      tokensToAdd = Number(reqRow.tokens_to_credit) || tokensToAdd;\n    }\n\n    var nowStr = Utilities.formatDate(new Date(), \"Asia/Seoul\", \"yyyy-MM-dd HH:mm:ss\");\n    if (reqRow && reqRow.id) {\n      _callUserDataTool('user_data_update_rows', {\n        tableName: 'sheetbot_deposit_requests',\n        ids: [String(reqRow.id)],\n        updates: {\n          status: \"COMPLETED\",\n          completed_at: nowStr,\n          updated_at: nowStr\n        }\n      });\n    } else {\n      var newReqId = requestId || (\"dep_sim_\" + new Date().getTime());\n      _callUserDataTool('user_data_insert_rows', {\n        tableName: 'sheetbot_deposit_requests',\n        rows: [{\n          id: newReqId,\n          user_email: email,\n          user_name: email.split('@')[0],\n          package_id: pkg.id,\n          package_name: pkg.name,\n          amount_krw: pkg.price,\n          tokens_to_credit: tokensToAdd,\n          deposit_code: codeUpper,\n          bank_name: \"카카오뱅크\",\n          status: \"COMPLETED\",\n          completed_at: nowStr,\n          created_at: nowStr,\n          updated_at: nowStr\n        }]\n      });\n    }\n\n    var wRes = _callUserDataTool('user_data_query', {\n      tableName: 'sheetbot_user_wallets',\n      filters: { user_email: email },\n      limit: 1\n    });\n    var wRows = (wRes && wRes.rows) || [];\n    var currentBalance = 1147439;\n    var walletId = null;\n    if (wRows.length > 0) {\n      currentBalance = Number(wRows[0].balance_tokens) || 1147439;\n      walletId = String(wRows[0].id);\n    }\n\n    var newBalance = currentBalance + tokensToAdd;\n    if (walletId) {\n      _callUserDataTool('user_data_update_rows', {\n        tableName: 'sheetbot_user_wallets',\n        ids: [walletId],\n        updates: {\n          balance_tokens: newBalance,\n          tier: \"PRO\",\n          updated_at: nowStr\n        }\n      });\n    }\n\n    try {\n      var props = PropertiesService.getScriptProperties();\n      props.setProperty(\"SHEETBOT_CACHED_BALANCE\", String(newBalance));\n      props.setProperty(\"SHEETBOT_CACHED_TIER\", \"PRO\");\n    } catch (e) {}\n\n    return {\n      success: true,\n      status: \"COMPLETED\",\n      tokensToCredit: tokensToAdd,\n      currentBalance: newBalance,\n      message: \"관리자 시뮬레이션 승인 완료: \" + Number(tokensToAdd).toLocaleString() + \" 토큰이 지급되었습니다.\"\n    };\n  } catch (err) {\n    return { success: false, error: err.message };\n  }\n}\n";
+export const TOKEN_RECHARGE_GAS_DATA = `function _callUserDataTool(tool, args) {
+  _LAST_USER_DATA_ERROR = null;
+  try {
+    if (typeof egdeskToolsCall === 'function') {
+      var res = egdeskToolsCall('user-data', tool, args);
+      if (!res) return null;
+      var raw = (res.result && res.result.content) ? res.result.content : res.result;
+      if (Array.isArray(raw) && raw.length > 0 && raw[0].text) {
+        raw = raw[0].text;
+      }
+      if (typeof raw === 'string') {
+        try {
+          var parsed = JSON.parse(raw);
+          if (parsed && typeof parsed.content === 'string') {
+            try { return JSON.parse(parsed.content); } catch (e) { return parsed; }
+          }
+          return parsed;
+        } catch (e) {
+          return null;
+        }
+      }
+      return raw || res;
+    }
+  } catch (err) {
+    _LAST_USER_DATA_ERROR = err;
+    Logger.log("EGDesk user-data error (" + tool + "): " + err.message);
+  }
+  return null;
+}
+
+function getUserTokenBalanceData() {
+  try {
+    var email = Session.getActiveUser().getEmail() || "";
+    if (!email) email = "chachogreat@gmail.com";
+    email = email.toLowerCase().trim();
+
+    var isAdmin = (email === "chachogreat@gmail.com" || email.indexOf("charisma") !== -1 || email.indexOf("chacho") !== -1);
+
+    // 1. 🌐 클라우드 서버 실시간 잔액 API 우선 조회 (0초 즉시 동기화)
+    try {
+      var balApiUrl = "https://sheetbot.cloud/api/wallet/balance?userEmail=" + encodeURIComponent(email);
+      var balRes = UrlFetchApp.fetch(balApiUrl, { muteHttpExceptions: true });
+      if (balRes.getResponseCode() === 200) {
+        var balData = JSON.parse(balRes.getContentText());
+        if (balData && balData.success && balData.balanceTokens !== undefined) {
+          var realBal = Number(balData.balanceTokens);
+          var realTier = balData.tier || (isAdmin ? "PRO" : "STANDARD");
+          try {
+            var props = PropertiesService.getScriptProperties();
+            if (props) {
+              props.setProperty("SHEETBOT_CACHED_BALANCE", String(realBal));
+              props.setProperty("SHEETBOT_CACHED_TIER", realTier);
+            }
+          } catch(e) {}
+          return {
+            success: true,
+            email: email,
+            balance: realBal,
+            tier: realTier,
+            isAdmin: isAdmin
+          };
+        }
+      }
+    } catch(fetchErr) {
+      Logger.log("실시간 잔액 API 호출 알림: " + fetchErr.message);
+    }
+
+    // 2. 터널 My DB 직접 쿼리 폴백
+    var queryRes = _callUserDataTool('user_data_query', {
+      tableName: 'sheetbot_user_wallets',
+      filters: { user_email: email },
+      limit: 1
+    });
+
+    var rows = (queryRes && queryRes.rows) || [];
+    if (rows.length > 0 && rows[0].balance_tokens !== undefined) {
+      var bal = Number(rows[0].balance_tokens) || 0;
+      var tier = rows[0].tier || "STANDARD";
+      try {
+        var props = PropertiesService.getScriptProperties();
+        if (props) {
+          props.setProperty("SHEETBOT_CACHED_BALANCE", String(bal));
+          props.setProperty("SHEETBOT_CACHED_TIER", tier);
+        }
+      } catch (e) {}
+      return {
+        success: true,
+        email: email,
+        balance: bal,
+        tier: tier,
+        isAdmin: isAdmin
+      };
+    }
+
+    try {
+      var props = PropertiesService.getScriptProperties();
+      if (props) {
+        var cachedBal = props.getProperty("SHEETBOT_CACHED_BALANCE");
+        var cachedTier = props.getProperty("SHEETBOT_CACHED_TIER");
+        if (cachedBal) {
+          var numBal = Number(cachedBal) || 0;
+          if (isAdmin && numBal < 2095439) {
+            numBal = 2095439;
+            try { props.setProperty("SHEETBOT_CACHED_BALANCE", "2095439"); } catch(e) {}
+          }
+          return {
+            success: true,
+            email: email,
+            balance: numBal,
+            tier: cachedTier || (isAdmin ? "PRO" : "FREE"),
+            isAdmin: isAdmin
+          };
+        }
+      }
+    } catch(storageErr) {
+      Logger.log("PropertiesService storage warning: " + storageErr.message);
+    }
+
+    if (isAdmin) {
+      return { success: true, email: email, balance: 2095439, tier: "PRO", isAdmin: true };
+    }
+
+    return { success: true, email: email, balance: 20000, tier: "FREE", isAdmin: false };
+  } catch (err) {
+    return { success: true, email: "chachogreat@gmail.com", balance: 2095439, tier: "PRO", isAdmin: true };
+  }
+}
+
+function _getDynamicBankConfig() {
+  try {
+    var queryRes = _callUserDataTool('user_data_query', {
+      tableName: 'sheetbot_settings',
+      filters: { key: 'sheetbot_footer_info' },
+      limit: 1
+    });
+    var rows = (queryRes && queryRes.rows) || [];
+    if (rows.length > 0 && rows[0].value) {
+      var footer = JSON.parse(rows[0].value);
+      if (footer.deposit_account_number) {
+        return {
+          bankName: footer.deposit_bank_name || DEPOSIT_BANK_CONFIG.bankName,
+          accountNumber: footer.deposit_account_number || DEPOSIT_BANK_CONFIG.accountNumber,
+          holder: footer.deposit_account_holder || DEPOSIT_BANK_CONFIG.holder
+        };
+      }
+    }
+  } catch (err) {
+    Logger.log("Dynamic bank query error: " + err.message);
+  }
+  return DEPOSIT_BANK_CONFIG;
+}
+
+function requestDirectDepositSession(packageId, depositorName, phoneNumber) {
+  try {
+    var email = Session.getActiveUser().getEmail() || "chachogreat@gmail.com";
+    email = email.toLowerCase().trim();
+    var userName = email.split('@')[0];
+
+    var cleanDepositor = (depositorName || "").trim();
+    if (!cleanDepositor || cleanDepositor.length < 2) {
+      return { success: false, error: "실제 송금하실 분의 성함(입금자명)을 2글자 이상 입력해 주세요." };
+    }
+    var cleanPhone = (phoneNumber || "").replace(/[^0-9-]/g, "").trim();
+
+    // 1. 📲 서버 다이렉트 입금 세션 생성 API 우선 호출 (My DB 안전 적재 및 충돌 방지 100% 보장)
+    try {
+      var res = UrlFetchApp.fetch("https://sheetbot.cloud/api/wallet/direct-deposit", {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({
+          packageId: packageId,
+          depositorName: cleanDepositor,
+          userEmail: email,
+          phoneNumber: cleanPhone
+        }),
+        muteHttpExceptions: true
+      });
+      if (res.getResponseCode() === 200) {
+        var data = JSON.parse(res.getContentText());
+        if (data && data.success) {
+          try {
+            var userProps = PropertiesService.getUserProperties();
+            userProps.setProperty("ACTIVE_DEPOSIT_CODE", data.depositCode);
+            userProps.setProperty("ACTIVE_DEPOSITOR_NAME", cleanDepositor);
+            userProps.setProperty("ACTIVE_REQUEST_ID", data.requestId);
+          } catch(pe) {}
+          var origPrice = Number(data.originalPriceKrw || data.originalAmountKrw || (data.package && data.package.originalPriceKrw) || 12000);
+          var disc = Number(data.discountKrw || 0);
+          var finPrice = Number(data.finalPriceKrw || data.finalAmountKrw || data.amountKrw || (data.package && data.package.priceKrw) || (origPrice - disc));
+          var bankObj = data.bank || {};
+          var accNo = String(bankObj.accountNumber || "3333-12-1695965");
+          if (accNo.length === 13 && accNo.indexOf("-") === -1) {
+            accNo = accNo.substring(0, 4) + "-" + accNo.substring(4, 6) + "-" + accNo.substring(6);
+          }
+          bankObj.accountNumber = accNo;
+
+          return {
+            success: true,
+            requestId: data.requestId,
+            depositCode: data.depositCode,
+            depositorName: data.depositorName,
+            originalPriceKrw: origPrice,
+            originalAmountKrw: origPrice,
+            discountKrw: disc,
+            finalPriceKrw: finPrice,
+            finalAmountKrw: finPrice,
+            amountKrw: finPrice,
+            package: data.package,
+            bank: bankObj,
+            qrImageUrl: data.qrImageUrl
+          };
+        }
+      }
+    } catch(fetchErr) {
+      Logger.log("원격 세션 발급 API 안내: " + fetchErr.message);
+    }
+
+    // 2. 터널 및 로컬 연산 폴백
+    var pkg = TOKEN_PACKAGES_CONFIG[packageId] || TOKEN_PACKAGES_CONFIG.pkg_standard;
+    var activeBank = _getDynamicBankConfig();
+
+    // 1원 단위 난수 할인 계산 (1~99원 즉시 할인, 동시간대 중복 방지)
+    // 예: 5,000원 -> 4,987원 (13원 할인)
+    var discountKrw = Math.floor(1 + Math.random() * 99);
+    var finalPrice = pkg.price - discountKrw;
+
+    var randomNum = Math.floor(100 + Math.random() * 900);
+    var cleanChars = cleanDepositor.replace(/[^a-zA-Z0-9가-힣]/g, '');
+    var initialChar = cleanChars ? cleanChars.charAt(0).toUpperCase() : 'C';
+    var numericId = new Date().getTime();
+    var requestId = String(numericId);
+
+    try {
+      var userProps = PropertiesService.getUserProperties();
+      userProps.setProperty("ACTIVE_DEPOSIT_CODE", depositCode);
+      userProps.setProperty("ACTIVE_DEPOSITOR_NAME", cleanDepositor);
+      userProps.setProperty("ACTIVE_REQUEST_ID", requestId);
+      userProps.setProperty("ACTIVE_PACKAGE_ID", pkg.id);
+      userProps.setProperty("ACTIVE_AMOUNT", String(finalPrice));
+      userProps.setProperty("ACTIVE_TOKENS", String(pkg.tokens));
+    } catch (e) {}
+
+    var insertRes = _callUserDataTool('user_data_insert_rows', {
+      tableName: 'sheetbot_deposit_requests',
+      rows: [{
+        id: numericId,
+        uuid: "dep_" + numericId,
+        deposit_code: depositCode,
+        depositor_name: cleanDepositor,
+        user_email: email,
+        user_name: userName,
+        package_id: pkg.id,
+        package_name: pkg.name,
+        original_amount_krw: pkg.price,
+        discount_krw: discountKrw,
+        amount_krw: finalPrice,
+        tokens_to_credit: pkg.tokens,
+        bank_name: activeBank.bankName,
+        account_number: activeBank.accountNumber,
+        account_holder: activeBank.holder,
+        phone_number: cleanPhone || null,
+        status: "PENDING",
+        created_at: Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM-dd HH:mm:ss")
+      }]
+    });
+
+    if (!insertRes && _LAST_USER_DATA_ERROR && _LAST_USER_DATA_ERROR.isTunnelError) {
+      return {
+        success: false,
+        isTunnelError: true,
+        error: "⚠️ [EGDesk 터널 통신 오류] 이지데스크 MCP 서버를 확인해 주세요."
+      };
+    }
+
+    var qrText = "은행명 :" + activeBank.bankName + " / 계좌번호 :" + activeBank.accountNumber + " / 금액 :" + finalPrice + "원 / 입금자 :" + cleanDepositor;
+    var qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=" + encodeURIComponent(qrText);
+
+    return {
+      success: true,
+      requestId: requestId,
+      depositCode: depositCode,
+      depositorName: cleanDepositor,
+      originalPriceKrw: pkg.price,
+      discountKrw: discountKrw,
+      finalPriceKrw: finalPrice,
+      package: {
+        id: pkg.id,
+        name: pkg.name,
+        tokens: pkg.tokens,
+        priceKrw: finalPrice,
+        originalPriceKrw: pkg.price
+      },
+      bank: {
+        bankName: activeBank.bankName,
+        accountNumber: activeBank.accountNumber,
+        accountHolder: activeBank.holder
+      },
+      qrImageUrl: qrUrl
+    };
+  } catch (err) {
+    return { success: false, isTunnelError: !!err.isTunnelError, error: err.message };
+  }
+}
+
+function checkDepositStatus(requestId, depositCode) {
+  try {
+    if (!requestId) {
+      return { success: true, status: "PENDING", message: "세션 준비 중..." };
+    }
+
+    var props = PropertiesService.getScriptProperties();
+    var currentBalance = Number(props.getProperty("SHEETBOT_CACHED_BALANCE")) || 1147439;
+
+    // 1. 📲 서버 2중 안전망 API 우선 호출 (Google Messages 수신함 실시간 스크랩 & 매칭 엔진 트리거)
+    try {
+      var syncUrl = "https://sheetbot.cloud/api/wallet/direct-deposit?requestId=" + encodeURIComponent(requestId);
+      var apiRes = UrlFetchApp.fetch(syncUrl, { muteHttpExceptions: true });
+      if (apiRes.getResponseCode() === 200) {
+        var apiData = JSON.parse(apiRes.getContentText());
+        if (apiData && apiData.success && apiData.status === "COMPLETED") {
+          var newBal = Number(apiData.currentBalance) || (currentBalance + (Number(apiData.tokensToCredit) || 50000));
+          try {
+            props.setProperty("SHEETBOT_CACHED_BALANCE", String(newBal));
+            props.setProperty("SHEETBOT_CACHED_TIER", "PRO");
+          } catch(e) {}
+          return {
+            success: true,
+            status: "COMPLETED",
+            tokensToCredit: Number(apiData.tokensToCredit) || 50000,
+            currentBalance: newBal,
+            message: "입금 확인 완료! " + (Number(apiData.tokensToCredit) || 50000).toLocaleString() + " 토큰이 성공적으로 충전되었습니다."
+          };
+        }
+      }
+    } catch(fetchErr) {
+      Logger.log("원격 입금 확인 API 호출 알림: " + fetchErr.message);
+    }
+
+    // 2. 터널 DB 직접 조회 폴백
+    var rows = [];
+    var res = _callUserDataTool('user_data_query', {
+      tableName: 'sheetbot_deposit_requests',
+      filters: { id: requestId },
+      limit: 1
+    });
+
+    if (!res && _LAST_USER_DATA_ERROR && _LAST_USER_DATA_ERROR.isTunnelError) {
+      return {
+        success: false,
+        isTunnelError: true,
+        status: "TUNNEL_ERROR",
+        message: "⚠️ [EGDesk 터널 통신 오류] 이지데스크 MCP 서버를 확인해 주세요."
+      };
+    }
+    rows = (res && res.rows) || [];
+
+    if (rows.length > 0) {
+      var row = rows[0];
+      if (row.status === "COMPLETED" || row.status === "APPROVED") {
+        var credited = Number(row.tokens_to_credit) || 50000;
+        var latestBal = currentBalance + credited;
+        try {
+          var wRes = _callUserDataTool('user_data_query', {
+            tableName: 'sheetbot_user_wallets',
+            filters: { user_email: 'chachogreat@gmail.com' },
+            limit: 1
+          });
+          if (wRes && wRes.rows && wRes.rows.length > 0 && wRes.rows[0].balance_tokens !== undefined) {
+            latestBal = Math.max(latestBal, Number(wRes.rows[0].balance_tokens));
+          }
+        } catch(e) {}
+        try {
+          props.setProperty("SHEETBOT_CACHED_BALANCE", String(latestBal));
+          props.setProperty("SHEETBOT_CACHED_TIER", "PRO");
+        } catch(e) {}
+
+        return {
+          success: true,
+          status: "COMPLETED",
+          tokensToCredit: credited,
+          currentBalance: latestBal,
+          message: "입금 확인 완료! " + credited.toLocaleString() + " 토큰이 성공적으로 충전되었습니다."
+        };
+      } else if (row.status === "PENDING") {
+        // 아직 서버 웹훅이나 SMS 동기화가 진행 중인 경우 대기 안내 반환
+        return { success: true, status: "PENDING", message: "실시간 입금 확인 중입니다... 잠시 후 다시 확인을 눌러주세요." };
+      }
+    }
+
+    if (depositCode && props.getProperty("SHEETBOT_ACTIVE_APPROVED_" + depositCode)) {
+      props.deleteProperty("SHEETBOT_ACTIVE_APPROVED_" + depositCode);
+      return {
+        success: true,
+        status: "COMPLETED",
+        tokensToCredit: 50000,
+        currentBalance: currentBalance,
+        message: "입금 확인 완료! 50,000 토큰이 성공적으로 충전되었습니다."
+      };
+    }
+
+    return { success: true, status: "PENDING", message: "실시간 입금 대기 중..." };
+  } catch (err) {
+    return { success: false, isTunnelError: !!err.isTunnelError, error: err.message };
+  }
+}
+
+function getTunnelStatusData() {
+  var startTime = new Date().getTime();
+  try {
+    if (typeof egdeskUserDataListTables === 'function') {
+      egdeskUserDataListTables();
+    }
+    var elapsed = new Date().getTime() - startTime;
+    return { success: true, elapsed: elapsed, latency: elapsed, serverName: "EGDesk Cloud", message: "정상 통신 준비 완료" };
+  } catch (err) {
+    return { success: false, isTunnelError: true, error: err.message || "통신 실패", elapsed: new Date().getTime() - startTime, message: "이지데스크 MCP 서버를 확인해 주세요." };
+  }
+}
+
+function simulateAdminDepositApproval(requestId, depositCode, pkgId) {
+  try {
+    var email = Session.getActiveUser().getEmail() || "";
+    email = email.toLowerCase().trim();
+
+    var isAuthorizedAdmin = (email === "chachogreat@gmail.com" || email.indexOf("charisma") !== -1 || email.indexOf("chacho") !== -1);
+    if (!isAuthorizedAdmin) {
+      return {
+        success: false,
+        error: "권한 오류: 시뮬레이션 승인은 관리자 전용 디버깅 도구입니다. 실제 계좌 입금을 통해 안전하게 충전해 주세요."
+      };
+    }
+
+    var pkg = TOKEN_PACKAGES_CONFIG[pkgId] || TOKEN_PACKAGES_CONFIG.pkg_starter;
+    var tokensToAdd = pkg.tokens || 50000;
+    var codeUpper = depositCode ? String(depositCode).toUpperCase().trim() : "SIM" + Math.floor(100 + Math.random() * 900);
+
+    var reqRow = null;
+    var queryRes = _callUserDataTool('user_data_query', {
+      tableName: 'sheetbot_deposit_requests',
+      filters: { deposit_code: codeUpper },
+      limit: 1
+    });
+    var rows = (queryRes && queryRes.rows) || [];
+    if (rows.length > 0) {
+      reqRow = rows[0];
+      tokensToAdd = Number(reqRow.tokens_to_credit) || tokensToAdd;
+    }
+
+    var nowStr = Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM-dd HH:mm:ss");
+    if (reqRow && reqRow.id) {
+      _callUserDataTool('user_data_update_rows', {
+        tableName: 'sheetbot_deposit_requests',
+        ids: [String(reqRow.id)],
+        updates: {
+          status: "COMPLETED",
+          completed_at: nowStr,
+          updated_at: nowStr
+        }
+      });
+    } else {
+      var newReqId = requestId || ("dep_sim_" + new Date().getTime());
+      _callUserDataTool('user_data_insert_rows', {
+        tableName: 'sheetbot_deposit_requests',
+        rows: [{
+          id: newReqId,
+          user_email: email,
+          user_name: email.split('@')[0],
+          package_id: pkg.id,
+          package_name: pkg.name,
+          amount_krw: pkg.price,
+          tokens_to_credit: tokensToAdd,
+          deposit_code: codeUpper,
+          bank_name: "카카오뱅크",
+          status: "COMPLETED",
+          completed_at: nowStr,
+          created_at: nowStr,
+          updated_at: nowStr
+        }]
+      });
+    }
+
+    var wRes = _callUserDataTool('user_data_query', {
+      tableName: 'sheetbot_user_wallets',
+      filters: { user_email: email },
+      limit: 1
+    });
+    var wRows = (wRes && wRes.rows) || [];
+    var currentBalance = 1147439;
+    var walletId = null;
+    if (wRows.length > 0) {
+      currentBalance = Number(wRows[0].balance_tokens) || 1147439;
+      walletId = String(wRows[0].id);
+    }
+
+    var newBalance = currentBalance + tokensToAdd;
+    if (walletId) {
+      _callUserDataTool('user_data_update_rows', {
+        tableName: 'sheetbot_user_wallets',
+        ids: [walletId],
+        updates: {
+          balance_tokens: newBalance,
+          tier: "PRO",
+          updated_at: nowStr
+        }
+      });
+    }
+
+    try {
+      var props = PropertiesService.getScriptProperties();
+      props.setProperty("SHEETBOT_CACHED_BALANCE", String(newBalance));
+      props.setProperty("SHEETBOT_CACHED_TIER", "PRO");
+    } catch (e) {}
+
+    return {
+      success: true,
+      status: "COMPLETED",
+      tokensToCredit: tokensToAdd,
+      currentBalance: newBalance,
+      message: "관리자 시뮬레이션 승인 완료: " + Number(tokensToAdd).toLocaleString() + " 토큰이 지급되었습니다."
+    };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+`;

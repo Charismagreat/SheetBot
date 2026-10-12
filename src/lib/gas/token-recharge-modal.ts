@@ -2,5 +2,397 @@
  * GAS fragment: getTokenRechargeModalHtml() for TokenRecharge.gs.
  */
 export function getTokenRechargeModalHtml(): string {
-  return "function getTokenRechargeModalHtml() {\n  var defaultEmail = \"chachogreat@gmail.com\";\n  try {\n    var sessionEmail = Session.getActiveUser().getEmail();\n    if (sessionEmail) defaultEmail = sessionEmail.toLowerCase().trim();\n  } catch(e) {}\n  var defaultQrUrl = \"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=\" + encodeURIComponent(\"은행명 :카카오뱅크 / 계좌번호 :3333-12-1695965\");\n\n  return '<!DOCTYPE html>' +\n  '<html>' +\n  '<head>' +\n    '<base target=\"_top\">' +\n    '<meta charset=\"UTF-8\">' +\n    '<script src=\"https://cdn.tailwindcss.com\"></script>' +\n    '<style>' +\n      '@import url(\"https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800;900&display=swap\");' +\n      '* { font-family: \"Pretendard\", -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif; }' +\n      '@keyframes pulse-subtle { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }' +\n      '.animate-pulse-subtle { animation: pulse-subtle 2s infinite; }' +\n    '</style>' +\n  '</head>' +\n  '<body class=\"bg-slate-50 text-slate-800 p-4 select-none min-h-screen\">' +\n    '<div class=\"max-w-md mx-auto space-y-3\">' +\n      '<div class=\"relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white p-3.5 rounded-2xl shadow-md\">' +\n        '<div class=\"flex items-center justify-between\">' +\n          '<div class=\"space-y-0.5\">' +\n            '<div class=\"flex items-center gap-1.5\">' +\n              '<span class=\"text-[10px] font-extrabold uppercase tracking-wider text-indigo-300\">SheetBot Wallet</span>' +\n              '<span id=\"userTierBadge\" class=\"px-2 py-0.5 text-[9px] font-black rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30\">PRO</span>' +\n            '</div>' +\n            '<div id=\"userEmailTxt\" class=\"text-xs text-slate-300 font-medium truncate max-w-[180px]\">' + defaultEmail + '</div>' +\n          '</div>' +\n          '<div class=\"text-right\">' +\n            '<div class=\"text-[10px] font-bold text-slate-400\">보유 잔액</div>' +\n            '<div class=\"text-lg font-black text-emerald-400 flex items-baseline justify-end gap-1 tracking-tight\">' +\n              '<span id=\"tokenBalanceTxt\">1,147,439</span>' +\n              '<span class=\"text-xs font-semibold text-slate-300\">토큰</span>' +\n            '</div>' +\n          '</div>' +\n        '</div>' +\n      '</div>' +\n\n      '<div class=\"space-y-1.5\">' +\n        '<div class=\"flex items-center justify-between px-1\">' +\n          '<span class=\"text-xs font-black text-slate-700\">1. 충전 패키지 선택</span>' +\n          '<span class=\"text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100\">⚡ PG 수수료 0원 혜택</span>' +\n        '</div>' +\n        '<div class=\"grid grid-cols-3 gap-2\" id=\"packageGrid\">' +\n          '<button type=\"button\" onclick=\"selectPackage(&quot;pkg_starter&quot;)\" id=\"btn_pkg_starter\" class=\"p-2.5 bg-white border-2 border-slate-200 rounded-2xl text-center transition-all duration-150 hover:border-indigo-300 hover:shadow-xs cursor-pointer flex flex-col items-center justify-between min-h-[92px]\">' +\n            '<span class=\"text-[11px] font-bold text-slate-500\">스타터</span>' +\n            '<div class=\"my-0.5\">' +\n              '<div class=\"text-[15px] font-black text-slate-800 leading-tight\">5만 토큰</div>' +\n              '<div class=\"text-xs font-bold text-slate-500 mt-0.5\">5,000원</div>' +\n            '</div>' +\n            '<span class=\"text-[9px] text-slate-400 font-semibold\">입문용</span>' +\n          '</button>' +\n          '<button type=\"button\" onclick=\"selectPackage(&quot;pkg_standard&quot;)\" id=\"btn_pkg_standard\" class=\"p-2.5 bg-indigo-50/90 border-2 border-indigo-600 rounded-2xl text-center transition-all duration-150 relative shadow-md ring-2 ring-indigo-300/40 cursor-pointer flex flex-col items-center justify-between min-h-[92px]\">' +\n            '<div class=\"absolute -top-2.5 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-indigo-600 text-white rounded-full text-[8px] font-black tracking-tight shadow-xs whitespace-nowrap\">🔥 인기추천</div>' +\n            '<span class=\"text-[11px] font-black text-indigo-900\">스탠다드</span>' +\n            '<div class=\"my-0.5\">' +\n              '<div class=\"text-[16px] font-black text-indigo-700 leading-tight\">15만 토큰</div>' +\n              '<div class=\"text-xs font-black text-indigo-950 mt-0.5\">12,000원</div>' +\n            '</div>' +\n            '<span class=\"text-[9px] text-indigo-600 font-extrabold bg-indigo-100/60 px-1.5 py-0.5 rounded\">가장 인기</span>' +\n          '</button>' +\n          '<button type=\"button\" onclick=\"selectPackage(&quot;pkg_pro&quot;)\" id=\"btn_pkg_pro\" class=\"p-2.5 bg-white border-2 border-slate-200 rounded-2xl text-center transition-all duration-150 hover:border-indigo-300 hover:shadow-xs cursor-pointer flex flex-col items-center justify-between min-h-[92px]\">' +\n            '<span class=\"text-[11px] font-bold text-slate-500\">프로</span>' +\n            '<div class=\"my-0.5\">' +\n              '<div class=\"text-[15px] font-black text-slate-800 leading-tight\">45만 토큰</div>' +\n              '<div class=\"text-xs font-bold text-slate-500 mt-0.5\">30,000원</div>' +\n            '</div>' +\n            '<span class=\"text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded\">최대 혜택</span>' +\n          '</button>' +\n        '</div>' +\n      '</div>' +\n\n      '<!-- 2. 입금인명 및 영수증 번호 입력 게이트 (Gate) -->' +\n      '<div class=\"bg-gradient-to-r from-indigo-50 via-indigo-50/60 to-purple-50 border-2 border-indigo-200 rounded-2xl p-3.5 space-y-2.5 shadow-2xs\">' +\n        '<div class=\"flex items-center justify-between\">' +\n          '<label class=\"text-xs font-black text-indigo-950 flex items-center gap-1.5\">' +\n            '<span>👤</span>' +\n            '<span>2. 송금자 정보 및 영수증 알림</span>' +\n          '</label>' +\n          '<span id=\"gateBadge\" class=\"text-[9px] font-extrabold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-300\">🔒 계좌 잠김</span>' +\n        '</div>' +\n        '<div class=\"space-y-1.5\">' +\n          '<div>' +\n            '<label for=\"depositorNameInput\" class=\"text-[9.5px] font-bold text-slate-600 block mb-0.5\">송금자 실명 <span class=\"text-rose-500 font-extrabold\">*필수</span></label>' +\n            '<input type=\"text\" id=\"depositorNameInput\" placeholder=\"은행 송금 시 보낼 실명 (예: 홍길동)\" class=\"w-full bg-white border-2 border-indigo-300 rounded-xl px-3 py-2 text-xs font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs placeholder:text-slate-400\" />' +\n          '</div>' +\n          '<div>' +\n            '<label for=\"receiptPhoneInput\" class=\"text-[9.5px] font-bold text-slate-600 flex items-center justify-between mb-0.5\">' +\n              '<span>영수증 수신 번호 <span class=\"text-indigo-600 font-medium\">(선택)</span></span>' +\n              '<span class=\"text-[8.5px] text-emerald-600 font-extrabold\">⚡ 입금 즉시 영수증 문자 자동 전송</span>' +\n            '</label>' +\n            '<input type=\"tel\" id=\"receiptPhoneInput\" placeholder=\"010-0000-0000 (미입력 시 SMS 발송 생략)\" class=\"w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs placeholder:text-slate-400\" />' +\n          '</div>' +\n          '<button type=\"button\" id=\"btnUnlockAccount\" onclick=\"confirmDepositorAndRequest()\" class=\"w-full py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer active:scale-95 flex items-center justify-center gap-1\">' +\n            '<span>계좌 확인 🔓</span>' +\n          '</button>' +\n        '</div>' +\n        '<div class=\"text-[10px] text-indigo-900/90 font-medium\">' +\n          '※ 성함을 입력하시면 <b>1원 단위 전용 할인 금액</b>과 <b>입금 계좌</b>가 열리며, 번호 입력 시 <b>무료 충전 영수증</b>이 문자로 전송됩니다.' +\n        '</div>' +\n      '</div>' +\n\n      '<!-- 3. 계좌정보 & 결제 영역 (입금자명 입력 전 블러 잠금) -->' +\n      '<div id=\"depositInfoCard\" class=\"bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs space-y-3 relative overflow-hidden\">' +\n        '<!-- 잠금 안내 오버레이 -->' +\n        '<div id=\"lockedOverlay\" class=\"p-8 bg-slate-50/95 border-2 border-dashed border-slate-300 rounded-2xl text-center space-y-2.5 my-1\">' +\n          '<div class=\"text-3xl animate-bounce\">🔒</div>' +\n          '<div class=\"text-xs font-black text-slate-800\">송금자 성함을 먼저 입력해 주세요</div>' +\n          '<div class=\"text-[11px] text-slate-500 leading-relaxed\">' +\n            '위 입력창에 실제 송금하실 분의 성함을 입력하신 후<br>' +\n            '<span class=\"font-bold text-indigo-600\">[계좌 확인 🔓]</span> 버튼을 누르면 전용 입금 계좌가 열립니다.' +\n          '</div>' +\n        '</div>' +\n\n        '<!-- 잠금 해제 후 활성화되는 컨텐츠 -->' +\n        '<div id=\"unlockedContent\" class=\"hidden space-y-3\">' +\n          '<div class=\"bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 border-2 border-emerald-300/90 rounded-xl p-3 flex items-center justify-between shadow-2xs\">' +\n            '<div class=\"flex items-center gap-2.5\">' +\n              '<div class=\"w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-sm shadow-xs\">₩</div>' +\n              '<div>' +\n                '<div class=\"flex items-center gap-1.5\">' +\n                  '<span class=\"text-xs font-black text-slate-900\">송금할 정확한 금액</span>' +\n                  '<span id=\"discountBadge\" class=\"text-[10px] font-black text-rose-600 bg-rose-100 px-1.5 py-0.2 rounded-full border border-rose-200\">-13원 할인</span>' +\n                '</div>' +\n                '<div class=\"text-[10px] text-slate-500 font-medium mt-0.5\">정가: <span id=\"originalPriceTxt\" class=\"line-through\">12,000</span>원 → 0초 자동충전 전용 금액</div>' +\n              '</div>' +\n            '</div>' +\n            '<div class=\"text-right\">' +\n              '<div class=\"flex items-baseline justify-end gap-0.5\">' +\n                '<span id=\"amountBadge\" class=\"text-2xl font-black text-emerald-600 tracking-tight font-mono\">11,987</span>' +\n                '<span class=\"text-sm font-black text-slate-900\">원</span>' +\n              '</div>' +\n            '</div>' +\n          '</div>' +\n\n          '<div class=\"bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-2 border-amber-300/90 rounded-2xl p-3 space-y-2 shadow-2xs\">' +\n            '<div class=\"flex items-center justify-between\">' +\n              '<div class=\"flex items-center gap-1.5 text-xs font-black text-amber-950\">' +\n                '<span class=\"text-sm\">⚠️</span>' +\n                '<span>보내시는 분(입금자명):</span>' +\n                '<span id=\"confirmedDepositorName\" class=\"text-indigo-900 bg-white border border-indigo-200 px-2 py-0.5 rounded font-black text-xs\">--</span>' +\n                '<span id=\"confirmedPhoneBadge\" class=\"hidden text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-1.5 py-0.2 rounded font-bold text-[9px]\">📱 영수증: --</span>' +\n              '</div>' +\n              '<button type=\"button\" onclick=\"changeDepositor()\" class=\"text-[10px] text-slate-600 hover:text-indigo-600 underline font-bold cursor-pointer\">✏️ 성함 수정</button>' +\n            '</div>' +\n            '<div class=\"text-[10px] text-amber-900/90 font-medium text-center bg-white/70 p-2 rounded-xl border border-amber-200\">' +\n              '※ 은행 송금 시 <b>입금자명</b>을 위 성함과 일치시키고, 금액은 <b>1원 단위까지 정확히 송금</b>하시면 0초 만에 자동 충전됩니다!' +\n            '</div>' +\n          '</div>' +\n\n          '<div class=\"grid grid-cols-12 gap-3 items-center pt-0.5\">' +\n            '<div class=\"col-span-5 flex flex-col items-center justify-center p-2 bg-slate-50 border border-slate-200 rounded-xl\">' +\n              '<img id=\"qrImg\" src=\"' + defaultQrUrl + '\" alt=\"QR\" class=\"w-24 h-24 bg-white p-1 rounded-lg border border-slate-200 object-contain shadow-xs\" />' +\n              '<div class=\"text-[9px] font-bold text-slate-500 mt-1 flex items-center gap-1\"><span>📸</span><span>카메라 스캔</span></div>' +\n            '</div>' +\n            '<div class=\"col-span-7 space-y-2\">' +\n              '<div class=\"space-y-1\">' +\n                '<div class=\"flex items-center gap-1.5 pt-0.5\">' +\n                  '<span class=\"w-2.5 h-2.5 rounded-full bg-yellow-400 shrink-0 shadow-xs\"></span>' +\n                  '<span id=\"bankNameTxt\" class=\"text-[15px] font-black text-slate-900 tracking-tight\">카카오뱅크</span>' +\n                  '<span id=\"accountHolderTxt\" class=\"text-xs font-semibold text-slate-500\">(예금주: 차호석)</span>' +\n                '</div>' +\n                '<div class=\"bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 flex items-center justify-between\">' +\n                  '<span id=\"accountNumberTxt\" class=\"text-sm font-black text-slate-900 font-mono tracking-wide select-all\">3333-12-1695965</span>' +\n                '</div>' +\n              '</div>' +\n              '<button type=\"button\" onclick=\"copyAccountNumber()\" class=\"w-full py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-extrabold text-[11px] rounded-lg transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer active:scale-95\">' +\n                '<span>📋 계좌번호 복사</span>' +\n              '</button>' +\n            '</div>' +\n          '</div>' +\n\n          '<div id=\"statusPulseBar\" class=\"p-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl flex items-center justify-between\">' +\n            '<div class=\"flex items-center gap-2\">' +\n              '<span class=\"w-2 h-2 rounded-full bg-emerald-500 animate-pulse-subtle\"></span>' +\n              '<span id=\"pollingStatusTxt\" class=\"text-emerald-900 font-bold text-[11px]\">실시간 입금 대기 중...</span>' +\n            '</div>' +\n            '<button type=\"button\" onclick=\"checkStatusNow(false)\" id=\"manualCheckBtn\" class=\"text-[10px] px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-lg shadow-xs transition-colors cursor-pointer\">🔄 확인</button>' +\n          '</div>' +\n\n          '<div id=\"adminSimContainer\" class=\"pt-0.5 text-center hidden\">' +\n            '<button type=\"button\" onclick=\"triggerSimulateDeposit()\" id=\"simBtn\" class=\"text-[10px] text-slate-400 hover:text-slate-600 underline font-medium cursor-pointer\">🔒 [관리자 테스트] 즉시 승인 시뮬레이션</button>' +\n          '</div>' +\n        '</div>' +\n      '</div>' +\n\n      '<div id=\"successCard\" class=\"hidden bg-emerald-50 border-2 border-emerald-500 rounded-2xl p-6 text-center space-y-3.5 shadow-md\">' +\n        '<div class=\"text-4xl\">🎉</div>' +\n        '<h3 class=\"font-black text-emerald-950 text-base\">토큰 충전이 완료되었습니다!</h3>' +\n        '<p id=\"successMsg\" class=\"text-xs text-emerald-800 font-medium\">토큰이 성공적으로 충전되었습니다.</p>' +\n        '<div class=\"p-3.5 bg-white rounded-xl border border-emerald-200 text-xs text-slate-700 font-bold shadow-xs\">' +\n          '현재 총 잔여 토큰: <span id=\"finalBalanceTxt\" class=\"text-emerald-600 text-base font-black\">--</span>개' +\n        '</div>' +\n        '<div class=\"space-y-2\">' +\n          '<button onclick=\"google.script.host.close()\" class=\"w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-sm transition-all cursor-pointer\">확인 및 닫기</button>' +\n          '<button type=\"button\" onclick=\"resetToRechargeView()\" class=\"w-full py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition-all cursor-pointer\">➕ 다른 패키지 / 추가 충전하기</button>' +\n        '</div>' +\n      '</div>' +\n    '</div>' +\n\n    '<script>' +\n      'var curRequestId = \"\"; var curDepositCode = \"\"; var curDepositorName = \"\"; var curPhone = \"\"; var curAmount = 12000; var curSelectedPkg = \"pkg_standard\"; var pollTimer = null;' +\n      'var PKG_META = { pkg_starter: { price: 5000, priceStr: \"5,000\", tokens: 50000 }, pkg_standard: { price: 12000, priceStr: \"12,000\", tokens: 150000 }, pkg_pro: { price: 30000, priceStr: \"30,000\", tokens: 450000 } };' +\n      'function init() {' +\n        'google.script.run.withSuccessHandler(function(res){' +\n          'if (res && res.success) {' +\n            'document.getElementById(\"userEmailTxt\").innerText = res.email;' +\n            'document.getElementById(\"userTierBadge\").innerText = res.tier;' +\n            'document.getElementById(\"tokenBalanceTxt\").innerText = Number(res.balance).toLocaleString();' +\n            'if (res.isAdmin) { var simEl = document.getElementById(\"adminSimContainer\"); if (simEl) simEl.classList.remove(\"hidden\"); }' +\n            'if (res.email) {' +\n              'var guess = res.email.split(\"@\")[0].replace(/[^a-zA-Z0-9가-힣]/g, \"\");' +\n              'var input = document.getElementById(\"depositorNameInput\");' +\n              'if (input && !input.value && guess) input.placeholder = \"예: \" + guess + \" (은행 송금자 성함)\";' +\n            '}' +\n            'if (res.phoneNumber) {' +\n              'var pInput = document.getElementById(\"receiptPhoneInput\");' +\n              'if (pInput && !pInput.value) pInput.value = res.phoneNumber;' +\n            '}' +\n          '}' +\n        '}).getUserTokenBalanceData();' +\n        'selectPackage(\"pkg_standard\");' +\n      '}' +\n\n      'function selectPackage(pkgId) {' +\n        'curSelectedPkg = pkgId;' +\n        'var pkgs = [\"pkg_starter\", \"pkg_standard\", \"pkg_pro\"];' +\n        'pkgs.forEach(function(p){' +\n          'var btn = document.getElementById(\"btn_\" + p);' +\n          'if (btn) {' +\n            'if (p === pkgId) {' +\n              'btn.className = \"p-2.5 bg-indigo-50/90 border-2 border-indigo-600 rounded-2xl text-center transition-all duration-150 relative shadow-md ring-2 ring-indigo-300/40 cursor-pointer flex flex-col items-center justify-between min-h-[92px]\";' +\n            '} else {' +\n              'btn.className = \"p-2.5 bg-white border-2 border-slate-200 rounded-2xl text-center transition-all duration-150 hover:border-indigo-300 hover:shadow-xs cursor-pointer flex flex-col items-center justify-between min-h-[92px]\";' +\n            '}' +\n          '}' +\n        '});' +\n        'if (curDepositorName) {' +\n          'requestSession(pkgId, curDepositorName, curPhone);' +\n        '}' +\n      '}' +\n\n      'function confirmDepositorAndRequest() {' +\n        'var input = document.getElementById(\"depositorNameInput\");' +\n        'var val = (input ? input.value : \"\").trim();' +\n        'if (!val || val.length < 2) {' +\n          'alert(\"실제 송금하실 분의 성함(입금자명)을 2글자 이상 입력해 주세요.\\\\n예: 홍길동\");' +\n          'if (input) input.focus();' +\n          'return;' +\n        '}' +\n        'curDepositorName = val;' +\n        'var pInput = document.getElementById(\"receiptPhoneInput\");' +\n        'curPhone = (pInput ? pInput.value : \"\").replace(/[^0-9-]/g, \"\").trim();' +\n        'requestSession(curSelectedPkg, curDepositorName, curPhone);' +\n      '}' +\n\n      'function requestSession(pkgId, depositorName, phoneNumber) {' +\n        'phoneNumber = phoneNumber !== undefined ? phoneNumber : (curPhone || \"\");' +\n        'var unlockBtn = document.getElementById(\"btnUnlockAccount\");' +\n        'if (unlockBtn) unlockBtn.innerText = \"발급 중...\";' +\n        'google.script.run.withSuccessHandler(function(data){' +\n          'if (unlockBtn) unlockBtn.innerHTML = \"<span>확인됨 🔓</span>\";' +\n          'if (data && data.success) {' +\n            'curRequestId = data.requestId;' +\n            'curDepositCode = data.depositCode;' +\n            'var origPrice = Number(data.originalPriceKrw || data.originalAmountKrw || (data.package && data.package.originalPriceKrw) || 12000);' +\n            'var disc = Number(data.discountKrw || 0);' +\n            'var finPrice = Number(data.finalPriceKrw || data.finalAmountKrw || data.amountKrw || (data.package && data.package.priceKrw) || (origPrice - disc));' +\n            'if (isNaN(finPrice) || finPrice <= 0) finPrice = Math.max(1000, origPrice - disc);' +\n            'curAmount = finPrice;' +\n            'document.getElementById(\"lockedOverlay\").classList.add(\"hidden\");' +\n            'document.getElementById(\"unlockedContent\").classList.remove(\"hidden\");' +\n            'var gateBadge = document.getElementById(\"gateBadge\");' +\n            'if (gateBadge) { gateBadge.innerText = \"🔓 계좌 열림\"; gateBadge.className = \"text-[9px] font-extrabold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full border border-emerald-300\"; }' +\n            'document.getElementById(\"confirmedDepositorName\").innerText = data.depositorName;' +\n            'var phoneBadge = document.getElementById(\"confirmedPhoneBadge\");' +\n            'if (phoneBadge) {' +\n              'if (curPhone) {' +\n                'phoneBadge.innerText = \"📱 영수증: \" + curPhone;' +\n                'phoneBadge.classList.remove(\"hidden\");' +\n              '} else {' +\n                'phoneBadge.classList.add(\"hidden\");' +\n              '}' +\n            '}' +\n            'document.getElementById(\"originalPriceTxt\").innerText = Number(origPrice).toLocaleString();' +\n            'document.getElementById(\"discountBadge\").innerText = \"-\" + disc + \"원 즉시할인\";' +\n            'document.getElementById(\"amountBadge\").innerText = Number(finPrice).toLocaleString();' +\n            'var bankObj = data.bank || {};' +\n            'if (document.getElementById(\"bankNameTxt\")) document.getElementById(\"bankNameTxt\").innerText = bankObj.bankName || \"카카오뱅크\";' +\n            'var accNum = String(bankObj.accountNumber || \"3333-12-1695965\");' +\n            'if (accNum.length === 13 && accNum.indexOf(\"-\") === -1) accNum = accNum.substring(0,4) + \"-\" + accNum.substring(4,6) + \"-\" + accNum.substring(6);' +\n            'document.getElementById(\"accountNumberTxt\").innerText = accNum;' +\n            'document.getElementById(\"accountHolderTxt\").innerText = \"(예금주: \" + (bankObj.accountHolder || \"차호석\") + \")\";' +\n            'if (data.qrImageUrl) document.getElementById(\"qrImg\").src = data.qrImageUrl;' +\n            'document.getElementById(\"pollingStatusTxt\").innerText = \"실시간 입금 대기 중...\";' +\n            'startPolling();' +\n          '} else {' +\n            'alert(\"발급 오류: \" + (data ? data.error : \"알 수 없는 오류\"));' +\n          '}' +\n        '}).withFailureHandler(function(err){' +\n          'if (unlockBtn) unlockBtn.innerHTML = \"<span>계좌 확인 🔓</span>\";' +\n          'alert(\"오류: \" + err.message);' +\n        '}).requestDirectDepositSession(pkgId, depositorName, phoneNumber);' +\n      '}' +\n\n      'function changeDepositor() {' +\n        'if (pollTimer) clearInterval(pollTimer);' +\n        'document.getElementById(\"unlockedContent\").classList.add(\"hidden\");' +\n        'document.getElementById(\"lockedOverlay\").classList.remove(\"hidden\");' +\n        'var gateBadge = document.getElementById(\"gateBadge\");' +\n        'if (gateBadge) { gateBadge.innerText = \"🔒 계좌 잠김\"; gateBadge.className = \"text-[9px] font-extrabold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-300\"; }' +\n        'var input = document.getElementById(\"depositorNameInput\");' +\n        'if (input) { input.focus(); input.select(); }' +\n        'var unlockBtn = document.getElementById(\"btnUnlockAccount\");' +\n        'if (unlockBtn) unlockBtn.innerHTML = \"<span>계좌 확인 🔓</span>\";' +\n      '}' +\n\n      'function startPolling() {' +\n        'if (pollTimer) clearInterval(pollTimer);' +\n        'pollTimer = setInterval(function(){' +\n          'if (!curRequestId) return;' +\n          'checkStatusNow(true);' +\n        '}, 3000);' +\n      '}' +\n\n      'function checkStatusNow(isAuto) {' +\n        'if (!curRequestId) return;' +\n        'var btn = document.getElementById(\"manualCheckBtn\");' +\n        'if (!isAuto && btn) btn.innerText = \"확인중..\";' +\n        'google.script.run.withSuccessHandler(function(res){' +\n          'if (!isAuto && btn) btn.innerText = \"🔄 확인\";' +\n          'if (res && res.success && (res.status === \"COMPLETED\" || res.status === \"APPROVED\")) {' +\n            'if (pollTimer) clearInterval(pollTimer);' +\n            'showSuccess(res);' +\n          '} else if (!isAuto) {' +\n            'alert(\"아직 입금이 확인되지 않았습니다.\\\\n송금을 완료하셨다면 5~10초 후 다시 [확인]을 누르시거나 잠시 기다려 주세요.\\\\n(입금자명: \" + curDepositorName + \" / 금액: \" + Number(curAmount).toLocaleString() + \"원)\");' +\n          '}' +\n        '}).withFailureHandler(function(err){' +\n          'if (!isAuto && btn) btn.innerText = \"🔄 확인\";' +\n          'if (!isAuto) alert(\"확인 중 오류: \" + err.message);' +\n        '}).checkDepositStatus(curRequestId, curDepositCode);' +\n      '}' +\n\n      'function showSuccess(res) {' +\n        'document.getElementById(\"depositInfoCard\").classList.add(\"hidden\");' +\n        'document.getElementById(\"packageGrid\").parentElement.classList.add(\"hidden\");' +\n        'document.getElementById(\"successCard\").classList.remove(\"hidden\");' +\n        'document.getElementById(\"finalBalanceTxt\").innerText = Number(res.currentBalance).toLocaleString();' +\n        'document.getElementById(\"tokenBalanceTxt\").innerText = Number(res.currentBalance).toLocaleString();' +\n        'if (res.message) document.getElementById(\"successMsg\").innerText = res.message;' +\n      '}' +\n\n      'function copyAccountNumber() {' +\n        'var num = document.getElementById(\"accountNumberTxt\").innerText;' +\n        'navigator.clipboard.writeText(num).then(function(){' +\n          'alert(\"계좌번호 [\" + num + \"] 가 복사되었습니다.\\\\n은행 앱에 붙여넣기 하여 송금하세요!\");' +\n        '});' +\n      '}' +\n\n      'function triggerSimulateDeposit() {' +\n        'if (!confirm(\"관리자 전용 기능: 즉시 입금 승인을 시뮬레이션하시겠습니까?\")) return;' +\n        'var btn = document.getElementById(\"simBtn\");' +\n        'btn.innerText = \"승인 처리 중...\";' +\n        'google.script.run.withSuccessHandler(function(res){' +\n          'if (res && res.success) {' +\n            'if (pollTimer) clearInterval(pollTimer);' +\n            'showSuccess(res);' +\n          '} else {' +\n            'alert(\"시뮬레이션 실패: \" + (res && res.error));' +\n            'btn.innerText = \"🔒 [관리자 테스트] 즉시 승인 시뮬레이션\";' +\n          '}' +\n        '}).withFailureHandler(function(err){' +\n          'alert(\"오류: \" + err.message);' +\n          'btn.innerText = \"🔒 [관리자 테스트] 즉시 승인 시뮬레이션\";' +\n        '}).simulateAdminDepositApproval(curRequestId, curDepositCode, curSelectedPkg);' +\n      '}' +\n\n      'function resetToRechargeView() {' +\n        'document.getElementById(\"successCard\").classList.add(\"hidden\");' +\n        'document.getElementById(\"depositInfoCard\").classList.remove(\"hidden\");' +\n        'document.getElementById(\"packageGrid\").parentElement.classList.remove(\"hidden\");' +\n        'selectPackage(\"pkg_standard\");' +\n      '}' +\n      'window.onload = init;' +\n    '</script>' +\n  '</body>' +\n  '</html>';\n}\n";
+  return `function getTokenRechargeModalHtml() {
+  var defaultEmail = "chachogreat@gmail.com";
+  try {
+    var sessionEmail = Session.getActiveUser().getEmail();
+    if (sessionEmail) defaultEmail = sessionEmail.toLowerCase().trim();
+  } catch(e) {}
+  var defaultQrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=" + encodeURIComponent("은행명 :카카오뱅크 / 계좌번호 :3333-12-1695965");
+
+  return '<!DOCTYPE html>' +
+  '<html>' +
+  '<head>' +
+    '<base target="_top">' +
+    '<meta charset="UTF-8">' +
+    '<script src="https://cdn.tailwindcss.com"></script>' +
+    '<style>' +
+      '@import url("https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800;900&display=swap");' +
+      '* { font-family: "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif; }' +
+      '@keyframes pulse-subtle { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }' +
+      '.animate-pulse-subtle { animation: pulse-subtle 2s infinite; }' +
+    '</style>' +
+  '</head>' +
+  '<body class="bg-slate-50 text-slate-800 p-4 select-none min-h-screen">' +
+    '<div class="max-w-md mx-auto space-y-3">' +
+      '<div class="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white p-3.5 rounded-2xl shadow-md">' +
+        '<div class="flex items-center justify-between">' +
+          '<div class="space-y-0.5">' +
+            '<div class="flex items-center gap-1.5">' +
+              '<span class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-300">SheetBot Wallet</span>' +
+              '<span id="userTierBadge" class="px-2 py-0.5 text-[9px] font-black rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">PRO</span>' +
+            '</div>' +
+            '<div id="userEmailTxt" class="text-xs text-slate-300 font-medium truncate max-w-[180px]">' + defaultEmail + '</div>' +
+          '</div>' +
+          '<div class="text-right">' +
+            '<div class="text-[10px] font-bold text-slate-400">보유 잔액</div>' +
+            '<div class="text-lg font-black text-emerald-400 flex items-baseline justify-end gap-1 tracking-tight">' +
+              '<span id="tokenBalanceTxt">1,147,439</span>' +
+              '<span class="text-xs font-semibold text-slate-300">토큰</span>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="space-y-1.5">' +
+        '<div class="flex items-center justify-between px-1">' +
+          '<span class="text-xs font-black text-slate-700">1. 충전 패키지 선택</span>' +
+          '<span class="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">⚡ PG 수수료 0원 혜택</span>' +
+        '</div>' +
+        '<div class="grid grid-cols-3 gap-2" id="packageGrid">' +
+          '<button type="button" onclick="selectPackage(&quot;pkg_starter&quot;)" id="btn_pkg_starter" class="p-2.5 bg-white border-2 border-slate-200 rounded-2xl text-center transition-all duration-150 hover:border-indigo-300 hover:shadow-xs cursor-pointer flex flex-col items-center justify-between min-h-[92px]">' +
+            '<span class="text-[11px] font-bold text-slate-500">스타터</span>' +
+            '<div class="my-0.5">' +
+              '<div class="text-[15px] font-black text-slate-800 leading-tight">5만 토큰</div>' +
+              '<div class="text-xs font-bold text-slate-500 mt-0.5">5,000원</div>' +
+            '</div>' +
+            '<span class="text-[9px] text-slate-400 font-semibold">입문용</span>' +
+          '</button>' +
+          '<button type="button" onclick="selectPackage(&quot;pkg_standard&quot;)" id="btn_pkg_standard" class="p-2.5 bg-indigo-50/90 border-2 border-indigo-600 rounded-2xl text-center transition-all duration-150 relative shadow-md ring-2 ring-indigo-300/40 cursor-pointer flex flex-col items-center justify-between min-h-[92px]">' +
+            '<div class="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-indigo-600 text-white rounded-full text-[8px] font-black tracking-tight shadow-xs whitespace-nowrap">🔥 인기추천</div>' +
+            '<span class="text-[11px] font-black text-indigo-900">스탠다드</span>' +
+            '<div class="my-0.5">' +
+              '<div class="text-[16px] font-black text-indigo-700 leading-tight">15만 토큰</div>' +
+              '<div class="text-xs font-black text-indigo-950 mt-0.5">12,000원</div>' +
+            '</div>' +
+            '<span class="text-[9px] text-indigo-600 font-extrabold bg-indigo-100/60 px-1.5 py-0.5 rounded">가장 인기</span>' +
+          '</button>' +
+          '<button type="button" onclick="selectPackage(&quot;pkg_pro&quot;)" id="btn_pkg_pro" class="p-2.5 bg-white border-2 border-slate-200 rounded-2xl text-center transition-all duration-150 hover:border-indigo-300 hover:shadow-xs cursor-pointer flex flex-col items-center justify-between min-h-[92px]">' +
+            '<span class="text-[11px] font-bold text-slate-500">프로</span>' +
+            '<div class="my-0.5">' +
+              '<div class="text-[15px] font-black text-slate-800 leading-tight">45만 토큰</div>' +
+              '<div class="text-xs font-bold text-slate-500 mt-0.5">30,000원</div>' +
+            '</div>' +
+            '<span class="text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">최대 혜택</span>' +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+
+      '<!-- 2. 입금인명 및 영수증 번호 입력 게이트 (Gate) -->' +
+      '<div class="bg-gradient-to-r from-indigo-50 via-indigo-50/60 to-purple-50 border-2 border-indigo-200 rounded-2xl p-3.5 space-y-2.5 shadow-2xs">' +
+        '<div class="flex items-center justify-between">' +
+          '<label class="text-xs font-black text-indigo-950 flex items-center gap-1.5">' +
+            '<span>👤</span>' +
+            '<span>2. 송금자 정보 및 영수증 알림</span>' +
+          '</label>' +
+          '<span id="gateBadge" class="text-[9px] font-extrabold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-300">🔒 계좌 잠김</span>' +
+        '</div>' +
+        '<div class="space-y-1.5">' +
+          '<div>' +
+            '<label for="depositorNameInput" class="text-[9.5px] font-bold text-slate-600 block mb-0.5">송금자 실명 <span class="text-rose-500 font-extrabold">*필수</span></label>' +
+            '<input type="text" id="depositorNameInput" placeholder="은행 송금 시 보낼 실명 (예: 홍길동)" class="w-full bg-white border-2 border-indigo-300 rounded-xl px-3 py-2 text-xs font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs placeholder:text-slate-400" />' +
+          '</div>' +
+          '<div>' +
+            '<label for="receiptPhoneInput" class="text-[9.5px] font-bold text-slate-600 flex items-center justify-between mb-0.5">' +
+              '<span>영수증 수신 번호 <span class="text-indigo-600 font-medium">(선택)</span></span>' +
+              '<span class="text-[8.5px] text-emerald-600 font-extrabold">⚡ 입금 즉시 영수증 문자 자동 전송</span>' +
+            '</label>' +
+            '<input type="tel" id="receiptPhoneInput" placeholder="010-0000-0000 (미입력 시 SMS 발송 생략)" class="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs placeholder:text-slate-400" />' +
+          '</div>' +
+          '<button type="button" id="btnUnlockAccount" onclick="confirmDepositorAndRequest()" class="w-full py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer active:scale-95 flex items-center justify-center gap-1">' +
+            '<span>계좌 확인 🔓</span>' +
+          '</button>' +
+        '</div>' +
+        '<div class="text-[10px] text-indigo-900/90 font-medium">' +
+          '※ 성함을 입력하시면 <b>1원 단위 전용 할인 금액</b>과 <b>입금 계좌</b>가 열리며, 번호 입력 시 <b>무료 충전 영수증</b>이 문자로 전송됩니다.' +
+        '</div>' +
+      '</div>' +
+
+      '<!-- 3. 계좌정보 & 결제 영역 (입금자명 입력 전 블러 잠금) -->' +
+      '<div id="depositInfoCard" class="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs space-y-3 relative overflow-hidden">' +
+        '<!-- 잠금 안내 오버레이 -->' +
+        '<div id="lockedOverlay" class="p-8 bg-slate-50/95 border-2 border-dashed border-slate-300 rounded-2xl text-center space-y-2.5 my-1">' +
+          '<div class="text-3xl animate-bounce">🔒</div>' +
+          '<div class="text-xs font-black text-slate-800">송금자 성함을 먼저 입력해 주세요</div>' +
+          '<div class="text-[11px] text-slate-500 leading-relaxed">' +
+            '위 입력창에 실제 송금하실 분의 성함을 입력하신 후<br>' +
+            '<span class="font-bold text-indigo-600">[계좌 확인 🔓]</span> 버튼을 누르면 전용 입금 계좌가 열립니다.' +
+          '</div>' +
+        '</div>' +
+
+        '<!-- 잠금 해제 후 활성화되는 컨텐츠 -->' +
+        '<div id="unlockedContent" class="hidden space-y-3">' +
+          '<div class="bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 border-2 border-emerald-300/90 rounded-xl p-3 flex items-center justify-between shadow-2xs">' +
+            '<div class="flex items-center gap-2.5">' +
+              '<div class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-sm shadow-xs">₩</div>' +
+              '<div>' +
+                '<div class="flex items-center gap-1.5">' +
+                  '<span class="text-xs font-black text-slate-900">송금할 정확한 금액</span>' +
+                  '<span id="discountBadge" class="text-[10px] font-black text-rose-600 bg-rose-100 px-1.5 py-0.2 rounded-full border border-rose-200">-13원 할인</span>' +
+                '</div>' +
+                '<div class="text-[10px] text-slate-500 font-medium mt-0.5">정가: <span id="originalPriceTxt" class="line-through">12,000</span>원 → 0초 자동충전 전용 금액</div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="text-right">' +
+              '<div class="flex items-baseline justify-end gap-0.5">' +
+                '<span id="amountBadge" class="text-2xl font-black text-emerald-600 tracking-tight font-mono">11,987</span>' +
+                '<span class="text-sm font-black text-slate-900">원</span>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+
+          '<div class="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-2 border-amber-300/90 rounded-2xl p-3 space-y-2 shadow-2xs">' +
+            '<div class="flex items-center justify-between">' +
+              '<div class="flex items-center gap-1.5 text-xs font-black text-amber-950">' +
+                '<span class="text-sm">⚠️</span>' +
+                '<span>보내시는 분(입금자명):</span>' +
+                '<span id="confirmedDepositorName" class="text-indigo-900 bg-white border border-indigo-200 px-2 py-0.5 rounded font-black text-xs">--</span>' +
+                '<span id="confirmedPhoneBadge" class="hidden text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-1.5 py-0.2 rounded font-bold text-[9px]">📱 영수증: --</span>' +
+              '</div>' +
+              '<button type="button" onclick="changeDepositor()" class="text-[10px] text-slate-600 hover:text-indigo-600 underline font-bold cursor-pointer">✏️ 성함 수정</button>' +
+            '</div>' +
+            '<div class="text-[10px] text-amber-900/90 font-medium text-center bg-white/70 p-2 rounded-xl border border-amber-200">' +
+              '※ 은행 송금 시 <b>입금자명</b>을 위 성함과 일치시키고, 금액은 <b>1원 단위까지 정확히 송금</b>하시면 0초 만에 자동 충전됩니다!' +
+            '</div>' +
+          '</div>' +
+
+          '<div class="grid grid-cols-12 gap-3 items-center pt-0.5">' +
+            '<div class="col-span-5 flex flex-col items-center justify-center p-2 bg-slate-50 border border-slate-200 rounded-xl">' +
+              '<img id="qrImg" src="' + defaultQrUrl + '" alt="QR" class="w-24 h-24 bg-white p-1 rounded-lg border border-slate-200 object-contain shadow-xs" />' +
+              '<div class="text-[9px] font-bold text-slate-500 mt-1 flex items-center gap-1"><span>📸</span><span>카메라 스캔</span></div>' +
+            '</div>' +
+            '<div class="col-span-7 space-y-2">' +
+              '<div class="space-y-1">' +
+                '<div class="flex items-center gap-1.5 pt-0.5">' +
+                  '<span class="w-2.5 h-2.5 rounded-full bg-yellow-400 shrink-0 shadow-xs"></span>' +
+                  '<span id="bankNameTxt" class="text-[15px] font-black text-slate-900 tracking-tight">카카오뱅크</span>' +
+                  '<span id="accountHolderTxt" class="text-xs font-semibold text-slate-500">(예금주: 차호석)</span>' +
+                '</div>' +
+                '<div class="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 flex items-center justify-between">' +
+                  '<span id="accountNumberTxt" class="text-sm font-black text-slate-900 font-mono tracking-wide select-all">3333-12-1695965</span>' +
+                '</div>' +
+              '</div>' +
+              '<button type="button" onclick="copyAccountNumber()" class="w-full py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-extrabold text-[11px] rounded-lg transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer active:scale-95">' +
+                '<span>📋 계좌번호 복사</span>' +
+              '</button>' +
+            '</div>' +
+          '</div>' +
+
+          '<div id="statusPulseBar" class="p-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl flex items-center justify-between">' +
+            '<div class="flex items-center gap-2">' +
+              '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse-subtle"></span>' +
+              '<span id="pollingStatusTxt" class="text-emerald-900 font-bold text-[11px]">실시간 입금 대기 중...</span>' +
+            '</div>' +
+            '<button type="button" onclick="checkStatusNow(false)" id="manualCheckBtn" class="text-[10px] px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-lg shadow-xs transition-colors cursor-pointer">🔄 확인</button>' +
+          '</div>' +
+
+          '<div id="adminSimContainer" class="pt-0.5 text-center hidden">' +
+            '<button type="button" onclick="triggerSimulateDeposit()" id="simBtn" class="text-[10px] text-slate-400 hover:text-slate-600 underline font-medium cursor-pointer">🔒 [관리자 테스트] 즉시 승인 시뮬레이션</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div id="successCard" class="hidden bg-emerald-50 border-2 border-emerald-500 rounded-2xl p-6 text-center space-y-3.5 shadow-md">' +
+        '<div class="text-4xl">🎉</div>' +
+        '<h3 class="font-black text-emerald-950 text-base">토큰 충전이 완료되었습니다!</h3>' +
+        '<p id="successMsg" class="text-xs text-emerald-800 font-medium">토큰이 성공적으로 충전되었습니다.</p>' +
+        '<div class="p-3.5 bg-white rounded-xl border border-emerald-200 text-xs text-slate-700 font-bold shadow-xs">' +
+          '현재 총 잔여 토큰: <span id="finalBalanceTxt" class="text-emerald-600 text-base font-black">--</span>개' +
+        '</div>' +
+        '<div class="space-y-2">' +
+          '<button onclick="google.script.host.close()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-sm transition-all cursor-pointer">확인 및 닫기</button>' +
+          '<button type="button" onclick="resetToRechargeView()" class="w-full py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition-all cursor-pointer">➕ 다른 패키지 / 추가 충전하기</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<script>' +
+      'var curRequestId = ""; var curDepositCode = ""; var curDepositorName = ""; var curPhone = ""; var curAmount = 12000; var curSelectedPkg = "pkg_standard"; var pollTimer = null;' +
+      'var PKG_META = { pkg_starter: { price: 5000, priceStr: "5,000", tokens: 50000 }, pkg_standard: { price: 12000, priceStr: "12,000", tokens: 150000 }, pkg_pro: { price: 30000, priceStr: "30,000", tokens: 450000 } };' +
+      'function init() {' +
+        'google.script.run.withSuccessHandler(function(res){' +
+          'if (res && res.success) {' +
+            'document.getElementById("userEmailTxt").innerText = res.email;' +
+            'document.getElementById("userTierBadge").innerText = res.tier;' +
+            'document.getElementById("tokenBalanceTxt").innerText = Number(res.balance).toLocaleString();' +
+            'if (res.isAdmin) { var simEl = document.getElementById("adminSimContainer"); if (simEl) simEl.classList.remove("hidden"); }' +
+            'if (res.email) {' +
+              'var guess = res.email.split("@")[0].replace(/[^a-zA-Z0-9가-힣]/g, "");' +
+              'var input = document.getElementById("depositorNameInput");' +
+              'if (input && !input.value && guess) input.placeholder = "예: " + guess + " (은행 송금자 성함)";' +
+            '}' +
+            'if (res.phoneNumber) {' +
+              'var pInput = document.getElementById("receiptPhoneInput");' +
+              'if (pInput && !pInput.value) pInput.value = res.phoneNumber;' +
+            '}' +
+          '}' +
+        '}).getUserTokenBalanceData();' +
+        'selectPackage("pkg_standard");' +
+      '}' +
+
+      'function selectPackage(pkgId) {' +
+        'curSelectedPkg = pkgId;' +
+        'var pkgs = ["pkg_starter", "pkg_standard", "pkg_pro"];' +
+        'pkgs.forEach(function(p){' +
+          'var btn = document.getElementById("btn_" + p);' +
+          'if (btn) {' +
+            'if (p === pkgId) {' +
+              'btn.className = "p-2.5 bg-indigo-50/90 border-2 border-indigo-600 rounded-2xl text-center transition-all duration-150 relative shadow-md ring-2 ring-indigo-300/40 cursor-pointer flex flex-col items-center justify-between min-h-[92px]";' +
+            '} else {' +
+              'btn.className = "p-2.5 bg-white border-2 border-slate-200 rounded-2xl text-center transition-all duration-150 hover:border-indigo-300 hover:shadow-xs cursor-pointer flex flex-col items-center justify-between min-h-[92px]";' +
+            '}' +
+          '}' +
+        '});' +
+        'if (curDepositorName) {' +
+          'requestSession(pkgId, curDepositorName, curPhone);' +
+        '}' +
+      '}' +
+
+      'function confirmDepositorAndRequest() {' +
+        'var input = document.getElementById("depositorNameInput");' +
+        'var val = (input ? input.value : "").trim();' +
+        'if (!val || val.length < 2) {' +
+          'alert("실제 송금하실 분의 성함(입금자명)을 2글자 이상 입력해 주세요.\\\\n예: 홍길동");' +
+          'if (input) input.focus();' +
+          'return;' +
+        '}' +
+        'curDepositorName = val;' +
+        'var pInput = document.getElementById("receiptPhoneInput");' +
+        'curPhone = (pInput ? pInput.value : "").replace(/[^0-9-]/g, "").trim();' +
+        'requestSession(curSelectedPkg, curDepositorName, curPhone);' +
+      '}' +
+
+      'function requestSession(pkgId, depositorName, phoneNumber) {' +
+        'phoneNumber = phoneNumber !== undefined ? phoneNumber : (curPhone || "");' +
+        'var unlockBtn = document.getElementById("btnUnlockAccount");' +
+        'if (unlockBtn) unlockBtn.innerText = "발급 중...";' +
+        'google.script.run.withSuccessHandler(function(data){' +
+          'if (unlockBtn) unlockBtn.innerHTML = "<span>확인됨 🔓</span>";' +
+          'if (data && data.success) {' +
+            'curRequestId = data.requestId;' +
+            'curDepositCode = data.depositCode;' +
+            'var origPrice = Number(data.originalPriceKrw || data.originalAmountKrw || (data.package && data.package.originalPriceKrw) || 12000);' +
+            'var disc = Number(data.discountKrw || 0);' +
+            'var finPrice = Number(data.finalPriceKrw || data.finalAmountKrw || data.amountKrw || (data.package && data.package.priceKrw) || (origPrice - disc));' +
+            'if (isNaN(finPrice) || finPrice <= 0) finPrice = Math.max(1000, origPrice - disc);' +
+            'curAmount = finPrice;' +
+            'document.getElementById("lockedOverlay").classList.add("hidden");' +
+            'document.getElementById("unlockedContent").classList.remove("hidden");' +
+            'var gateBadge = document.getElementById("gateBadge");' +
+            'if (gateBadge) { gateBadge.innerText = "🔓 계좌 열림"; gateBadge.className = "text-[9px] font-extrabold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full border border-emerald-300"; }' +
+            'document.getElementById("confirmedDepositorName").innerText = data.depositorName;' +
+            'var phoneBadge = document.getElementById("confirmedPhoneBadge");' +
+            'if (phoneBadge) {' +
+              'if (curPhone) {' +
+                'phoneBadge.innerText = "📱 영수증: " + curPhone;' +
+                'phoneBadge.classList.remove("hidden");' +
+              '} else {' +
+                'phoneBadge.classList.add("hidden");' +
+              '}' +
+            '}' +
+            'document.getElementById("originalPriceTxt").innerText = Number(origPrice).toLocaleString();' +
+            'document.getElementById("discountBadge").innerText = "-" + disc + "원 즉시할인";' +
+            'document.getElementById("amountBadge").innerText = Number(finPrice).toLocaleString();' +
+            'var bankObj = data.bank || {};' +
+            'if (document.getElementById("bankNameTxt")) document.getElementById("bankNameTxt").innerText = bankObj.bankName || "카카오뱅크";' +
+            'var accNum = String(bankObj.accountNumber || "3333-12-1695965");' +
+            'if (accNum.length === 13 && accNum.indexOf("-") === -1) accNum = accNum.substring(0,4) + "-" + accNum.substring(4,6) + "-" + accNum.substring(6);' +
+            'document.getElementById("accountNumberTxt").innerText = accNum;' +
+            'document.getElementById("accountHolderTxt").innerText = "(예금주: " + (bankObj.accountHolder || "차호석") + ")";' +
+            'if (data.qrImageUrl) document.getElementById("qrImg").src = data.qrImageUrl;' +
+            'document.getElementById("pollingStatusTxt").innerText = "실시간 입금 대기 중...";' +
+            'startPolling();' +
+          '} else {' +
+            'alert("발급 오류: " + (data ? data.error : "알 수 없는 오류"));' +
+          '}' +
+        '}).withFailureHandler(function(err){' +
+          'if (unlockBtn) unlockBtn.innerHTML = "<span>계좌 확인 🔓</span>";' +
+          'alert("오류: " + err.message);' +
+        '}).requestDirectDepositSession(pkgId, depositorName, phoneNumber);' +
+      '}' +
+
+      'function changeDepositor() {' +
+        'if (pollTimer) clearInterval(pollTimer);' +
+        'document.getElementById("unlockedContent").classList.add("hidden");' +
+        'document.getElementById("lockedOverlay").classList.remove("hidden");' +
+        'var gateBadge = document.getElementById("gateBadge");' +
+        'if (gateBadge) { gateBadge.innerText = "🔒 계좌 잠김"; gateBadge.className = "text-[9px] font-extrabold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-300"; }' +
+        'var input = document.getElementById("depositorNameInput");' +
+        'if (input) { input.focus(); input.select(); }' +
+        'var unlockBtn = document.getElementById("btnUnlockAccount");' +
+        'if (unlockBtn) unlockBtn.innerHTML = "<span>계좌 확인 🔓</span>";' +
+      '}' +
+
+      'function startPolling() {' +
+        'if (pollTimer) clearInterval(pollTimer);' +
+        'pollTimer = setInterval(function(){' +
+          'if (!curRequestId) return;' +
+          'checkStatusNow(true);' +
+        '}, 3000);' +
+      '}' +
+
+      'function checkStatusNow(isAuto) {' +
+        'if (!curRequestId) return;' +
+        'var btn = document.getElementById("manualCheckBtn");' +
+        'if (!isAuto && btn) btn.innerText = "확인중..";' +
+        'google.script.run.withSuccessHandler(function(res){' +
+          'if (!isAuto && btn) btn.innerText = "🔄 확인";' +
+          'if (res && res.success && (res.status === "COMPLETED" || res.status === "APPROVED")) {' +
+            'if (pollTimer) clearInterval(pollTimer);' +
+            'showSuccess(res);' +
+          '} else if (!isAuto) {' +
+            'alert("아직 입금이 확인되지 않았습니다.\\\\n송금을 완료하셨다면 5~10초 후 다시 [확인]을 누르시거나 잠시 기다려 주세요.\\\\n(입금자명: " + curDepositorName + " / 금액: " + Number(curAmount).toLocaleString() + "원)");' +
+          '}' +
+        '}).withFailureHandler(function(err){' +
+          'if (!isAuto && btn) btn.innerText = "🔄 확인";' +
+          'if (!isAuto) alert("확인 중 오류: " + err.message);' +
+        '}).checkDepositStatus(curRequestId, curDepositCode);' +
+      '}' +
+
+      'function showSuccess(res) {' +
+        'document.getElementById("depositInfoCard").classList.add("hidden");' +
+        'document.getElementById("packageGrid").parentElement.classList.add("hidden");' +
+        'document.getElementById("successCard").classList.remove("hidden");' +
+        'document.getElementById("finalBalanceTxt").innerText = Number(res.currentBalance).toLocaleString();' +
+        'document.getElementById("tokenBalanceTxt").innerText = Number(res.currentBalance).toLocaleString();' +
+        'if (res.message) document.getElementById("successMsg").innerText = res.message;' +
+      '}' +
+
+      'function copyAccountNumber() {' +
+        'var num = document.getElementById("accountNumberTxt").innerText;' +
+        'navigator.clipboard.writeText(num).then(function(){' +
+          'alert("계좌번호 [" + num + "] 가 복사되었습니다.\\\\n은행 앱에 붙여넣기 하여 송금하세요!");' +
+        '});' +
+      '}' +
+
+      'function triggerSimulateDeposit() {' +
+        'if (!confirm("관리자 전용 기능: 즉시 입금 승인을 시뮬레이션하시겠습니까?")) return;' +
+        'var btn = document.getElementById("simBtn");' +
+        'btn.innerText = "승인 처리 중...";' +
+        'google.script.run.withSuccessHandler(function(res){' +
+          'if (res && res.success) {' +
+            'if (pollTimer) clearInterval(pollTimer);' +
+            'showSuccess(res);' +
+          '} else {' +
+            'alert("시뮬레이션 실패: " + (res && res.error));' +
+            'btn.innerText = "🔒 [관리자 테스트] 즉시 승인 시뮬레이션";' +
+          '}' +
+        '}).withFailureHandler(function(err){' +
+          'alert("오류: " + err.message);' +
+          'btn.innerText = "🔒 [관리자 테스트] 즉시 승인 시뮬레이션";' +
+        '}).simulateAdminDepositApproval(curRequestId, curDepositCode, curSelectedPkg);' +
+      '}' +
+
+      'function resetToRechargeView() {' +
+        'document.getElementById("successCard").classList.add("hidden");' +
+        'document.getElementById("depositInfoCard").classList.remove("hidden");' +
+        'document.getElementById("packageGrid").parentElement.classList.remove("hidden");' +
+        'selectPackage("pkg_standard");' +
+      '}' +
+      'window.onload = init;' +
+    '</script>' +
+  '</body>' +
+  '</html>';
+}
+`;
 }
