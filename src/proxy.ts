@@ -80,7 +80,21 @@ function resolveBrowserClientIpForMcp(request: NextRequest): string | undefined 
 /** Forward this site's origin so EGDesk can bind visitor sessions to this site only. */
 function visitorForwardHeaders(request: NextRequest): Record<string, string> {
   const headers = buildEgdeskHeaders();
-  const origin = request.headers.get('origin') || request.nextUrl.origin;
+  const fromVisitor = request.headers.get('x-visitor-origin')?.trim();
+  const fromOrigin = request.headers.get('origin')?.trim();
+  let origin = fromVisitor || fromOrigin || '';
+  if (!origin || origin === 'null') {
+    const referer = request.headers.get('referer')?.trim();
+    if (referer) {
+      try {
+        origin = new URL(referer).origin;
+      } catch {
+        origin = request.nextUrl.origin;
+      }
+    } else {
+      origin = request.nextUrl.origin;
+    }
+  }
   headers['Origin'] = origin;
   headers['X-Visitor-Origin'] = origin;
   const clientIp = resolveBrowserClientIpForMcp(request);
