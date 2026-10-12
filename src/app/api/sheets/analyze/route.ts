@@ -2,7 +2,11 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
-import { callAiCaller, getSpreadsheetFullContext } from "@/lib/egdesk-helpers";
+import { getSpreadsheetFullContext } from "@/lib/egdesk-helpers";
+import {
+  callAiCallerWithAnalyzeRetry,
+  isGeminiCapacityError,
+} from "@/lib/ai-caller-retry";
 import { getAiModelSettings, getModelTokenMultiplier } from "@/lib/ai-settings";
 import { recordAiUsageLog } from "@/lib/ai-usage";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
@@ -200,12 +204,17 @@ ${prompt || "스마트 발주/업무 자동화 시스템 구축"}
       }
     }
 
-    const aiRes = await callAiCaller(userMessage, {
-      model: targetModel,
-      systemPrompt,
-      temperature: 0.2,
-      caller: "sheetbot-sheet-architect",
-    });
+    const { result: aiRes, modelUsed } = await callAiCallerWithAnalyzeRetry(
+      userMessage,
+      {
+        systemPrompt,
+        temperature: 0.2,
+        caller: "sheetbot-sheet-architect",
+      },
+      targetModel,
+    );
+
+    const billingMultiplier = await getModelTokenMultiplier(modelUsed);
 
     let rawText = aiRes.content || aiRes.text || "";
 
@@ -215,7 +224,7 @@ ${prompt || "스마트 발주/업무 자동화 시스템 구축"}
     const pTokens = aiRes.usage?.promptTokens || Math.ceil(promptLen / 2.5);
     const cTokens = aiRes.usage?.completionTokens || Math.ceil(respLen / 2.5);
     const totalRaw = pTokens + cTokens;
-    const usedTokens = Math.round(totalRaw * tokenMultiplier);
+    const usedTokens = Math.round(totalRaw * billingMultiplier);
 
     let newBalance = 0;
     if (userEmail) {
@@ -223,15 +232,15 @@ ${prompt || "스마트 발주/업무 자동화 시스템 구축"}
       newBalance = deductRes.newBalance;
 
       const purpose = isFeedbackMode
-        ? `구글 시트 대화형 조율 피드백 (${turn}회차) (${targetModel} / ${tokenMultiplier}x)`
-        : `구글 시트 2차원 구조 정밀 분석 (${targetModel} / ${tokenMultiplier}x)`;
+        ? `구글 시트 대화형 조율 피드백 (${turn}회차) (${modelUsed} / ${billingMultiplier}x)`
+        : `구글 시트 2차원 구조 정밀 분석 (${modelUsed} / ${billingMultiplier}x)`;
 
       void recordAiUsageLog({
         userEmail,
         userName: "사용자",
         caller: "sheetbot-sheet-architect",
         purpose,
-        model: targetModel,
+        model: modelUsed,
         promptTokens: pTokens,
         completionTokens: cTokens,
         totalTokens: usedTokens,
@@ -283,9 +292,14 @@ ${prompt || "스마트 발주/업무 자동화 시스템 구축"}
     });
   } catch (err: any) {
     console.error("[Sheets-Analyze-API] Error:", err);
+    const message = err.message || "시트 구조 분석 중 오류가 발생했습니다.";
+    const status = isGeminiCapacityError(err) ? 503 : 500;
+    const userMessage = isGeminiCapacityError(err)
+      ? "Gemini 모델 서버가 일시적으로 포화 상태입니다(503). 잠시 후 다시 시도해 주세요."
+      : message;
     return NextResponse.json(
-      { success: false, error: err.message || "시트 구조 분석 중 오류가 발생했습니다." },
-      { status: 500 }
+      { success: false, error: userMessage, detail: message },
+      { status },
     );
   }
 }
