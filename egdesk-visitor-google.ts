@@ -396,6 +396,7 @@ export async function startVisitorGoogleLogin(options: {
     egdeskPublicUrl,
     forceConsent: options.forceConsent === true,
     scopes,
+    visitorOrigin: window.location.origin,
   };
   if (options.gcp?.trim()) startArgs.gcp = options.gcp.trim();
   if (options.handle?.trim()) startArgs.handle = options.handle.trim();
@@ -407,7 +408,11 @@ export async function startVisitorGoogleLogin(options: {
 }
 
 export async function exchangeVisitorAuthCode(code: string) {
-  const result = await callVisitorAuth('exchange', { code });
+  const exchangeArgs: Record<string, unknown> = { code };
+  if (typeof window !== 'undefined') {
+    exchangeArgs.visitorOrigin = window.location.origin;
+  }
+  const result = await callVisitorAuth('exchange', exchangeArgs);
   if (!result?.sessionId) {
     throw new Error(result?.error || 'Failed to complete visitor login');
   }

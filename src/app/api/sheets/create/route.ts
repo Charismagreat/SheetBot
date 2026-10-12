@@ -41,7 +41,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    let userEmail = await getCurrentUserEmail();
+    let userEmail = await getCurrentUserEmail(request);
     let apiKeyVisitorSessionId: string | null = null;
 
     // 만약 세션 쿠키가 없다면 API 키(Authorization: Bearer sk_sheetbot_... 또는 x-api-key) 확인
@@ -86,9 +86,8 @@ export async function POST(request: Request) {
     let result: any = null;
     let createMethod = "sheets";
 
-    const host = request.headers.get("host") || "localhost:4003";
-    const protocol = request.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
-    const siteOrigin = `${protocol}://${host}`;
+    const { resolveVisitorSiteOriginFromRequest } = await import("@/lib/auth");
+    const siteOrigin = resolveVisitorSiteOriginFromRequest(request);
 
     // 1차 시도: 방문자(유저) 권한으로 Google Sheets API sheets_create_spreadsheet (유저 본인 드라이브에 생성)
     try {

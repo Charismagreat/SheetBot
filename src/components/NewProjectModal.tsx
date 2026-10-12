@@ -1,6 +1,6 @@
 "use client";
 
-import { apiFetch } from '@/lib/api';
+import { apiFetch, apiFetchWithTimeout } from '@/lib/api';
 import { usePricingCost } from '@/lib/usePricingCost';
 import React, { useState, useEffect } from "react";
 import {
@@ -158,7 +158,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
   const checkGoogleScopes = async () => {
     try {
       // 1. 서버의 구글 시트 자동 생성 엔진 상태 확인
-      apiFetch("/api/sheets/create")
+      void apiFetchWithTimeout("/api/sheets/create", { method: "GET", timeoutMs: 12_000 })
         .then((res) => res.json())
         .then((data) => {
           setServerCanCreateSheet(Boolean(data?.canAutoCreate));
@@ -168,9 +168,12 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
       // 2. 브라우저의 구글 로그인 및 파일 접근 상태 확인
       const status = await getVisitorGoogleStatus();
       if (status?.connected && status?.email) {
-        // 실제 드라이브 파일 목록을 1건 조회하여 Workspace(시트/드라이브) 권한 보유 여부 실시간 확인
-        const testRes = await listVisitorDriveFiles({ pageSize: 1 }).catch(() => null);
-        if (testRes && (Array.isArray(testRes.files) || Array.isArray(testRes))) {
+        const driveProbe = Promise.race([
+          listVisitorDriveFiles({ pageSize: 1 }),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 10_000)),
+        ]);
+        const testRes = await driveProbe.catch(() => null);
+        if (testRes && (Array.isArray((testRes as any).files) || Array.isArray(testRes))) {
           setScopeStatus("granted");
           setShowScopePrompt(false);
         } else {
@@ -426,6 +429,38 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
     window.open("https://docs.google.com/spreadsheets/create", "_blank");
   };
 
+  const provisionSpreadsheetInBackground = async (payload: {
+    title: string;
+    data: any[][];
+  }) => {
+    setIsCreatingSheet(true);
+    try {
+      const createRes = await apiFetchWithTimeout("/api/sheets/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        timeoutMs: 45_000,
+      });
+      const createData = await createRes.json();
+      if (createData.success && createData.spreadsheetUrl) {
+        setSheetUrl(createData.spreadsheetUrl);
+        setAutoCreatedSheet({
+          id: createData.spreadsheetId,
+          url: createData.spreadsheetUrl,
+        });
+        return createData.spreadsheetUrl as string;
+      }
+      if (createData.oauthRequired || createData.code === "GOOGLE_OAUTH_TOKEN_MISSING") {
+        setShowScopePrompt(true);
+      }
+    } catch (createErr) {
+      console.warn("[NewProjectModal] Background sheet create:", createErr);
+    } finally {
+      setIsCreatingSheet(false);
+    }
+    return null;
+  };
+
   // 1단계: AI 시트 사전 정밀 분석 실행 (무료)
   const handleStartAnalysis = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -450,8 +485,10 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
     setAnalyzing(true);
     setError(null);
 
+    let postAnalyzeCreate: { title: string; data: any[][] } | null = null;
+
     try {
-      const res = await apiFetch("/api/sheets/analyze", {
+      const res = await apiFetchWithTimeout("/api/sheets/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -469,6 +506,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
           prompt: prompt.trim(),
           model: selectedModel,
         }),
+        timeoutMs: 120_000,
       });
       const data = await res.json();
       if (!data.success || !data.schema) {
@@ -478,30 +516,14 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
       setAnalyzedSchema(data.schema);
       setTurnCount(1);
 
-      // '새 시트 자동 생성' 또는 시트 URL이 없는 경우, 분석된 헤더 기반으로 새 스프레드시트 사전 자동 생성
-      let finalSheetUrl = sheetUrl.trim();
-      if ((sourceMode === "NEW_SHEET" || sourceMode === "EXCEL_UPLOAD") && !finalSheetUrl) {
-        try {
-          const createRes = await apiFetch("/api/sheets/create", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              title: projectName.trim() || "새 스프레드시트",
-              data: parsedExcel?.previewGrid || (data.schema?.columns ? [data.schema.columns.map((c: any) => c.name)] : []),
-            }),
-          });
-          const createData = await createRes.json();
-          if (createData.success && createData.spreadsheetUrl) {
-            finalSheetUrl = createData.spreadsheetUrl;
-            setSheetUrl(finalSheetUrl);
-            setAutoCreatedSheet({
-              id: createData.spreadsheetId,
-              url: createData.spreadsheetUrl,
-            });
-          }
-        } catch (createErr) {
-          console.warn("[Analysis] Auto sheet creation warning:", createErr);
-        }
+      const hasSheetUrl = Boolean(sheetUrl.trim());
+      if ((sourceMode === "NEW_SHEET" || sourceMode === "EXCEL_UPLOAD") && !hasSheetUrl) {
+        postAnalyzeCreate = {
+          title: projectName.trim() || "새 스프레드시트",
+          data:
+            parsedExcel?.previewGrid ||
+            (data.schema?.columns ? [data.schema.columns.map((c: any) => c.name)] : []),
+        };
       }
 
       setFeedbackHistory([
@@ -512,17 +534,24 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
             (sourceMode === "EXCEL_UPLOAD"
               ? `엑셀 파일 '${parsedExcel?.fileName}'의 컬럼 분석이 완료되었습니다. 아래 양식 구조와 실행 계획을 확인해 주세요.`
               : sourceMode === "NEW_SHEET"
-              ? (finalSheetUrl
-                  ? "요구사항에 맞춘 최적의 스프레드시트가 자동 생성되어 연결되었습니다. 아래 컬럼 구조와 실행 계획을 확인해 주세요."
-                  : "요구사항에 맞춘 최적의 스프레드시트 양식 설계가 완료되었습니다. 아래 컬럼 구조를 확인해 주세요.")
+              ? postAnalyzeCreate
+                  ? "요구사항에 맞춘 스프레드시트 양식 설계가 완료되었습니다. 구글 시트를 백그라운드에서 연결 중이며, 잠시 후 2단계에서 링크가 표시됩니다."
+                  : "요구사항에 맞춘 최적의 스프레드시트 양식 설계가 완료되었습니다. 아래 컬럼 구조를 확인해 주세요."
               : "스프레드시트 분석이 완료되었습니다. 아래 실행 계획을 검토해 주세요."),
         },
       ]);
       setStep(2); // 2단계 브리핑 화면으로 전환
     } catch (err: any) {
-      setError(err.message || "시트 분석 중 오류가 발생했습니다.");
+      const msg = err?.name === "TimeoutError" || err?.message?.includes("aborted")
+        ? "시트 분석 요청이 시간 초과되었습니다. EGDesk가 실행 중인지 확인한 후 다시 시도해 주세요."
+        : err.message || "시트 분석 중 오류가 발생했습니다.";
+      setError(msg);
     } finally {
       setAnalyzing(false);
+    }
+
+    if (postAnalyzeCreate) {
+      void provisionSpreadsheetInBackground(postAnalyzeCreate);
     }
   };
 
@@ -636,32 +665,21 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
 
       // 만약 구글 시트 URL이 비어있다면, 서버에서 sheets_create_spreadsheet로 자동 생성 시도
       if (!targetSheetUrl) {
-        setIsCreatingSheet(true);
-        try {
-          const createRes = await apiFetch("/api/sheets/create", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              title: projectName.trim() || "새 스프레드시트",
-              data: parsedExcel?.previewGrid || (analyzedSchema?.columns ? [analyzedSchema.columns.map((c: any) => c.name)] : []),
-            }),
-          });
-          const createData = await createRes.json();
-          if (createData.success && createData.spreadsheetUrl) {
-            targetSheetUrl = createData.spreadsheetUrl;
-            setSheetUrl(targetSheetUrl);
-            setAutoCreatedSheet({ id: createData.spreadsheetId, url: createData.spreadsheetUrl });
-          } else {
-            // 서버 백그라운드 생성이 불가능한 경우: 브라우저 새 탭으로 즉시 새 시트를 띄워줌
-            try {
-              window.open("https://docs.google.com/spreadsheets/create", "_blank");
-            } catch {}
-            throw new Error(
-              "새 구글 스프레드시트가 브라우저 새 탭에 열렸습니다! 상단 주소창 URL을 복사하여 아래 입력란에 붙여넣어 주세요."
-            );
-          }
-        } finally {
-          setIsCreatingSheet(false);
+        const createdUrl = await provisionSpreadsheetInBackground({
+          title: projectName.trim() || "새 스프레드시트",
+          data:
+            parsedExcel?.previewGrid ||
+            (analyzedSchema?.columns ? [analyzedSchema.columns.map((c: any) => c.name)] : []),
+        });
+        if (createdUrl) {
+          targetSheetUrl = createdUrl;
+        } else {
+          try {
+            window.open("https://docs.google.com/spreadsheets/create", "_blank");
+          } catch {}
+          throw new Error(
+            "구글 시트 자동 생성에 실패했습니다. 새 탭에서 시트를 열었으니 URL을 복사해 2단계 입력란에 붙여넣거나, 상단에서 Workspace 권한을 승인한 후 다시 시도해 주세요."
+          );
         }
       }
 
@@ -1681,12 +1699,17 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                 <div className="flex items-center gap-2">
                   <FileSpreadsheet className={`w-4 h-4 ${sheetUrl.trim() ? "text-emerald-600" : "text-amber-600 animate-bounce"}`} />
                   <span className="font-extrabold text-slate-800 text-xs">
-                    {autoCreatedSheet || sourceMode === "NEW_SHEET"
+                    {isCreatingSheet
+                      ? "구글 스프레드시트 생성 중..."
+                      : autoCreatedSheet || (sourceMode === "NEW_SHEET" && sheetUrl.trim())
                       ? "✅ 자동 생성 및 연결된 구글 스프레드시트"
                       : sheetUrl.trim()
                       ? "연결된 대상 구글 스프레드시트"
                       : "📌 바인딩할 구글 스프레드시트 지정"}
                   </span>
+                  {isCreatingSheet && (
+                    <RefreshCw className="w-3.5 h-3.5 text-amber-600 animate-spin shrink-0" />
+                  )}
                   {autoCreatedSheet && (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
                       실시간 동기화 준비 완료

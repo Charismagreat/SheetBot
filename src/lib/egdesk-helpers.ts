@@ -7,7 +7,11 @@ export * from '../../egdesk-helpers';
 import { EGDESK_CONFIG } from '../../egdesk.config';
 
 export function getServerEgdeskApiUrl(): string {
-  return 'http://localhost:8080';
+  const raw =
+    (typeof process !== 'undefined' && process.env?.EGDESK_MCP_INTERNAL_URL) ||
+    (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+    'http://localhost:8080';
+  return String(raw).replace(/\/$/, '');
 }
 
 export interface AiCallerOptions {
@@ -284,6 +288,7 @@ export async function callVisitorWorkspaceTool(
       tool: toolName,
       arguments: payloadArgs,
     }),
+    signal: AbortSignal.timeout(45_000),
   });
 
   const json = await response.json().catch(() => null);

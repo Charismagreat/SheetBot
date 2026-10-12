@@ -18,7 +18,7 @@ function extractSpreadsheetId(urlOrId: string): string | null {
 
 export async function POST(request: Request) {
   try {
-    const sessionEmail = await getCurrentUserEmail();
+    const sessionEmail = await getCurrentUserEmail(request);
     const userEmail = sessionEmail || (process.env.NODE_ENV === "development" ? "test.user@sheetbot.dev" : null);
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });

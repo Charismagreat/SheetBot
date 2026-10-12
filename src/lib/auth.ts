@@ -3,6 +3,36 @@ import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { decode } from "next-auth/jwt";
 
+/** Visitor OAuth / workspace MCP calls must match the browser origin (tunnel path included). */
+export function resolveVisitorSiteOriginFromRequest(req?: Request): string {
+  if (req) {
+    try {
+      const url = new URL(req.url);
+      const forwardedProto = req.headers.get("x-forwarded-proto");
+      const forwardedHost = req.headers.get("x-forwarded-host");
+      if (forwardedHost) {
+        const proto = forwardedProto || url.protocol.replace(":", "") || "https";
+        return `${proto}://${forwardedHost.split(",")[0].trim()}`;
+      }
+      return url.origin;
+    } catch {
+      /* fall through */
+    }
+  }
+  const fromEnv =
+    process.env.NEXT_PUBLIC_EGDESK_VISITOR_ORIGIN ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    "";
+  if (fromEnv.trim()) {
+    try {
+      return new URL(fromEnv.trim()).origin;
+    } catch {
+      return fromEnv.trim().replace(/\/$/, "");
+    }
+  }
+  return "http://localhost:3002";
+}
+
 export const authOptions: AuthOptions = {
   providers: [
     // 1. 실제 구글 계정 OAuth 로그인
@@ -174,16 +204,22 @@ export async function getCurrentUserEmail(req?: Request): Promise<string | null>
 
       // 3-2. DB 매핑이 없을 경우 이지데스크 visitor-google status 직접 실시간 검증 (SSOT)
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || "http://localhost:8080";
+        const apiUrl = (
+          process.env.EGDESK_MCP_INTERNAL_URL ||
+          process.env.NEXT_PUBLIC_EGDESK_API_URL ||
+          "http://localhost:8080"
+        ).replace(/\/$/, "");
+        const visitorOrigin = resolveVisitorSiteOriginFromRequest(req);
         const statusRes = await fetch(`${apiUrl}/visitor-google/tools/call`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${visitorSessionId}`,
-            Origin: "https://sheetbot.cloud",
-            "X-Visitor-Origin": "https://sheetbot.cloud",
+            Origin: visitorOrigin,
+            "X-Visitor-Origin": visitorOrigin,
           },
           body: JSON.stringify({ tool: "status", arguments: {} }),
+          signal: AbortSignal.timeout(12_000),
         });
 
         if (statusRes.ok) {
