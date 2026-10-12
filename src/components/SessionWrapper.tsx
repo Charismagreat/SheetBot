@@ -6,7 +6,7 @@ import { SessionProvider } from "next-auth/react";
 import { AuthAdminProvider } from "@/contexts/AuthAdminContext";
 
 export default function SessionWrapper({ children }: { children: React.ReactNode }) {
-  const [authBasePath, setAuthBasePath] = useState<string | null>(null);
+  const [authBasePath, setAuthBasePath] = useState("/api/auth");
 
   useEffect(() => {
     setAuthBasePath(getNextAuthBasePath());
@@ -52,10 +52,6 @@ export default function SessionWrapper({ children }: { children: React.ReactNode
       isMounted = false;
     };
   }, []);
-
-  if (!authBasePath) {
-    return <AuthAdminProvider>{children}</AuthAdminProvider>;
-  }
 
   return (
     <SessionProvider
