@@ -1,6 +1,7 @@
 "use client";
 
-import { apiFetch, getNextAuthBasePath } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
+import { getNextAuthBasePath } from '@/lib/next-auth-base-path';
 import React, { useState, useEffect } from "react";
 import { SessionProvider } from "next-auth/react";
 import { AuthAdminProvider } from "@/contexts/AuthAdminContext";
