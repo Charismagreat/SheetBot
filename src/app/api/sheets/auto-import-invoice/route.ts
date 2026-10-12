@@ -9,6 +9,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
+import { appendSheetbotDebugLog } from "@/lib/safe-debug-log";
 // 검증된 프로덕션 활성 웹앱 배포 URL (Failover 보장용)
 const KNOWN_ACTIVE_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbx7l5Ce6S4cwaU4mrDyUgZF5uKOSwU8zl3Nw_so5i6Rpl5MnMW6S98u1tgMrbHSl7zArw/exec";
 
@@ -150,7 +151,7 @@ async function processInvoiceFolderBackground(params: {
 }) {
   const { spreadsheetId, folderId, webhookUrl, userEmail } = params;
   const startLog = `[${new Date().toISOString()}] [INVOICE ASYNC START] folderId: ${folderId}, ss: ${spreadsheetId}, webhook: ${webhookUrl || "none"}, user: ${userEmail}\n`;
-  try { fs.appendFileSync("C:/dev/SheetBot/debug_sync.log", startLog); } catch (_) {}
+  appendSheetbotDebugLog("debug_sync.log", startLog);
   console.log(`[auto-import-invoice] [ASYNC START] folderId: ${folderId}, ss: ${spreadsheetId}`);
 
   try {
@@ -374,9 +375,7 @@ async function processInvoiceFolderBackground(params: {
           });
           const cbBody = await cbRes.text().catch(() => "");
           console.log(`[auto-import-invoice] Callback status: ${cbRes.status}, body: ${cbBody}`);
-          try {
-            fs.appendFileSync("C:/dev/SheetBot/debug_sync.log", `[INVOICE CALLBACK] status=${cbRes.status}, body=${cbBody}\n`);
-          } catch (_) {}
+          appendSheetbotDebugLog("debug_sync.log", `[INVOICE CALLBACK] status=${cbRes.status}, body=${cbBody}\n`);
           webhookSuccess = cbRes.ok;
         } catch (cbErr: any) {
           console.error(`[auto-import-invoice] Callback error:`, cbErr.message);

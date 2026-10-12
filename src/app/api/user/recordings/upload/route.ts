@@ -33,14 +33,12 @@ import {
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { appendSheetbotDebugLog } from "@/lib/safe-debug-log";
 
-const debugLogPath = path.join(process.cwd(), "upload_debug.log");
 function writeDebugLog(msg: string) {
-  try {
-    const timestamp = new Date().toISOString();
-    fs.appendFileSync(debugLogPath, `[${timestamp}] ${msg}\n`);
-    console.log(`[RecordingsUpload] ${msg}`);
-  } catch {}
+  const timestamp = new Date().toISOString();
+  appendSheetbotDebugLog("upload_debug.log", `[${timestamp}] ${msg}`);
+  console.log(`[RecordingsUpload] ${msg}`);
 }
 
 function formatBytes(bytes: number): string {

@@ -8,6 +8,7 @@ import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { appendSheetbotDebugLog } from "@/lib/safe-debug-log";
 
 // 검증된 프로덕션 활성 웹앱 배포 URL (Failover 보장용)
 const KNOWN_ACTIVE_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbx7l5Ce6S4cwaU4mrDyUgZF5uKOSwU8zl3Nw_so5i6Rpl5MnMW6S98u1tgMrbHSl7zArw/exec";
@@ -81,7 +82,7 @@ async function runAsyncFolderSyncWithWebhook(params: {
 }) {
   const { spreadsheetId, folderId, webhookUrl, userEmail } = params;
   const logMsg = `[${new Date().toISOString()}] [ASYNC START] folderId: ${folderId}, ss: ${spreadsheetId}, webhook: ${webhookUrl || "none"}, user: ${userEmail}\n`;
-  try { fs.appendFileSync("C:/dev/SheetBot/debug_sync.log", logMsg); } catch (_) {}
+  appendSheetbotDebugLog("debug_sync.log", logMsg);
   console.log(`[auto-import-doc] [ASYNC START] folderId: ${folderId}, ss: ${spreadsheetId}, webhook: ${webhookUrl || "none"}, user: ${userEmail}`);
 
   try {
@@ -92,7 +93,7 @@ async function runAsyncFolderSyncWithWebhook(params: {
       pageSize: 50,
     });
     const items = listRes?.files || listRes?.items || [];
-    try { fs.appendFileSync("C:/dev/SheetBot/debug_sync.log", `Found ${items.length} items in folder: ${items.map((i: any) => i.name).join(", ")}\n`); } catch (_) {}
+    appendSheetbotDebugLog("debug_sync.log", `Found ${items.length} items in folder: ${items.map((i: any) => i.name).join(", ")}\n`);
     console.log(`[auto-import-doc] [ASYNC] Found ${items.length} items in folder`);
 
     // 2. 하위 완료함/미처리함 폴더 확인 또는 생성
@@ -243,11 +244,11 @@ async function runAsyncFolderSyncWithWebhook(params: {
         // 오직 PO 번호와 품번이 둘 다 완벽하게 일치(100점 만점)하는 행에만 기입을 허용합니다!
         if (bestRowIndex !== -1 && bestScore === 100) {
           targetRowIndex = bestRowIndex;
-          try { fs.appendFileSync("C:/dev/SheetBot/debug_sync.log", `[100PT MATCH CONFIRMED] File ${file.name} -> Row ${targetRowIndex} (PO: ${matchPo}, Part: ${matchPart})\n`); } catch (_) {}
+          appendSheetbotDebugLog("debug_sync.log", `[100PT MATCH CONFIRMED] File ${file.name} -> Row ${targetRowIndex} (PO: ${matchPo}, Part: ${matchPart})\n`);
         } else {
           // 100점 미달(조건 불일치) 시: 절대 시트에 오기입하지 않고, 미처리보관함으로 안전 격리!
           console.warn(`[auto-import-doc] [100PT GUARD] File ${file.name} does not meet 100% criteria (bestScore=${bestScore}, bestRow=${bestRowIndex}). Moving to review folder.`);
-          try { fs.appendFileSync("C:/dev/SheetBot/debug_sync.log", `[100PT GUARD BLOCKED] File ${file.name} score=${bestScore} (PO: ${matchPo}, Part: ${matchPart}) -> Skipped sheet update & moved to review folder\n`); } catch (_) {}
+          appendSheetbotDebugLog("debug_sync.log", `[100PT GUARD BLOCKED] File ${file.name} score=${bestScore} (PO: ${matchPo}, Part: ${matchPart}) -> Skipped sheet update & moved to review folder\n`);
 
           if (reviewFolderId) {
             try {
@@ -283,11 +284,11 @@ async function runAsyncFolderSyncWithWebhook(params: {
               redirect: "follow",
             });
             const cbBody = await cbRes.text().catch(() => "");
-            try { fs.appendFileSync("C:/dev/SheetBot/debug_sync.log", `Webhook callback to ${webhookUrl}: status=${cbRes.status}, body=${cbBody}\n`); } catch (_) {}
+            appendSheetbotDebugLog("debug_sync.log", `Webhook callback to ${webhookUrl}: status=${cbRes.status}, body=${cbBody}\n`);
             console.log(`[auto-import-doc] [ASYNC] Webhook callback status: ${cbRes.status}`);
             webhookSuccess = cbRes.ok;
           } catch (cbErr: any) {
-            try { fs.appendFileSync("C:/dev/SheetBot/debug_sync.log", `Webhook callback FAILED: ${cbErr.message}\n`); } catch (_) {}
+            appendSheetbotDebugLog("debug_sync.log", `Webhook callback FAILED: ${cbErr.message}\n`);
             console.error(`[auto-import-doc] [ASYNC] Webhook callback failed:`, cbErr.message);
           }
         }
@@ -313,7 +314,7 @@ async function runAsyncFolderSyncWithWebhook(params: {
               redirect: "follow",
             });
             const retryBody = await retryRes.text().catch(() => "");
-            try { fs.appendFileSync("C:/dev/SheetBot/debug_sync.log", `Failover Webhook to ${KNOWN_ACTIVE_WEBHOOK_URL}: status=${retryRes.status}, body=${retryBody}\n`); } catch (_) {}
+            appendSheetbotDebugLog("debug_sync.log", `Failover Webhook to ${KNOWN_ACTIVE_WEBHOOK_URL}: status=${retryRes.status}, body=${retryBody}\n`);
             webhookSuccess = retryRes.ok;
           } catch (retryErr: any) {
             console.error("[auto-import-doc] [ASYNC FAILOVER ERROR]:", retryErr.message);
@@ -369,12 +370,10 @@ async function runAsyncFolderSyncWithWebhook(params: {
             });
             const styleBody = await styleRes.text().catch(() => "");
             console.log(`[auto-import-doc] [ASYNC FALLBACK STYLE] Result (${styleRes.status}):`, styleBody);
-            try {
-              fs.appendFileSync(
-                "C:/dev/SheetBot/debug_sync.log",
-                `[FALLBACK BLUE STYLE APPLIED] Row ${targetRowIndex} (${targetTab}!${invColLetter}${targetRowIndex}) -> Status ${styleRes.status}\n`
-              );
-            } catch (_) {}
+            appendSheetbotDebugLog(
+              "debug_sync.log",
+              `[FALLBACK BLUE STYLE APPLIED] Row ${targetRowIndex} (${targetTab}!${invColLetter}${targetRowIndex}) -> Status ${styleRes.status}\n`
+            );
           } catch (styleErr: any) {
             console.error(`[auto-import-doc] [ASYNC FALLBACK STYLE ERROR]:`, styleErr.message);
           }
@@ -428,7 +427,7 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const { spreadsheetId, folderId, webhookUrl, mode, fileId, fileName, mimeType, fileBase64: clientBase64, fileText: clientFileText } = body;
-    try { fs.appendFileSync("C:/dev/SheetBot/debug_sync.log", `[${new Date().toISOString()}] [POST INCOMING] body: ${JSON.stringify(body)}\n`); } catch (_) {}
+    appendSheetbotDebugLog("debug_sync.log", `[${new Date().toISOString()}] [POST INCOMING] body: ${JSON.stringify(body)}\n`);
 
     if (!spreadsheetId) {
       return NextResponse.json(
