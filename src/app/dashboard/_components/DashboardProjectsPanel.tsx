@@ -395,7 +395,7 @@ export function DashboardProjectsPanel({
                         disabled={Boolean(syncingCodeProjectId && p.id && syncingCodeProjectId === p.id)}
                         className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 text-slate-600 font-bold rounded-lg transition-all border border-slate-200 cursor-pointer shadow-2xs text-[11px] whitespace-nowrap disabled:opacity-50"
                         title="구글 시트에서 직접 수정한 최신 Apps Script 코드를 SheetBot DB로 가져옵니다."
-                        data-easybot-hint="최신 코드 동기화: 사용자가 구글 시트에서 직접 수정한 Apps Script 최신 코드를 즉시 읽어와 SheetBot에 일치시킵니다."
+                        data-easybot-hint="코드 동기화: 구글 Code.gs를 읽어 SheetBot 표준(코파일럿 사이드바·메뉴)으로 보정한 뒤 DB와 구글 클라우드에 다시 배포합니다."
                       >
                         <RefreshCw className={`w-3 h-3 ${Boolean(syncingCodeProjectId && p.id && syncingCodeProjectId === p.id) ? "animate-spin text-emerald-600" : "text-slate-500"}`} />
                         <span>{Boolean(syncingCodeProjectId && p.id && syncingCodeProjectId === p.id) ? "동기화 중..." : "코드 동기화"}</span>

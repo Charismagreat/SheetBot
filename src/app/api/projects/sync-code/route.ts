@@ -5,6 +5,7 @@ import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, updateRows, callAppsScriptTool } from "@/lib/egdesk-helpers";
 import { findSheetbotProjectByRef } from "@/lib/sheetbot-project-resolve";
 import { generateStandardTokenRecharge } from "@/lib/gas-manifest";
+import { sanitizeGasScriptCode } from "@/lib/gas-sanitizer";
 
 // 구글 스프레드시트 URL에서 ID 추출
 function extractSpreadsheetId(urlOrId: string): string | null {
@@ -16,7 +17,7 @@ function extractSpreadsheetId(urlOrId: string): string | null {
 }
 
 /**
- * POST: 구글 시트의 클라우드 Apps Script 최신 코드를 읽어와 SheetBot DB에 동기화
+ * POST: 구글 Apps Script Code.gs를 읽어 SheetBot 표준(sanitizer)으로 맞춘 뒤 DB·클라우드에 반영
  */
 export async function POST(request: Request) {
   try {
@@ -106,7 +107,29 @@ export async function POST(request: Request) {
       );
     }
 
-    // 5. 최신 appsscript.json 파일 내용 읽기 (선택)
+    const sanitizedCode = sanitizeGasScriptCode(latestCode);
+    const codeStandardized = sanitizedCode !== latestCode;
+    let codePushOk = !codeStandardized;
+
+    // 5. SheetBot 표준 보정(코파일럿 사이드바 등)이 필요하면 Code.gs를 구글에 다시 배포
+    if (codeStandardized) {
+      try {
+        await callAppsScriptTool("apps_script_write_file", {
+          projectId: gasProjectId,
+          fileName: "Code.gs",
+          content: sanitizedCode,
+        });
+        await callAppsScriptTool("apps_script_push_to_google", {
+          projectId: gasProjectId,
+        });
+        codePushOk = true;
+      } catch (pushCodeErr: any) {
+        console.warn("[Sync-Code] Code.gs standardize push warning:", pushCodeErr.message);
+        codePushOk = false;
+      }
+    }
+
+    // 6. 최신 appsscript.json 파일 내용 읽기 (선택)
     let latestManifest = "";
     try {
       const manifestRes = await callAppsScriptTool("apps_script_read_file", {
@@ -118,11 +141,11 @@ export async function POST(request: Request) {
       // 매니페스트 실패는 치명적이지 않음
     }
 
-    // 6. 감지된 함수명 목록 추출
-    const functionMatches = [...latestCode.matchAll(/function\s+([a-zA-Z0-9_$]+)\s*\(/g)];
+    // 7. 감지된 함수명 목록 추출 (보정 후 코드 기준)
+    const functionMatches = [...sanitizedCode.matchAll(/function\s+([a-zA-Z0-9_$]+)\s*\(/g)];
     const functionNames = functionMatches.map((m) => m[1]);
 
-    // 7. SheetBot 표준 토큰 충전 모듈(TokenRecharge.gs) 최신화 및 구글 클라우드 자동 배포 (Push)
+    // 8. SheetBot 표준 토큰 충전 모듈(TokenRecharge.gs) 최신화 및 구글 클라우드 자동 배포 (Push)
     try {
       await callAppsScriptTool("apps_script_write_file", {
         projectId: gasProjectId,
@@ -136,10 +159,10 @@ export async function POST(request: Request) {
       console.warn("[Sync-Code] TokenRecharge.gs push warning:", pushErr.message);
     }
 
-    // 8. SheetBot DB 갱신
+    // 9. SheetBot DB 갱신
     const nowStr = new Date().toISOString();
     const updatePayload: Record<string, any> = {
-      script_code: latestCode,
+      script_code: sanitizedCode,
       updated_at: nowStr,
       updated_by: userEmail,
     };
@@ -157,13 +180,21 @@ export async function POST(request: Request) {
       },
     });
 
+    const standardizeNote = codeStandardized
+      ? codePushOk
+        ? "코파일럿 사이드바 등 SheetBot 표준 Code.gs 보정본이 구글에 배포되었습니다."
+        : "Code.gs 표준 보정은 적용했으나 구글 배포에 실패했습니다. 잠시 후 다시 시도해 주세요."
+      : "Code.gs는 이미 SheetBot 표준과 일치합니다.";
+
     return NextResponse.json({
       success: true,
-      message: "구글 시트의 최신 코드가 동기화되었으며, 최신 토큰 충전 모듈(TokenRecharge.gs)이 구글 시트에 안전하게 업데이트 배포되었습니다.",
+      message: `${standardizeNote} 최신 토큰 충전 모듈(TokenRecharge.gs)도 갱신되었습니다.`,
       syncedAt: nowStr,
       functionNames,
-      codeLength: latestCode.length,
-      scriptCode: latestCode,
+      codeLength: sanitizedCode.length,
+      scriptCode: sanitizedCode,
+      codeStandardized,
+      codePushOk,
     });
   } catch (err: any) {
     console.error("[Sync-Code] Unexpected error:", err);

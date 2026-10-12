@@ -465,9 +465,15 @@ export default function DashboardPage() {
         )
       );
 
+      const deployNote =
+        data.codeStandardized && data.codePushOk
+          ? " 코파일럿·메뉴 표준 보정본이 구글 Apps Script에 배포되었습니다."
+          : data.codeStandardized && !data.codePushOk
+            ? " (표준 보정은 DB에만 반영됨 — 구글 배포 실패, 재시도 필요)"
+            : "";
       showAlert({
         type: "success",
-        text: `'${p.name}' 구글 시트의 최신 Apps Script 코드(${data.functionNames?.length || 0}개 함수)가 SheetBot DB에 동기화되었습니다.`,
+        text: `'${p.name}' Apps Script ${data.functionNames?.length || 0}개 함수 동기화 완료.${deployNote}`,
       });
     } catch (err: any) {
       showAlert({ type: "error", text: err.message || "코드 동기화 중 오류가 발생했습니다." });
