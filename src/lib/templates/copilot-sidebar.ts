@@ -1,0 +1,1532 @@
+/**
+ * SheetBot in-sheet copilot sidebar HTML (Apps Script HtmlService).
+ * Exported as a string — do not load via fs at runtime.
+ */
+
+export const COPILOT_SIDEBAR_HTML = `<!DOCTYPE html>
+<html>
+<head>
+  <base target="_blank">
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      background: #f8fafc;
+      color: #0f172a;
+      margin: 0;
+      padding: 6px 4px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.4;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* [1] 최상단 1줄 슬림 인프라 상태 바 */
+    .top-status-strip {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 7px;
+      font-size: 11px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+    }
+    .status-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #334155;
+      font-weight: 600;
+    }
+    .status-dot-sm {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+    }
+    .status-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .latency-tag {
+      background: #f1f5f9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #475569;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .strip-reload {
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: #94a3b8;
+      font-size: 11px;
+      padding: 2px;
+      transition: color 0.15s;
+    }
+    .strip-reload:hover { color: #2563eb; }
+
+    /* [1-1] 스마트 하이브리드 지갑 미니 스트립 */
+    .wallet-mini-strip {
+      width: 100%;
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      border-radius: 8px;
+      padding: 6px 9px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 7px;
+      color: #ffffff;
+      box-shadow: 0 2px 5px rgba(15, 23, 42, 0.1);
+      box-sizing: border-box;
+      transition: all 0.2s ease;
+    }
+    .wallet-mini-strip:hover {
+      border-color: rgba(99, 102, 241, 0.6);
+    }
+    .wallet-mini-left {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .wallet-mini-icon {
+      font-size: 13px;
+    }
+    .wallet-mini-label {
+      font-size: 10.5px;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+    .wallet-mini-amount {
+      font-size: 13px;
+      font-weight: 800;
+      color: #38bdf8;
+      letter-spacing: -0.2px;
+      font-variant-numeric: tabular-nums;
+    }
+    .wallet-mini-tier {
+      font-size: 8.5px;
+      font-weight: 800;
+      padding: 1px 4px;
+      border-radius: 3px;
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    .wallet-toggle-arrow {
+      font-size: 9px;
+      color: #94a3b8;
+      margin-left: 2px;
+      transition: transform 0.2s;
+    }
+    .wallet-mini-right {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .wallet-eye-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #cbd5e1;
+      padding: 3px 6px;
+      border-radius: 5px;
+      font-size: 11px;
+      cursor: pointer;
+      line-height: 1;
+      transition: all 0.15s;
+    }
+    .wallet-eye-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+      color: #ffffff;
+    }
+    .wallet-mini-charge-btn {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #ffffff;
+      border: none;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      transition: filter 0.15s;
+      box-shadow: 0 1px 4px rgba(16, 185, 129, 0.3);
+    }
+    .wallet-mini-charge-btn:hover {
+      filter: brightness(1.1);
+    }
+
+    /* [2] 프리미엄 토큰 지갑 카드 */
+    .wallet-card {
+      width: 100%;
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #0f172a 100%);
+      border-radius: 10px;
+      padding: 12px 10px;
+      color: #ffffff;
+      margin-bottom: 7px;
+      box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.15), 0 0 0 1px rgba(99, 102, 241, 0.25) inset;
+    }
+    .wallet-top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .tier-badge {
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #ffffff;
+    }
+    .user-email-text {
+      font-size: 11px;
+      color: #94a3b8;
+      max-width: 190px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .wallet-balance-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .balance-num-box {
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+    }
+    .balance-val {
+      font-size: 23px;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+      color: #38bdf8;
+      font-variant-numeric: tabular-nums;
+    }
+    .balance-unit {
+      font-size: 12px;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+    .refresh-icon-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #e2e8f0;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      transition: all 0.2s;
+    }
+    .refresh-icon-btn:hover {
+      background: rgba(255, 255, 255, 0.16);
+      color: #ffffff;
+    }
+    .token-warning-box {
+      margin-top: 8px;
+      margin-bottom: 10px;
+      padding: 9px 12px;
+      border-radius: 9px;
+      font-size: 11px;
+      line-height: 1.45;
+      transition: all 0.25s ease;
+      box-sizing: border-box;
+    }
+    .token-warning-box.warning-low {
+      background: rgba(245, 158, 11, 0.16);
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      color: #fef3c7;
+    }
+    .token-warning-box.warning-low .warning-title {
+      color: #fcd34d;
+      font-weight: 800;
+      font-size: 11.5px;
+    }
+    .token-warning-box.warning-low .warning-desc {
+      color: #fde68a;
+      margin-top: 3px;
+      font-size: 10.5px;
+    }
+    .token-warning-box.warning-depleted {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.55);
+      color: #fee2e2;
+      animation: alertPulse 2s infinite ease-in-out;
+    }
+    .token-warning-box.warning-depleted .warning-title {
+      color: #fca5a5;
+      font-weight: 800;
+      font-size: 11.5px;
+    }
+    .token-warning-box.warning-depleted .warning-desc {
+      color: #fecaca;
+      margin-top: 3px;
+      font-size: 10.5px;
+    }
+    @keyframes alertPulse {
+      0%, 100% { border-color: rgba(239, 68, 68, 0.55); box-shadow: 0 0 0 rgba(239, 68, 68, 0); }
+      50% { border-color: rgba(239, 68, 68, 0.95); box-shadow: 0 0 12px rgba(239, 68, 68, 0.4); }
+    }
+    .warning-header {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .wallet-btn-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .btn-charge {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #ffffff;
+      font-size: 11.5px;
+      font-weight: 700;
+      padding: 8px 6px;
+      border-radius: 7px;
+      border: none;
+      cursor: pointer;
+      text-align: center;
+      transition: transform 0.1s, filter 0.2s;
+      box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .btn-charge:hover { filter: brightness(1.08); }
+    .btn-charge:active { transform: scale(0.98); }
+    .btn-workspace {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      color: #ffffff;
+      font-size: 11.5px;
+      font-weight: 700;
+      padding: 8px 6px;
+      border-radius: 7px;
+      text-decoration: none;
+      text-align: center;
+      transition: all 0.2s;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .btn-workspace:hover {
+      background: rgba(255, 255, 255, 0.22);
+      border-color: rgba(255, 255, 255, 0.35);
+      color: #ffffff;
+    }
+    .btn-workspace:active { transform: scale(0.98); }
+    .btn-cases-full {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #cbd5e1;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 6px;
+      text-decoration: none;
+      text-align: center;
+      transition: all 0.2s;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .btn-cases-full:hover {
+      background: rgba(255, 255, 255, 0.14);
+      color: #ffffff;
+    }
+    .btn-referral-invite {
+      width: 100%;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 7px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      margin-top: 6px;
+      transition: all 0.2s;
+      box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
+      box-sizing: border-box;
+    }
+    .btn-referral-invite:hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+
+    /* [🌟] 시트봇 다목적 공지/광고 배너 슬롯 */
+    /* [🌟] 시트봇 다목적 광고/공지 배너 (정사각형 화사한 프리미엄 광고 포맷) */
+    .promo-banner-card {
+      width: 100%;
+      min-height: 330px;
+      aspect-ratio: 1 / 1;
+      background: linear-gradient(145deg, #ffffff 0%, #f8faff 40%, #eef2ff 100%);
+      border: 2px solid #818cf8;
+      border-radius: 16px;
+      padding: 18px 14px;
+      margin-top: 14px;
+      margin-bottom: 12px;
+      box-shadow: 0 10px 25px -4px rgba(79, 70, 229, 0.16), 0 4px 12px rgba(0, 0, 0, 0.05);
+      text-decoration: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      color: #0f172a;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+    .promo-banner-card:hover {
+      border-color: #4f46e5;
+      transform: translateY(-3px);
+      box-shadow: 0 16px 32px -4px rgba(79, 70, 229, 0.24), 0 6px 16px rgba(0, 0, 0, 0.08);
+    }
+    .promo-banner-card::before {
+      content: "";
+      position: absolute;
+      top: -40px;
+      right: -40px;
+      width: 140px;
+      height: 140px;
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .ad-badge-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .ad-pill {
+      font-size: 14px;
+      font-weight: 800;
+      padding: 6px 14px;
+      border-radius: 9px;
+      background: #4f46e5;
+      color: #ffffff;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      letter-spacing: -0.2px;
+      box-shadow: 0 3px 8px rgba(79, 70, 229, 0.35);
+    }
+    .ad-tag {
+      display: none;
+    }
+    .ad-content-box {
+      margin: auto 0;
+      padding: 12px 0;
+    }
+    .ad-headline {
+      font-size: 20px;
+      font-weight: 900;
+      color: #0f172a;
+      line-height: 1.4;
+      letter-spacing: -0.5px;
+      margin-bottom: 14px;
+      word-break: keep-all;
+    }
+    .ad-headline-highlight {
+      color: #4f46e5;
+      position: relative;
+      display: inline-block;
+    }
+    .ad-feature-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+    .ad-feature-item {
+      font-size: 13.5px;
+      color: #334155;
+      font-weight: 700;
+      line-height: 1.5;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      letter-spacing: -0.3px;
+      white-space: nowrap;
+      word-break: keep-all;
+    }
+    .ad-feature-bullet {
+      color: #10b981;
+      font-size: 15px;
+      font-weight: 900;
+      flex-shrink: 0;
+    }
+    .ad-cta-button {
+      width: 100%;
+      background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+      color: #ffffff;
+      padding: 13px 16px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+      transition: all 0.2s ease;
+      letter-spacing: -0.3px;
+    }
+    .promo-banner-card:hover .ad-cta-button {
+      background: linear-gradient(135deg, #4338ca 0%, #4f46e5 100%);
+      transform: scale(1.01);
+      box-shadow: 0 6px 18px rgba(79, 70, 229, 0.45);
+    }
+    .ad-cta-arrow {
+      font-size: 17px;
+      transition: transform 0.2s ease;
+    }
+    .promo-banner-card:hover .ad-cta-arrow {
+      transform: translateX(4px);
+    }
+
+    /* [3] 안티그라비티 허브 */
+    .studio-card {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 7px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    }
+    .btn-main-antigravity {
+      width: 100%;
+      background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-bottom: 7px;
+      transition: filter 0.2s, transform 0.1s;
+      box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);
+    }
+    .btn-main-antigravity:hover { filter: brightness(1.08); }
+    .btn-main-antigravity:active { transform: scale(0.98); }
+    .studio-sub-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .btn-sub {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      color: #334155;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 7px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: center;
+      text-decoration: none;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      transition: all 0.2s;
+    }
+    .btn-sub:hover { background: #f1f5f9; border-color: #94a3b8; color: #0f172a; }
+
+    /* [3-1] 전문가(FDE) 문의 버튼 */
+    .btn-fde-request {
+      width: 100%;
+      background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+      border: 1px solid #15803d;
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 9px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      text-decoration: none;
+      box-sizing: border-box;
+      transition: all 0.2s;
+      box-shadow: 0 1px 3px rgba(21, 128, 61, 0.25);
+    }
+    .btn-fde-request:hover {
+      background: linear-gradient(135deg, #15803d 0%, #166534 100%);
+      filter: brightness(1.05);
+      transform: translateY(-1px);
+    }
+
+    /* [3-2] FDE 파트너스 모집 배너 */
+    .fde-recruit-card {
+      width: 100%;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      border: 1px solid #334155;
+      border-radius: 9px;
+      padding: 10px 11px;
+      margin-bottom: 7px;
+      box-sizing: border-box;
+      text-decoration: none;
+      display: block;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.2);
+    }
+    .fde-recruit-card:hover {
+      border-color: #38bdf8;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(56, 189, 248, 0.15);
+    }
+    .fde-recruit-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    .fde-recruit-badge {
+      font-size: 9.5px;
+      font-weight: 800;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      padding: 2px 6px;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .fde-recruit-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: #ffffff;
+      margin-bottom: 2px;
+      line-height: 1.35;
+    }
+    .fde-recruit-desc {
+      font-size: 10.5px;
+      color: #94a3b8;
+      line-height: 1.4;
+      margin-bottom: 6px;
+    }
+    .fde-recruit-cta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #f8fafc;
+      transition: background 0.15s;
+    }
+    .fde-recruit-card:hover .fde-recruit-cta {
+      background: rgba(56, 189, 248, 0.18);
+      color: #38bdf8;
+      border-color: rgba(56, 189, 248, 0.35);
+    }
+
+    /* [3-3] 카카오 오픈채팅 커뮤니티 버튼 */
+    .kakao-community-card {
+      width: 100%;
+      background: #fee500;
+      border: 1px solid #e5cc00;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 7px;
+      box-sizing: border-box;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #371d1e;
+      transition: all 0.15s ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+    .kakao-community-card:hover {
+      background: #fada0a;
+      border-color: #d1ba00;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    }
+    .kakao-left {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .kakao-icon-box {
+      font-size: 15px;
+      line-height: 1;
+    }
+    .kakao-text-box {
+      display: flex;
+      flex-direction: column;
+      text-align: left;
+    }
+    .kakao-title {
+      font-size: 11.5px;
+      font-weight: 800;
+      color: #191919;
+      line-height: 1.25;
+    }
+    .kakao-subtitle {
+      font-size: 9.5px;
+      color: #554422;
+      margin-top: 1px;
+    }
+    .kakao-badge {
+      font-size: 10px;
+      font-weight: 700;
+      background: rgba(0, 0, 0, 0.08);
+      padding: 3px 7px;
+      border-radius: 5px;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      color: #191919;
+    }
+
+    /* [4] 접이식 고급 관리 아코디언 */
+    details.advanced-box {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 11px;
+      overflow: hidden;
+    }
+    details.advanced-box summary {
+      padding: 7px 10px;
+      color: #64748b;
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    details.advanced-box summary:hover { color: #334155; background: #f8fafc; }
+    .danger-inner {
+      padding: 9px 10px;
+      background: #fff1f2;
+      border-top: 1px solid #fecdd3;
+    }
+    .danger-desc {
+      font-size: 10px;
+      color: #9f1239;
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+    .btn-danger-clean {
+      width: 100%;
+      background: #e11d48;
+      color: #ffffff;
+      border: none;
+      padding: 6px 8px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-danger-clean:hover { background: #be123c; }
+
+    /* [5] 🏷️ 시트봇 공식 인증 푸터 카드 */
+    .copilot-footer-card {
+      margin-top: 10px;
+      margin-bottom: 6px;
+      padding: 10px 8px;
+      text-align: center;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .footer-brand-link {
+      text-decoration: none;
+      display: inline-flex;
+      transition: transform 0.15s ease;
+    }
+    .footer-brand-link:hover {
+      transform: translateY(-1px);
+    }
+    .footer-brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 999px;
+      font-size: 11px;
+      color: #334155;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+      transition: all 0.2s ease;
+    }
+    .footer-brand-link:hover .footer-brand-badge {
+      border-color: #6366f1;
+      color: #4f46e5;
+      box-shadow: 0 2px 6px rgba(99, 102, 241, 0.15);
+    }
+    .footer-bolt {
+      color: #f59e0b;
+      font-size: 11px;
+    }
+    .footer-brand-name {
+      font-weight: 500;
+      letter-spacing: -0.2px;
+    }
+    .footer-brand-name strong {
+      font-weight: 800;
+      color: #1e293b;
+    }
+    .footer-brand-link:hover .footer-brand-name strong {
+      color: #4f46e5;
+    }
+    .footer-verified-icon {
+      font-size: 9.5px;
+      font-weight: 900;
+      color: #10b981;
+      background: rgba(16, 185, 129, 0.12);
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .footer-meta-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      color: #94a3b8;
+      letter-spacing: -0.2px;
+    }
+    .footer-subtext {
+      color: #94a3b8;
+    }
+    .footer-dot {
+      color: #cbd5e1;
+    }
+    .footer-version {
+      color: #64748b;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <!-- [1] 최상단 1줄 슬림 인프라 상태 바 -->
+  <div class="top-status-strip">
+    <div class="status-left">
+      <span class="status-dot-sm" id="tunnel-dot"></span>
+      <span id="tunnel-status">EGDesk SSL 터널 정상</span>
+    </div>
+    <div class="status-right">
+      <span class="latency-tag" id="tunnel-latency">112 ms</span>
+      <button class="strip-reload" onclick="checkTunnel()" title="인프라 재점검">🔄</button>
+    </div>
+  </div>
+
+  <?
+    var _initBal = (typeof initialBalance !== 'undefined' && initialBalance !== null) ? Number(initialBalance) : 2495439;
+    var _initTier = (typeof initialTier !== 'undefined' && initialTier) ? initialTier : 'PRO';
+    var _initEmail = (typeof currentUserEmail !== 'undefined' && currentUserEmail) ? currentUserEmail : 'chachogreat@gmail.com';
+    var _formattedBal = _initBal.toLocaleString();
+  ?>
+
+  <!-- [1-1] 스마트 하이브리드 지갑 미니 스트립 (평상시 슬림 표시 & 마스킹) -->
+  <div class="wallet-mini-strip" id="wallet-mini-strip">
+    <div class="wallet-mini-left" onclick="toggleWalletCard()" title="클릭하여 지갑 상세 카드 열기/닫기">
+      <span class="wallet-mini-icon">🪙</span>
+      <span class="wallet-mini-label">토큰</span>
+      <span class="wallet-mini-amount" id="token-amount-mini"><?= _formattedBal ?> T</span>
+      <span class="wallet-mini-tier" id="tier-badge-mini"><?= _initTier ?></span>
+      <span class="wallet-toggle-arrow" id="wallet-toggle-arrow">▼</span>
+    </div>
+    <div class="wallet-mini-right">
+      <button class="wallet-eye-btn" onclick="toggleMaskBalance(event)" id="mask-btn" title="프라이버시 잔액 숨김/보임 (화면 공유 시 보호)">👁️</button>
+      <button class="wallet-mini-charge-btn" onclick="openRechargeModal(event)" title="토큰 즉시 충전">+ 충전</button>
+    </div>
+  </div>
+
+  <!-- [2] 프리미엄 토큰 지갑 상세 카드 (접이식) -->
+  <div class="wallet-card" id="wallet-card-details" style="display: none;">
+    <div class="wallet-top-row">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span class="tier-badge" id="tier-badge"><?= _initTier ?></span>
+        <span class="user-email-text" id="token-user"><?= _initEmail ?></span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <button class="refresh-icon-btn" onclick="refreshBalance()" title="실시간 잔액 새로고침">
+          <span>🔄</span><span>새로고침</span>
+        </button>
+        <button class="refresh-icon-btn" onclick="toggleWalletCard()" title="지갑 상세 접기" style="color: #94a3b8;">
+          <span>▲ 접기</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="wallet-balance-row">
+      <div class="balance-num-box">
+        <span class="balance-val" id="token-amount"><?= _formattedBal ?></span>
+        <span class="balance-unit" id="balance-unit">Token</span>
+      </div>
+    </div>
+
+    <!-- [⚠️] 동적 토큰 잔액 경고 알림 박스 (5,000 이하 또는 소진 시 자동 노출) -->
+    <div id="token-warning-box" class="token-warning-box" style="display: none;">
+      <div class="warning-header">
+        <span id="warning-icon">⚠️</span>
+        <span id="warning-title" class="warning-title">잔여 토큰 부족 주의</span>
+      </div>
+      <div id="warning-desc" class="warning-desc">
+        잔여 토큰이 5,000 이하입니다. 원활한 AI 자동화를 위해 충전을 권장합니다.
+      </div>
+    </div>
+
+    <div class="wallet-btn-grid">
+      <button class="btn-charge" onclick="openRechargeModal()" title="토큰 충전 모달 열기">
+        <span>💳 즉시 충전</span>
+      </button>
+      <a id="btn-workspace-link" href="https://sheetbot.cloud/dashboard" target="_blank" class="btn-workspace" title="내 시트봇 대시보드(워크스페이스)로 이동">
+        <span>💼 내 워크스페이스</span>
+        <span style="font-size: 10px; opacity: 0.8;">↗</span>
+      </a>
+    </div>
+    <a href="https://sheetbot.cloud/use-cases" target="_blank" class="btn-cases-full" title="실무 활용사례 40선 보기">
+      <span>📖 40+ 실무 활용사례 및 가이드</span>
+      <span style="font-size: 10px; opacity: 0.7;">↗</span>
+    </a>
+    <button class="btn-referral-invite" onclick="copyReferralLink()" title="동료 초대 시 초대한 사람과 동료 모두에게 10,000 토큰 즉시 선물">
+      <span>🎁 동료 초대 링크 복사 (둘 다 10,000T)</span>
+    </button>
+  </div>
+
+
+  <!-- [3] 안티그라비티 허브 -->
+  <div class="studio-card">
+    <!-- 메인 CTA -->
+    <button class="btn-main-antigravity" onclick="openAntigravity()">
+      <span>🚀 안티그라비티에서 작업</span>
+    </button>
+
+    <!-- 서브 액션 2열 그리드 -->
+    <div class="studio-sub-grid">
+      <button class="btn-sub" onclick="copyPrompt()">
+        <span>📋 지시문 복사</span>
+      </button>
+      <a href="https://sheetbot.cloud/wrap" target="_blank" class="btn-sub">
+        <span>🔗 새 시트 래핑</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- [3-1] 전문가(FDE) 문의 버튼 -->
+  <div style="margin-bottom: 7px;">
+    <?
+      var _initialSheetUrl = '';
+      try {
+        if (typeof currentSheetUrl !== 'undefined' && currentSheetUrl) {
+          _initialSheetUrl = currentSheetUrl;
+        }
+      } catch(e) {}
+      var _fdeHref = 'https://sheetbot.cloud/dashboard?modal=fde' + (_initialSheetUrl ? '&sheetUrl=' + encodeURIComponent(_initialSheetUrl) : '');
+    ?>
+    <a href="<?= _fdeHref ?>" target="_blank" class="btn-fde-request" id="btn-fde-request-link" onclick="handleFdeClick(event)" title="시트봇 전담 엔지니어에게 1:1 맞춤 제작 문의">
+      <span>🛠️ 전문가에게 문의하기</span>
+      <span style="font-size: 11px; opacity: 0.9;">↗</span>
+    </a>
+  </div>
+
+  <!-- [3-2] FDE 파트너스 모집 배너 -->
+  <a id="fde-recruit-card" href="https://sheetbot.cloud/dashboard?modal=fde-recruit" target="_blank" class="fde-recruit-card" title="시트봇 공인 FDE 파트너 지원하기">
+    <div class="fde-recruit-header">
+      <span class="fde-recruit-badge" id="fde-recruit-badge">👨‍💻 파트너스 1기 모집</span>
+      <span id="fde-recruit-tag" style="font-size: 9.5px; color: #34d399; font-weight: 700;">수익 창출</span>
+    </div>
+    <div class="fde-recruit-title" id="fde-recruit-title">
+      시트 제작 능력을 수익으로 전환하세요
+    </div>
+    <div class="fde-recruit-desc" id="fde-recruit-desc">
+      고객 맞춤 자동화 제작 건당 5만~30만원 부수입 창출
+    </div>
+    <div class="fde-recruit-cta">
+      <span id="fde-recruit-btn-text">🚀 공인 FDE 파트너 지원하기</span>
+      <span>↗</span>
+    </div>
+  </a>
+
+  <!-- [3-3] 💬 카카오 오픈채팅 커뮤니티 연결 -->
+  <a id="kakao-community-card" href="https://invite.kakao.com/tc/DiKY7rTu0w" target="_blank" class="kakao-community-card" title="시트봇 공식 오픈채팅방에서 실시간 Q&A와 꿀팁을 공유하세요">
+    <div class="kakao-left">
+      <span class="kakao-icon-box">💬</span>
+      <div class="kakao-text-box">
+        <span class="kakao-title" id="kakao-community-title">시트봇 실시간 해결 오픈채팅</span>
+        <span class="kakao-subtitle" id="kakao-community-subtitle">막힐 때 실시간 질문 & 자동화 팁 공유</span>
+      </div>
+    </div>
+    <span class="kakao-badge">
+      <span id="kakao-community-btn-text">입장하기</span>
+      <span>↗</span>
+    </span>
+  </a>
+
+  <!-- [4] 접이식 고급 관리 아코디언 -->
+  <details class="advanced-box">
+    <summary>
+      <span>⚙️ 고급 설정 및 래핑 관리</span>
+      <span>▼</span>
+    </summary>
+    <div class="danger-inner">
+      <p class="danger-desc">
+        시트봇 스크립트와 설치형 트리거를 완전히 초기화합니다. (시트 데이터는 100% 안전 보존됩니다)
+      </p>
+      <button class="btn-danger-clean" onclick="confirmUninstall()">
+        🗑️ 시트봇 래핑 해제 및 스크립트 삭제
+      </button>
+    </div>
+  </details>
+
+  <!-- [🌟] 시트봇 다목적 공지 & 광고 배너 (정사각형 화사한 프리미엄 광고 포맷) -->
+  <a id="promo-banner-card" href="https://sheetbot.cloud/wrap/guide" target="_blank" class="promo-banner-card">
+    <div class="ad-badge-row">
+      <span class="ad-pill">📖 1분 사용법</span>
+    </div>
+
+    <div class="ad-content-box">
+      <div class="ad-headline">
+        Google 시트 AI 래핑<br>
+        <span class="ad-headline-highlight">스크린샷 보며 따라하기</span>
+      </div>
+
+      <div class="ad-feature-list">
+        <div class="ad-feature-item">
+          <span class="ad-feature-bullet">✔</span>
+          <span>복잡한 코딩 없이 안티그라비티 즉시 연동</span>
+        </div>
+        <div class="ad-feature-item">
+          <span class="ad-feature-bullet">✔</span>
+          <span>구글 시트 상단 전용 메뉴 자동 생성</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ad-cta-button">
+      <span>🚀 초간단 사용법 보기</span>
+      <span class="ad-cta-arrow">→</span>
+    </div>
+  </a>
+
+  <!-- [5] 🏷️ 시트봇 공식 인증 푸터 (Powered by SheetBot Cloud) -->
+  <footer class="copilot-footer-card">
+    <a href="https://sheetbot.cloud" target="_blank" class="footer-brand-link" title="시트봇 공식 클라우드 홈페이지 방문">
+      <div class="footer-brand-badge">
+        <span class="footer-bolt">⚡</span>
+        <span class="footer-brand-name">Powered by <strong>SheetBot</strong></span>
+        <span class="footer-verified-icon">✓</span>
+      </div>
+    </a>
+    <div class="footer-meta-row">
+      <span class="footer-subtext">Google 시트 AI 업무 자동화 엔진</span>
+      <span class="footer-dot">&bull;</span>
+      <span class="footer-version" id="footer-version">v3.3 Connected</span>
+    </div>
+  </footer>
+
+  <script>
+    var currentEmail = '<?= _initEmail ?>';
+    var currentBalance = <?= _initBal ?>;
+    var isMasked = false;
+    var isDetailsOpen = false;
+
+    try {
+      isMasked = localStorage.getItem('sheetbot_wallet_masked') === 'true';
+    } catch(e) {}
+
+    applyBalanceDisplay(currentBalance);
+
+    // 사이드바 로드 즉시 브라우저에서 최신 잔액 백그라운드 갱신
+    setTimeout(function() {
+      fetchDirectWallet(currentEmail);
+    }, 20);
+
+    function toggleWalletCard() {
+      var detailsEl = document.getElementById('wallet-card-details');
+      var arrowEl = document.getElementById('wallet-toggle-arrow');
+      if (!detailsEl) return;
+      isDetailsOpen = !isDetailsOpen;
+      detailsEl.style.display = isDetailsOpen ? 'block' : 'none';
+      if (arrowEl) arrowEl.innerText = isDetailsOpen ? '▲' : '▼';
+    }
+
+    function toggleMaskBalance(event) {
+      if (event && event.stopPropagation) event.stopPropagation();
+      isMasked = !isMasked;
+      try {
+        localStorage.setItem('sheetbot_wallet_masked', isMasked ? 'true' : 'false');
+      } catch(e) {}
+      applyBalanceDisplay(currentBalance);
+    }
+
+    function applyBalanceDisplay(bal) {
+      if (bal !== undefined && bal !== null && !isNaN(bal)) {
+        currentBalance = Number(bal);
+      }
+      var miniEl = document.getElementById('token-amount-mini');
+      var fullEl = document.getElementById('token-amount');
+      var maskBtn = document.getElementById('mask-btn');
+
+      if (isMasked) {
+        if (miniEl) miniEl.innerText = '••••• T';
+        if (fullEl) fullEl.innerText = '•••••';
+        if (maskBtn) {
+          maskBtn.innerText = '🔒';
+          maskBtn.title = '프라이버시 잔액 숨김 해제';
+        }
+      } else {
+        var formatted = currentBalance.toLocaleString();
+        if (miniEl) miniEl.innerText = formatted + ' T';
+        if (fullEl) fullEl.innerText = formatted;
+        if (maskBtn) {
+          maskBtn.innerText = '👁️';
+          maskBtn.title = '프라이버시 잔액 숨김 (화면 공유 시 보호)';
+        }
+      }
+    }
+
+    function updateTokenWarningState(bal) {
+      var amountEl = document.getElementById('token-amount');
+      var miniEl = document.getElementById('token-amount-mini');
+      var warningBox = document.getElementById('token-warning-box');
+      var warningIcon = document.getElementById('warning-icon');
+      var warningTitle = document.getElementById('warning-title');
+      var warningDesc = document.getElementById('warning-desc');
+
+      if (bal === undefined || bal === null || isNaN(bal)) return;
+      var num = Number(bal);
+      applyBalanceDisplay(num);
+
+      if (num <= 0) {
+        if (amountEl) {
+          amountEl.style.color = '#ef4444';
+          amountEl.style.textShadow = '0 0 12px rgba(239, 68, 68, 0.55)';
+        }
+        if (miniEl) miniEl.style.color = '#ef4444';
+        if (warningBox) {
+          warningBox.style.display = 'block';
+          warningBox.className = 'token-warning-box warning-depleted';
+          if (warningIcon) warningIcon.innerText = '🚨';
+          if (warningTitle) warningTitle.innerText = '토큰 소진 (AI 기능 일시 중지)';
+          if (warningDesc) warningDesc.innerText = '잔여 토큰이 0이 되어 AI 자동화 호출이 중지되었습니다. 즉시 충전 후 계속 이용해 주세요.';
+        }
+        // 토큰 소진 시 자동으로 상세 지갑 카드를 펼쳐 경고 안내
+        if (!isDetailsOpen) {
+          var detailsEl = document.getElementById('wallet-card-details');
+          var arrowEl = document.getElementById('wallet-toggle-arrow');
+          if (detailsEl) {
+            detailsEl.style.display = 'block';
+            isDetailsOpen = true;
+            if (arrowEl) arrowEl.innerText = '▲';
+          }
+        }
+      } else if (num <= 5000) {
+        if (amountEl) {
+          amountEl.style.color = '#f59e0b';
+          amountEl.style.textShadow = '0 0 8px rgba(245, 158, 11, 0.4)';
+        }
+        if (miniEl) miniEl.style.color = '#f59e0b';
+        if (warningBox) {
+          warningBox.style.display = 'block';
+          warningBox.className = 'token-warning-box warning-low';
+          if (warningIcon) warningIcon.innerText = '⚠️';
+          if (warningTitle) warningTitle.innerText = '잔여 토큰 부족 주의 (' + num.toLocaleString() + ' Token)';
+          if (warningDesc) warningDesc.innerText = '잔여 토큰이 5,000 이하입니다. 원활한 AI 자동화를 위해 충전을 권장합니다.';
+        }
+        // 토큰 부족 시 자동으로 상세 지갑 카드를 펼쳐 경고 안내
+        if (!isDetailsOpen) {
+          var detailsEl = document.getElementById('wallet-card-details');
+          var arrowEl = document.getElementById('wallet-toggle-arrow');
+          if (detailsEl) {
+            detailsEl.style.display = 'block';
+            isDetailsOpen = true;
+            if (arrowEl) arrowEl.innerText = '▲';
+          }
+        }
+      } else {
+        if (amountEl) {
+          amountEl.style.color = '#38bdf8';
+          amountEl.style.textShadow = 'none';
+        }
+        if (miniEl) miniEl.style.color = '#38bdf8';
+        if (warningBox) {
+          warningBox.style.display = 'none';
+        }
+      }
+
+      // 구글 시트 상단 메뉴줄 갱신 연동 (Apps Script 환경)
+      if (window.google && window.google.script && window.google.script.run) {
+        try {
+          if (typeof google.script.run.updateSheetBotMenuWithBalance === 'function') {
+            google.script.run.updateSheetBotMenuWithBalance(num);
+          }
+        } catch (e) {}
+      }
+    }
+
+    function fetchDirectWallet(email) {
+      var targetEmail = email || currentEmail || 'chachogreat@gmail.com';
+      var userEl = document.getElementById('token-user');
+      var tierEl = document.getElementById('tier-badge');
+      var miniTierEl = document.getElementById('tier-badge-mini');
+
+      fetch('https://sheetbot.cloud/api/wallet/balance?userEmail=' + encodeURIComponent(targetEmail), { cache: 'no-store' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data && data.success && data.balanceTokens !== undefined) {
+            var bal = Number(data.balanceTokens);
+            if (userEl) userEl.innerText = data.userEmail || targetEmail;
+            if (tierEl && data.tier) {
+              tierEl.innerText = data.tier;
+            }
+            if (miniTierEl && data.tier) {
+              miniTierEl.innerText = data.tier;
+            }
+            applyBalanceDisplay(bal);
+            updateTokenWarningState(bal);
+          }
+        })
+        .catch(function(err) {
+          console.log('Direct fetch error:', err);
+        });
+    }
+
+    function refreshBalance() {
+      // 1. ⚡ 브라우저 직접 fetch를 즉시 우선 실행 (조용한 백그라운드 SWR 갱신)
+      fetchDirectWallet(currentEmail);
+
+      // 2. Apps Script 백엔드 함수 병렬 실행
+      if (window.google && window.google.script && window.google.script.run) {
+        try {
+          google.script.run
+            .withSuccessHandler(function(res) {
+              if (res && res.email) {
+                currentEmail = res.email;
+              }
+              if (res && res.balance !== undefined) {
+                var bal = Number(res.balance);
+                applyBalanceDisplay(bal);
+                updateTokenWarningState(bal);
+              }
+              if (res && res.email && res.email !== 'chachogreat@gmail.com') {
+                fetchDirectWallet(res.email);
+              }
+            })
+            .withFailureHandler(function(err) {
+              fetchDirectWallet(currentEmail);
+            })
+            .getUserTokenBalanceData();
+        } catch(e) {
+          fetchDirectWallet(currentEmail);
+        }
+      }
+    }
+
+    function checkTunnel() {
+      var statusEl = document.getElementById('tunnel-status');
+      var latEl = document.getElementById('tunnel-latency');
+      var dotEl = document.getElementById('tunnel-dot');
+
+      if (window.google && window.google.script && window.google.script.run) {
+        try {
+          google.script.run
+            .withSuccessHandler(function(res) {
+              if (res && res.success) {
+                statusEl.innerText = 'EGDesk SSL 터널 정상';
+                dotEl.style.background = '#10b981';
+                latEl.innerText = (res.latency || res.elapsed || 112) + ' ms';
+              } else {
+                statusEl.innerText = 'EGDesk 터널 단절';
+                dotEl.style.background = '#ef4444';
+                latEl.innerText = 'MCP 서버 확인';
+              }
+            })
+            .withFailureHandler(function(err) {
+              statusEl.innerText = 'EGDesk 터널 오류';
+              dotEl.style.background = '#ef4444';
+              latEl.innerText = 'MCP 서버 확인';
+            })
+            .getTunnelStatusData();
+        } catch(e) {}
+      }
+    }
+
+    function openRechargeModal() {
+      if (window.google && window.google.script && window.google.script.run) {
+        try {
+          google.script.run.openTokenRechargeModal();
+          return;
+        } catch(e) {}
+      }
+      window.open('https://sheetbot.cloud/dashboard/pricing', '_blank');
+    }
+
+
+    function copyReferralLink() {
+      var userEmail = '';
+      try {
+        if (typeof currentUserEmail !== 'undefined' && currentUserEmail) {
+          userEmail = currentUserEmail;
+        }
+      } catch(e) {}
+      if (!userEmail) {
+        var userEl = document.getElementById('token-user');
+        if (userEl && userEl.innerText && userEl.innerText.indexOf('@') !== -1) {
+          userEmail = userEl.innerText.trim();
+        }
+      }
+
+      var refCode = userEmail ? encodeURIComponent(userEmail.split('@')[0]) : 'sheetbot';
+      var inviteUrl = 'https://sheetbot.cloud/?ref=' + refCode;
+      var shareText = '🚀 Google 스프레드시트 1초 AI 자동화 [SheetBot]\n' +
+        '초대 링크로 접속하시면 가입 즉시 10,000 토큰이 지급됩니다!\n\n' +
+        '👉 초대 링크: ' + inviteUrl;
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(shareText).then(function() {
+          alert('🎁 동료 초대 링크가 복사되었습니다!\n\n사내 메신저나 카카오톡으로 동료에게 공유하세요.\n(초대받은 동료와 추천인 모두에게 10,000 토큰이 선물됩니다)');
+        }).catch(function() {
+          prompt('아래 초대 링크를 복사하여 동료에게 공유하세요:', inviteUrl);
+        });
+      } else {
+        prompt('아래 초대 링크를 복사하여 동료에게 공유하세요:', inviteUrl);
+      }
+    }
+
+    var BASE_DASHBOARD_URL = 'https://sheetbot.cloud/dashboard';
+    var CURRENT_SHEET_URL = '';
+    try {
+      if (typeof currentSheetUrl !== 'undefined' && currentSheetUrl) {
+        CURRENT_SHEET_URL = currentSheetUrl;
+      }
+    } catch(e) {}
+
+    function bindFdeSheetUrl(url) {
+      if (!url) return;
+      CURRENT_SHEET_URL = url;
+      var link = document.getElementById('btn-fde-request-link');
+      if (link) {
+        link.href = BASE_DASHBOARD_URL + '?modal=fde&sheetUrl=' + encodeURIComponent(url);
+      }
+    }
+
+    function handleFdeClick(e) {
+      var link = document.getElementById('btn-fde-request-link');
+      if (CURRENT_SHEET_URL && link) {
+        link.href = BASE_DASHBOARD_URL + '?modal=fde&sheetUrl=' + encodeURIComponent(CURRENT_SHEET_URL);
+      }
+    }
+
+    function openFdeRequestModal() {
+      var targetUrl = BASE_DASHBOARD_URL + '?modal=fde' + (CURRENT_SHEET_URL ? '&sheetUrl=' + encodeURIComponent(CURRENT_SHEET_URL) : '');
+      window.open(targetUrl, '_blank');
+    }
+
+    function getBridgePromptText() {
+      return [
+        '구글 시트 래핑 주소: https://sheetbot.cloud/api/agent/gas-bridge',
+        '',
+        '위 구글 시트에 다음 자동화 기능을 구현하고 즉시 주입해줘:',
+        '[추가할 기능 입력]'
+      ].join(String.fromCharCode(10));
+    }
+
+    function openAntigravity() {
+      var promptText = getBridgePromptText();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(promptText).catch(function(){});
+      }
+      window.open('antigravity://', '_blank');
+      setTimeout(function() {
+        alert('안티그라비티가 실행되었습니다! 채팅창에 [Ctrl + V]로 프롬프트를 붙여넣고 원하는 자동화를 요청하세요.');
+      }, 200);
+    }
+
+    function copyPrompt() {
+      var promptText = getBridgePromptText();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(promptText).then(function() {
+          alert('안티그라비티 지시 프롬프트가 복사되었습니다! [Ctrl + V]로 붙여넣어 사용하세요.');
+        }).catch(function() {
+          prompt('아래 프롬프트를 복사하세요:', promptText);
+        });
+      } else {
+        prompt('아래 프롬프트를 복사하세요:', promptText);
+      }
+    }
+
+    function confirmUninstall() {
+      if (!confirm('정말로 시트봇 래핑을 해제하고 모든 자동화 스크립트를 삭제하시겠습니까? (시트 데이터는 보존됩니다)')) return;
+      if (window.google && window.google.script && window.google.script.run) {
+        try {
+          var fn = google.script.run.uninstallScript || google.script.run.uninstallSheetBot || google.script.run.resetSheetBotIntegration;
+          if (fn) {
+            google.script.run
+              .withSuccessHandler(function(msg) {
+                alert(msg || '스크립트가 안전하게 삭제되었습니다. 구글 시트를 새로고침(F5)하세요.');
+              })
+              .withFailureHandler(function(err) {
+                alert('삭제 처리 완료. 시트를 새로고침(F5)하세요.');
+              });
+            fn();
+          }
+        } catch(e) {}
+      }
+    }
+
+    // 실시간 동적 프로모션/배너/템플릿 Micro-Frontend 로더 (Zero-Deploy Architecture)
+    function loadDynamicPromotions() {
+      var endpoints = [
+        'http://localhost:4004/api/copilot/promotions',
+        'https://sheetbot.cloud/api/copilot/promotions'
+      ];
+      
+      function tryFetch(idx) {
+        if (idx >= endpoints.length) return;
+        fetch(endpoints[idx], { method: 'GET', cache: 'no-store' })
+          .then(function(res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+          })
+          .then(function(data) {
+            if (!data || !data.success) return;
+
+            // 2. FDE 파트너스 카드 동적 갱신
+            if (data.fdeRecruit) {
+              var fdeCard = document.getElementById('fde-recruit-card');
+              if (fdeCard && data.fdeRecruit.url) fdeCard.href = data.fdeRecruit.url;
+              var fdeBadge = document.getElementById('fde-recruit-badge');
+              if (fdeBadge && data.fdeRecruit.badge) fdeBadge.innerText = data.fdeRecruit.badge;
+              var fdeTag = document.getElementById('fde-recruit-tag');
+              if (fdeTag && data.fdeRecruit.tag) fdeTag.innerText = data.fdeRecruit.tag;
+              var fdeTitle = document.getElementById('fde-recruit-title');
+              if (fdeTitle && data.fdeRecruit.title) fdeTitle.innerText = data.fdeRecruit.title;
+              var fdeDesc = document.getElementById('fde-recruit-desc');
+              if (fdeDesc && data.fdeRecruit.desc) fdeDesc.innerText = data.fdeRecruit.desc;
+              var fdeBtn = document.getElementById('fde-recruit-btn-text');
+              if (fdeBtn && data.fdeRecruit.buttonText) fdeBtn.innerText = data.fdeRecruit.buttonText;
+            }
+
+            // 3. 카카오 오픈채팅 링크 동적 갱신
+            if (data.kakaoCommunity) {
+              var kakaoCard = document.getElementById('kakao-community-card');
+              if (kakaoCard && data.kakaoCommunity.url) kakaoCard.href = data.kakaoCommunity.url;
+              var kakaoTitle = document.getElementById('kakao-community-title');
+              if (kakaoTitle && data.kakaoCommunity.title) kakaoTitle.innerText = data.kakaoCommunity.title;
+              var kakaoSub = document.getElementById('kakao-community-subtitle');
+              if (kakaoSub && data.kakaoCommunity.subtitle) kakaoSub.innerText = data.kakaoCommunity.subtitle;
+              var kakaoBtn = document.getElementById('kakao-community-btn-text');
+              if (kakaoBtn && data.kakaoCommunity.buttonText) kakaoBtn.innerText = data.kakaoCommunity.buttonText;
+            }
+
+            // 4. 광고 배너 링크 동적 갱신
+            if (data.promoBanner) {
+              var promoCard = document.getElementById('promo-banner-card');
+              if (promoCard && data.promoBanner.url) promoCard.href = data.promoBanner.url;
+            }
+
+            // 5. 푸터 버전 동적 갱신
+            if (data.footer && data.footer.version) {
+              var verEl = document.getElementById('footer-version');
+              if (verEl) verEl.innerText = data.footer.version;
+            }
+          })
+          .catch(function() {
+            tryFetch(idx + 1);
+          });
+      }
+
+      tryFetch(0);
+    }
+
+    // Google Apps Script 비동기 바인딩 감지 즉시 실행
+    (function initGasBridge() {
+      applyBalanceDisplay(0);
+      var attempts = 0;
+      loadDynamicPromotions();
+      var interval = setInterval(function() {
+        attempts++;
+        if (window.google && window.google.script && window.google.script.run) {
+          clearInterval(interval);
+          setTimeout(function() {
+            refreshBalance();
+            checkTunnel();
+            loadDynamicPromotions();
+            try {
+              if (google.script.run.getSpreadsheetUrl) {
+                google.script.run.withSuccessHandler(function(url) {
+                  if (url) bindFdeSheetUrl(url);
+                }).getSpreadsheetUrl();
+              }
+              if (google.script.run.getSpreadsheetInfo) {
+                google.script.run.withSuccessHandler(function(info) {
+                  if (info && info.url) bindFdeSheetUrl(info.url);
+                }).getSpreadsheetInfo();
+              }
+            } catch(e) {}
+          }, 100);
+        } else if (attempts >= 30) {
+          clearInterval(interval);
+          refreshBalance();
+        }
+      }, 50);
+    })();
+  </script>
+</body>
+</html>`;
