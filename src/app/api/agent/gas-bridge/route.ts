@@ -16,20 +16,15 @@ import { recordAiUsageLog } from "@/lib/ai-usage";
 import { ensureStandardManifest, generateSecureEgdeskConfig, generateStandardTokenRecharge } from "@/lib/gas-manifest";
 import { sanitizeGasScriptCode } from "@/lib/gas-sanitizer";
 import { getArchiveHistory, recordToArchiveSheet } from "@/lib/agent-archive-helper";
-import {
-  resolveGasBridgePostEndpoint,
-  resolvePublicSiteOrigin,
-} from "@/lib/bridge-public-url";
+import { resolveGasBridgePostEndpoint } from "@/lib/bridge-public-url";
 
 function buildBridgeVisitorOptions(
-  request: Request,
   visitorSessionId: string | null | undefined,
 ): WorkspaceVisitorCallOptions {
   if (!visitorSessionId) return {};
   return {
     asVisitor: true,
     visitorSessionId,
-    visitorOrigin: resolvePublicSiteOrigin(request.headers),
   };
 }
 
@@ -363,7 +358,7 @@ export async function POST(request: Request) {
       } catch {}
     }
 
-    const visitorOptions = buildBridgeVisitorOptions(request, visitorSessionId);
+    const visitorOptions = buildBridgeVisitorOptions(visitorSessionId);
 
     const targetSpreadsheetId = project.spreadsheet_id || spreadsheetId;
 
