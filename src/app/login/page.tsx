@@ -60,6 +60,8 @@ export default function LoginPage() {
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [storedGcpHandleHint, setStoredGcpHandleHint] = useState<string | null>(null);
+  const [isForgettingGcp, setIsForgettingGcp] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 🌐 GCP 콘솔 등록용 승인된 자바스크립트 원본 & 승인된 리디렉션 URI
@@ -108,6 +110,7 @@ export default function LoginPage() {
       const storedHandle = getStoredVisitorGcpHandle();
       if (storedHandle) {
         setGcpHandle(storedHandle);
+        setStoredGcpHandleHint(storedHandle);
       }
     }
 
@@ -149,15 +152,19 @@ export default function LoginPage() {
         });
         setGcpHandle(handleToQuery);
         setStoredVisitorGcpHandle(handleToQuery);
+        setStoredGcpHandleHint(handleToQuery);
       } else {
         // 유효하지 않은 핸들이면 초기화
         setGcpStatus(null);
         setGcpHandle(null);
         setStoredVisitorGcpHandle(null);
+        setStoredGcpHandleHint(null);
       }
     } catch (err) {
       console.warn("GCP status check error:", err);
       setGcpStatus(null);
+      const stale = getStoredVisitorGcpHandle();
+      if (stale) setStoredGcpHandleHint(stale);
     } finally {
       setIsGcpChecking(false);
     }
@@ -228,6 +235,7 @@ export default function LoginPage() {
       const nextHandle = String(result.handle);
       setGcpHandle(nextHandle);
       setStoredVisitorGcpHandle(nextHandle);
+      setStoredGcpHandleHint(nextHandle);
       setGcpStatus({
         connected: true,
         registered: true,
@@ -277,21 +285,42 @@ export default function LoginPage() {
     }
   };
 
-  // 등록된 GCP 설정 해제 (초기화)
+  const showGcpReset =
+    Boolean(gcpStatus?.registered || gcpStatus?.connected) ||
+    Boolean(gcpHandle || storedGcpHandleHint) ||
+    Boolean(uploadError);
+
+  // 등록된 GCP 설정 해제 (초기화) — EGDesk MCP 프로필 + 브라우저 localStorage
   const handleForgetGcp = async () => {
-    if (!confirm("등록된 Google Cloud 설정을 초기화하시겠습니까? 다른 GCP JSON을 다시 등록할 수 있습니다.")) {
+    if (
+      !confirm(
+        "등록된 Google Cloud OAuth 클라이언트를 이 PC에서 해제할까요?\n\n다른 JSON으로 다시 업로드할 수 있습니다.",
+      )
+    ) {
       return;
     }
-    const currentHandle = gcpHandle || getStoredVisitorGcpHandle();
+    setIsForgettingGcp(true);
+    const currentHandle = gcpHandle || getStoredVisitorGcpHandle() || storedGcpHandleHint;
     if (currentHandle) {
       try {
         await forgetVisitorGcp(currentHandle);
-      } catch {}
+      } catch (err) {
+        console.warn("forgetVisitorGcp error:", err);
+        const proceed = confirm(
+          "서버에서 해제하지 못했습니다. 이 브라우저에 저장된 연결 정보만 지울까요?",
+        );
+        if (!proceed) {
+          setIsForgettingGcp(false);
+          return;
+        }
+      }
     }
     setStoredVisitorGcpHandle(null);
     setGcpHandle(null);
     setGcpStatus(null);
+    setStoredGcpHandleHint(null);
     setUploadError(null);
+    setIsForgettingGcp(false);
   };
 
   // 클립보드 복사 헬퍼
@@ -441,20 +470,19 @@ export default function LoginPage() {
                 )}
               </button>
 
-              <div className="flex justify-between items-center text-xs text-slate-500 pt-1">
-                <button
-                  type="button"
-                  onClick={handleForgetGcp}
-                  className="inline-flex items-center gap-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-                >
+              <button
+                type="button"
+                onClick={handleForgetGcp}
+                disabled={isForgettingGcp}
+                className="w-full py-2.5 px-4 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-rose-700 hover:border-rose-200 hover:bg-rose-50/50 text-xs font-bold inline-flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isForgettingGcp ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
                   <Settings className="w-3.5 h-3.5" />
-                  <span>다른 GCP 클라이언트 JSON으로 변경</span>
-                </button>
-
-                <span className="text-[11px] text-slate-400">
-                  Client ID 바인딩 완료
-                </span>
-              </div>
+                )}
+                <span>GCP OAuth 클라이언트 등록 해제 / 다른 JSON으로 변경</span>
+              </button>
             </div>
           ) : (
             /* ------------------------------------------------------------- */
@@ -629,6 +657,26 @@ export default function LoginPage() {
                   <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                   <span className="leading-relaxed">{uploadError}</span>
                 </div>
+              )}
+
+              {showGcpReset && (
+                <button
+                  type="button"
+                  onClick={handleForgetGcp}
+                  disabled={isForgettingGcp || isUploading}
+                  className="w-full py-2.5 px-4 rounded-xl border border-slate-200 text-slate-600 hover:text-rose-700 hover:border-rose-200 hover:bg-rose-50/50 text-xs font-bold inline-flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isForgettingGcp ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Settings className="w-3.5 h-3.5" />
+                  )}
+                  <span>
+                    {storedGcpHandleHint || gcpHandle
+                      ? "저장된 GCP 연결 지우고 새 JSON으로 다시 시작"
+                      : "GCP 등록 초기화"}
+                  </span>
+                </button>
               )}
             </div>
           )}
