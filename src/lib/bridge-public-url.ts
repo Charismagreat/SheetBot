@@ -30,18 +30,29 @@ export function resolvePublicSiteOrigin(headers: Headers): string {
   return `${proto}://${host}`.replace(/\/$/, "");
 }
 
+function tunnelBasePathBeforeApi(pathname: string): string {
+  const apiIdx = pathname.indexOf("/api/");
+  if (apiIdx <= 0) return "";
+  const prefix = pathname.slice(0, apiIdx);
+  return prefix.startsWith("/t/") ? prefix.replace(/\/$/, "") : "";
+}
+
 /** Base URL for API routes (includes Next basePath when present on the request path). */
 export function resolveGasBridgePublicBaseUrl(request: Request): string {
   const origin = resolvePublicSiteOrigin(request.headers);
   const path = new URL(request.url).pathname;
-  const marker = "/api/agent/gas-bridge";
-  const apiIdx = path.indexOf(marker);
-  if (apiIdx > 0) {
-    const prefix = path.slice(0, apiIdx);
-    if (prefix.startsWith("/t/")) {
-      return `${origin}${prefix}`.replace(/\/$/, "");
-    }
+
+  const fromRequestPath = tunnelBasePathBeforeApi(path);
+  if (fromRequestPath) {
+    return `${origin}${fromRequestPath}`.replace(/\/$/, "");
   }
+
+  const fromEnv =
+    process.env.NEXT_PUBLIC_EGDESK_BASE_PATH || process.env.EGDESK_BASE_PATH || "";
+  if (fromEnv.startsWith("/t/")) {
+    return `${origin}${fromEnv.replace(/\/$/, "")}`;
+  }
+
   return origin.replace(/\/$/, "");
 }
 

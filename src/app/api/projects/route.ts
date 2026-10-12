@@ -14,6 +14,7 @@ import { setupDatabase } from "@/lib/setup-db";
 import { ensureStandardManifest, generateSecureEgdeskConfig, generateStandardTokenRecharge } from "@/lib/gas-manifest";
 import { formatGasCloudPushUserError } from "@/lib/gas-deploy-errors";
 import { normalizeSheetbotProjectId } from "@/lib/sheetbot-project-id";
+import { ensureBridgeTokenForProject } from "@/lib/bridge-token-persist";
 
 export interface SheetBotProject {
   id: string;
@@ -391,6 +392,11 @@ export async function POST(request: Request) {
 
     await insertRows("sheetbot_projects", [newRow]);
 
+    const bridgeToken = await ensureBridgeTokenForProject(
+      projectId,
+      userEmail.toLowerCase().trim(),
+    );
+
     return NextResponse.json({
       success: true,
       message: "새 Apps Script 프로젝트가 성공적으로 생성 및 등록되었습니다.",
@@ -401,7 +407,8 @@ export async function POST(request: Request) {
         pushed: gasCloudPushed,
         errors: gasDeployErrors.length > 0 ? gasDeployErrors : undefined,
       },
-      project: mapRowToProject(newRow),
+      bridgeToken,
+      project: mapRowToProject({ ...newRow, bridge_token: bridgeToken }),
     });
   } catch (error: any) {
     console.error("POST SheetBot project error:", error);

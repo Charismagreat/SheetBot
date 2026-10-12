@@ -15,6 +15,11 @@ import {
   callVisitorWorkspaceTool,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { ensureBridgeTokenForProject } from "@/lib/bridge-token-persist";
+import {
+  resolveGasBridgePostEndpoint,
+  resolvePublicSiteOrigin,
+} from "@/lib/bridge-public-url";
 
 // 구글 스프레드시트 URL에서 ID 추출
 function extractSpreadsheetId(urlOrId: string): string | null {
@@ -171,9 +176,7 @@ export async function POST(request: Request) {
     let scriptId = "";
     let scriptUrl = "";
 
-    const host = request.headers.get("host") || "localhost:4003";
-    const protocol = request.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
-    const siteOrigin = `${protocol}://${host}`;
+    const siteOrigin = resolvePublicSiteOrigin(request.headers);
 
     try {
       const visitorSessionId = authCheck.visitorSessionId || (await getCurrentVisitorSessionId(request));
@@ -276,9 +279,14 @@ export async function POST(request: Request) {
 
     await insertRows("sheetbot_projects", [newProjectRow]);
 
+    const resolvedBridgeToken = await ensureBridgeTokenForProject(
+      projectId,
+      userEmail.toLowerCase().trim(),
+      bridgeToken,
+    );
+
     // 7. 반환 URL 및 프롬프트 생성
-    const baseUrl = `${protocol}://${host}`;
-    const bridgeUrl = `${baseUrl}/api/agent/gas-bridge?token=${bridgeToken}`;
+    const bridgeUrl = resolveGasBridgePostEndpoint(request, resolvedBridgeToken);
 
     const promptTemplate = `아래 웹 주소를 통해 내 구글 시트의 헤더 구조와 기존 코드를 확인하고, 필요한 기능 코드를 주입해줘:
 웹 주소: ${bridgeUrl}
@@ -297,7 +305,7 @@ export async function POST(request: Request) {
         scriptUrl: scriptUrl,
         createdAt: now,
       },
-      bridgeToken: bridgeToken,
+      bridgeToken: resolvedBridgeToken,
       bridgeUrl: bridgeUrl,
       spreadsheetAnalysis: {
         title: detectedSheetTitle,

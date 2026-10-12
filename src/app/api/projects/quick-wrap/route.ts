@@ -3,10 +3,9 @@ export const dynamic = "force-dynamic";
 import { NextResponse, NextRequest } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, insertRows, updateRows, getSpreadsheetFullContext } from "@/lib/egdesk-helpers";
-import { persistBridgeToken } from "@/lib/bridge-token-persist";
+import { ensureBridgeTokenForProject } from "@/lib/bridge-token-persist";
 import { resolveGasBridgePostEndpoint } from "@/lib/bridge-public-url";
 import { setupDatabase } from "@/lib/setup-db";
-import crypto from "crypto";
 
 // 구글 스프레드시트 URL에서 Spreadsheet ID 추출
 function extractSpreadsheetId(urlOrId: string): string | null {
@@ -132,23 +131,11 @@ export async function POST(request: NextRequest) {
       isExisting = false;
     }
 
-    // 3. 브릿지 토큰 발급
-    let token = project.bridge_token;
-    if (!token) {
-      const existingTokenRes = await queryTable("sheetbot_bridge_tokens", {
-        filters: { project_id: project.id },
-        limit: 1,
-      }).catch(() => ({ rows: [] }));
-
-      if (existingTokenRes.rows && existingTokenRes.rows.length > 0) {
-        token = existingTokenRes.rows[0].token;
-      } else {
-        token = `sec_${crypto.randomBytes(16).toString("hex")}`;
-        await persistBridgeToken(project.id, token, userEmail);
-      }
-    } else {
-      await persistBridgeToken(project.id, token, userEmail);
-    }
+    const token = await ensureBridgeTokenForProject(
+      project.id,
+      userEmail,
+      project.bridge_token,
+    );
 
     const bridgeUrl = resolveGasBridgePostEndpoint(request, token);
 

@@ -2,12 +2,10 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse, NextRequest } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
-import { queryTable } from "@/lib/egdesk-helpers";
 import { findSheetbotProjectByRef } from "@/lib/sheetbot-project-resolve";
-import { persistBridgeToken } from "@/lib/bridge-token-persist";
+import { ensureBridgeTokenForProject } from "@/lib/bridge-token-persist";
 import { resolveGasBridgePostEndpoint } from "@/lib/bridge-public-url";
 import { setupDatabase } from "@/lib/setup-db";
-import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
   try {
@@ -43,22 +41,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "해당 프로젝트에 대한 접근 권한이 없습니다." }, { status: 403 });
     }
 
-    let token = project.bridge_token as string | undefined;
-    if (!token) {
-      const existingTokenRes = await queryTable("sheetbot_bridge_tokens", {
-        filters: { project_id: canonicalId },
-        limit: 1,
-      }).catch(() => ({ rows: [] }));
-
-      if (existingTokenRes.rows && existingTokenRes.rows.length > 0) {
-        token = existingTokenRes.rows[0].token;
-      } else {
-        token = `sec_${crypto.randomBytes(16).toString("hex")}`;
-        await persistBridgeToken(canonicalId, token, userEmail);
-      }
-    } else {
-      await persistBridgeToken(canonicalId, token, userEmail);
-    }
+    const token = await ensureBridgeTokenForProject(
+      canonicalId,
+      userEmail,
+      project.bridge_token as string | undefined,
+    );
 
     const bridgeUrl = resolveGasBridgePostEndpoint(request, token);
 
