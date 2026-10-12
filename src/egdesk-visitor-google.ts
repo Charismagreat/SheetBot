@@ -1,5 +1,6 @@
-// Central re-export of root egdesk-visitor-google
+// Central re-export of root egdesk-visitor-google (prefer @/egdesk-visitor-google → repo root via tsconfig paths)
 export * from '../egdesk-visitor-google';
+export { resolveVisitorGcpRedirectUriToRegister } from '../egdesk-visitor-google';
 
 // Fallback & Explicit exports to ensure scopes are always available
 export const VISITOR_BASIC_SCOPES = [

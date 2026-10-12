@@ -23,6 +23,9 @@
       }
     ],
     "paths": {
+      "@/egdesk-visitor-google": [
+        "./egdesk-visitor-google.ts"
+      ],
       "@/*": [
         "./src/*"
       ]
