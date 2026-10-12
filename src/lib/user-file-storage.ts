@@ -2,7 +2,6 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { queryTable, insertRows } from "@/lib/egdesk-helpers";
-import { safeCreateTable } from "@/lib/setup-db";
 
 let sharp: any = null;
 try {
@@ -48,22 +47,7 @@ export function getUserUploadDir(userEmail: string, category: FileCategory = "ge
  * DB 테이블 `sheetbot_user_files` 준비
  */
 export async function ensureUserFilesTable(): Promise<void> {
-  await safeCreateTable(
-    "이용자 파일 스토리지 대장",
-    [
-      { name: "id", type: "TEXT" },
-      { name: "user_email", type: "TEXT" },
-      { name: "category", type: "TEXT" },
-      { name: "original_name", type: "TEXT" },
-      { name: "stored_filename", type: "TEXT" },
-      { name: "file_size", type: "INTEGER" },
-      { name: "mime_type", type: "TEXT" },
-      { name: "storage_path", type: "TEXT" },
-      { name: "public_url", type: "TEXT" },
-      { name: "created_at", type: "TEXT" },
-    ],
-    { tableName: "sheetbot_user_files" }
-  );
+  // Table `sheetbot_user_files` is created from egdesk.schema.ts on EGDesk start.
 }
 
 /**

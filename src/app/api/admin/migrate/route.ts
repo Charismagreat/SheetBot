@@ -7,7 +7,7 @@ import { isCurrentUserAdmin, getCurrentUserEmail } from "@/lib/auth";
 
 /**
  * GET / POST /api/admin/migrate
- * 시트봇 전체 데이터베이스 스키마 동기화 및 관리자 계정 승격 마이그레이션 API
+ * 관리자 계정 승격 및 프롬프트 시드 (스키마는 egdesk.schema.ts / EGDesk 시작 시 적용)
  */
 export async function GET(req: NextRequest) {
   return handleMigration(req);
@@ -29,7 +29,7 @@ async function handleMigration(req: NextRequest) {
 
     console.log(`[Admin-Migrate] Started migration by: ${sessionEmail || "system"} (isAdmin: ${isAdmin})`);
 
-    // 1. 전체 DB 스키마 강제 동기화 및 신규 컬럼 주입
+    // 1. 데이터 시드 (프롬프트 템플릿 등) — 테이블 스키마는 EGDesk가 egdesk.schema.ts로 생성
     await setupDatabase(true);
 
     const nowStr = new Date().toISOString().replace("T", " ").slice(0, 19);

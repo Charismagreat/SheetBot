@@ -1,0 +1,19 @@
+# Step 0 smoke baseline (body SHA-256 first 16 hex chars)
+# Captured: SHEETBOT_SMOKE_BASE_URL=https://sheetbot.cloud node scripts/smoke.mjs
+# Local EGDesk default: SHEETBOT_SMOKE_BASE_URL=http://localhost:3005/t/mcp-server-fxkud1/p/SheetBot node scripts/smoke.mjs
+
+SheetBot smoke — base URL: https://sheetbot.cloud
+Time: 2026-10-12T05:05:44.788Z
+
+NAME                      METHOD  STATUS  MS     BODY_SHA256_16  PATH
+----------------------------------------------------------------------------------------------------
+login-page                GET    200     861    507b81796b818f59 /login
+auth-session              GET    200     570    44136fa355b3678a /api/auth/session
+wallet-balance            GET    200     568    9303e2c4a6616315 /api/wallet/balance?userEmail=smoke%40sheetbot.local
+projects-list             GET    401     688    65f37ef645ae71cf /api/projects
+copilot-sidebar-template  GET    200     662    b59e8989502b75f8 /api/copilot/sidebar-template
+public-order-page         GET    200     760    8476bcf1441a66a7 /order/demo
+public-quote-page         GET    200     970    35972fb6e4c7066c /q/demo
+public-estimate-issue     GET    200     4604   ae1ffd3d4d3603a8 /estimate/issue
+admin-check               GET    200     581    732ff689a1520ad4 /api/admin/check
+gateway-mcp-unauth        POST   401     489    25fb5946f48d9db3 /api/gateway/mcp
