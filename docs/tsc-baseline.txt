@@ -1,9 +1,6 @@
 # TypeScript errors allowed at refactor baseline (main @ 3f35ba9).
 # Format: path:line TScode
 # Regenerate only when intentionally fixing baseline errors (update this file in the same commit).
-egdesk-helpers.ts:1161 TS2322
-egdesk-helpers.ts:1188 TS2322
-src/app/api/user/blog/post/route.ts:201 TS2554
 src/app/api/user/blog/post/route.ts:211 TS2353
 src/app/api/user/blog/post/route.ts:300 TS2558
 src/app/api/user/cards/request/route.ts:103 TS2561
@@ -15,13 +12,10 @@ src/app/api/user/commands/promote/route.ts:143 TS2353
 src/app/api/user/commands/promote/route.ts:247 TS2353
 src/app/api/user/crm/setup/route.ts:51 TS2353
 src/app/api/user/crm/setup/route.ts:74 TS2353
-src/app/api/user/instagram/post/route.ts:240 TS2554
 src/app/api/user/instagram/post/route.ts:395 TS2558
 src/app/api/user/instagram/post/route.ts:89 TS2558
 src/app/api/user/instagram/post/route.ts:98 TS2558
-src/app/api/user/law-advisory/route.ts:177 TS2554
 src/app/api/user/law-advisory/route.ts:181 TS2353
-src/app/api/user/site/route.ts:423 TS2554
 src/app/dashboard/pricing/page.tsx:87 TS2558
 src/app/dashboard/pricing/page.tsx:91 TS2558
 src/components/EasyBot.tsx:606 TS2558
