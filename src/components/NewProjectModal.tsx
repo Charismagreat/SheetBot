@@ -1,6 +1,7 @@
 "use client";
 
-import { apiFetch, apiFetchWithTimeout } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
+import { apiFetchWithTimeout } from '@/lib/api-fetch-timeout';
 import { usePricingCost } from '@/lib/usePricingCost';
 import React, { useState, useEffect } from "react";
 import {
