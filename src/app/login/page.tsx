@@ -33,6 +33,7 @@ import {
   getStoredVisitorGcpHandle,
   setStoredVisitorGcpHandle,
   resolveEgdeskPublicUrl,
+  resolveVisitorGcpRedirectUriToRegister,
   VISITOR_WORKSPACE_SCOPES,
 } from "@/egdesk-visitor-google";
 
@@ -81,7 +82,11 @@ export default function LoginPage() {
       const origin = window.location.origin;
       const isCustomDomain = origin.includes("sheetbot.cloud");
       setJsOrigin(isCustomDomain ? "https://sheetbot.cloud" : origin);
-      setRedirectUri(isCustomDomain ? "https://sheetbot.cloud/visitor-auth/callback" : `${origin}/visitor-auth/callback`);
+      setRedirectUri(
+        isCustomDomain
+          ? "https://sheetbot.cloud/visitor-auth/callback"
+          : resolveVisitorGcpRedirectUriToRegister(),
+      );
 
       const params = new URLSearchParams(window.location.search);
       const cb = params.get("callbackUrl");

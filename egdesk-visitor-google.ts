@@ -202,10 +202,78 @@ function resolveRemoteMcpRoot(configured: string, tunnelUrl: string): string {
   return '';
 }
 
+function resolveLocalMcpRootFromEnv(configured: string, tunnelUrl: string): string {
+  if (configured && isLocalEgdeskUrl(configured)) return configured.replace(/\/$/, '');
+  if (tunnelUrl && isLocalEgdeskUrl(tunnelUrl)) return tunnelUrl.replace(/\/$/, '');
+  return 'http://localhost:8080';
+}
+
+function isKnownGatewayHostname(hostname: string): boolean {
+  return hostname === 'tunneling-service.onrender.com' || hostname.endsWith('.egdesk.cloud');
+}
+
+/** Keep in sync with visitor-auth-origin.ts sanitizeVisitorOAuthBase */
+function sanitizeVisitorOAuthBase(returnTo: string, egdeskPublicUrl: string): string {
+  const base = egdeskPublicUrl.replace(/\/$/, '');
+  try {
+    const publicUrl = new URL(base);
+    const site = new URL(returnTo);
+    if (isKnownGatewayHostname(publicUrl.hostname)) return base;
+    if (!/^\/t\/[^/]+/.test(publicUrl.pathname)) return base;
+    if (
+      (site.protocol === 'http:' || site.protocol === 'https:') &&
+      !isDevSiteHostname(site.hostname)
+    ) {
+      return site.origin;
+    }
+    return publicUrl.origin;
+  } catch {
+    return base;
+  }
+}
+
+function resolveLocalVisitorMcpRoot(egdeskPublicUrl: string): string {
+  const trimmed = egdeskPublicUrl.replace(/\/$/, '');
+  try {
+    const parsed = new URL(trimmed);
+    if (isLoopbackHostname(parsed.hostname)) {
+      const port = parsed.port || '8080';
+      return `http://localhost:${port}`;
+    }
+  } catch {
+    // ignore
+  }
+  return 'http://localhost:8080';
+}
+
+/**
+ * Authorized redirect URI for BYO visitor GCP (gateway mode). Not the Next dev port (:3000/:4000).
+ * Keep in sync with visitor-auth-origin.ts resolveOperatorVisitorWebCallbackUri (gateway).
+ */
+export function resolveVisitorGcpRedirectUriToRegister(): string {
+  if (typeof window === 'undefined') {
+    throw new Error('resolveVisitorGcpRedirectUriToRegister() must run in the browser');
+  }
+  const returnTo = new URL(resolveVisitorAppPath('/auth/callback'), window.location.origin).toString();
+  const egdeskPublicUrl = resolveEgdeskPublicUrl();
+  if (isLoopbackHostname(new URL(returnTo).hostname)) {
+    return `${resolveLocalVisitorMcpRoot(egdeskPublicUrl)}/visitor-auth/callback`;
+  }
+  if (isDevSiteHostname(new URL(returnTo).hostname)) {
+    const base = sanitizeVisitorOAuthBase(returnTo, egdeskPublicUrl);
+    if (isTunnelMcpRoot(base)) {
+      return `${base.replace(/\/$/, '')}/visitor-auth/callback`;
+    }
+    return `${resolveLocalVisitorMcpRoot(egdeskPublicUrl)}/visitor-auth/callback`;
+  }
+  const sanitized = sanitizeVisitorOAuthBase(returnTo, egdeskPublicUrl);
+  return `${sanitized.replace(/\/$/, '')}/visitor-auth/callback`;
+}
+
 /**
  * MCP root passed to visitor-auth start (egdeskPublicUrl).
  *
- * - Loopback dev → NEXT_PUBLIC_EGDESK_TUNNEL_URL when set, else local MCP (OAuth bounces via :54321).
+ * - Loopback dev → local MCP (:8080); platform OAuth still bounces via :54321 server-side.
  * - LAN IP → tunnel MCP root from NEXT_PUBLIC_EGDESK_TUNNEL_URL or non-local API URL (required).
  * - Tunnel/custom domain → tunnel MCP root; never window.location.origin on dev/LAN hosts.
  *
@@ -221,7 +289,7 @@ export function resolveEgdeskPublicUrl(): string {
     ''
   ).replace(/\/$/, '');
   const remoteMcpRoot = resolveRemoteMcpRoot(configured, tunnelUrl);
-  const localMcpRoot = configured || tunnelUrl || 'http://localhost:8080';
+  const localMcpRoot = resolveLocalMcpRootFromEnv(configured, tunnelUrl);
 
   if (typeof window === 'undefined') {
     return remoteMcpRoot || localMcpRoot;
@@ -247,7 +315,7 @@ export function resolveEgdeskPublicUrl(): string {
       );
     }
     if (isLoopbackHostname(hostname)) {
-      return remoteMcpRoot || localMcpRoot;
+      return localMcpRoot;
     }
     if (remoteMcpRoot) return remoteMcpRoot;
     throw new Error(
@@ -394,7 +462,8 @@ export async function getVisitorGcpStatus(handle: string) {
     throw new Error('getVisitorGcpStatus() must run in the browser');
   }
   const sampleReturnTo = new URL(resolveVisitorAppPath('/auth/callback'), window.location.origin).toString();
-  return callVisitorAuth('gcp_status', { handle, sampleReturnTo });
+  const egdeskPublicUrl = resolveEgdeskPublicUrl();
+  return callVisitorAuth('gcp_status', { handle, sampleReturnTo, egdeskPublicUrl });
 }
 
 export async function forgetVisitorGcp(handle: string) {
