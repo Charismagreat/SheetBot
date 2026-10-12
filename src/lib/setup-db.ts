@@ -260,6 +260,17 @@ export async function setupDatabase(force = false): Promise<void> {
       await executeSQL(`ALTER TABLE sheetbot_projects ADD COLUMN bridge_token TEXT;`);
     } catch {}
 
+    await safeCreateTable(
+      'SheetBot 브릿지 토큰 매핑 대장',
+      [
+        { name: 'token', type: 'TEXT', notNull: true },
+        { name: 'project_id', type: 'TEXT', notNull: true },
+        { name: 'user_email', type: 'TEXT' },
+        { name: 'created_at', type: 'TEXT' },
+      ],
+      { tableName: 'sheetbot_bridge_tokens' }
+    );
+
     // 2. sheetbot_schedules 테이블 생성
     await safeCreateTable(
       'SheetBot 스케줄 및 트리거 대장',

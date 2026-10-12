@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse, NextRequest } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, insertRows, updateRows, getSpreadsheetFullContext } from "@/lib/egdesk-helpers";
+import { persistBridgeToken } from "@/lib/bridge-token-persist";
 import { setupDatabase } from "@/lib/setup-db";
 import crypto from "crypto";
 
@@ -142,15 +143,10 @@ export async function POST(request: NextRequest) {
         token = existingTokenRes.rows[0].token;
       } else {
         token = `sec_${crypto.randomBytes(16).toString("hex")}`;
-        await insertRows("sheetbot_bridge_tokens", [
-          {
-            token,
-            project_id: project.id,
-            user_email: userEmail,
-            created_at: now,
-          },
-        ]).catch(() => null);
+        await persistBridgeToken(project.id, token, userEmail);
       }
+    } else {
+      await persistBridgeToken(project.id, token, userEmail);
     }
 
     const forwardedHost = request.headers.get("x-forwarded-host");

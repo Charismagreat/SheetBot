@@ -16,6 +16,22 @@ import { recordAiUsageLog } from "@/lib/ai-usage";
 import { ensureStandardManifest, generateSecureEgdeskConfig, generateStandardTokenRecharge } from "@/lib/gas-manifest";
 import { sanitizeGasScriptCode } from "@/lib/gas-sanitizer";
 import { getArchiveHistory, recordToArchiveSheet } from "@/lib/agent-archive-helper";
+import {
+  resolveGasBridgePostEndpoint,
+  resolvePublicSiteOrigin,
+} from "@/lib/bridge-public-url";
+
+function buildBridgeVisitorOptions(
+  request: Request,
+  visitorSessionId: string | null | undefined,
+): WorkspaceVisitorCallOptions {
+  if (!visitorSessionId) return {};
+  return {
+    asVisitor: true,
+    visitorSessionId,
+    visitorOrigin: resolvePublicSiteOrigin(request.headers),
+  };
+}
 
 /**
  * 브릿지 토큰을 통해 프로젝트를 조회하고 삭제(소프트 삭제/PENDING_DELETE/TRASHED) 및 소유자 탈퇴 여부를 검증합니다.
@@ -219,10 +235,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const host = request.headers.get("host") || request.nextUrl.host;
-    const protocol = request.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
-    const baseUrl = `${protocol}://${host}`;
-    const postEndpoint = `${baseUrl}/api/agent/gas-bridge?token=${token}`;
+    const postEndpoint = resolveGasBridgePostEndpoint(request, token);
 
     return NextResponse.json({
       success: true,
@@ -350,9 +363,7 @@ export async function POST(request: Request) {
       } catch {}
     }
 
-    const visitorOptions: WorkspaceVisitorCallOptions = visitorSessionId
-      ? { asVisitor: true, visitorSessionId }
-      : {};
+    const visitorOptions = buildBridgeVisitorOptions(request, visitorSessionId);
 
     const targetSpreadsheetId = project.spreadsheet_id || spreadsheetId;
 
