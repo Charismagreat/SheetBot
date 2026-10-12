@@ -4,6 +4,39 @@ const GENERIC_PUSH_FAILURE =
 const QUOTA_PUSH_FAILURE =
   "Google Apps Script API 호출 한도(분당 관리 요청)에 도달했습니다. 1~2분 기다린 뒤 배포를 한 번만 다시 시도해 주세요. 연속 클릭·재시도는 한도를 더 빨리 소진합니다.";
 
+const AI_SYNTAX_PUSH_FAILURE =
+  "AI가 생성한 Apps Script(Code.gs)에 문법 오류가 있어 Google에 배포하지 못했습니다. 2단계에서 요구사항을 조율하거나 코드 미리보기를 확인한 뒤 다시 생성·배포해 주세요.";
+
+export type GasDeployFailureKind = "ai_syntax" | "quota" | "auth" | "infra" | "unknown";
+
+/** Classify MCP / Apps Script deploy errors for UI (AI vs quota vs EGDesk). */
+export function classifyGasDeployFailure(gasDeployErrors: string[]): GasDeployFailureKind {
+  const combined = gasDeployErrors.join("\n").toLowerCase();
+  if (isAppsScriptManagementQuotaError(combined)) {
+    return "quota";
+  }
+  if (
+    /syntaxerror|syntax error|unexpected token|parse error|line:\s*\d+.*code\.gs|file:\s*code\.gs/i.test(
+      gasDeployErrors.join("\n"),
+    )
+  ) {
+    return "ai_syntax";
+  }
+  if (
+    /permission|oauth|scope|403|401|unauthorized|insufficient|auth/i.test(combined)
+  ) {
+    return "auth";
+  }
+  if (
+    /egdesk|mcp|create_bound|list_projects|connection|econnrefused|not enabled/i.test(
+      combined,
+    )
+  ) {
+    return "infra";
+  }
+  return "unknown";
+}
+
 /** Detect Google Script API management quota / rate-limit errors from EGDesk or MCP messages. */
 export function isAppsScriptManagementQuotaError(text: string): boolean {
   const m = text.toLowerCase();
@@ -20,9 +53,23 @@ export function isAppsScriptManagementQuotaError(text: string): boolean {
 }
 
 export function formatGasCloudPushUserError(gasDeployErrors: string[]): string {
-  const combined = gasDeployErrors.join("\n");
-  if (isAppsScriptManagementQuotaError(combined)) {
+  const kind = classifyGasDeployFailure(gasDeployErrors);
+  if (kind === "quota") {
     return QUOTA_PUSH_FAILURE;
   }
+  if (kind === "ai_syntax") {
+    return AI_SYNTAX_PUSH_FAILURE;
+  }
   return GENERIC_PUSH_FAILURE;
+}
+
+export function gasDeployFailureMeta(gasDeployErrors: string[]): {
+  kind: GasDeployFailureKind;
+  userMessage: string;
+} {
+  const kind = classifyGasDeployFailure(gasDeployErrors);
+  return {
+    kind,
+    userMessage: formatGasCloudPushUserError(gasDeployErrors),
+  };
 }

@@ -12,7 +12,8 @@ import {
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { ensureStandardManifest, generateSecureEgdeskConfig, generateStandardTokenRecharge } from "@/lib/gas-manifest";
-import { formatGasCloudPushUserError } from "@/lib/gas-deploy-errors";
+import { formatGasCloudPushUserError, gasDeployFailureMeta } from "@/lib/gas-deploy-errors";
+import { sanitizeGasScriptCode } from "@/lib/gas-sanitizer";
 import { normalizeSheetbotProjectId } from "@/lib/sheetbot-project-id";
 import { ensureBridgeTokenForProject } from "@/lib/bridge-token-persist";
 
@@ -177,7 +178,9 @@ export async function POST(request: Request) {
 
     const spreadsheetId = extractSpreadsheetId(spreadsheetUrl) || "";
     const nowStr = new Date().toISOString();
-    const requiresGasCloud = Boolean(String(scriptCode || "").trim());
+    const rawScriptCode = String(scriptCode || "").trim();
+    const sanitizedScriptCode = rawScriptCode ? sanitizeGasScriptCode(rawScriptCode) : "";
+    const requiresGasCloud = Boolean(sanitizedScriptCode);
     const gasDeployErrors: string[] = [];
     let gasCloudPushed = false;
 
@@ -233,7 +236,6 @@ export async function POST(request: Request) {
             const boundRes = await callAppsScriptTool("apps_script_create_bound", {
               fileId: spreadsheetId,
               title: name.trim(),
-              scriptCode: scriptCode || undefined,
             }, visitorOptions);
             if (boundRes && (boundRes.id || boundRes.projectId)) {
               gasProjectId = boundRes.id || boundRes.projectId;
@@ -274,12 +276,12 @@ export async function POST(request: Request) {
         }
 
         // 스크립트 코드가 제공된 경우 Code.gs 파일 덮어쓰기 및 구글 클라우드에 직접 푸시
-        if (gasProjectId && scriptCode) {
+        if (gasProjectId && sanitizedScriptCode) {
           try {
             await callAppsScriptTool("apps_script_write_file", {
               projectId: gasProjectId,
               fileName: "Code.gs",
-              content: scriptCode,
+              content: sanitizedScriptCode,
             }, visitorOptions);
 
             const validManifest = ensureStandardManifest(manifest);
@@ -294,7 +296,7 @@ export async function POST(request: Request) {
             }, visitorOptions);
             gasCloudPushed = true;
 
-            if (scriptCode.includes("doGet") || scriptCode.includes("HtmlService")) {
+            if (sanitizedScriptCode.includes("doGet") || sanitizedScriptCode.includes("HtmlService")) {
               try {
                 const deployRes = await callAppsScriptTool("apps_script_create_deployment", {
                   projectId: gasProjectId,
@@ -325,16 +327,20 @@ export async function POST(request: Request) {
     }
 
     if (requiresGasCloud) {
+      const deployMeta = gasDeployFailureMeta(gasDeployErrors);
       if (!gasProjectId) {
         return NextResponse.json(
           {
             success: false,
             error:
-              "Google Apps Script를 시트에 연결하지 못했습니다. EGDesk가 실행 중이고 Apps Script MCP가 활성화되어 있으며, Google Workspace(스크립트/시트) 권한이 승인되어 있는지 확인해 주세요.",
+              deployMeta.kind === "ai_syntax"
+                ? deployMeta.userMessage
+                : "Google Apps Script를 시트에 연결하지 못했습니다. EGDesk가 실행 중이고 Apps Script MCP가 활성화되어 있으며, Google Workspace(스크립트/시트) 권한이 승인되어 있는지 확인해 주세요.",
             cloudDeploy: {
               ok: false,
               bound: false,
               pushed: false,
+              failureKind: deployMeta.kind,
               errors: gasDeployErrors,
             },
           },
@@ -345,12 +351,13 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             success: false,
-            error: formatGasCloudPushUserError(gasDeployErrors),
+            error: deployMeta.userMessage,
             cloudDeploy: {
               ok: false,
               bound: true,
               gasProjectId,
               pushed: false,
+              failureKind: deployMeta.kind,
               errors: gasDeployErrors,
             },
           },
@@ -373,7 +380,7 @@ export async function POST(request: Request) {
       gas_project_id: gasProjectId || (requiresGasCloud ? "" : `gas_${Date.now()}`),
       script_id: scriptId || gasProjectId || "",
       script_url: scriptUrl || (scriptId ? `https://script.google.com/d/${scriptId}/edit` : ""),
-      script_code: scriptCode || "",
+      script_code: sanitizedScriptCode || rawScriptCode || "",
       manifest: manifest || "",
       summary: summary || "",
       features: JSON.stringify(Array.isArray(features) ? features : []),

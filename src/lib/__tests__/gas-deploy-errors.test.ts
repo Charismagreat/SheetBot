@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyGasDeployFailure,
   formatGasCloudPushUserError,
   isAppsScriptManagementQuotaError,
 } from "../gas-deploy-errors";
@@ -22,5 +23,16 @@ describe("gas-deploy-errors", () => {
   it("returns generic copy for other failures", () => {
     const text = formatGasCloudPushUserError(["write_or_push: permission_denied"]);
     expect(text).toContain("EGDesk 로그");
+  });
+
+  it("classifies Apps Script syntax errors as ai_syntax", () => {
+    expect(
+      classifyGasDeployFailure([
+        "create_bound: Syntax error: SyntaxError: Unexpected token 'var' line: 229 file: Code.gs",
+      ]),
+    ).toBe("ai_syntax");
+    expect(formatGasCloudPushUserError(["Syntax error line: 229 file: Code.gs"])).toContain(
+      "AI가 생성한",
+    );
   });
 });

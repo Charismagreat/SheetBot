@@ -44,6 +44,7 @@ import {
   VISITOR_GOOGLE_OAUTH_SCOPES,
 } from "@/egdesk-visitor-google";
 import { PROJECT_DEPLOY_LOADING_LABEL } from "@/constants/project-deploy-ui";
+import { gasDeployFailureUi } from "@/constants/gas-deploy-failure-ui";
 
 interface NewProjectModalProps {
   isOpen: boolean;
@@ -77,6 +78,9 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deployFailureKind, setDeployFailureKind] = useState<
+    "ai_syntax" | "quota" | "auth" | "infra" | "unknown" | null
+  >(null);
   const [generatedResult, setGeneratedResult] = useState<any>(null);
 
   // 엑셀 업로드 및 파싱 관련 상태
@@ -683,6 +687,14 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
   const handleFinalDeploy = async () => {
     setLoading(true);
     setError(null);
+    setDeployFailureKind(null);
+    let deployKindForCatch:
+      | "ai_syntax"
+      | "quota"
+      | "auth"
+      | "infra"
+      | "unknown"
+      | null = null;
 
     try {
       let targetSheetUrl = sheetUrl.trim();
@@ -750,6 +762,17 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
 
       const projJson = await projRes.json();
       if (!projJson.success) {
+        const kind = projJson.cloudDeploy?.failureKind;
+        if (
+          kind === "ai_syntax" ||
+          kind === "quota" ||
+          kind === "auth" ||
+          kind === "infra" ||
+          kind === "unknown"
+        ) {
+          deployKindForCatch = kind;
+          setDeployFailureKind(kind);
+        }
         const detail =
           Array.isArray(projJson.cloudDeploy?.errors) && projJson.cloudDeploy.errors.length > 0
             ? `\n\n${projJson.cloudDeploy.errors.join("\n")}`
@@ -767,6 +790,7 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
       setError(msg);
       // 실제 OAuth 권한 부족 에러인 경우에만 권한 안내 배너 노출 (단순 단어 포함 오인 발동 방지)
       if (
+        deployKindForCatch === "auth" ||
         msg.includes("권한이 필요합니다") ||
         msg.includes("permission_denied") ||
         msg.includes("403") ||
@@ -800,6 +824,7 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
     setInquiryMemo("");
     setInquirySuccess(false);
     setGeneratedResult(null);
+    setDeployFailureKind(null);
     setExistingGasInfo(null);
     setMergeMode("MERGE");
     setShowCodePreview(false);
@@ -899,12 +924,32 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
           </div>
         ) : null}
 
-        {error && (
-          <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-2 text-rose-700 text-xs font-bold">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
+        {error && (() => {
+          const ui = gasDeployFailureUi(deployFailureKind);
+          const toneClass =
+            ui.tone === "amber"
+              ? "bg-amber-50 border-amber-200 text-amber-900"
+              : ui.tone === "sky"
+                ? "bg-sky-50 border-sky-200 text-sky-900"
+                : "bg-rose-50 border-rose-200 text-rose-700";
+          return (
+            <div className={`p-3 border rounded-2xl text-xs font-bold space-y-1.5 ${toneClass}`}>
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span className="font-extrabold">{ui.title}</span>
+                {deployFailureKind === "ai_syntax" && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-950">
+                    AI 코드
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] font-semibold leading-relaxed opacity-90">{ui.hint}</p>
+              <p className="text-[11px] font-mono font-normal whitespace-pre-wrap break-words opacity-80">
+                {error}
+              </p>
+            </div>
+          );
+        })()}
 
         {/* 🔐 권한 안내 및 추가 요청 배너 (점진적 권한 요청 UX) */}
         {showScopePrompt && (
