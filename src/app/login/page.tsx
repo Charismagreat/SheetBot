@@ -33,9 +33,9 @@ import {
   getStoredVisitorGcpHandle,
   setStoredVisitorGcpHandle,
   resolveEgdeskPublicUrl,
-  resolveVisitorGcpRedirectUriToRegister,
   VISITOR_WORKSPACE_SCOPES,
 } from "@/egdesk-visitor-google";
+import { resolveVisitorGcpRedirectUriToRegister } from "@/lib/visitor-gcp-redirect-uri";
 
 export default function LoginPage() {
   const [visitorEmail, setVisitorEmail] = useState<string | null>(null);
