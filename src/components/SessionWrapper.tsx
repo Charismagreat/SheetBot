@@ -1,34 +1,16 @@
 "use client";
 
-import { apiFetch } from '@/lib/api';
+import { apiFetch, getNextAuthBasePath } from '@/lib/api';
 import React, { useState, useEffect } from "react";
 import { SessionProvider } from "next-auth/react";
 import { AuthAdminProvider } from "@/contexts/AuthAdminContext";
 
-function getInitialBasePath() {
-  if (typeof window !== "undefined") {
-    const match = window.location.pathname.match(/^(\/t\/[^\/]+\/p\/[^\/]+)/);
-    if (match) {
-      return `${match[1]}/api/auth`;
-    }
-  }
-  return "/api/auth";
-}
-
 export default function SessionWrapper({ children }: { children: React.ReactNode }) {
-  const [basePath, setBasePath] = useState(getInitialBasePath);
+  const [authBasePath, setAuthBasePath] = useState<string | null>(null);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const match = window.location.pathname.match(/^(\/t\/[^\/]+\/p\/[^\/]+)/);
-      if (match) {
-        const detected = `${match[1]}/api/auth`;
-        if (basePath !== detected) {
-          setBasePath(detected);
-        }
-      }
-    }
-  }, [basePath]);
+    setAuthBasePath(getNextAuthBasePath());
+  }, []);
 
   // 플러그인이 발급한 이지데스크 Visitor 세션을 확인하여 NextAuth 세션과 자동 동기화 (탭당 1회 한정)
   useEffect(() => {
@@ -71,9 +53,13 @@ export default function SessionWrapper({ children }: { children: React.ReactNode
     };
   }, []);
 
+  if (!authBasePath) {
+    return <AuthAdminProvider>{children}</AuthAdminProvider>;
+  }
+
   return (
     <SessionProvider
-      basePath={basePath}
+      basePath={authBasePath}
       refetchOnWindowFocus={false}
       refetchWhenOffline={false}
     >
