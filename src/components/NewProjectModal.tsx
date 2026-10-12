@@ -488,26 +488,40 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
     let postAnalyzeCreate: { title: string; data: any[][] } | null = null;
 
     try {
-      const res = await apiFetchWithTimeout("/api/sheets/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sourceType: sourceMode === "EXCEL_UPLOAD" ? "EXCEL_UPLOAD" : sourceMode === "NEW_SHEET" ? "NEW_SHEET" : "URL",
-          sheetUrl: sheetUrl.trim(),
-          excelData: parsedExcel
-            ? {
-                fileName: parsedExcel.fileName,
-                sheets: parsedExcel.sheets,
-                activeSheet: parsedExcel.activeSheet,
-                headers: parsedExcel.headers,
-                sampleRows: parsedExcel.sampleRows,
-              }
-            : undefined,
-          prompt: prompt.trim(),
-          model: selectedModel,
-        }),
-        timeoutMs: 120_000,
-      });
+      const analyzePayload = {
+        sourceType: sourceMode === "EXCEL_UPLOAD" ? "EXCEL_UPLOAD" : sourceMode === "NEW_SHEET" ? "NEW_SHEET" : "URL",
+        sheetUrl: sheetUrl.trim(),
+        excelData: parsedExcel
+          ? {
+              fileName: parsedExcel.fileName,
+              sheets: parsedExcel.sheets,
+              activeSheet: parsedExcel.activeSheet,
+              headers: parsedExcel.headers,
+              sampleRows: parsedExcel.sampleRows,
+            }
+          : undefined,
+        prompt: prompt.trim(),
+        model: selectedModel,
+      };
+      const runAnalyze = () =>
+        apiFetchWithTimeout("/api/sheets/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(analyzePayload),
+          timeoutMs: 120_000,
+        });
+
+      let res = await runAnalyze();
+      if (res.status === 503) {
+        try {
+          const peek = await res.clone().json();
+          if (peek?.retryable) {
+            res = await runAnalyze();
+          }
+        } catch {
+          /* keep first 503 response */
+        }
+      }
       const data = await res.json();
       if (!data.success || !data.schema) {
         throw new Error(data.error || "시트 구조 분석에 실패했습니다.");
@@ -546,6 +560,14 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
         ? "시트 분석 요청이 시간 초과되었습니다. EGDesk가 실행 중인지 확인한 후 다시 시도해 주세요."
         : err.message || "시트 분석 중 오류가 발생했습니다.";
       setError(msg);
+      if (
+        msg.includes("로그인") ||
+        msg.includes("권한") ||
+        msg.includes("scope") ||
+        msg.includes("OAuth")
+      ) {
+        setShowScopePrompt(true);
+      }
     } finally {
       setAnalyzing(false);
     }
@@ -831,16 +853,36 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
             </span>
           </div>
         ) : scopeStatus === "needed" ? (
-          <div className="px-3.5 py-2 bg-amber-50 border border-amber-200/80 rounded-2xl flex items-center justify-between gap-2 text-amber-900 text-xs font-bold shadow-2xs">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>구글 시트 래핑 권한 승인이 필요합니다.</span>
+          <div
+            className={`px-3.5 py-2 rounded-2xl flex items-center justify-between gap-2 text-xs font-bold shadow-2xs border ${
+              sourceMode === "NEW_SHEET" || sourceMode === "EXCEL_UPLOAD"
+                ? "bg-sky-50 border-sky-200/80 text-sky-950"
+                : "bg-amber-50 border-amber-200/80 text-amber-900"
+            }`}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertCircle
+                className={`w-4 h-4 shrink-0 ${
+                  sourceMode === "NEW_SHEET" || sourceMode === "EXCEL_UPLOAD" ? "text-sky-600" : "text-amber-600"
+                }`}
+              />
+              <span className="leading-snug">
+                {sourceMode === "NEW_SHEET" || sourceMode === "EXCEL_UPLOAD"
+                  ? analyzing
+                    ? "AI 시트 설계 분석은 진행 중입니다. 구글 시트 자동 생성·코드 배포 직전에 드라이브/시트 권한이 필요합니다."
+                    : "AI 설계·분석은 지금 가능합니다. 구글 시트 자동 생성·Apps Script 배포 전에 드라이브/시트 권한을 승인해 주세요."
+                  : "구글 시트 래핑 권한 승인이 필요합니다."}
+              </span>
             </div>
             <button
               type="button"
               onClick={handleGrantWorkspaceScopes}
-              disabled={isGrantingScope}
-              className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-[11px] font-black transition-all shadow-xs cursor-pointer flex items-center gap-1 shrink-0"
+              disabled={isGrantingScope || analyzing}
+              className={`px-2.5 py-1 text-white rounded-xl text-[11px] font-black transition-all shadow-xs cursor-pointer flex items-center gap-1 shrink-0 disabled:opacity-60 ${
+                sourceMode === "NEW_SHEET" || sourceMode === "EXCEL_UPLOAD"
+                  ? "bg-sky-600 hover:bg-sky-700"
+                  : "bg-amber-600 hover:bg-amber-700"
+              }`}
             >
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>{isGrantingScope ? "이동 중..." : "1초 권한 승인하기"}</span>
@@ -1672,7 +1714,11 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                   {analyzing ? (
                     <>
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>시트 2차원 구조 및 수식 정밀 분석 중...</span>
+                      <span>
+                        {sourceMode === "NEW_SHEET"
+                          ? "Gemini가 시트 설계안 생성 중… (상단 권한 안내와 별개)"
+                          : "시트 2차원 구조 및 수식 정밀 분석 중…"}
+                      </span>
                     </>
                   ) : (
                     <>
