@@ -265,9 +265,10 @@ export async function GET(request: NextRequest) {
           "2. [실제 헤더 1:1 매핑]: 상단에 보고서 타이틀/결재란이 있어 헤더가 10행 등에 위치하는 경우, suggestedHeaderRow 및 dataStartRow를 엄격히 준수하여 신규 데이터를 기입하세요.",
           "3. [다중 품목 분리 삽입]: 발주서나 견적서 등 다중 품목 문서는 1건당 1행이 아니라 품목별로 1행씩(N개 행) 분리하여 시트에 순차 기록하세요.",
           "4. [onOpen 메뉴 등록 및 상단 메뉴 슬림화]: 구글 시트 상단에 '🚀 SheetBot 메뉴'를 등록하는 onOpen() 함수를 포함하세요. 업무 기능 이후 구분선(.addSeparator()) 아래에는 오직 단 1개의 일체형 제어 센터인 ['🤖 SheetBot AI 코파일럿'](showAiCopilotSidebar)만 배치하세요. '토큰 충전', '사용법 및 활용사례' 등은 상단 메뉴에 절대 개별 등록하지 말고 코파일럿 사이드바 내부로 100% 일원화해야 합니다.",
-          "5. [AI 응답 언래핑 함수]: parseAiCallerResponse(toolRes) 유틸리티 함수를 Code.gs에 포함하여 안전하게 JSON을 추출하세요.",
-          "6. [빈 시트 기본 탭 무손실 단일화]: 빈 시트 초기화 시 insertSheet로 새 탭을 추가하여 탭을 2개로 쪼개지 마세요. 기본 탭(Sheet1 또는 시트1)이 1개뿐인 경우 반드시 ss.getSheets()[0].setName(TARGET_NAME)으로 이름을 변경하여 단 1개의 메인 탭만 유지하세요.",
-          "7. [과거 아카이빙 이력 준수 및 충돌 방지]: previousArchiveHistory에 기록된 이전 작업 함수명(예: onEdit, sendNotification 등) 및 업무 규칙을 참조하여 기존 로직과 충돌이 없도록 코드를 설계하세요. 코드 배포(POST) 성공 시 서버가 계정 드라이브의 '[SheetBot] 아카이빙' 시트에 이번 작업 내역을 자동 기록합니다.",
+          "5. [코파일럿 사이드바 HTML]: showAiCopilotSidebar()는 Sidebar.html 또는 createTemplateFromFile('Sidebar')를 쓰지 말고 UrlFetchApp으로 https://sheetbot.cloud/api/copilot/sidebar-template 을 불러 HtmlService.createHtmlOutput 후 showSidebar 하세요. 업무 UI는 별도 함수(예: showSqliteQuerySidebar)와 별도 Html 파일로 분리하세요.",
+          "6. [AI 응답 언래핑 함수]: parseAiCallerResponse(toolRes) 유틸리티 함수를 Code.gs에 포함하여 안전하게 JSON을 추출하세요.",
+          "7. [빈 시트 기본 탭 무손실 단일화]: 빈 시트 초기화 시 insertSheet로 새 탭을 추가하여 탭을 2개로 쪼개지 마세요. 기본 탭(Sheet1 또는 시트1)이 1개뿐인 경우 반드시 ss.getSheets()[0].setName(TARGET_NAME)으로 이름을 변경하여 단 1개의 메인 탭만 유지하세요.",
+          "8. [과거 아카이빙 이력 준수 및 충돌 방지]: previousArchiveHistory에 기록된 이전 작업 함수명(예: onEdit, sendNotification 등) 및 업무 규칙을 참조하여 기존 로직과 충돌이 없도록 코드를 설계하세요. 코드 배포(POST) 성공 시 서버가 계정 드라이브의 '[SheetBot] 아카이빙' 시트에 이번 작업 내역을 자동 기록합니다.",
         ],
         postEndpoint,
         postPayloadExample: {

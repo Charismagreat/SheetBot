@@ -10,6 +10,7 @@ import {
   insertRows,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { sanitizeGasScriptCode } from "@/lib/gas-sanitizer";
 
 /**
  * 기존 Code.gs 코드에 신규 함수를 안전하게 병합하고 onOpen 메뉴에 등록
@@ -193,11 +194,13 @@ ${requestedTitle ? `- 권장 기능명: ${requestedTitle}` : ""}
     }
 
     // 3. 기존 코드에 신규 함수 병합
-    const mergedCode = mergeFunctionIntoScript(
-      targetProject.script_code || "",
-      generated.functionName,
-      generated.functionTitle,
-      generated.codeSnippet
+    const mergedCode = sanitizeGasScriptCode(
+      mergeFunctionIntoScript(
+        targetProject.script_code || "",
+        generated.functionName,
+        generated.functionTitle,
+        generated.codeSnippet
+      )
     );
 
     // 4. 구글 클라우드에 원격 주입 (write_file & push_to_google)

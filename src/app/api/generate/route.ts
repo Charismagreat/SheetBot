@@ -435,10 +435,11 @@ ${existingScriptCode.trim()}
      .addSeparator()
      .addItem('🤖 SheetBot AI 코파일럿', 'showAiCopilotSidebar')
      .addToUi();
-2. 사이드바 표출 함수 showAiCopilotSidebar():
-   - HtmlService.createHtmlOutput(getAiCopilotSidebarHtml()).setTitle("🤖 SheetBot AI 제어 센터").setWidth(360);
-   - SpreadsheetApp.getUi().showSidebar(html);
-3. 사이드바 UI 템플릿 getAiCopilotSidebarHtml():
+2. 사이드바 표출 함수 showAiCopilotSidebar() [필수 — Sidebar.html 사용 금지]:
+   - UrlFetchApp.fetch("https://sheetbot.cloud/api/copilot/sidebar-template?_cb=" + cacheBuster) 로 HTML을 받아 HtmlService.createHtmlOutput(...) 후 showSidebar.
+   - fetch 실패 시에만 getAiCopilotSidebarHtml() 폴백(동일 템플릿 복제).
+   - setTitle("🤖 SheetBot AI 코파일럿").setWidth(360).
+3. 사이드바 UI 템플릿 getAiCopilotSidebarHtml() (오프라인 폴백 전용):
    - 모던하고 깔끔한 Tailwind CSS 스타일(인라인 스타일 또는 CDN)의 4단 통합 레이아웃:
      [1] 토큰 지갑 & 충전 센터 (최상단 카드):
        - 사이드바 진입 시 즉시 google.script.run.withSuccessHandler(...).getUserTokenBalanceData() 를 비동기 호출하여 실시간 잔액 표시.

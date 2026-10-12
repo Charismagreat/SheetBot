@@ -5,6 +5,15 @@
  * LLM이나 외부 에이전트가 생성한 코드의 상단 메뉴를 '단일 코파일럿 사이드바' 표준 규격으로 강제 보정합니다.
  */
 
+import { removeGasFunctionDefinition } from "@/lib/gas-script-functions";
+import { buildGasCopilotSidebarRuntime } from "@/lib/templates/gas-copilot-sidebar-runtime";
+
+function ensureGasCopilotSidebarRuntime(scriptCode: string): string {
+  let code = removeGasFunctionDefinition(scriptCode, "getAiCopilotSidebarHtml");
+  code = removeGasFunctionDefinition(code, "showAiCopilotSidebar");
+  return `${code.trimEnd()}\n\n${buildGasCopilotSidebarRuntime()}\n`;
+}
+
 export function sanitizeGasScriptCode(scriptCode: string): string {
   if (!scriptCode || typeof scriptCode !== "string") {
     return scriptCode;
@@ -452,6 +461,11 @@ function submitFdeRequest(formObj) {
   ).setWidth(440).setHeight(530);
   SpreadsheetApp.getUi().showModalDialog(html, "🔑 구글 권한 점검 및 재승인 가이드");
 }`;
+  }
+
+  // 10. 코파일럿 사이드바: 항상 /api/copilot/sidebar-template (COPILOT_SIDEBAR_HTML)과 동일 UI
+  if (code.includes("showAiCopilotSidebar")) {
+    code = ensureGasCopilotSidebarRuntime(code);
   }
 
   return code;

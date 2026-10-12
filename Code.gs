@@ -669,31 +669,33 @@ function removeTriggers() {
 }
 
 /**
- * 공식 SheetBot 공통 코파일럿 사이드바 열기
+ * 공식 SheetBot 공통 코파일럿 사이드바 (cloud template = /api/copilot/sidebar-template)
  */
 function showAiCopilotSidebar() {
+  var htmlOutput;
   try {
-    var template = HtmlService.createTemplateFromFile('Sidebar');
-    var email = 'chachogreat@gmail.com';
-    try {
-      email = Session.getActiveUser().getEmail() || email;
-    } catch (e) {}
-
-    template.currentUserEmail = email;
-    template.initialBalance = 2495439;
-    template.initialTier = 'PRO';
-    var sUrl = "";
-    try { sUrl = SpreadsheetApp.getActiveSpreadsheet().getUrl(); } catch(e) {}
-    template.currentSheetUrl = sUrl;
-
-    var html = template.evaluate()
-      .setTitle('🤖 SheetBot AI 코파일럿')
-      .setWidth(360);
-
-    SpreadsheetApp.getUi().showSidebar(html);
-  } catch (err) {
-    SpreadsheetApp.getUi().alert('코파일럿 사이드바 오류: ' + err.message);
+    var cb = new Date().getTime();
+    var res = UrlFetchApp.fetch("https://sheetbot.cloud/api/copilot/sidebar-template?_cb=" + cb, {
+      muteHttpExceptions: true,
+      headers: {
+        "Cache-Control": "no-cache, no-store, max-age=0",
+        "Pragma": "no-cache"
+      }
+    });
+    if (res.getResponseCode() === 200) {
+      htmlOutput = HtmlService.createHtmlOutput(res.getContentText());
+    }
+  } catch (e) {
+    Logger.log("원격 코파일럿 사이드바 로드 실패: " + e.message);
   }
+  if (!htmlOutput) {
+    SpreadsheetApp.getUi().alert(
+      "코파일럿 UI를 불러오지 못했습니다. 네트워크 연결을 확인한 뒤 다시 시도해 주세요."
+    );
+    return;
+  }
+  htmlOutput.setTitle("🤖 SheetBot AI 코파일럿").setWidth(360);
+  SpreadsheetApp.getUi().showSidebar(htmlOutput);
 }
 
 function getSpreadsheetUrl() {
