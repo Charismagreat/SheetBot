@@ -32,5 +32,10 @@ export function ensureStandardManifest(rawManifest?: string | null): string {
   STANDARD_OAUTH_SCOPES.forEach((scope) => scopeSet.add(scope));
   parsed.oauthScopes = Array.from(scopeSet);
 
+  // Remote execution (scripts.run / clasp run) requires executionApi in the manifest.
+  if (!parsed.executionApi || typeof parsed.executionApi !== 'object') {
+    parsed.executionApi = { access: 'MYSELF' };
+  }
+
   return JSON.stringify(parsed, null, 2);
 }

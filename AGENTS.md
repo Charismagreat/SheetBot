@@ -175,6 +175,7 @@
    - 예외 처리를 위한 `try-catch` 및 구글 시트 알림 UI(`SpreadsheetApp.getUi().alert`, `toast`)를 필수로 포함해야 합니다.
 2. **트리거 등록 및 중복 방지**:
    - Apps Script 원격 함수 실행(`apps_script_run_function`) 시 실행 결과 및 로그를 `last_run_at`, `last_status`, `last_run_message`에 투명하게 기록해야 합니다.
+   - **원격 실행 사전 준비 (clasp run 동등)**: `apps_script_run_function` 호출 전 `apps_script_auth_status`로 OAuth·사용자 계정을 확인하고, 실패 시 `apps_script_execution_readiness`(`autoFix: true`) 또는 `apps_script_ensure_execution_api`로 `executionApi` 매니페스트·API Executable 배포를 맞춘 뒤 재시도합니다. Google 계정별 **Apps Script API** 사용자 설정은 `https://script.google.com/home/usersettings`에서 켜야 합니다 (`apps_script_auth_status.appsScriptUserApi`).
 3. **SQLite 양방향 동기화 및 CRUD 표준 아키텍처 준수**:
    - 데이터 전송(`[1]`), 조회(`[2]`), 수정/삭제 일괄 동기화(`[3]`)의 3종 메뉴를 표준 제공합니다.
    - 조회 결과 시트 출력 시 이전 날짜 서식 오염을 방지하기 위해 `sheet.clearFormats()` 후 A열(SQLite ID)을 `setNumberFormat("0")`으로 강제 고정하며, `extractSqliteId` 헬퍼(날짜 오인식 역산 2중 방어)를 필수 적용합니다.
