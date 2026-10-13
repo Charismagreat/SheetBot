@@ -2,15 +2,15 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
-import { callAiCaller, getSpreadsheetFullContext } from "@/lib/egdesk-helpers";
+import { getSpreadsheetFullContext } from "@/lib/egdesk-helpers";
 import { recordAiUsageLog } from "@/lib/ai-usage";
 import { getAiModelSettings, getModelTokenMultiplier } from "@/lib/ai-settings";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { queryTable } from "@/lib/setup-db";
-import { sanitizeGasScriptCode } from "@/lib/gas-sanitizer";
-import { calculateBillableTokens, normalizeAiCallerUsage, type AiUsageCounts } from "@/lib/token-calculator";
+import { calculateBillableTokens } from "@/lib/token-calculator";
+import { generateGasScriptBundle } from "@/lib/gas/gas-script-generate-service";
+import { splitLegacyScriptCode } from "@/lib/gas/deploy-script-files";
 
-// 구글 스프레드시트 URL에서 ID 추출
 function extractSpreadsheetId(urlOrId: string): string | null {
   if (!urlOrId) return null;
   const trimmed = urlOrId.trim();
@@ -19,11 +19,6 @@ function extractSpreadsheetId(urlOrId: string): string | null {
   return match && match[1] ? match[1] : null;
 }
 
-/**
- * AI 자가 학습(Self-Improving) 피드백 컨텍스트 생성
- * - 고평가(4~5점) 피드백: 모범 사례(Exemplars)로 강화
- * - 저평가(1~2점) 피드백: 실수/오류 방지 가이드(Pitfalls to Avoid)로 보강
- */
 async function buildSelfImprovingFeedbackContext(): Promise<string> {
   try {
     const feedbackRes = await queryTable("sheetbot_project_feedback", {
@@ -33,7 +28,9 @@ async function buildSelfImprovingFeedbackContext(): Promise<string> {
     }).catch(() => ({ rows: [] }));
 
     const rawRows = feedbackRes.rows || [];
-    const rows = rawRows.filter((r: any) => !r.deleted_at && (r.ai_learned === 1 || r.ai_learned === "1" || r.ai_learned === true));
+    const rows = rawRows.filter(
+      (r: any) => !r.deleted_at && (r.ai_learned === 1 || r.ai_learned === "1" || r.ai_learned === true),
+    );
     if (rows.length === 0) return "";
 
     const positiveCases = rows.filter((r: any) => r.rating >= 4).slice(0, 3);
@@ -93,16 +90,12 @@ export async function POST(request: Request) {
       existingScriptCode,
       mergeMode = "OVERWRITE",
       includeCopilotSidebar = true,
-      enableSqliteSync = false,
-      sqliteFolderName = "SheetBot_Databases",
-      sqliteFileName = "",
     } = body;
 
     const aiSettings = await getAiModelSettings();
-    // 사용자가 선택한 모델이 있으면 최우선 적용, 없으면 관리자 기본 설정 모델 적용
-    const targetModel = userRequestedModel || aiSettings.scriptGeneratorModel || aiSettings.defaultModel || "gemini-3.8-flash";
+    const targetModel =
+      userRequestedModel || aiSettings.scriptGeneratorModel || aiSettings.defaultModel || "gemini-3.8-flash";
 
-    // 1. 토큰 지갑 잔여량 사전 검증 (선택된 모델의 가중치 고려: 기본 1500 * multiplier)
     const tokenMultiplier = await getModelTokenMultiplier(targetModel);
     const requiredTokens = Math.round(1500 * tokenMultiplier);
 
@@ -111,11 +104,13 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: tokenCheck.reason || `잔여 토큰이 부족합니다. (선택 모델: ${targetModel}, 필요 토큰: ${requiredTokens.toLocaleString()})`,
+          error:
+            tokenCheck.reason ||
+            `잔여 토큰이 부족합니다. (선택 모델: ${targetModel}, 필요 토큰: ${requiredTokens.toLocaleString()})`,
           requirePayment: true,
           balance: tokenCheck.balance,
         },
-        { status: 402 } // 402 Payment Required
+        { status: 402 },
       );
     }
 
@@ -123,26 +118,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "요구사항 프롬프트를 입력해 주세요." }, { status: 400 });
     }
 
-    const host = request.headers.get("host") || "localhost:4002";
-    const protocol = request.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
-    const rawServerUrl = `${protocol}://${host}`;
-    // Google 클라우드 환경에서 localhost 호출 시 발생하는 DNS 오류 방지: EGDesk 공용 터널 URL 기본 제공
-    const egdeskTunnelUrl = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/ai-caller/tools/call";
-    const egdeskApiKey = "a67ddc0f-7e2b-4997-9a0b-9667a74c89d0";
-    const currentServerUrl = process.env.SHEETBOT_PUBLIC_URL || (host.includes("localhost") ? egdeskTunnelUrl : `${rawServerUrl}/api/ai/ocr`);
-
-    // 2. 시트 스키마 사전 분석 정보 확인 및 누락 시 실시간 자동 스캔 폴백
     let activeSchema = analyzedSchema;
     if (!activeSchema && sheetUrl) {
       const spreadsheetId = extractSpreadsheetId(sheetUrl);
       if (spreadsheetId) {
         try {
           const fullContext = await getSpreadsheetFullContext(spreadsheetId, 5);
-          if (fullContext && fullContext.sheetsData && fullContext.sheetsData.length > 0) {
-            // '발주서' 또는 '접수'가 포함된 시트 우선, 없으면 첫 번째 탭
+          if (fullContext?.sheetsData?.length > 0) {
             const targetSheet =
-              fullContext.sheetsData.find((s: any) =>
-                s.sheetTitle.includes("발주") || s.sheetTitle.includes("접수") || s.sheetTitle.includes("대장")
+              fullContext.sheetsData.find(
+                (s: any) =>
+                  s.sheetTitle.includes("발주") ||
+                  s.sheetTitle.includes("접수") ||
+                  s.sheetTitle.includes("대장"),
               ) || fullContext.sheetsData[0];
 
             const rawHeaders = (targetSheet.headers || []).filter((h: string) => h && h.trim());
@@ -159,11 +147,9 @@ export async function POST(request: Request) {
                   purpose: h.trim(),
                 })),
                 keyStrategies: [
-                  `실제 시트 '${targetSheet.sheetTitle}'의 ${rawHeaders.length}개 열(A열~${String.fromCharCode(64 + rawHeaders.length)}열) 순서와 1:1 완벽 일치 매핑`,
-                  "다중 품목(N개) 발주서인 경우 품목별로 1행씩 분리하여 순차 최상단 삽입",
+                  `실제 시트 '${targetSheet.sheetTitle}'의 ${rawHeaders.length}개 열 순서 1:1 준수`,
                 ],
               };
-              console.log(`[Generate] Auto-detected ${rawHeaders.length} headers from sheet:`, rawHeaders);
             }
           }
         } catch (e: any) {
@@ -172,926 +158,87 @@ export async function POST(request: Request) {
       }
     }
 
-    let schemaPromptSection = "";
-    if (activeSchema && activeSchema.columns && activeSchema.columns.length > 0) {
-      const colDetails = activeSchema.columns
-        .map((c: any) => `  * ${c.letter || `Col${c.index}`}열: "${c.name}"`)
-        .join("\n");
-
-      schemaPromptSection = `
-[사전 검증된 실제 구글 시트 양식 및 스키마 (100% 필수 준수)]:
-- 양식 유형: ${activeSchema.archetypeName || "실무 누적 대장형"}
-- 대상 탭 이름: "${activeSchema.targetTab || "기본 탭"}"
-- 헤더 위치: ${activeSchema.headerRow || 1}행 (신규 데이터 삽입 위치: ${activeSchema.dataStartRow || 2}행)
-- 확정된 컬럼 매핑 (총 ${activeSchema.columns.length}개 열):
-${colDetails}
-- 핵심 실행 전략:
-${(activeSchema.keyStrategies || []).map((s: string) => `  - ${s}`).join("\n")}
-
-⚠️ [컬럼 매핑 절대 규칙 - 불일치 시 시스템 작동 불가]:
-1. 임의의 가상 컬럼을 생성하지 말고, 반드시 위에서 감지된 실제 시트의 확정된 컬럼 순서 및 개수(${activeSchema.columns.length}개 열)를 1:1로 엄격히 준수하세요.
-2. recordToSheet 또는 데이터 삽입 시 각 행 배열(rowData)은 반드시 위에서 확정된 정확히 ${activeSchema.columns.length}개의 원소를 가져야 하며, A열부터 순서대로 정확한 필드 값을 매핑해야 합니다.
-3. 세부 품목(Line Items)이 복수 개 존재하는 문서(발주서, 견적서, 거래명세서, 영수증 등)의 경우, 1행으로 뭉뚱그리지 말고 품목별로 1행씩(총 N개 행) 분리하여 시트에 순차 삽입하세요. 단일 건 문서(신청서, 문의 등)는 1건당 1행으로 삽입하세요.
-`;
-    }
-
-    const systemPrompt = `당신은 Google Apps Script(GAS) 최고의 전문 수석 엔지니어입니다.
-사용자의 자연어 요구사항을 분석하여 Google 스프레드시트에서 즉시 완벽히 동작하는 완성형 Apps Script 코드와 매니페스트를 작성하세요.
-
-[이지데스크 터널 클라이언트 인프라 환경 (사전 주입 완료)]:
-* 중요: 이 프로젝트는 이지데스크 터널 설정 도구(apps_script_setup_egdesk_tunnel)를 통해 다음 파일들이 이미 함께 주입되어 즉시 사용할 수 있습니다.
-1. EgdeskConfig.gs: getEgdeskConfig() 함수 제공 (활성 공용 터널 URL 및 인증 X-Api-Key 자동 보유)
-2. EgdeskClient.gs: 강력한 터널 통신 클라이언트 유틸리티 함수 사전 제공:
-   - egdeskToolsCall(service, tool, args): 이지데스크의 모든 백엔드 MCP 도구를 원격 호출 (예: service 'ai-caller', 'user-data' 등)
-   - egdeskUserDataCall(tool, args): My DB 도구(user_data_*) 원격 호출
-   - queryTable(tableName, options) / egdeskUserDataQuery(tableName, options): My DB 구조적 조회 표준 도구 (SQL 금지 키워드 차단 원천 방지)
-   - egdeskUserDataSql(query): My DB에 SQL 쿼리 직접 실행 및 결과 반환 (SELECT * 필수)
-   - egdeskUserDataListTables(): DB 테이블 목록 조회
-   - testEgdeskTunnel(): 터널 연결 상태 점검 및 UI 알림 함수
-3. appsscript.json: UrlFetchApp 외부 요청 권한("https://www.googleapis.com/auth/script.external_request") 사전 등록 완료
-
-[시트봇 핵심 보안 및 API 원칙 - 절대 준수]
-1. ⚠️ 사용자 개인 API 키 요구 절대 금지:
-   - 사용자에게 Gemini API 키나 OpenAI API 키 등 개인 API 키 입력을 요구하는 UI, 안내문, 팝업, 메뉴(예: 'Gemini API 키 설정')를 "절대로 작성하지 마십시오".
-   - 시트봇(SheetBot) 서비스는 모든 AI 및 OCR 호출을 이지데스크 중앙 AI Caller에서 일괄 처리하므로, 사용자가 개인 API 키를 소지하거나 시트에 등록할 필요가 없습니다.
-2. 🤖 AI 및 OCR 분석 구현 방법 (EgdeskClient 유틸리티 함수 적극 활용):
-   - 더 이상 Code.gs 내부에 길고 복잡한 UrlFetchApp 저수준 코드나 하드코딩된 API Key 상수를 넣을 필요가 없습니다!
-   - 이미 사전 제공되는 egdeskToolsCall('ai-caller', 'ai_caller_call', { ... }) 함수를 호출하여 AI/OCR 분석을 깔끔하게 구현하세요.
-   - 사이드바에서 PDF 또는 이미지 파일 업로드 시:
-     - 사이드바 UI에 파일 선택(<input type="file">)과 'AI 분석 및 시트 기록' 버튼을 제공하세요.
-     - 사용자가 파일을 선택하고 버튼을 누르면, 브라우저 FileReader로 Base64로 인코딩한 뒤 google.script.run을 통해 GAS 서버 함수(예: processUploadedDocument)를 호출하세요.
-     - GAS 서버 함수에서는 egdeskToolsCall을 사용하여 AI Caller(gemini-3.8-flash)를 호출하세요:
-       \`\`\`javascript
-       const toolRes = egdeskToolsCall('ai-caller', 'ai_caller_call', {
-         model: 'gemini-3.8-flash',
-         temperature: 0.1,
-         prompt: '첨부된 문서를 정밀 분석하여 대상 시트의 각 컬럼에 맞는 JSON 규격으로 추출하세요. (복수 품목이 있는 문서는 items 배열 포함)',
-         files: [{ name: fileName, content: fileData, encoding: 'base64', mimeType: mimeType }]
-       });
-       \`\`\`
-   - ⚠️ [AI Caller 응답 언래핑 헬퍼 함수 - 필수 포함 및 준수]:
-     - egdeskToolsCall이 반환한 결과 객체에서 실제 AI JSON 텍스트를 안전하게 추출하는 parseAiCallerResponse 헬퍼 함수를 Code.gs에 포함하세요:
-       \`\`\`javascript
-       function parseAiCallerResponse(toolRes) {
-         let text = "";
-         if (toolRes && toolRes.result && toolRes.result.content && toolRes.result.content[0] && toolRes.result.content[0].text) {
-           text = toolRes.result.content[0].text;
-         } else if (toolRes && toolRes.content && toolRes.content[0] && toolRes.content[0].text) {
-           text = toolRes.content[0].text;
-         } else if (typeof toolRes.result === "string") {
-           text = toolRes.result;
-         } else {
-           text = JSON.stringify(toolRes);
-         }
-
-         // 중첩된 메타 JSON 래퍼({ content: "..." }) 언래핑
-         try {
-           const nested = JSON.parse(text);
-           if (nested && typeof nested === "object") {
-             if (typeof nested.content === "string") text = nested.content;
-             else if (typeof nested.text === "string") text = nested.text;
-             else if (nested.json && typeof nested.json === "object") text = JSON.stringify(nested.json);
-           }
-         } catch (e) {}
-
-         var jsonStr = text.replace(/\`\`\`json/gi, "").replace(/\`\`\`/g, "").trim();
-         var firstBrace = jsonStr.indexOf("{");
-         var lastBrace = jsonStr.lastIndexOf("}");
-         if (firstBrace !== -1 && lastBrace !== -1) {
-           jsonStr = jsonStr.substring(firstBrace, lastBrace + 1);
-         }
-         return JSON.parse(jsonStr);
-       }
-       \`\`\`
-   - ⚠️ [실시간 AI 사용량 감사 로그 적재]:
-     - AI OCR 분석이 완료되면, 사용자 관제 센터에 기록되도록 egdeskToolsCall('user-data', 'user_data_insert_rows', { tableName: 'sheetbot_ai_usage_logs', rows: [{ user_email: SHEETBOT_USER_EMAIL, caller: 'sheetbot-gas-ocr', purpose: '구글 시트 문서 AI OCR 분석', model: 'gemini-3.8-flash', prompt_preview: fileName }] })를 호출하는 recordOcrUsageLog 헬퍼 함수를 포함하세요 (try-catch로 감싸서 실패해도 본 작업에 영향 없도록 안전 처리).
-   - ⚠️ [데이터 유효성 검증]:
-     - AI 분석 결과가 비어있거나 유효하지 않으면 절대 파일명(fileName)이나 임의의 더미값을 데이터 열에 대체 삽입하지 말고, throw new Error("문서에서 유효한 정보를 추출하지 못했습니다.")로 명확히 예외를 발생시키세요.
-     - 사용자에게 API 키가 없다는 경고나 설정창을 절대 띄우지 마세요!
-3. 💾 My DB 연동 및 🏛️ B2B 공공/기업 인텔리전스 도구 활용:
-   - 스프레드시트 데이터를 My DB 대장에 백업하거나, My DB의 프로젝트/회원/이력 데이터를 조회해야 할 때는 egdeskUserDataSql("SELECT ...") 또는 egdeskToolsCall('user-data', 'user_data_insert_rows', ...)를 사용하여 원격 DB와 원활히 동기화할 수 있습니다.
-   - 🏢 [국민연금(NPS) 사업장·직원 수·고용 추이 자동 조회]:
-     - 거래처나 고객사의 직원 수, 월별 가입자 변동을 시트에 채울 때: egdeskToolsCall('nps', 'nps_lookup', { workplaceName: '회사명', businessNumber: '사업자번호' })
-   - 🏛️ [나라장터(KONEPS) 공공 계약 실적 & 입찰공고(BidNotice) 실시간 수집]:
-     - 기업의 공공기관 납품/낙찰 계약 실적 조회: egdeskToolsCall('koneps', 'koneps_lookup', { companyName: '회사명' })
-     - 나라장터 신규 입찰공고 실시간 모니터링: egdeskToolsCall('bidnotice', 'bidnotice_lookup', { title: '키워드', openOnly: true })
-   - 🔍 [기업 심층 웹 리서치]:
-     - 기업 홈페이지 분석 및 사업 영역 요약: egdeskToolsCall('company-research', 'companyresearch_run', { domain: '회사도메인', companyName: '회사명' })
-    - 📱 [SMS 문자 발송 구현 표준 원칙 - SheetBot Agent2 연동]:
-      - ⚠️ 절대 금지: 실제 통신 없이 단순히 '발송성공'이나 'HTTP 200' 문자열을 대입하는 모의(Mock) 코드를 작성하지 마십시오!
-      - [1번 기본 엔진 - SheetBot Agent2 스마트폰 연동 (0원 무제한 발송 & 양방향 수신)]:
-          * 발송 전 checkActiveSmsDevice()를 호출하여 회원의 등록된 활성 기기(status === 'CONNECTED')가 있는지 실시간 점검하세요. (My DB sheetbot_user_devices 조회 시 result.content[0].text JSON을 안전하게 파싱하여 user_email 일치 기기를 1순위 매칭)
-          * 점검 결과(연결된 기기명, 무료 연동 여부, 발송 대상 건수)를 명시한 [점검 완료 및 발송 확인] 알림창을 띄워 사용자 승인을 받은 후 실제 문자를 발송하세요.
-          * 활성 기기가 있으면 egdeskToolsCall('phone', 'phone_send', { deviceId: device.device_id, phoneNumber: phone, message: content })를 호출하여 실제 문자를 발송하세요.
-      - [기기 미등록 시 세련된 안내 모달 표출 - showSmsDeviceNoticeModal()]:
-        * 등록된 기기가 없으면 발송을 중단하고 다음 2가지 대안을 담은 HTML 모달 다이얼로그(380px)를 띄우세요:
-          1. 📱 기본: SheetBot Agent2 스마트폰 연동 (0원 무제한 발송) -> [SheetBot Agent2 기기 연동 바로가기 ↗] (https://sheetbot.cloud/dashboard/notifications)
-          2. 💳 대안: 상용 유료 문자 API (알리고, 쿨SMS 등) Key 등록 안내
-      - [2번 대안 - 상용 문자 API (알리고/쿨SMS) 지원]:
-        * PropertiesService.getScriptProperties()에 'SMS_API_KEY'가 설정되어 있는 경우, 해당 상용 통신사 API 규격으로 전송하는 폴백을 함께 지원하세요.
-4. 📋 시트 및 데이터 조작 (실제 컬럼 1:1 매핑 및 동적 행 삽입 절대 준수):
-   - 특정 시트명이 언급된 경우, getSheetByName()으로 참조하고 시트가 없으면 insertSheet()로 헤더 행과 함께 자동 생성하세요.
-   - 단, 시트에 이미 존재하는 헤더(1행)가 있을 경우, 헤더를 임의로 변경하거나 덮어쓰지 말고 실제 시트 1행의 컬럼 순서 및 개수에 1:1로 정확히 맞추어 rowsToInsert 2차원 배열을 구성하세요.
-   - '최근 기록이 위에 오도록' 요청된 경우:
-     - 삽입할 행이 N개일 때, sheet.insertRowsBefore(2, N) 후 sheet.getRange(2, 1, N, rowsToInsert[0].length).setValues(rowsToInsert)로 한 번에 삽입하여 데이터 순서가 뒤집히지 않고 최신 데이터가 시트 맨 위(2행부터)에 안전하게 자리잡도록 작성하세요.
-   - 숫자 포맷: 금액, 수량, 단가 등 숫자 열이 감지되면 해당 열에 .setNumberFormat("#,##0")을 적용하세요.
-5. 🚀 상단 메뉴 및 사이드바 (표준 메뉴 규칙 필수 준수 - 위반 절대 금지):
-   - ⚠️ [메뉴명 고정 절대 원칙]: 구글 시트 상단 메뉴명은 사용자의 요청 주제나 업무 내용과 무관하게 **반드시 100% '🚀 SheetBot 메뉴'로 통일**해야 합니다. (예: ui.createMenu('🚀 SheetBot 메뉴')) 임의의 다른 메뉴명(예: '문자발송 시스템', '주문 관리' 등)을 절대로 사용하지 마십시오!
-     - 메뉴 구성 순서 (슬림 메뉴 표준 절대 준수):
-       - 1. 업무 자동화 기능 항목들 (예: '▶️ 자동화 작업 실행', '📤 [1] SQLite 전송', '📥 [2] SQLite 조회', '🛠️ 초기 시트 양식 및 데이터 자동 세팅' 등)
-       - 2. 구분선 (.addSeparator())
-       - 3. '🤖 SheetBot AI 코파일럿' (showAiCopilotSidebar 호출 - 토큰 지갑&충전, 실무 활용사례 가이드, 터널 상태 진단, 안티그라비티 AI 확장, 스크립트 전체 삭제 4단 올인원 제어 센터)
-       - ⚠️ [상단 메뉴 극단적 슬림화 규칙]: 상단 메뉴에 '토큰 충전', '사용법 및 활용사례', '터널 연결 점검', '스크립트 삭제' 등을 별도 메뉴 항목으로 절대 두지 마십시오! 이 모든 시스템/관리 기능은 '🤖 SheetBot AI 코파일럿' 사이드바 내부로 100% 일원화되어 상단 메뉴가 항상 슬림하고 정갈하게 유지되어야 합니다.
-     - 💳 [토큰 충전 모달 함수 - openTokenRechargeModal 필수 포함]:
-       - 사이드바 내부 호출을 위해 Code.gs 하단에 openTokenRechargeModal() 함수를 반드시 포함하세요:
-         \`\`\`javascript
-         function openTokenRechargeModal() {
-           var html = HtmlService.createHtmlOutput(
-             '<!DOCTYPE html><html><head><base target="_blank"><script>window.onload=function(){window.open("https://sheetbot.cloud/billing","_blank");google.script.host.close();};</script><style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f8fafc;color:#334155;}.btn{display:inline-block;margin-top:10px;padding:8px 16px;background:#059669;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:12px;}</style></head><body><div style="font-weight:bold;font-size:13px;margin-bottom:6px;">💳 SheetBot 토큰 충전 센터</div><div style="font-size:11px;color:#64748b;margin-bottom:10px;">새 창이 열리지 않으면 아래 버튼을 클릭하세요.</div><a href="https://sheetbot.cloud/billing" target="_blank" class="btn">토큰 충전 페이지 열기</a></body></html>'
-           ).setWidth(340).setHeight(150);
-           SpreadsheetApp.getUi().showModalDialog(html, "💳 SheetBot 토큰 충전 센터");
-         }
-         \`\`\`
-     - 🌐 [SheetBot 사용법 및 활용사례 함수 - openSheetBotGuide 필수 포함]:
-       - 사이드바 내부 호출을 위해 Code.gs 하단에 다음 openSheetBotGuide() 함수를 반드시 포함하세요 (링크 대상: https://sheetbot.cloud/use-cases):
-         \`\`\`javascript
-         function openSheetBotGuide() {
-           var html = HtmlService.createHtmlOutput(
-             '<!DOCTYPE html><html><head><base target="_blank"><script>window.onload=function(){window.open("https://sheetbot.cloud/use-cases","_blank");google.script.host.close();};</script><style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f8fafc;color:#334155;}.btn{display:inline-block;margin-top:10px;padding:8px 16px;background:#4f46e5;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:12px;}</style></head><body><div style="font-weight:bold;font-size:13px;margin-bottom:6px;">🌐 SheetBot 활용사례 및 가이드로 이동합니다</div><div style="font-size:11px;color:#64748b;margin-bottom:10px;">새 탭이 열리지 않으면 아래를 클릭하세요.</div><a href="https://sheetbot.cloud/use-cases" target="_blank" class="btn">sheetbot.cloud/use-cases 바로가기</a></body></html>'
-           ).setWidth(340).setHeight(130);
-           SpreadsheetApp.getUi().showModalDialog(html, "SheetBot 사용법 및 활용사례");
-         }
-         \`\`\`
-    - 🛠️ [신규 시트 양식/엑셀 데이터 초기화 함수 - setupInitialSheetLayout]:
-      - 사용자가 빈 구글 시트에서 시작하거나 엑셀 데이터를 가져왔을 때를 대비하여, setupInitialSheetLayout() 함수를 구현하세요:
-        * 대상 시트 탭이 없을 때 기존 탭이 'Sheet1' 또는 '시트1' 1개뿐인 빈 시트라면 추가(insertSheet)하지 않고 기존 탭 이름을 대상 탭명으로 변경(sheets[0].setName)하여 탭이 2개로 쪼개지는 것을 방지하고, 이미 다른 업무 탭들이 존재할 때만 새로 생성(insertSheet),
-        * 1행에 확정된 컬럼 헤더들을 깔끔하게 채우고 배경색(에메랄드 또는 네이비 #1e293b)과 굵은 글씨 스타일 적용,
-        * 각 열의 너비를 내용에 맞게 자동 조절(autoResizeColumns),
-        * 완료 시 SpreadsheetApp.getUi().alert("✅ 시트 양식 및 초기 설정이 완료되었습니다.") 안내.
-    - ⚡ [터널 연결 상태 진단 함수 - getTunnelStatusData 및 testEgdeskTunnel 호환성 포함]:
-      - 사이드바 비동기 호출 및 호환성을 위해 Code.gs에 다음 진단 함수를 구현하세요:
-        \`\`\`javascript
-        function getTunnelStatusData() {
-          try {
-            var config = getEgdeskConfig();
-            var startTime = new Date().getTime();
-            var result = egdeskUserDataListTables();
-            var elapsed = new Date().getTime() - startTime;
-            return {
-              success: true,
-              elapsed: elapsed,
-              serverName: config.serverName || "EGDesk Cloud",
-              message: "My DB 및 SMS 통신 준비 완료"
-            };
-          } catch (err) {
-            return {
-              success: false,
-              error: err.message || "클라우드 터널 통신 실패"
-            };
-          }
-        }
-        function testEgdeskTunnel() {
-          var res = getTunnelStatusData();
-          var ui; try { ui = SpreadsheetApp.getUi(); } catch(e) { ui = null; }
-          if (!ui) return res;
-          if (res.success) {
-            ui.alert("🚀 SheetBot 클라우드 터널 정상", "• 상태: 정상 통신 (" + res.elapsed + "ms)\\n• 서버: " + res.serverName + "\\n• 연동: " + res.message, ui.ButtonSet.OK);
-          } else {
-            ui.alert("⚠️ 터널 연결 오류", "❌ 통신 실패: " + res.error, ui.ButtonSet.OK);
-          }
-          return res;
-        }
-        \`\`\`
-6. 🛡️ 예외 처리:
-   - try-catch를 꼼꼼히 감싸고, 실패 시 { success: false, error: error.message }를 반환하여 사이드바에 실패 원인이 빨간색 안내창으로 명확히 뜨도록 작성하세요.
-7. 🌐 독립 웹페이지(Web App) 설문/신청서/접수폼 구현 규칙:
-   - 사용자가 '설문지', '신청서', '접수 폼', '웹페이지', '공개 링크/URL'을 요구한 경우:
-     - 반드시 function doGet(e) 함수를 구현하여 HtmlService.createHtmlOutput(getFormHtml()).setTitle("...").setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)을 반환하세요.
-     - getFormHtml() 함수 내부에 Tailwind CSS(CDN)를 활용한 모바일 반응형 독립 웹페이지 입력 폼을 작성하세요.
-     - 시트 컬럼에 맞는 입력 필드(성함, 연락처, 주관식 내용 등)를 구성하고, 브라우저에서 google.script.run을 통해 서버 함수(예: submitFormToSheet)를 호출하여 시트에 실시간 기록(appendRow)하세요.
-     - 제출 완료 후 "정상 접수되었습니다" 안내 화면을 표출하세요.
-     - appsscript.json 매니페스트에 "webapp": { "access": "ANYONE_ANONYMOUS", "executeAs": "USER_DEPLOYING" }를 포함하세요.
-
-[출력 형식]
-반드시 다음 JSON 규격으로만 응답해야 합니다. 마크다운 코드블록(\`\`\`json) 없이 순수 JSON 문자열만 출력하세요:
-{
-  "summary": "구현된 자동화 기능의 핵심 요약 (1~2문장)",
-  "features": [
-    "구현된 세부 기능 1",
-    "구현된 세부 기능 2",
-    "구현된 세부 기능 3"
-  ],
-  "scriptCode": "/* Code.gs 전체 소스코드 (onOpen, 사이드바 표출, egdeskToolsCall을 활용한 깔끔하고 강력한 자동화 코드) */",
-  "manifest": "{\\n  \\"timeZone\\": \\"Asia/Seoul\\",\\n  \\"dependencies\\": {},\\n  \\"exceptionLogging\\": \\"STACKDRIVER\\",\\n  \\"runtimeVersion\\": \\"V8\\",\\n  \\"oauthScopes\\": [\\n    \\"https://www.googleapis.com/auth/spreadsheets\\",\\n    \\"https://www.googleapis.com/auth/script.container.ui\\",\\n    \\"https://www.googleapis.com/auth/script.external_request\\",\\n    \\"https://www.googleapis.com/auth/script.scriptapp\\",\\n    \\"https://www.googleapis.com/auth/drive\\"\\n  ]\\n}",
-  "triggers": [
-    { "type": "ON_OPEN", "description": "시트 열기 시 커스텀 메뉴 및 환경 자동 초기화" }
-  ]
-}`;
-
-    let existingScriptSection = "";
-    if (mergeMode === "MERGE" && existingScriptCode && existingScriptCode.trim()) {
-      existingScriptSection = `
-[🛡️ 지능형 안전 병합(Smart Merge) 모드 지침 (Managed Core vs User Custom)]:
-- 사용자의 구글 시트에는 이미 실무에서 사용 중인 Apps Script 코드가 존재합니다.
-- ⚠️ [영역별 핵심 병합 규칙 - 절대 준수]:
-  1. 👤 [사용자 고유 커스텀 함수 (User Custom)]:
-     - 사용자가 직접 작성하거나 추가한 고유 함수(비즈니스 계산식, 사용자 작성 로직 등)는 100% 무손실 영구 보존하십시오.
-  2. 🚀 [시트봇 관리 함수 (SheetBot Managed Core)]:
-     - 기존에 시트봇이 생성했던 핵심 함수들(onOpen, 발송, 조회, 동기화 등)의 비즈니스 기능 스펙은 온전히 유지하십시오.
-     - ⚠️ [중요 - 적극적 결함 리팩토링 허용]: 사용자가 요구사항에서 **"오류가 발생하지 않도록", "에러 수정", "예외 처리", "기능 수정"** 등을 요청한 경우, 기존의 잘못된 결함 코드(예: 단순 alert 에러창 띄우고 중단하는 코드)를 그대로 보존하지 말고, **기존 함수의 내부 로직을 적극적으로 수정·리팩토링하여 요구사항을 완벽히 충족하는 완성형 코드로 개선**하십시오!
-  3. 🛠️ [시트 탭 부재 오류 방지 자가 치유(Self-Healing) 필수 탑재]:
-     - '시트를 찾을 수 없습니다' 오류를 방지하기 위해 단순 alert 후 종료하는 구문을 절대 사용하지 마십시오.
-     - 대신 대상 시트 탭이 없으면 자동으로 새 시트를 생성하고 양식을 세팅하는 getTargetSheetSafe(sheetName) 자가 치유 함수를 반드시 탑재하고 모든 데이터 조작 함수에서 이를 호출하도록 구현하십시오:
-       \`\`\`javascript
-       function getTargetSheetSafe(sheetName) {
-         const ss = SpreadsheetApp.getActiveSpreadsheet();
-         let sheet = ss.getSheetByName(sheetName);
-         if (!sheet) {
-           sheet = ss.insertSheet(sheetName, 0);
-           if (typeof setupInitialSheetLayout === 'function') {
-             setupInitialSheetLayout();
-           }
-         }
-         return sheet;
-       }
-       \`\`\`
-  4. onOpen() 메뉴 병합:
-     - onOpen()은 반드시 1개로 통합하며, 상단 메뉴명은 무조건 '🚀 SheetBot 메뉴'로 통일하십시오.
-  5. 결과물 scriptCode는 기존 사용자 함수와 시트봇의 개선된 코드가 조화롭게 결합된 '완전한 완성형 Code.gs'여야 합니다.
-
-[기존 Apps Script 소스코드]:
-\`\`\`javascript
-${existingScriptCode.trim()}
-\`\`\`
-`;
-    }
-
-    let copilotSidebarPromptSection = "";
-    if (includeCopilotSidebar) {
-      copilotSidebarPromptSection = `
-[🤖 시트 내장 AI 코파일럿 사이드바 (통합 제어 센터: 토큰 지갑 · 터널 진단 · 안티그라비티 연동 · 스크립트 삭제) 필수 탑재 지침]:
-- 구글 시트 우측 사이드바를 '시트봇 올인원 통합 제어 센터'로 구현하세요. 사용자가 실시간 토큰 잔액 확인 및 즉시 충전, 실무 활용사례 가이드 확인, 인프라 상태 점검, 안티그라비티(Antigravity)를 통한 시트 자동화 확장, 필요 시 스크립트를 깨끗이 전면 삭제할 수 있는 완성형 4단 UI를 필수 구현하세요.
-1. 상단 onOpen() 메뉴 구성:
-   - 상단 메뉴에는 관리/점검/충전/삭제 등 부가 항목을 일절 노출하지 말고, 메뉴의 다른 업무 기능들이 모두 등록된 후 맨 마지막에 구분선(.addSeparator())과 함께 오직 단 1개의 통합 제어 메뉴만 슬림하게 배치하세요:
-     .addSeparator()
-     .addItem('🤖 SheetBot AI 코파일럿', 'showAiCopilotSidebar')
-     .addToUi();
-2. 사이드바 표출 함수 showAiCopilotSidebar() [필수 — Sidebar.html 사용 금지]:
-   - UrlFetchApp.fetch("https://sheetbot.cloud/api/copilot/sidebar-template?_cb=" + cacheBuster) 로 HTML을 받아 HtmlService.createHtmlOutput(...) 후 showSidebar.
-   - fetch 실패 시에만 getAiCopilotSidebarHtml() 폴백(동일 템플릿 복제).
-   - setTitle("🤖 SheetBot AI 코파일럿").setWidth(360).
-3. 사이드바 UI 템플릿 getAiCopilotSidebarHtml() (오프라인 폴백 전용):
-   - 모던하고 깔끔한 Tailwind CSS 스타일(인라인 스타일 또는 CDN)의 4단 통합 레이아웃:
-     [1] 토큰 지갑 & 충전 센터 (최상단 카드):
-       - 사이드바 진입 시 즉시 google.script.run.withSuccessHandler(...).getUserTokenBalanceData() 를 비동기 호출하여 실시간 잔액 표시.
-       - '보유 토큰 잔액'과 [💳 즉시 충전] 버튼(클릭 시 openTokenRechargeModal() 호출).
-       - '📖 40+ 실무 활용사례 및 가이드' 링크 (클릭 시 https://sheetbot.cloud/use-cases 새 창 열기).
-     [2] 인프라 실시간 진단 (상단 카드):
-       - 사이드바 진입 시 즉시 google.script.run.withSuccessHandler(...).getTunnelStatusData() 를 비동기 호출.
-       - 상태 뱃지: 로딩 중('⏳ 점검 중...'), 정상('🟢 클라우드 터널 정상 (Oms)'), 에러('🔴 연결 점검 필요') 실시간 표출.
-       - 연결 서버명 및 'My DB · SMS 통신 준비 완료' 서브 카피 표출.
-       - 우측에 작은 [🔄 재점검] 버튼을 두어 언제든 1초 만에 재진단 가능하게 구성.
-     [2] 안티그라비티(Antigravity) AI 확장 (중단 메인 카드):
-       - 카피: '구글 시트에 새로운 AI 자동화 기능을 추가하려면 최첨단 AI 에이전트 안티그라비티에게 명령하세요.'
-       - 발급된 래핑 브릿지 주소 표시 박스 및 [📋 복사] 버튼:
-         상수 SHEETBOT_GAS_BRIDGE_URL 또는 'https://sheetbot.cloud/api/agent/gas-bridge?sk=...' 표시
-       - 메인 액션 버튼 2종:
-         * 🚀 [안티그라비티 열기 및 자동화 시작] 버튼:
-           클릭 시 시트 래핑 주소와 지시 프롬프트를 클립보드에 원클릭 자동 복사하고, 즉시 window.open('antigravity://') 호출 및 Ctrl+V 붙여넣기 안내 표출
-         * 📋 [안티그라비티 프롬프트 원클릭 복사] 버튼:
-           클릭 시 아래 표준 프롬프트 양식을 클립보드에 자동 복사:
-           '구글 시트 래핑 주소: ' + bridgeUrl + '\\n\\n위 구글 시트에 다음 자동화 기능을 구현하고 즉시 주입해줘:\\n[여기에 추가할 기능 입력]'
-       - 접이식(<details>) 직접 코드 주입 (고급 사용자용):
-         <summary class="text-xs text-slate-500 cursor-pointer">📝 직접 짠 코드 긴급 주입 (고급)</summary>
-         <textarea id="userPrompt" class="w-full mt-2 text-xs p-2 border rounded resize-y min-h-[100px]" placeholder="자연어 요청 또는 function ... 코드 붙여넣기"></textarea>
-         <button onclick="submitCustomCode()" class="mt-1.5 w-full py-1.5 bg-slate-800 text-white text-xs font-bold rounded">⚡ 시트에 즉시 주입</button>
-     [3] 래핑 관리 Danger Zone (최하단 카드):
-       - 연한 붉은색 경고 카드 (border-rose-200, bg-rose-50):
-       - 타이틀: '⚠️ 시트봇 래핑 해제 및 스크립트 전체 삭제'
-       - 안내 문구: '시트의 표 데이터는 100% 안전하게 유지되며, 상단 메뉴와 Apps Script 코드만 완전히 제거됩니다.'
-       - 버튼: 붉은색 [🗑️ 스크립트 전체 삭제]
-       - 인터랙션: 클릭 시 confirm('⚠️ 정말로 시트봇 자동화 스크립트를 모두 제거하시겠습니까?\\n\\n• 시트 내 셀 데이터(표, 텍스트)는 100% 안전하게 유지됩니다.\\n• 상단 메뉴와 자동화 기능만 깨끗하게 초기화됩니다.\\n\\n계속하시겠습니까?') 확인 후,
-         google.script.run.withSuccessHandler(onUninstallSuccess).withFailureHandler(onUninstallFail).executeUninstallSheetBot() 호출.
-       - 성공 시 alert('모든 스크립트가 성공적으로 제거되었습니다.\\n구글 시트를 새로고침(F5)하시면 상단 메뉴가 완전히 사라집니다.') 안내 후 google.script.host.close() 로 사이드바 종료.
-4. 백엔드 지원 함수 구현:
-   - getTunnelStatusData():
-     * 실시간 터널 통신 및 응답속도(ms) 측정 후 { success: true, elapsed: elapsed, serverName: ..., message: '...' } 반환.
-   - executeUninstallSheetBot():
-     * 1) ScriptApp.getProjectTriggers().forEach(function(t) { ScriptApp.deleteTrigger(t); }); 로 설치형 트리거 전체 제거.
-     * 2) 프로젝트 ID 조회 후 egdeskToolsCall('apps-script', 'apps_script_write_file', { projectId: gasProjectId, fileName: 'Code.gs', content: '// SheetBot 자동화 래핑이 해제되었습니다.\\nfunction onOpen() {}\\n' }) 호출.
-     * 3) egdeskToolsCall('apps-script', 'apps_script_push_to_google', { projectId: gasProjectId }) 호출하여 구글 클라우드에 빈 스크립트 배포.
-     * 4) egdeskToolsCall('user-data', 'user_data_update_rows', { tableName: 'sheetbot_projects', filters: { id: projectId }, updates: { script_code: '// SheetBot 래핑 해제됨', status: 'UNLINKED', updated_at: new Date().toISOString() } }) 로 상태 갱신.
-     * 5) { success: true, message: '모든 스크립트가 성공적으로 제거되었습니다.' } 반환.
-   - executeSelfCodeInjection(userPrompt): 기존 직접 코드 주입 및 자가 병합 배포 로직 유지.
-`;
-    }
-
-    let sqliteSyncPromptSection = "";
-    if (enableSqliteSync) {
-      const targetSqliteFileName = (sqliteFileName.trim() || `${customTitle || 'sheetbot'}_데이터`).replace(/\.sqlite$/i, '') + '.sqlite';
-      sqliteSyncPromptSection = `
-[🗄️ Google Drive SQLite 양방향 연동 및 전송·조회·수정·삭제(CRUD) 완성형 탑재 지침]:
-- 사용자가 구글 시트의 데이터를 구글 드라이브의 SQLite DB 파일('${targetSqliteFileName}')로 안전하게 전송하고, 시트 안에서 조건 검색 및 AI 자연어(Text-to-SQL)로 즉시 조회하며, 시트 셀 직접 편집 및 사이드바 폼을 통한 수정/삭제(CRUD)를 완벽 지원하도록 구현하세요.
-
-1. 상단 onOpen() 메뉴 3종 세트 필수 등록:
-   .addItem('📤 [1] 미전송 데이터 SQLite로 전송 (구글 드라이브 동기화)', 'exportOrdersToSqlite')
-   .addItem('📥 [2] SQLite 데이터 조회 및 시트 추출', 'showSqliteQuerySidebar')
-   .addItem('💾 [3] 조회결과 시트 수정/삭제 내역 SQLite에 반영', 'syncEditedResultsToSqlite')
-
-2. 데이터 전송 함수 exportOrdersToSqlite():
-   - 시트에서 '전송완료'가 아닌 미전송 데이터 행들을 추출.
-   - egdeskToolsCall('user-data', 'user_data_insert_rows', { tableName: '${sqliteFileName.replace(/[^a-zA-Z0-9_]/g, '_') || 'sheetbot_table'}', rows: rowsToExport }) 호출.
-   - Google Drive 폴더('${sqliteFolderName}') 내 '${targetSqliteFileName}' 파일 내용도 최신 JSON 덤프로 자동 생성/동기화.
-   - 전송 성공 후 해당 행들의 마지막 열에 '전송완료 (YYYY-MM-DD HH:mm)' 타임스탬프 및 녹색 배경 서식 기록.
-
-3. 2가지 조회 모드 및 'SQLite_조회결과' 시트 렌더링 (서식 및 ID 보존 원칙):
-   - executeSqliteQuery(mode, filterParams, aiPrompt):
-     * ⚠️ [핵심 보안 규칙: 조건 검색은 반드시 표준 queryTable(user_data_query) 사용, SQL 키워드 차단 완벽 방지]:
-       - user_data_sql_query 백엔드는 보안을 위해 쿼리 문자열에 'UPDATE', 'DELETE', 'DROP' 등의 키워드가 포함되어 있는지 검사합니다.
-       - 컬럼명에 'updated_at', 'updated_by', 'deleted_at' 등이 포함되면 해당 단어로 인해 'Query contains forbidden keyword: DELETE / UPDATE' 오류(HTTP 500)가 발생합니다.
-       - 따라서:
-         1) [조건 검색]: 날것의 SQL 조립 대신 반드시 사전 제공되는 표준 queryTable(tableName, { filters: { user_email: ... }, limit: 100 }) 함수를 사용하고 세부 조건은 JS 인메모리로 안전하게 필터링하세요.
-         2) [🤖 AI 검색 (Text-to-SQL)]: egdeskToolsCall('ai-caller', ...)로 자연어를 'SELECT * FROM 테이블명 WHERE user_email = ...' 형태의 단일 SELECT 문으로 변환하되, WHERE 조건에 'deleted_at', 'updated_at' 등의 감사 컬럼명을 절대 쓰지 못하도록 AI 프롬프트에 명시하고, 실행 후 JS 상에서 !r.deleted_at 으로 소프트 삭제 레코드를 걸러내세요.
-   - renderQueryResultsToSheet(rows, queryTitle):
-     * 'SQLite_조회결과' 탭이 없으면 생성, 있으면 sheet.clear() 및 sheet.clearFormats()로 이전 날짜 서식 오염 완전 리셋.
-     * A열은 반드시 'SQLite ID'로 배치하고, sheet.getRange(3, 1, tableData.length, 1).setNumberFormat("0") 정수 서식을 강제 적용하여 날짜로 오인식되지 않도록 방지.
-     * B열부터 기존 데이터 컬럼 출력, 타이틀 행 및 합계 행 추가.
-
-4. 📊 [방안 1] 시트 직접 편집 후 일괄 동기화 (syncEditedResultsToSqlite):
-   - 사용자가 'SQLite_조회결과' 시트에서 수량, 금액, 상태 등을 직접 수정한 뒤 메뉴 [3]을 실행하면 작동.
-   - A열 ID를 안전하게 파싱하는 extractSqliteId 헬퍼 함수를 필수 탑재 (셀이 날짜 객체로 들어올 경우 1899-12-30 기준일 역산 2중 방어).
-   - 낙관적 잠금 사전 검증 시에도 'SELECT * FROM 테이블명 WHERE id IN (...)' 형태로 조회하여 updated_at 키워드 차단을 방지하세요.
-   - 상태가 '삭제'인 행은 user_data_delete_rows로 삭제하고, 나머지 행은 user_data_update_rows로 일괄 수정 반영.
-   - 구글 드라이브 동기화 파일('${targetSqliteFileName}')도 최신 상태로 백업 갱신.
-
-5. ✏️ [방안 2] 사이드바 3단 탭 및 단건 폼 제어 (Sidebar.html 독립 파일 분리):
-   - 인라인 스크립트 파싱 충돌 방지를 위해 showSqliteQuerySidebar()는 HtmlService.createHtmlOutputFromFile("Sidebar")를 호출.
-   - 사이드바 상단 탭: [조건 검색] | [AI 검색] | [행 수정/삭제] (360px 너비 최적화).
-   - AI 검색 탭에는 ⭐ 최근 성공한 질문 목록 및 즐겨찾기 보관함(localStorage) 제공.
-   - 행 수정/삭제 탭: 시트에서 원하는 행을 클릭 후 '선택 행 불러오기'(getSelectedRowDataForSidebar) ➔ 폼에 값 자동 입력 ➔ '수정 저장'(updateSingleRowFromSidebar) 또는 '삭제'(deleteSingleRowFromSidebar)로 시트와 DB에 즉시 동시 반영.
-`;
-    }
-
-    const userMessage = `[회원 계정]: ${userEmail}
-[대상 구글 시트]: ${sheetUrl || "연결된 스프레드시트"}
-[프로젝트 명칭]: ${customTitle || "스마트 시트 자동화"}
-[이지데스크 공용 터널 인프라]: 사전 배포 완료 (EgdeskConfig.gs, EgdeskClient.gs 내장)
-${schemaPromptSection}
-${existingScriptSection}
-${copilotSidebarPromptSection}
-${sqliteSyncPromptSection}
-[사용자 요구사항]:
-${prompt}
-
-* 중요 지침: 
-1. 코드 상단에 회원 식별을 위한 상수를 선언하세요:
-   const SHEETBOT_USER_EMAIL = "${userEmail}";
-2. AI/OCR 호출 시, 별도의 저수준 UrlFetchApp 대신 프로젝트에 사전 제공되는 egdeskToolsCall('ai-caller', 'ai_caller_call', { model: 'gemini-3.8-flash', prompt: '...', files: [...] })을 사용하여 간결하고 우아하게 구현하세요.
-3. My DB 연동이나 SQL 쿼리가 필요한 경우 egdeskUserDataSql(query)을 활용하세요.
-4. 사용자에게 개인 Gemini API 키 입력을 요구하는 코드는 절대로 작성하지 마십시오.`;
+    const legacySplit = existingScriptCode
+      ? splitLegacyScriptCode(String(existingScriptCode))
+      : { userAutomationGs: "" };
+    const existingUserAutomation =
+      legacySplit.userAutomationGs ||
+      (mergeMode === "MERGE" ? String(existingScriptCode || "") : "");
 
     const learningFeedbackSection = await buildSelfImprovingFeedbackContext();
 
-    const fullPrompt = `${systemPrompt}\n${learningFeedbackSection}\n\n${userMessage}`;
-
-    // JSON 안전 추출 헬퍼
-    const safeParseJson = (text: string) => {
-      if (!text) return null;
-      try {
-        return JSON.parse(text);
-      } catch {
-        // 코드블록 제거 후 시도
-        const stripped = text.replace(/```json/gi, "").replace(/```/g, "").trim();
-        try {
-          return JSON.parse(stripped);
-        } catch {
-          // 첫 번째 '{'와 마지막 '}' 사이 추출 시도
-          const start = text.indexOf("{");
-          const end = text.lastIndexOf("}");
-          if (start !== -1 && end !== -1 && end > start) {
-            try {
-              return JSON.parse(text.substring(start, end + 1));
-            } catch {
-              return null;
-            }
-          }
-          return null;
-        }
-      }
-    };
-
-    // 데이터 구조 안전 정규화 헬퍼
-    const normalizeGeneratedData = (data: any) => {
-      if (!data) return null;
-      let scriptCode = "";
-      if (typeof data.scriptCode === "string") {
-        scriptCode = data.scriptCode;
-      } else if (typeof data.scriptCode === "object" && data.scriptCode !== null) {
-        // {"Code.gs": "..."} 형태 처리
-        scriptCode = data.scriptCode["Code.gs"] || Object.values(data.scriptCode).join("\n\n");
-      }
-
-      // 표준 메뉴 규칙 강제 및 상단 메뉴 슬림화/코파일럿 일원화 공통 정제기 실행
-      scriptCode = sanitizeGasScriptCode(scriptCode);
-
-      return {
-        summary: typeof data.summary === "string" ? data.summary : "AI 자동 생성 Apps Script",
-        features: Array.isArray(data.features) ? data.features : [],
-        scriptCode: scriptCode.trim(),
-        manifest: typeof data.manifest === "string" ? data.manifest : JSON.stringify({
-          timeZone: "Asia/Seoul",
-          dependencies: {},
-          exceptionLogging: "STACKDRIVER",
-          runtimeVersion: "V8",
-        }, null, 2),
-        triggers: Array.isArray(data.triggers) ? data.triggers : [
-          { type: "ON_OPEN", description: "시트 열기 시 상단 메뉴 및 환경 자동 초기화" }
-        ],
-      };
-    };
-
-    let generatedData: any = null;
-    let aiCallerUsage: AiUsageCounts | undefined;
-
-    // 1. 이지데스크 AI Caller 우선 호출 (사내 중앙 토큰 관리 및 감사 로그 연동)
-    try {
-      const callerRes = await callAiCaller(fullPrompt, {
-        caller: "sheetbot-script-generator",
-        model: targetModel,
-        temperature: aiSettings.temperature || 0.2,
-      });
-
-      if (callerRes && callerRes.text) {
-        aiCallerUsage = normalizeAiCallerUsage(callerRes.usage);
-        const rawParsed = safeParseJson(callerRes.text);
-        generatedData = normalizeGeneratedData(rawParsed);
-        if (generatedData?.scriptCode) {
-          console.log("[AI-Caller] Successfully generated script via AI Caller:", targetModel);
-        }
-      }
-    } catch (aiCallerErr: any) {
-      console.warn("[AI-Caller] Primary call warning:", aiCallerErr.message);
-    }
-
-    // 2. 이지데스크 AI Caller 미응답 시 직접 Gemini API 폴백
-    if (!generatedData || !generatedData.scriptCode) {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
-      if (apiKey) {
-        try {
-          const geminiRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    role: "user",
-                    parts: [{ text: fullPrompt }],
-                  },
-                ],
-                generationConfig: {
-                  temperature: 0.2,
-                  responseMimeType: "application/json",
-                },
-              }),
-            }
-          );
-
-          if (geminiRes.ok) {
-            const geminiJson = await geminiRes.json();
-            const rawText = geminiJson?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            const rawParsed = safeParseJson(rawText);
-            generatedData = normalizeGeneratedData(rawParsed);
-          }
-        } catch (apiErr: any) {
-          console.warn("[Gemini-Fallback] Direct call warning:", apiErr.message);
-        }
-      }
-    }
-
-    // 3. AI 키 부재 또는 실패 시 지능형 템플릿 안전 폴백
-    if (!generatedData || !generatedData.scriptCode) {
-      generatedData = {
-        summary: prompt.substring(0, 50) + " 자동화 스크립트",
-        features: [
-          "스프레드시트 상단 '🚀 SheetBot 메뉴' 전용 메뉴 자동 생성",
-          "데이터 실시간 검증 및 안전한 일괄 처리 핸들러 탑재",
-          "작업 완료 알림 토스트 및 실행 결과 로그 시트 자동 기록",
-        ],
-        scriptCode: `/**
- * SheetBot AI 자동 생성 Apps Script
- * 생성일: ${new Date().toISOString().substring(0, 10)}
- * 요구사항: ${prompt.replace(/\n/g, " ")}
- */
-
-function onOpen() {
-  var ui = SpreadsheetApp.getUi();
-  var cachedBal = null;
-  try {
-    cachedBal = PropertiesService.getScriptProperties().getProperty("SHEETBOT_CACHED_BALANCE");
-  } catch (e) {}
-
-  var balNum = cachedBal !== null && cachedBal !== "" ? Number(cachedBal) : null;
-  var menuTitle = "🚀 SheetBot 메뉴";
-  var showWarningItem = false;
-  var warningItemText = "";
-
-  if (balNum !== null && !isNaN(balNum)) {
-    if (balNum <= 0) {
-      menuTitle = "🚀 SheetBot [🚨토큰소진]";
-      showWarningItem = true;
-      warningItemText = "🚨 [서비스 일시중지] 토큰 소진 - 즉시 충전";
-    } else if (balNum <= 5000) {
-      menuTitle = "🚀 SheetBot [⚠️잔액부족: " + balNum.toLocaleString() + "T]";
-      showWarningItem = true;
-      warningItemText = "⚠️ [주의] 잔여 토큰 부족 (" + balNum.toLocaleString() + "T 남음) - 즉시 충전";
-    }
-  }
-
-  var menu = ui.createMenu(menuTitle);
-  if (showWarningItem) {
-    menu.addItem(warningItemText, "openTokenRechargeModal");
-    menu.addSeparator();
-  }
-
-  menu.addItem('▶️ 자동화 작업 실행', 'runSheetBotAutomatedTask')
-    .addItem('📊 일일 통계 집계', 'calculateDailySummary')
-    .addSeparator()
-    .addItem('🤖 SheetBot AI 코파일럿', 'showAiCopilotSidebar')
-    .addToUi();
-
-  if (balNum !== null && !isNaN(balNum) && balNum <= 5000) {
-    try {
-      SpreadsheetApp.getActiveSpreadsheet().toast(
-        balNum <= 0
-          ? "🚨 토큰이 모두 소진되어 AI 자동화가 일시 중지되었습니다. 메뉴줄 또는 사이드바에서 충전해 주세요."
-          : "⚠️ 토큰 잔액이 " + balNum.toLocaleString() + "토큰으로 부족합니다 (5,000 이하). 안정적인 자동화를 위해 충전을 권장합니다.",
-        "SheetBot 잔액 주의",
-        8
-      );
-    } catch (tErr) {}
-  }
-}
-
-function updateSheetBotMenuWithBalance(bal) {
-  try {
-    var balNum = Number(bal);
-    if (isNaN(balNum)) return;
-    try {
-      PropertiesService.getScriptProperties().setProperty("SHEETBOT_CACHED_BALANCE", String(balNum));
-    } catch (e) {}
-    onOpen();
-  } catch (err) {
-    Logger.log("updateSheetBotMenuWithBalance error: " + err.message);
-  }
-}
-
-function openTokenRechargeModal() {
-  if (typeof getTokenRechargeModalHtml === 'function') {
-    var html = HtmlService.createHtmlOutput(getTokenRechargeModalHtml())
-      .setWidth(450)
-      .setHeight(670);
-    SpreadsheetApp.getUi().showModalDialog(html, "💳 SheetBot 토큰 잔액 확인 및 즉시 충전");
-  } else {
-    var html = HtmlService.createHtmlOutput(
-      '<!DOCTYPE html><html><head><base target="_blank"><script>window.onload=function(){window.open("https://sheetbot.cloud/dashboard/pricing","_blank");google.script.host.close();};</script><style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f8fafc;color:#334155;}.btn{display:inline-block;margin-top:10px;padding:8px 16px;background:#059669;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:12px;}</style></head><body><div style="font-weight:bold;font-size:13px;margin-bottom:6px;">💳 SheetBot 토큰 충전 센터</div><div style="font-size:11px;color:#64748b;margin-bottom:10px;">새 창이 열리지 않으면 아래 버튼을 클릭하세요.</div><a href="https://sheetbot.cloud/dashboard/pricing" target="_blank" class="btn">토큰 충전 페이지 열기</a></body></html>'
-    ).setWidth(340).setHeight(150);
-    SpreadsheetApp.getUi().showModalDialog(html, "💳 SheetBot 토큰 충전 센터");
-  }
-}
-
-function openSheetBotGuide() {
-  var html = HtmlService.createHtmlOutput(
-    '<!DOCTYPE html><html><head><base target="_blank"><script>window.onload=function(){window.open("https://sheetbot.cloud/use-cases","_blank");google.script.host.close();};</script><style>body{font-family:sans-serif;text-align:center;padding:20px;background:#f8fafc;color:#334155;}.btn{display:inline-block;margin-top:10px;padding:8px 16px;background:#4f46e5;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:12px;}</style></head><body><div style="font-weight:bold;font-size:13px;margin-bottom:6px;">🌐 SheetBot 활용사례 및 가이드로 이동합니다</div><div style="font-size:11px;color:#64748b;margin-bottom:10px;">새 탭이 열리지 않으면 아래를 클릭하세요.</div><a href="https://sheetbot.cloud/use-cases" target="_blank" class="btn">sheetbot.cloud/use-cases 바로가기</a></body></html>'
-  ).setWidth(340).setHeight(130);
-  SpreadsheetApp.getUi().showModalDialog(html, "SheetBot 사용법 및 활용사례");
-}
-
-function showAiCopilotSidebar() {
-  var htmlOutput;
-  try {
-    var cb = new Date().getTime();
-    var res = UrlFetchApp.fetch("https://sheetbot.cloud/api/copilot/sidebar-template?_cb=" + cb, {
-      muteHttpExceptions: true,
-      headers: {
-        "Cache-Control": "no-cache, no-store, max-age=0",
-        "Pragma": "no-cache"
-      }
-    });
-    if (res.getResponseCode() === 200) {
-      htmlOutput = HtmlService.createHtmlOutput(res.getContentText());
-    }
-  } catch (e) {
-    Logger.log("원격 코파일럿 사이드바 로드 실패: " + e.message);
-  }
-  if (!htmlOutput) {
-    htmlOutput = HtmlService.createHtmlOutput(getAiCopilotSidebarHtml());
-  }
-  htmlOutput.setTitle("🤖 SheetBot AI 코파일럿").setWidth(360);
-  SpreadsheetApp.getUi().showSidebar(htmlOutput);
-}
-
-function getAiCopilotSidebarHtml() {
-  return '<!DOCTYPE html><html><head><meta charset="utf-8">' +
-    '<script src="https://cdn.tailwindcss.com"></script>' +
-    '<style>body{font-family:sans-serif;background:#f8fafc;color:#0f172a;padding:10px 6px;}</style>' +
-    '</head><body>' +
-    '<div class="space-y-3">' +
-      '<!-- [1-1] 스마트 하이브리드 미니 스트립 -->' +
-      '<div class="flex items-center justify-between p-2.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-xl text-white shadow-xs border border-indigo-800/40">' +
-        '<div onclick="toggleWalletCard()" class="flex items-center gap-1.5 cursor-pointer select-none" title="지갑 상세 열기/닫기">' +
-          '<span class="text-xs">🪙</span>' +
-          '<span class="text-[11px] font-bold text-slate-300">토큰</span>' +
-          '<span id="copilotBalanceMini" class="text-xs font-black text-cyan-400">조회 중...</span>' +
-          '<span id="copilotTierBadge" class="px-1 py-0.2 text-[8px] font-black rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">PRO</span>' +
-          '<span id="walletToggleArrow" class="text-[9px] text-slate-400">▼</span>' +
-        '</div>' +
-        '<div class="flex items-center gap-1">' +
-          '<button onclick="toggleMaskWallet(event)" id="copilotMaskBtn" class="px-1.5 py-0.5 text-[10px] bg-white/10 hover:bg-white/20 text-slate-200 rounded cursor-pointer transition-colors" title="프라이버시 잔액 숨김">👁️</button>' +
-          '<button onclick="openTokenRechargeModal()" class="px-2 py-0.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] rounded shadow-xs cursor-pointer">+ 충전</button>' +
-        '</div>' +
-      '</div>' +
-      '<div id="copilotWalletDetails" style="display:none;" class="p-3 bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 rounded-xl text-white shadow-sm space-y-2 border border-indigo-800/40">' +
-        '<div class="flex items-center justify-between">' +
-          '<div class="text-[10px] text-slate-400 font-medium">보유 토큰 잔액</div>' +
-          '<button onclick="toggleWalletCard()" class="text-[10px] text-slate-400 hover:text-white cursor-pointer">▲ 접기</button>' +
-        '</div>' +
-        '<div class="flex items-baseline justify-between">' +
-          '<div class="text-base font-black text-emerald-400 tracking-tight flex items-baseline gap-1">' +
-            '<span id="copilotBalanceTxt">조회 중...</span>' +
-            '<span class="text-[10px] text-slate-300 font-normal">토큰</span>' +
-          '</div>' +
-          '<button onclick="openTokenRechargeModal()" class="px-2.5 py-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 text-white font-bold text-xs rounded-lg shadow-xs cursor-pointer">💳 즉시 충전</button>' +
-        '</div>' +
-        '<div class="pt-1.5 border-t border-slate-800">' +
-          '<a href="https://sheetbot.cloud/use-cases" target="_blank" class="text-[10px] text-indigo-300 hover:text-indigo-200 flex items-center justify-between font-semibold py-0.5">' +
-            '<span>📖 40+ 실무 활용사례 및 가이드</span>' +
-            '<span class="text-xs">→</span>' +
-          '</a>' +
-        '</div>' +
-      '</div>' +
-      '<div class="p-3 bg-white rounded-xl border border-slate-200 shadow-sm">' +
-        '<div class="flex items-center justify-between mb-1.5">' +
-          '<span class="text-[11px] font-bold text-slate-500">인프라 연결 상태</span>' +
-          '<button onclick="refreshStatus()" class="text-[11px] px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold transition-colors">🔄 점검</button>' +
-        '</div>' +
-        '<div class="text-xs flex items-center gap-1.5" id="tunnelRow">' +
-          '<span id="tunnelDot" class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>' +
-          '<span id="tunnelText" class="text-amber-600 font-extrabold">점검 중...</span>' +
-        '</div>' +
-        '<div id="tunnelDetail" class="text-[10px] text-slate-400 mt-1">EGDesk Cloud 터널 통신 준비 완료</div>' +
-      '</div>' +
-      '<div class="p-3 bg-white rounded-xl border border-slate-200 shadow-sm space-y-2.5">' +
-        '<div class="text-[11px] font-bold text-slate-700">🚀 안티그라비티(Antigravity) AI 확장</div>' +
-        '<p class="text-[11px] text-slate-500 leading-relaxed">새로운 자동화 기능 구현은 최첨단 AI 에이전트 안티그라비티에게 명령하세요.</p>' +
-        '<div class="p-2 bg-slate-50 border border-slate-200 rounded text-[10px] font-mono text-slate-600 break-all select-all" id="bridgeBox">' +
-          'https://sheetbot.cloud/api/agent/gas-bridge' +
-        '</div>' +
-        '<button onclick="openAntigravity()" class="w-full py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 text-white font-extrabold text-xs rounded-lg shadow-sm">🚀 안티그라비티 열기 및 자동화 시작</button>' +
-        '<button onclick="copyPrompt()" class="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg">📋 프롬프트 복사하기</button>' +
-      '</div>' +
-      '<div class="p-3 bg-rose-50/70 rounded-xl border border-rose-200 text-xs space-y-2">' +
-        '<div class="font-bold text-rose-800 flex items-center gap-1">⚠️ 래핑 관리 (Danger Zone)</div>' +
-        '<p class="text-[11px] text-rose-600 leading-relaxed">시트 데이터는 100% 보존되며, 상단 메뉴와 Apps Script 코드만 완전히 제거됩니다.</p>' +
-        '<button onclick="uninstallScript()" id="uninstallBtn" class="w-full py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg transition-colors">🗑️ 스크립트 전체 삭제</button>' +
-      '</div>' +
-      '<!-- [🌟] 시트봇 다목적 공지 & 광고 배너 (정사각형 화사한 광고 포맷) -->' +
-      '<a href="https://sheetbot.cloud/wrap/guide" target="_blank" class="block p-5 bg-gradient-to-br from-white via-blue-50/50 to-indigo-50/60 rounded-2xl border-2 border-indigo-400 hover:border-indigo-600 shadow-md transition-all text-slate-900 no-underline group mt-3.5 flex flex-col justify-between" style="min-height: 330px; aspect-ratio: 1 / 1;">' +
-        '<div class="flex items-center justify-between">' +
-          '<span class="text-sm font-black px-3.5 py-1.5 rounded-lg bg-indigo-600 text-white flex items-center gap-1.5 shadow-sm">📖 1분 사용법</span>' +
-        '</div>' +
-        '<div class="my-auto py-2.5">' +
-          '<div class="text-xl font-black text-slate-900 leading-snug tracking-tight">' +
-            'Google 시트 AI 래핑<br>' +
-            '<span class="text-indigo-600">스크린샷 보며 따라하기</span>' +
-          '</div>' +
-          '<div class="mt-4 space-y-3 text-[13.5px] text-slate-700 font-bold leading-normal whitespace-nowrap">' +
-            '<div class="flex items-center gap-2">' +
-              '<span class="text-emerald-500 font-black text-base flex-shrink-0">✔</span>' +
-              '<span>복잡한 코딩 없이 안티그라비티 즉시 연동</span>' +
-            '</div>' +
-            '<div class="flex items-center gap-2">' +
-              '<span class="text-emerald-500 font-black text-base flex-shrink-0">✔</span>' +
-              '<span>구글 시트 상단 전용 메뉴 자동 생성</span>' +
-            '</div>' +
-          '</div>' +
-        '</div>' +
-        '<div class="w-full py-3 px-4 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-black text-[15px] rounded-xl shadow-md text-center flex items-center justify-center gap-2 tracking-tight group-hover:scale-[1.01] transition-transform">' +
-          '<span>🚀 초간단 사용법 보기</span>' +
-          '<span class="group-hover:translate-x-1 transition-transform text-lg">→</span>' +
-        '</div>' +
-      '</a>' +
-    '</div>' +
-    '<script>' +
-      'var isWalletMasked = false;' +
-      'var currentWalletBal = 20000;' +
-      'try { isWalletMasked = localStorage.getItem("sheetbot_wallet_masked") === "true"; } catch(e){}' +
-      'function toggleWalletCard() {' +
-        'var d = document.getElementById("copilotWalletDetails");' +
-        'var a = document.getElementById("walletToggleArrow");' +
-        'if (!d) return;' +
-        'var open = d.style.display !== "none";' +
-        'd.style.display = open ? "none" : "block";' +
-        'if (a) a.innerText = open ? "▼" : "▲";' +
-      '}' +
-      'function toggleMaskWallet(e) {' +
-        'if (e && e.stopPropagation) e.stopPropagation();' +
-        'isWalletMasked = !isWalletMasked;' +
-        'try { localStorage.setItem("sheetbot_wallet_masked", isWalletMasked ? "true" : "false"); } catch(e){}' +
-        'applyWalletDisplay();' +
-      '}' +
-      'function applyWalletDisplay() {' +
-        'var mini = document.getElementById("copilotBalanceMini");' +
-        'var full = document.getElementById("copilotBalanceTxt");' +
-        'var btn = document.getElementById("copilotMaskBtn");' +
-        'if (isWalletMasked) {' +
-          'if (mini) mini.innerText = "••••• T";' +
-          'if (full) full.innerText = "•••••";' +
-          'if (btn) btn.innerText = "🔒";' +
-        '} else {' +
-          'var str = Number(currentWalletBal || 0).toLocaleString();' +
-          'if (mini) mini.innerText = str + " T";' +
-          'if (full) full.innerText = str;' +
-          'if (btn) btn.innerText = "👁️";' +
-        '}' +
-      '}' +
-      'function refreshWallet() {' +
-        'var bTxt = document.getElementById("copilotBalanceTxt");' +
-        'var bMini = document.getElementById("copilotBalanceMini");' +
-        'var tBadge = document.getElementById("copilotTierBadge");' +
-        'if (bTxt && !isWalletMasked) bTxt.innerText = "조회 중...";' +
-        'if (bMini && !isWalletMasked) bMini.innerText = "조회 중...";' +
-        'google.script.run' +
-          '.withSuccessHandler(function(res){' +
-            'if (res && res.success) {' +
-              'currentWalletBal = Number(res.balance || 0);' +
-              'applyWalletDisplay();' +
-              'if (tBadge) tBadge.innerText = res.tier || "PRO";' +
-            '} else {' +
-              'currentWalletBal = 20000;' +
-              'applyWalletDisplay();' +
-            '}' +
-          '})' +
-          '.withFailureHandler(function(err){' +
-            'currentWalletBal = 20000;' +
-            'applyWalletDisplay();' +
-          '})' +
-          '.getUserTokenBalanceData();' +
-      '}' +
-      'setTimeout(applyWalletDisplay, 50);' +
-      'function refreshStatus() {' +
-        'var dot = document.getElementById("tunnelDot");' +
-        'var txt = document.getElementById("tunnelText");' +
-        'var detail = document.getElementById("tunnelDetail");' +
-        'if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse";' +
-        'if (txt) { txt.className = "text-amber-600 font-extrabold"; txt.innerText = "점검 중..."; }' +
-        'google.script.run' +
-          '.withSuccessHandler(function(res){' +
-            'if (res && res.success) {' +
-              'if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";' +
-              'if (txt) { txt.className = "text-emerald-700 font-extrabold"; txt.innerText = "터널 정상 (" + res.elapsed + "ms)"; }' +
-              'if (detail) detail.innerText = (res.serverName || "EGDesk Cloud") + " · 통신 준비 완료";' +
-            '} else {' +
-              'if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-rose-500";' +
-              'if (txt) { txt.className = "text-rose-600 font-extrabold"; txt.innerText = "연결 점검 필요"; }' +
-              'if (detail) detail.innerText = (res && res.error) ? res.error : "터널 응답 없음";' +
-            '}' +
-          '})' +
-          '.withFailureHandler(function(err){' +
-            'if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-rose-500";' +
-            'if (txt) { txt.className = "text-rose-600 font-extrabold"; txt.innerText = "통신 오류"; }' +
-            'if (detail) detail.innerText = (err && err.message) ? err.message : "통신 실패";' +
-          '})' +
-          '.getTunnelStatusData();' +
-      '}' +
-      'function openAntigravity(){' +
-        'var text = "구글 시트 래핑 주소: https://sheetbot.cloud/api/agent/gas-bridge\\\\n\\\\n위 구글 시트에 다음 자동화 기능을 구현하고 즉시 주입해줘:\\\\n[추가할 기능 입력]";' +
-        'if(navigator.clipboard && navigator.clipboard.writeText){' +
-          'navigator.clipboard.writeText(text).catch(function(e){});' +
-        '}' +
-        'window.open("antigravity://", "_blank");' +
-        'setTimeout(function(){' +
-          'alert("🚀 안티그라비티 지시 프롬프트가 클립보드에 자동 복사되었습니다!\\\\n\\\\n안티그라비티 창이 열리면 채팅창에 바로 [Ctrl + V]로 붙여넣고 원하는 기능을 입력하세요.");' +
-        '}, 300);' +
-      '}' +
-      'function copyPrompt(){' +
-        'var text = "구글 시트 래핑 주소: https://sheetbot.cloud/api/agent/gas-bridge\\\\n\\\\n위 구글 시트에 다음 자동화 기능을 구현하고 즉시 주입해줘:\\\\n[추가할 기능 입력]";' +
-        'navigator.clipboard.writeText(text).then(function(){ alert("프롬프트가 클립보드에 복사되었습니다! 안티그라비티에 붙여넣으세요."); });' +
-      '}' +
-      'function uninstallScript(){' +
-        'if(!confirm("⚠️ 정말로 시트봇 자동화 스크립트를 모두 제거하시겠습니까?\\\\n\\\\n• 시트 내 데이터(표, 텍스트)는 100% 안전하게 유지됩니다.\\\\n• 상단 메뉴와 자동화 기능만 깨끗하게 초기화됩니다.\\\\n\\\\n계속하시겠습니까?")) return;' +
-        'var btn = document.getElementById("uninstallBtn");' +
-        'btn.innerText = "제거 작업 진행 중..."; btn.disabled = true;' +
-        'google.script.run.withSuccessHandler(function(res){' +
-          'alert("✅ 모든 스크립트가 성공적으로 제거되었습니다.\\\\n구글 시트를 새로고침(F5)하시면 상단 메뉴가 완전히 사라집니다.");' +
-          'google.script.host.close();' +
-        '}).withFailureHandler(function(err){' +
-          'alert("제거 실패: " + err.message);' +
-          'btn.innerText = "🗑️ 스크립트 전체 삭제"; btn.disabled = false;' +
-        '}).executeUninstallSheetBot();' +
-      '}' +
-      'setTimeout(refreshStatus, 150);' +
-      'setTimeout(refreshWallet, 250);' +
-    '</script>' +
-    '</body></html>';
-}
-
-function getTunnelStatusData() {
-  var startTime = new Date().getTime();
-  try {
-    if (typeof egdeskUserDataListTables === 'function') {
-      egdeskUserDataListTables();
-    }
-    var elapsed = new Date().getTime() - startTime;
-    return { success: true, elapsed: elapsed, latency: elapsed, serverName: "EGDesk Cloud", message: "정상 통신 준비 완료" };
-  } catch (err) {
-    return { success: false, isTunnelError: true, error: err.message || "통신 실패", elapsed: new Date().getTime() - startTime, message: "이지데스크 MCP 서버를 확인해 주세요." };
-  }
-}
-
-function executeUninstallSheetBot() {
-  try {
-    // 1. 등록된 모든 트리거 삭제
-    var triggers = ScriptApp.getProjectTriggers();
-    for (var i = 0; i < triggers.length; i++) {
-      ScriptApp.deleteTrigger(triggers[i]);
-    }
-    return { success: true, message: "트리거 및 스크립트 정리 완료" };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-}
-
-function runSheetBotAutomatedTask() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  SpreadsheetApp.getActiveSpreadsheet().toast('SheetBot 자동화 작업을 시작합니다...', '안내', 3);
-  
-  try {
-    var lastRow = sheet.getLastRow();
-    if (lastRow <= 1) {
-      SpreadsheetApp.getUi().alert('처리할 데이터가 없습니다.');
-      return;
-    }
-    
-    // 자동화 로직 처리
-    SpreadsheetApp.getActiveSpreadsheet().toast('총 ' + (lastRow - 1) + '건의 데이터가 성공적으로 처리되었습니다.', '완료', 5);
-  } catch (err) {
-    SpreadsheetApp.getUi().alert('오류 발생: ' + err.message);
-  }
-}
-
-function calculateDailySummary() {
-  SpreadsheetApp.getActiveSpreadsheet().toast('일일 요약 통계를 산출하고 있습니다.', '집계 중', 3);
-}
-
-function checkSheetBotStatus() {
-  SpreadsheetApp.getUi().alert('SheetBot SaaS 시스템과 정상적으로 연결되어 있습니다.');
-}`,
-        manifest: JSON.stringify(
-          {
-            timeZone: "Asia/Seoul",
-            dependencies: {},
-            exceptionLogging: "STACKDRIVER",
-            runtimeVersion: "V8",
-          },
-          null,
-          2
-        ),
-        triggers: [
-          { type: "ON_OPEN", description: "시트 열기 시 상단 메뉴 자동 생성" },
-          { type: "TIME_DRIVEN", description: "매일 정기 자동 실행" },
-        ],
-      };
-    }
-
-    const responseText = generatedData?.scriptCode || JSON.stringify(generatedData);
-    const billing = calculateBillableTokens({
-      promptText: fullPrompt,
-      responseText,
-      usage: aiCallerUsage,
-      tokenMultiplier,
-    });
-    const estimatedUsedTokens = billing.billableTokens;
-
-    const deductRes = await deductTokens(userEmail, estimatedUsedTokens);
-
-    void recordAiUsageLog({
+    const bundle = await generateGasScriptBundle({
       userEmail,
-      caller: "sheetbot-script-generator",
-      purpose: `Apps Script 자동 생성 (${targetModel} / ${tokenMultiplier}x)`,
-      model: targetModel,
-      promptTokens: billing.promptTokens,
-      completionTokens: billing.completionTokens,
-      totalTokens: estimatedUsedTokens,
-      promptText: fullPrompt,
-      responseText,
+      prompt: prompt.trim(),
+      sheetUrl,
+      customTitle,
+      analyzedSchema: activeSchema,
+      existingUserAutomation,
+      mergeMode,
+      includeCopilotSidebar,
+      targetModel,
+      temperature: aiSettings.temperature || 0.2,
+      learningFeedbackSection,
     });
+
+    const generatedData = {
+      summary: bundle.summary,
+      features: bundle.features,
+      scriptCode: bundle.scriptCode,
+      scriptFiles: bundle.scriptFiles,
+      userAutomationCode: bundle.userAutomationCode,
+      baseCode: bundle.baseCode,
+      manifest: bundle.manifest,
+      triggers: bundle.triggers,
+      generationSource: bundle.generationSource,
+      validationErrors: bundle.validationErrors,
+    };
+
+    const billingPrompt = `${prompt}\n${JSON.stringify(activeSchema || {}).slice(0, 2000)}`;
+    const billingResponse = bundle.userAutomationCode;
+
+    let estimatedUsedTokens = 0;
+    if (bundle.generationSource === "noop" && !bundle.aiCallerUsage) {
+      estimatedUsedTokens = 0;
+    } else {
+      const billing = calculateBillableTokens({
+        promptText: billingPrompt,
+        responseText: billingResponse,
+        usage: bundle.aiCallerUsage,
+        tokenMultiplier,
+      });
+      estimatedUsedTokens = billing.billableTokens;
+    }
+
+    const deductRes =
+      estimatedUsedTokens > 0
+        ? await deductTokens(userEmail, estimatedUsedTokens)
+        : { newBalance: tokenCheck.balance };
+
+    if (estimatedUsedTokens > 0) {
+      const billing = calculateBillableTokens({
+        promptText: billingPrompt,
+        responseText: billingResponse,
+        usage: bundle.aiCallerUsage,
+        tokenMultiplier,
+      });
+      void recordAiUsageLog({
+        userEmail,
+        caller: "sheetbot-script-generator",
+        purpose: `Apps Script UserAutomation.gs (${bundle.modelUsed} / ${tokenMultiplier}x / ${bundle.generationSource})`,
+        model: bundle.modelUsed,
+        promptTokens: billing.promptTokens,
+        completionTokens: billing.completionTokens,
+        totalTokens: estimatedUsedTokens,
+        promptText: billingPrompt,
+        responseText: billingResponse,
+      });
+    }
 
     return NextResponse.json({
       success: true,
       data: generatedData,
-      modelUsed: targetModel,
+      modelUsed: bundle.modelUsed,
       multiplier: tokenMultiplier,
       tokensDeducted: estimatedUsedTokens,
       newBalance: deductRes.newBalance,

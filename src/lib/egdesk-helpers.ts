@@ -4,6 +4,7 @@ if (typeof window === 'undefined') {
 }
 
 export * from '../../egdesk-helpers';
+import { callAiCallerTool as rootCallAiCallerTool } from '../../egdesk-helpers';
 import { EGDESK_CONFIG } from '../../egdesk.config';
 
 export function getServerEgdeskApiUrl(): string {
@@ -19,6 +20,8 @@ export interface AiCallerOptions {
   model?: string;
   temperature?: number;
   systemPrompt?: string;
+  maxOutputTokens?: number;
+  responseSchema?: Record<string, unknown>;
   files?: Array<{
     name: string;
     content: string;
@@ -35,61 +38,30 @@ export interface AiCallerResponse {
 }
 
 /**
- * 이지데스크 표준 AI Caller 호출 함수
- * http://localhost:8080/ai-caller/tools/call 경유
+ * SheetBot server AI Caller — delegates to generated `callAiCallerTool` so MCP JSON
+ * (including `usage` and `caller`) is parsed via `parseEgdeskMcpToolResponse`.
  */
 export async function callAiCaller(
   prompt: string,
   options: AiCallerOptions = {}
 ): Promise<AiCallerResponse> {
-  const apiUrl = getServerEgdeskApiUrl();
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'X-Api-Key': 'a67ddc0f-7e2b-4997-9a0b-9667a74c89d0',
-  };
-
-  const args: Record<string, any> = {
+  const result = await rootCallAiCallerTool('ai_caller_call', {
     prompt,
-    ...(options.model ? { model: options.model } : {}),
-    ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
-    ...(options.systemPrompt ? { systemPrompt: options.systemPrompt } : {}),
-    ...(options.files && options.files.length > 0 ? { files: options.files } : {}),
-  };
-
-  const response = await fetch(`${apiUrl}/ai-caller/tools/call`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      tool: 'ai_caller_call',
-      arguments: args,
-    }),
+    caller: options.caller,
+    model: options.model,
+    temperature: options.temperature,
+    systemPrompt: options.systemPrompt,
+    maxOutputTokens: options.maxOutputTokens,
+    responseSchema: options.responseSchema,
+    files: options.files,
   });
 
-  if (!response.ok) {
-    throw new Error(`AI Caller HTTP error: ${response.status} ${response.statusText}`);
-  }
-
-  const json = await response.json();
-  let innerText = '';
-  if (json?.result?.content?.[0]?.text) {
-    try {
-      const parsed = JSON.parse(json.result.content[0].text);
-      innerText = parsed.content || parsed.text || json.result.content[0].text;
-    } catch {
-      innerText = json.result.content[0].text;
-    }
-  } else if (json?.content) {
-    innerText = json.content;
-  } else if (json?.text) {
-    innerText = json.text;
-  }
-
+  const text = String(result?.content ?? result?.text ?? '');
   return {
-    text: innerText,
-    content: innerText,
-    usage: json?.result?.usage,
-    raw: json,
+    text,
+    content: text,
+    usage: result?.usage,
+    raw: result,
   };
 }
 

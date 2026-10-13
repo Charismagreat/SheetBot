@@ -776,6 +776,7 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
           name: projectName.trim(),
           spreadsheetUrl: targetSheetUrl,
           scriptCode: scriptData.scriptCode,
+          scriptFiles: scriptData.scriptFiles,
           manifest: scriptData.manifest,
           summary: scriptData.summary,
           features: scriptData.features,

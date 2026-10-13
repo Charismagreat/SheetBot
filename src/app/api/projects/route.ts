@@ -15,9 +15,9 @@ import {
   callDriveTool,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
-import { ensureStandardManifest, generateSecureEgdeskConfig, generateStandardTokenRecharge } from "@/lib/gas-manifest";
 import { formatGasCloudPushUserError, gasDeployFailureMeta } from "@/lib/gas-deploy-errors";
-import { sanitizeGasScriptCode } from "@/lib/gas-sanitizer";
+import { buildSheetBotBaseGs } from "@/lib/gas/sheetbot-base-gs";
+import { pushSheetBotGasProjectFiles, splitLegacyScriptCode } from "@/lib/gas/deploy-script-files";
 import { normalizeSheetbotProjectId } from "@/lib/sheetbot-project-id";
 import { ensureBridgeTokenForProject } from "@/lib/bridge-token-persist";
 
@@ -166,6 +166,7 @@ export async function POST(request: Request) {
       name,
       spreadsheetUrl,
       scriptCode,
+      scriptFiles,
       manifest,
       summary,
       features,
@@ -183,8 +184,12 @@ export async function POST(request: Request) {
     const spreadsheetId = extractSpreadsheetId(spreadsheetUrl) || "";
     const nowStr = new Date().toISOString();
     const rawScriptCode = String(scriptCode || "").trim();
-    const sanitizedScriptCode = rawScriptCode ? sanitizeGasScriptCode(rawScriptCode) : "";
-    const requiresGasCloud = Boolean(sanitizedScriptCode);
+    const multiBase = scriptFiles?.["Base.gs"] ? String(scriptFiles["Base.gs"]) : "";
+    const multiUser = scriptFiles?.["UserAutomation.gs"]
+      ? String(scriptFiles["UserAutomation.gs"])
+      : "";
+    const hasMultiFile = Boolean(multiBase && multiUser);
+    const requiresGasCloud = Boolean(hasMultiFile || rawScriptCode);
     const gasDeployErrors: string[] = [];
     let gasCloudPushed = false;
 
@@ -271,52 +276,29 @@ export async function POST(request: Request) {
 
         // 1-1. 이지데스크 터널 인프라(EgdeskConfig.gs, EgdeskClient.gs) 자동 주입
         // AI가 생성한 Code.gs가 egdeskToolsCall, egdeskUserDataSql을 즉시 안전하게 호출할 수 있도록 보장
-        if (gasProjectId) {
+        if (gasProjectId && (hasMultiFile || rawScriptCode)) {
           try {
-            await callAppsScriptTool("apps_script_setup_egdesk_tunnel", {
-              projectId: gasProjectId,
-              push: false,
-            }, visitorOptions);
-            // 보안 정화: 마스터 API Key 평문 노출 방지를 위한 ScriptProperties 보안 템플릿 즉시 주입
-            await callAppsScriptTool("apps_script_write_file", {
-              projectId: gasProjectId,
-              fileName: "EgdeskConfig.gs",
-              content: generateSecureEgdeskConfig(userEmail),
-            }, visitorOptions).catch(() => null);
-            // 💳 기본 메뉴: 인-시트 실시간 토큰 충전 모듈(TokenRecharge.gs) 항상 주입
-            await callAppsScriptTool("apps_script_write_file", {
-              projectId: gasProjectId,
-              fileName: "TokenRecharge.gs",
-              content: generateStandardTokenRecharge(),
-            }, visitorOptions).catch(() => null);
-            console.log(`[Projects] Successfully embedded secured EGDesk tunnel & TokenRecharge into ${gasProjectId}`);
-          } catch (tunnelErr: any) {
-            console.warn("[Projects] Embed EGDesk tunnel warning:", tunnelErr.message);
-          }
-        }
-
-        // 스크립트 코드가 제공된 경우 Code.gs 파일 덮어쓰기 및 구글 클라우드에 직접 푸시
-        if (gasProjectId && sanitizedScriptCode) {
-          try {
-            await callAppsScriptTool("apps_script_write_file", {
-              projectId: gasProjectId,
-              fileName: "Code.gs",
-              content: sanitizedScriptCode,
-            }, visitorOptions);
-
-            const validManifest = ensureStandardManifest(manifest);
-            await callAppsScriptTool("apps_script_write_file", {
-              projectId: gasProjectId,
-              fileName: "appsscript.json",
-              content: validManifest,
-            }, visitorOptions);
-
-            await callAppsScriptTool("apps_script_push_to_google", {
-              projectId: gasProjectId,
-            }, visitorOptions);
+            const split = hasMultiFile
+              ? { baseGs: multiBase, userAutomationGs: multiUser }
+              : splitLegacyScriptCode(rawScriptCode);
+            const baseGs =
+              split.baseGs ||
+              buildSheetBotBaseGs({ userEmail, includeCopilotSidebar: true });
+            await pushSheetBotGasProjectFiles(
+              callAppsScriptTool,
+              gasProjectId,
+              {
+                baseGs,
+                userAutomationGs: split.userAutomationGs,
+                manifest,
+                userEmail,
+              },
+              visitorOptions,
+            );
             gasCloudPushed = true;
 
-            if (sanitizedScriptCode.includes("doGet") || sanitizedScriptCode.includes("HtmlService")) {
+            const deployBody = split.userAutomationGs + baseGs;
+            if (deployBody.includes("doGet") || deployBody.includes("HtmlService")) {
               try {
                 const deployRes = await callAppsScriptTool("apps_script_create_deployment", {
                   projectId: gasProjectId,
@@ -400,7 +382,7 @@ export async function POST(request: Request) {
       gas_project_id: gasProjectId || (requiresGasCloud ? "" : `gas_${Date.now()}`),
       script_id: scriptId || gasProjectId || "",
       script_url: scriptUrl || (scriptId ? `https://script.google.com/d/${scriptId}/edit` : ""),
-      script_code: sanitizedScriptCode || rawScriptCode || "",
+      script_code: multiUser || rawScriptCode || "",
       manifest: manifest || "",
       summary: summary || "",
       features: JSON.stringify(Array.isArray(features) ? features : []),
@@ -642,41 +624,25 @@ export async function PATCH(request: Request) {
       const targetManifest = updateData.manifest || projRow.manifest;
 
       if (gasProjId && targetScriptCode) {
-        // 터널 클라이언트 인프라(EgdeskConfig.gs, EgdeskClient.gs) 최신화 보장 및 보안 정화
-        await callAppsScriptTool("apps_script_setup_egdesk_tunnel", {
-          projectId: gasProjId,
-          push: false,
-        }, visitorOptions).catch((err: any) => console.warn("Redeploy setup tunnel warning:", err.message));
-
-        await callAppsScriptTool("apps_script_write_file", {
-          projectId: gasProjId,
-          fileName: "EgdeskConfig.gs",
-          content: generateSecureEgdeskConfig(userEmail),
-        }, visitorOptions).catch(() => null);
-
-        // 💳 기본 메뉴: 인-시트 실시간 토큰 충전 모듈(TokenRecharge.gs) 항상 주입
-        await callAppsScriptTool("apps_script_write_file", {
-          projectId: gasProjId,
-          fileName: "TokenRecharge.gs",
-          content: generateStandardTokenRecharge(),
-        }, visitorOptions).catch(() => null);
-
-        await callAppsScriptTool("apps_script_write_file", {
-          projectId: gasProjId,
-          fileName: "Code.gs",
-          content: targetScriptCode,
-        }, visitorOptions).catch((err: any) => console.warn("Redeploy Code.gs warning:", err.message));
-
-        const validManifest = ensureStandardManifest(targetManifest);
-        await callAppsScriptTool("apps_script_write_file", {
-          projectId: gasProjId,
-          fileName: "appsscript.json",
-          content: validManifest,
-        }, visitorOptions).catch(() => null);
-
-        await callAppsScriptTool("apps_script_push_to_google", {
-          projectId: gasProjId,
-        }, visitorOptions).catch((err: any) => console.warn("Redeploy push warning:", err.message));
+        try {
+          const split = splitLegacyScriptCode(String(targetScriptCode));
+          const baseGs =
+            split.baseGs ||
+            buildSheetBotBaseGs({ userEmail, includeCopilotSidebar: true });
+          await pushSheetBotGasProjectFiles(
+            callAppsScriptTool,
+            gasProjId,
+            {
+              baseGs,
+              userAutomationGs: split.userAutomationGs,
+              manifest: targetManifest,
+              userEmail,
+            },
+            visitorOptions,
+          );
+        } catch (redeployErr: any) {
+          console.warn("Redeploy push warning:", redeployErr.message);
+        }
       }
     }
 

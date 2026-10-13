@@ -13,7 +13,9 @@ import { setupDatabase } from "@/lib/setup-db";
 import { getAiModelSettings } from "@/lib/ai-settings";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { recordAiUsageLog } from "@/lib/ai-usage";
-import { ensureStandardManifest, generateSecureEgdeskConfig, generateStandardTokenRecharge } from "@/lib/gas-manifest";
+import { ensureStandardManifest } from "@/lib/gas-manifest";
+import { buildSheetBotBaseGs } from "@/lib/gas/sheetbot-base-gs";
+import { pushSheetBotGasProjectFiles, splitLegacyScriptCode } from "@/lib/gas/deploy-script-files";
 import { sanitizeGasScriptCode } from "@/lib/gas-sanitizer";
 import { getArchiveHistory, recordToArchiveSheet } from "@/lib/agent-archive-helper";
 import { resolveGasBridgePostEndpoint } from "@/lib/bridge-public-url";
@@ -422,59 +424,36 @@ export async function POST(request: Request) {
       );
     }
 
-    // 1. 이지데스크 터널 인프라(EgdeskConfig.gs, EgdeskClient.gs) 자동 주입 보장
-    try {
-      await callAppsScriptTool("apps_script_setup_egdesk_tunnel", {
-        projectId: gasProjectId,
-        push: false,
-      }, visitorOptions);
-      await callAppsScriptTool("apps_script_write_file", {
-        projectId: gasProjectId,
-        fileName: "EgdeskConfig.gs",
-        content: generateSecureEgdeskConfig(project.user_email),
-      }, visitorOptions).catch(() => null);
-      // 💳 기본 메뉴: 인-시트 실시간 토큰 충전 모듈(TokenRecharge.gs) 항상 자동 주입
-      await callAppsScriptTool("apps_script_write_file", {
-        projectId: gasProjectId,
-        fileName: "TokenRecharge.gs",
-        content: generateStandardTokenRecharge(),
-      }, visitorOptions).catch(() => null);
-      console.log(`[Gas-Bridge POST] Injected secured EGDesk tunnel & TokenRecharge into ${gasProjectId}`);
-    } catch (tunnelErr: any) {
-      console.warn("[Gas-Bridge POST] Setup tunnel warning:", tunnelErr.message);
-    }
-
-    // 2. Code.gs 파일 기록 (상단 메뉴 슬림화 정제 완료된 소스코드)
-    await callAppsScriptTool("apps_script_write_file", {
-      projectId: gasProjectId,
-      fileName: "Code.gs",
-      content: sanitizedScriptCode,
-    }, visitorOptions);
-
-    // 3. appsscript.json 매니페스트 기록
+    const split = splitLegacyScriptCode(sanitizedScriptCode);
+    const baseGs =
+      split.baseGs ||
+      buildSheetBotBaseGs({
+        userEmail: project.user_email,
+        includeCopilotSidebar: true,
+      });
     const finalManifest = ensureStandardManifest(manifest);
 
-    await callAppsScriptTool("apps_script_write_file", {
-      projectId: gasProjectId,
-      fileName: "appsscript.json",
-      content: finalManifest,
-    }, visitorOptions);
-
-    // 4. 구글 클라우드 최종 동기화 (Push) 및 응답 무결성 검증
-    const pushRes = await callAppsScriptTool("apps_script_push_to_google", {
-      projectId: gasProjectId,
-    }, visitorOptions);
-
-    if (pushRes && (pushRes.error || pushRes.isError || pushRes.code === "GOOGLE_OAUTH_TOKEN")) {
-      const errMsg = pushRes.error || pushRes.message || "구글 클라우드(Apps Script API)로 코드를 업로드하지 못했습니다.";
+    try {
+      await pushSheetBotGasProjectFiles(
+        callAppsScriptTool,
+        gasProjectId,
+        {
+          baseGs,
+          userAutomationGs: split.userAutomationGs,
+          manifest: finalManifest,
+          userEmail: project.user_email,
+        },
+        visitorOptions,
+      );
+    } catch (pushErr: unknown) {
+      const errMsg = pushErr instanceof Error ? pushErr.message : String(pushErr);
       return NextResponse.json(
         {
           success: false,
           error: `[클라우드 푸시 실패] ${errMsg}`,
-          code: pushRes.code || "PUSH_TO_GOOGLE_FAILED",
-          details: pushRes,
+          code: "PUSH_TO_GOOGLE_FAILED",
         },
-        { status: 502 }
+        { status: 502 },
       );
     }
 
