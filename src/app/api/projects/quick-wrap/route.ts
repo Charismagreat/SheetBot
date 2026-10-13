@@ -1,7 +1,12 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse, NextRequest } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import {
+  buildWorkspaceVisitorCallOptions,
+  getCurrentUserEmail,
+  getCurrentVisitorSessionId,
+  isCurrentUserAdmin,
+} from "@/lib/auth";
 import { queryTable, insertRows, updateRows, getSpreadsheetFullContext } from "@/lib/egdesk-helpers";
 import { ensureBridgeTokenForProject } from "@/lib/bridge-token-persist";
 import { resolveGasBridgePostEndpoint } from "@/lib/bridge-public-url";
@@ -19,8 +24,22 @@ function extractSpreadsheetId(urlOrId: string): string | null {
 export async function POST(request: NextRequest) {
   try {
     await setupDatabase();
-    const sessionEmail = await getCurrentUserEmail();
-    const userEmail = sessionEmail || "guest@sheetbot.cloud";
+    const userEmail = await getCurrentUserEmail(request);
+    if (!userEmail) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "LOGIN_REQUIRED",
+          error:
+            "1초 래핑을 진행하려면 로그인이 필요합니다. BYO Google 로그인 후 다시 시도해 주세요. (NextAuth 세션 쿠키 또는 방문자 세션이 서버에 전달되어야 합니다.)",
+        },
+        { status: 401 },
+      );
+    }
+
+    const visitorSessionId = await getCurrentVisitorSessionId(request);
+    const isAdmin = await isCurrentUserAdmin(userEmail);
+    const visitorWorkspaceOptions = await buildWorkspaceVisitorCallOptions(request, userEmail);
 
     const body = await request.json();
     const { sheetUrl, templateName, presetPrompt } = body;
@@ -98,12 +117,21 @@ export async function POST(request: NextRequest) {
       } else if (!projectName && spreadsheetId) {
         // [기존 시트]: 구글 시트 원본 파일명을 100% 그대로 프로젝트명으로 채택
         try {
-          const fullContext = await getSpreadsheetFullContext(spreadsheetId, 1);
+          const fullContext = await getSpreadsheetFullContext(
+            spreadsheetId,
+            1,
+            visitorWorkspaceOptions.asVisitor ? visitorWorkspaceOptions : {},
+          );
           if (fullContext?.metadata?.title) {
             projectName = fullContext.metadata.title.trim();
           }
         } catch (e: any) {
           console.warn("[Quick-Wrap] Failed to get spreadsheet title:", e.message);
+          if (!isAdmin && !visitorSessionId) {
+            console.warn(
+              "[Quick-Wrap] Title fetch may need BYO visitor session; continuing with default project name.",
+            );
+          }
         }
       }
 

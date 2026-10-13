@@ -95,6 +95,16 @@ export default function WrapPage() {
 
       const data = await res.json();
       if (!res.ok || !data.success) {
+        if (res.status === 401 && data.code === 'LOGIN_REQUIRED') {
+          try {
+            localStorage.setItem('pending_sheet_url', finalUrl);
+            if (selectedTemplate?.title) {
+              localStorage.setItem('pending_template_name', selectedTemplate.title);
+            }
+          } catch {}
+          window.location.href = `/login?callbackUrl=${encodeURIComponent('/wrap')}`;
+          return;
+        }
         throw new Error(data.error || '래핑 중 오류가 발생했습니다.');
       }
 

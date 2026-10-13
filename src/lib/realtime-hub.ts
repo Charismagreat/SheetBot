@@ -20,6 +20,7 @@
 
 import crypto from 'crypto';
 import { EGDESK_CONFIG } from '../../egdesk.config';
+import { resolveServerEgdeskMcpApiUrlForSse } from '../../egdesk-helpers';
 import { depositEventBus, DepositEventPayload } from './deposit-events';
 
 export type RealtimeTopic = 'all' | 'deposit' | 'sms' | 'schedules' | 'projects' | 'wallet';
@@ -198,7 +199,7 @@ class SheetBotRealtimeHub {
     }
     this.upstreamAbortController = new AbortController();
 
-    const baseUrl = EGDESK_CONFIG.apiUrl || 'http://localhost:8080';
+    const baseUrl = resolveServerEgdeskMcpApiUrlForSse();
     const apiKey = EGDESK_CONFIG.apiKey || '';
     const sseUrl = `${baseUrl}/user-data/sse?key=${apiKey}`;
 
