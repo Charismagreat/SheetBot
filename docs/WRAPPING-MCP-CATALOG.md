@@ -94,7 +94,7 @@ Below: EGDesk HTTP `POST /{service}/tools/call` that SheetBot may proxy for shee
 | `ai-center`     | `/ai-center/tools/call`     | AI Center     | ❌                | Full tool list: `GET /ai-center/tools` on EGDesk                                                                              |
 | `egdesk-config` | `/egdesk-config/tools/call` | EGDesk Config | ❌                | API keys, tunnel — server only                                                                                                |
 | `filesystem`    | `/filesystem/tools/call`    | File system   | ❌                | Local EGDesk machine                                                                                                          |
-| `file-organizer` | `/file-organizer/tools/call` | File organizer | ❌                | v1: `organize_files` classify/scan (read disk); `confirm` local-only (references). Phase 2 filing not from sheet. Pair with `filesystem` for ad-hoc path I/O |
+| `file-organizer` | `/file-organizer/tools/call` | File classifier | ❌                | v1: stateless `classify` (file + caller `categories`; read disk under approved roots). Optional `confirm` DB-only. Phase 2 filing not from sheet |
 
 
 
