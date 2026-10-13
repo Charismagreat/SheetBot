@@ -7,19 +7,15 @@ import {
   getCurrentVisitorSessionId,
   isCurrentUserAdmin,
 } from "@/lib/auth";
-import {
-  queryTable,
-  insertRows,
-  updateRows,
-  callAppsScriptTool,
-  callDriveTool,
-} from "@/lib/egdesk-helpers";
+import { queryTable, insertRows, updateRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
-import { formatGasCloudPushUserError, gasDeployFailureMeta } from "@/lib/gas-deploy-errors";
-import { buildSheetBotBaseGs } from "@/lib/gas/sheetbot-base-gs";
-import { pushSheetBotGasProjectFiles, splitLegacyScriptCode } from "@/lib/gas/deploy-script-files";
+import { formatGasCloudPushUserError, gasDeployFailureMeta, sheetbotApiErrorFromGasDeploy } from "@/lib/gas-deploy-errors";
+import { splitLegacyScriptCode } from "@/lib/gas/deploy-script-files";
 import { normalizeSheetbotProjectId } from "@/lib/sheetbot-project-id";
 import { ensureBridgeTokenForProject } from "@/lib/bridge-token-persist";
+import { resolveGasBridgePostEndpoint } from "@/lib/bridge-public-url";
+import { wrapProject, updateAutomation } from "@/lib/gas/sheetbot-deploy-service";
+import { SheetbotServiceError, sheetbotErrorResponse } from "@/lib/wrapping/sheetbot-api-error";
 
 export interface SheetBotProject {
   id: string;
@@ -152,6 +148,7 @@ export async function GET(request: Request) {
 
 /**
  * POST: 새 프로젝트 생성 및 구글 시트에 스크립트 주입/배포 (My DB 정규 테이블 저장)
+ * Target (WRAPPING.md): create row → `wrap()`; automation edits → `updateAutomation()` via `sheetbot-deploy-service.ts`.
  */
 export async function POST(request: Request) {
   try {
@@ -172,6 +169,7 @@ export async function POST(request: Request) {
       features,
       triggers,
       prompt,
+      wrapOnly,
     } = body;
 
     if (!name || !spreadsheetUrl) {
@@ -183,6 +181,88 @@ export async function POST(request: Request) {
 
     const spreadsheetId = extractSpreadsheetId(spreadsheetUrl) || "";
     const nowStr = new Date().toISOString();
+
+    const visitorSessionId = await getCurrentVisitorSessionId(request);
+    const isAdmin = await isCurrentUserAdmin(userEmail);
+    const visitorOptions = await buildWorkspaceVisitorCallOptions(request, userEmail);
+
+    if (wrapOnly) {
+      if (!spreadsheetId) {
+        return NextResponse.json(
+          { success: false, code: "WRAP_SHEET_MISSING", error: "유효한 스프레드시트 URL이 필요합니다." },
+          { status: 400 },
+        );
+      }
+      if (!visitorSessionId && !isAdmin) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "시트 래핑을 위해 EGDesk 방문자 세션이 필요합니다. /login에서 BYO Google로 다시 로그인해 주세요.",
+          },
+          { status: 401 },
+        );
+      }
+
+      const projectId = `proj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const newRow = {
+        id: projectId,
+        uuid: crypto.randomUUID(),
+        user_email: userEmail.toLowerCase().trim(),
+        name: name.trim(),
+        description: summary || "SheetBot shell wrap",
+        spreadsheet_id: spreadsheetId,
+        spreadsheet_url: spreadsheetUrl,
+        gas_project_id: "",
+        script_id: "",
+        script_url: "",
+        script_code: "",
+        manifest: "",
+        summary: summary || "",
+        features: JSON.stringify([]),
+        triggers: JSON.stringify([]),
+        prompt: prompt || "",
+        webapp_url: "",
+        status: "ACTIVE",
+        created_at: nowStr,
+        updated_at: nowStr,
+        updated_by: userEmail,
+        deleted_at: null,
+        deleted_by: null,
+        restored_at: null,
+        restored_by: null,
+      };
+      await insertRows("sheetbot_projects", [newRow]);
+      const bridgeToken = await ensureBridgeTokenForProject(projectId, userEmail.toLowerCase().trim());
+      const bridgeUrl = resolveGasBridgePostEndpoint(request, bridgeToken);
+
+      try {
+        const wrapResult = await wrapProject({
+          projectId,
+          userEmail,
+          visitorOptions,
+          bridgeUrl,
+          promptTemplate: prompt || name,
+          preflightBalance: true,
+        });
+        const refreshed = await queryTable("sheetbot_projects", {
+          filters: { id: projectId },
+          limit: 1,
+        }).catch(() => ({ rows: [] }));
+        const row = refreshed.rows?.[0] || newRow;
+        return NextResponse.json({
+          ...wrapResult,
+          bridgeToken,
+          project: mapRowToProject({ ...row, bridge_token: bridgeToken }, true),
+        });
+      } catch (err) {
+        if (err instanceof SheetbotServiceError) {
+          return sheetbotErrorResponse(err.apiError);
+        }
+        throw err;
+      }
+    }
+
     const rawScriptCode = String(scriptCode || "").trim();
     const multiBase = scriptFiles?.["Base.gs"] ? String(scriptFiles["Base.gs"]) : "";
     const multiUser = scriptFiles?.["UserAutomation.gs"]
@@ -190,25 +270,10 @@ export async function POST(request: Request) {
       : "";
     const hasMultiFile = Boolean(multiBase && multiUser);
     const requiresGasCloud = Boolean(hasMultiFile || rawScriptCode);
-    const gasDeployErrors: string[] = [];
-    let gasCloudPushed = false;
-
-    const noteGasDeployError = (step: string, err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      gasDeployErrors.push(`${step}: ${msg}`);
-      console.warn(`[Projects] ${step}:`, msg);
-    };
-
-    // 1. 이지데스크 Apps Script MCP 도구를 통한 구글 시트 바인딩 프로젝트 생성
-    let gasProjectId = "";
-    let scriptId = "";
-    let scriptUrl = "";
-    let webAppUrl = "";
-
-    // 방문자(Visitor) 구글 세션 추출 (일반 회원이 본인 구글 권한으로 스크립트 직접 주입)
-    const visitorSessionId = await getCurrentVisitorSessionId(request);
-    const isAdmin = await isCurrentUserAdmin(userEmail);
-    const visitorOptions = await buildWorkspaceVisitorCallOptions(request, userEmail);
+    const split = hasMultiFile
+      ? { userAutomationGs: multiUser }
+      : splitLegacyScriptCode(rawScriptCode);
+    const userAutomationGs = split.userAutomationGs || "";
 
     if (requiresGasCloud && !visitorSessionId && !isAdmin) {
       return NextResponse.json(
@@ -230,147 +295,8 @@ export async function POST(request: Request) {
       );
     }
 
-    try {
-      if (spreadsheetId) {
-        // 1-0. 이미 해당 스프레드시트에 연결된 바운드 프로젝트가 있는지 우선 검색 (중복 생성 방지)
-        let existingGasProject: any = null;
-        try {
-          const listRes = await callAppsScriptTool("apps_script_list_projects", {}, visitorOptions);
-          const allProjects = Array.isArray(listRes)
-            ? listRes
-            : (listRes?.projects || listRes?.result || []);
-          existingGasProject = allProjects.find(
-            (p: any) =>
-              p.containerId === spreadsheetId ||
-              p.spreadsheetId === spreadsheetId ||
-              (p.containerUrl && p.containerUrl.includes(spreadsheetId)) ||
-              (p.spreadsheetUrl && p.spreadsheetUrl.includes(spreadsheetId))
-          );
-        } catch (listErr: any) {
-          noteGasDeployError("list_projects", listErr);
-        }
-
-        if (existingGasProject && (existingGasProject.id || existingGasProject.projectId)) {
-          gasProjectId = existingGasProject.id || existingGasProject.projectId;
-          scriptId = existingGasProject.scriptId || gasProjectId;
-          scriptUrl = existingGasProject.scriptUrl || `https://script.google.com/d/${scriptId}/edit`;
-          console.log(`[Projects] Reusing existing bound Apps Script project: ${gasProjectId}`);
-        } else {
-          // 기존 프로젝트가 없을 때만 신규 바운드 프로젝트 생성 (방문자 세션으로 유저 시트에 생성)
-          try {
-            const boundRes = await callAppsScriptTool("apps_script_create_bound", {
-              fileId: spreadsheetId,
-              title: name.trim(),
-            }, visitorOptions);
-            if (boundRes && (boundRes.id || boundRes.projectId)) {
-              gasProjectId = boundRes.id || boundRes.projectId;
-              scriptId = boundRes.scriptId || gasProjectId;
-              scriptUrl = boundRes.scriptUrl || `https://script.google.com/d/${scriptId}/edit`;
-            } else {
-              noteGasDeployError("create_bound", "Apps Script create_bound returned no project id");
-            }
-          } catch (bindErr: any) {
-            noteGasDeployError("create_bound", bindErr);
-          }
-        }
-
-        // 1-1. 이지데스크 터널 인프라(EgdeskConfig.gs, EgdeskClient.gs) 자동 주입
-        // AI가 생성한 Code.gs가 egdeskToolsCall, egdeskUserDataSql을 즉시 안전하게 호출할 수 있도록 보장
-        if (gasProjectId && (hasMultiFile || rawScriptCode)) {
-          try {
-            const split = hasMultiFile
-              ? { baseGs: multiBase, userAutomationGs: multiUser }
-              : splitLegacyScriptCode(rawScriptCode);
-            const baseGs =
-              split.baseGs ||
-              buildSheetBotBaseGs({ userEmail, includeCopilotSidebar: true });
-            await pushSheetBotGasProjectFiles(
-              callAppsScriptTool,
-              gasProjectId,
-              {
-                baseGs,
-                userAutomationGs: split.userAutomationGs,
-                manifest,
-                userEmail,
-              },
-              visitorOptions,
-            );
-            gasCloudPushed = true;
-
-            const deployBody = split.userAutomationGs + baseGs;
-            if (deployBody.includes("doGet") || deployBody.includes("HtmlService")) {
-              try {
-                const deployRes = await callAppsScriptTool("apps_script_create_deployment", {
-                  projectId: gasProjectId,
-                  access: "ANYONE_ANONYMOUS",
-                  executeAs: "USER_DEPLOYING",
-                  description: `[SheetBot] 공개 웹 폼 배포 (${name.trim()})`,
-                }, visitorOptions);
-                if (deployRes) {
-                  webAppUrl =
-                    deployRes.webAppUrl ||
-                    deployRes.url ||
-                    deployRes.entryPoints?.[0]?.webApp?.url ||
-                    (deployRes.deploymentId ? `https://script.google.com/macros/s/${deployRes.deploymentId}/exec` : "");
-                }
-              } catch (deployErr: any) {
-                console.warn("Apps Script web app deployment note:", deployErr.message);
-              }
-            }
-          } catch (pushErr: any) {
-            noteGasDeployError("write_or_push", pushErr);
-          }
-        }
-      } else if (requiresGasCloud) {
-        noteGasDeployError("spreadsheet_id", "Could not parse spreadsheet id from spreadsheetUrl");
-      }
-    } catch (mcpErr: any) {
-      noteGasDeployError("apps_script_mcp", mcpErr);
-    }
-
-    if (requiresGasCloud) {
-      const deployMeta = gasDeployFailureMeta(gasDeployErrors);
-      if (!gasProjectId) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              deployMeta.kind === "ai_syntax"
-                ? deployMeta.userMessage
-                : "Google Apps Script를 시트에 연결하지 못했습니다. EGDesk가 실행 중이고 Apps Script MCP가 활성화되어 있으며, Google Workspace(스크립트/시트) 권한이 승인되어 있는지 확인해 주세요.",
-            cloudDeploy: {
-              ok: false,
-              bound: false,
-              pushed: false,
-              failureKind: deployMeta.kind,
-              errors: gasDeployErrors,
-            },
-          },
-          { status: 502 },
-        );
-      }
-      if (!gasCloudPushed) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: deployMeta.userMessage,
-            cloudDeploy: {
-              ok: false,
-              bound: true,
-              gasProjectId,
-              pushed: false,
-              failureKind: deployMeta.kind,
-              errors: gasDeployErrors,
-            },
-          },
-          { status: 502 },
-        );
-      }
-    }
-
     const projectId = `proj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-    // 2. 정규 My DB 테이블(sheetbot_projects)에 인서트 (7종 감사 컬럼 주입)
     const newRow = {
       id: projectId,
       uuid: crypto.randomUUID(),
@@ -379,16 +305,16 @@ export async function POST(request: Request) {
       description: summary || "AI 자동 생성 스프레드시트 프로젝트",
       spreadsheet_id: spreadsheetId,
       spreadsheet_url: spreadsheetUrl,
-      gas_project_id: gasProjectId || (requiresGasCloud ? "" : `gas_${Date.now()}`),
-      script_id: scriptId || gasProjectId || "",
-      script_url: scriptUrl || (scriptId ? `https://script.google.com/d/${scriptId}/edit` : ""),
-      script_code: multiUser || rawScriptCode || "",
+      gas_project_id: requiresGasCloud ? "" : `gas_${Date.now()}`,
+      script_id: "",
+      script_url: "",
+      script_code: userAutomationGs,
       manifest: manifest || "",
       summary: summary || "",
       features: JSON.stringify(Array.isArray(features) ? features : []),
       triggers: JSON.stringify(Array.isArray(triggers) ? triggers : []),
       prompt: prompt || "",
-      webapp_url: webAppUrl || "",
+      webapp_url: "",
       status: "ACTIVE",
       created_at: nowStr,
       updated_at: nowStr,
@@ -401,21 +327,70 @@ export async function POST(request: Request) {
 
     await insertRows("sheetbot_projects", [newRow]);
 
-    const bridgeToken = await ensureBridgeTokenForProject(
-      projectId,
-      userEmail.toLowerCase().trim(),
-    );
+    const bridgeToken = await ensureBridgeTokenForProject(projectId, userEmail.toLowerCase().trim());
+    const bridgeUrl = resolveGasBridgePostEndpoint(request, bridgeToken);
+
+    if (requiresGasCloud && spreadsheetId) {
+      try {
+        const wrapResult = await wrapProject({
+          projectId,
+          userEmail,
+          visitorOptions,
+          bridgeUrl,
+          promptTemplate: summary || name,
+          userAutomationCode: userAutomationGs || undefined,
+          preflightBalance: true,
+        });
+        const refreshed = await queryTable("sheetbot_projects", {
+          filters: { id: projectId },
+          limit: 1,
+        }).catch(() => ({ rows: [] }));
+        const row = refreshed.rows?.[0] || newRow;
+        return NextResponse.json({
+          ...wrapResult,
+          message: "새 Apps Script 프로젝트가 성공적으로 생성 및 래핑되었습니다.",
+          bridgeToken,
+          project: mapRowToProject({ ...row, bridge_token: bridgeToken }, true),
+          cloudDeploy: { ok: true, bound: true, pushed: true, gasProjectId: wrapResult.deployment.gasProjectId },
+        });
+      } catch (err) {
+        if (err instanceof SheetbotServiceError) {
+          return sheetbotErrorResponse(err.apiError);
+        }
+        const gasDeployErrors = [err instanceof Error ? err.message : String(err)];
+        const apiErr = sheetbotApiErrorFromGasDeploy(gasDeployErrors);
+        return NextResponse.json(
+          {
+            success: false,
+            error: apiErr.message,
+            cloudDeploy: {
+              ok: false,
+              bound: false,
+              pushed: false,
+              failureKind: gasDeployFailureMeta(gasDeployErrors).kind,
+              errors: gasDeployErrors,
+            },
+          },
+          { status: apiErr.httpStatus },
+        );
+      }
+    }
+
+    if (requiresGasCloud && !spreadsheetId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "스프레드시트 URL에서 ID를 파싱하지 못했습니다.",
+          code: "WRAP_SHEET_MISSING",
+        },
+        { status: 400 },
+      );
+    }
 
     return NextResponse.json({
       success: true,
-      message: "새 Apps Script 프로젝트가 성공적으로 생성 및 등록되었습니다.",
-      cloudDeploy: {
-        ok: !requiresGasCloud || gasCloudPushed,
-        bound: Boolean(gasProjectId),
-        gasProjectId: gasProjectId || undefined,
-        pushed: gasCloudPushed,
-        errors: gasDeployErrors.length > 0 ? gasDeployErrors : undefined,
-      },
+      message: "새 프로젝트가 등록되었습니다.",
+      cloudDeploy: { ok: true, bound: false, pushed: false },
       bridgeToken,
       project: mapRowToProject({ ...newRow, bridge_token: bridgeToken }),
     });
@@ -618,30 +593,28 @@ export async function PATCH(request: Request) {
     const visitorOptions = await buildWorkspaceVisitorCallOptions(request, userEmail);
 
     // 기존 프로젝트의 AI 생성 코드를 구글 클라우드에 재주입
+    let automationUpdate: Awaited<ReturnType<typeof updateAutomation>> | null = null;
+
     if (redeploy && projRow) {
-      const gasProjId = projRow.gas_project_id || projRow.script_id;
       const targetScriptCode = updateData.script_code || projRow.script_code;
       const targetManifest = updateData.manifest || projRow.manifest;
 
-      if (gasProjId && targetScriptCode) {
+      if (targetScriptCode) {
         try {
-          const split = splitLegacyScriptCode(String(targetScriptCode));
-          const baseGs =
-            split.baseGs ||
-            buildSheetBotBaseGs({ userEmail, includeCopilotSidebar: true });
-          await pushSheetBotGasProjectFiles(
-            callAppsScriptTool,
-            gasProjId,
-            {
-              baseGs,
-              userAutomationGs: split.userAutomationGs,
-              manifest: targetManifest,
-              userEmail,
-            },
+          automationUpdate = await updateAutomation({
+            project: projRow,
+            userAutomationCode: String(targetScriptCode),
+            manifest: targetManifest,
+            comment: "Dashboard redeploy",
             visitorOptions,
-          );
-        } catch (redeployErr: any) {
-          console.warn("Redeploy push warning:", redeployErr.message);
+            caller: "sheetbot-dashboard-patch",
+            preflightBalance: true,
+          });
+        } catch (redeployErr: unknown) {
+          if (redeployErr instanceof SheetbotServiceError) {
+            return sheetbotErrorResponse(redeployErr.apiError);
+          }
+          console.warn("Redeploy push warning:", redeployErr);
         }
       }
     }
@@ -657,6 +630,7 @@ export async function PATCH(request: Request) {
       success: true,
       message: redeploy ? "스크립트 코드가 구글 시트에 성공적으로 재배포되었습니다." : "프로젝트 정보가 성공적으로 갱신되었습니다.",
       updated: updateData,
+      automationUpdate,
     });
   } catch (error: any) {
     console.error("PATCH SheetBot project error:", error);

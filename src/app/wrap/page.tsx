@@ -1,6 +1,7 @@
 'use client';
 
 import { apiFetch } from '@/lib/api';
+import { isWrapResultPayload, normalizeQuickWrapForClient } from '@/lib/wrapping/normalize-quick-wrap-response';
 import React, { useState, useEffect } from 'react';
 
 interface TemplatePreset {
@@ -94,8 +95,9 @@ export default function WrapPage() {
       });
 
       const data = await res.json();
-      if (!res.ok || !data.success) {
-        if (res.status === 401 && data.code === 'LOGIN_REQUIRED') {
+      const apiError = data?.error?.message || data?.error;
+      if (!res.ok || (!data.success && !isWrapResultPayload(data))) {
+        if (res.status === 401 && (data.code === 'LOGIN_REQUIRED' || data?.error?.code === 'LOGIN_REQUIRED')) {
           try {
             localStorage.setItem('pending_sheet_url', finalUrl);
             if (selectedTemplate?.title) {
@@ -105,26 +107,38 @@ export default function WrapPage() {
           window.location.href = `/login?callbackUrl=${encodeURIComponent('/wrap')}`;
           return;
         }
-        throw new Error(data.error || '래핑 중 오류가 발생했습니다.');
+        throw new Error(typeof apiError === 'string' ? apiError : apiError?.message || data.error || '래핑 중 오류가 발생했습니다.');
       }
 
-      const defaultPrompt = selectedTemplate
-        ? `아래 웹 주소를 통해 새 구글 시트의 컬럼 구조와 자동화 스크립트를 처음부터 설계하고 주입해줘:\n웹 주소: ${data.bridgeUrl}\n목표 업무: ${selectedTemplate.title}\n세부 요구사항: ${selectedTemplate.prompt}`
-        : `아래 웹 주소를 통해 새 구글 시트의 컬럼 구조와 자동화 스크립트를 처음부터 설계하고 주입해줘:\n웹 주소: ${data.bridgeUrl}\n요구사항: 새 구글 시트에 내 비즈니스에 맞는 시트 탭과 컬럼 헤더 구조를 설계하고, 필요한 자동화 기능과 Apps Script 코드를 즉시 주입해줘.`;
+      const normalized = normalizeQuickWrapForClient(
+        isWrapResultPayload(data)
+          ? data
+          : {
+              success: true,
+              bridgeUrl: data.bridgeUrl,
+              spreadsheetId: data.spreadsheetId,
+              token: data.token,
+              promptTemplate: data.promptTemplate,
+              projectName: data.projectName,
+            },
+      );
 
-      const promptTemplate = data.promptTemplate || defaultPrompt;
+      const defaultPrompt = selectedTemplate
+        ? `아래 웹 주소를 통해 새 구글 시트의 컬럼 구조와 자동화 스크립트를 처음부터 설계하고 주입해줘:\n웹 주소: ${normalized.bridgeUrl}\n목표 업무: ${selectedTemplate.title}\n세부 요구사항: ${selectedTemplate.prompt}`
+        : `아래 웹 주소를 통해 새 구글 시트의 컬럼 구조와 자동화 스크립트를 처음부터 설계하고 주입해줘:\n웹 주소: ${normalized.bridgeUrl}\n요구사항: 새 구글 시트에 내 비즈니스에 맞는 시트 탭과 컬럼 헤더 구조를 설계하고, 필요한 자동화 기능과 Apps Script 코드를 즉시 주입해줘.`;
+
+      const promptTemplate = normalized.bridgePrompt || defaultPrompt;
 
       setResult({
-        bridgeUrl: data.bridgeUrl,
-        spreadsheetId: data.spreadsheetId || '',
-        token: data.token || '',
+        bridgeUrl: normalized.bridgeUrl,
+        spreadsheetId: normalized.spreadsheetId || '',
+        token: normalized.token || '',
         bridgePrompt: promptTemplate,
-        projectName: data.projectName || tplTitle,
+        projectName: normalized.projectName || tplTitle,
       });
 
-      // 네이티브 DOM 동기화
       if (typeof window !== 'undefined' && (window as any).__showNativeResult) {
-        (window as any).__showNativeResult(data.bridgeUrl, promptTemplate, data.projectName || '스마트 자동화 시트');
+        (window as any).__showNativeResult(normalized.bridgeUrl, promptTemplate, normalized.projectName || '스마트 자동화 시트');
       }
     } catch (err: any) {
       console.error('[quick-wrap error]', err);

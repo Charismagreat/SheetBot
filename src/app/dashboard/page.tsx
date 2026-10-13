@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import nextDynamic from "next/dynamic";
+import { isWrapResultPayload } from "@/lib/wrapping/normalize-quick-wrap-response";
 
 const NewProjectModal = nextDynamic(() => import("@/components/NewProjectModal"));
 const QuickWrapSuccessModal = nextDynamic(() => import("@/components/QuickWrapSuccessModal"));
@@ -54,6 +55,8 @@ export default function DashboardPage() {
     promptTemplate: string;
     projectName: string;
     isExisting?: boolean;
+    wrapTokens?: { deducted: number; remainingBalance: number };
+    idempotentReplay?: boolean;
   }>({
     isOpen: false,
     sheetUrl: "",
@@ -112,7 +115,19 @@ export default function DashboardPage() {
               body: JSON.stringify({ sheetUrl, templateName, presetPrompt }),
             });
             const data = await res.json();
-            if (data.success) {
+            if (isWrapResultPayload(data)) {
+              setQuickWrapData({
+                isOpen: true,
+                sheetUrl: data.project.sheetUrl || sheetUrl,
+                bridgeUrl: data.agent.bridgeUrl,
+                promptTemplate: data.agent.promptTemplate,
+                projectName: data.project.name || templateName || "시트봇 자동화 프로젝트",
+                isExisting: Boolean(data.isExisting),
+                wrapTokens: data.tokens,
+                idempotentReplay: data.idempotentReplay,
+              });
+              void fetchData(true);
+            } else if (data.success) {
               setQuickWrapData({
                 isOpen: true,
                 sheetUrl: data.sheetUrl || sheetUrl,
@@ -708,6 +723,8 @@ export default function DashboardPage() {
         promptTemplate={quickWrapData.promptTemplate}
         projectName={quickWrapData.projectName}
         isExisting={quickWrapData.isExisting}
+        wrapTokens={quickWrapData.wrapTokens}
+        idempotentReplay={quickWrapData.idempotentReplay}
         onClose={() => setQuickWrapData((prev) => ({ ...prev, isOpen: false }))}
       />
 

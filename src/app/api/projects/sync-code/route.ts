@@ -6,6 +6,7 @@ import { queryTable, updateRows, callAppsScriptTool } from "@/lib/egdesk-helpers
 import { findSheetbotProjectByRef } from "@/lib/sheetbot-project-resolve";
 import { generateStandardTokenRecharge } from "@/lib/gas-manifest";
 import { sanitizeGasScriptCode } from "@/lib/gas-sanitizer";
+import { readRemoteGasAutomationSources } from "@/lib/gas/read-remote-gas-files";
 
 // 구글 스프레드시트 URL에서 ID 추출
 function extractSpreadsheetId(urlOrId: string): string | null {
@@ -17,7 +18,7 @@ function extractSpreadsheetId(urlOrId: string): string | null {
 }
 
 /**
- * POST: 구글 Apps Script Code.gs를 읽어 SheetBot 표준(sanitizer)으로 맞춘 뒤 DB·클라우드에 반영
+ * POST: 구글 Apps Script UserAutomation.gs(또는 레거시 Code.gs)를 읽어 sanitizer로 맞춘 뒤 DB·클라우드에 반영
  */
 export async function POST(request: Request) {
   try {
@@ -79,30 +80,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. 구글 클라우드에서 최신 버전 pull 실행
-    try {
-      await callAppsScriptTool("apps_script_pull_from_google", {
-        projectId: gasProjectId,
-      });
-    } catch (pullErr: any) {
-      console.warn("[Sync-Code] pull_from_google warning:", pullErr.message);
-    }
-
-    // 4. 최신 Code.gs 파일 내용 읽기
-    let latestCode = "";
-    try {
-      const readRes = await callAppsScriptTool("apps_script_read_file", {
-        projectId: gasProjectId,
-        fileName: "Code.gs",
-      });
-      latestCode = typeof readRes === "string" ? readRes : (readRes?.content || readRes?.data || "");
-    } catch (readErr: any) {
-      console.warn("[Sync-Code] read Code.gs warning:", readErr.message);
-    }
+    const remote = await readRemoteGasAutomationSources(callAppsScriptTool, gasProjectId);
+    const latestCode = remote.userAutomationGs || remote.legacyCodeGs;
 
     if (!latestCode) {
       return NextResponse.json(
-        { success: false, error: "구글 시트의 Apps Script 코드를 읽어오지 못했습니다." },
+        { success: false, error: "구글 시트의 UserAutomation.gs(또는 Code.gs)를 읽어오지 못했습니다." },
         { status: 400 }
       );
     }
@@ -111,12 +94,11 @@ export async function POST(request: Request) {
     const codeStandardized = sanitizedCode !== latestCode;
     let codePushOk = !codeStandardized;
 
-    // 5. SheetBot 표준 보정(코파일럿 사이드바 등)이 필요하면 Code.gs를 구글에 다시 배포
     if (codeStandardized) {
       try {
         await callAppsScriptTool("apps_script_write_file", {
           projectId: gasProjectId,
-          fileName: "Code.gs",
+          fileName: "UserAutomation.gs",
           content: sanitizedCode,
         });
         await callAppsScriptTool("apps_script_push_to_google", {
@@ -124,24 +106,13 @@ export async function POST(request: Request) {
         });
         codePushOk = true;
       } catch (pushCodeErr: any) {
-        console.warn("[Sync-Code] Code.gs standardize push warning:", pushCodeErr.message);
+        console.warn("[Sync-Code] UserAutomation.gs standardize push warning:", pushCodeErr.message);
         codePushOk = false;
       }
     }
 
-    // 6. 최신 appsscript.json 파일 내용 읽기 (선택)
-    let latestManifest = "";
-    try {
-      const manifestRes = await callAppsScriptTool("apps_script_read_file", {
-        projectId: gasProjectId,
-        fileName: "appsscript.json",
-      });
-      latestManifest = typeof manifestRes === "string" ? manifestRes : (manifestRes?.content || manifestRes?.data || "");
-    } catch {
-      // 매니페스트 실패는 치명적이지 않음
-    }
+    const latestManifest = remote.manifest;
 
-    // 7. 감지된 함수명 목록 추출 (보정 후 코드 기준)
     const functionMatches = [...sanitizedCode.matchAll(/function\s+([a-zA-Z0-9_$]+)\s*\(/g)];
     const functionNames = functionMatches.map((m) => m[1]);
 
@@ -182,9 +153,9 @@ export async function POST(request: Request) {
 
     const standardizeNote = codeStandardized
       ? codePushOk
-        ? "코파일럿 사이드바 등 SheetBot 표준 Code.gs 보정본이 구글에 배포되었습니다."
-        : "Code.gs 표준 보정은 적용했으나 구글 배포에 실패했습니다. 잠시 후 다시 시도해 주세요."
-      : "Code.gs는 이미 SheetBot 표준과 일치합니다.";
+        ? "SheetBot 표준 UserAutomation.gs 보정본이 구글에 배포되었습니다."
+        : "UserAutomation.gs 표준 보정은 적용했으나 구글 배포에 실패했습니다. 잠시 후 다시 시도해 주세요."
+      : "UserAutomation.gs는 이미 SheetBot 표준과 일치합니다.";
 
     return NextResponse.json({
       success: true,

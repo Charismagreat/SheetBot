@@ -1,4 +1,9 @@
 import { ensureStandardManifest, generateSecureEgdeskConfig, generateStandardTokenRecharge } from "@/lib/gas-manifest";
+import { generateSheetBotClientGs } from "@/lib/gas/sheetbot-client-gs";
+import {
+  defaultSheetbotPublicApiBase,
+  shouldDeploySheetbotRuntimeClient,
+} from "@/lib/runtime/runtime-deploy";
 
 type VisitorOptions = Record<string, unknown> | undefined;
 
@@ -13,6 +18,11 @@ const CODE_GS_STUB = `// SheetBot splits automation across Base.gs and UserAutom
 `;
 
 /**
+ * Production routes should call `pushFiles` in `sheetbot-deploy-service.ts` (wrap / updateAutomation).
+ * This module is the only place that invokes `apps_script_push_to_google` for SheetBot shell deploys.
+ */
+
+/**
  * Push multi-file SheetBot layout to an Apps Script project (server-owned base + AI user file).
  */
 export async function pushSheetBotGasProjectFiles(
@@ -23,24 +33,41 @@ export async function pushSheetBotGasProjectFiles(
     userAutomationGs: string;
     manifest?: string;
     userEmail: string;
+    runtimeToken?: string;
+    useRuntimeClient?: boolean;
   },
   visitorOptions?: VisitorOptions,
 ): Promise<void> {
-  await callAppsScriptTool(
-    "apps_script_setup_egdesk_tunnel",
-    { projectId, push: false },
-    visitorOptions,
-  ).catch(() => null);
+  const useRuntime =
+    files.useRuntimeClient ?? shouldDeploySheetbotRuntimeClient();
 
-  await callAppsScriptTool(
-    "apps_script_write_file",
-    {
-      projectId,
-      fileName: "EgdeskConfig.gs",
-      content: generateSecureEgdeskConfig(files.userEmail),
-    },
-    visitorOptions,
-  ).catch(() => null);
+  if (!useRuntime) {
+    await callAppsScriptTool(
+      "apps_script_setup_egdesk_tunnel",
+      { projectId, push: false },
+      visitorOptions,
+    ).catch(() => null);
+
+    await callAppsScriptTool(
+      "apps_script_write_file",
+      {
+        projectId,
+        fileName: "EgdeskConfig.gs",
+        content: generateSecureEgdeskConfig(files.userEmail),
+      },
+      visitorOptions,
+    ).catch(() => null);
+  } else {
+    const clientGs = generateSheetBotClientGs({
+      sheetbotApiBase: defaultSheetbotPublicApiBase(),
+      runtimeToken: files.runtimeToken,
+    });
+    await callAppsScriptTool(
+      "apps_script_write_file",
+      { projectId, fileName: "SheetBotClient.gs", content: clientGs },
+      visitorOptions,
+    );
+  }
 
   await callAppsScriptTool(
     "apps_script_write_file",
@@ -77,6 +104,21 @@ export async function pushSheetBotGasProjectFiles(
     visitorOptions,
   );
 
+  await callAppsScriptTool("apps_script_push_to_google", { projectId }, visitorOptions);
+}
+
+/** `updateAutomation` default — user file only, same runtime token / shell files on sheet. */
+export async function pushUserAutomationGsOnly(
+  callAppsScriptTool: AppsScriptToolCaller,
+  projectId: string,
+  userAutomationGs: string,
+  visitorOptions?: VisitorOptions,
+): Promise<void> {
+  await callAppsScriptTool(
+    "apps_script_write_file",
+    { projectId, fileName: "UserAutomation.gs", content: userAutomationGs },
+    visitorOptions,
+  );
   await callAppsScriptTool("apps_script_push_to_google", { projectId }, visitorOptions);
 }
 

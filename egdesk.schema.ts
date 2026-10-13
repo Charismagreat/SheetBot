@@ -31,6 +31,13 @@ export const TABLES = {
     columnCount: 23,
     rowCount: 0,
   },
+  sheetbot_billing_idempotency: {
+    name: 'sheetbot_billing_idempotency',
+    displayName: 'SheetBot 결제 멱등성 캐시',
+    columns: ['id', 'uuid', 'user_email', 'project_id', 'idempotency_key', 'kind', 'amount', 'balance_after', 'metadata_json', 'created_at', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by'],
+    columnCount: 16,
+    rowCount: 0,
+  },
   sheetbot_bridge_tokens: {
     name: 'sheetbot_bridge_tokens',
     displayName: 'SheetBot 브릿지 토큰 매핑 대장',
@@ -132,8 +139,15 @@ export const TABLES = {
   sheetbot_projects: {
     name: 'sheetbot_projects',
     displayName: 'SheetBot 프로젝트 대장',
-    columns: ['id', 'user_email', 'name', 'description', 'spreadsheet_id', 'spreadsheet_url', 'gas_project_id', 'script_id', 'script_url', 'script_code', 'manifest', 'summary', 'features', 'triggers', 'prompt', 'webapp_url', 'bridge_token', 'status', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by'],
-    columnCount: 26,
+    columns: ['id', 'user_email', 'name', 'description', 'spreadsheet_id', 'spreadsheet_url', 'gas_project_id', 'script_id', 'script_url', 'script_code', 'manifest', 'summary', 'features', 'triggers', 'prompt', 'webapp_url', 'bridge_token', 'wrapped_at', 'wrap_started_at', 'last_push_receipt_id', 'runtime_token_hash', 'runtime_token_issued_at', 'runtime_daily_cap_tokens', 'status', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by'],
+    columnCount: 32,
+    rowCount: 0,
+  },
+  sheetbot_wallet_settlements: {
+    name: 'sheetbot_wallet_settlements',
+    displayName: 'SheetBot 지갑 정산 대기 대장',
+    columns: ['id', 'uuid', 'user_email', 'project_id', 'idempotency_key', 'kind', 'amount', 'status', 'metadata_json', 'created_at', 'settled_at', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by'],
+    columnCount: 17,
     rowCount: 0,
   },
   sheetbot_prompt_templates: {

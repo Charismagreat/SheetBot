@@ -1,3 +1,5 @@
+import type { SheetbotApiError, SheetbotErrorCode } from "@/lib/wrapping/sheetbot-api-error";
+
 const GENERIC_PUSH_FAILURE =
   "Code.gs를 Google Apps Script에 푸시하지 못했습니다. EGDesk 로그에서 apps_script_write_file / apps_script_push_to_google 오류를 확인해 주세요.";
 
@@ -71,5 +73,25 @@ export function gasDeployFailureMeta(gasDeployErrors: string[]): {
   return {
     kind,
     userMessage: formatGasCloudPushUserError(gasDeployErrors),
+  };
+}
+
+/** Map deploy / MCP failures to stable API codes (WRAPPING.md § API errors). */
+export function sheetbotApiErrorFromGasDeploy(gasDeployErrors: string[]): SheetbotApiError {
+  const kind = classifyGasDeployFailure(gasDeployErrors);
+  const code: SheetbotErrorCode =
+    kind === "auth"
+      ? "WRAP_OAUTH"
+      : kind === "quota"
+        ? "RATE_LIMITED"
+        : kind === "ai_syntax"
+          ? "WRAP_PUSH_FAILED"
+          : "WRAP_PUSH_FAILED";
+  const httpStatus = kind === "auth" ? 403 : kind === "quota" ? 429 : 502;
+  return {
+    code,
+    message: formatGasCloudPushUserError(gasDeployErrors),
+    httpStatus,
+    details: kind === "quota" ? { retryAfterSeconds: 90 } : undefined,
   };
 }

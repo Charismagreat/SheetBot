@@ -337,6 +337,10 @@ export default function EditProjectPromptModal({
       }
 
       const scriptData = genJson.data;
+      const userAutomationCode =
+        scriptData.userAutomationCode ||
+        genJson.automation?.userAutomationCode ||
+        scriptData.scriptCode;
 
       // 2. 프로젝트 DB 갱신 및 구글 시트에 새 코드 재배포
       const patchRes = await apiFetch("/api/projects", {
@@ -346,7 +350,7 @@ export default function EditProjectPromptModal({
           id: project.id,
           name: projectName.trim() || project.name,
           prompt: prompt.trim(),
-          scriptCode: scriptData.scriptCode,
+          scriptCode: userAutomationCode,
           manifest: scriptData.manifest,
           summary: scriptData.summary,
           features: scriptData.features,

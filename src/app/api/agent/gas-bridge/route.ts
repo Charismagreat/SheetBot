@@ -1,5 +1,10 @@
 export const dynamic = "force-dynamic";
 
+/**
+ * Agent bridge (WRAPPING.md): GET = context + shellContract; POST = `updateAutomation` only (not wrap).
+ * Requires wrapped project for POST; GET allowed when spreadsheet is linked (migration).
+ */
+
 import { NextResponse, NextRequest } from "next/server";
 import { getCurrentVisitorSessionId, isCurrentUserAdmin } from "@/lib/auth";
 import {
@@ -11,14 +16,26 @@ import {
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { getAiModelSettings } from "@/lib/ai-settings";
-import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
-import { recordAiUsageLog } from "@/lib/ai-usage";
-import { ensureStandardManifest } from "@/lib/gas-manifest";
-import { buildSheetBotBaseGs } from "@/lib/gas/sheetbot-base-gs";
-import { pushSheetBotGasProjectFiles, splitLegacyScriptCode } from "@/lib/gas/deploy-script-files";
 import { sanitizeGasScriptCode } from "@/lib/gas-sanitizer";
-import { getArchiveHistory, recordToArchiveSheet } from "@/lib/agent-archive-helper";
+import { getArchiveHistory } from "@/lib/agent-archive-helper";
 import { resolveGasBridgePostEndpoint } from "@/lib/bridge-public-url";
+import { updateAutomation } from "@/lib/gas/sheetbot-deploy-service";
+import { isBridgeGetAllowed } from "@/lib/wrapping/project-wrapped";
+import {
+  RESERVED_GAS_FUNCTION_NAMES,
+} from "@/lib/gas/user-automation-schema";
+import {
+  SHEET_MCP_MANIFEST_VERSION,
+  runtimeToolsForShellContract,
+  SHEET_RUNTIME_TOOL_EXPOSURE,
+} from "@/lib/runtime/sheet-mcp-manifest";
+import { shouldDeploySheetbotRuntimeClient } from "@/lib/runtime/runtime-deploy";
+import { SheetbotServiceError, sheetbotErrorResponse } from "@/lib/wrapping/sheetbot-api-error";
+import { readRemoteGasAutomationSources } from "@/lib/gas/read-remote-gas-files";
+import {
+  buildBridgeCodingInstructions,
+  shellContractCallableFromUser,
+} from "@/lib/wrapping/bridge-coding-instructions";
 
 function buildBridgeVisitorOptions(
   visitorSessionId: string | null | undefined,
@@ -155,6 +172,14 @@ export async function GET(request: NextRequest) {
     const { project, errorResponse } = await findAndValidateBridgeProject(token);
     if (errorResponse) return errorResponse;
 
+    if (!isBridgeGetAllowed(project)) {
+      return sheetbotErrorResponse({
+        code: "NOT_WRAPPED",
+        message: "스프레드시트가 연결되지 않았거나 래핑이 완료되지 않았습니다. sheetbot.cloud에서 시트를 연결·wrap 해 주세요.",
+        httpStatus: 409,
+      });
+    }
+
     const spreadsheetId = project.spreadsheet_id;
     let sheetsContext: any = null;
     let detectedStructure: any = null;
@@ -205,18 +230,17 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 기존 Apps Script 프로젝트 소스코드 확인
-    let currentCode = project.script_code || "";
+    let currentUserAutomation = project.script_code || "";
     let currentManifest = project.manifest || "";
-    let gasProjectId = project.gas_project_id || "";
+    let legacyCodeGs = "";
+    const gasProjectId = project.gas_project_id || "";
 
     if (gasProjectId) {
       try {
-        await callAppsScriptTool("apps_script_pull_from_google", { projectId: gasProjectId }).catch(() => null);
-        const codeRes = await callAppsScriptTool("apps_script_read_file", { projectId: gasProjectId, fileName: "Code.gs" }).catch(() => null);
-        if (codeRes && codeRes.content) currentCode = codeRes.content;
-        const manifestRes = await callAppsScriptTool("apps_script_read_file", { projectId: gasProjectId, fileName: "appsscript.json" }).catch(() => null);
-        if (manifestRes && manifestRes.content) currentManifest = manifestRes.content;
+        const remote = await readRemoteGasAutomationSources(callAppsScriptTool, gasProjectId);
+        if (remote.userAutomationGs) currentUserAutomation = remote.userAutomationGs;
+        if (remote.manifest) currentManifest = remote.manifest;
+        legacyCodeGs = remote.legacyCodeGs;
       } catch (e: any) {
         console.warn("[Gas-Bridge GET] Sync existing code note:", e.message);
       }
@@ -233,9 +257,45 @@ export async function GET(request: NextRequest) {
     }
 
     const postEndpoint = resolveGasBridgePostEndpoint(request, token);
+    const useRuntimeClient = shouldDeploySheetbotRuntimeClient();
+    const deploymentTokenCost = (await getAiModelSettings()).agentBridgeDeploymentTokens ?? 500;
+
+    const shellContract = {
+      shellVersion: "2026-wrapping-2",
+      hooks: [
+        { name: "registerSheetBotMenuItems_", signature: "(menu) → menu?", definedIn: "UserAutomation.gs" as const },
+        { name: "installSheetBotTriggers_", signature: "() → void", definedIn: "UserAutomation.gs" as const },
+        { name: "onSheetBotOpen_", signature: "(e) → void", definedIn: "UserAutomation.gs" as const },
+        { name: "onSheetBotEdit_", signature: "(e) → void", definedIn: "UserAutomation.gs" as const },
+      ],
+      callableFromUser: shellContractCallableFromUser(useRuntimeClient),
+      mcp: {
+        manifestVersion: SHEET_MCP_MANIFEST_VERSION,
+        transport: (useRuntimeClient ? "sheetbot-runtime" : "egdesk-tunnel") as
+          | "sheetbot-runtime"
+          | "egdesk-tunnel",
+        entrypoint: (useRuntimeClient ? "sheetbotCall_" : "egdeskToolsCall") as
+          | "sheetbotCall_"
+          | "egdeskToolsCall",
+        exposedRuntimeTools: runtimeToolsForShellContract(SHEET_RUNTIME_TOOL_EXPOSURE),
+        exposedSheetbot: [] as { service: string; tool: string }[],
+      },
+      reservedFunctionNames: Array.from(RESERVED_GAS_FUNCTION_NAMES),
+      aiParsingHelpers: ["egdeskExtractAiText", "egdeskExtractAiJson"],
+      runtimeErrorCodes: [
+        "INSUFFICIENT_BALANCE",
+        "SPEND_CAP_EXCEEDED",
+        "RATE_LIMITED",
+        "MANIFEST_VIOLATION",
+        "NOT_WRAPPED",
+        "INVALID_RUNTIME_AUTH",
+      ],
+      rechargeUiAction: "openTokenRechargeModal",
+    };
 
     return NextResponse.json({
       success: true,
+      shellContract,
       project: {
         id: project.id,
         name: project.name,
@@ -250,7 +310,8 @@ export async function GET(request: NextRequest) {
         rawSheetsContext: sheetsContext,
       },
       existingCode: {
-        codeGs: currentCode,
+        userAutomationGs: currentUserAutomation,
+        codeGs: legacyCodeGs || currentUserAutomation,
         manifest: currentManifest,
       },
       previousArchiveHistory: archiveInfo.history || [],
@@ -258,27 +319,11 @@ export async function GET(request: NextRequest) {
         spreadsheetId: archiveInfo.spreadsheetId || null,
         spreadsheetUrl: archiveInfo.spreadsheetUrl || null,
       },
-      codingInstructions: {
-        overview: "본 프로젝트는 이지데스크 터널 인프라(EgdeskConfig.gs, EgdeskClient.gs)가 자동 탑재되는 환경입니다.",
-        deploymentTokenCost: (await getAiModelSettings()).agentBridgeDeploymentTokens ?? 500,
-        tokenPolicy: `코드 배포(POST) 완료 시 프로젝트 소유자 토큰 지갑에서 ${(await getAiModelSettings()).agentBridgeDeploymentTokens ?? 500} 토큰이 차감됩니다. (0 설정 시 무료)`,
-        absoluteRules: [
-          "1. [개인 API 키 요구 금지]: 사용자에게 Gemini/OpenAI API 키를 요구하는 팝업/UI를 만들지 마세요. 이미 주입된 egdeskToolsCall('ai-caller', 'ai_caller_call', ...) 함수를 호출하세요.",
-          "2. [실제 헤더 1:1 매핑]: 상단에 보고서 타이틀/결재란이 있어 헤더가 10행 등에 위치하는 경우, suggestedHeaderRow 및 dataStartRow를 엄격히 준수하여 신규 데이터를 기입하세요.",
-          "3. [다중 품목 분리 삽입]: 발주서나 견적서 등 다중 품목 문서는 1건당 1행이 아니라 품목별로 1행씩(N개 행) 분리하여 시트에 순차 기록하세요.",
-          "4. [onOpen 메뉴 등록 및 상단 메뉴 슬림화]: 구글 시트 상단에 '🚀 SheetBot 메뉴'를 등록하는 onOpen() 함수를 포함하세요. 업무 기능 이후 구분선(.addSeparator()) 아래에는 오직 단 1개의 일체형 제어 센터인 ['🤖 SheetBot AI 코파일럿'](showAiCopilotSidebar)만 배치하세요. '토큰 충전', '사용법 및 활용사례' 등은 상단 메뉴에 절대 개별 등록하지 말고 코파일럿 사이드바 내부로 100% 일원화해야 합니다.",
-          "5. [코파일럿 사이드바 HTML]: showAiCopilotSidebar()는 Sidebar.html 또는 createTemplateFromFile('Sidebar')를 쓰지 말고 UrlFetchApp으로 https://sheetbot.cloud/api/copilot/sidebar-template 을 불러 HtmlService.createHtmlOutput 후 showSidebar 하세요. 업무 UI는 별도 함수(예: showSqliteQuerySidebar)와 별도 Html 파일로 분리하세요.",
-          "6. [AI 응답 언래핑 함수]: parseAiCallerResponse(toolRes) 유틸리티 함수를 Code.gs에 포함하여 안전하게 JSON을 추출하세요.",
-          "7. [빈 시트 기본 탭 무손실 단일화]: 빈 시트 초기화 시 insertSheet로 새 탭을 추가하여 탭을 2개로 쪼개지 마세요. 기본 탭(Sheet1 또는 시트1)이 1개뿐인 경우 반드시 ss.getSheets()[0].setName(TARGET_NAME)으로 이름을 변경하여 단 1개의 메인 탭만 유지하세요.",
-          "8. [과거 아카이빙 이력 준수 및 충돌 방지]: previousArchiveHistory에 기록된 이전 작업 함수명(예: onEdit, sendNotification 등) 및 업무 규칙을 참조하여 기존 로직과 충돌이 없도록 코드를 설계하세요. 코드 배포(POST) 성공 시 서버가 계정 드라이브의 '[SheetBot] 아카이빙' 시트에 이번 작업 내역을 자동 기록합니다.",
-        ],
+      codingInstructions: buildBridgeCodingInstructions({
         postEndpoint,
-        postPayloadExample: {
-          scriptCode: "/* 완성된 Code.gs 전체 소스코드 */",
-          manifest: "/* (선택) appsscript.json 내용. 생략 시 기본값 자동 적용 */",
-          comment: "/* 변경 요약 (예: '발주서 OCR 분석 및 10행 기준 자동 기입 기능 주입') */",
-        },
-      },
+        deploymentTokenCost,
+        useRuntimeClient,
+      }),
     });
   } catch (err: any) {
     console.error("[Gas-Bridge GET] Error:", err);
@@ -287,9 +332,9 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * 2. POST: 외부 AI 에이전트가 완성한 코드를 구글 클라우드에 원클릭 자동 주입 및 배포
+ * 2. POST: `updateAutomation` only — requires wrapped project (see WRAPPING.md).
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     await setupDatabase();
     const { searchParams } = new URL(request.url);
@@ -303,53 +348,29 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { scriptCode, manifest, comment = "AI 에이전트 자동 코드 주입", spreadsheetId } = body;
+    const {
+      scriptCode,
+      userAutomationCode,
+      manifest,
+      comment = "AI 에이전트 자동 코드 주입",
+    } = body;
 
-    if (!scriptCode || !scriptCode.trim()) {
+    const rawAutomation = String(userAutomationCode || scriptCode || "").trim();
+    if (!rawAutomation) {
       return NextResponse.json(
-        { success: false, error: "scriptCode(주입할 소스코드)가 필요합니다." },
+        { success: false, error: "userAutomationCode 또는 scriptCode(주입할 UserAutomation.gs)가 필요합니다." },
         { status: 400 }
       );
     }
 
-    // 🚀 상단 메뉴 슬림화 및 코파일럿 단일 메뉴 표준 정제 강제 적용
-    const sanitizedScriptCode = sanitizeGasScriptCode(scriptCode.trim());
+    const sanitizedScriptCode = sanitizeGasScriptCode(rawAutomation);
 
-    // 0. 프로젝트 검증 및 410 Gone 차단 검사
     const { project, errorResponse } = await findAndValidateBridgeProject(token || "");
     if (errorResponse) return errorResponse;
 
-    // 0. 관리자 설정 토큰 차감량 확인 및 사전 잔액 검증
-    const aiSettings = await getAiModelSettings();
-    const deploymentTokenCost = aiSettings.agentBridgeDeploymentTokens ?? 500;
-
-    if (deploymentTokenCost > 0 && project.user_email) {
-      const tokenCheck = await checkTokenBalance(project.user_email, deploymentTokenCost);
-      if (!tokenCheck.allowed) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: tokenCheck.reason || `프로젝트 소유자의 잔여 토큰이 부족합니다. (필요: ${deploymentTokenCost} 토큰, 잔여: ${tokenCheck.balance} 토큰)`,
-            requirePayment: true,
-            balance: tokenCheck.balance,
-          },
-          { status: 402 } // 402 Payment Required
-        );
-      }
-    }
-
-    let gasProjectId = project.gas_project_id;
-    let scriptId = project.script_id;
-    let scriptUrl = project.script_url;
-    let webAppUrl = project.webapp_url || "";
-
-    // 방문자(Visitor) 구글 세션 추출 (에이전트 브릿지 요청도 유저 세션이 있는 경우 유저 권한으로 푸시)
     let visitorSessionId = await getCurrentVisitorSessionId(request);
-
-    // 요청 헤더나 쿠키에 세션이 없으면 프로젝트 소유자의 최신 방문자 세션 DB 조회
     if (!visitorSessionId && project.user_email) {
       try {
-        const { queryTable } = await import("@/lib/egdesk-helpers");
         const userRes = await queryTable("sheetbot_users", {
           filters: { email: project.user_email.toLowerCase().trim() },
           limit: 1,
@@ -362,135 +383,28 @@ export async function POST(request: Request) {
     }
 
     const visitorOptions = buildBridgeVisitorOptions(visitorSessionId);
+    const userAgent = request.headers.get("user-agent") || "";
+    const detectedCaller = userAgent.includes("Cursor")
+      ? "Cursor"
+      : userAgent.includes("Windsurf")
+        ? "Windsurf"
+        : userAgent.includes("Antigravity")
+          ? "Antigravity"
+          : "AI Agent (Bridge)";
 
-    const targetSpreadsheetId = project.spreadsheet_id || spreadsheetId;
+    const result = await updateAutomation({
+      project,
+      userAutomationCode: sanitizedScriptCode,
+      manifest,
+      comment,
+      visitorOptions,
+      caller: "sheetbot-agent-bridge",
+      userAgent: detectedCaller,
+      archive: true,
+      preflightBalance: true,
+      fullShellPush: false,
+    });
 
-    // 0-0. 기존 프로젝트 목록에서 gasProjectId 실존 여부 및 시트 바인딩 확인
-    try {
-      const listRes = await callAppsScriptTool("apps_script_list_projects", {}, visitorOptions);
-      const existingProjects = Array.isArray(listRes) ? listRes : listRes?.result || [];
-      const matched = existingProjects.find(
-        (p: any) =>
-          p.id === gasProjectId ||
-          p.projectId === gasProjectId ||
-          (targetSpreadsheetId && (p.containerId === targetSpreadsheetId || p.spreadsheetId === targetSpreadsheetId))
-      );
-      if (matched) {
-        gasProjectId = matched.id || matched.projectId;
-        scriptId = matched.scriptId || gasProjectId;
-        scriptUrl = matched.scriptUrl || `https://script.google.com/d/${scriptId}/edit`;
-      } else {
-        // 기존 ID가 Apps Script 엔진에 등록되어 있지 않으면 새로 생성하도록 null 처리
-        gasProjectId = null;
-      }
-    } catch (checkErr: any) {
-      console.warn("[Gas-Bridge POST] apps_script_list_projects check note:", checkErr.message);
-    }
-
-    // 바인딩된 Apps Script 프로젝트가 아직 없으면 생성
-    if (!gasProjectId && targetSpreadsheetId) {
-      const boundRes = await callAppsScriptTool("apps_script_create_bound", {
-        fileId: targetSpreadsheetId,
-        title: project.name || "SheetBot 자동화",
-        scriptCode: sanitizedScriptCode,
-      }, visitorOptions);
-
-      if (boundRes && (boundRes.id || boundRes.projectId)) {
-        gasProjectId = boundRes.id || boundRes.projectId;
-        scriptId = boundRes.scriptId || gasProjectId;
-        scriptUrl = boundRes.scriptUrl || `https://script.google.com/d/${scriptId}/edit`;
-      }
-    }
-
-    if (!gasProjectId) {
-      return NextResponse.json(
-        { success: false, error: "연동된 Google Apps Script 프로젝트를 초기화하지 못했습니다." },
-        { status: 500 }
-      );
-    }
-
-    // 0-1. 구글 워크스페이스 OAuth 사전 인증 점검 (가짜 성공 원천 차단)
-    const authStatus = await callAppsScriptTool("apps_script_auth_status", {}, visitorOptions).catch(() => null);
-    if (authStatus && authStatus.connected === false) {
-      const errorMsg = authStatus.agentInstructions || authStatus.error || "Google Workspace 계정 연결(OAuth)이 해제되어 있습니다. EGDesk에서 Google 계정 로그인을 다시 수행해 주세요.";
-      return NextResponse.json(
-        {
-          success: false,
-          error: `[배포 중단] Google Workspace OAuth 세션 만료: ${errorMsg}`,
-          code: "GOOGLE_OAUTH_TOKEN_MISSING",
-          authStatus,
-        },
-        { status: 401 }
-      );
-    }
-
-    const split = splitLegacyScriptCode(sanitizedScriptCode);
-    const baseGs =
-      split.baseGs ||
-      buildSheetBotBaseGs({
-        userEmail: project.user_email,
-        includeCopilotSidebar: true,
-      });
-    const finalManifest = ensureStandardManifest(manifest);
-
-    try {
-      await pushSheetBotGasProjectFiles(
-        callAppsScriptTool,
-        gasProjectId,
-        {
-          baseGs,
-          userAutomationGs: split.userAutomationGs,
-          manifest: finalManifest,
-          userEmail: project.user_email,
-        },
-        visitorOptions,
-      );
-    } catch (pushErr: unknown) {
-      const errMsg = pushErr instanceof Error ? pushErr.message : String(pushErr);
-      return NextResponse.json(
-        {
-          success: false,
-          error: `[클라우드 푸시 실패] ${errMsg}`,
-          code: "PUSH_TO_GOOGLE_FAILED",
-        },
-        { status: 502 },
-      );
-    }
-
-    // 5. 웹앱(doGet) 포함 시 웹앱 자동 배포
-    if (scriptCode.includes("doGet") || scriptCode.includes("HtmlService")) {
-      try {
-        const deployRes = await callAppsScriptTool("apps_script_create_deployment", {
-          projectId: gasProjectId,
-          access: "ANYONE_ANONYMOUS",
-          executeAs: "USER_DEPLOYING",
-          description: `[Bridge] ${comment}`,
-        });
-        if (deployRes) {
-          webAppUrl =
-            deployRes.webAppUrl ||
-            deployRes.url ||
-            deployRes.entryPoints?.[0]?.webApp?.url ||
-            (deployRes.deploymentId ? `https://script.google.com/macros/s/${deployRes.deploymentId}/exec` : "");
-        }
-      } catch (deployErr: any) {
-        console.warn("[Gas-Bridge POST] Web app deployment note:", deployErr.message);
-      }
-    }
-
-    // 6. DB 상태 갱신 (Dual Naming Policy: 기본 이름일 경우 의미 있는 이름으로 자동 갱신)
-    const updatePayload: any = {
-      spreadsheet_id: targetSpreadsheetId,
-      gas_project_id: gasProjectId,
-      script_id: scriptId || gasProjectId,
-      script_url: scriptUrl,
-      script_code: sanitizedScriptCode,
-      manifest: finalManifest,
-      webapp_url: webAppUrl,
-      updated_at: new Date().toISOString(),
-    };
-
-    // 프로젝트 이름이 기본값이면 배포 comment를 기반으로 스마트 갱신
     const currentName = String(project.name || "").trim();
     const isDefaultName =
       !currentName ||
@@ -500,85 +414,20 @@ export async function POST(request: Request) {
 
     if (isDefaultName && comment && comment !== "AI 에이전트 자동 코드 주입") {
       const cleanComment = comment.replace(/(기능\s*주입|자동화\s*코드|자동\s*주입|개발\s*완료)$/i, "").trim();
-      updatePayload.name = `[SheetBot] ${cleanComment}`;
+      await updateRows(
+        "sheetbot_projects",
+        { name: `[SheetBot] ${cleanComment}`, updated_at: new Date().toISOString() },
+        { filters: { id: project.id } },
+      ).catch(() => null);
     }
 
-    await updateRows(
-      "sheetbot_projects",
-      updatePayload,
-      {
-        filters: { id: project.id },
-      }
-    );
-
-    // 7. 관리자 설정 토큰 차감 및 감사 로그 적재
-    let remainingBalance = 0;
-    if (deploymentTokenCost > 0 && project.user_email) {
-      const deductRes = await deductTokens(project.user_email, deploymentTokenCost);
-      remainingBalance = deductRes.newBalance;
-
-      void recordAiUsageLog({
-        userEmail: project.user_email,
-        userName: "프로젝트 소유자",
-        caller: "sheetbot-agent-bridge",
-        purpose: `AI 에이전트 브릿지 코드 배포 (${comment})`,
-        model: "agent-bridge-deployment",
-        promptTokens: 0,
-        completionTokens: deploymentTokenCost,
-        totalTokens: deploymentTokenCost,
-        promptText: `브릿지 코드 주입: ${comment}`,
-      });
+    return NextResponse.json(result);
+  } catch (err: unknown) {
+    if (err instanceof SheetbotServiceError) {
+      return sheetbotErrorResponse(err.apiError);
     }
-
-    // 8. 💡 [서버 사이드 자동 아카이빙] 계정의 '[SheetBot] 아카이빙' 시트에 이번 배포 이력 및 대화 요약 자동 적재
-    let archiveResult: any = null;
-    if (project.user_email) {
-      try {
-        const userAgent = request.headers.get("user-agent") || "";
-        const detectedCaller = userAgent.includes("Cursor")
-          ? "Cursor"
-          : userAgent.includes("Windsurf")
-          ? "Windsurf"
-          : userAgent.includes("Antigravity")
-          ? "Antigravity"
-          : "AI Agent (Bridge)";
-
-        archiveResult = await recordToArchiveSheet({
-          userEmail: project.user_email,
-          targetSpreadsheetId,
-          targetSpreadsheetName: project.name || "시트봇 자동화 시트",
-          scriptCode: sanitizedScriptCode,
-          comment,
-          caller: detectedCaller,
-          visitorOptions,
-        });
-        if (archiveResult?.success) {
-          console.log(`[Gas-Bridge POST] Successfully archived deployment to ${archiveResult.spreadsheetId}`);
-        }
-      } catch (archErr: any) {
-        console.warn("[Gas-Bridge POST] Archive recording warning:", archErr.message);
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: "Google Apps Script 프로젝트에 코드가 성공적으로 주입 및 배포되었습니다.",
-      deployment: {
-        gasProjectId,
-        scriptUrl,
-        webAppUrl: webAppUrl || null,
-        pushedToGoogle: true,
-        deployedAt: new Date().toISOString(),
-        comment,
-        archive: archiveResult,
-      },
-      tokens: {
-        deducted: deploymentTokenCost,
-        remainingBalance: deploymentTokenCost > 0 ? remainingBalance : undefined,
-      },
-    });
-  } catch (err: any) {
     console.error("[Gas-Bridge POST] Error:", err);
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

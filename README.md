@@ -6,6 +6,9 @@
 ---
 
 ## 📋 목차
+
+- **시트 래핑:** [`docs/WRAPPING.md`](docs/WRAPPING.md) — **wrap** · **updateAutomation** · **bridge**. EGDesk MCP 노출 목록(선택): [`docs/WRAPPING-MCP-CATALOG.md`](docs/WRAPPING-MCP-CATALOG.md). 구현: [`WRAPPING-PLAN.md`](docs/WRAPPING-PLAN.md). 터널/런타임 키 로테이션: [`docs/RUNTIME-ROTATION.md`](docs/RUNTIME-ROTATION.md). Runtime 6-lite: `POST /api/runtime/call`, [`docs/RUNTIME-LONG-AI.md`](docs/RUNTIME-LONG-AI.md).
+
 1. [프로젝트 개요 및 핵심 가치](#1-프로젝트-개요-및-핵심-가치)
 2. [전체 시스템 아키텍처 다이어그램](#2-전체-시스템-아키텍처-다이어그램)
 3. [인프라 및 배포 환경](#3-인프라-및-배포-환경)
@@ -22,7 +25,7 @@
 
 SheetBot은 일반 비즈니스 사용자와 실무자가 복잡한 프로그래밍 지식 없이도 스프레드시트 업무를 완전 자동화할 수 있도록 지원하는 All-in-One 자동화 솔루션입니다.
 
-- **원클릭 스프레드시트 래핑 (Wrap)**: 구글 시트 URL만 입력하면 1초 만에 최적화된 Apps Script 코드를 자동 주입합니다.
+- **원클릭 스프레드시트 래핑 (Wrap)**: 시트에 SheetBot **셸**을 한 번 부착하고(`wrap`), 이후 AI·에이전트는 **브릿지**로 시트를 읽고 `UserAutomation.gs`만 갱신(`updateAutomation`)합니다. (목표 동작 — 상세는 `docs/WRAPPING.md`)
 - **AI 코파일럿 일체형 사이드바**: 시트 내부에서 직접 구동되는 단일 통합 사이드바를 통해 토큰 잔액 조회, 즉시 충전, 실시간 AI 질의응답을 제공합니다.
 - **AI 폴더 감시 및 무역 수불부 자동 기입**: 구글 드라이브 폴더에 송장(Commercial Invoice), 선하증권(B/L) 등의 문서를 올리면 AI가 문서를 자율 분석하여 적합한 탭(`SPRING`, `BAND`)의 일치하는 행을 찾아 인보이스 일자를 자동 기입하고 처리완료함으로 이동합니다.
 - **스마트폰 0원 양방향 알림 (SheetBot Agent2)**: 회원의 개인 스마트폰과 구글 시트를 직결하여 통신사 부가비용 없이 SMS 알림 발송 및 회신 내역 자동 기록을 수행합니다.
@@ -243,6 +246,8 @@ sequenceDiagram
 ```
 C:\dev\SheetBot\
 ├── README.md                      # [현재 파일] 프로젝트 종합 기술 문서
+├── docs/WRAPPING.md               # 시트 래핑 스펙 (target design)
+├── docs/WRAPPING-PLAN.md          # 구현 계획·파일 맵 (마이그레이션용)
 ├── AGENTS.md                      # AI 어시스턴트 전용 개발 및 운영 절대 원칙
 ├── egdesk-helpers.ts              # 이지데스크 백엔드 통신 표준 라이브러리 (MCP 연동)
 ├── src/

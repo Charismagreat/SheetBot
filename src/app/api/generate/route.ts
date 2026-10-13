@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+/** Draft UserAutomation only (no GAS push). Response: `automation` + trimmed `data` (WRAPPING.md `GeneratedAutomation`). */
+
 import { NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { getSpreadsheetFullContext } from "@/lib/egdesk-helpers";
@@ -10,6 +12,7 @@ import { queryTable } from "@/lib/setup-db";
 import { calculateBillableTokens } from "@/lib/token-calculator";
 import { generateGasScriptBundle } from "@/lib/gas/gas-script-generate-service";
 import { splitLegacyScriptCode } from "@/lib/gas/deploy-script-files";
+import { buildGenerateApiData, buildGeneratedAutomation } from "@/lib/wrapping/build-generated-automation";
 
 function extractSpreadsheetId(urlOrId: string): string | null {
   if (!urlOrId) return null;
@@ -90,6 +93,7 @@ export async function POST(request: Request) {
       existingScriptCode,
       mergeMode = "OVERWRITE",
       includeCopilotSidebar = true,
+      includeShellPreview = false,
     } = body;
 
     const aiSettings = await getAiModelSettings();
@@ -181,18 +185,22 @@ export async function POST(request: Request) {
       learningFeedbackSection,
     });
 
-    const generatedData = {
-      summary: bundle.summary,
-      features: bundle.features,
-      scriptCode: bundle.scriptCode,
-      scriptFiles: bundle.scriptFiles,
-      userAutomationCode: bundle.userAutomationCode,
-      baseCode: bundle.baseCode,
-      manifest: bundle.manifest,
-      triggers: bundle.triggers,
-      generationSource: bundle.generationSource,
-      validationErrors: bundle.validationErrors,
-    };
+    const generatedData = buildGenerateApiData(
+      {
+        summary: bundle.summary,
+        features: bundle.features,
+        generationSource: bundle.generationSource,
+        userAutomationCode: bundle.userAutomationCode,
+        manifest: bundle.manifest,
+        triggers: bundle.triggers,
+        validationErrors: bundle.validationErrors,
+        scriptCode: bundle.scriptCode,
+        scriptFiles: bundle.scriptFiles,
+        baseCode: bundle.baseCode,
+      },
+      { includeShellPreview: Boolean(includeShellPreview) },
+    );
+    const automation = buildGeneratedAutomation(bundle);
 
     const billingPrompt = `${prompt}\n${JSON.stringify(activeSchema || {}).slice(0, 2000)}`;
     const billingResponse = bundle.userAutomationCode;
@@ -237,6 +245,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
+      automation,
       data: generatedData,
       modelUsed: bundle.modelUsed,
       multiplier: tokenMultiplier,

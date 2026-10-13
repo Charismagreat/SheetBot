@@ -1,7 +1,26 @@
+import crypto from "crypto";
 import { queryTable, insertRows, updateRows } from "./egdesk-helpers";
 import { setupDatabase } from "./setup-db";
 import { getOrCreateUserApiKey } from "./api-keys";
 import { fetchWithCache, invalidateServerCache } from "./server-cache";
+
+export type SettleWalletDebitKind = "gas-push" | "runtime" | "generate" | "other";
+
+export type SettleWalletDebitInput = {
+  userEmail: string;
+  amount: number;
+  idempotencyKey: string;
+  kind: SettleWalletDebitKind;
+  metadata?: Record<string, unknown>;
+  /** When false, debit only if balance >= amount (no overdraft). Default true matches legacy deductTokens. */
+  allowDebt?: boolean;
+};
+
+export type SettleWalletDebitResult =
+  | { status: "settled"; deducted: number; newBalance: number; replay: false }
+  | { status: "settled"; deducted: number; newBalance: number; replay: true }
+  | { status: "insufficient_funds"; balance: number }
+  | { status: "pending_settlement"; settlementId: string };
 
 export interface UserWallet {
   id: string;
@@ -224,8 +243,126 @@ export async function checkTokenBalance(
 }
 
 /**
- * AI 호출 완료 후 실제 사용된 토큰 차감 (마이너스 잔액 허용 및 차기 충전 시 자동 상계)
+ * AI 호출 완료 후 실제 사용된 토큰 차감 (마이너스 잔액 허용 및 차기 충전 시 자동 상계).
+ * New wrap/runtime/push flows should use atomic `settleWalletDebit` — WRAPPING.md § Idempotency.
  */
+async function findBillingIdempotencyRow(idempotencyKey: string) {
+  const res = await queryTable("sheetbot_billing_idempotency", {
+    filters: { idempotency_key: idempotencyKey },
+    limit: 1,
+  }).catch(() => ({ rows: [] }));
+  const rows = (res.rows || []).filter((r: any) => !r.deleted_at);
+  return rows[0] as Record<string, unknown> | undefined;
+}
+
+/**
+ * Atomic-ish wallet debit with idempotency replay — WRAPPING.md § Wallet settlement.
+ * Uses read-check-update; concurrent callers rely on idempotency keys for push/runtime.
+ */
+export async function settleWalletDebit(
+  input: SettleWalletDebitInput,
+): Promise<SettleWalletDebitResult> {
+  const email = input.userEmail.toLowerCase().trim();
+  const amount = Math.max(0, Math.floor(input.amount));
+  const key = String(input.idempotencyKey || "").trim();
+  if (!key) {
+    throw new Error("settleWalletDebit requires idempotencyKey");
+  }
+  if (amount === 0) {
+    const wallet = await getOrCreateUserWallet(email);
+    return { status: "settled", deducted: 0, newBalance: wallet.balanceTokens, replay: false };
+  }
+
+  const existing = await findBillingIdempotencyRow(key);
+  if (existing) {
+    const priorBalance = Number(existing.balance_after);
+    const priorDeducted = Number(existing.amount) || amount;
+    return {
+      status: "settled",
+      deducted: priorDeducted,
+      newBalance: Number.isFinite(priorBalance) ? priorBalance : (await getOrCreateUserWallet(email)).balanceTokens,
+      replay: true,
+    };
+  }
+
+  const wallet = await getOrCreateUserWallet(email);
+  const allowDebt = input.allowDebt !== false;
+
+  if (!allowDebt && wallet.balanceTokens < amount) {
+    return { status: "insufficient_funds", balance: wallet.balanceTokens };
+  }
+
+  const newBalance = wallet.balanceTokens - amount;
+  const newTotalUsed = wallet.totalUsedTokens + amount;
+  const now = new Date().toISOString();
+
+  await updateRows(
+    "sheetbot_user_wallets",
+    {
+      balance_tokens: newBalance,
+      total_used_tokens: newTotalUsed,
+      updated_at: now,
+      updated_by: email,
+    },
+    { filters: { id: wallet.id } },
+  );
+  invalidateServerCache(`user_wallet_${email}`);
+
+  const rowId = `idem_${crypto.randomBytes(12).toString("hex")}`;
+  await insertRows("sheetbot_billing_idempotency", [
+    {
+      id: rowId,
+      uuid: crypto.randomUUID(),
+      user_email: email,
+      project_id: String(input.metadata?.projectId ?? ""),
+      idempotency_key: key,
+      kind: input.kind,
+      amount,
+      balance_after: newBalance,
+      metadata_json: JSON.stringify(input.metadata ?? {}),
+      created_at: now,
+      updated_at: now,
+      deleted_at: null,
+    },
+  ]).catch((err) => {
+    console.warn("[TokenWallet] idempotency insert failed (debit already applied):", err);
+  });
+
+  return { status: "settled", deducted: amount, newBalance, replay: false };
+}
+
+/** Queue debit when Google push succeeded but wallet settlement failed. */
+export async function recordPendingWalletSettlement(input: {
+  userEmail: string;
+  amount: number;
+  idempotencyKey: string;
+  kind: SettleWalletDebitKind;
+  projectId?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<string> {
+  const now = new Date().toISOString();
+  const settlementId = `settle_${Date.now()}_${crypto.randomBytes(6).toString("hex")}`;
+  await insertRows("sheetbot_wallet_settlements", [
+    {
+      id: settlementId,
+      uuid: crypto.randomUUID(),
+      user_email: input.userEmail.toLowerCase().trim(),
+      project_id: input.projectId ?? "",
+      idempotency_key: input.idempotencyKey,
+      kind: input.kind,
+      amount: input.amount,
+      status: "pending",
+      metadata_json: JSON.stringify(input.metadata ?? {}),
+      created_at: now,
+      updated_at: now,
+      deleted_at: null,
+    },
+  ]).catch((err) => {
+    console.error("[TokenWallet] pending settlement insert failed:", err);
+  });
+  return settlementId;
+}
+
 export async function deductTokens(
   userEmail: string,
   usedTokens: number,

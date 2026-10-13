@@ -409,3 +409,14 @@
    - 작업 완료 보고 시 아카이빙 시트 바로가기 링크를 사용자에게 함께 제공하여 투명한 작업 이력을 확인하도록 안내해야 합니다.
 <!-- END:sheetbot-gas-coder-archive-rules -->
 
+<!-- BEGIN:sheetbot-wrapping-spec -->
+## SheetBot sheet wrapping (canonical)
+
+- **Spec:** `SheetBot/docs/WRAPPING.md` — `wrap()` / `updateAutomation()` / internal `pushFiles()`.
+- **Plan & phases:** `SheetBot/docs/WRAPPING-PLAN.md`.
+- **Runtime MCP allowlist:** `SheetBot/docs/WRAPPING-MCP-CATALOG.md` → `src/lib/runtime/sheet-mcp-manifest.ts`.
+- **Deploy service:** `src/lib/gas/sheetbot-deploy-service.ts` (bridge POST must not call `apps_script_push_to_google` directly).
+- **Generate API:** `POST /api/generate` returns `automation` (`GeneratedAutomation`) + `data` (manifest/triggers + `userAutomationCode`). Set `includeShellPreview: true` only for legacy combined `scriptCode` / `baseCode` previews.
+- **Runtime deploy flags:** `SHEETBOT_RUNTIME_DEPLOY_DEFAULT=1` or `SHEETBOT_LEGACY_EGDESK_TUNNEL=1` — see `src/lib/runtime/runtime-deploy.ts`.
+<!-- END:sheetbot-wrapping-spec -->
+

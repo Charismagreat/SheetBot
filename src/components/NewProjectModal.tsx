@@ -41,7 +41,17 @@ import {
   getVisitorSheetRange,
 } from "@/egdesk-visitor-google";
 import { startSheetbotByoVisitorLogin } from "@/lib/sheetbot-visitor-oauth";
-import { PROJECT_DEPLOY_LOADING_LABEL } from "@/constants/project-deploy-ui";
+import {
+  PROJECT_DEPLOY_LOADING_LABEL,
+  PROJECT_DEPLOY_PHASE_LABELS,
+} from "@/constants/project-deploy-ui";
+import WrapSuccessCard from "@/components/WrapSuccessCard";
+
+function readSheetbotApiError(json: any, fallback: string): string {
+  if (typeof json?.error === "string") return json.error;
+  if (json?.error?.message) return String(json.error.message);
+  return fallback;
+}
 import { gasDeployFailureUi } from "@/constants/gas-deploy-failure-ui";
 
 interface NewProjectModalProps {
@@ -74,6 +84,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
   const [autoDetectedTitle, setAutoDetectedTitle] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
+  const [deployPhase, setDeployPhase] = useState<"wrap" | "generate" | "update" | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deployFailureKind, setDeployFailureKind] = useState<
@@ -710,6 +721,7 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
   // 2단계 -> 3단계: 최종 승인 및 코드 생성/배포 (정규 토큰 1회 일괄 차감)
   const handleFinalDeploy = async () => {
     setLoading(true);
+    setDeployPhase(null);
     setError(null);
     setDeployFailureKind(null);
     let deployKindForCatch:
@@ -743,7 +755,29 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
         }
       }
 
-      // 1. AI 코드 생성 (사전 분석된 스키마 및 기존 코드 병합 옵션 주입)
+      // 1. 셸 래핑 (wrapProject) — UserAutomation 없이 Base/매니페스트만 푸시
+      setDeployPhase("wrap");
+      const wrapRes = await apiFetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wrapOnly: true,
+          name: projectName.trim(),
+          spreadsheetUrl: targetSheetUrl,
+          prompt,
+        }),
+      });
+      const wrapJson = await wrapRes.json();
+      if (!wrapRes.ok || !wrapJson.success) {
+        throw new Error(readSheetbotApiError(wrapJson, "시트 래핑에 실패했습니다."));
+      }
+      const projectId = wrapJson.project?.id;
+      if (!projectId) {
+        throw new Error("래핑은 완료되었으나 프로젝트 ID를 확인할 수 없습니다.");
+      }
+
+      // 2. AI UserAutomation 생성
+      setDeployPhase("generate");
       const genRes = await apiFetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -752,13 +786,13 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
           sheetUrl: targetSheetUrl,
           customTitle: projectName,
           model: selectedModel,
-          analyzedSchema, // 검증 및 조율된 시트 구조 주입
+          analyzedSchema,
           existingScriptCode: existingGasInfo?.existingCode || undefined,
           mergeMode: existingGasInfo?.hasExistingScript ? mergeMode : "OVERWRITE",
           includeCopilotSidebar,
           enableSqliteSync,
           sqliteFolderName: sqliteFolderName.trim() || "SheetBot_Databases",
-          sqliteFileName: (sqliteFileName.trim() || `${projectName || 'sheetbot'}_데이터`).replace(/\.sqlite$/i, '') + '.sqlite',
+          sqliteFileName: (sqliteFileName.trim() || `${projectName || "sheetbot"}_데이터`).replace(/\.sqlite$/i, "") + ".sqlite",
         }),
       });
       const genJson = await genRes.json();
@@ -767,27 +801,29 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
       }
 
       const scriptData = genJson.data;
+      const userAutomationCode = scriptData.userAutomationCode || scriptData.scriptCode;
+      if (!userAutomationCode?.trim()) {
+        throw new Error("생성된 UserAutomation 코드가 비어 있습니다.");
+      }
 
-      // 2. 프로젝트 등록 및 배포 (My DB 정규 테이블 저장)
-      const projRes = await apiFetch("/api/projects", {
-        method: "POST",
+      // 3. updateAutomation (PATCH redeploy)
+      setDeployPhase("update");
+      const patchRes = await apiFetch("/api/projects", {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: projectName.trim(),
-          spreadsheetUrl: targetSheetUrl,
-          scriptCode: scriptData.scriptCode,
-          scriptFiles: scriptData.scriptFiles,
+          id: projectId,
+          scriptCode: userAutomationCode,
           manifest: scriptData.manifest,
           summary: scriptData.summary,
           features: scriptData.features,
           triggers: scriptData.triggers,
-          prompt,
+          redeploy: true,
         }),
       });
-
-      const projJson = await projRes.json();
-      if (!projJson.success) {
-        const kind = projJson.cloudDeploy?.failureKind;
+      const patchJson = await patchRes.json();
+      if (!patchRes.ok || !patchJson.success) {
+        const kind = patchJson.cloudDeploy?.failureKind;
         if (
           kind === "ai_syntax" ||
           kind === "quota" ||
@@ -798,16 +834,31 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
           deployKindForCatch = kind;
           setDeployFailureKind(kind);
         }
-        const detail =
-          Array.isArray(projJson.cloudDeploy?.errors) && projJson.cloudDeploy.errors.length > 0
-            ? `\n\n${projJson.cloudDeploy.errors.join("\n")}`
-            : "";
-        throw new Error((projJson.error || "프로젝트 저장에 실패했습니다.") + detail);
+        throw new Error(readSheetbotApiError(patchJson, "자동화 코드 배포에 실패했습니다."));
       }
 
+      const automationUpdate = patchJson.automationUpdate;
+      const mappedProject = wrapJson.project || {};
       setGeneratedResult({
         ...scriptData,
-        project: projJson.project,
+        scriptCode: userAutomationCode,
+        project: {
+          ...mappedProject,
+          id: projectId,
+          scriptUrl:
+            automationUpdate?.deployment?.scriptUrl ||
+            wrapJson.deployment?.scriptUrl ||
+            mappedProject.scriptUrl,
+          webappUrl:
+            automationUpdate?.deployment?.webAppUrl ||
+            wrapJson.deployment?.webAppUrl ||
+            mappedProject.webappUrl,
+        },
+        wrapTokens: wrapJson.tokens,
+        updateTokens: automationUpdate?.tokens,
+        agentBridgeUrl: wrapJson.agent?.bridgeUrl,
+        agentPromptTemplate: wrapJson.agent?.promptTemplate,
+        idempotentWrapReplay: wrapJson.idempotentReplay,
       });
       setStep(3);
     } catch (err: any) {
@@ -827,6 +878,7 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
       }
     } finally {
       setLoading(false);
+      setDeployPhase(null);
     }
   };
 
@@ -2199,7 +2251,9 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                 {loading ? (
                   <>
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span className="font-[inherit]">{PROJECT_DEPLOY_LOADING_LABEL}</span>
+                    <span className="font-[inherit]">
+                      {deployPhase ? PROJECT_DEPLOY_PHASE_LABELS[deployPhase] : PROJECT_DEPLOY_LOADING_LABEL}
+                    </span>
                   </>
                 ) : (
                   <>
@@ -2221,9 +2275,35 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
                 <span>Google 스프레드시트 바인딩 및 스크립트 배포 완료!</span>
               </div>
               <p className="text-emerald-950 font-medium leading-relaxed">
-                구글 클라우드에 <code className="font-mono bg-white px-1.5 py-0.5 rounded text-emerald-700">Code.gs</code>와 <code className="font-mono bg-white px-1.5 py-0.5 rounded text-emerald-700">appsscript.json</code> 매니페스트가 성공적으로 푸시되었습니다.
+                SheetBot 셸 래핑 후 <code className="font-mono bg-white px-1.5 py-0.5 rounded text-emerald-700">UserAutomation.gs</code>가
+                구글 Apps Script 프로젝트에 배포되었습니다.
               </p>
+              {(generatedResult?.wrapTokens || generatedResult?.updateTokens) && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {generatedResult?.wrapTokens?.deducted > 0 && (
+                    <span className="text-[10px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-full border border-emerald-200">
+                      래핑 −{generatedResult.wrapTokens.deducted.toLocaleString()} 토큰
+                    </span>
+                  )}
+                  {generatedResult?.updateTokens?.deducted > 0 && (
+                    <span className="text-[10px] font-bold text-sky-800 bg-white px-2 py-0.5 rounded-full border border-sky-200">
+                      배포 −{generatedResult.updateTokens.deducted.toLocaleString()} 토큰
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
+
+            {generatedResult?.agentBridgeUrl && (
+              <WrapSuccessCard
+                embedded
+                bridgeUrl={generatedResult.agentBridgeUrl}
+                promptTemplate={generatedResult.agentPromptTemplate}
+                projectName={projectName}
+                wrapTokens={generatedResult.wrapTokens}
+                idempotentReplay={generatedResult.idempotentWrapReplay}
+              />
+            )}
 
             {generatedResult?.summary && (
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
@@ -2251,7 +2331,7 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
               <div className="flex items-center justify-between">
                 <span className="font-bold text-slate-400 text-[10px] flex items-center gap-1">
                   <Code className="w-3.5 h-3.5 text-slate-500" />
-                  <span>생성된 Code.gs 소스코드 미리보기</span>
+                  <span>생성된 UserAutomation.gs 미리보기</span>
                 </span>
                 {generatedResult?.project?.scriptUrl && (
                   <a
