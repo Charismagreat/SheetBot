@@ -20,6 +20,7 @@ import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { recordAiUsageLog } from "@/lib/ai-usage";
 import { getAiModelSettings } from "@/lib/ai-settings";
+import { calculateBillableTokens } from "@/lib/token-calculator";
 import { uploadDriveFileWithBridge } from "@/lib/drive-upload-helper";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import { processPendingBatchJobs } from "@/lib/ai-batch-sweeper";
@@ -810,25 +811,26 @@ ${voiceProfileHint}
       }
     }
 
-    // 4. 사용 토큰 계산 및 차감 (★ 배치 방식 성공 시 50% 반값 할인 계수 0.5 적용!)
-    const promptLen = prompt.length;
-    const respLen = rawText.length;
-    const rawTokens = Math.max(800, Math.ceil((promptLen + respLen) / 2.5) + 500);
     const baseMultiplier = (aiSettings as any).tokenMultiplier || 1.0;
-    const batchDiscountRate = isBatchSuccess ? 0.5 : 1.0; // 배치 50% 할인
-    const usedTokens = Math.round(rawTokens * baseMultiplier * batchDiscountRate);
+    const batchDiscountRate = isBatchSuccess ? 0.5 : 1.0;
+    const billing = calculateBillableTokens({
+      promptText: prompt,
+      responseText: rawText,
+      tokenMultiplier: baseMultiplier,
+      additionalBillingFactor: batchDiscountRate,
+    });
+    const usedTokens = billing.billableTokens;
 
     await deductTokens(cleanEmail, usedTokens);
 
-    // 5. AI 사용량 감사 로그 적재
     const modeLabel = isBatchSuccess ? "AI 배치(50% 절감)" : "실시간 폴백";
     void recordAiUsageLog({
       userEmail: cleanEmail,
       caller: isBatchSuccess ? "sheetbot-voice-batch" : "sheetbot-voice-intelligence",
       purpose: `통화 녹음 AI STT 및 3줄 요약/Action Items [${modeLabel}] (${targetModel} / ${baseMultiplier * batchDiscountRate}x)`,
       model: targetModel,
-      promptTokens: Math.ceil(promptLen / 2.5) + 500,
-      completionTokens: Math.ceil(respLen / 2.5),
+      promptTokens: billing.promptTokens,
+      completionTokens: billing.completionTokens,
       totalTokens: usedTokens,
       promptText: `음성 분석: ${fileName}`,
       responseText: summary,

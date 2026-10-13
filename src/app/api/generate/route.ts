@@ -8,6 +8,7 @@ import { getAiModelSettings, getModelTokenMultiplier } from "@/lib/ai-settings";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { queryTable } from "@/lib/setup-db";
 import { sanitizeGasScriptCode } from "@/lib/gas-sanitizer";
+import { calculateBillableTokens, normalizeAiCallerUsage, type AiUsageCounts } from "@/lib/token-calculator";
 
 // 구글 스프레드시트 URL에서 ID 추출
 function extractSpreadsheetId(urlOrId: string): string | null {
@@ -610,6 +611,7 @@ ${prompt}
     };
 
     let generatedData: any = null;
+    let aiCallerUsage: AiUsageCounts | undefined;
 
     // 1. 이지데스크 AI Caller 우선 호출 (사내 중앙 토큰 관리 및 감사 로그 연동)
     try {
@@ -620,6 +622,7 @@ ${prompt}
       });
 
       if (callerRes && callerRes.text) {
+        aiCallerUsage = normalizeAiCallerUsage(callerRes.usage);
         const rawParsed = safeParseJson(callerRes.text);
         generatedData = normalizeGeneratedData(rawParsed);
         if (generatedData?.scriptCode) {
@@ -1062,25 +1065,27 @@ function checkSheetBotStatus() {
       };
     }
 
-    // 2. 토큰 사용량 계산 및 차감 (선택된 모델의 multiplier 가중치 반영)
-    const promptLength = fullPrompt.length;
-    const responseLength = (generatedData?.scriptCode || JSON.stringify(generatedData)).length;
-    const rawTokens = Math.max(800, Math.ceil((promptLength + responseLength) / 2.5));
-    const estimatedUsedTokens = Math.round(rawTokens * tokenMultiplier);
+    const responseText = generatedData?.scriptCode || JSON.stringify(generatedData);
+    const billing = calculateBillableTokens({
+      promptText: fullPrompt,
+      responseText,
+      usage: aiCallerUsage,
+      tokenMultiplier,
+    });
+    const estimatedUsedTokens = billing.billableTokens;
 
     const deductRes = await deductTokens(userEmail, estimatedUsedTokens);
 
-    // AI 사용량 및 추정 비용 실시간 적재 (가중치 적용된 실차감 토큰 기록)
     void recordAiUsageLog({
       userEmail,
       caller: "sheetbot-script-generator",
       purpose: `Apps Script 자동 생성 (${targetModel} / ${tokenMultiplier}x)`,
       model: targetModel,
-      promptTokens: Math.ceil(promptLength / 2.5),
-      completionTokens: Math.ceil(responseLength / 2.5),
+      promptTokens: billing.promptTokens,
+      completionTokens: billing.completionTokens,
       totalTokens: estimatedUsedTokens,
       promptText: fullPrompt,
-      responseText: generatedData?.scriptCode || JSON.stringify(generatedData),
+      responseText,
     });
 
     return NextResponse.json({

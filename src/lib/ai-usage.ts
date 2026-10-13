@@ -18,18 +18,8 @@ export interface AiUsageLogInput {
 // 1 USD = 1,350 KRW 기준
 const KRW_EXCHANGE_RATE = 1350;
 
-/**
- * 텍스트 길이를 바탕으로 대략적인 토큰 수 추정 (1 토큰 ≈ 한글 1.5자, 영문 4자)
- */
-function estimateTokens(text: string): number {
-  if (!text) return 0;
-  const len = text.length;
-  // 한글 포함 여부에 따라 유동적 가중치
-  const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(text);
-  return hasKorean ? Math.ceil(len / 1.5) : Math.ceil(len / 3.5);
-}
-
 import { getPricingCostConfig, DEFAULT_PRICING_CONFIG } from './ai-settings';
+import { calculateBillableTokens } from './token-calculator';
 
 /**
  * 모델별 단가(USD) 기준 비용 계산
@@ -78,9 +68,18 @@ export async function recordAiUsageLog(input: AiUsageLogInput): Promise<void> {
   try {
     await setupDatabase();
 
-    const pTokens = input.promptTokens ?? estimateTokens(input.promptText || '');
-    const cTokens = input.completionTokens ?? estimateTokens(input.responseText || '');
-    const totalTokens = input.totalTokens ?? (pTokens + cTokens);
+    const billing = calculateBillableTokens({
+      promptText: input.promptText,
+      responseText: input.responseText,
+      usage: {
+        promptTokens: input.promptTokens,
+        completionTokens: input.completionTokens,
+      },
+      tokenMultiplier: 1,
+    });
+    const pTokens = input.promptTokens ?? billing.promptTokens;
+    const cTokens = input.completionTokens ?? billing.completionTokens;
+    const totalTokens = input.totalTokens ?? billing.billableTokens;
     const model = input.model || 'gemini-2.0-flash';
 
     const { costUsd, costKrw } = calculateEstimatedCost(pTokens, cTokens, model);

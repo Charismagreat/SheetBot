@@ -4,6 +4,7 @@ import { setupDatabase } from "@/lib/setup-db";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { recordAiUsageLog } from "@/lib/ai-usage";
 import { getAiModelSettings, getModelTokenMultiplier } from "@/lib/ai-settings";
+import { calculateBillableTokens, normalizeAiCallerUsage } from "@/lib/token-calculator";
 
 /**
  * POST /api/ai/ocr
@@ -117,28 +118,30 @@ ${userPrompt || "모든 품목 항목을 행별로 빠짐없이 추출하세요.
       throw new Error("AI Caller OCR 데이터 추출 응답을 파싱할 수 없습니다.");
     }
 
-    // 2. 사용 토큰 계산 및 차감 (선택된 모델의 multiplier 가중치 반영)
-    const promptLen = ocrPrompt.length;
-    const respLen = JSON.stringify(resultJson).length;
-    const rawTokens = Math.max(500, Math.ceil((promptLen + respLen) / 2.5));
-    const usedTokens = Math.round(rawTokens * tokenMultiplier);
+    const responseText = JSON.stringify(resultJson);
+    const billing = calculateBillableTokens({
+      promptText: ocrPrompt,
+      responseText,
+      usage: normalizeAiCallerUsage(callerRes?.usage),
+      tokenMultiplier,
+    });
+    const usedTokens = billing.billableTokens;
     let newBalance = 0;
 
     if (cleanEmail) {
       const deductRes = await deductTokens(cleanEmail, usedTokens);
       newBalance = deductRes.newBalance;
 
-      // AI 사용량 감사 로그 실시간 적재 (가중치 적용된 실차감 토큰 기록)
       void recordAiUsageLog({
         userEmail: cleanEmail,
         caller: "sheetbot-ocr-service",
         purpose: `문서 AI OCR 분석 및 시트 데이터 추출 (${targetModel} / ${tokenMultiplier}x)`,
         model: targetModel,
-        promptTokens: Math.ceil(promptLen / 2.5),
-        completionTokens: Math.ceil(respLen / 2.5),
+        promptTokens: billing.promptTokens,
+        completionTokens: billing.completionTokens,
         totalTokens: usedTokens,
         promptText: `OCR 분석: ${fileName || "문서"}`,
-        responseText: JSON.stringify(resultJson),
+        responseText,
       });
     }
 

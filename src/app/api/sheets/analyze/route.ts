@@ -10,6 +10,7 @@ import {
 import { getAiModelSettings, getModelTokenMultiplier } from "@/lib/ai-settings";
 import { recordAiUsageLog } from "@/lib/ai-usage";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
+import { calculateBillableTokens, normalizeAiCallerUsage } from "@/lib/token-calculator";
 
 // 구글 스프레드시트 URL에서 ID 추출
 function extractSpreadsheetId(urlOrId: string): string | null {
@@ -219,12 +220,13 @@ ${prompt || "스마트 발주/업무 자동화 시스템 구축"}
     let rawText = aiRes.content || aiRes.text || "";
 
     // 2. 사용 토큰 계산, 차감 및 감사 로그 실시간 적재
-    const promptLen = userMessage.length;
-    const respLen = rawText.length;
-    const pTokens = aiRes.usage?.promptTokens || Math.ceil(promptLen / 2.5);
-    const cTokens = aiRes.usage?.completionTokens || Math.ceil(respLen / 2.5);
-    const totalRaw = pTokens + cTokens;
-    const usedTokens = Math.round(totalRaw * billingMultiplier);
+    const billing = calculateBillableTokens({
+      promptText: userMessage,
+      responseText: rawText,
+      usage: normalizeAiCallerUsage(aiRes.usage),
+      tokenMultiplier: billingMultiplier,
+    });
+    const { promptTokens: pTokens, completionTokens: cTokens, billableTokens: usedTokens } = billing;
 
     let newBalance = 0;
     if (userEmail) {

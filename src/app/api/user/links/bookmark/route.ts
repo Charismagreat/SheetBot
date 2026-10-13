@@ -11,7 +11,8 @@ import {
   insertRows,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
-import { getAiModelSettings } from "@/lib/ai-settings";
+import { getAiModelSettings, getModelTokenMultiplier } from "@/lib/ai-settings";
+import { calculateBillableTokens, normalizeAiCallerUsage } from "@/lib/token-calculator";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { recordAiUsageLog } from "@/lib/ai-usage";
@@ -242,20 +243,23 @@ export async function POST(req: NextRequest) {
           const rawResult = (aiRes.text || aiRes.content || "").trim();
           aiSummary = rawResult.length > 5 ? rawResult : (description ? description.slice(0, 200) : "1. 원본 링크 참조\n2. 주요 콘텐츠 확인 완료\n3. 후속 검토 요망");
 
-          const promptLen = prompt.length;
-          const respLen = aiSummary.length;
-          const usedTokens = Math.max(200, Math.ceil((promptLen + respLen) / 2.5));
+          const billing = calculateBillableTokens({
+            promptText: prompt,
+            responseText: aiSummary,
+            usage: normalizeAiCallerUsage(aiRes.usage),
+            tokenMultiplier: await getModelTokenMultiplier(targetModel),
+          });
 
-          await deductTokens(cleanEmail, usedTokens).catch(() => {});
+          await deductTokens(cleanEmail, billing.billableTokens).catch(() => {});
 
           void recordAiUsageLog({
             userEmail: cleanEmail,
             caller: "sheetbot-link-scraper",
             purpose: `${category} 링크 스크랩 AI 3줄 요약 (${targetModel})`,
             model: targetModel,
-            promptTokens: Math.ceil(promptLen / 2.5),
-            completionTokens: Math.ceil(respLen / 2.5),
-            totalTokens: usedTokens,
+            promptTokens: billing.promptTokens,
+            completionTokens: billing.completionTokens,
+            totalTokens: billing.billableTokens,
             promptText: `링크 요약: ${title} (${rawUrl})`,
             responseText: aiSummary,
           });

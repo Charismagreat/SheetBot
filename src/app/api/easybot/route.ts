@@ -5,7 +5,8 @@ import { getCurrentUserEmail, isCurrentUserAdmin } from "@/lib/auth";
 import { callAiCaller, insertRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { recordAiUsageLog } from "@/lib/ai-usage";
-import { getAiModelSettings } from "@/lib/ai-settings";
+import { getAiModelSettings, getModelTokenMultiplier } from "@/lib/ai-settings";
+import { calculateBillableTokens, normalizeAiCallerUsage } from "@/lib/token-calculator";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 
 export async function POST(request: Request) {
@@ -77,6 +78,7 @@ ${userRoleContext}
     const fullPrompt = `${systemPrompt}\n\n[이전 대화 내역]\n${conversationText}\n\n[사용자 최신 질문]\n${message}`;
 
     let replyContent = "";
+    let aiCallerUsage: ReturnType<typeof normalizeAiCallerUsage>;
 
     // 1. 이지데스크 AI Caller 우선 호출
     try {
@@ -86,6 +88,7 @@ ${userRoleContext}
         temperature: aiSettings.temperature || 0.4,
       });
       if (callerRes && callerRes.text) {
+        aiCallerUsage = normalizeAiCallerUsage(callerRes.usage);
         replyContent = callerRes.text.trim();
       }
     } catch (err: any) {
@@ -123,11 +126,16 @@ ${userRoleContext}
       replyContent = `안녕하세요! Google Apps Script 및 스프레드시트 자동화 도우미 시트봇 AI입니다. 🤖\n\n문의하신 "${message}"에 대한 안내입니다.\n\n구글 시트 상단 메뉴 자동화나 정기 실행 트리거가 필요하시면, 상단의 **[+ 새 프로젝트 생성]** 버튼을 눌러 스프레드시트 URL과 요구사항을 입력해 보세요. AI가 완벽한 \`Code.gs\` 코드를 자동 생성하여 구글 클라우드에 직접 배포해 드립니다.`;
     }
 
-    // 사용 토큰 계산 및 차감 (관리자는 무제한 무료 제공으로 차감 면제)
+    const tokenMultiplier = await getModelTokenMultiplier(targetModel);
+    const billing = calculateBillableTokens({
+      promptText: fullPrompt,
+      responseText: replyContent,
+      usage: aiCallerUsage,
+      tokenMultiplier,
+    });
+    const { promptTokens, completionTokens, billableTokens: usedTokens } = billing;
+
     let newBalance = 0;
-    const promptTokens = Math.ceil(fullPrompt.length / 2.5);
-    const completionTokens = Math.ceil(replyContent.length / 2.5);
-    const usedTokens = promptTokens + completionTokens;
 
     if (userEmail && !isAdmin) {
       const deductRes = await deductTokens(userEmail, usedTokens);

@@ -17,6 +17,7 @@ import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { recordAiUsageLog } from "@/lib/ai-usage";
 import { getAiModelSettings } from "@/lib/ai-settings";
+import { calculateBillableTokens } from "@/lib/token-calculator";
 import { uploadDriveFileWithBridge } from "@/lib/drive-upload-helper";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import { processPendingBatchJobs } from "@/lib/ai-batch-sweeper";
@@ -753,20 +754,21 @@ ${voiceProfileHint}
             }
           } catch {}
 
-          const promptLen = 5000;
-          const respLen = rawText.length;
-          const rawTokens = Math.max(1000, Math.ceil((promptLen + respLen) / 2.5) + 600);
-          const usedTokens = Math.round(rawTokens * 0.5);
+          const billing = calculateBillableTokens({
+            promptText: `비동기 회의 분석: ${fileName}`,
+            responseText: rawText,
+            additionalBillingFactor: 0.5,
+          });
 
-          await deductTokens(cleanEmail, usedTokens).catch(() => {});
+          await deductTokens(cleanEmail, billing.billableTokens).catch(() => {});
           void recordAiUsageLog({
             userEmail: cleanEmail,
             caller: "sheetbot-meeting-fast-check",
             purpose: `회의 녹음 AI 회의록 정리 [Fast-Check(50% 절감)] (${targetModel} / 0.5x)`,
             model: targetModel,
-            promptTokens: Math.ceil(promptLen / 2.5),
-            completionTokens: Math.ceil(respLen / 2.5),
-            totalTokens: usedTokens,
+            promptTokens: billing.promptTokens,
+            completionTokens: billing.completionTokens,
+            totalTokens: billing.billableTokens,
             promptText: `비동기 회의 분석: ${fileName}`,
             responseText: summary,
           });

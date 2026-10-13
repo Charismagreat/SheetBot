@@ -10,6 +10,7 @@ import { queryTable, insertRows } from './setup-db';
 import { callAiBatchGet, callAiBatchList, callSheetsTool, updateRows } from './egdesk-helpers';
 import { deductTokens } from './token-wallet';
 import { recordAiUsageLog } from './ai-usage';
+import { calculateBillableTokens } from './token-calculator';
 import { getKoreanTimeString } from './date-utils';
 import { resolveSafeTargetRow } from './sheet-fingerprint-guard';
 import { createTaskItem, parseActionItems, autoResolveMissedCallTasks } from './task-hub-helper';
@@ -180,19 +181,25 @@ export async function processPendingBatchJobs(): Promise<{
               }).catch(() => {});
             }
 
-            const usedTokens = Math.round(1200 * 0.5); // 50% 배치 할인
-            await deductTokens(userEmail, usedTokens).catch(() => {});
+            const receiptPromptText = `비동기 영수증 분석: ${fileName}`;
+            const receiptResponseText = JSON.stringify(ocrData).slice(0, 300);
+            const receiptBilling = calculateBillableTokens({
+              promptText: receiptPromptText,
+              responseText: receiptResponseText,
+              additionalBillingFactor: 0.5,
+            });
+            await deductTokens(userEmail, receiptBilling.billableTokens).catch(() => {});
 
             void recordAiUsageLog({
               userEmail,
               caller: 'sheetbot-receipt-batch-sweeper',
               purpose: `영수증 AI 장부화 [AI 배치(50% 절감)] (${targetModel} / 0.5x)`,
               model: targetModel,
-              promptTokens: 400,
-              completionTokens: 200,
-              totalTokens: usedTokens,
-              promptText: `비동기 영수증 분석: ${fileName}`,
-              responseText: JSON.stringify(ocrData).slice(0, 300),
+              promptTokens: receiptBilling.promptTokens,
+              completionTokens: receiptBilling.completionTokens,
+              totalTokens: receiptBilling.billableTokens,
+              promptText: receiptPromptText,
+              responseText: receiptResponseText,
             });
           } else if (jobType === 'BUSINESS_CARD') {
             // [BUSINESS_CARD] 명함 11대 표준 컬럼 수거 (B~I열 핀포인트 갱신)
@@ -222,19 +229,25 @@ export async function processPendingBatchJobs(): Promise<{
               }).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
             }
 
-            const usedTokens = Math.round(1000 * 0.5); // 50% 배치 할인
-            await deductTokens(userEmail, usedTokens).catch(() => {});
+            const cardPromptText = `비동기 명함 분석: ${fileName}`;
+            const cardResponseText = JSON.stringify(ocrData).slice(0, 300);
+            const cardBilling = calculateBillableTokens({
+              promptText: cardPromptText,
+              responseText: cardResponseText,
+              additionalBillingFactor: 0.5,
+            });
+            await deductTokens(userEmail, cardBilling.billableTokens).catch(() => {});
 
             void recordAiUsageLog({
               userEmail,
               caller: 'sheetbot-card-batch-sweeper',
               purpose: `명함 AI 인맥화 [AI 배치(50% 절감)] (${targetModel} / 0.5x)`,
               model: targetModel,
-              promptTokens: 350,
-              completionTokens: 150,
-              totalTokens: usedTokens,
-              promptText: `비동기 명함 분석: ${fileName}`,
-              responseText: JSON.stringify(ocrData).slice(0, 300),
+              promptTokens: cardBilling.promptTokens,
+              completionTokens: cardBilling.completionTokens,
+              totalTokens: cardBilling.billableTokens,
+              promptText: cardPromptText,
+              responseText: cardResponseText,
             });
           } else if (jobType === 'LINK_BOOKMARK') {
             // [LINK_BOOKMARK] 웹 링크 및 유튜브 3줄 요약 수거
@@ -257,23 +270,24 @@ export async function processPendingBatchJobs(): Promise<{
               }).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
             }
 
-            // 50% 반값 할인 토큰 정산
-            const promptLen = 1200;
-            const respLen = finalSummary.length;
-            const rawTokens = Math.max(300, Math.ceil((promptLen + respLen) / 2.5));
-            const usedTokens = Math.round(rawTokens * 0.5); // 50% 배치 할인
+            const linkPromptText = `비동기 수거 링크 분석: ${fileName}`;
+            const linkBilling = calculateBillableTokens({
+              promptText: linkPromptText,
+              responseText: finalSummary,
+              additionalBillingFactor: 0.5,
+            });
 
-            await deductTokens(userEmail, usedTokens).catch(() => {});
+            await deductTokens(userEmail, linkBilling.billableTokens).catch(() => {});
 
             void recordAiUsageLog({
               userEmail,
               caller: 'sheetbot-link-batch-sweeper',
               purpose: `웹 링크/유튜브 AI 3줄 요약 [AI 배치(50% 절감)] (${targetModel} / 0.5x)`,
               model: targetModel,
-              promptTokens: Math.ceil(promptLen / 2.5),
-              completionTokens: Math.ceil(respLen / 2.5),
-              totalTokens: usedTokens,
-              promptText: `비동기 수거 링크 분석: ${fileName}`,
+              promptTokens: linkBilling.promptTokens,
+              completionTokens: linkBilling.completionTokens,
+              totalTokens: linkBilling.billableTokens,
+              promptText: linkPromptText,
               responseText: finalSummary,
             });
           } else if (jobType === 'MEETING') {
@@ -340,22 +354,24 @@ export async function processPendingBatchJobs(): Promise<{
               console.warn("[BatchSweeper] Meeting Task Hub integration error:", taskErr.message);
             }
 
-            const promptLen = 5000;
-            const respLen = rawText.length;
-            const rawTokens = Math.max(1000, Math.ceil((promptLen + respLen) / 2.5) + 600);
-            const usedTokens = Math.round(rawTokens * 0.5); // 50% 배치 할인
+            const meetingPromptText = `비동기 수거 회의 음성 분석: ${fileName}`;
+            const meetingBilling = calculateBillableTokens({
+              promptText: meetingPromptText,
+              responseText: rawText,
+              additionalBillingFactor: 0.5,
+            });
 
-            await deductTokens(userEmail, usedTokens).catch(() => {});
+            await deductTokens(userEmail, meetingBilling.billableTokens).catch(() => {});
 
             void recordAiUsageLog({
               userEmail,
               caller: 'sheetbot-meeting-batch-sweeper',
               purpose: `회의 녹음 AI 회의록 정리 및 Action Items [AI 배치(50% 절감)] (${targetModel} / 0.5x)`,
               model: targetModel,
-              promptTokens: Math.ceil(promptLen / 2.5),
-              completionTokens: Math.ceil(respLen / 2.5),
-              totalTokens: usedTokens,
-              promptText: `비동기 수거 회의 음성 분석: ${fileName}`,
+              promptTokens: meetingBilling.promptTokens,
+              completionTokens: meetingBilling.completionTokens,
+              totalTokens: meetingBilling.billableTokens,
+              promptText: meetingPromptText,
               responseText: summary,
             });
           } else {
@@ -435,22 +451,24 @@ export async function processPendingBatchJobs(): Promise<{
               console.warn("[BatchSweeper] Task Hub integration error:", taskErr.message);
             }
 
-            const promptLen = 4500;
-            const respLen = rawText.length;
-            const rawTokens = Math.max(800, Math.ceil((promptLen + respLen) / 2.5) + 500);
-            const usedTokens = Math.round(rawTokens * 0.5); // 50% 배치 할인
+            const voicePromptText = `비동기 수거 음성 분석: ${fileName}`;
+            const voiceBilling = calculateBillableTokens({
+              promptText: voicePromptText,
+              responseText: rawText,
+              additionalBillingFactor: 0.5,
+            });
 
-            await deductTokens(userEmail, usedTokens).catch(() => {});
+            await deductTokens(userEmail, voiceBilling.billableTokens).catch(() => {});
 
             void recordAiUsageLog({
               userEmail,
               caller: 'sheetbot-voice-batch-sweeper',
               purpose: `통화 녹음 AI STT 및 3줄 요약/Action Items [AI 배치(50% 절감)] (${targetModel} / 0.5x)`,
               model: targetModel,
-              promptTokens: Math.ceil(promptLen / 2.5),
-              completionTokens: Math.ceil(respLen / 2.5),
-              totalTokens: usedTokens,
-              promptText: `비동기 수거 음성 분석: ${fileName}`,
+              promptTokens: voiceBilling.promptTokens,
+              completionTokens: voiceBilling.completionTokens,
+              totalTokens: voiceBilling.billableTokens,
+              promptText: voicePromptText,
               responseText: summary,
             });
           }
