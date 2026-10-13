@@ -24,7 +24,6 @@ import {
   Info
 } from "lucide-react";
 import {
-  startVisitorGoogleLogin,
   getVisitorGoogleStatus,
   signOutVisitorGoogle,
   registerVisitorGcp,
@@ -33,9 +32,9 @@ import {
   getStoredVisitorGcpHandle,
   setStoredVisitorGcpHandle,
   resolveEgdeskPublicUrl,
-  VISITOR_WORKSPACE_SCOPES,
 } from "@/egdesk-visitor-google";
 import { resolveVisitorGcpRedirectUriToRegister } from "@/lib/visitor-gcp-redirect-uri";
+import { startSheetbotByoVisitorLogin } from "@/lib/sheetbot-visitor-oauth";
 
 export default function LoginPage() {
   const [visitorEmail, setVisitorEmail] = useState<string | null>(null);
@@ -186,14 +185,6 @@ export default function LoginPage() {
     return "/dashboard";
   };
 
-  // SheetBot 자동화를 위한 확장 권한 스코프 (시트 + 드라이브 + Apps Script 프로젝트 생성)
-  const SHEETBOT_WORKSPACE_SCOPES = [
-    ...VISITOR_WORKSPACE_SCOPES,
-    "https://www.googleapis.com/auth/drive",
-    "https://www.googleapis.com/auth/script.projects",
-    "https://www.googleapis.com/auth/script.external_request",
-  ];
-
   // 🌟 [핵심] 사용자가 업로드한 GCP JSON 파싱 및 등록
   const processGcpJsonFile = async (file: File) => {
     setIsUploading(true);
@@ -268,16 +259,15 @@ export default function LoginPage() {
         new Promise((resolve) => setTimeout(resolve, 300)),
       ]);
 
-      const currentHandle = gcpHandle || getStoredVisitorGcpHandle() || undefined;
-
-      // BYO 전용 로그인 실행: gcp: 'self'와 유저 전용 handle 주입
-      await startVisitorGoogleLogin({
+      const started = await startSheetbotByoVisitorLogin({
         next: getTargetRedirectUrl(),
         forceConsent: true,
-        scopes: SHEETBOT_WORKSPACE_SCOPES,
-        gcp: "self",
-        handle: currentHandle,
       });
+      if (!started) {
+        alert("먼저 본인의 Google Cloud(GCP) OAuth 클라이언트 JSON 파일을 업로드해 주세요.");
+        setIsLoading(false);
+        return;
+      }
     } catch (err: any) {
       console.error("BYO Login error:", err);
       setIsLoading(false);

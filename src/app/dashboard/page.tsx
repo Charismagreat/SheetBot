@@ -8,6 +8,7 @@ import type { DashboardAlertMessage, DashboardWalletSummary } from "./_lib/types
 import { DashboardAlertToast } from "./_components/DashboardAlertToast";
 import { DashboardWorkspaceOverview } from "./_components/DashboardWorkspaceOverview";
 import { DashboardProjectsPanel } from "./_components/DashboardProjectsPanel";
+import { DashboardVisitorSessionBanner } from "./_components/DashboardVisitorSessionBanner";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -121,7 +122,7 @@ export default function DashboardPage() {
                 isExisting: Boolean(data.isExisting),
               });
               // 프로젝트 목록 리로드
-              void fetchData();
+              void fetchData(true);
             } else {
               showAlert({ type: "error", text: data.error || "1초 래핑 처리에 실패했습니다." });
             }
@@ -427,6 +428,27 @@ export default function DashboardPage() {
     };
   }, []);
 
+  // 다른 탭(구글 시트 사이드바 등)에서 프로젝트 생성 후 워크스페이스 탭으로 돌아올 때 목록 갱신
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    let visibilityDebounce: ReturnType<typeof setTimeout> | null = null;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      if (visibilityDebounce) clearTimeout(visibilityDebounce);
+      visibilityDebounce = setTimeout(() => {
+        void fetchDataRef.current(true);
+      }, 300);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      if (visibilityDebounce) clearTimeout(visibilityDebounce);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
   const [syncingProjectId, setSyncingProjectId] = useState<string | null>(null);
   const [syncingCodeProjectId, setSyncingCodeProjectId] = useState<string | null>(null);
 
@@ -576,7 +598,7 @@ export default function DashboardPage() {
       const data = await res.json();
       if (data.success) {
         showAlert({ type: "success", text: "프로젝트가 성공적으로 삭제되었습니다. (14일 내 휴지통에서 복원 가능)" });
-        fetchData();
+        fetchData(true);
       } else {
         showAlert({ type: "error", text: data.error || "삭제 실패" });
       }
@@ -599,7 +621,7 @@ export default function DashboardPage() {
       const data = await res.json();
       if (data.success) {
         showAlert({ type: "success", text: "프로젝트가 성공적으로 복원되었습니다!" });
-        fetchData();
+        fetchData(true);
       } else {
         showAlert({ type: "error", text: data.error || "복원 실패" });
       }
@@ -623,6 +645,8 @@ export default function DashboardPage() {
             onDismiss={() => setAlertMessage(null)}
           />
         )}
+
+        <DashboardVisitorSessionBanner mounted={mounted} isAdminUser={isAdminUser} />
 
         <DashboardWorkspaceOverview
           mounted={mounted}
@@ -671,7 +695,7 @@ export default function DashboardPage() {
         <ScheduleManager
           schedules={schedules}
           projects={projects}
-          onRefresh={fetchData}
+          onRefresh={() => void fetchData(true)}
           onShowAlert={showAlert}
         />
       </main>
@@ -696,7 +720,7 @@ export default function DashboardPage() {
           setUrlSheetParam("");
         }}
         onSuccess={() => {
-          fetchData();
+          fetchData(true);
           showAlert({ type: "success", text: "새 Apps Script 프로젝트가 성공적으로 생성되었습니다!" });
         }}
       />
@@ -707,7 +731,7 @@ export default function DashboardPage() {
         project={editingProject}
         onClose={() => setEditingProject(null)}
         onSuccess={() => {
-          fetchData();
+          fetchData(true);
           showAlert({ type: "success", text: "수정된 요구사항을 바탕으로 스크립트 코드가 성공적으로 갱신 및 재배포되었습니다!" });
         }}
       />

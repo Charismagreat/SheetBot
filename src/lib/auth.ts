@@ -2,6 +2,7 @@ import { AuthOptions, getServerSession } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { decode } from "next-auth/jwt";
+import type { WorkspaceVisitorCallOptions } from "@/lib/egdesk-helpers";
 
 /** Visitor OAuth / workspace MCP calls must match the browser origin (tunnel path included). */
 export function resolveVisitorSiteOriginFromRequest(req?: Request): string {
@@ -282,6 +283,93 @@ export async function getCurrentUserEmail(req?: Request): Promise<string | null>
   return null;
 }
 
+const NEXT_AUTH_SECRET = process.env.NEXTAUTH_SECRET || "sheetbot_secret_2026_default_key_32chars";
+
+/** NextAuth JWT only — does not call getCurrentVisitorSessionId (avoids recursion). */
+async function getEmailFromNextAuthCookie(req?: Request): Promise<string | null> {
+  if (req) {
+    const cookieHeader = req.headers.get("cookie") || "";
+    const tokenMatch = cookieHeader.match(/(?:__Secure-)?next-auth\.session-token=([^;]+)/);
+    if (tokenMatch?.[1]) {
+      try {
+        const decoded = await decode({
+          token: decodeURIComponent(tokenMatch[1]),
+          secret: NEXT_AUTH_SECRET,
+        });
+        if (decoded?.email && typeof decoded.email === "string") {
+          return decoded.email.toLowerCase().trim();
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  try {
+    const { cookies } = await import("next/headers");
+    const c = await cookies();
+    const sessionCookie =
+      c.get("__Secure-next-auth.session-token")?.value || c.get("next-auth.session-token")?.value;
+    if (sessionCookie) {
+      const decoded = await decode({
+        token: sessionCookie,
+        secret: NEXT_AUTH_SECRET,
+      });
+      if (decoded?.email && typeof decoded.email === "string") {
+        return decoded.email.toLowerCase().trim();
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return null;
+}
+
+async function lookupVisitorSessionIdForEmail(email: string): Promise<string | null> {
+  const normalized = email.toLowerCase().trim();
+  if (!normalized.includes("@")) return null;
+  try {
+    const { queryTable } = await import("@/lib/egdesk-helpers");
+    const userRes = await queryTable("sheetbot_users", {
+      filters: { email: normalized },
+      limit: 1,
+    }).catch(() => ({ rows: [] }));
+    const row = (userRes.rows || []).find((r: any) => !r.deleted_at);
+    const sid = row?.visitor_session_id;
+    if (sid && String(sid).trim()) {
+      return String(sid).trim();
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+/**
+ * Apps Script / Drive MCP calls for end users (visitor OAuth on EGDesk).
+ */
+export async function buildWorkspaceVisitorCallOptions(
+  req: Request,
+  userEmail?: string | null,
+): Promise<WorkspaceVisitorCallOptions> {
+  const visitorSessionId = await getCurrentVisitorSessionId(req);
+  if (visitorSessionId) {
+    return {
+      asVisitor: true,
+      visitorSessionId,
+      visitorOrigin: resolveVisitorSiteOriginFromRequest(req),
+    };
+  }
+  const isAdmin = userEmail
+    ? await isCurrentUserAdmin(userEmail)
+    : await isCurrentUserAdmin();
+  if (isAdmin) {
+    return {};
+  }
+  return {};
+}
+
 /**
  * 서버 사이드에서 현재 요청의 방문자(Visitor) 세션 ID를 가져옵니다.
  * Request 객체가 전달되면 요청 헤더/쿠키에서, 없으면 next/headers에서 추출합니다.
@@ -348,6 +436,13 @@ export async function getCurrentVisitorSessionId(req?: Request): Promise<string 
       }
     }
   } catch {}
+
+  // 3. NextAuth 로그인만 있고 visitor 쿠키/헤더가 없을 때 DB에 저장된 visitor_session_id 사용
+  const emailFromJwt = await getEmailFromNextAuthCookie(req);
+  if (emailFromJwt) {
+    const fromDb = await lookupVisitorSessionIdForEmail(emailFromJwt);
+    if (fromDb) return fromDb;
+  }
 
   return null;
 }

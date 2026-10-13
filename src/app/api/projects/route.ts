@@ -1,14 +1,18 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { getCurrentUserEmail, getCurrentVisitorSessionId, isCurrentUserAdmin } from "@/lib/auth";
+import {
+  buildWorkspaceVisitorCallOptions,
+  getCurrentUserEmail,
+  getCurrentVisitorSessionId,
+  isCurrentUserAdmin,
+} from "@/lib/auth";
 import {
   queryTable,
   insertRows,
   updateRows,
   callAppsScriptTool,
   callDriveTool,
-  WorkspaceVisitorCallOptions,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { ensureStandardManifest, generateSecureEgdeskConfig, generateStandardTokenRecharge } from "@/lib/gas-manifest";
@@ -199,11 +203,27 @@ export async function POST(request: Request) {
     // 방문자(Visitor) 구글 세션 추출 (일반 회원이 본인 구글 권한으로 스크립트 직접 주입)
     const visitorSessionId = await getCurrentVisitorSessionId(request);
     const isAdmin = await isCurrentUserAdmin(userEmail);
-    const visitorOptions: WorkspaceVisitorCallOptions = visitorSessionId
-      ? { asVisitor: true, visitorSessionId }
-      : !isAdmin
-        ? { asVisitor: true }
-        : {};
+    const visitorOptions = await buildWorkspaceVisitorCallOptions(request, userEmail);
+
+    if (requiresGasCloud && !visitorSessionId && !isAdmin) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Google Apps Script 배포를 위해 EGDesk 방문자 세션이 필요합니다. /login에서 BYO Google로 다시 로그인한 뒤 프로젝트 생성을 재시도해 주세요.",
+          cloudDeploy: {
+            ok: false,
+            bound: false,
+            pushed: false,
+            failureKind: "auth",
+            errors: [
+              "visitor_session: Server could not resolve egdesk visitor session (header, cookie, or sheetbot_users.visitor_session_id).",
+            ],
+          },
+        },
+        { status: 401 },
+      );
+    }
 
     try {
       if (spreadsheetId) {
@@ -613,13 +633,7 @@ export async function PATCH(request: Request) {
     const projRow = existing.rows?.[0];
 
     // 방문자(Visitor) 구글 세션 추출 (재배포 시에도 유저 권한으로 푸시)
-    const visitorSessionId = await getCurrentVisitorSessionId(request);
-    const isAdmin = await isCurrentUserAdmin(userEmail);
-    const visitorOptions: WorkspaceVisitorCallOptions = visitorSessionId
-      ? { asVisitor: true, visitorSessionId }
-      : !isAdmin
-        ? { asVisitor: true }
-        : {};
+    const visitorOptions = await buildWorkspaceVisitorCallOptions(request, userEmail);
 
     // 기존 프로젝트의 AI 생성 코드를 구글 클라우드에 재주입
     if (redeploy && projRow) {

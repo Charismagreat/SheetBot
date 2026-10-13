@@ -36,13 +36,11 @@ import {
   FileText,
 } from "lucide-react";
 import {
-  startVisitorGoogleLogin,
   getVisitorGoogleStatus,
   listVisitorDriveFiles,
   getVisitorSheetRange,
-  VISITOR_WORKSPACE_SCOPES,
-  VISITOR_GOOGLE_OAUTH_SCOPES,
 } from "@/egdesk-visitor-google";
+import { startSheetbotByoVisitorLogin } from "@/lib/sheetbot-visitor-oauth";
 import { PROJECT_DEPLOY_LOADING_LABEL } from "@/constants/project-deploy-ui";
 import { gasDeployFailureUi } from "@/constants/gas-deploy-failure-ui";
 
@@ -196,11 +194,20 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
   const handleGrantWorkspaceScopes = async () => {
     setIsGrantingScope(true);
     try {
-      await startVisitorGoogleLogin({
+      const started = await startSheetbotByoVisitorLogin({
         next: "/dashboard",
         forceConsent: true,
-        scopes: VISITOR_WORKSPACE_SCOPES,
       });
+      if (!started) {
+        setIsGrantingScope(false);
+        const goLogin = window.confirm(
+          "SheetBot은 BYO Google Cloud OAuth 클라이언트로만 권한을 부여합니다.\n\n로그인 페이지에서 GCP JSON을 먼저 등록하시겠습니까?"
+        );
+        if (goLogin) {
+          window.location.href = "/login";
+        }
+        return;
+      }
     } catch (err: any) {
       setIsGrantingScope(false);
       alert("권한 요청 중 오류가 발생했습니다: " + (err?.message || "네트워크 오류"));
@@ -456,8 +463,25 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
         });
         return createData.spreadsheetUrl as string;
       }
-      if (createData.oauthRequired || createData.code === "GOOGLE_OAUTH_TOKEN_MISSING") {
+      if (
+        createData.oauthRequired ||
+        createData.code === "GOOGLE_OAUTH_TOKEN_MISSING" ||
+        createData.code === "VISITOR_SESSION_MISSING"
+      ) {
         setShowScopePrompt(true);
+        setError(
+          createData.error ||
+            "구글 시트 자동 생성에 필요한 BYO Google(방문자) 세션이 없습니다. 상단에서 권한을 승인하거나 /login에서 다시 로그인해 주세요.",
+        );
+      } else if (!createData.success && createData.error) {
+        setError(createData.error);
+        if (
+          String(createData.error).includes("OAuth") ||
+          String(createData.error).includes("token") ||
+          String(createData.error).includes("권한")
+        ) {
+          setShowScopePrompt(true);
+        }
       }
     } catch (createErr) {
       console.warn("[NewProjectModal] Background sheet create:", createErr);

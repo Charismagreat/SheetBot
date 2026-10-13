@@ -174,6 +174,10 @@ export function AuthAdminProvider({ children }: { children: React.ReactNode }) {
                     localStorage.setItem("sheetbot_user_email", email);
                     localStorage.setItem("sheetbot_user_name", name);
                     localStorage.setItem("sheetbot_user_image", image);
+                    const isSecure = window.location.protocol === "https:";
+                    document.cookie = `egdesk_visitor_session=${encodeURIComponent(
+                      visitorSession,
+                    )}; path=/; max-age=2592000; SameSite=Lax${isSecure ? "; Secure" : ""}`;
                   } catch {}
                 }
 

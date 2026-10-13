@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { getCurrentUserEmail, getCurrentVisitorSessionId, isCurrentUserAdmin } from "@/lib/auth";
+import {
+  getCurrentUserEmail,
+  getCurrentVisitorSessionId,
+  isCurrentUserAdmin,
+  resolveVisitorSiteOriginFromRequest,
+} from "@/lib/auth";
 import {
   createSpreadsheet,
   createSpreadsheetInEgdeskFolder,
@@ -11,13 +16,39 @@ import {
 
 export async function GET(request: Request) {
   try {
+    const userEmail = await getCurrentUserEmail(request);
+    const isAdmin = userEmail ? await isCurrentUserAdmin(userEmail) : false;
     const visitorSessionId = await getCurrentVisitorSessionId(request);
+    const siteOrigin = resolveVisitorSiteOriginFromRequest(request);
+
+    // End users must have a visitor session — operator MCP "connected" is not their Drive.
+    if (!visitorSessionId && !isAdmin) {
+      return NextResponse.json({
+        success: true,
+        canAutoCreate: false,
+        oauthRequired: true,
+        code: "VISITOR_SESSION_MISSING",
+        error:
+          "구글 시트 자동 생성에는 BYO Google 로그인(EGDesk 방문자 세션)이 필요합니다. /login에서 다시 로그인해 주세요.",
+        authStatus: { sheets: null, drive: null },
+        quickCreateUrl: "https://docs.google.com/spreadsheets/create",
+      });
+    }
+
     const visitorOptions: WorkspaceVisitorCallOptions = visitorSessionId
-      ? { asVisitor: true, visitorSessionId }
+      ? { asVisitor: true, visitorSessionId, visitorOrigin: siteOrigin }
       : {};
 
-    const sheetsAuth = await callSheetsTool("sheets_auth_status", {}, visitorOptions).catch(() => null);
-    const driveAuth = await callDriveTool("drive_auth_status", {}, visitorOptions).catch(() => null);
+    const sheetsAuth = visitorSessionId
+      ? await callVisitorWorkspaceTool("sheets", "sheets_auth_status", {}, visitorSessionId, siteOrigin).catch(
+          () => null,
+        )
+      : await callSheetsTool("sheets_auth_status", {}, visitorOptions).catch(() => null);
+    const driveAuth = visitorSessionId
+      ? await callVisitorWorkspaceTool("drive", "drive_auth_status", {}, visitorSessionId, siteOrigin).catch(
+          () => null,
+        )
+      : await callDriveTool("drive_auth_status", {}, visitorOptions).catch(() => null);
 
     const sheetsOk = Boolean(sheetsAuth && sheetsAuth.connected !== false && !sheetsAuth.error);
     const driveOk = Boolean(driveAuth && driveAuth.status === "connected");
@@ -26,6 +57,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: true,
       canAutoCreate: canCreate,
+      oauthRequired: !canCreate,
       authStatus: { sheets: sheetsAuth, drive: driveAuth },
       quickCreateUrl: "https://docs.google.com/spreadsheets/create",
     });
@@ -79,15 +111,30 @@ export async function POST(request: Request) {
     if (!visitorSessionId && apiKeyVisitorSessionId) {
       visitorSessionId = apiKeyVisitorSessionId;
     }
+
+    const isAdmin = await isCurrentUserAdmin(userEmail);
+    const siteOrigin = resolveVisitorSiteOriginFromRequest(request);
+
+    if (!visitorSessionId && !isAdmin) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "VISITOR_SESSION_MISSING",
+          oauthRequired: true,
+          error:
+            "구글 시트를 자동 생성하려면 BYO Google 로그인(EGDesk 방문자 세션)이 필요합니다. /login에서 다시 로그인한 뒤 재시도해 주세요.",
+          quickCreateUrl: "https://docs.google.com/spreadsheets/create",
+        },
+        { status: 401 },
+      );
+    }
+
     const visitorOptions: WorkspaceVisitorCallOptions = visitorSessionId
-      ? { asVisitor: true, visitorSessionId }
+      ? { asVisitor: true, visitorSessionId, visitorOrigin: siteOrigin }
       : {};
 
     let result: any = null;
     let createMethod = "sheets";
-
-    const { resolveVisitorSiteOriginFromRequest } = await import("@/lib/auth");
-    const siteOrigin = resolveVisitorSiteOriginFromRequest(request);
 
     // 1차 시도: 방문자(유저) 권한으로 Google Sheets API sheets_create_spreadsheet (유저 본인 드라이브에 생성)
     try {
