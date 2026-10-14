@@ -14,23 +14,60 @@ import { appendSheetbotDebugLog } from "@/lib/safe-debug-log";
 const KNOWN_ACTIVE_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbx7l5Ce6S4cwaU4mrDyUgZF5uKOSwU8zl3Nw_so5i6Rpl5MnMW6S98u1tgMrbHSl7zArw/exec";
 
 // 정적 탭 스키마 컨텍스트 (사용 중인 SPRING, BAND 2대 탭으로 확정)
-const SYSTEM_PROMPT = `수입/무역 수불부 자동화 AI입니다. 업로드 문서를 분석하여 SPRING 또는 BAND 탭 중 알맞은 탭의 기입 정보를 JSON으로 출력하세요.
+const SYSTEM_PROMPT = `수입/무역 수불부 자동화 AI입니다. 업로드 문서(상업송장 INVOICE 또는 발주서 PURCHASE ORDER)를 분석하여 알맞은 탭(SPRING 또는 BAND)의 기입 정보를 JSON으로 출력하세요.
 
-[탭 판정 규칙]
-1. SPRING 탭: 달러($) 통화, Bal Seal 공급사, 스프링 품목(Part No: X...), PO NO: S25xx/S26xx. 인보이스일자=N열. 결제조건=NET60.
-   - 중요: Bal Seal 인보이스에서 'WONEC-S2657' 및 'Cust PO Line #: 2' 또는 'Item 2'가 표기된 경우, 시트 매칭 PO NO는 반드시 'S2657-2' 형식으로 정확히 조합하세요.
-2. BAND 탭: 유로(€) 통화, 밴드 품목(BAND, FLAT SPRING), PO NO: B25xx/B26xx. 인보이스일자=J열. 결제조건=NET30.
-3. 문서가 무역과 무관하거나 판독 불가능하면 action="UNSUPPORTED_OR_UNREADABLE" 지정.
-4. 계산 수식 열(금액, 결제금액, 합계, 송금예정일 등)은 절대 덮어쓰지 마세요.
+[문서 종류 판정]
+1. 발주서 (PURCHASE ORDER):
+   - 문서 제목에 'PURCHASE ORDER' 또는 'P/O NUMBER'가 표기된 구매 발주서 문서.
+   - [탭 분기 규칙]:
+     * 품명(Description)이 'Bal Spring', 'Spring', '스프링', 'Bal Seal', 'Seal', '씰'인 경우 -> targetTab="SPRING" (품명="스프링" 또는 "씰")
+     * 품명이 'I-CORE BAND', 'BAND', '밴드'인 경우 -> targetTab="BAND" (품명="I-CORE BAND")
+   - [P/O 번호 조합 규칙]:
+     * P/O NUMBER가 'WONEC-S2694'이고 Item No가 1이면, 시트 기입 poNo는 'S2694-1' 형식으로 조합하세요. (Item No가 없으면 'S2694')
+     * 밴드인 경우 'B2602-1' 형식.
+   - [공급사 승인확인(Order Confirmation) 추가 정보 여부 (1번 사진 vs 2번 사진 판별)]:
+     * 1번 사진 (원 발주서): 공급사 추가 메모 없음 -> hasConfirmation=false, soNo="", shipDate=""
+     * 2번 사진 (확인 발주서): 'Thank you for your PO', 'The order# is:', 'It is due to ship on:' 등 공급사 수기/스템프/컬러 텍스트 포함 ->
+       hasConfirmation=true,
+       soNo="3259424" (The order# is 뒤의 번호),
+       shipDate="6 TO 8 WKS" (It is due to ship on 뒤의 기간/날짜),
+       shipVia="FEDEX P1 COLLECT"
+
+2. 상업송장 (INVOICE):
+   - 문서 제목에 'INVOICE' 또는 'COMMERCIAL INVOICE'가 표기된 송장 문서.
+   - SPRING 탭: 달러($) 통화, Bal Seal 공급사, 스프링 품목(Part No: X...), PO NO: S25xx/S26xx. 인보이스일자=N열. 결제조건=NET60.
+     * 중요: Bal Seal 인보이스에서 'WONEC-S2657' 및 'Cust PO Line #: 2' 또는 'Item 2'가 표기된 경우, 시트 매칭 PO NO는 반드시 'S2657-2' 형식으로 정확히 조합하세요.
+   - BAND 탭: 유로(€) 통화, 밴드 품목(BAND, FLAT SPRING), PO NO: B25xx/B26xx. 인보이스일자=J열. 결제조건=NET30.
+
+3. 공통 규칙:
+   - 문서가 무역과 무관하거나 판독 불가능하면 action="UNSUPPORTED_OR_UNREADABLE" 지정.
+   - 계산 수식 열(금액, 결제금액, 합계, 송금예정일 등)은 절대 덮어쓰지 마세요.
 
 응답 형식 (JSON만 출력):
 {
+  "docType": "PURCHASE_ORDER" | "INVOICE",
   "targetTab": "SPRING" | "BAND",
-  "action": "UPDATE_ROW" | "INSERT_ROW" | "UNSUPPORTED_OR_UNREADABLE",
-  "matchCriteria": { "poNo": "S2657-2", "partNo": "X578630", "orderDate": "YYYY-MM-DD", "quantity": 100 },
+  "action": "PURCHASE_ORDER_SYNC" | "UPDATE_ROW" | "INSERT_ROW" | "UNSUPPORTED_OR_UNREADABLE",
+  "poInfo": {
+    "poNo": "S2694-1",
+    "rawPoNo": "WONEC-S2694",
+    "itemNo": "1",
+    "partNo": "X640482",
+    "itemName": "스프링",
+    "orderType": "양산",
+    "unitPrice": 25.50,
+    "quantity": 20,
+    "orderDate": "10/12/2026",
+    "requestDate": "11/23/2026",
+    "hasConfirmation": true,
+    "soNo": "3259424",
+    "shipDate": "6 TO 8 WKS",
+    "shipVia": "FEDEX P1 COLLECT"
+  },
+  "matchCriteria": { "poNo": "S2694-1", "partNo": "X640482", "orderDate": "10/12/2026", "quantity": 20 },
   "updates": { "N": "MM/DD/YYYY" },
   "updatesDetail": [{ "colLetter": "N", "colName": "인보이스일자", "value": "MM/DD/YYYY" }],
-  "documentSummary": { "docType": "INVOICE", "invoiceNo": "...", "invoiceDate": "...", "supplier": "...", "poNo": "...", "partNo": "...", "quantity": 0, "amount": 0 },
+  "documentSummary": { "docType": "...", "invoiceNo": "...", "invoiceDate": "...", "supplier": "...", "poNo": "...", "partNo": "...", "quantity": 0, "amount": 0 },
   "reasoning": "판단 사유"
 }`;
 
@@ -187,7 +224,7 @@ async function runAsyncFolderSyncWithWebhook(params: {
         const isSpring = targetTab === "SPRING";
 
         // 기존 시트 데이터 읽어 타겟 행 탐색
-        const rangeStr = `${targetTab}!A1:AB200`;
+        const rangeStr = `${targetTab}!A1:AB300`;
         const sheetDataRes = await callSheetsTool("sheets_get_range", {
           spreadsheetId,
           range: rangeStr,
@@ -199,6 +236,192 @@ async function runAsyncFolderSyncWithWebhook(params: {
         const poColIdx = isSpring ? 6 : 3; // G열=6, D열=3 (0-indexed)
         const partColIdx = isSpring ? 2 : 1; // C열=2, B열=1 (0-indexed)
         const invColLetter = isSpring ? "N" : "J";
+
+        // ==========================================
+        // 📑 발주서(PURCHASE ORDER) 전용 처리 파이프라인
+        // ==========================================
+        const isPurchaseOrder = parsedResult.docType === "PURCHASE_ORDER" || Boolean(parsedResult.poInfo);
+        if (isPurchaseOrder) {
+          const poInfo = parsedResult.poInfo || {};
+          const poNo = String(poInfo.poNo || parsedResult.matchCriteria?.poNo || "").trim();
+          const cleanPoNo = poNo.replace(/^WONEC-/i, "").replace(/[^A-Z0-9-]/gi, "").toUpperCase();
+          const partNo = String(poInfo.partNo || parsedResult.matchCriteria?.partNo || "").trim().toUpperCase();
+          const soNo = String(poInfo.soNo || "").trim();
+          const shipDate = String(poInfo.shipDate || "").trim();
+          const hasConfirmation = Boolean(poInfo.hasConfirmation || soNo);
+
+          // 1. 기존 행에서 PO NO + Part No 매칭 행 검색
+          let existingRowIndex = -1;
+          let existingRowData: any[] = [];
+          for (let r = startRow - 1; r < rows.length; r++) {
+            const row = rows[r] || [];
+            const rowPo = String(row[poColIdx] || "").trim().toUpperCase();
+            const cleanRowPo = rowPo.replace(/^WONEC-/i, "").replace(/[^A-Z0-9-]/gi, "").toUpperCase();
+            const rowPart = String(row[partColIdx] || "").trim().toUpperCase();
+
+            const isPoMatch = cleanPoNo && cleanRowPo && (cleanPoNo === cleanRowPo || cleanRowPo.includes(cleanPoNo) || cleanPoNo.includes(cleanRowPo));
+            const isPartMatch = partNo && rowPart && (partNo === rowPart);
+
+            if (isPoMatch && isPartMatch) {
+              existingRowIndex = r + 1; // 1-indexed
+              existingRowData = row;
+              break;
+            }
+          }
+
+          let poMode: "INSERT" | "UPDATE" | "NOOP_ALREADY_CONFIRMED" = "INSERT";
+          let targetRow = rows.length + 1;
+
+          if (existingRowIndex !== -1) {
+            targetRow = existingRowIndex;
+            // 기존 행의 SO# / 승인 정보 유무 점검
+            const existingSo = String(isSpring ? existingRowData[7] : existingRowData[8] || "").trim();
+
+            if (existingSo) {
+              // 기존 행에 이미 SO#(확인 정보)가 기재되어 있음
+              // 1번 사진(확인 정보 없음)이 나중에 올라왔거나, 이미 처리 완료된 2번 사진인 경우 -> 아무 작업 안 하고 완료 처리
+              poMode = "NOOP_ALREADY_CONFIRMED";
+              appendSheetbotDebugLog("debug_sync.log", `[PO NOOP] File ${file.name} already confirmed at Row ${targetRow} (SO#: ${existingSo}). Moving to done without changes.\n`);
+            } else if (hasConfirmation && soNo) {
+              // 1번 사진으로 데이터가 들어간 후, 2번 사진(확인 정보 포함)이 올라온 경우 -> 기존 행에 SO# 및 선적예정일 업데이트
+              poMode = "UPDATE";
+              appendSheetbotDebugLog("debug_sync.log", `[PO UPDATE] File ${file.name} updating confirmation at Row ${targetRow} (SO#: ${soNo}, ShipDate: ${shipDate})\n`);
+            } else {
+              // 1번 사진이 중복 업로드된 경우
+              poMode = "NOOP_ALREADY_CONFIRMED";
+            }
+          } else {
+            // 최초 신규 등록 (1번 사진이든 2번 사진이든 신규 행 추가)
+            poMode = "INSERT";
+            targetRow = rows.length + 1;
+            appendSheetbotDebugLog("debug_sync.log", `[PO INSERT] File ${file.name} inserting new row at ${targetRow} (PO: ${poNo}, Part: ${partNo})\n`);
+          }
+
+          // 웹훅 페이로드 전송
+          const poWebhookPayload = {
+            spreadsheetId,
+            action: "APPLY_PURCHASE_ORDER",
+            targetTab,
+            poMode,
+            appliedRow: targetRow,
+            poInfo: {
+              ...poInfo,
+              poNo: poNo || cleanPoNo,
+              partNo,
+              soNo,
+              shipDate,
+              hasConfirmation
+            },
+            fileName: file.name,
+            fileId: file.id,
+            doneFolderId,
+            reasoning: parsedResult.reasoning || "발주서 AI 분석 반영"
+          };
+
+          let poSuccess = false;
+          if (webhookUrl) {
+            try {
+              const cbRes = await fetch(webhookUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(poWebhookPayload),
+                redirect: "follow",
+              });
+              poSuccess = cbRes.ok;
+            } catch (err: any) {
+              console.warn("[auto-import-doc] PO webhook error:", err.message);
+            }
+          }
+
+          if (!poSuccess && webhookUrl !== KNOWN_ACTIVE_WEBHOOK_URL) {
+            try {
+              const retryRes = await fetch(KNOWN_ACTIVE_WEBHOOK_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(poWebhookPayload),
+                redirect: "follow",
+              });
+              poSuccess = retryRes.ok;
+            } catch (_) {}
+          }
+
+          // Fallback 시 서버 직접 시트 반영
+          if (!poSuccess) {
+            if (poMode === "INSERT") {
+              const newRowData = isSpring ? [
+                poInfo.orderType || "양산",
+                poInfo.itemName || "스프링",
+                partNo,
+                "", "",
+                Number(poInfo.unitPrice) || 0,
+                poNo,
+                soNo || "",
+                Number(poInfo.quantity) || 0,
+                `=F${targetRow}*I${targetRow}`,
+                poInfo.orderDate || "",
+                poInfo.requestDate || "",
+                shipDate || "",
+                "", "", "", "", "", "", "", "", "",
+                `=U${targetRow}*10`, "",
+                `=X${targetRow}*J${targetRow}`,
+                `=R${targetRow}+U${targetRow}+Y${targetRow}`,
+                `=N${targetRow}+60`, ""
+              ] : [
+                "I-CORE BAND",
+                partNo,
+                Number(poInfo.unitPrice) || 0,
+                poNo,
+                Number(poInfo.quantity) || 0,
+                `=C${targetRow}*E${targetRow}`,
+                poInfo.orderDate || "",
+                poInfo.requestDate || "",
+                shipDate || "",
+                "", "", "", "", "", "", "", "",
+                `=P${targetRow}*10`, "",
+                `=S${targetRow}*F${targetRow}`,
+                `=T${targetRow}+P${targetRow}+M${targetRow}`,
+                `=J${targetRow}+30`, ""
+              ];
+
+              await callSheetsTool("sheets_append_values", {
+                spreadsheetId,
+                range: `${targetTab}!A${targetRow}`,
+                values: [newRowData],
+              });
+            } else if (poMode === "UPDATE") {
+              if (isSpring) {
+                if (soNo) {
+                  await callSheetsTool("sheets_update_range", { spreadsheetId, range: `${targetTab}!H${targetRow}`, values: [[soNo]] });
+                }
+                if (shipDate) {
+                  await callSheetsTool("sheets_update_range", { spreadsheetId, range: `${targetTab}!M${targetRow}`, values: [[shipDate]] });
+                }
+              } else {
+                if (shipDate) {
+                  await callSheetsTool("sheets_update_range", { spreadsheetId, range: `${targetTab}!I${targetRow}`, values: [[shipDate]] });
+                }
+              }
+            }
+          }
+
+          // 완료함으로 파일 이동
+          if (doneFolderId) {
+            try {
+              await callDriveTool("drive_move", { fileId: file.id, destFolderId: doneFolderId, preferOAuth: true });
+            } catch (_) {}
+          }
+
+          // 토큰 차감 및 감사 로그
+          await deductTokens(userEmail, 15, `발주서 AI 자동 분석 및 반영 (${file.name})`);
+          await recordAiUsageLog({
+            userEmail,
+            action: "PURCHASE_ORDER_SYNC",
+            tokensUsed: 15,
+            details: { fileName: file.name, targetTab, poMode, row: targetRow, poNo },
+          });
+
+          continue; // 발주서 처리 완료 후 다음 파일로 이동
+        }
 
         let targetRowIndex = -1;
         const matchPo = String(parsedResult.matchCriteria?.poNo || "").trim();
