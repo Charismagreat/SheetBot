@@ -97,7 +97,7 @@ async function analyzeInvoiceDocumentWithAi(fileName: string, mimeType: string, 
 위 상업송장(Commercial Invoice) 문서를 정밀 분석하여 헤더 정보 및 모든 품목별 Line Item 상세 내역을 JSON으로 추출해 주세요.`;
 
   const aiOptions: any = {
-    model: "gemini-2.5-flash",
+    model: "gemini-3.8-flash",
     systemPrompt: INVOICE_SYSTEM_PROMPT,
   };
 

@@ -81,7 +81,7 @@ ${fileText ? `[문서 추출 텍스트]:\n${fileText}\n` : "[문서 파일이 �
 위 문서를 정밀 분석하여 'SPRING' 또는 'BAND' 탭 중 어느 탭의 어떤 열에 값을 입력해야 할지 최적의 결과를 JSON으로 판단해 주세요.`;
 
   const aiOptions: any = {
-    model: "gemini-2.5-flash",
+    model: "gemini-3.8-flash",
     systemPrompt: SYSTEM_PROMPT,
   };
 

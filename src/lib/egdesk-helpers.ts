@@ -45,16 +45,52 @@ export async function callAiCaller(
   prompt: string,
   options: AiCallerOptions = {}
 ): Promise<AiCallerResponse> {
-  const result = await rootCallAiCallerTool('ai_caller_call', {
-    prompt,
-    caller: options.caller,
-    model: options.model,
-    temperature: options.temperature,
-    systemPrompt: options.systemPrompt,
-    maxOutputTokens: options.maxOutputTokens,
-    responseSchema: options.responseSchema,
-    files: options.files,
-  });
+  const resolvedModel =
+    !options.model || options.model === 'gemini-2.5-flash'
+      ? 'gemini-3.8-flash'
+      : options.model;
+
+  const candidateModels = Array.from(
+    new Set([resolvedModel, 'gemini-3.5-flash', 'gemini-flash-latest'])
+  );
+
+  let result: any = null;
+  let lastError: any = null;
+
+  for (let i = 0; i < candidateModels.length; i++) {
+    try {
+      result = await rootCallAiCallerTool('ai_caller_call', {
+        prompt,
+        caller: options.caller,
+        model: candidateModels[i],
+        temperature: options.temperature,
+        systemPrompt: options.systemPrompt,
+        maxOutputTokens: options.maxOutputTokens,
+        responseSchema: options.responseSchema,
+        files: options.files,
+      });
+      lastError = null;
+      break;
+    } catch (err: any) {
+      lastError = err;
+      const errMsg = String(err?.message || err || '');
+      const isTransient =
+        errMsg.includes('503') ||
+        errMsg.includes('Service Unavailable') ||
+        errMsg.includes('high demand') ||
+        errMsg.includes('429') ||
+        errMsg.includes('Quota exceeded') ||
+        errMsg.includes('404 Not Found');
+
+      if (!isTransient || i === candidateModels.length - 1) {
+        throw err;
+      }
+    }
+  }
+
+  if (lastError && !result) {
+    throw lastError;
+  }
 
   const text = String(result?.content ?? result?.text ?? '');
   return {
