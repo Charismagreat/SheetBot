@@ -20,7 +20,7 @@
 
 import crypto from 'crypto';
 import { EGDESK_CONFIG } from '../../egdesk.config';
-import { resolveServerEgdeskMcpApiUrlForSse } from '../../egdesk-helpers';
+import { resolveServerEgdeskMcpApiUrlForSse } from './egdesk-helpers';
 import { depositEventBus, DepositEventPayload } from './deposit-events';
 
 export type RealtimeTopic = 'all' | 'deposit' | 'sms' | 'schedules' | 'projects' | 'wallet';

@@ -15,6 +15,10 @@ export function getServerEgdeskApiUrl(): string {
   return String(raw).replace(/\/$/, '');
 }
 
+export function resolveServerEgdeskMcpApiUrlForSse(): string {
+  return getServerEgdeskApiUrl();
+}
+
 export interface AiCallerOptions {
   caller?: string;
   model?: string;
