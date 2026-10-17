@@ -49,8 +49,8 @@ export async function POST(request: Request) {
       );
     }
 
-    let gasProjectId = project.gas_project_id || project.script_id;
-    const spreadsheetUrl = project.spreadsheet_url || project.spreadsheetUrl || "";
+    let gasProjectId = String(project.gas_project_id || project.script_id || "");
+    const spreadsheetUrl = String(project.spreadsheet_url || project.spreadsheetUrl || "");
     const spreadsheetId = extractSpreadsheetId(spreadsheetUrl);
 
     // 2. 만약 gasProjectId가 비어있다면 스프레드시트 매칭으로 조회

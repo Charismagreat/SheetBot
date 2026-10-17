@@ -5,10 +5,13 @@ import {
   listDriveFiles,
   getDriveFile,
   callSheetsTool,
+  callDriveTool,
   moveDriveFile,
   trashDriveFile,
+  WorkspaceVisitorCallOptions,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 
 export type SheetBindingType =
   | "SMS"
@@ -43,6 +46,8 @@ export interface ResolveSheetOptions {
   folderId?: string | null;
   folderName?: string | null;
   preferOAuth?: boolean;
+  visitorSessionId?: string | null;
+  callOptions?: WorkspaceVisitorCallOptions;
 }
 
 export interface ResolveSheetResult {
@@ -191,7 +196,10 @@ async function doResolveUserSpreadsheet(
     };
   }
 
-  // 3. 바인딩이 없거나 실제 파일이 삭제된 경우: 구글 드라이브 2단계 스마트 탐색
+  // 2-1. 사용자별 구글 OAuth/Visitor 세션 옵션 확정 (멀티테넌시 완벽 격리)
+  const callOptions = options.callOptions || (await getWorkspaceCallOptionsForEmail(cleanEmail));
+
+  // 3. 바인딩이 없거나 실제 파일이 삭제된 경우: 해당 사용자 구글 드라이브 2단계 스마트 탐색
   let targetSpreadsheetId: string | null = null;
   let isNew = false;
 
@@ -199,7 +207,7 @@ async function doResolveUserSpreadsheet(
   if (folderId) {
     try {
       const folderQuery = `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${targetTitle}' and trashed = false`;
-      const searchRes = await listDriveFiles({ query: folderQuery }, { preferOAuth });
+      const searchRes = await listDriveFiles({ query: folderQuery }, { preferOAuth, ...callOptions });
       const foundFiles = searchRes?.files || [];
       if (foundFiles.length > 0) {
         targetSpreadsheetId = foundFiles[0].id;
@@ -209,11 +217,11 @@ async function doResolveUserSpreadsheet(
     }
   }
 
-  // 3-2. 2차: 폴더 내에서 못 찾았거나 폴더가 지정되지 않은 경우, 전체 드라이브에서 동일 파일명 시트 탐색 (중복 생성 방지 핵심 안전망)
+  // 3-2. 2차: 폴더 내에서 못 찾았거나 폴더가 지정되지 않은 경우, 사용자 드라이브에서 동일 파일명 시트 탐색
   if (!targetSpreadsheetId) {
     try {
       const globalQuery = `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${targetTitle}' and trashed = false`;
-      const searchRes = await listDriveFiles({ query: globalQuery }, { preferOAuth });
+      const searchRes = await listDriveFiles({ query: globalQuery }, { preferOAuth, ...callOptions });
       const foundFiles = searchRes?.files || [];
       if (foundFiles.length > 0) {
         // 가장 최근에 수정된 파일 선택
@@ -221,14 +229,14 @@ async function doResolveUserSpreadsheet(
 
         // 만약 지정 폴더가 있는데 루트 등 다른 곳에 있었다면 폴더로 이동
         if (folderId && targetSpreadsheetId) {
-          await moveDriveFile(targetSpreadsheetId, folderId, preferOAuth).catch(() => {});
+          await callDriveTool("drive_move", { fileId: targetSpreadsheetId, destFolderId: folderId, preferOAuth }, callOptions).catch(() => {});
         }
 
         // 만약 중복으로 생성된 여분의 동일 파일들이 있다면 2번째부터는 자동으로 휴지통 정리(Self-Healing)
         if (foundFiles.length > 1) {
           console.log(`[SheetBinding] Cleaning up ${foundFiles.length - 1} duplicate sheets for '${targetTitle}'...`);
           for (let i = 1; i < foundFiles.length; i++) {
-            trashDriveFile(foundFiles[i].id, preferOAuth).catch(() => {});
+            callDriveTool("drive_trash", { fileId: foundFiles[i].id, preferOAuth }, callOptions).catch(() => {});
           }
         }
       }
@@ -237,20 +245,20 @@ async function doResolveUserSpreadsheet(
     }
   }
 
-  // 4. 드라이브 전체에도 없으면 그때에만 최초 1회 신규 생성
+  // 4. 드라이브 전체에도 없으면 그때에만 최초 1회 신규 생성 (해당 사용자 개인 드라이브에 생성)
   if (!targetSpreadsheetId) {
     try {
       const createRes = await callSheetsTool(
         "sheets_create_spreadsheet",
         { title: targetTitle },
-        { preferOAuth }
+        { preferOAuth, ...callOptions }
       );
       targetSpreadsheetId = createRes?.spreadsheetId || createRes?.id || null;
       isNew = true;
 
       // 지정 폴더가 있으면 폴더로 이동
       if (targetSpreadsheetId && folderId) {
-        await moveDriveFile(targetSpreadsheetId, folderId, preferOAuth).catch(() => {});
+        await callDriveTool("drive_move", { fileId: targetSpreadsheetId, destFolderId: folderId, preferOAuth }, callOptions).catch(() => {});
       }
     } catch (createErr: any) {
       console.error(`[SheetBinding] Failed to create spreadsheet ${targetTitle}:`, createErr);

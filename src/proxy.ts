@@ -80,21 +80,7 @@ function resolveBrowserClientIpForMcp(request: NextRequest): string | undefined 
 /** Forward this site's origin so EGDesk can bind visitor sessions to this site only. */
 function visitorForwardHeaders(request: NextRequest): Record<string, string> {
   const headers = buildEgdeskHeaders();
-  const fromVisitor = request.headers.get('x-visitor-origin')?.trim();
-  const fromOrigin = request.headers.get('origin')?.trim();
-  let origin = fromVisitor || fromOrigin || '';
-  if (!origin || origin === 'null') {
-    const referer = request.headers.get('referer')?.trim();
-    if (referer) {
-      try {
-        origin = new URL(referer).origin;
-      } catch {
-        origin = request.nextUrl.origin;
-      }
-    } else {
-      origin = request.nextUrl.origin;
-    }
-  }
+  const origin = request.headers.get('origin') || request.nextUrl.origin;
   headers['Origin'] = origin;
   headers['X-Visitor-Origin'] = origin;
   const clientIp = resolveBrowserClientIpForMcp(request);
@@ -103,6 +89,201 @@ function visitorForwardHeaders(request: NextRequest): Record<string, string> {
 }
 
 /** Forward opt-in visitor session headers to Workspace MCP tool calls. */
+function originFromEnvValue(value?: string | null): string | null {
+  const raw = (value || '').trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    try {
+      return new URL(`https://${raw}`).origin;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function runtimeEnv(key: string): string | undefined {
+  try {
+    if (typeof process === 'undefined' || !process.env) return undefined;
+    return process.env[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function headerFirst(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  const first = value.split(',')[0]?.trim();
+  return first || undefined;
+}
+
+function resolvePublicRequestOrigin(request: NextRequest): string | null {
+  const host =
+    headerFirst(request.headers.get('x-forwarded-host')) ||
+    headerFirst(request.headers.get('host')) ||
+    request.nextUrl.host;
+  if (!host) return null;
+  const proto =
+    headerFirst(request.headers.get('x-forwarded-proto')) ||
+    (host.includes('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https');
+  try {
+    return new URL(`${proto}://${host}`).origin;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeHostname(host: string): string {
+  return host.toLowerCase().replace(/:\d+$/, '');
+}
+
+function isKnownTunnelHostname(hostname: string): boolean {
+  const h = normalizeHostname(hostname);
+  if (
+    h === 'tunneling-service.onrender.com' ||
+    h === 'egdesk.cloud' ||
+    h === 'www.egdesk.cloud'
+  ) {
+    return true;
+  }
+  return h.endsWith('.egdesk.cloud');
+}
+
+function isWwwAlternateOfCanonical(requestHost: string, canonicalOrigin: string): boolean {
+  try {
+    const canonicalHost = new URL(canonicalOrigin).hostname.toLowerCase();
+    if (canonicalHost.startsWith('www.')) return false;
+    const bare = canonicalHost.replace(/^www\./, '');
+    const h = normalizeHostname(requestHost);
+    return h === `www.${bare}`;
+  } catch {
+    return false;
+  }
+}
+
+function resolveCanonicalVisitorOrigin(request: NextRequest): string | null {
+  const fromHeader = originFromEnvValue(request.headers.get('x-egdesk-canonical-visitor-origin'));
+  if (fromHeader) return fromHeader;
+  const fromRuntime =
+    runtimeEnv('EGDESK_CANONICAL_VISITOR_ORIGIN') ||
+    runtimeEnv('NEXT_PUBLIC_EGDESK_VISITOR_ORIGIN');
+  return originFromEnvValue(fromRuntime);
+}
+
+function isCanonicalRedirectEnabled(request: NextRequest): boolean {
+  const fromHeader = (request.headers.get('x-egdesk-canonical-redirect-enabled') || '').trim();
+  if (fromHeader === '1' || fromHeader.toLowerCase() === 'true') return true;
+  return runtimeEnv('EGDESK_CANONICAL_REDIRECT_ENABLED') === '1';
+}
+
+function isHtmlNavigation(request: NextRequest): boolean {
+  const accept = request.headers.get('accept') || '';
+  const secFetchDest = request.headers.get('sec-fetch-dest');
+  if (accept.includes('text/html') || accept.includes('application/xhtml+xml')) return true;
+  if (!secFetchDest) return true;
+  return secFetchDest === 'document' || secFetchDest === 'iframe';
+}
+
+function resolveEgdeskBasePathForRedirect(request: NextRequest): string {
+  const fromHeader = (request.headers.get('x-egdesk-base-path') || '').trim();
+  if (fromHeader) return fromHeader.replace(/\/$/, '');
+  return (
+    runtimeEnv('EGDESK_BASE_PATH') || runtimeEnv('NEXT_PUBLIC_EGDESK_BASE_PATH') || ''
+  ).replace(/\/$/, '');
+}
+
+function stripBasePathFromPathname(pathname: string, basePath: string): string {
+  if (!basePath) return pathname;
+  if (pathname === basePath || pathname.startsWith(basePath + '/')) {
+    return pathname.slice(basePath.length) || '/';
+  }
+  return pathname;
+}
+
+function shouldSkipCanonicalRedirectPath(pathname: string, basePath = ''): boolean {
+  const path = stripBasePathFromPathname(pathname, basePath);
+  if (path.startsWith('/api/')) return true;
+  if (path.startsWith('/_next/')) return true;
+  if (path.includes('__')) return true;
+  return false;
+}
+
+function isTunnelPrefixedCodingUrl(pathname: string, basePath = ''): boolean {
+  if (/^\/t\/[^/]+\/p\/[^/]+(\/|$)/.test(pathname)) return true;
+  const stripped = stripBasePathFromPathname(pathname, basePath);
+  if (stripped !== pathname && /^\/t\/[^/]+\/p\/[^/]+(\/|$)/.test(stripped)) return true;
+  return false;
+}
+
+function isTunnelUrlCanonicalRedirectOptIn(request: NextRequest): boolean {
+  const fromHeader = (request.headers.get('x-egdesk-canonical-redirect-tunnel-urls') || '').trim();
+  if (fromHeader === '1' || fromHeader.toLowerCase() === 'true') return true;
+  return runtimeEnv('EGDESK_CANONICAL_REDIRECT_TUNNEL_URLS') === '1';
+}
+
+function resolveCanonicalVisitorRedirect(request: NextRequest): { url: string; status: number } | null {
+  if (!isCanonicalRedirectEnabled(request)) return null;
+  const canonical = resolveCanonicalVisitorOrigin(request);
+  if (!canonical) return null;
+  if (request.method !== 'GET') return null;
+  const { pathname, search } = request.nextUrl;
+  const basePath = resolveEgdeskBasePathForRedirect(request);
+  if (shouldSkipCanonicalRedirectPath(pathname, basePath)) return null;
+  if (!isHtmlNavigation(request)) return null;
+
+  const publicOrigin = resolvePublicRequestOrigin(request);
+  if (publicOrigin && publicOrigin === canonical) return null;
+
+  const requestHost = normalizeHostname(
+    headerFirst(request.headers.get('x-forwarded-host')) ||
+      headerFirst(request.headers.get('host')) ||
+      request.nextUrl.host,
+  );
+  const canonicalHost = normalizeHostname(new URL(canonical).host);
+  if (requestHost === canonicalHost) return null;
+
+  const wwwAlias = isWwwAlternateOfCanonical(requestHost, canonical);
+  if (wwwAlias) {
+    // www → apex on the same project (custom domain alias).
+  } else if (isKnownTunnelHostname(requestHost)) {
+    if (
+      isTunnelPrefixedCodingUrl(pathname, basePath) &&
+      !isTunnelUrlCanonicalRedirectOptIn(request)
+    ) {
+      return null;
+    }
+  } else {
+    return null;
+  }
+
+  let path = stripBasePathFromPathname(pathname, basePath);
+  const url = new URL(
+    (path.startsWith('/') ? path : `/${path}`) + search,
+    canonical,
+  ).toString();
+
+  if (publicOrigin) {
+    try {
+      const current = new URL(
+        (path.startsWith('/') ? path : `/${path}`) + search,
+        publicOrigin,
+      ).toString();
+      if (current === url) return null;
+    } catch {
+      // ignore
+    }
+  }
+
+  return { url, status: wwwAlias ? 308 : 307 };
+}
+
+function maybeRedirectToCanonicalVisitorSite(request: NextRequest): NextResponse | null {
+  const resolved = resolveCanonicalVisitorRedirect(request);
+  if (!resolved) return null;
+  return NextResponse.redirect(resolved.url, resolved.status);
+}
+
 function workspaceForwardHeaders(request: NextRequest): Record<string, string> {
   const headers = buildEgdeskHeaders();
   const authorization = request.headers.get('authorization');
@@ -113,6 +294,7 @@ function workspaceForwardHeaders(request: NextRequest): Record<string, string> {
     const origin =
       request.headers.get('x-visitor-origin') ||
       request.headers.get('origin') ||
+      process.env.EGDESK_CANONICAL_VISITOR_ORIGIN ||
       process.env.NEXT_PUBLIC_EGDESK_VISITOR_ORIGIN ||
       process.env.NEXT_PUBLIC_SITE_URL ||
       request.nextUrl.origin;
@@ -123,6 +305,9 @@ function workspaceForwardHeaders(request: NextRequest): Record<string, string> {
 }
 
 export async function proxy(request: NextRequest) {
+  const canonicalRedirect = maybeRedirectToCanonicalVisitorSite(request);
+  if (canonicalRedirect) return canonicalRedirect;
+
   const { pathname } = request.nextUrl;
 
   // Intercept __user_data_proxy requests

@@ -164,9 +164,9 @@ export async function syncAndMatchBankDepositFromPhone(targetRequestId?: string)
               // 1. 토큰 지급
               const creditRes = await creditTokens(
                 req.user_email,
-                req.tokens_to_credit,
+                Number(req.tokens_to_credit) || 0,
                 req.package_name,
-                req.amount_krw,
+                Number(req.amount_krw) || 0,
                 `구글 메시지 감지 (${parsedSms.bankName || "은행"} / ${reqDepositor})`
               );
 

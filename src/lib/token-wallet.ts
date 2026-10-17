@@ -399,15 +399,17 @@ export async function deductTokens(
  */
 export async function creditTokens(
   userEmail: string,
-  tokensToAdd: number,
+  tokensToAdd: number | string,
   packageName: string,
-  amountKrw: number,
+  amountKrw: number | string,
   paymentMethod: string = "간편결제/카드"
 ): Promise<{ success: boolean; newBalance: number }> {
   try {
+    const numTokens = Math.max(0, Number(tokensToAdd) || 0);
+    const numAmount = Math.max(0, Number(amountKrw) || 0);
     const wallet = await getOrCreateUserWallet(userEmail);
-    const newBalance = wallet.balanceTokens + tokensToAdd;
-    const newPurchased = wallet.totalPurchasedTokens + tokensToAdd;
+    const newBalance = (Number(wallet.balanceTokens) || 0) + numTokens;
+    const newPurchased = (Number(wallet.totalPurchasedTokens) || 0) + numTokens;
     const now = new Date().toISOString();
 
     // 1. 지갑 잔액 갱신
@@ -432,8 +434,8 @@ export async function creditTokens(
         order_id: orderId,
         user_email: userEmail.toLowerCase().trim(),
         package_name: packageName,
-        amount_krw: amountKrw,
-        tokens_credited: tokensToAdd,
+        amount_krw: numAmount,
+        tokens_credited: numTokens,
         pg_provider: "portone_simulation",
         payment_method: paymentMethod,
         status: "PAID",

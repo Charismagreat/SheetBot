@@ -16,6 +16,7 @@ import { ensureBridgeTokenForProject } from "@/lib/bridge-token-persist";
 import { resolveGasBridgePostEndpoint } from "@/lib/bridge-public-url";
 import { wrapProject, updateAutomation } from "@/lib/gas/sheetbot-deploy-service";
 import { SheetbotServiceError, sheetbotErrorResponse } from "@/lib/wrapping/sheetbot-api-error";
+import { buildSheetbotHandoffPrompt } from "@/lib/prompt-template";
 
 export interface SheetBotProject {
   id: string;
@@ -237,12 +238,18 @@ export async function POST(request: Request) {
       const bridgeUrl = resolveGasBridgePostEndpoint(request, bridgeToken);
 
       try {
+        const fullPromptTemplate = buildSheetbotHandoffPrompt({
+          projectName: name,
+          sheetUrl: spreadsheetUrl,
+          bridgeUrl,
+          requirement: prompt,
+        });
         const wrapResult = await wrapProject({
           projectId,
           userEmail,
           visitorOptions,
           bridgeUrl,
-          promptTemplate: prompt || name,
+          promptTemplate: fullPromptTemplate,
           preflightBalance: true,
         });
         const refreshed = await queryTable("sheetbot_projects", {
@@ -332,12 +339,18 @@ export async function POST(request: Request) {
 
     if (requiresGasCloud && spreadsheetId) {
       try {
+        const fullPromptTemplate = buildSheetbotHandoffPrompt({
+          projectName: name,
+          sheetUrl: spreadsheetUrl,
+          bridgeUrl,
+          requirement: prompt || summary,
+        });
         const wrapResult = await wrapProject({
           projectId,
           userEmail,
           visitorOptions,
           bridgeUrl,
-          promptTemplate: summary || name,
+          promptTemplate: fullPromptTemplate,
           userAutomationCode: userAutomationGs || undefined,
           preflightBalance: true,
         });

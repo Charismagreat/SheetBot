@@ -93,7 +93,7 @@ jobs:
         if: startsWith(github.ref, 'refs/heads/main')
         with:
           tag_name: user-v${{ steps.get_version.outputs.VERSION_NAME }}
-          body: "시트봇 모바일 에이전트 v${{ steps.get_version.outputs.VERSION_NAME }} 릴리즈\n• 📁 [녹음 파일 직접 선택 업로드] 다른 폰/외부에서 전달받은 녹음 파일 직접 선택 업로드 및 스테레오/성문 기반 '나' vs '상대방' 화자 분리\n• 🛡️ [유선전화/대표번호 자동 제외] 통화 종료 모바일 명함, 부재중 자동 답장, 영수증 문자 발송 시 일반 유선/대표번호 자동 제외 필터링\n• 📞 [인콜 플로팅 요약] 전화 수신 시 화면 상단 구글 시트 고객 정보 및 직전 통화 요약 카드 자동 표출"
+          body: "시트봇 모바일 에이전트 v${{ steps.get_version.outputs.VERSION_NAME }} 릴리즈\n• ⚡ [대용량 통화 녹음 2MB 청크 분할 업로드] 10MB 초과 대용량 통화 녹음도 프록시 본문 제한 없이 안정적 분할 전송\n• 🛡️ [Google Workspace 다중 회원 격리] 각 사용자별 전용 구글 스프레드시트 및 드라이브 보관함 연동\n• 📁 [녹음 파일 직접 선택 업로드] 외부 녹음 파일 직접 선택 업로드 및 AI 화자 분리\n• 📞 [인콜 플로팅 요약] 전화 수신 시 화면 상단 구글 시트 고객 정보 및 통화 요약 카드 자동 표출"
           files: release-apk/SheetBotAgent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

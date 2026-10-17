@@ -238,6 +238,154 @@ object ChunkedUploader {
     }
 
     /**
+     * 통화 녹음 전용 청크 업로드 (/api/user/recordings/chunks)
+     *
+     * - 범용 /api/user/files/uploads 경로는 이지데스크 파일 스토리지에만 저장되고(complete 단계 HTTP 500)
+     *   통화 녹음 파이프라인(구글 드라이브 / 시트 대장 / AI 분석)을 실행하지 않습니다.
+     * - 이 경로는 서버가 2MB 청크를 재조립한 뒤 기존 통화 녹음 파이프라인에 그대로 투입합니다.
+     * - 단일 본문 업로드는 이지데스크 프록시의 10MB 본문 제한으로 잘리므로 대용량 녹음은 반드시 이 경로를 사용합니다.
+     */
+    suspend fun uploadCallRecordingChunked(
+        file: File,
+        fileName: String,
+        userEmail: String,
+        contactName: String,
+        callTime: String,
+        folderName: String,
+        autoRecordSheet: Boolean,
+        channelCount: Int,
+        onProgress: ((uploadedChunks: Int, totalChunks: Int) -> Unit)? = null
+    ): ChunkedUploadResult = withContext(Dispatchers.IO) {
+        if (!file.exists() || file.length() == 0L) {
+            return@withContext ChunkedUploadResult(
+                success = false,
+                error = "업로드할 파일이 존재하지 않거나 0바이트입니다: ${file.absolutePath}"
+            )
+        }
+
+        val totalBytes = file.length()
+        val hosts = listOf(ApiClient.PRIMARY_HOST, ApiClient.FALLBACK_HOST)
+        var lastError = "통화 녹음 청크 업로드에 실패했습니다."
+
+        for (host in hosts) {
+            try {
+                Log.i(TAG, "🚀 [통화 녹음 청크 업로드 개시] $fileName (${totalBytes / 1024} KB) -> $host")
+
+                // 1단계: 세션 초기화
+                val initJson = JSONObject().apply {
+                    put("userEmail", userEmail)
+                    put("fileName", fileName)
+                    put("totalSize", totalBytes)
+                    put("contactName", contactName)
+                    put("callTime", callTime)
+                    put("folderName", folderName)
+                    put("autoRecordSheet", autoRecordSheet)
+                    put("channelCount", channelCount)
+                }
+                val initReq = Request.Builder()
+                    .url("$host/api/user/recordings/chunks")
+                    .post(initJson.toString().toRequestBody(JSON_MEDIA_TYPE))
+                    .header("x-sheetbot-user-email", userEmail)
+                    .build()
+                val initRes = chunkClient.newCall(initReq).execute()
+                val initJsonRes = try { JSONObject(initRes.body?.string() ?: "") } catch (_: Exception) { JSONObject() }
+                if (!initRes.isSuccessful || !initJsonRes.optBoolean("success", false)) {
+                    lastError = initJsonRes.optString("error", "초기화 실패 (HTTP ${initRes.code})")
+                    Log.w(TAG, "[$host] 통화 녹음 청크 세션 초기화 실패: $lastError")
+                    continue
+                }
+
+                val uploadId = initJsonRes.optString("uploadId")
+                val chunkSize = initJsonRes.optInt("chunkSize", 2 * 1024 * 1024)
+                val totalChunks = initJsonRes.optInt(
+                    "totalChunks",
+                    Math.ceil(totalBytes.toDouble() / chunkSize).toInt()
+                )
+                Log.i(TAG, "📦 [통화 녹음 세션 발급] uploadId=$uploadId, chunk=${chunkSize / 1024}KB x $totalChunks")
+
+                // 2단계: 청크 순차 전송 (청크당 최대 3회 재시도)
+                val buffer = ByteArray(chunkSize)
+                var allOk = true
+                FileInputStream(file).use { fis ->
+                    for (index in 0 until totalChunks) {
+                        // 청크 크기를 정확히 채워 읽기 (read()는 요청보다 적게 반환할 수 있음)
+                        var filled = 0
+                        while (filled < chunkSize) {
+                            val n = fis.read(buffer, filled, chunkSize - filled)
+                            if (n <= 0) break
+                            filled += n
+                        }
+                        if (filled <= 0) break
+                        val chunkBytes = if (filled == chunkSize) buffer.copyOf() else buffer.copyOf(filled)
+                        val chunkSha = sha256Hex(chunkBytes)
+                        val partUrl = "$host/api/user/recordings/chunks/$uploadId/parts/$index"
+
+                        var ok = false
+                        var errMsg = ""
+                        for (attempt in 1..MAX_RETRIES) {
+                            try {
+                                val req = Request.Builder()
+                                    .url(partUrl)
+                                    .put(chunkBytes.toRequestBody(OCTET_STREAM_MEDIA_TYPE))
+                                    .header("x-chunk-sha256", chunkSha)
+                                    .build()
+                                val res = chunkClient.newCall(req).execute()
+                                val resJson = try { JSONObject(res.body?.string() ?: "") } catch (_: Exception) { JSONObject() }
+                                if (res.isSuccessful && resJson.optBoolean("success", false)) {
+                                    ok = true
+                                    break
+                                }
+                                errMsg = resJson.optString("error", "HTTP ${res.code}")
+                            } catch (e: Exception) {
+                                errMsg = e.localizedMessage ?: "청크 전송 예외"
+                            }
+                            if (attempt < MAX_RETRIES) delay(500L * attempt * attempt)
+                        }
+
+                        if (!ok) {
+                            Log.e(TAG, "❌ 통화 녹음 청크 전송 실패 (index=$index): $errMsg")
+                            lastError = "청크 $index 전송 실패: $errMsg"
+                            allOk = false
+                            break
+                        }
+                        onProgress?.invoke(index + 1, totalChunks)
+                    }
+                }
+                if (!allOk) continue
+
+                // 3단계: 재조립 및 통화 녹음 파이프라인 트리거
+                val completeReq = Request.Builder()
+                    .url("$host/api/user/recordings/chunks/$uploadId/complete")
+                    .post("{}".toRequestBody(JSON_MEDIA_TYPE))
+                    .header("x-sheetbot-user-email", userEmail)
+                    .build()
+                val completeRes = completeClient.newCall(completeReq).execute()
+                val completeJson = try { JSONObject(completeRes.body?.string() ?: "") } catch (_: Exception) { JSONObject() }
+                if (completeRes.isSuccessful && completeJson.optBoolean("success", false)) {
+                    Log.i(TAG, "🎉 [통화 녹음 청크 업로드 완료] $fileName")
+                    return@withContext ChunkedUploadResult(
+                        success = true,
+                        fileId = completeJson.optString("fileId").takeIf { it.isNotBlank() },
+                        fileName = completeJson.optString("fileName", fileName),
+                        folderName = completeJson.optString("folderName", folderName),
+                        webViewLink = completeJson.optString("webViewLink").takeIf { it.isNotBlank() },
+                        spreadsheetUrl = completeJson.optString("spreadsheetUrl").takeIf { it.isNotBlank() },
+                        message = completeJson.optString("message", "업로드 완료"),
+                        uploadId = uploadId
+                    )
+                }
+                lastError = completeJson.optString("error", "병합 완료 처리 실패 (HTTP ${completeRes.code})")
+                Log.w(TAG, "[$host] 통화 녹음 complete 실패: $lastError")
+            } catch (e: Exception) {
+                lastError = e.localizedMessage ?: "통신 중 오류 발생"
+                Log.w(TAG, "[$host] 통화 녹음 청크 업로드 예외: ${e.message}")
+            }
+        }
+
+        ChunkedUploadResult(success = false, error = lastError)
+    }
+
+    /**
      * 바이트 배열의 SHA-256 해시를 16진수 문자열로 반환
      */
     private fun sha256Hex(bytes: ByteArray): String {

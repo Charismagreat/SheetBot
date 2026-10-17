@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     // 중복 접수 방어: 동일 사용자, 동일 카드/제목으로 1분 이내 접수건 확인
     if (userEmail) {
       const recent = await queryTable('sheetbot_feature_requests', {
-        filter: {
+        filters: {
           user_email: userEmail,
           title: title,
         },
@@ -100,7 +100,7 @@ export async function GET(req: NextRequest) {
     }
 
     const result = await queryTable('sheetbot_feature_requests', {
-      filter: { user_email: userEmail },
+      filters: { user_email: userEmail },
       limit: 50,
       orderBy: 'id',
       orderDirection: 'DESC',

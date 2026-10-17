@@ -21,6 +21,7 @@ import { setupDatabase } from "@/lib/setup-db";
 import { wrapProject } from "@/lib/gas/sheetbot-deploy-service";
 import { createUserSpreadsheet } from "@/lib/sheets/create-user-spreadsheet";
 import { SheetbotServiceError, sheetbotErrorResponse } from "@/lib/wrapping/sheetbot-api-error";
+import { buildSheetbotHandoffPrompt } from "@/lib/prompt-template";
 
 function extractSpreadsheetId(urlOrId: string): string | null {
   if (!urlOrId) return null;
@@ -208,13 +209,13 @@ export async function POST(request: NextRequest) {
     if (!legacyBridge && spreadsheetId) {
       const token = await ensureBridgeTokenForProject(project.id, userEmail, project.bridge_token);
       const bridgeUrl = resolveGasBridgePostEndpoint(request, token);
-      const promptTemplate = isNewSheet
-        ? `아래 웹 주소를 통해 새 구글 시트의 컬럼 구조와 자동화 스크립트를 처음부터 설계하고 주입해줘:
-웹 주소: ${bridgeUrl}
-요구사항: ${defaultRequirement}`
-        : `아래 웹 주소를 통해 내 구글 시트의 헤더 구조와 기존 코드를 확인하고, 필요한 기능 코드를 주입해줘:
-웹 주소: ${bridgeUrl}
-요구사항: ${defaultRequirement}`;
+      const promptTemplate = buildSheetbotHandoffPrompt({
+        projectName: project.name || tplTitle,
+        sheetUrl: project.spreadsheet_url || sheetUrlResolved,
+        bridgeUrl,
+        requirement: defaultRequirement,
+        isNewSheet,
+      });
 
       try {
         const wrapResult = await wrapProject({
@@ -236,13 +237,13 @@ export async function POST(request: NextRequest) {
 
     const token = await ensureBridgeTokenForProject(project.id, userEmail, project.bridge_token);
     const bridgeUrl = resolveGasBridgePostEndpoint(request, token);
-    const promptTemplate = isNewSheet
-      ? `아래 웹 주소를 통해 새 구글 시트의 컬럼 구조와 자동화 스크립트를 처음부터 설계하고 주입해줘:
-웹 주소: ${bridgeUrl}
-요구사항: ${defaultRequirement}`
-      : `아래 웹 주소를 통해 내 구글 시트의 헤더 구조와 기존 코드를 확인하고, 필요한 기능 코드를 주입해줘:
-웹 주소: ${bridgeUrl}
-요구사항: ${defaultRequirement}`;
+    const promptTemplate = buildSheetbotHandoffPrompt({
+      projectName: project.name || tplTitle,
+      sheetUrl: project.spreadsheet_url || sheetUrlResolved,
+      bridgeUrl,
+      requirement: defaultRequirement,
+      isNewSheet,
+    });
 
     return NextResponse.json({
       success: true,

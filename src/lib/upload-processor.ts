@@ -11,6 +11,7 @@ import {
   insertRows,
   updateRows,
   queryTable,
+  WorkspaceVisitorCallOptions,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { getAiModelSettings } from "@/lib/ai-settings";
@@ -20,18 +21,13 @@ import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { recordAiUsageLog } from "@/lib/ai-usage";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import { resolveSafeTargetRow } from "@/lib/sheet-fingerprint-guard";
+import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import fs from "fs";
 import path from "path";
 import os from "os";
 
-// 드라이브 폴더 0초 메모리 캐시
-const folderCache = new Map<string, string>([
-  ["[SheetBot] 통화 녹음", "14TuBcWsooWB7_yPqyn6L0imjshpVxFVX"],
-  ["[SheetBot] 영수증 보관함", "1rKVf3Swmi-VifK0fJoME5cdknZgA4H7K"],
-  ["[SheetBot] 명함 보관함", "1PypdJD-D7El1btJ-POyINjP00x7r3rIu"],
-  ["[SheetBot] 스크랩 보관함", "185vGZRGTDY4g6iG_OZdgGCuJ23D4GsHE"],
-  ["[SheetBot] 파일 보관함", "1bRO1aJEEQBUX_R9bFLfZ7C0liZFZjijc"],
-]);
+// 사용자별 격리 드라이브 폴더 캐시
+const userFolderCache = new Map<string, string>();
 
 // 멱등성 및 진행 락 캐시
 const recentFileUploads = new Map<string, { timestamp: number; response: any }>();
@@ -149,8 +145,12 @@ export async function processGenericFile(input: ProcessGenericFileInput): Promis
     ? (buffer.length / (1024 * 1024)).toFixed(2) + " MB"
     : (buffer.length / 1024).toFixed(1) + " KB";
 
+  // 0. 사용자별 구글 OAuth/Visitor 세션 옵션 확정 (멀티테넌시 완벽 격리)
+  const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail);
+  const folderCacheKey = `${callOptions?.visitorSessionId || cleanEmail}:${targetFolderName}`;
+
   // 3. 구글 드라이브 대상 폴더 탐색 및 미존재 시 자동 생성
-  let targetFolderId: string | null = folderCache.get(targetFolderName) || null;
+  let targetFolderId: string | null = userFolderCache.get(folderCacheKey) || null;
 
   if (!targetFolderId) {
     try {
@@ -161,7 +161,7 @@ export async function processGenericFile(input: ProcessGenericFileInput): Promis
       });
       if (bindingQuery?.rows?.[0]?.folder_id) {
         targetFolderId = String(bindingQuery.rows[0].folder_id);
-        folderCache.set(targetFolderName, targetFolderId);
+        userFolderCache.set(folderCacheKey, targetFolderId);
       }
     } catch {}
   }
@@ -170,18 +170,18 @@ export async function processGenericFile(input: ProcessGenericFileInput): Promis
     try {
       const folderSearch = await listDriveFiles({
         query: `mimeType = 'application/vnd.google-apps.folder' and name = '${targetFolderName}' and trashed = false`,
-      }, { preferOAuth: true });
+      }, { preferOAuth: true, ...callOptions });
 
       const existingFolders = folderSearch?.files || [];
       if (existingFolders.length > 0) {
         targetFolderId = existingFolders[0].id;
       } else {
-        const newFolderRes = await createDriveFolder(targetFolderName, undefined, true);
+        const newFolderRes = await callDriveTool("drive_create_folder", { name: targetFolderName, preferOAuth: true }, callOptions).catch(() => null);
         targetFolderId = newFolderRes?.id || (typeof newFolderRes === "string" ? newFolderRes : null);
       }
 
       if (targetFolderId) {
-        folderCache.set(targetFolderName, targetFolderId);
+        userFolderCache.set(folderCacheKey, targetFolderId);
       }
     } catch (folderErr: any) {
       console.warn("[UploadProcessor] Folder resolve warning:", folderErr.message);
@@ -190,9 +190,9 @@ export async function processGenericFile(input: ProcessGenericFileInput): Promis
 
   if (!targetFolderId && ocrType !== "BUSINESS_CARD") {
     try {
-      const retryCreate = await createDriveFolder(targetFolderName, undefined, true);
+      const retryCreate = await callDriveTool("drive_create_folder", { name: targetFolderName, preferOAuth: true }, callOptions).catch(() => null);
       targetFolderId = retryCreate?.id || (typeof retryCreate === "string" ? retryCreate : null);
-      if (targetFolderId) folderCache.set(targetFolderName, targetFolderId);
+      if (targetFolderId) userFolderCache.set(folderCacheKey, targetFolderId);
     } catch {}
     if (!targetFolderId) {
       throw new Error(`대상 구글 드라이브 폴더('${targetFolderName}')를 특정하지 못했습니다.`);
@@ -256,11 +256,11 @@ export async function processGenericFile(input: ProcessGenericFileInput): Promis
         try {
           let actualFolderId = capturedFolderId;
           if (!actualFolderId) {
-            actualFolderId = folderCache.get(targetFolderName) || null;
+            actualFolderId = userFolderCache.get(folderCacheKey) || null;
             if (!actualFolderId) {
-              const newFolderRes = await createDriveFolder(targetFolderName, undefined, true).catch(() => null);
+              const newFolderRes = await callDriveTool("drive_create_folder", { name: targetFolderName, preferOAuth: true }, callOptions).catch(() => null);
               actualFolderId = newFolderRes?.id || (typeof newFolderRes === "string" ? newFolderRes : null);
-              if (actualFolderId) folderCache.set(targetFolderName, actualFolderId);
+              if (actualFolderId) userFolderCache.set(folderCacheKey, actualFolderId);
             }
           }
 
@@ -270,6 +270,7 @@ export async function processGenericFile(input: ProcessGenericFileInput): Promis
             defaultTitle: defaultSheetTitle,
             folderId: actualFolderId || undefined,
             preferOAuth: true,
+            callOptions,
           }).catch(() => null);
 
           const targetSpreadsheetId = resolved?.spreadsheetId;
@@ -279,7 +280,7 @@ export async function processGenericFile(input: ProcessGenericFileInput): Promis
             if (actualFolderId) {
               const existingSearch = await listDriveFiles({
                 query: `'${actualFolderId}' in parents and name = '${capturedFileName}' and trashed = false`,
-              }, { preferOAuth: true }).catch(() => null);
+              }, { preferOAuth: true, ...callOptions }).catch(() => null);
 
               if (existingSearch?.files && existingSearch.files.length > 0) {
                 const bgId = existingSearch.files[0].id;
@@ -294,6 +295,7 @@ export async function processGenericFile(input: ProcessGenericFileInput): Promis
                 folderId: actualFolderId,
                 mimeType: capturedMimeType,
                 userEmail: cleanEmail,
+                callOptions,
               }).catch(() => null);
 
               if (uploadRes?.id) {
@@ -320,7 +322,7 @@ export async function processGenericFile(input: ProcessGenericFileInput): Promis
                 "✅ 분석 완료",
               ]],
               preferOAuth: true,
-            }).catch(() => {});
+            }, callOptions).catch(() => {});
           }
         } catch (bgErr: any) {
           console.warn("[UploadProcessor] Card background pipeline error:", bgErr.message);
@@ -340,6 +342,7 @@ export async function processGenericFile(input: ProcessGenericFileInput): Promis
       folderId: targetFolderId!,
       mimeType,
       userEmail: cleanEmail,
+      callOptions,
     });
   } catch (upErr: any) {
     console.error("[UploadProcessor] Drive upload error:", upErr);
@@ -358,6 +361,7 @@ export async function processGenericFile(input: ProcessGenericFileInput): Promis
       defaultTitle,
       folderId: targetFolderId || undefined,
       preferOAuth: true,
+      callOptions,
     });
 
     const targetSpreadsheetId = resolved.spreadsheetId;
@@ -383,7 +387,7 @@ export async function processGenericFile(input: ProcessGenericFileInput): Promis
           "⏳ AI 영수증 분석중...",
         ]],
         preferOAuth: true,
-      });
+      }, callOptions);
 
       const updatedRange = appendResult?.updates?.updatedRange || "";
       const rowMatch = updatedRange.match(/!A(\d+):/);
@@ -422,7 +426,7 @@ export async function processGenericFile(input: ProcessGenericFileInput): Promis
                 "✅ 분석 완료",
               ]],
               preferOAuth: true,
-            }).catch(() => {});
+            }, callOptions).catch(() => {});
           }
         } catch (err: any) {
           console.warn("[UploadProcessor] Async receipt OCR warning:", err.message);
@@ -444,7 +448,7 @@ export async function processGenericFile(input: ProcessGenericFileInput): Promis
           deviceId,
         ]],
         preferOAuth: true,
-      }).catch(() => {});
+      }, callOptions).catch(() => {});
     }
   }
 

@@ -326,7 +326,7 @@ async function getEmailFromNextAuthCookie(req?: Request): Promise<string | null>
   return null;
 }
 
-async function lookupVisitorSessionIdForEmail(email: string): Promise<string | null> {
+export async function lookupVisitorSessionIdForEmail(email: string): Promise<string | null> {
   const normalized = email.toLowerCase().trim();
   if (!normalized.includes("@")) return null;
   try {
@@ -347,6 +347,32 @@ async function lookupVisitorSessionIdForEmail(email: string): Promise<string | n
 }
 
 /**
+ * 특정 이메일 사용자의 작업공간(Drive/Sheets/Apps Script) 호출 옵션 생성
+ * - DB에 저장된 visitor_session_id가 있으면 해당 세션으로 격리 호출 (asVisitor: true)
+ * - 관리자이고 세션이 없는 경우에만 호스트 기본 권한({}) 폴백
+ */
+export async function getWorkspaceCallOptionsForEmail(
+  email: string,
+  req?: Request
+): Promise<WorkspaceVisitorCallOptions> {
+  const normalized = email.toLowerCase().trim();
+  const visitorSessionId = await lookupVisitorSessionIdForEmail(normalized);
+  const origin = req ? resolveVisitorSiteOriginFromRequest(req) : resolveVisitorSiteOriginFromRequest();
+  if (visitorSessionId) {
+    return {
+      asVisitor: true,
+      visitorSessionId,
+      visitorOrigin: origin,
+    };
+  }
+  const isAdmin = await isCurrentUserAdmin(normalized);
+  if (isAdmin) {
+    return {};
+  }
+  return {};
+}
+
+/**
  * Apps Script / Drive MCP calls for end users (visitor OAuth on EGDesk).
  */
 export async function buildWorkspaceVisitorCallOptions(
@@ -361,8 +387,13 @@ export async function buildWorkspaceVisitorCallOptions(
       visitorOrigin: resolveVisitorSiteOriginFromRequest(req),
     };
   }
-  const isAdmin = userEmail
-    ? await isCurrentUserAdmin(userEmail)
+  const targetEmail = userEmail || await getCurrentUserEmail().catch(() => null);
+  if (targetEmail) {
+    const emailOptions = await getWorkspaceCallOptionsForEmail(targetEmail, req);
+    if (emailOptions.asVisitor) return emailOptions;
+  }
+  const isAdmin = targetEmail
+    ? await isCurrentUserAdmin(targetEmail)
     : await isCurrentUserAdmin();
   if (isAdmin) {
     return {};
@@ -370,83 +401,141 @@ export async function buildWorkspaceVisitorCallOptions(
   return {};
 }
 
+/** 방문자 세션 검증 결과 캐시 (sid|origin → 결과). 연결됨 60초 / 실패 15초 */
+const visitorSessionCheckCache = new Map<string, { connected: boolean; email: string | null; ts: number }>();
+
+async function checkVisitorSessionConnected(
+  sessionId: string,
+  origin: string,
+): Promise<{ connected: boolean; email: string | null }> {
+  const key = `${sessionId}|${origin}`;
+  const cached = visitorSessionCheckCache.get(key);
+  if (cached && Date.now() - cached.ts < (cached.connected ? 60_000 : 15_000)) {
+    return { connected: cached.connected, email: cached.email };
+  }
+  let result = { connected: false, email: null as string | null };
+  try {
+    const { getServerEgdeskApiUrl } = await import("@/lib/egdesk-helpers");
+    const res = await fetch(`${getServerEgdeskApiUrl()}/visitor-google/tools/call`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${sessionId}`,
+        Origin: origin,
+        "X-Visitor-Origin": origin,
+      },
+      body: JSON.stringify({ tool: "status", arguments: {} }),
+      signal: AbortSignal.timeout(5_000),
+    });
+    const json: any = await res.json().catch(() => null);
+    const status = json?.result?.content?.[0]?.text ? JSON.parse(json.result.content[0].text) : json;
+    result = {
+      connected: Boolean(status?.connected),
+      email: status?.email ? String(status.email).toLowerCase().trim() : null,
+    };
+  } catch {
+    /* treat as not connected */
+  }
+  visitorSessionCheckCache.set(key, { ...result, ts: Date.now() });
+  if (visitorSessionCheckCache.size > 500) {
+    const oldest = visitorSessionCheckCache.keys().next().value;
+    if (oldest) visitorSessionCheckCache.delete(oldest);
+  }
+  return result;
+}
+
+function extractApiKey(h: Headers): string {
+  const authHeader = h.get("authorization") || "";
+  const key = authHeader.startsWith("Bearer ")
+    ? authHeader.substring(7).trim()
+    : h.get("x-api-key")?.trim() || h.get("x-sheetbot-key")?.trim() || "";
+  return key.startsWith("sk_sheetbot_") ? key : "";
+}
+
+function originFromHeaders(h: Headers): string {
+  const forwardedHost = h.get("x-forwarded-host");
+  if (forwardedHost) {
+    const proto = h.get("x-forwarded-proto") || "https";
+    return `${proto}://${forwardedHost.split(",")[0].trim()}`;
+  }
+  return resolveVisitorSiteOriginFromRequest();
+}
+
 /**
  * 서버 사이드에서 현재 요청의 방문자(Visitor) 세션 ID를 가져옵니다.
- * Request 객체가 전달되면 요청 헤더/쿠키에서, 없으면 next/headers에서 추출합니다.
+ *
+ * 후보 수집 순서: 헤더 → 쿠키(동일 이름 쿠키 전부) → API 키 → DB(sheetbot_users.visitor_session_id)
+ * ⚠️ 재로그인 후에도 브라우저에 30일짜리 옛 egdesk_visitor_session 쿠키(경로가 다른 복수 쿠키 포함)가 남아
+ *    새 세션(DB)을 가리는 문제가 있었으므로, 후보가 2개 이상이면 이지데스크 status로 실제 연결된 세션을 선택합니다.
  */
 export async function getCurrentVisitorSessionId(req?: Request): Promise<string | null> {
-  // 1. 전달된 Request 객체가 있는 경우 헤더와 쿠키에서 추출
-  if (req) {
-    const fromHeader = req.headers.get("x-visitor-session-id") || req.headers.get("x-egdesk-visitor-session");
-    if (fromHeader) return fromHeader.trim();
+  let h: Headers | null = req ? req.headers : null;
+  if (!h) {
+    try {
+      const { headers } = await import("next/headers");
+      h = new Headers(await headers());
+    } catch {
+      h = null;
+    }
+  }
 
-    const cookieHeader = req.headers.get("cookie") || "";
-    const match = cookieHeader.match(/egdesk_visitor_session=([^;]+)/);
-    if (match && match[1]) {
-      return decodeURIComponent(match[1]).trim();
+  const candidates: string[] = [];
+  const push = (v?: string | null) => {
+    const s = (v || "").trim();
+    if (s && !candidates.includes(s)) candidates.push(s);
+  };
+
+  if (h) {
+    push(h.get("x-visitor-session-id") || h.get("x-egdesk-visitor-session"));
+
+    // 동일 이름 쿠키가 여러 개일 수 있음 (경로 차이) → 전부 후보로
+    const cookieHeader = h.get("cookie") || "";
+    for (const m of cookieHeader.matchAll(/(?:^|;\s*)egdesk_visitor_session=([^;]+)/g)) {
+      try {
+        push(decodeURIComponent(m[1]));
+      } catch {
+        push(m[1]);
+      }
     }
 
-    // API Key (Authorization: Bearer sk_sheetbot_... 또는 x-api-key)가 있는 경우 DB에서 visitorSessionId 자동 추출
-    const authHeader = req.headers.get("authorization") || "";
-    let apiKey = "";
-    if (authHeader.startsWith("Bearer ")) {
-      apiKey = authHeader.substring(7).trim();
-    } else {
-      apiKey = req.headers.get("x-api-key")?.trim() || req.headers.get("x-sheetbot-key")?.trim() || "";
-    }
-
-    if (apiKey && apiKey.startsWith("sk_sheetbot_")) {
+    const apiKey = extractApiKey(h);
+    if (apiKey) {
       try {
         const { verifyApiKey } = await import("@/lib/api-keys");
         const keyResult = await verifyApiKey(apiKey);
-        if (keyResult.valid && keyResult.visitorSessionId) {
-          return keyResult.visitorSessionId;
-        }
+        if (keyResult.valid) push(keyResult.visitorSessionId);
       } catch (keyErr) {
         console.warn("[Auth] verifyApiKey for visitorSessionId note:", keyErr);
       }
     }
   }
 
-  // 2. next/headers를 통한 서버 컴포넌트/라우트 핸들러 추출
-  try {
-    const { cookies, headers } = await import("next/headers");
-    const h = await headers();
-    const headerVal = h.get("x-visitor-session-id") || h.get("x-egdesk-visitor-session");
-    if (headerVal) return headerVal.trim();
-
-    const c = await cookies();
-    const cookieVal = c.get("egdesk_visitor_session")?.value;
-    if (cookieVal) return decodeURIComponent(cookieVal).trim();
-
-    // 헤더에 API Key가 있는지 확인
-    const authHeader = h.get("authorization") || "";
-    let apiKey = "";
-    if (authHeader.startsWith("Bearer ")) {
-      apiKey = authHeader.substring(7).trim();
-    } else {
-      apiKey = h.get("x-api-key")?.trim() || h.get("x-sheetbot-key")?.trim() || "";
-    }
-
-    if (apiKey && apiKey.startsWith("sk_sheetbot_")) {
-      const { verifyApiKey } = await import("@/lib/api-keys");
-      const keyResult = await verifyApiKey(apiKey);
-      if (keyResult.valid && keyResult.visitorSessionId) {
-        return keyResult.visitorSessionId;
-      }
-    }
-  } catch {}
-
-  // 3. NextAuth 로그인만 있고 visitor 쿠키/헤더가 없을 때 DB에 저장된 visitor_session_id 사용
-  const emailFromJwt = await getEmailFromNextAuthCookie(req);
+  // NextAuth 로그인 이메일 기준 DB 저장 세션 (재로그인 시 검증 후 갱신되는 최신 값)
+  const emailFromJwt = await getEmailFromNextAuthCookie(req).catch(() => null);
   if (emailFromJwt) {
-    const fromDb = await lookupVisitorSessionIdForEmail(emailFromJwt);
-    if (fromDb) return fromDb;
+    push(await lookupVisitorSessionIdForEmail(emailFromJwt));
   }
 
-  return null;
-}
+  if (candidates.length <= 1) return candidates[0] || null;
 
+  // 후보가 여러 개면 실제 연결된(가능하면 로그인 이메일과 일치하는) 세션 선택
+  const origin = req ? resolveVisitorSiteOriginFromRequest(req) : h ? originFromHeaders(h) : resolveVisitorSiteOriginFromRequest();
+  const checks = await Promise.all(candidates.map((sid) => checkVisitorSessionConnected(sid, origin)));
+  const normalizedJwtEmail = emailFromJwt ? emailFromJwt.toLowerCase().trim() : null;
+  const matchIdx = checks.findIndex(
+    (c) => c.connected && (!normalizedJwtEmail || !c.email || c.email === normalizedJwtEmail),
+  );
+  if (matchIdx >= 0) {
+    if (matchIdx > 0) {
+      console.warn(
+        `[Auth] Skipped ${matchIdx} stale visitor session candidate(s); using verified session for ${checks[matchIdx].email || "visitor"}.`,
+      );
+    }
+    return candidates[matchIdx];
+  }
+  // 연결된 세션이 없으면 기존 우선순위 유지 (호출부에서 재인증 안내)
+  return candidates[0];
+}
 /**
  * 서버 사이드에서 현재 사용자가 관리자(ADMIN)인지 여부를 판별합니다.
  */

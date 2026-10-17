@@ -1,4 +1,5 @@
-import { callDriveTool, getServerEgdeskApiUrl } from "@/lib/egdesk-helpers";
+import { callDriveTool, getServerEgdeskApiUrl, WorkspaceVisitorCallOptions } from "@/lib/egdesk-helpers";
+import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -17,6 +18,7 @@ export async function uploadDriveFileWithBridge(options: {
   tempFilePath?: string;
   preferOAuth?: boolean;
   userEmail?: string;
+  callOptions?: WorkspaceVisitorCallOptions;
 }): Promise<{
   id: string | null;
   fileId?: string | null;
@@ -24,6 +26,7 @@ export async function uploadDriveFileWithBridge(options: {
   name?: string;
 }> {
   const { buffer, fileName, folderId, mimeType, tempFilePath, preferOAuth = true, userEmail } = options;
+  const callOptions = options.callOptions || (userEmail ? await getWorkspaceCallOptionsForEmail(userEmail) : {});
 
   let localPathToUse = tempFilePath || "";
 
@@ -85,14 +88,14 @@ export async function uploadDriveFileWithBridge(options: {
     }
   }
 
-  // 4. 구글 드라이브 업로드 MCP 도구 호출
+  // 4. 구글 드라이브 업로드 MCP 도구 호출 (사용자 격리 callOptions 주입)
   const uploadRes = await callDriveTool("drive_upload", {
     filePath: localPathToUse,
     folderId: folderId || undefined,
     destName: fileName,
     mimeType: mimeType || undefined,
     preferOAuth,
-  });
+  }, callOptions);
 
   // 5. MCP 응답 2중 언래핑 패턴 적용
   let innerJson: any = null;

@@ -111,19 +111,34 @@ export function useAuth(): UseAuthReturn {
           }
         }
 
-        // NextAuth 세션 쿠키가 없고 동기화가 필요한 경우에만 백그라운드 1회 초고속 발급
+        // NextAuth 세션 쿠키가 없거나, 방문자 세션 ID가 바뀐 경우(재로그인) 서버 DB에 동기화
+        // ⚠️ visitorSessionId를 반드시 함께 전송해야 sheetbot_users / api_keys 의 visitor_session_id가 갱신됩니다.
+        //    (누락 시 서버가 만료된 옛 세션으로 Workspace 도구를 호출 → "Visitor is not signed in")
         const hasSessionCookie =
           typeof document !== "undefined" &&
           document.cookie.includes("next-auth.session-token");
+        const currentVisitorSid =
+          typeof window !== "undefined" ? localStorage.getItem("egdesk_visitor_session") : null;
+        const lastSyncedVisitorSid =
+          typeof window !== "undefined" ? localStorage.getItem("sheetbot_synced_visitor_sid") : null;
+        const visitorSidChanged = !!currentVisitorSid && currentVisitorSid !== lastSyncedVisitorSid;
 
-        if (!session?.user?.email && !hasSessionCookie && !isGlobalSigningIn) {
+        if (((!session?.user?.email && !hasSessionCookie) || visitorSidChanged) && !isGlobalSigningIn) {
           isGlobalSigningIn = true;
           try {
-            await apiFetch("/api/auth/google/session", {
+            const syncRes = await apiFetch("/api/auth/google/session", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ email, name, image }),
+              body: JSON.stringify({
+                email,
+                name,
+                image,
+                ...(currentVisitorSid ? { visitorSessionId: currentVisitorSid } : {}),
+              }),
             });
+            if (syncRes.ok && currentVisitorSid) {
+              localStorage.setItem("sheetbot_synced_visitor_sid", currentVisitorSid);
+            }
           } catch (e) {
             console.warn("[useAuth] Silent session cookie issue note:", e);
           } finally {

@@ -3,9 +3,34 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { encode } from "next-auth/jwt";
-import { queryTable, insertRows, updateRows } from "@/lib/egdesk-helpers";
+import { queryTable, insertRows, updateRows, getServerEgdeskApiUrl } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { getOrCreateUserWallet } from "@/lib/token-wallet";
+import { resolveVisitorSiteOriginFromRequest } from "@/lib/auth";
+
+/** 이지데스크 visitor-google status로 세션이 실제 연결 상태이며 동일 이메일인지 검증 */
+async function verifyVisitorSession(sessionId: string, email: string, siteOrigin: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${getServerEgdeskApiUrl()}/visitor-google/tools/call`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${sessionId}`,
+        Origin: siteOrigin,
+        "X-Visitor-Origin": siteOrigin,
+      },
+      body: JSON.stringify({ tool: "status", arguments: {} }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const json: any = await res.json().catch(() => null);
+    const status = json?.result?.content?.[0]?.text ? JSON.parse(json.result.content[0].text) : json;
+    return Boolean(
+      status?.connected && String(status?.email || "").toLowerCase().trim() === email.toLowerCase().trim(),
+    );
+  } catch {
+    return false;
+  }
+}
 
 export async function POST(req: Request) {
   try {
@@ -71,9 +96,21 @@ export async function POST(req: Request) {
     });
 
     // ⚡ 2. 회원 동기화 및 지갑 확보는 백그라운드 비동기로 안전하게 처리 (HTTP 응답 블로킹 차단)
+    const siteOrigin = resolveVisitorSiteOriginFromRequest(req);
     void (async () => {
       try {
         await setupDatabase();
+
+        // 🛡️ 클라이언트가 보낸 방문자 세션 ID는 이지데스크에서 실제 연결 + 동일 이메일임이 확인된 경우에만 저장
+        //    (만료된 세션 저장 방지 + 타 회원 세션 덮어쓰기 차단)
+        if (visitorSessionId) {
+          const verified = await verifyVisitorSession(visitorSessionId, email, siteOrigin);
+          if (!verified) {
+            console.warn(`[GoogleSession] visitorSessionId not verified for ${email} (origin=${siteOrigin}); not persisting.`);
+            visitorSessionId = "";
+          }
+        }
+
         const existingUserRes = await queryTable("sheetbot_users", {
           filters: { email },
           limit: 1,

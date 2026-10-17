@@ -18,7 +18,7 @@ interface QuickWrapSuccessModalProps {
 export default function QuickWrapSuccessModal({
   isOpen,
   onClose,
-  sheetUrl: _sheetUrl,
+  sheetUrl,
   bridgeUrl,
   promptTemplate,
   projectName,
@@ -31,6 +31,7 @@ export default function QuickWrapSuccessModal({
   return (
     <WrapSuccessCard
       bridgeUrl={bridgeUrl}
+      sheetUrl={sheetUrl}
       promptTemplate={promptTemplate}
       projectName={projectName}
       isExisting={isExisting}

@@ -6,6 +6,7 @@ import { findSheetbotProjectByRef } from "@/lib/sheetbot-project-resolve";
 import { ensureBridgeTokenForProject } from "@/lib/bridge-token-persist";
 import { resolveGasBridgePostEndpoint } from "@/lib/bridge-public-url";
 import { setupDatabase } from "@/lib/setup-db";
+import { buildSheetbotHandoffPrompt } from "@/lib/prompt-template";
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,9 +50,12 @@ export async function POST(request: NextRequest) {
 
     const bridgeUrl = resolveGasBridgePostEndpoint(request, token);
 
-    const promptTemplate = `아래 웹 주소를 통해 내 구글 시트의 헤더 구조와 기존 코드를 확인하고, 필요한 기능 코드를 주입해줘:
-웹 주소: ${bridgeUrl}
-요구사항: [원하는 기능 입력 (예: 사이드바에서 영수증/명함 이미지를 올리면 분석 후 자동 기입)]`;
+    const promptTemplate = buildSheetbotHandoffPrompt({
+      projectName: typeof project.name === "string" ? project.name : undefined,
+      sheetUrl: typeof project.spreadsheet_url === "string" ? project.spreadsheet_url : undefined,
+      bridgeUrl,
+      requirement: typeof project.prompt === "string" ? project.prompt : undefined,
+    });
 
     return NextResponse.json({
       success: true,

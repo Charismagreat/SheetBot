@@ -311,8 +311,7 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
           const kw = (plan.queryKeywords && plan.queryKeywords[0]) || "";
           const driveSearch = await listDriveFiles({
             query: `mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false ${kw ? `and name contains '${kw}'` : ""}`,
-            preferOAuth: true,
-          }).catch(() => ({ files: [] }));
+          }, { preferOAuth: true }).catch(() => ({ files: [] }));
 
           for (const f of driveSearch?.files || []) {
             if (!candidateSheets.some((c) => c.id === f.id)) {
@@ -397,8 +396,7 @@ ${sampleDataTexts.join("\n\n====================\n\n")}
         try {
           const cardSearch = await listDriveFiles({
             query: `mimeType = 'application/vnd.google-apps.spreadsheet' and name contains '명함' and trashed = false`,
-            preferOAuth: true,
-          }).catch(() => ({ files: [] }));
+          }, { preferOAuth: true }).catch(() => ({ files: [] }));
 
           const cardSheets = cardSearch?.files || [];
           if (cardSheets.length > 0) {
@@ -423,7 +421,10 @@ ${sampleDataTexts.join("\n\n====================\n\n")}
       if (!recipientPhone) recipientPhone = "self";
 
       const msgToSend = plan.messageText || `[SheetBot 알림] ${plan.targetName || "고객"}님, 요청하신 사항이 접수되었습니다.`;
-      const smsRes = await sendPhoneSms(cleanEmail, recipientPhone, msgToSend).catch((e: any) => {
+      const smsRes = await sendPhoneSms({
+        phoneNumber: recipientPhone,
+        message: msgToSend,
+      }).catch((e: any) => {
         return { success: false, error: e.message };
       });
 

@@ -8,3 +8,9 @@
  */
 
 export { apiFetch, getEgdeskBasePath } from '../../egdesk-helpers';
+
+/** NextAuth SessionProvider basePath (EGDesk tunnel prefix + /api/auth). */
+export function getNextAuthBasePath(): string {
+  const root = getEgdeskBasePath();
+  return root ? `${root}/api/auth` : '/api/auth';
+}

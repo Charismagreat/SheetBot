@@ -2,6 +2,7 @@
 
 import { apiFetch } from '@/lib/api';
 import { isWrapResultPayload, normalizeQuickWrapForClient } from '@/lib/wrapping/normalize-quick-wrap-response';
+import { buildSheetbotHandoffPrompt, resolveCompleteHandoffPrompt, copyTextSafely } from '@/lib/prompt-template';
 import React, { useState, useEffect } from 'react';
 
 interface TemplatePreset {
@@ -124,8 +125,18 @@ export default function WrapPage() {
       );
 
       const defaultPrompt = selectedTemplate
-        ? `아래 웹 주소를 통해 새 구글 시트의 컬럼 구조와 자동화 스크립트를 처음부터 설계하고 주입해줘:\n웹 주소: ${normalized.bridgeUrl}\n목표 업무: ${selectedTemplate.title}\n세부 요구사항: ${selectedTemplate.prompt}`
-        : `아래 웹 주소를 통해 새 구글 시트의 컬럼 구조와 자동화 스크립트를 처음부터 설계하고 주입해줘:\n웹 주소: ${normalized.bridgeUrl}\n요구사항: 새 구글 시트에 내 비즈니스에 맞는 시트 탭과 컬럼 헤더 구조를 설계하고, 필요한 자동화 기능과 Apps Script 코드를 즉시 주입해줘.`;
+        ? buildSheetbotHandoffPrompt({
+            projectName: selectedTemplate.title,
+            sheetUrl: normalized.spreadsheetId ? `https://docs.google.com/spreadsheets/d/${normalized.spreadsheetId}/edit` : undefined,
+            bridgeUrl: normalized.bridgeUrl,
+            requirement: selectedTemplate.prompt,
+          })
+        : buildSheetbotHandoffPrompt({
+            projectName: normalized.projectName || tplTitle,
+            sheetUrl: normalized.spreadsheetId ? `https://docs.google.com/spreadsheets/d/${normalized.spreadsheetId}/edit` : undefined,
+            bridgeUrl: normalized.bridgeUrl,
+            requirement: "새 구글 시트에 내 비즈니스에 맞는 시트 탭과 컬럼 헤더 구조를 설계하고, 필요한 자동화 기능과 Apps Script 코드를 즉시 주입해줘.",
+          });
 
       const promptTemplate = normalized.bridgePrompt || defaultPrompt;
 
@@ -156,12 +167,14 @@ export default function WrapPage() {
 
   // 🚀 안티그라비티 원클릭 열기
   const handleOpenAntigravity = async () => {
-    const promptText = result?.bridgePrompt || (window as any).__currentPrompt || (
-      `구글 시트 래핑 주소: ${result?.bridgeUrl || (window as any).__currentBridgeUrl}\n위 구글 시트 구조를 확인하고 원하는 자동화 기능을 주입해줘:\n[추가할 기능 입력]`
-    );
-    try {
-      await navigator.clipboard.writeText(promptText);
-    } catch {}
+    const rawPrompt = result?.bridgePrompt || (window as any).__currentPrompt || '';
+    const promptText = resolveCompleteHandoffPrompt({
+      bridgeUrl: result?.bridgeUrl || (window as any).__currentBridgeUrl,
+      promptTemplate: rawPrompt,
+      sheetUrl: result?.spreadsheetId ? `https://docs.google.com/spreadsheets/d/${result.spreadsheetId}/edit` : undefined,
+      projectName: result?.projectName,
+    });
+    await copyTextSafely(promptText);
 
     if (typeof window !== 'undefined') {
       window.open('antigravity://', '_blank');
@@ -172,24 +185,18 @@ export default function WrapPage() {
   };
 
   const handleCopyPrompt = async () => {
-    const promptText = result?.bridgePrompt || (window as any).__currentPrompt || '';
+    const rawPrompt = result?.bridgePrompt || (window as any).__currentPrompt || '';
+    const promptText = resolveCompleteHandoffPrompt({
+      bridgeUrl: result?.bridgeUrl || (window as any).__currentBridgeUrl,
+      promptTemplate: rawPrompt,
+      sheetUrl: result?.spreadsheetId ? `https://docs.google.com/spreadsheets/d/${result.spreadsheetId}/edit` : undefined,
+      projectName: result?.projectName,
+    });
     if (!promptText) return;
 
-    try {
-      await navigator.clipboard.writeText(promptText);
-      setCopiedType('copy');
-      setTimeout(() => setCopiedType(null), 2500);
-    } catch {
-      // fallback
-      const ta = document.createElement('textarea');
-      ta.value = promptText;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-      setCopiedType('copy');
-      setTimeout(() => setCopiedType(null), 2500);
-    }
+    await copyTextSafely(promptText);
+    setCopiedType('copy');
+    setTimeout(() => setCopiedType(null), 2500);
   };
 
   const resetAll = () => {
@@ -742,7 +749,11 @@ export default function WrapPage() {
     })
     .then(function(data) {
       var prompt = data.promptTemplate || (
-        "아래 웹 주소를 통해 새 구글 시트의 컬럼 구조와 자동화 스크립트를 처음부터 설계하고 주입해줘:\\n웹 주소: " + data.bridgeUrl + "\\n요구사항: 새 구글 시트에 내 비즈니스에 맞는 시트 탭과 컬럼 헤더 구조를 설계하고, 필요한 자동화 기능과 Apps Script 코드를 즉시 주입해줘."
+        "[SheetBot ↔ AI 에이전트 연동: " + (data.projectName || "스마트 자동화 시트") + "]\n" +
+        (data.sheetUrl ? "• 구글 스프레드시트 URL: " + data.sheetUrl + "\n" : "") +
+        "• 시트봇 래핑 브릿지 주소: " + data.bridgeUrl + "\n\n" +
+        "[자동화 요구사항]\n새 구글 시트에 내 비즈니스에 맞는 시트 탭과 컬럼 헤더 구조를 설계하고, 필요한 자동화 기능과 Apps Script 코드를 즉시 주입해줘.\n\n" +
+        "위 래핑 브릿지 주소(또는 구글 스프레드시트)를 확인하고, 시트 구조에 맞추어 Google Apps Script 자동화 메뉴(🚀 SheetBot 메뉴)와 기능 코드를 완성하여 주입해줘."
       );
       window.__showNativeResult(data.bridgeUrl, prompt, data.projectName || "스마트 자동화 시트");
 

@@ -469,9 +469,9 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     const creditRes = await creditTokens(
       matched.user_email,
-      matched.tokens_to_credit,
+      Number(matched.tokens_to_credit) || 0,
       matched.package_name,
-      matched.amount_krw,
+      Number(matched.amount_krw) || 0,
       "다이렉트 송금 (0원 수수료 / " + (bankName || "은행") + ")"
     );
 

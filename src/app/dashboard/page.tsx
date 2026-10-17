@@ -122,7 +122,7 @@ export default function DashboardPage() {
                 bridgeUrl: data.agent.bridgeUrl,
                 promptTemplate: data.agent.promptTemplate,
                 projectName: data.project.name || templateName || "시트봇 자동화 프로젝트",
-                isExisting: Boolean(data.isExisting),
+                isExisting: Boolean((data as any).isExisting),
                 wrapTokens: data.tokens,
                 idempotentReplay: data.idempotentReplay,
               });
@@ -568,25 +568,77 @@ export default function DashboardPage() {
   };
 
   // AI 에이전트 연동 주소 및 프롬프트 복사 핸들러
+  // ⚠️ 서버 응답(await) 이후에 clipboard.writeText를 호출하면 브라우저가 "사용자 클릭"으로 인정하지 않아
+  //    (Safari/iOS, 일부 Chrome) 복사가 조용히 거부됩니다. → 클릭 즉시 ClipboardItem(Promise)로 쓰기를 시작하고,
+  //    실패 시 execCommand / 수동 복사 창으로 순차 폴백합니다.
   const handleCopyAgentBridgeUrl = async (p: any) => {
     setCopyingBridgeProjectId(p.id);
-    try {
+
+    const promptPromise: Promise<string> = (async () => {
       const res = await apiFetch("/api/projects/bridge-token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId: p.id }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!data?.success) {
+      if (!data?.success || !data?.promptTemplate) {
         throw new Error(data?.error || "AI 연동 주소 발급에 실패했습니다.");
       }
+      return String(data.promptTemplate);
+    })();
 
-      await navigator.clipboard.writeText(data.promptTemplate);
-      showAlert({
-        type: "success",
-        text: `🤖 AI 연동 프롬프트가 복사되었습니다! 안티그라비티나 AI 채팅창에 붙여넣어 코드를 자동 주입하세요.`,
-      });
+    // 1) 클릭 제스처 안에서 즉시 클립보드 쓰기 개시 (응답은 나중에 채워짐)
+    let clipboardWrite: Promise<void> | null = null;
+    try {
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+        clipboardWrite = navigator.clipboard.write([
+          new ClipboardItem({
+            "text/plain": promptPromise.then((t) => new Blob([t], { type: "text/plain" })),
+          }),
+        ]);
+      }
+    } catch {
+      clipboardWrite = null;
+    }
+
+    try {
+      const promptText = await promptPromise;
+
+      let copied = false;
+      if (clipboardWrite) {
+        copied = await clipboardWrite.then(() => true).catch(() => false);
+      }
+      if (!copied && navigator.clipboard?.writeText) {
+        copied = await navigator.clipboard.writeText(promptText).then(() => true).catch(() => false);
+      }
+      if (!copied) {
+        // 2) 레거시 폴백
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = promptText;
+          ta.setAttribute("readonly", "");
+          ta.style.position = "fixed";
+          ta.style.top = "-1000px";
+          document.body.appendChild(ta);
+          ta.select();
+          copied = document.execCommand("copy");
+          document.body.removeChild(ta);
+        } catch {
+          copied = false;
+        }
+      }
+
+      if (copied) {
+        showAlert({
+          type: "success",
+          text: `🤖 AI 연동 프롬프트가 복사되었습니다! 안티그라비티나 AI 채팅창에 붙여넣어 코드를 자동 주입하세요.`,
+        });
+      } else {
+        // 3) 최종 폴백: 수동 복사 창
+        window.prompt("자동 복사가 차단되었습니다. 아래 프롬프트를 전체 선택(Ctrl+A) 후 복사(Ctrl+C)하세요.", promptText);
+      }
     } catch (err: any) {
+      clipboardWrite?.catch(() => {});
       showAlert({ type: "error", text: err.message || "주소 복사 중 오류가 발생했습니다." });
     } finally {
       setCopyingBridgeProjectId(null);

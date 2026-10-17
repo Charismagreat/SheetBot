@@ -710,18 +710,16 @@ object ApiClient {
         autoRecordSheet: Boolean = true,
         channelCount: Int = 2
     ): UploadRecordingResult = withContext(Dispatchers.IO) {
-        // 1. [1순위] 터널 안심 청크 분할 업로드 (ChunkedUploader)
+        // 1. [1순위] 통화 녹음 전용 청크 분할 업로드 (/api/user/recordings/chunks → 서버 재조립 후 녹음 파이프라인)
         try {
-            val chunkResult = ChunkedUploader.uploadFileChunked(
+            val chunkResult = ChunkedUploader.uploadCallRecordingChunked(
                 file = file,
                 fileName = fileName,
-                mimeType = "audio/m4a",
                 userEmail = userEmail,
-                folderName = folderName,
-                autoRecordSheet = autoRecordSheet,
-                isCallRecording = true,
                 contactName = contactName,
                 callTime = callTime,
+                folderName = folderName,
+                autoRecordSheet = autoRecordSheet,
                 channelCount = channelCount
             )
             if (chunkResult.success) {
@@ -734,13 +732,22 @@ object ApiClient {
                     spreadsheetUrl = chunkResult.spreadsheetUrl
                 )
             } else {
-                Log.w(TAG, "통화 녹음 청크 업로드 실패, 기존 단일 업로드로 폴백: ${chunkResult.error}")
+                Log.w(TAG, "통화 녹음 청크 업로드 실패: ${chunkResult.error}")
             }
         } catch (e: Exception) {
-            Log.w(TAG, "통화 녹음 청크 업로드 예외, 단일 업로드 폴백: ${e.message}")
+            Log.w(TAG, "통화 녹음 청크 업로드 예외: ${e.message}")
         }
 
         // 2. [2순위 폴백] 기존 단일 Base64 업로드
+        //    이지데스크 프록시가 요청 본문을 10MB까지만 보존하므로, base64(약 4/3배 팽창) 후 10MB를 넘는 파일은
+        //    잘려서 서버 JSON 파싱이 실패합니다. → 7MB 이하 파일만 폴백 허용
+        val maxSingleUploadBytes = 7L * 1024 * 1024
+        if (file.length() > maxSingleUploadBytes) {
+            return@withContext UploadRecordingResult(
+                success = false,
+                error = "청크 업로드 실패 (파일 ${file.length() / 1024 / 1024}MB는 단일 업로드 한도 7MB 초과). 네트워크 확인 후 재시도해 주세요."
+            )
+        }
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val fileBytes = file.readBytes()
         val base64Str = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)

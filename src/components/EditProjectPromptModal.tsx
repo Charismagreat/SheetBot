@@ -21,6 +21,7 @@ import {
   Check,
 } from "lucide-react";
 import { PROJECT_REDEPLOY_LOADING_LABEL } from "@/constants/project-deploy-ui";
+import { copyTextSafely } from "@/lib/prompt-template";
 
 interface EditProjectPromptModalProps {
   isOpen: boolean;
@@ -134,7 +135,7 @@ export default function EditProjectPromptModal({
       promptText += `\n[수정 및 추가 요구사항]\n${curPrompt || "구글 시트 구조에 맞추어 맞춤형 자동화 기능 구현 및 사이드바 메뉴 주입"}\n\n`;
       promptText += `위 구글 스프레드시트의 기존 구조와 코드를 점검하고, 나와 단계별로 대화하면서 요구사항을 정밀하게 구현해줘.`;
 
-      await navigator.clipboard.writeText(promptText);
+      await copyTextSafely(promptText);
 
       if (typeof window !== "undefined") {
         window.open("antigravity://", "_blank");

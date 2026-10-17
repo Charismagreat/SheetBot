@@ -5,9 +5,9 @@ import { getCurrentUserEmail } from "@/lib/auth";
 import {
   callSheetsTool,
   callAiCaller,
+  callDriveTool,
   insertRows,
   queryTable,
-  uploadDriveFile,
   findOrCreateEgdeskFolder,
   findOrCreateEgdeskSubfolder,
   createDriveFolder,
@@ -207,7 +207,7 @@ export async function POST(req: NextRequest) {
         uploadedFiles.slice(0, 10).map(async (file, idx) => {
           const b64 = file.buffer.toString("base64");
           const safeName = `img_${idx + 1}_${file.name}`;
-          const uploadRes = await uploadDriveFile({
+          const uploadRes = await callDriveTool("drive_upload", {
             name: safeName,
             content: b64,
             mimeType: file.mimeType,
@@ -297,7 +297,7 @@ ${refSummaryForAi || "참고 URL 없음 (주제 및 키워드 기반으로 최�
     let cleanNaverId = extractNaverId(naverBlogIdInput);
     if (!cleanNaverId && userEmail) {
       try {
-        const userRes = await queryTable<any>("sheetbot_users", {
+        const userRes = await queryTable("sheetbot_users", {
           filters: { email: userEmail },
           limit: 1,
         });

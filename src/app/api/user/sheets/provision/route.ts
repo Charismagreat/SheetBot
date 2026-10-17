@@ -1,8 +1,7 @@
-export const dynamic = "force-dynamic";
-
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUserSpreadsheet, SheetBindingType } from "@/lib/sheet-binding-helper";
-import { callSheetsTool, callDriveTool, listDriveFiles, createDriveFolder, trashDriveFile } from "@/lib/egdesk-helpers";
+import { callSheetsTool, callDriveTool, listDriveFiles, createDriveFolder, trashDriveFile, WorkspaceVisitorCallOptions } from "@/lib/egdesk-helpers";
+import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 
 interface SheetDefinition {
   defaultTitle: string;
@@ -94,42 +93,38 @@ export const SHEET_DEFINITIONS: Record<string, SheetDefinition> = {
   },
 };
 
-const folderCache = new Map<string, string>([
-  ["[SheetBot] 통화 녹음", "14TuBcWsooWB7_yPqyn6L0imjshpVxFVX"],
-  ["[SheetBot] 영수증 보관함", "1rKVf3Swmi-VifK0fJoME5cdknZgA4H7K"],
-  ["[SheetBot] 명함 보관함", "1TJpJ01yA7YKOI8FlVTwjhIdUyjxK8aMe"],
-  ["[SheetBot] 파일 보관함", "1bRO1aJEEQBUX_R9bFLfZ7C0liZFZjijc"],
-]);
+const userFolderCache = new Map<string, string>();
 
 /**
- * 구글 드라이브 폴더 선제 생성 헬퍼 (0초 메모리 캐시 적용)
+ * 구글 드라이브 폴더 선제 생성 헬퍼 (사용자별 격리 캐시 적용)
  */
-async function ensureDriveFolder(folderName: string): Promise<string | null> {
+async function ensureDriveFolder(folderName: string, callOptions?: WorkspaceVisitorCallOptions): Promise<string | null> {
+  const cacheKey = `${callOptions?.visitorSessionId || "default"}:${folderName}`;
   try {
-    if (folderCache.has(folderName)) {
-      return folderCache.get(folderName)!;
+    if (userFolderCache.has(cacheKey)) {
+      return userFolderCache.get(cacheKey)!;
     }
 
     const queryStr = `mimeType = 'application/vnd.google-apps.folder' and name = '${folderName}' and trashed = false`;
     const searchRes = await listDriveFiles(
       { query: queryStr },
-      { preferOAuth: true }
+      { preferOAuth: true, ...callOptions }
     ).catch(() => ({ files: [] }));
 
     if (searchRes?.files && searchRes.files.length > 0) {
       const primaryFolder = searchRes.files[0];
-      folderCache.set(folderName, primaryFolder.id);
+      userFolderCache.set(cacheKey, primaryFolder.id);
       return primaryFolder.id;
     }
 
-    const createRes = await createDriveFolder(folderName, undefined, true).catch((err: any) => {
+    const createRes = await callDriveTool("drive_create_folder", { name: folderName, preferOAuth: true }, callOptions).catch((err: any) => {
       console.warn(`[ProvisionSheet] drive_create_folder warning for ${folderName}:`, err.message);
       return null;
     });
 
     const folderId = (createRes as any)?.folderId || (createRes as any)?.id || null;
     if (folderId) {
-      folderCache.set(folderName, folderId);
+      userFolderCache.set(cacheKey, folderId);
     }
     return folderId;
   } catch (err: any) {
@@ -142,7 +137,11 @@ async function ensureDriveFolder(folderName: string): Promise<string | null> {
  * 스마트 간편 주문 및 품목 대장 (QUOTE) 전용 2종 탭(품목, 주문접수대장) 자동 생성 함수
  * - 기존 견적서출력서식은 모바일 웹 주문확인서(HTML)로 완전 대체되어 생성하지 않음
  */
-async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: string): Promise<void> {
+async function setupQuoteSpreadsheet(
+  spreadsheetId: string,
+  primaryTabName: string,
+  callOptions?: WorkspaceVisitorCallOptions
+): Promise<void> {
   console.log(`[ProvisionSheet] Setting up ORDER & ITEMS spreadsheet layout for ${spreadsheetId}...`);
 
   // 기본 생성된 첫 번째 탭 이름을 '품목'으로 변경 (또는 primaryTabName)
@@ -169,7 +168,7 @@ async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: stri
       values: sampleCatalogRows,
       preferOAuth: true,
     },
-    { preferOAuth: true }
+    callOptions
   ).catch((err: any) => console.warn(`[ProvisionQuote] Catalog insert warning:`, err.message));
 
   await callSheetsTool(
@@ -179,7 +178,7 @@ async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: stri
       sheetName: primaryTabName,
       preferOAuth: true,
     },
-    { preferOAuth: true }
+    callOptions
   ).catch(() => {});
 
   // 2. 두 번째 탭: '주문접수대장' 생성 및 헤더 주입
@@ -191,7 +190,7 @@ async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: stri
       title: logTabName,
       preferOAuth: true,
     },
-    { preferOAuth: true }
+    callOptions
   ).catch((err: any) => console.warn(`[ProvisionQuote] Create log tab warning:`, err.message));
 
   const logHeaders = [
@@ -205,7 +204,7 @@ async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: stri
       values: logHeaders,
       preferOAuth: true,
     },
-    { preferOAuth: true }
+    callOptions
   ).catch(() => {});
 
   await callSheetsTool(
@@ -215,7 +214,7 @@ async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: stri
       sheetName: logTabName,
       preferOAuth: true,
     },
-    { preferOAuth: true }
+    callOptions
   ).catch(() => {});
 
   // 3. 세 번째 탭: '사업자정보' 생성 및 설정 항목 주입
@@ -227,21 +226,21 @@ async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: stri
       title: infoTabName,
       preferOAuth: true,
     },
-    { preferOAuth: true }
+    callOptions
   ).catch((err: any) => console.warn(`[ProvisionQuote] Create info tab warning:`, err.message));
 
   const sampleInfoRows = [
     ["설정항목", "안내내용 및 설정값 (자유롭게 수정 가능)"],
-    ["회사명(상호)", "chachogreat몰"],
-    ["대표자명", "차호석"],
+    ["회사명(상호)", "온라인 스토어"],
+    ["대표자명", "대표자"],
     ["사업자등록번호", "123-45-67890"],
     ["사업장 주소", "서울특별시 서초구 반포대로 10, 3층"],
-    ["고객센터 연락처", "010-7216-5884"],
-    ["대표 e메일", "chachogreat@gmail.com"],
+    ["고객센터 연락처", "010-0000-0000"],
+    ["대표 e메일", "support@example.com"],
     ["홈페이지/SNS", "https://sheetbot.cloud"],
-    ["결제관련안내", "국민은행 123456-04-111111 (예금주: 차호석) / 주문 접수 후 24시간 이내 입금 시 배송 준비가 진행됩니다."],
+    ["결제관련안내", "계좌 입금 안내 / 주문 접수 후 24시간 이내 입금 시 배송 준비가 진행됩니다."],
     ["배송관련안내", "평일 오후 2시 이전 주문 시 당일 출고 / 기본 배송비 무료 (도서산간 3,000원 추가)"],
-    ["환불관련안내", "상품 수령 후 7일 이내 교환 및 반품이 가능합니다. (단순 변심 시 왕복 배송비 고객 부담)"],
+    ["환불관련안내", "상품 수령 후 7일 이내 교환 및 반품이 가능합니다."],
     ["기타 안내사항", "대량 주문 및 세금계산서 발급 문의는 고객센터로 연락 부탁드립니다."],
   ];
 
@@ -253,7 +252,7 @@ async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: stri
       values: sampleInfoRows,
       preferOAuth: true,
     },
-    { preferOAuth: true }
+    callOptions
   ).catch(() => {});
 
   await callSheetsTool(
@@ -263,7 +262,7 @@ async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: stri
       sheetName: infoTabName,
       preferOAuth: true,
     },
-    { preferOAuth: true }
+    callOptions
   ).catch(() => {});
 
   console.log(`[ProvisionQuote] ✅ Successfully initialized 3 tabs (품목, 주문접수대장, 사업자정보) for ORDER spreadsheet.`);
@@ -272,7 +271,11 @@ async function setupQuoteSpreadsheet(spreadsheetId: string, primaryTabName: stri
 /**
  * 스마트 간편 견적 및 단가 대장 (ESTIMATE) 전용 3종 탭(단가표, 견적발행대장, 사업자정보) 자동 생성 함수
  */
-async function setupEstimateSpreadsheet(spreadsheetId: string, primaryTabName: string): Promise<void> {
+async function setupEstimateSpreadsheet(
+  spreadsheetId: string,
+  primaryTabName: string,
+  callOptions?: WorkspaceVisitorCallOptions
+): Promise<void> {
   // 1. 첫 번째 탭: '단가표' 헤더 및 표준 샘플 품목 주입 (10개 열)
   const sampleCatalogRows = [
     ["카테고리", "품목코드", "품목명", "규격/단위", "기준단가(원)", "할인단가(원)", "대표사진", "상세설명", "최소수량", "비고"],
@@ -291,7 +294,7 @@ async function setupEstimateSpreadsheet(spreadsheetId: string, primaryTabName: s
       values: sampleCatalogRows,
       preferOAuth: true,
     },
-    { preferOAuth: true }
+    callOptions
   ).catch((err: any) => console.warn(`[ProvisionEstimate] Catalog insert warning:`, err.message));
 
   await callSheetsTool(
@@ -301,7 +304,7 @@ async function setupEstimateSpreadsheet(spreadsheetId: string, primaryTabName: s
       sheetName: primaryTabName,
       preferOAuth: true,
     },
-    { preferOAuth: true }
+    callOptions
   ).catch(() => {});
 
   // 2. 두 번째 탭: '견적발행대장' 생성 및 13개 열 헤더 주입
@@ -313,7 +316,7 @@ async function setupEstimateSpreadsheet(spreadsheetId: string, primaryTabName: s
       title: logTabName,
       preferOAuth: true,
     },
-    { preferOAuth: true }
+    callOptions
   ).catch((err: any) => console.warn(`[ProvisionEstimate] Create log tab warning:`, err.message));
 
   const logHeaders = [
@@ -327,7 +330,7 @@ async function setupEstimateSpreadsheet(spreadsheetId: string, primaryTabName: s
       values: logHeaders,
       preferOAuth: true,
     },
-    { preferOAuth: true }
+    callOptions
   ).catch(() => {});
 
   await callSheetsTool(
@@ -337,7 +340,7 @@ async function setupEstimateSpreadsheet(spreadsheetId: string, primaryTabName: s
       sheetName: logTabName,
       preferOAuth: true,
     },
-    { preferOAuth: true }
+    callOptions
   ).catch(() => {});
 
   // 3. 세 번째 탭: '사업자정보' 생성 및 설정 항목 주입
@@ -349,17 +352,17 @@ async function setupEstimateSpreadsheet(spreadsheetId: string, primaryTabName: s
       title: infoTabName,
       preferOAuth: true,
     },
-    { preferOAuth: true }
+    callOptions
   ).catch((err: any) => console.warn(`[ProvisionEstimate] Create info tab warning:`, err.message));
 
   const sampleInfoRows = [
     ["설정항목", "안내내용 및 설정값 (자유롭게 수정 가능)"],
-    ["회사명(상호)", "chachogreat 견적센터"],
-    ["대표자명", "차호석"],
+    ["회사명(상호)", "견적센터"],
+    ["대표자명", "대표자"],
     ["사업자등록번호", "123-45-67890"],
     ["사업장 주소", "서울특별시 서초구 반포대로 10, 3층"],
-    ["고객센터 연락처", "010-7216-5884"],
-    ["대표 e메일", "chachogreat@gmail.com"],
+    ["고객센터 연락처", "010-0000-0000"],
+    ["대표 e메일", "support@example.com"],
     ["홈페이지/SNS", "https://sheetbot.cloud"],
     ["직인/도장 이미지 URL", "https://sheetbot.cloud/api/user/files/serve?file=official_seal.png&cat=seal&email=common"],
     ["기본 견적 유효기간(일)", "14"],
@@ -375,7 +378,7 @@ async function setupEstimateSpreadsheet(spreadsheetId: string, primaryTabName: s
       values: sampleInfoRows,
       preferOAuth: true,
     },
-    { preferOAuth: true }
+    callOptions
   ).catch(() => {});
 
   await callSheetsTool(
@@ -385,7 +388,7 @@ async function setupEstimateSpreadsheet(spreadsheetId: string, primaryTabName: s
       sheetName: infoTabName,
       preferOAuth: true,
     },
-    { preferOAuth: true }
+    callOptions
   ).catch(() => {});
 
   console.log(`[ProvisionEstimate] ✅ Successfully initialized 3 tabs (단가표, 견적발행대장, 사업자정보) for ESTIMATE spreadsheet.`);
@@ -408,6 +411,7 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanEmail = userEmail.trim().toLowerCase();
+    const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req);
     const typeKey = (sheetType || "").toUpperCase();
     const def = SHEET_DEFINITIONS[typeKey];
 
@@ -418,11 +422,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. 필요한 경우 구글 드라이브 폴더 선제 생성
+    // 1. 필요한 경우 구글 드라이브 폴더 선제 생성 (사용자 드라이브 격리)
     const targetFolder = folderName || def.defaultFolder;
     let createdFolderId: string | null = null;
     if (targetFolder) {
-      createdFolderId = await ensureDriveFolder(targetFolder);
+      createdFolderId = await ensureDriveFolder(targetFolder, callOptions);
     }
 
     // 2. 구글 스프레드시트 대장 고유 ID 영구 바인딩 및 생성
@@ -433,6 +437,7 @@ export async function POST(req: NextRequest) {
       requestedTitle: sheetTitle,
       folderId: createdFolderId,
       preferOAuth: true,
+      callOptions,
     });
 
     const targetSpreadsheetId = resolved.spreadsheetId;
@@ -473,7 +478,7 @@ export async function POST(req: NextRequest) {
         const meta = await callSheetsTool(
           "sheets_get_spreadsheet",
           { spreadsheetId: targetSpreadsheetId, preferOAuth: true },
-          { preferOAuth: true }
+          callOptions
         );
         if (meta?.sheets && meta.sheets.length > 0 && meta.sheets[0].title) {
           primaryTabName = meta.sheets[0].title;
@@ -490,7 +495,7 @@ export async function POST(req: NextRequest) {
           range: checkRange,
           preferOAuth: true,
         },
-        { preferOAuth: true }
+        callOptions
       ).catch(() => null);
 
       const hasHeaderOrData =
@@ -500,9 +505,9 @@ export async function POST(req: NextRequest) {
 
       if (!hasHeaderOrData) {
         if (typeKey === "QUOTE") {
-          await setupQuoteSpreadsheet(targetSpreadsheetId, primaryTabName);
+          await setupQuoteSpreadsheet(targetSpreadsheetId, primaryTabName, callOptions);
         } else if (typeKey === "ESTIMATE") {
-          await setupEstimateSpreadsheet(targetSpreadsheetId, primaryTabName);
+          await setupEstimateSpreadsheet(targetSpreadsheetId, primaryTabName, callOptions);
         } else {
           const updateRange = `${primaryTabName}!${def.range}`;
           console.log(`[ProvisionSheet] Injecting headers to ${updateRange} for ${typeKey}...`);
@@ -514,7 +519,7 @@ export async function POST(req: NextRequest) {
               values: [def.headers],
               preferOAuth: true,
             },
-            { preferOAuth: true }
+            callOptions
           );
 
           await callSheetsTool(
@@ -524,7 +529,7 @@ export async function POST(req: NextRequest) {
               sheetName: primaryTabName,
               preferOAuth: true,
             },
-            { preferOAuth: true }
+            callOptions
           ).catch((fmtErr: any) => {
             console.warn(`[ProvisionSheet] sheets_format_headers warning:`, fmtErr.message);
           });

@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { Copy, Check, X, Link as LinkIcon, Sparkles, ExternalLink } from "lucide-react";
+import { Copy, Check, X, Link as LinkIcon, Sparkles, ExternalLink, FileSpreadsheet, ChevronDown, ChevronUp } from "lucide-react";
+import { resolveCompleteHandoffPrompt, copyTextSafely } from "@/lib/prompt-template";
 
 export type WrapTokenSummary = {
   deducted: number;
@@ -11,6 +12,7 @@ export type WrapTokenSummary = {
 export type WrapSuccessCardProps = {
   bridgeUrl: string;
   promptTemplate?: string;
+  sheetUrl?: string;
   projectName?: string;
   isExisting?: boolean;
   wrapTokens?: WrapTokenSummary;
@@ -23,6 +25,7 @@ export type WrapSuccessCardProps = {
 export default function WrapSuccessCard({
   bridgeUrl,
   promptTemplate,
+  sheetUrl,
   projectName,
   isExisting = false,
   wrapTokens,
@@ -31,16 +34,17 @@ export default function WrapSuccessCard({
   embedded = false,
 }: WrapSuccessCardProps) {
   const [copiedType, setCopiedType] = useState<"antigravity" | "copy" | null>(null);
+  const [showPromptPreview, setShowPromptPreview] = useState(false);
+
+  const fullPromptToCopy = resolveCompleteHandoffPrompt({
+    bridgeUrl,
+    promptTemplate,
+    sheetUrl,
+    projectName,
+  });
 
   const handleOpenAntigravity = async () => {
-    const textToCopy =
-      promptTemplate ||
-      `구글 시트 래핑 주소: ${bridgeUrl}\n위 구글 시트 구조를 확인하고 원하는 자동화 기능을 주입해줘:\n[추가할 기능 입력]`;
-    try {
-      await navigator.clipboard.writeText(textToCopy);
-    } catch {
-      /* ignore */
-    }
+    await copyTextSafely(fullPromptToCopy);
 
     if (typeof window !== "undefined") {
       window.open("antigravity://", "_blank");
@@ -51,10 +55,7 @@ export default function WrapSuccessCard({
   };
 
   const handleCopy = async () => {
-    const textToCopy =
-      promptTemplate ||
-      `아래 웹 주소를 통해 내 구글 시트의 헤더 구조와 기존 코드를 확인하고, 필요한 기능 코드를 주입해줘:\n웹 주소: ${bridgeUrl}\n요구사항: 내 구글 시트 구조에 맞는 스프레드시트 자동화 메뉴와 기능을 주입해줘.`;
-    await navigator.clipboard.writeText(textToCopy);
+    await copyTextSafely(fullPromptToCopy);
     setCopiedType("copy");
     setTimeout(() => setCopiedType(null), 2500);
   };
@@ -145,6 +146,29 @@ export default function WrapSuccessCard({
           </div>
         </div>
 
+        {sheetUrl && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-extrabold text-slate-700 flex items-center gap-1.5">
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                <span>연결된 Google 스프레드시트</span>
+              </span>
+              <a
+                href={sheetUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-emerald-600 hover:text-emerald-700 font-bold flex items-center gap-0.5 hover:underline"
+              >
+                <span>시트 열기</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+            <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs font-mono text-slate-600 truncate">
+              {sheetUrl}
+            </div>
+          </div>
+        )}
+
         <div className="space-y-2.5">
           <button
             type="button"
@@ -196,6 +220,23 @@ export default function WrapSuccessCard({
               </>
             )}
           </button>
+
+          {/* 복사될 프롬프트 미리보기 토글 */}
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => setShowPromptPreview((prev) => !prev)}
+              className="w-full flex items-center justify-center gap-1 text-[11px] font-bold text-slate-400 hover:text-slate-600 transition-colors py-1 cursor-pointer"
+            >
+              <span>{showPromptPreview ? "복사될 프롬프트 닫기" : "복사될 프롬프트 전문 미리보기"}</span>
+              {showPromptPreview ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+            {showPromptPreview && (
+              <div className="mt-1.5 p-3 bg-slate-900 text-emerald-300 font-mono text-[11px] rounded-xl border border-slate-800 max-h-36 overflow-y-auto whitespace-pre-wrap leading-relaxed select-all">
+                {fullPromptToCopy}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="bg-slate-50 border-2 border-emerald-100 rounded-2xl p-4.5 space-y-3">

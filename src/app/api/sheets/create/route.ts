@@ -135,6 +135,7 @@ export async function POST(request: Request) {
 
     let result: any = null;
     let createMethod = "sheets";
+    const thrownErrors: string[] = [];
 
     // 1차 시도: 방문자(유저) 권한으로 Google Sheets API sheets_create_spreadsheet (유저 본인 드라이브에 생성)
     try {
@@ -150,6 +151,7 @@ export async function POST(request: Request) {
         result = await callSheetsTool("sheets_create_spreadsheet", { title, data }, visitorOptions);
       }
     } catch (sheetsErr: any) {
+      thrownErrors.push(String(sheetsErr?.message || ""));
       console.warn("[Sheets-Create] Primary sheets_create_spreadsheet failed, attempting fallback:", sheetsErr?.message);
     }
 
@@ -173,6 +175,7 @@ export async function POST(request: Request) {
         }
         createMethod = "drive";
       } catch (driveErr: any) {
+        thrownErrors.push(String(driveErr?.message || ""));
         console.warn("[Sheets-Create] Drive fallback failed:", driveErr?.message);
       }
     }
@@ -192,15 +195,28 @@ export async function POST(request: Request) {
       });
     }
 
-    // 결과 객체에 에러가 담겨온 경우
-    const errorMsg = result?.error || result?.message || "구글 시트 자동 생성에 실패했습니다.";
-    const isOauthError = errorMsg.includes("OAuth") || errorMsg.includes("token") || result?.code === "GOOGLE_OAUTH_TOKEN";
+    // 결과 객체 또는 throw된 예외에 담긴 에러 분류
+    const errorMsg =
+      result?.error || result?.message || thrownErrors.find(Boolean) || "구글 시트 자동 생성에 실패했습니다.";
+    const allErrText = [errorMsg, ...thrownErrors, result?.code, result?.reason].filter(Boolean).join(" | ");
+    // 방문자 세션 만료 / 미로그인 / 리프레시 토큰 무효 / 사이트 불일치 → 구글 재인증 필요
+    const isVisitorAuthError =
+      /not signed in|startVisitorGoogleLogin|not valid for this site|token_expired|refresh token|Re-authorize|VISITOR_WORKSPACE_AUTH|VISITOR_GOOG/i.test(
+        allErrText,
+      );
+    const isOauthError =
+      isVisitorAuthError ||
+      errorMsg.includes("OAuth") ||
+      errorMsg.includes("token") ||
+      result?.code === "GOOGLE_OAUTH_TOKEN";
 
     return NextResponse.json({
       success: false,
-      code: isOauthError ? "GOOGLE_OAUTH_TOKEN_MISSING" : "SHEET_CREATE_FAILED",
+      code: isVisitorAuthError ? "VISITOR_SESSION_MISSING" : isOauthError ? "GOOGLE_OAUTH_TOKEN_MISSING" : "SHEET_CREATE_FAILED",
       oauthRequired: isOauthError,
-      error: errorMsg,
+      error: isVisitorAuthError
+        ? "구글 계정 연결이 만료되었습니다. 구글 시트/드라이브 권한을 다시 승인(재로그인)한 뒤 재시도해 주세요."
+        : errorMsg,
       quickCreateUrl: "https://docs.google.com/spreadsheets/create",
     });
   } catch (err: any) {

@@ -745,6 +745,7 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
         });
         if (createdUrl) {
           targetSheetUrl = createdUrl;
+          setSheetUrl(createdUrl);
         } else {
           try {
             window.open("https://docs.google.com/spreadsheets/create", "_blank");
@@ -845,6 +846,8 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
         project: {
           ...mappedProject,
           id: projectId,
+          sheetUrl: mappedProject.sheetUrl || mappedProject.spreadsheetUrl || targetSheetUrl,
+          spreadsheetUrl: mappedProject.spreadsheetUrl || mappedProject.sheetUrl || targetSheetUrl,
           scriptUrl:
             automationUpdate?.deployment?.scriptUrl ||
             wrapJson.deployment?.scriptUrl ||
@@ -2298,6 +2301,11 @@ ${inquiryMemo.trim() || "(추가 메모 없음)"}`;
               <WrapSuccessCard
                 embedded
                 bridgeUrl={generatedResult.agentBridgeUrl}
+                sheetUrl={
+                  generatedResult?.project?.sheetUrl ||
+                  generatedResult?.project?.spreadsheetUrl ||
+                  sheetUrl
+                }
                 promptTemplate={generatedResult.agentPromptTemplate}
                 projectName={projectName}
                 wrapTokens={generatedResult.wrapTokens}

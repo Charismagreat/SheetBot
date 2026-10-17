@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import {
   callDriveTool,
   callSheetsTool,
@@ -16,6 +16,7 @@ import {
   insertRows,
   updateRows,
   queryTable,
+  WorkspaceVisitorCallOptions,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { getAiModelSettings } from "@/lib/ai-settings";
@@ -36,13 +37,8 @@ import os from "os";
  */
 const recentFileUploads = new Map<string, { timestamp: number; response: any }>();
 const inFlightUploads = new Map<string, { jobId: string; timestamp: number }>();
-const folderCache = new Map<string, string>([
-  ["[SheetBot] 통화 녹음", "14TuBcWsooWB7_yPqyn6L0imjshpVxFVX"],
-  ["[SheetBot] 영수증 보관함", "1rKVf3Swmi-VifK0fJoME5cdknZgA4H7K"],
-  ["[SheetBot] 명함 보관함", "1PypdJD-D7El1btJ-POyINjP00x7r3rIu"],
-  ["[SheetBot] 스크랩 보관함", "185vGZRGTDY4g6iG_OZdgGCuJ23D4GsHE"],
-  ["[SheetBot] 파일 보관함", "1bRO1aJEEQBUX_R9bFLfZ7C0liZFZjijc"],
-]);
+// 사용자별 격리 드라이브 폴더 캐시 (이메일:폴더명 -> 폴더ID)
+const userFolderCache = new Map<string, string>();
 
 // 백그라운드 구글 드라이브 업로드 및 시트 적재의 순차 처리를 위한 직렬화 큐 (Hub Gateway Timeout 방지)
 let cardBackgroundQueue: Promise<any> = Promise.resolve();
@@ -130,6 +126,7 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanEmail = userEmail.toLowerCase().trim();
+    const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req);
 
     // 1-1. [Idempotency] 동일 사용자 + 동일 파일명/크기 60초 이내 중복 전송 방어 & 선제 락
     const dedupKey = `${cleanEmail}:${rawFileName.trim()}:${buffer.length}:${ocrType}`;
@@ -202,8 +199,9 @@ export async function POST(req: NextRequest) {
       ? (buffer.length / (1024 * 1024)).toFixed(2) + " MB"
       : (buffer.length / 1024).toFixed(1) + " KB";
 
-    // 4. 구글 드라이브 대상 폴더 탐색 및 미존재 시 자동 생성 (0초 메모리 캐싱 및 폴더 격리 보장)
-    let targetFolderId: string | null = folderCache.get(targetFolderName) || null;
+    // 4. 구글 드라이브 대상 폴더 탐색 및 미존재 시 자동 생성 (0초 메모리 캐싱 및 사용자별 폴더 격리 보장)
+    const folderCacheKey = `${cleanEmail}:${targetFolderName}`;
+    let targetFolderId: string | null = userFolderCache.get(folderCacheKey) || null;
 
     if (!targetFolderId) {
       // 4-1. DB 바인딩 테이블에서 기존 바인딩된 고유 폴더 선제 확인 (폴더 중복 생성 원천 차단)
@@ -216,7 +214,7 @@ export async function POST(req: NextRequest) {
         const foundFolderId = bindingQuery?.rows?.[0]?.folder_id;
         if (foundFolderId && typeof foundFolderId === "string") {
           targetFolderId = foundFolderId;
-          folderCache.set(targetFolderName, foundFolderId);
+          userFolderCache.set(folderCacheKey, foundFolderId);
         }
       } catch {}
     }
@@ -226,18 +224,18 @@ export async function POST(req: NextRequest) {
       try {
         const folderSearch = await listDriveFiles({
           query: `mimeType = 'application/vnd.google-apps.folder' and name = '${targetFolderName}' and trashed = false`,
-        }, { preferOAuth: true });
+        }, { preferOAuth: true, ...callOptions });
 
         const existingFolders = folderSearch?.files || [];
         if (existingFolders.length > 0) {
           targetFolderId = existingFolders[0].id;
         } else {
-          const newFolderRes = await createDriveFolder(targetFolderName, undefined, true);
+          const newFolderRes = await callDriveTool("drive_create_folder", { name: targetFolderName }, callOptions).catch(() => null);
           targetFolderId = newFolderRes?.id || (typeof newFolderRes === "string" ? newFolderRes : null);
         }
 
         if (targetFolderId) {
-          folderCache.set(targetFolderName, targetFolderId);
+          userFolderCache.set(folderCacheKey, targetFolderId);
         }
       } catch (folderErr: any) {
         console.warn("[FilesUpload] Folder resolve warning:", folderErr.message);
@@ -248,10 +246,10 @@ export async function POST(req: NextRequest) {
     if (!targetFolderId && ocrType !== "BUSINESS_CARD") {
       // 1회 즉시 동기 생성 재시도
       try {
-        const retryCreate = await createDriveFolder(targetFolderName, undefined, true);
+        const retryCreate = await callDriveTool("drive_create_folder", { name: targetFolderName }, callOptions).catch(() => null);
         targetFolderId = retryCreate?.id || (typeof retryCreate === "string" ? retryCreate : null);
         if (targetFolderId) {
-          folderCache.set(targetFolderName, targetFolderId);
+          userFolderCache.set(folderCacheKey, targetFolderId);
         }
       } catch (retryErr: any) {
         console.error("[FilesUpload] Target folder creation retry failed:", retryErr.message);
@@ -329,20 +327,20 @@ export async function POST(req: NextRequest) {
           try {
           let actualFolderId = capturedFolderId;
           if (!actualFolderId) {
-            actualFolderId = folderCache.get(targetFolderName) || null;
+            actualFolderId = userFolderCache.get(folderCacheKey) || null;
             if (!actualFolderId) {
               try {
                 const folderSearch = await listDriveFiles({
                   query: `mimeType = 'application/vnd.google-apps.folder' and name = '${targetFolderName}' and trashed = false`,
-                }, { preferOAuth: true }).catch(() => null);
+                }, { preferOAuth: true, ...callOptions }).catch(() => null);
                 const existingFolders = folderSearch?.files || [];
                 if (existingFolders.length > 0) {
                   actualFolderId = existingFolders[0].id;
                 } else {
-                  const newFolderRes = await createDriveFolder(targetFolderName, undefined, true).catch(() => null);
+                  const newFolderRes = await callDriveTool("drive_create_folder", { name: targetFolderName }, callOptions).catch(() => null);
                   actualFolderId = newFolderRes?.id || (typeof newFolderRes === "string" ? newFolderRes : null);
                 }
-                if (actualFolderId) folderCache.set(targetFolderName, actualFolderId);
+                if (actualFolderId) userFolderCache.set(folderCacheKey, actualFolderId);
               } catch {}
             }
           }
@@ -353,6 +351,7 @@ export async function POST(req: NextRequest) {
             defaultTitle: defaultSheetTitle,
             folderId: actualFolderId || undefined,
             preferOAuth: true,
+            callOptions,
           }).catch(() => null);
 
           const targetSpreadsheetId = resolved?.spreadsheetId;
@@ -364,7 +363,7 @@ export async function POST(req: NextRequest) {
               if (actualFolderId) {
                 const existingSearch = await listDriveFiles({
                   query: `'${actualFolderId}' in parents and name = '${capturedFileName}' and trashed = false`,
-                }, { preferOAuth: true }).catch(() => null);
+                }, { preferOAuth: true, ...callOptions }).catch(() => null);
 
                 if (existingSearch?.files && existingSearch.files.length > 0) {
                   const bgId = existingSearch.files[0].id;
@@ -381,6 +380,8 @@ export async function POST(req: NextRequest) {
                 mimeType: capturedMimeType,
                 tempFilePath: capturedTempFilePath,
                 preferOAuth: true,
+                userEmail: cleanEmail,
+                callOptions,
               });
               const bgId = uploadRes?.id || uploadRes?.fileId || null;
               return uploadRes?.webViewLink || (bgId ? `https://drive.google.com/file/d/${bgId}/view` : "");
@@ -407,6 +408,7 @@ export async function POST(req: NextRequest) {
                 range: "시트1!A1:K1",
                 values: cardHeaders,
                 preferOAuth: true,
+                ...callOptions,
               }).catch(() => {});
               await callSheetsTool("sheets_format_headers", {
                 spreadsheetId: targetSpreadsheetId,
@@ -414,6 +416,7 @@ export async function POST(req: NextRequest) {
                 headerBgColor: "#1e3a8a",
                 headerTextColor: "#ffffff",
                 preferOAuth: true,
+                ...callOptions,
               }).catch(() => {});
             }
 
@@ -424,6 +427,7 @@ export async function POST(req: NextRequest) {
                 spreadsheetId: targetSpreadsheetId,
                 range: "시트1!B:E",
                 preferOAuth: true,
+                ...callOptions,
               }).catch(() => null);
 
               const rows = existingRowsRes?.values || existingRowsRes?.result?.values || [];
@@ -471,6 +475,7 @@ export async function POST(req: NextRequest) {
                 range: "시트1!A:K",
                 values: newCardRow,
                 preferOAuth: true,
+                ...callOptions,
               }).catch((e: any) => console.warn("[FilesUpload] Sheet append warning:", e.message));
 
               const usedTokens = 700;
@@ -534,6 +539,8 @@ export async function POST(req: NextRequest) {
           mimeType,
           tempFilePath,
           preferOAuth: true,
+          userEmail: cleanEmail,
+          callOptions,
         });
 
         driveFileId = uploadRes?.id || uploadRes?.fileId || null;
@@ -544,7 +551,7 @@ export async function POST(req: NextRequest) {
           try {
             const checkRes = await listDriveFiles({
               query: `'${targetFolderId}' in parents and name = '${targetFileName}' and trashed = false`,
-            }, { preferOAuth: true });
+            }, { preferOAuth: true, ...callOptions });
             const matched = checkRes?.files?.[0];
             if (matched) {
               driveFileId = matched.id;
@@ -591,6 +598,7 @@ export async function POST(req: NextRequest) {
                 defaultTitle: sheetTitle,
                 folderId: capturedTargetFolderId,
                 preferOAuth: true,
+                callOptions,
               });
 
               targetSpreadsheetId = resolved.spreadsheetId;
@@ -607,11 +615,13 @@ export async function POST(req: NextRequest) {
                     range: "시트1!A1:M1",
                     values: receiptHeaders,
                     preferOAuth: true,
+                    ...callOptions,
                   }).catch(() => {});
                   await callSheetsTool("sheets_format_headers", {
                     spreadsheetId: targetSpreadsheetId,
                     sheetName: "시트1",
                     preferOAuth: true,
+                    ...callOptions,
                   }).catch(() => {});
                 }
 
@@ -621,6 +631,7 @@ export async function POST(req: NextRequest) {
                       spreadsheetId: targetSpreadsheetId,
                       range: "시트1!A:A",
                       preferOAuth: true,
+                      ...callOptions,
                     });
                     targetRow = (rangeRes?.values?.length || 1) + 1;
                   } catch {
@@ -649,6 +660,7 @@ export async function POST(req: NextRequest) {
                     range: "A:M",
                     values: initialRow,
                     preferOAuth: true,
+                    ...callOptions,
                   }).catch(() => {});
                 } else {
                   // 일반 파일
@@ -667,6 +679,7 @@ export async function POST(req: NextRequest) {
                     range: "A:F",
                     values: newRowValues,
                     preferOAuth: true,
+                    ...callOptions,
                   }).catch((e: any) => console.warn("[FilesUpload] append_values error:", e.message));
                 }
               }
@@ -687,6 +700,7 @@ export async function POST(req: NextRequest) {
                 range: `시트1!D${rowToUpdate}:D${rowToUpdate}`,
                 values: [[noTokenMsg]],
                 preferOAuth: true,
+                ...callOptions,
               }).catch(() => {});
               return;
             }
@@ -811,6 +825,7 @@ export async function POST(req: NextRequest) {
                     "✅ 분석 완료", // L: 분석상태
                   ]],
                   preferOAuth: true,
+                  ...callOptions,
                 }).catch(() => {});
 
                 const usedTokens = Math.round(1200 * 0.5);
@@ -868,6 +883,7 @@ export async function POST(req: NextRequest) {
                     "✅ 분석 완료", // L: 분석상태
                   ]],
                   preferOAuth: true,
+                  ...callOptions,
                 }).catch(() => {});
                 const usedTokens = Math.round(1200);
                 await deductTokens(cleanEmail, usedTokens).catch(() => {});
