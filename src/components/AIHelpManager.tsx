@@ -89,9 +89,11 @@ export default function AIHelpManager() {
     }
   };
 
-  // 마우스 이벤트 리스너
+  // 마우스 이벤트 리스너 (도움말 활성화 시에만 등록 및 requestAnimationFrame 쓰로틀링 적용)
   useEffect(() => {
-    if (!mounted) return;
+    if (!mounted || !isHelpEnabled) return;
+
+    let rafId: number | null = null;
 
     const handleMouseOver = (e: MouseEvent) => {
       if (!isHelpEnabledRef.current) return;
@@ -104,6 +106,11 @@ export default function AIHelpManager() {
           clearTimeout(leaveTimerRef.current);
           leaveTimerRef.current = null;
         }
+        return;
+      }
+
+      // 모달 다이얼로그 내부에서는 커서 간섭 방지
+      if (target.closest("[role='dialog']") || target.closest(".fixed.inset-0")) {
         return;
       }
 
@@ -187,24 +194,38 @@ export default function AIHelpManager() {
 
     const handleMouseMove = (e: MouseEvent) => {
       if (!isHelpEnabledRef.current) return;
+      if (rafId !== null) return;
+
+      const clientX = e.clientX;
+      const clientY = e.clientY;
       const target = e.target as HTMLElement;
-      if (!target) return;
 
-      if (target.closest("#sheetbot-ai-help-popup")) {
-        setCursorIndicator((prev) => (prev.visible ? { ...prev, visible: false } : prev));
-        return;
-      }
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (!target) return;
 
-      const hintElem = target.closest("[data-easybot-hint]");
-      if (hintElem) {
-        setCursorIndicator({
-          visible: true,
-          x: e.clientX,
-          y: e.clientY,
-        });
-      } else {
-        setCursorIndicator((prev) => (prev.visible ? { ...prev, visible: false } : prev));
-      }
+        if (target.closest("#sheetbot-ai-help-popup")) {
+          setCursorIndicator((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+          return;
+        }
+
+        // 모달 내부에서는 인디케이터 숨김 (모달 인터랙션 및 프레임 속도 최우선 보장)
+        if (target.closest("[role='dialog']") || target.closest(".fixed.inset-0")) {
+          setCursorIndicator((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+          return;
+        }
+
+        const hintElem = target.closest("[data-easybot-hint]");
+        if (hintElem) {
+          setCursorIndicator({
+            visible: true,
+            x: clientX,
+            y: clientY,
+          });
+        } else {
+          setCursorIndicator((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+        }
+      });
     };
 
     const handleMouseOut = (e: MouseEvent) => {
@@ -228,16 +249,20 @@ export default function AIHelpManager() {
       }
     };
 
-    window.addEventListener("mouseover", handleMouseOver);
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseout", handleMouseOut);
+    window.addEventListener("mouseover", handleMouseOver, { passive: true });
+    window.addEventListener("mousemove", handleMouseMove, { passive: true });
+    window.addEventListener("mouseout", handleMouseOut, { passive: true });
 
     return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
       window.removeEventListener("mouseover", handleMouseOver);
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseout", handleMouseOut);
     };
-  }, [mounted]);
+  }, [mounted, isHelpEnabled]);
 
   if (!mounted || !isHelpEnabled) return null;
 

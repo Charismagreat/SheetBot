@@ -69,19 +69,6 @@ jobs:
           path: release-apk/*.apk
           retention-days: 30
 
-      - name: Commit and Push Keystore and APK back to Main
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          mkdir -p public/downloads
-          cp release-apk/SheetBotAgent.apk public/downloads/SheetBotAgent.apk
-          git add android-user-agent/keystore/sheetbot-agent.jks public/downloads/SheetBotAgent.apk
-          if ! git diff --staged --quiet; then
-            git commit -m "build(user-agent): update keystore and public SheetBotAgent.apk"
-            git pull --rebase origin main || true
-            git push origin main
-          fi
-
       - name: Extract Version from Gradle
         id: get_version
         run: |
@@ -97,3 +84,20 @@ jobs:
           files: release-apk/SheetBotAgent.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit and Push Keystore and APK back to Main
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+          mkdir -p public/downloads
+          cp release-apk/SheetBotAgent.apk public/downloads/SheetBotAgent.apk
+          git add android-user-agent/keystore/sheetbot-agent.jks public/downloads/SheetBotAgent.apk
+          if ! git diff --staged --quiet; then
+            git commit -m "build(user-agent): update keystore and public SheetBotAgent.apk"
+            git pull --rebase origin main || true
+            git push origin main || true
+          fi

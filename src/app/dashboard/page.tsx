@@ -403,6 +403,23 @@ export default function DashboardPage() {
     fetchDataRef.current = fetchData;
   }, [fetchData]);
 
+  // 모달이 열려 있는 동안에는 백그라운드 리패칭을 일시 중단하여 소켓 고갈 및 화면 버벅임 방지
+  const isModalActive = isNewProjectModalOpen || isApiKeyModalOpen || !!editingProject || quickWrapData.isOpen || isFdeModalOpen || isFdeRecruitOpen;
+  const isModalActiveRef = useRef(isModalActive);
+  isModalActiveRef.current = isModalActive;
+  const pendingRefetchAfterModalRef = useRef(false);
+  const prevModalActiveRef = useRef(false);
+
+  useEffect(() => {
+    if (prevModalActiveRef.current && !isModalActive) {
+      if (pendingRefetchAfterModalRef.current) {
+        pendingRefetchAfterModalRef.current = false;
+        void fetchData(true);
+      }
+    }
+    prevModalActiveRef.current = isModalActive;
+  }, [isModalActive, fetchData]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -428,6 +445,13 @@ export default function DashboardPage() {
       ];
 
       if (event.tableName && relevantTables.includes(event.tableName)) {
+        // 모달(새 프로젝트 생성/AI 스크립트 작성 등)이 열려 있는 동안에는
+        // 백그라운드 재패칭으로 인한 소켓 고갈 및 화면 버벅임을 원천 차단하고 지연 예약
+        if (isModalActiveRef.current) {
+          pendingRefetchAfterModalRef.current = true;
+          return;
+        }
+
         if (sseDebounceTimer) clearTimeout(sseDebounceTimer);
         sseDebounceTimer = setTimeout(() => {
           fetchDataRef.current(true);

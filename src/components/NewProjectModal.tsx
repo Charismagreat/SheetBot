@@ -54,6 +54,11 @@ function readSheetbotApiError(json: any, fallback: string): string {
 }
 import { gasDeployFailureUi } from "@/constants/gas-deploy-failure-ui";
 
+// 모달 토글 시 불필요한 HTTP 소켓 소모 방지를 위한 스코프 상태 메모리 캐시 (3분 TTL)
+let cachedScopeStatus: "granted" | "needed" | null = null;
+let cachedServerCanCreateSheet: boolean | null = null;
+let lastScopeCheckTime = 0;
+
 interface NewProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -62,6 +67,7 @@ interface NewProjectModalProps {
 }
 
 export default function NewProjectModal({ isOpen, onClose, onSuccess, initialSheetUrl }: NewProjectModalProps) {
+  const inFlightProvisioningRef = React.useRef<Promise<string | null> | null>(null);
   // 생성 모드: NEW_SHEET (새 시트 자동 설계), EXCEL_UPLOAD (엑셀 업로드 변환), EXISTING_URL (기존 구글 시트 URL)
   const [sourceMode, setSourceMode] = useState<"NEW_SHEET" | "EXCEL_UPLOAD" | "EXISTING_URL">("NEW_SHEET");
 
@@ -172,11 +178,22 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
 
   const checkGoogleScopes = async () => {
     try {
+      // 3분 이내 확인된 결과가 있으면 재사용 (모달 열 때마다 발생하는 불필요한 HTTP 소켓 소모 방지)
+      if (cachedScopeStatus && Date.now() - lastScopeCheckTime < 180_000) {
+        setScopeStatus(cachedScopeStatus);
+        if (cachedServerCanCreateSheet !== null) {
+          setServerCanCreateSheet(cachedServerCanCreateSheet);
+        }
+        return;
+      }
+
       // 1. 서버의 구글 시트 자동 생성 엔진 상태 확인
       void apiFetchWithTimeout("/api/sheets/create", { method: "GET", timeoutMs: 12_000 })
         .then((res) => res.json())
         .then((data) => {
-          setServerCanCreateSheet(Boolean(data?.canAutoCreate));
+          const canCreate = Boolean(data?.canAutoCreate);
+          cachedServerCanCreateSheet = canCreate;
+          setServerCanCreateSheet(canCreate);
         })
         .catch(() => setServerCanCreateSheet(false));
 
@@ -189,12 +206,18 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
         ]);
         const testRes = await driveProbe.catch(() => null);
         if (testRes && (Array.isArray((testRes as any).files) || Array.isArray(testRes))) {
+          cachedScopeStatus = "granted";
+          lastScopeCheckTime = Date.now();
           setScopeStatus("granted");
           setShowScopePrompt(false);
         } else {
+          cachedScopeStatus = "needed";
+          lastScopeCheckTime = Date.now();
           setScopeStatus("needed");
         }
       } else {
+        cachedScopeStatus = "needed";
+        lastScopeCheckTime = Date.now();
         setScopeStatus("needed");
       }
     } catch {
@@ -453,53 +476,63 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess, initialShe
     window.open("https://docs.google.com/spreadsheets/create", "_blank");
   };
 
-  const provisionSpreadsheetInBackground = async (payload: {
+  const provisionSpreadsheetInBackground = (payload: {
     title: string;
     data: any[][];
-  }) => {
+  }): Promise<string | null> => {
+    if (inFlightProvisioningRef.current) {
+      return inFlightProvisioningRef.current;
+    }
+
     setIsCreatingSheet(true);
-    try {
-      const createRes = await apiFetchWithTimeout("/api/sheets/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        timeoutMs: 45_000,
-      });
-      const createData = await createRes.json();
-      if (createData.success && createData.spreadsheetUrl) {
-        setSheetUrl(createData.spreadsheetUrl);
-        setAutoCreatedSheet({
-          id: createData.spreadsheetId,
-          url: createData.spreadsheetUrl,
+    const p = (async () => {
+      try {
+        const createRes = await apiFetchWithTimeout("/api/sheets/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          timeoutMs: 45_000,
         });
-        return createData.spreadsheetUrl as string;
-      }
-      if (
-        createData.oauthRequired ||
-        createData.code === "GOOGLE_OAUTH_TOKEN_MISSING" ||
-        createData.code === "VISITOR_SESSION_MISSING"
-      ) {
-        setShowScopePrompt(true);
-        setError(
-          createData.error ||
-            "구글 시트 자동 생성에 필요한 BYO Google(방문자) 세션이 없습니다. 상단에서 권한을 승인하거나 /login에서 다시 로그인해 주세요.",
-        );
-      } else if (!createData.success && createData.error) {
-        setError(createData.error);
+        const createData = await createRes.json();
+        if (createData.success && createData.spreadsheetUrl) {
+          setSheetUrl(createData.spreadsheetUrl);
+          setAutoCreatedSheet({
+            id: createData.spreadsheetId,
+            url: createData.spreadsheetUrl,
+          });
+          return createData.spreadsheetUrl as string;
+        }
         if (
-          String(createData.error).includes("OAuth") ||
-          String(createData.error).includes("token") ||
-          String(createData.error).includes("권한")
+          createData.oauthRequired ||
+          createData.code === "GOOGLE_OAUTH_TOKEN_MISSING" ||
+          createData.code === "VISITOR_SESSION_MISSING"
         ) {
           setShowScopePrompt(true);
+          setError(
+            createData.error ||
+              "구글 시트 자동 생성에 필요한 BYO Google(방문자) 세션이 없습니다. 상단에서 권한을 승인하거나 /login에서 다시 로그인해 주세요.",
+          );
+        } else if (!createData.success && createData.error) {
+          setError(createData.error);
+          if (
+            String(createData.error).includes("OAuth") ||
+            String(createData.error).includes("token") ||
+            String(createData.error).includes("권한")
+          ) {
+            setShowScopePrompt(true);
+          }
         }
+      } catch (createErr) {
+        console.warn("[NewProjectModal] Background sheet create:", createErr);
+      } finally {
+        setIsCreatingSheet(false);
+        inFlightProvisioningRef.current = null;
       }
-    } catch (createErr) {
-      console.warn("[NewProjectModal] Background sheet create:", createErr);
-    } finally {
-      setIsCreatingSheet(false);
-    }
-    return null;
+      return null;
+    })();
+
+    inFlightProvisioningRef.current = p;
+    return p;
   };
 
   // 1단계: AI 시트 사전 정밀 분석 실행 (무료)
