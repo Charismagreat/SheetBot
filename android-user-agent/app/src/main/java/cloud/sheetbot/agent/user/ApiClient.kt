@@ -147,11 +147,11 @@ object ApiClient {
                     return@withContext PairResult(
                         success = true,
                         userEmail = finalEmail,
-                        deviceToken = resJson.optString("token", ""),
-                        webhookUrl = resJson.optString("webhookUrl", "$PRIMARY_HOST/api/webhooks/dispatch"),
-                        fallbackWebhookUrl = resJson.optString("fallbackWebhookUrl", "$FALLBACK_HOST/api/webhooks/dispatch"),
-                        heartbeatUrl = "$PRIMARY_HOST/api/user/agent2/heartbeat",
-                        fallbackHeartbeatUrl = "$FALLBACK_HOST/api/user/agent2/heartbeat",
+                        deviceToken = resJson.optString("deviceId", resJson.optString("deviceToken", resJson.optString("token", ""))),
+                        webhookUrl = resJson.optString("webhookUrl", "$PRIMARY_HOST/api/user/agent2/inbound-sms"),
+                        fallbackWebhookUrl = resJson.optString("fallbackWebhookUrl", "$FALLBACK_HOST/api/user/agent2/inbound-sms"),
+                        heartbeatUrl = resJson.optString("heartbeatUrl", "$PRIMARY_HOST/api/user/agent2/heartbeat"),
+                        fallbackHeartbeatUrl = resJson.optString("fallbackHeartbeatUrl", "$FALLBACK_HOST/api/user/agent2/heartbeat"),
                         message = if (refMsg.isNotBlank()) "$refMsg\n구글 계정 연동 성공" else resJson.optString("message", "구글 계정 연동 성공"),
                         referralMessage = if (refMsg.isNotBlank()) refMsg else null
                     )

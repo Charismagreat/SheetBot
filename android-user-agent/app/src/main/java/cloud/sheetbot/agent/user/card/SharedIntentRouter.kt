@@ -19,7 +19,8 @@ class SharedIntentRouter(
     private val context: Context,
     private val onBookmarkUrl: (url: String, rawText: String?) -> Unit,
     private val onUploadFiles: (uris: List<Uri>, sourceTag: String) -> Unit,
-    private val onClearIntent: () -> Unit
+    private val onClearIntent: () -> Unit,
+    private val onDeepLinkPair: ((Uri) -> Unit)? = null
 ) {
     private var lastHandledShareUrl: String? = null
     private var lastHandledShareTime: Long = 0L
@@ -27,6 +28,18 @@ class SharedIntentRouter(
     fun handleSharedIntent(intent: Intent?) {
         if (intent == null) return
         val action = intent.action ?: return
+
+        // 📲 0순위: sheetbot://pair 딥링크 원터치 페어링
+        if (Intent.ACTION_VIEW == action) {
+            val dataUri = intent.data
+            if (dataUri != null && dataUri.scheme == "sheetbot" && dataUri.host == "pair") {
+                onDeepLinkPair?.invoke(dataUri)
+                intent.action = null
+                intent.data = null
+                try { onClearIntent() } catch (_: Throwable) {}
+                return
+            }
+        }
 
         if (Intent.ACTION_SEND == action) {
             val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)

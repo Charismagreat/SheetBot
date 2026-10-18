@@ -56,9 +56,10 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanEmail = verifiedEmail;
-    const cleanModel = String(deviceModel || "Android Device (SheetBot Agent)").trim();
-    const cleanVersion = String(appVersion || "1.8.0").trim();
+    const cleanModel = String(deviceModel || "안드로이드 스마트폰").trim();
+    const cleanVersion = String(appVersion || "2.3.0").trim();
     const cleanPhone = String(phoneNumber || "").trim();
+    const generatedDeviceId = `agent2_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}_${Date.now()}`;
 
     // 3. 기기 고유 토큰 및 핀코드 생성
     const secretKey = process.env.NEXTAUTH_SECRET || "sheetbot-agent2-secret-key-2026";
@@ -69,40 +70,52 @@ export async function POST(req: NextRequest) {
       .digest("hex")
       .slice(0, 16);
 
-    // 4. sheetbot_user_devices 대장 조회 및 업서트 (소프트 삭제 필터링)
+    // 4. sheetbot_user_devices 대장 조회 및 업서트 (소프트 삭제 복원 포함)
     const existDevRes = await queryTable("sheetbot_user_devices", {
-      filters: { user_email: cleanEmail, device_id: cleanModel },
-      limit: 5,
+      filters: { user_email: cleanEmail },
+      limit: 10,
+      orderBy: "id",
+      orderDirection: "DESC",
     }).catch(() => ({ rows: [] }));
 
-    const existingDevices = (existDevRes.rows || []).filter((d: any) => !d.deleted_at);
-
     const nowIso = new Date().toISOString();
-    if (existingDevices.length > 0) {
-      await updateRows("sheetbot_user_devices", {
-        filters: { id: existingDevices[0].id },
-        updates: {
+    let finalDeviceId = generatedDeviceId;
+    const existingList = existDevRes.rows || [];
+
+    if (existingList.length > 0) {
+      const targetDev = existingList[0];
+      finalDeviceId = targetDev.device_id || generatedDeviceId;
+      await updateRows(
+        "sheetbot_user_devices",
+        {
+          device_id: finalDeviceId,
           device_name: cleanModel,
+          label: `${cleanModel} (SheetBot Agent)`,
           status: "CONNECTED",
-          phone_number: cleanPhone || existingDevices[0].phone_number || null,
-          pairing_mode: "google",
+          phone_number: cleanPhone || targetDev.phone_number || "",
+          pairing_mode: "agent2",
           app_version: cleanVersion,
           last_connected_at: nowIso,
           last_ping: nowIso,
           updated_at: nowIso,
           updated_by: cleanEmail,
+          deleted_at: null,
+          deleted_by: null,
         },
-      }).catch((e) => console.warn("[PairGoogle] device update warning:", e.message));
+        { filters: { id: String(targetDev.id) } }
+      ).catch((e) => console.warn("[PairGoogle] device update warning:", e.message));
     } else {
+      const recordId = `udev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       await insertRows("sheetbot_user_devices", [
         {
-          id: Date.now(),
+          id: recordId,
           user_email: cleanEmail,
-          device_id: cleanModel,
+          device_id: finalDeviceId,
           device_name: cleanModel,
+          label: `${cleanModel} (SheetBot Agent)`,
           status: "CONNECTED",
-          phone_number: cleanPhone || null,
-          pairing_mode: "google",
+          phone_number: cleanPhone || "",
+          pairing_mode: "agent2",
           app_version: cleanVersion,
           last_connected_at: nowIso,
           last_ping: nowIso,
@@ -125,7 +138,7 @@ export async function POST(req: NextRequest) {
         user_email: cleanEmail,
         rule_id: "GOOGLE_SIGNIN_PAIR",
         rule_name: "🔐 Google 원클릭 모바일 기기 연동",
-        device_id: cleanModel,
+        device_id: finalDeviceId,
         recipient: cleanEmail,
         content: `구글 계정(${cleanEmail})으로 스마트폰 에이전트가 0초 만에 자동 페어링되었습니다.`,
         status: "SUCCESS",
@@ -143,7 +156,7 @@ export async function POST(req: NextRequest) {
         const refResult = await processReferralReward({
           inviterCodeOrEmail: referralCode.trim(),
           inviteeEmail: cleanEmail,
-          deviceId: cleanModel,
+          deviceId: finalDeviceId,
           ipAddress: ip,
           channel: "MOBILE_AGENT",
         });
@@ -161,9 +174,12 @@ export async function POST(req: NextRequest) {
       userEmail: cleanEmail,
       googleName,
       token,
+      deviceId: finalDeviceId,
+      deviceToken: finalDeviceId,
+      status: "CONNECTED",
       referralMessage,
-      webhookUrl: "https://sheetbot.cloud/api/wallet/bank-webhook",
-      fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/bank-webhook",
+      webhookUrl: "https://sheetbot.cloud/api/user/agent2/inbound-sms",
+      fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/user/agent2/inbound-sms",
       heartbeatUrl: "https://sheetbot.cloud/api/user/agent2/heartbeat",
       fallbackHeartbeatUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/user/agent2/heartbeat",
     });

@@ -133,7 +133,7 @@ export async function GET(request: Request) {
     // 1. 디바이스 필터링 & 가공
     const rawDevices = (devicesRes.rows || []).filter((r: any) => !r.deleted_at);
     const agentDevices = rawDevices
-      .filter((r: any) => r.pairing_mode === "agent2" || r.pairing_mode === "agent")
+      .filter((r: any) => r.pairing_mode === "agent2" || r.pairing_mode === "agent" || r.pairing_mode === "google")
       .map(mapNotificationDevice);
 
     // 2. 규칙 필터링

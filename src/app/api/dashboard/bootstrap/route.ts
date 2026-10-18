@@ -189,9 +189,9 @@ export async function GET(request: Request) {
     // C. 스케줄 분류
     const validSchedules = (schedulesRes.rows || []).filter((r: any) => !r.deleted_at);
 
-    // D. 디바이스 분류 (이용자용 에이전트 agent2 / agent 기기만 집계)
+    // D. 디바이스 분류 (이용자용 에이전트 agent2 / agent / google 기기만 집계)
     const validDevices = (devicesRes.rows || []).filter(
-      (r: any) => !r.deleted_at && (r.pairing_mode === "agent2" || r.pairing_mode === "agent")
+      (r: any) => !r.deleted_at && (r.pairing_mode === "agent2" || r.pairing_mode === "agent" || r.pairing_mode === "google")
     );
 
     // E. AI 모델 설정

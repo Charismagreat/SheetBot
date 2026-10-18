@@ -128,6 +128,12 @@ class MainCoreCoordinator(
             },
             onClearIntent = {
                 activity.setIntent(Intent())
+            },
+            onDeepLinkPair = { uri ->
+                val card = getCardCoordinator()
+                if (card != null && card.isAccountPairingInitialized) {
+                    card.accountPairingController.handleDeepLinkUri(uri)
+                }
             }
         )
 
@@ -200,6 +206,10 @@ class MainCoreCoordinator(
             }
         )
         smsObserverController.register()
+
+        if (intent != null) {
+            handleSharedIntent(intent)
+        }
     }
 
     fun onResume() {

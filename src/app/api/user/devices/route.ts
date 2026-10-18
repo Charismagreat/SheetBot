@@ -47,7 +47,11 @@ export async function GET(req: NextRequest) {
     // 2. 과거 방식(구글 메시지 QR 등) 기기는 DB에서 즉시 자동 소프트 삭제 정리
     // ⚠️ 관리자용 무통장 입금 감지 에이전트 M(android_agent)은 절대 삭제 대상에 포함하지 않음
     const legacyRows = rawRows.filter(
-      (r: any) => r.pairing_mode !== "agent2" && r.pairing_mode !== "agent" && r.pairing_mode !== "android_agent"
+      (r: any) =>
+        r.pairing_mode !== "agent2" &&
+        r.pairing_mode !== "agent" &&
+        r.pairing_mode !== "google" &&
+        r.pairing_mode !== "android_agent"
     );
     for (const leg of legacyRows) {
       void updateRows(
@@ -61,9 +65,12 @@ export async function GET(req: NextRequest) {
       ).catch(() => {});
     }
 
-    // 3. 오직 이용자용 시트봇 에이전트(Agent2 / Agent) 기기만 필터링 (관리자용 android_agent 배제)
+    // 3. 오직 이용자용 시트봇 에이전트(Agent2 / Agent / Google) 기기만 필터링 (관리자용 android_agent 배제)
     const agentDevices = rawRows.filter(
-      (r: any) => r.pairing_mode === "agent2" || r.pairing_mode === "agent"
+      (r: any) =>
+        r.pairing_mode === "agent2" ||
+        r.pairing_mode === "agent" ||
+        r.pairing_mode === "google"
     );
 
     // 마지막 하트비트 경과 시간 계산 헬퍼 (초 단위)

@@ -83,6 +83,14 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="*/*" />
             </intent-filter>
+
+            <!-- 📲 모바일 웹 대시보드에서 1초 원터치 자동 연동 딥링크 (v2.3.0) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="sheetbot" android:host="pair" />
+            </intent-filter>
         </activity>
 
         <!-- 서버 두절 시 잠금화면 위 강제 점등 전면 비상 알람 액티비티 -->

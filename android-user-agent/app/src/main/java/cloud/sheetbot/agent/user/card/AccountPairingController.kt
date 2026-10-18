@@ -117,11 +117,11 @@ class AccountPairingController(
                 launchAccountPickerOrManualDialog("구글 계정 이메일을 가져올 수 없어 기기 계정 선택창으로 전환합니다.")
             }
         } catch (e: ApiException) {
-            android.util.Log.w("AccountPairing", "Google sign-in failed: statusCode=${e.statusCode}")
+            android.util.Log.w("AccountPairing", "Google sign-in exception: statusCode=${e.statusCode}")
             if (e.statusCode == 12501) { // 사용자 단순 취소
                 Toast.makeText(activity, "구글 로그인이 취소되었습니다.", Toast.LENGTH_SHORT).show()
             } else {
-                launchAccountPickerOrManualDialog("구글 보안 인증(코드 ${e.statusCode})으로 인해 스마트폰 계정 선택창으로 안전하게 전환합니다.")
+                launchAccountPickerOrManualDialog("스마트폰 구글 계정을 선택하거나 이메일을 확인해 주세요.")
             }
         }
     }
@@ -348,10 +348,12 @@ class AccountPairingController(
                 prefs.isPaired = true
                 if (!result.webhookUrl.isNullOrBlank()) prefs.webhookUrl = result.webhookUrl
                 if (!result.fallbackWebhookUrl.isNullOrBlank()) prefs.fallbackWebhookUrl = result.fallbackWebhookUrl
+                if (!result.heartbeatUrl.isNullOrBlank()) prefs.heartbeatUrl = result.heartbeatUrl
+                if (!result.fallbackHeartbeatUrl.isNullOrBlank()) prefs.fallbackHeartbeatUrl = result.fallbackHeartbeatUrl
                 if (!result.deviceToken.isNullOrBlank()) prefs.deviceToken = result.deviceToken
 
                 KeepAliveService.start(activity)
-            onPairingSuccess(finalEmail)
+                onPairingSuccess(finalEmail)
 
                 addLogItem("구글로그인", "$finalEmail 계정 자동 연동 성공", true)
 
@@ -374,4 +376,20 @@ class AccountPairingController(
         }
     }
 
+    /**
+     * 📲 sheetbot://pair 딥링크 수신 시 0초 원터치 자동 연동 (v2.3.0)
+     */
+    fun handleDeepLinkUri(uri: Uri) {
+        val scheme = uri.scheme
+        val host = uri.host
+        if (scheme == "sheetbot" && host == "pair") {
+            val email = uri.getQueryParameter("email")
+            val token = uri.getQueryParameter("token")
+            val pin = uri.getQueryParameter("pin")
+            if (!email.isNullOrBlank()) {
+                Toast.makeText(activity, "딥링크 원터치 페어링 진행 중: $email", Toast.LENGTH_SHORT).show()
+                performPairing(email, token = token, pinCode = pin)
+            }
+        }
+    }
 }

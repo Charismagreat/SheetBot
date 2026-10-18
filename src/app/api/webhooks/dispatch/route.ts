@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     }).catch(() => ({ rows: [] }));
 
     const userDevices = (devRes.rows || []).filter(
-      (d: any) => !d.deleted_at && (d.pairing_mode === "agent2" || d.pairing_mode === "agent")
+      (d: any) => !d.deleted_at && (d.pairing_mode === "agent2" || d.pairing_mode === "agent" || d.pairing_mode === "google")
     );
     const activeDevice = userDevices[0] || null;
 

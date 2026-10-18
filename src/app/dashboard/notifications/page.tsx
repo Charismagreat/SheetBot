@@ -868,6 +868,12 @@ export default function NotificationsPage() {
                               {agent2PairData.pinCode || "SB-777777"}
                             </span>
                           </div>
+                          <a
+                            href={agent2PairData.qrData}
+                            className="mt-2 block w-full py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg text-center transition-all md:hidden shadow-xs"
+                          >
+                            📲 모바일 앱 1초 원터치 연동
+                          </a>
                         </div>
                       ) : (
                         <button
