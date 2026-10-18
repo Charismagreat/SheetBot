@@ -46,6 +46,7 @@ export interface ResolveSheetOptions {
   folderId?: string | null;
   folderName?: string | null;
   preferOAuth?: boolean;
+  forceRefresh?: boolean;
   visitorSessionId?: string | null;
   callOptions?: WorkspaceVisitorCallOptions;
 }
@@ -59,32 +60,39 @@ export interface ResolveSheetResult {
 // 동시 다발적 요청 시 중복 시트 생성 방지를 위한 인메모리 뮤텍스
 const inFlightResolutions = new Map<string, Promise<ResolveSheetResult>>();
 
-// 인메모리 바인딩 캐시 (프로세스 실행 중 0초 응답 보장)
-const resolvedBindingCache = new Map<string, ResolveSheetResult>();
+// 인메모리 바인딩 캐시 (60초 유효)
+interface CachedBinding {
+  result: ResolveSheetResult;
+  timestamp: number;
+}
+const resolvedBindingCache = new Map<string, CachedBinding>();
+const BINDING_CACHE_TTL_MS = 60_000;
 
-// 대표 관리자 및 기바인딩된 10대 대장 프리셋 (드라이브 및 DB 조회 전 0초 즉각 반환)
-const KNOWN_DEFAULT_BINDINGS: Record<string, Partial<Record<SheetBindingType, string>>> = {
-  "chachogreat@gmail.com": {
-    WEBSITE_MONITOR: "1YkK5vuxxgqwumB-FRDCw_NyI-ojnhFfn7x-HQe7go4s",
-    CALL_ENDED_CARD: "1EnsIL1JPoa4_e97dpvS53Fi7Sf-hrKGwVHa0i1FZFzI",
-    FILE_UPLOAD: "1yxw6CTt269YWdfYoHLGf69picVoPVpsAiQTbq0Ss9mQ",
-    SMS: "1FzEBoeQvniowaF6SMcQWujMnuSXqQZGqtIRPz0ha7kE",
-    RECORDING: "1bHtvSdmqfHJ-1WkgPv9hMlaUjqbMxEBnkHQpk1kIiOQ",
-    LINK_BOOKMARK: "1fSUK1NVshsX2unoTdfw7XfMjrbql46a4ecWp5E3EmeU",
-    KAKAO: "1QKd7OBcp8IQ_2llO9jmmhWlkNRgaIRzT9v1vwZ2Ll1g",
-    MISSED_CALL: "1DqUqEECRjE2luuLoBuyV8RXYLccqRpbSSD2SZvTOAXo",
-    PAYMENT_PUSH: "1CSxsEJEpiBXisqw8yAqz3paTqcraH2kzW6RCpQ07vx8",
-    RECEIPT_SMS: "1Hi-hYZAGcmWDSSBpUhgEl6_Utc6iIguUiFClqEqas9I",
-    RECEIPT: "14t6C-90zNNN-NTXexP37fMOKX85gP9iTe3MIlM83RC4",
-    BUSINESS_CARD: "1GPMcTd7hxU2-ORZ32OX7Qz0tOnxMDNtSPqwKzqiS_AI",
-    QUOTE: "1XCQMxao3uIhbXGh5kYlnXE5g9vH5mFBQ0cohJGyMl1U",
-    ESTIMATE: "1fLbvyQ3hTOs6mK-czFdDrveQiNjBXT2fAPUhRnwjBqg",
-    MOBILE_SITE: "1hxYuqBrYGVmeX_W09izu8-ga9xMqZt0ssMu8TLaSPrg",
-  },
-  "charismagreat@gmail.com": {
-    MOBILE_SITE: "1hxYuqBrYGVmeX_W09izu8-ga9xMqZt0ssMu8TLaSPrg",
-  },
-};
+/**
+ * 특정 회원의 대장 바인딩을 강제 무효화(캐시 및 DB 초기화)하여 다음 요청 시 재탐색/자가치유하도록 처리
+ */
+export async function invalidateUserSheetBinding(
+  userEmail: string,
+  sheetType: SheetBindingType
+): Promise<void> {
+  const cleanEmail = userEmail.trim().toLowerCase();
+  const normalizedType = (sheetType || "").toUpperCase() as SheetBindingType;
+  const bindingKey = `${cleanEmail}_${normalizedType}`;
+  resolvedBindingCache.delete(bindingKey);
+  try {
+    await updateRows("sheetbot_user_sheet_bindings", {
+      filters: { user_email: cleanEmail, sheet_type: normalizedType },
+      updates: {
+        spreadsheet_id: null,
+        spreadsheet_url: null,
+        updated_at: new Date().toISOString().replace("T", " ").slice(0, 19),
+      },
+    });
+    console.log(`[SheetBinding] 🗑️ Invalidation complete for ${bindingKey}`);
+  } catch (err: any) {
+    console.warn(`[SheetBinding] Failed to invalidate DB binding for ${bindingKey}:`, err?.message);
+  }
+}
 
 /**
  * 회원별 구글 스프레드시트 고유 ID 영구 바인딩 및 자가 치유 탐색기
@@ -96,28 +104,15 @@ export async function resolveUserSpreadsheet(
   const normalizedType = (options.sheetType || "").toUpperCase() as SheetBindingType;
   const bindingKey = `${cleanEmail}_${normalizedType}`;
 
-  // 0-1. 인메모리 바인딩 캐시 우선 확인 (0ms)
-  const memoryCached = resolvedBindingCache.get(bindingKey);
-  if (memoryCached?.spreadsheetId) {
-    return memoryCached;
+  // 0-1. 인메모리 바인딩 캐시 우선 확인 (forceRefresh가 아닐 때 60초 유효)
+  if (!options.forceRefresh) {
+    const memoryCached = resolvedBindingCache.get(bindingKey);
+    if (memoryCached && Date.now() - memoryCached.timestamp < BINDING_CACHE_TTL_MS) {
+      return memoryCached.result;
+    }
   }
 
-  // 0-2. 사전 정의된 기바인딩 프리셋 확인 (0ms)
-  const knownId = KNOWN_DEFAULT_BINDINGS[cleanEmail]?.[normalizedType];
-  if (knownId) {
-    const finalUrl = normalizedType === "QUOTE"
-      ? `https://docs.google.com/spreadsheets/d/${knownId}/edit#gid=1021826080`
-      : `https://docs.google.com/spreadsheets/d/${knownId}/edit`;
-    const result: ResolveSheetResult = {
-      spreadsheetId: knownId,
-      spreadsheetUrl: finalUrl,
-      isNew: false,
-    };
-    resolvedBindingCache.set(bindingKey, result);
-    return result;
-  }
-
-  // 0-3. 동시 요청 뮤텍스 확인 (단, 8초 이상 블로킹 방지)
+  // 0-2. 동시 요청 뮤텍스 확인 (단, 8초 이상 블로킹 방지)
   if (inFlightResolutions.has(bindingKey)) {
     return inFlightResolutions.get(bindingKey)!;
   }
@@ -125,7 +120,7 @@ export async function resolveUserSpreadsheet(
   const promise = doResolveUserSpreadsheet({ ...options, sheetType: normalizedType })
     .then((res) => {
       if (res?.spreadsheetId) {
-        resolvedBindingCache.set(bindingKey, res);
+        resolvedBindingCache.set(bindingKey, { result: res, timestamp: Date.now() });
       }
       return res;
     })
@@ -177,34 +172,84 @@ async function doResolveUserSpreadsheet(
     }
   }
 
-  // 2. 바인딩된 고유 ID가 있으면 구글 드라이브 추가 왕복 없이 즉시 반환 (0초 응답 보장)
-  if (boundRecord?.spreadsheet_id) {
-    const existingId = boundRecord.spreadsheet_id;
-    let url = boundRecord.spreadsheet_url;
-    if (!url) {
-      url = normalizedType === "QUOTE"
-        ? `https://docs.google.com/spreadsheets/d/${existingId}/edit#gid=1021826080`
-        : `https://docs.google.com/spreadsheets/d/${existingId}/edit`;
-    } else if (normalizedType === "QUOTE" && !url.includes("gid=")) {
-      url = `${url}#gid=1021826080`;
-    }
-
-    return {
-      spreadsheetId: existingId,
-      spreadsheetUrl: url,
-      isNew: false,
-    };
-  }
-
-  // 2-1. 사용자별 구글 OAuth/Visitor 세션 옵션 확정 (멀티테넌시 완벽 격리)
+  // 1-1. 사용자별 구글 OAuth/Visitor 세션 옵션 확정 (멀티테넌시 완벽 격리)
   const callOptions = options.callOptions || (await getWorkspaceCallOptionsForEmail(cleanEmail));
 
-  // 3. 바인딩이 없거나 실제 파일이 삭제된 경우: 해당 사용자 구글 드라이브 2단계 스마트 탐색
   let targetSpreadsheetId: string | null = null;
   let isNew = false;
 
+  // 2. 바인딩된 고유 ID가 있으면 구글 드라이브에서 실제 파일의 활성(휴지통 제외) 상태 검증
+  if (boundRecord?.spreadsheet_id) {
+    const candidateId = boundRecord.spreadsheet_id;
+    try {
+      let activeFiles: any[] = [];
+      // 2-1. 지정 폴더가 있으면 해당 폴더 내 활성 시트 확인
+      if (folderId) {
+        const folderQuery = `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${targetTitle}' and trashed = false`;
+        const folderRes = await listDriveFiles({ query: folderQuery }, { preferOAuth, ...callOptions }).catch(() => ({ files: [] }));
+        activeFiles = folderRes?.files || [];
+      }
+      // 2-2. 폴더 내에 없으면 드라이브 전체에서 동일 제목의 활성 시트 확인
+      if (activeFiles.length === 0) {
+        const globalQuery = `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${targetTitle}' and trashed = false`;
+        const globalRes = await listDriveFiles({ query: globalQuery }, { preferOAuth, ...callOptions }).catch(() => ({ files: [] }));
+        activeFiles = globalRes?.files || [];
+      }
+
+      if (activeFiles.some((f: any) => f.id === candidateId)) {
+        // 기존 바인딩 시트가 정상적으로 활성 상태임 (휴지통에 없음)
+        targetSpreadsheetId = candidateId;
+      } else if (activeFiles.length > 0) {
+        // 기존 candidateId는 사용자에 의해 휴지통으로 이동되었으나 동일 제목의 다른 활성 시트가 존재함 -> 자동 리바인딩
+        console.log(`[SheetBinding] 🔄 Candidate sheet ${candidateId} was trashed/superseded. Auto-rebinding to active sheet ${activeFiles[0].id} for '${targetTitle}'...`);
+        targetSpreadsheetId = activeFiles[0].id;
+      } else {
+        // 동일 제목의 활성 시트가 드라이브에 전무함 -> 사용자가 시트를 휴지통으로 버렸거나 영구 삭제함!
+        console.warn(`[SheetBinding] ⚠️ Sheet ${candidateId} for '${targetTitle}' was TRASHED by user! Invalidating stale binding to trigger fresh creation...`);
+        targetSpreadsheetId = null;
+      }
+    } catch (checkErr: any) {
+      console.warn(`[SheetBinding] Active check warning for ${targetTitle}:`, checkErr?.message);
+      targetSpreadsheetId = candidateId;
+    }
+
+    if (targetSpreadsheetId) {
+      let url = boundRecord.spreadsheet_url;
+      if (!url || targetSpreadsheetId !== candidateId) {
+        url = normalizedType === "QUOTE"
+          ? `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit#gid=1021826080`
+          : `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
+      } else if (normalizedType === "QUOTE" && !url.includes("gid=")) {
+        url = `${url}#gid=1021826080`;
+      }
+
+      // 만약 다른 활성 시트로 리바인딩된 경우 DB 즉시 업데이트
+      if (boundRecord.id && targetSpreadsheetId !== candidateId) {
+        await updateRows("sheetbot_user_sheet_bindings", {
+          filters: { id: boundRecord.id },
+          updates: {
+            spreadsheet_id: targetSpreadsheetId,
+            spreadsheet_url: url,
+            updated_at: new Date().toISOString().replace("T", " ").slice(0, 19),
+          },
+        }).catch(() => {});
+      }
+
+      return {
+        spreadsheetId: targetSpreadsheetId,
+        spreadsheetUrl: url,
+        isNew: false,
+      };
+    }
+
+    // candidate가 휴지통에 들어갔으므로 DB 및 캐시를 비우고 신규 생성으로 진행
+    boundRecord.spreadsheet_id = null;
+    resolvedBindingCache.delete(bindingId);
+  }
+
+  // 3. 바인딩이 없거나 휴지통에 버려져 새로 탐색해야 하는 경우
   // 3-1. 1차: 지정된 폴더가 있다면 해당 폴더 내부 탐색
-  if (folderId) {
+  if (!targetSpreadsheetId && folderId) {
     try {
       const folderQuery = `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${targetTitle}' and trashed = false`;
       const searchRes = await listDriveFiles({ query: folderQuery }, { preferOAuth, ...callOptions });
@@ -217,7 +262,7 @@ async function doResolveUserSpreadsheet(
     }
   }
 
-  // 3-2. 2차: 폴더 내에서 못 찾았거나 폴더가 지정되지 않은 경우, 사용자 드라이브에서 동일 파일명 시트 탐색
+  // 3-2. 2차: 폴더 내에서 못 찾았거나 폴더가 지정되지 않은 경우, 사용자 드라이브에서 동일 파일명 활성 시트 탐색
   if (!targetSpreadsheetId) {
     try {
       const globalQuery = `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${targetTitle}' and trashed = false`;

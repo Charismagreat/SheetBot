@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: "id 파라미터가 필요합니다." }, { status: 400 });
     }
 
-    const rowsRes = await queryTable<any>("sheetbot_instagram_posts", {
+    const rowsRes = await queryTable("sheetbot_instagram_posts", {
       filters: { uuid: id },
       limit: 1,
     }).catch(() => ({ rows: [] }));
@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
 
     if (!row) {
       // 최근 등록건 중 일치하는 레코드 탐색 (폴백)
-      const allRowsRes = await queryTable<any>("sheetbot_instagram_posts", {
+      const allRowsRes = await queryTable("sheetbot_instagram_posts", {
         limit: 10,
         orderBy: "id",
         orderDirection: "DESC",
@@ -392,7 +392,7 @@ ${refSummaryForAi}
     let cleanHandle = instagramIdInput.trim().replace(/^@/, "").replace(/[^a-zA-Z0-9._]/g, "");
     if (!cleanHandle && userEmail) {
       try {
-        const userRes = await queryTable<any>("sheetbot_users", {
+        const userRes = await queryTable("sheetbot_users", {
           filters: { email: userEmail },
           limit: 1,
         });

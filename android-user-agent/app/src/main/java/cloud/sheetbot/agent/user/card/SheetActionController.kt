@@ -149,95 +149,32 @@ class SheetActionController(
     }
 
     /**
-     * 구글 시트 원본 vs 모바일 스마트 웹앱 선택 다이얼로그 (v2.1.5)
+     * 구글 시트 원본 vs 모바일 스마트 웹앱 선택 다이얼로그 (v2.2.9)
+     * - 하드코딩 프리셋 제거 및 실시간 드라이브 활성(휴지통 제외) 검증 연동
      */
     fun showOpenSheetChooserDialog(sheetType: String, defaultTitle: String) {
         val userEmail = prefs.userEmail
-        var cachedUrl = prefs.getSheetUrl(sheetType)
-        var cachedId = prefs.getSheetId(sheetType)
-
-        // 구버전 캐시(1feIe5...) 감지 시 강제 제거하여 최신 바인딩(1XCQMxao...) 동기화 유도
-        if (sheetType == "QUOTE" && (cachedUrl?.contains("1feIe5") == true || cachedId?.contains("1feIe5") == true)) {
-            cachedUrl = null
-            cachedId = null
-            prefs.setSheetUrl("QUOTE", "")
-            prefs.setSheetId("QUOTE", "")
-        }
-
-        // 영수증 및 명함 기바인딩 프리셋 안전 확인 (0초 즉시 오픈 보장)
-        if (cachedUrl.isNullOrBlank() && cachedId.isNullOrBlank() && !userEmail.isNullOrBlank()) {
-            val presetId = when (sheetType.uppercase()) {
-                "RECEIPT" -> if (userEmail.equals("chachogreat@gmail.com", ignoreCase = true)) "14t6C-90zNNN-NTXexP37fMOKX85gP9iTe3MIlM83RC4" else null
-                "BUSINESS_CARD" -> if (userEmail.equals("chachogreat@gmail.com", ignoreCase = true)) "1GPMcTd7hxU2-ORZ32OX7Qz0tOnxMDNtSPqwKzqiS_AI" else null
-                "LAW_ADVISORY" -> "1wpMUfSeV2nn0RRiEZKKU8vopBrx5iHCc67ltxNhKP3M"
-                "NAVER_BLOG" -> "14nqZrqndHdz4gGpxBAqluss1kKnQSeSPk10koHYDSgI"
-                "INSTAGRAM" -> "1iVleM1QedmtH7wLA0cVM4qhBNjJ3oL-PIrion4gwg2M"
-                "MOBILE_SITE" -> "1hxYuqBrYGVmeX_W09izu8-ga9xMqZt0ssMu8TLaSPrg"
-                "COMPANY_RESEARCH" -> "1K-SkmE7dyA2tDtl8YKz0QVyog7J7FJIc0vDQIAEOXag"
-                else -> null
-            }
-            if (presetId != null) {
-                cachedId = presetId
-                cachedUrl = "https://docs.google.com/spreadsheets/d/$presetId/edit"
-                prefs.setSheetId(sheetType, presetId)
-                prefs.setSheetUrl(sheetType, cachedUrl)
-            }
-        }
-
-        var finalSheetUrl = cachedUrl ?: if (!cachedId.isNullOrBlank()) {
-            "https://docs.google.com/spreadsheets/d/$cachedId/edit"
-        } else null
-
-        // 주문 대장의 경우 주문접수대장 탭(gid=1021826080)으로 직행 보장
-        if (sheetType == "QUOTE" && finalSheetUrl != null && !finalSheetUrl.contains("gid=")) {
-            finalSheetUrl = "$finalSheetUrl#gid=1021826080"
-        }
-
-        val webAppUrl = buildString {
-            append("https://sheetbot.cloud/m/${sheetType.lowercase()}")
-            val queryParams = mutableListOf<String>()
-            if (!userEmail.isNullOrBlank()) {
-                queryParams.add("email=${Uri.encode(userEmail)}")
-            }
-            if (!cachedId.isNullOrBlank()) {
-                queryParams.add("sheetId=${Uri.encode(cachedId)}")
-            }
-            if (queryParams.isNotEmpty()) {
-                append("?").append(queryParams.joinToString("&"))
-            }
+        if (!prefs.isPaired || userEmail.isNullOrBlank()) {
+            Toast.makeText(activity, "먼저 상단에서 시트봇 계정 연동을 완료해 주세요.", Toast.LENGTH_SHORT).show()
+            return
         }
 
         val items = arrayOf(
-            "📊 구글 스프레드시트 원본",
+            "📊 구글 스프레드시트 원본 (실시간 드라이브 연동)",
             "🌐 모바일 스마트 웹앱 (모바일 최적화)"
         )
 
         AlertDialog.Builder(activity)
             .setTitle(defaultTitle)
             .setItems(items) { _, which ->
-                when (which) {
-                    0 -> {
-                        if (!finalSheetUrl.isNullOrBlank()) {
-                            openExternalUrl(finalSheetUrl)
-                        } else {
-                            openSheetWithProgress(sheetType, defaultTitle, isWebApp = false)
-                        }
-                    }
-                    1 -> {
-                        if (!finalSheetUrl.isNullOrBlank()) {
-                            openExternalUrl(webAppUrl)
-                        } else {
-                            openSheetWithProgress(sheetType, defaultTitle, isWebApp = true)
-                        }
-                    }
-                }
+                openSheetWithProgress(sheetType, defaultTitle, isWebApp = (which == 1))
             }
             .setNegativeButton("닫기", null)
             .show()
     }
 
     /**
-     * 캐시가 없을 때 프로그레스 다이얼로그를 표시하고 구글 시트를 확인/생성한 즉시 자동으로 열어줌 (v2.1.5)
+     * 구글 시트의 활성(휴지통 제외) 상태를 확인하고 즉시 자동으로 열어줌 (v2.2.9)
      */
     fun openSheetWithProgress(sheetType: String, defaultTitle: String, isWebApp: Boolean) {
         val userEmail = prefs.userEmail
@@ -281,23 +218,6 @@ class SheetActionController(
                     }
 
                     if (result == null) {
-                        val fallbackId = when (sheetType.uppercase()) {
-                            "RECEIPT" -> if (userEmail.equals("chachogreat@gmail.com", ignoreCase = true)) "14t6C-90zNNN-NTXexP37fMOKX85gP9iTe3MIlM83RC4" else null
-                            "BUSINESS_CARD" -> if (userEmail.equals("chachogreat@gmail.com", ignoreCase = true)) "1GPMcTd7hxU2-ORZ32OX7Qz0tOnxMDNtSPqwKzqiS_AI" else null
-                            else -> null
-                        }
-                        if (fallbackId != null) {
-                            val fallbackUrl = "https://docs.google.com/spreadsheets/d/$fallbackId/edit"
-                            prefs.setSheetId(sheetType, fallbackId)
-                            prefs.setSheetUrl(sheetType, fallbackUrl)
-                            Toast.makeText(activity, "대장 시트로 바로 연결합니다.", Toast.LENGTH_SHORT).show()
-                            if (isWebApp) {
-                                openExternalUrl("https://sheetbot.cloud/m/${sheetType.lowercase()}?email=${Uri.encode(userEmail)}&sheetId=${Uri.encode(fallbackId)}")
-                            } else {
-                                openExternalUrl(fallbackUrl)
-                            }
-                            return@withContext
-                        }
                         Toast.makeText(activity, "시트 연결 요청 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.", Toast.LENGTH_LONG).show()
                         return@withContext
                     }

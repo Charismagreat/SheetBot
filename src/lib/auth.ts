@@ -13,7 +13,14 @@ export function resolveVisitorSiteOriginFromRequest(req?: Request): string {
       const forwardedHost = req.headers.get("x-forwarded-host");
       if (forwardedHost) {
         const proto = forwardedProto || url.protocol.replace(":", "") || "https";
-        return `${proto}://${forwardedHost.split(",")[0].trim()}`;
+        const host = forwardedHost.split(",")[0].trim();
+        if (host.includes("sheetbot.cloud") || host.includes("onrender.com")) {
+          return "https://sheetbot.cloud";
+        }
+        return `${proto}://${host}`;
+      }
+      if (url.hostname.includes("sheetbot.cloud") || url.hostname.includes("onrender.com") || url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+        return "https://sheetbot.cloud";
       }
       return url.origin;
     } catch {
@@ -31,7 +38,7 @@ export function resolveVisitorSiteOriginFromRequest(req?: Request): string {
       return fromEnv.trim().replace(/\/$/, "");
     }
   }
-  return "http://localhost:3002";
+  return "https://sheetbot.cloud";
 }
 
 export const authOptions: AuthOptions = {

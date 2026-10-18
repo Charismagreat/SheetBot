@@ -48,7 +48,6 @@ export async function POST(req: NextRequest) {
     try {
       const folderSearch = await listDriveFiles({
         query: `mimeType = 'application/vnd.google-apps.folder' and name = '${folderName}' and trashed = false`,
-        preferOAuth: true,
       });
       const existingFolders = folderSearch?.files || [];
       if (existingFolders.length > 0) {
@@ -71,7 +70,6 @@ export async function POST(req: NextRequest) {
 
     const sheetSearch = await listDriveFiles({
       query: queryStr,
-      preferOAuth: true,
     }).catch(() => ({ files: [] }));
 
     const foundSheets = sheetSearch?.files || [];

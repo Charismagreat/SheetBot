@@ -429,7 +429,7 @@ export async function POST(req: NextRequest) {
       createdFolderId = await ensureDriveFolder(targetFolder, callOptions);
     }
 
-    // 2. 구글 스프레드시트 대장 고유 ID 영구 바인딩 및 생성
+    // 2. 구글 스프레드시트 대장 고유 ID 영구 바인딩 및 생성 (휴지통 여부 실시간 확인을 위해 forceRefresh: true)
     const resolved = await resolveUserSpreadsheet({
       userEmail: cleanEmail,
       sheetType: typeKey as SheetBindingType,
@@ -437,6 +437,7 @@ export async function POST(req: NextRequest) {
       requestedTitle: sheetTitle,
       folderId: createdFolderId,
       preferOAuth: true,
+      forceRefresh: true,
       callOptions,
     });
 

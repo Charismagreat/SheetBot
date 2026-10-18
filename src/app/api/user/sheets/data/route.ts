@@ -34,35 +34,34 @@ export async function GET(req: NextRequest) {
     const typeKey = sheetType.toUpperCase() as SheetBindingType;
     const def = SHEET_DEFINITIONS[typeKey];
 
-    const sheetIdParam = searchParams.get("sheetId");
-    let targetSpreadsheetId = sheetIdParam || null;
-    let spreadsheetUrl = targetSpreadsheetId
-      ? `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`
-      : "";
+    const forceRefresh = searchParams.get("refresh") === "true";
 
-    // 1. 단기 인메모리 캐시 확인 (15초 이내 중복/연속 요청 즉시 0초 반환)
+    // 1. 단기 인메모리 캐시 확인 (15초 이내 중복/연속 요청 즉시 0초 반환, refresh 요청 시 무시)
     const cacheKey = `${cleanEmail}_${typeKey}`;
-    const cached = sheetDataCache.get(cacheKey);
-    const now = Date.now();
-    if (cached && now - cached.timestamp < CACHE_TTL_MS) {
-      return NextResponse.json(cached.data, {
-        headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
-      });
+    if (forceRefresh) {
+      sheetDataCache.delete(cacheKey);
+    } else {
+      const cached = sheetDataCache.get(cacheKey);
+      const now = Date.now();
+      if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+        return NextResponse.json(cached.data, {
+          headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
+        });
+      }
     }
 
-    // sheetId가 직접 전달되지 않은 경우에만 resolveUserSpreadsheet 실행
-    if (!targetSpreadsheetId) {
-      const resolved = await resolveUserSpreadsheet({
-        userEmail: cleanEmail,
-        sheetType: typeKey,
-        defaultTitle: def?.defaultTitle || `[SheetBot] ${typeKey} 대장`,
-        preferOAuth: true,
-      });
-      targetSpreadsheetId = resolved.spreadsheetId;
-      spreadsheetUrl =
-        resolved.spreadsheetUrl ||
-        `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
-    }
+    // 2. 구글 드라이브 활성(휴지통 제외) 대장 확인 및 자동 바인딩
+    const resolved = await resolveUserSpreadsheet({
+      userEmail: cleanEmail,
+      sheetType: typeKey,
+      defaultTitle: def?.defaultTitle || `[SheetBot] ${typeKey} 대장`,
+      preferOAuth: true,
+      forceRefresh,
+    });
+    const targetSpreadsheetId = resolved.spreadsheetId;
+    const spreadsheetUrl =
+      resolved.spreadsheetUrl ||
+      `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
 
     if (!targetSpreadsheetId) {
       return NextResponse.json({
@@ -113,7 +112,7 @@ export async function GET(req: NextRequest) {
     };
 
     // 캐시에 보관
-    sheetDataCache.set(cacheKey, { data: responsePayload, timestamp: now });
+    sheetDataCache.set(cacheKey, { data: responsePayload, timestamp: Date.now() });
 
     return NextResponse.json(responsePayload, {
       headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },

@@ -422,6 +422,7 @@ ${sampleDataTexts.join("\n\n====================\n\n")}
 
       const msgToSend = plan.messageText || `[SheetBot 알림] ${plan.targetName || "고객"}님, 요청하신 사항이 접수되었습니다.`;
       const smsRes = await sendPhoneSms({
+        deviceId,
         phoneNumber: recipientPhone,
         message: msgToSend,
       }).catch((e: any) => {

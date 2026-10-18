@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
         scriptId = createRes?.scriptId || createRes?.id;
         if (scriptId) {
           targetProject.script_id = scriptId;
-          await updateRows("sheetbot_projects", { script_id: scriptId }, { id: targetProject.id }).catch(() => {});
+          await updateRows("sheetbot_projects", { script_id: scriptId }, { filters: { id: String(targetProject.id) } }).catch(() => {});
         }
       } catch (bindErr: any) {
         console.warn("[PromoteCommand] Script creation warning:", bindErr.message);
@@ -247,7 +247,7 @@ ${requestedTitle ? `- 권장 기능명: ${requestedTitle}` : ""}
         features: JSON.stringify(currentFeatures),
         updated_at: new Date().toISOString(),
       },
-      { id: targetProject.id }
+      { filters: { id: String(targetProject.id) } }
     ).catch(() => {});
 
     return NextResponse.json({

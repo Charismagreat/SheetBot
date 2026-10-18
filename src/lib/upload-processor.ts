@@ -513,11 +513,12 @@ export async function processCallRecordingFile(input: ProcessCallRecordingInput)
   const targetFolderName = input.folderName || "[SheetBot] 통화 녹음";
   const autoRecordSheet = input.autoRecordSheet !== false;
 
-  let targetFolderId = folderCache.get(targetFolderName) || null;
+  const folderCacheKey = `${cleanEmail}:${targetFolderName}`;
+  let targetFolderId = userFolderCache.get(folderCacheKey) || null;
   if (!targetFolderId) {
     const newFolderRes = await createDriveFolder(targetFolderName, undefined, true).catch(() => null);
     targetFolderId = newFolderRes?.id || (typeof newFolderRes === "string" ? newFolderRes : null);
-    if (targetFolderId) folderCache.set(targetFolderName, targetFolderId);
+    if (targetFolderId) userFolderCache.set(folderCacheKey, targetFolderId);
   }
 
   // 구글 드라이브 업로드

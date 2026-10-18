@@ -553,9 +553,13 @@ async function triggerAiAudioAnalysis(params: {
     callOptions: inputCallOptions,
   } = params;
 
+  let effectiveCallOptions: any = inputCallOptions || null;
+
   try {
     const cleanEmail = userEmail.toLowerCase().trim();
-    const effectiveCallOptions = inputCallOptions || (await getWorkspaceCallOptionsForEmail(cleanEmail));
+    if (!effectiveCallOptions) {
+      effectiveCallOptions = await getWorkspaceCallOptionsForEmail(cleanEmail);
+    }
 
     // 1. 최소 오디오 크기 검사 (1KB 미만은 더미/손상 파일이므로 API 에러 방지)
     const audioBytesLen = Buffer.byteLength(base64Audio, "base64");

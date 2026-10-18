@@ -7,9 +7,9 @@ import {
   searchKoreanLaw,
   getKoreanLawDecision,
   callSheetsTool,
+  callDriveTool,
   callAiCaller,
   insertRows,
-  uploadDriveFile,
   findOrCreateEgdeskFolder,
   findOrCreateEgdeskSubfolder,
   createDriveFolder,
@@ -177,11 +177,11 @@ export async function POST(req: NextRequest) {
         const parentFolder = await findOrCreateEgdeskFolder("[SheetBot] 연동 데이터");
         const lawFolder = await createDriveFolder("[SheetBot] 법률·계약 증빙 보관함", parentFolder?.id);
 
-        const uploadRes = await uploadDriveFile({
+        const uploadRes = await callDriveTool("drive_upload", {
           name: fileName,
           content: fileBase64,
           mimeType: fileMimeType,
-          folderId: lawFolder.id,
+          folderId: lawFolder?.id,
           encoding: "base64",
         });
 
