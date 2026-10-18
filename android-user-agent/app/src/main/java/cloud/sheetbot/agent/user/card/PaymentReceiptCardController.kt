@@ -44,6 +44,9 @@ class PaymentReceiptCardController(
             prefs.isTtsEnabled = isChecked
             if (isChecked) TtsManager.speak(activity, "실시간 음성 안내가 활성화되었습니다.")
         }
+        binding.cardTtsToggle.setOnClickListener {
+            binding.switchTts.toggle()
+        }
 
         binding.switchReceiptSms.isChecked = prefs.isReceiptSmsEnabled
         binding.layoutReceiptSmsSettings.visibility = if (prefs.isReceiptSmsEnabled) View.VISIBLE else View.GONE

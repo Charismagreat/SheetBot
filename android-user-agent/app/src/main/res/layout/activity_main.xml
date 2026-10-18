@@ -277,6 +277,57 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- 🔊 실시간 AI 음성 안내 (TTS) 빠른 설정 카드 -->
+            <LinearLayout
+                android:id="@+id/cardTtsToggle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/bg_card_scenario"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="11dp"
+                android:layout_marginBottom="12dp"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🔊"
+                    android:textSize="18sp"
+                    android:layout_marginEnd="10dp" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="실시간 음성 안내 (TTS)"
+                        android:textColor="#F8FAFC"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="결제 알림 및 자동화 실행 시 음성으로 안내"
+                        android:textColor="#94A3B8"
+                        android:textSize="10.5sp"
+                        android:layout_marginTop="1dp" />
+                </LinearLayout>
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchTts"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true" />
+            </LinearLayout>
+
             <!-- 토큰 지갑 카드 (v1.9 NEW, 연동 시 상시 노출) -->
             <LinearLayout
                 android:id="@+id/layoutWalletCard"
@@ -2270,29 +2321,6 @@
                     android:textSize="12sp"
                     android:textStyle="bold"
                     android:layout_marginTop="6dp" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="4dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="🔊 결제될 때 음성으로 안내받기"
-                    android:textColor="#E2E8F0"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
-
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/switchTts"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:checked="true" />
             </LinearLayout>
 
             <!-- 매장 결제 & 고객 영수증 시트 열기 바로가기 뱃지 -->
