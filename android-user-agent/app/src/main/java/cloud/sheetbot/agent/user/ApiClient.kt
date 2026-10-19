@@ -2862,7 +2862,98 @@ object ApiClient {
         }
         FeatureRequestResult(success = false, error = lastError)
     }
+
+    /**
+     * 외부 연동 서비스(FileToSheet 등)의 발송 대기 SMS 큐 조회
+     */
+    suspend fun fetchSmsBridgeQueue(userEmail: String?, limit: Int = 5): List<SmsBridgeQueueItem> = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            val baseEndpoint = "$host/api/user/agent2/sms-queue"
+            val endpoint = if (!userEmail.isNullOrBlank()) {
+                val enc = java.net.URLEncoder.encode(userEmail, "UTF-8")
+                "$baseEndpoint?userEmail=$enc&limit=$limit"
+            } else {
+                "$baseEndpoint?limit=$limit"
+            }
+            try {
+                val reqBuilder = Request.Builder().url(endpoint).get()
+                if (!userEmail.isNullOrBlank()) {
+                    reqBuilder.addHeader("x-sheetbot-user-email", userEmail)
+                }
+                val response = client.newCall(reqBuilder.build()).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val array = resJson.optJSONArray("items") ?: continue
+                    val list = mutableListOf<SmsBridgeQueueItem>()
+                    for (i in 0 until array.length()) {
+                        val item = array.getJSONObject(i)
+                        list.add(
+                            SmsBridgeQueueItem(
+                                id = item.optLong("id", 0L),
+                                uuid = item.optString("uuid", ""),
+                                sourceService = item.optString("sourceService", "FileToSheet"),
+                                recipient = item.optString("recipient", ""),
+                                message = item.optString("message", ""),
+                                senderPhone = if (item.isNull("senderPhone")) null else item.optString("senderPhone", null),
+                                callbackUrl = if (item.isNull("callbackUrl")) null else item.optString("callbackUrl", null),
+                                createdAt = item.optString("createdAt", "")
+                            )
+                        )
+                    }
+                    return@withContext list
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "외부 발송 큐 조회 실패 ($host): ${e.message}")
+            }
+        }
+        emptyList()
+    }
+
+    /**
+     * 외부 SMS 발송 결과를 서버에 보고 (서버는 웹훅 콜백 및 감사 대장 기록 수행)
+     */
+    suspend fun reportSmsBridgeResult(
+        dispatchId: Long,
+        uuid: String? = null,
+        success: Boolean,
+        error: String? = null,
+        deviceId: String? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            val endpoint = "$host/api/user/agent2/sms-queue/report"
+            try {
+                val json = JSONObject().apply {
+                    put("dispatchId", dispatchId)
+                    if (!uuid.isNullOrBlank()) put("uuid", uuid)
+                    put("success", success)
+                    if (!error.isNullOrBlank()) put("error", error)
+                    put("deviceId", deviceId ?: "SheetBot Mobile Agent")
+                }
+                val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+                val request = Request.Builder().url(endpoint).post(body).build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) return@withContext true
+            } catch (e: Exception) {
+                Log.w(TAG, "외부 발송 결과 보고 실패 ($host): ${e.message}")
+            }
+        }
+        false
+    }
 }
+
+data class SmsBridgeQueueItem(
+    val id: Long,
+    val uuid: String,
+    val sourceService: String,
+    val recipient: String,
+    val message: String,
+    val senderPhone: String? = null,
+    val callbackUrl: String? = null,
+    val createdAt: String = ""
+)
 
 data class FeatureRequestResult(
     val success: Boolean,

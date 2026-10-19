@@ -178,6 +178,13 @@ export const TABLES = {
     columnCount: 16,
     rowCount: 0,
   },
+  sheetbot_sms_dispatch_queue: {
+    name: 'sheetbot_sms_dispatch_queue',
+    displayName: 'SheetBot SMS 브릿지 원격 발송 큐 대장',
+    columns: ['id', 'source_service', 'recipient_phone', 'message_text', 'sender_phone', 'callback_url', 'user_email', 'device_id', 'status', 'error_message', 'sent_at', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by'],
+    columnCount: 19,
+    rowCount: 0,
+  },
   sheetbot_schedules: {
     name: 'sheetbot_schedules',
     displayName: 'SheetBot 스케줄 및 트리거 대장',

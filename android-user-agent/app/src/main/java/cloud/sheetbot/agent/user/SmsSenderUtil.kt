@@ -209,4 +209,68 @@ object SmsSenderUtil {
 
         sentCount
     }
+
+    /**
+     * 외부 연동 서비스(FileToSheet 등)에서 요청한 SMS 발송 대기열을 조회하여 순차 발송 후 결과 보고
+     * @return 발송 성공한 SMS 건수
+     */
+    suspend fun processRemoteSmsBridgeQueue(context: Context): Int = withContext(Dispatchers.IO) {
+        val prefs = PreferencesManager(context)
+        if (!prefs.isPaired) {
+            return@withContext 0
+        }
+
+        val pendingList = ApiClient.fetchSmsBridgeQueue(prefs.userEmail)
+        if (pendingList.isEmpty()) {
+            return@withContext 0
+        }
+
+        val deviceId = prefs.deviceToken ?: Build.MODEL ?: "SheetBot Mobile Agent"
+        Log.i(TAG, "📨 [외부 브릿지 SMS 대기열] ${pendingList.size}건 발견. 모바일 발송을 개시합니다.")
+        var sentCount = 0
+
+        for (item in pendingList) {
+            if (item.recipient.isBlank() || item.message.isBlank()) {
+                Log.w(TAG, "브릿지 발송 정보 불완전 (ID: ${item.id}) - 건너뜀")
+                ApiClient.reportSmsBridgeResult(
+                    dispatchId = item.id,
+                    uuid = item.uuid,
+                    success = false,
+                    error = "수신번호 또는 메시지 본문 누락",
+                    deviceId = deviceId
+                )
+                continue
+            }
+
+            if (!ContactHelper.isMobilePhoneNumber(item.recipient)) {
+                Log.w(TAG, "⏭️ [브릿지 SMS 제외] 한국 휴대전화 번호가 아닙니다: ${item.recipient} (유선/대표번호 자동 제외)")
+                ApiClient.reportSmsBridgeResult(
+                    dispatchId = item.id,
+                    uuid = item.uuid,
+                    success = false,
+                    error = "휴대전화 번호가 아님 (유선전화/대표번호 발송 불가)",
+                    deviceId = deviceId
+                )
+                continue
+            }
+
+            val (isSent, _) = sendSmsDetailed(context, item.recipient, item.message)
+            ApiClient.reportSmsBridgeResult(
+                dispatchId = item.id,
+                uuid = item.uuid,
+                success = isSent,
+                error = if (isSent) null else "통신사 SMS 전송 실패",
+                deviceId = deviceId
+            )
+
+            if (isSent) {
+                sentCount++
+                Log.i(TAG, "🎉 [브릿지 SMS 발송 성공] 출처: ${item.sourceService}, ID: ${item.id}, 수신: ${item.recipient}")
+            } else {
+                Log.w(TAG, "❌ [브릿지 SMS 발송 실패] 출처: ${item.sourceService}, ID: ${item.id}, 수신: ${item.recipient}")
+            }
+        }
+
+        sentCount
+    }
 }
