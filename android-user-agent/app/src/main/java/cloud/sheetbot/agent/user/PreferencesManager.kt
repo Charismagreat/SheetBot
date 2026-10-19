@@ -38,6 +38,49 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_paired", false) && !userEmail.isNullOrBlank()
         set(value) = prefs.edit().putBoolean("is_paired", value).apply()
 
+    // 🎯 전송 목적지 제어: GOOGLE_SHEETS (구글 시트/드라이브) vs FILE_TO_SHEET (파일투시트 직결)
+    var uploadDestination: String
+        get() = prefs.getString("upload_destination", DESTINATION_GOOGLE_SHEETS) ?: DESTINATION_GOOGLE_SHEETS
+        set(value) = prefs.edit().putString("upload_destination", value).apply()
+
+    val isDestinationFileToSheet: Boolean
+        get() = uploadDestination == DESTINATION_FILE_TO_SHEET
+
+    // ⚡ 파일투시트(FileToSheet) 직결 수신함 연동 정보
+    var ftsToken: String?
+        get() = prefs.getString("fts_token", null)
+        set(value) = prefs.edit().putString("fts_token", value).apply()
+
+    var ftsEndpoint: String?
+        get() = prefs.getString("fts_endpoint", null)
+        set(value) = prefs.edit().putString("fts_endpoint", value).apply()
+
+    var ftsSheetName: String?
+        get() = prefs.getString("fts_sheet_name", null)
+        set(value) = prefs.edit().putString("fts_sheet_name", value).apply()
+
+    var ftsProjectName: String?
+        get() = prefs.getString("fts_project_name", null)
+        set(value) = prefs.edit().putString("fts_project_name", value).apply()
+
+    var ftsProjectId: String?
+        get() = prefs.getString("fts_project_id", null)
+        set(value) = prefs.edit().putString("fts_project_id", value).apply()
+
+    val isFtsPaired: Boolean
+        get() = !ftsToken.isNullOrBlank() && !ftsEndpoint.isNullOrBlank()
+
+    fun clearFtsPairing() {
+        prefs.edit()
+            .remove("fts_token")
+            .remove("fts_endpoint")
+            .remove("fts_sheet_name")
+            .remove("fts_project_name")
+            .remove("fts_project_id")
+            .putString("upload_destination", DESTINATION_GOOGLE_SHEETS)
+            .apply()
+    }
+
     var lastSyncTime: Long
         get() = prefs.getLong("last_sync_time", 0L)
         set(value) = prefs.edit().putLong("last_sync_time", value).apply()
@@ -514,6 +557,9 @@ class PreferencesManager(context: Context) {
     }
 
     companion object {
+        const val DESTINATION_GOOGLE_SHEETS = "GOOGLE_SHEETS"
+        const val DESTINATION_FILE_TO_SHEET = "FILE_TO_SHEET"
+
         val DEFAULT_HIDDEN_CARDS = setOf(
             "cardInCallSummary",
             "cardMissedCall",

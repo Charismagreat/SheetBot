@@ -416,6 +416,7 @@ class CardSetupCoordinator(
             prefs = prefs,
             scope = scope,
             launchFilePicker = { launchers.filePickerLauncher.launch("*/*") },
+            launchQrScan = { launchQrScanner() },
             provisionSheetAsync = { type, defaultTitle, folderName -> provisionSheetAsync(type, defaultTitle, folderName) },
             showOpenSheetChooserDialog = { type, title -> showOpenSheetChooserDialog(type, title) },
             openDriveFolder = { type, folderName -> openDriveFolder(type, folderName) },

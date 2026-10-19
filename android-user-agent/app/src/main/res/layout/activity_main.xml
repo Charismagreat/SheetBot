@@ -2808,6 +2808,125 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
+                <!-- 🎯 [전송 목적지 선택] 구글 스프레드시트 vs 파일투시트(FileToSheet) 직결 -->
+                <LinearLayout
+                    android:id="@+id/layoutUploadDestinationPanel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#0B132B"
+                    android:padding="12dp"
+                    android:layout_marginBottom="10dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🎯 데이터 전송 목적지 선택"
+                        android:textColor="#F8FAFC"
+                        android:textSize="12.5sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="촬영 사진 및 영수증을 저장할 대상을 선택하세요"
+                        android:textColor="#94A3B8"
+                        android:textSize="10.5sp"
+                        android:layout_marginTop="2dp"
+                        android:layout_marginBottom="6dp" />
+
+                    <RadioGroup
+                        android:id="@+id/rgUploadDestination"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <RadioButton
+                            android:id="@+id/rbDestGoogleSheet"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="구글 시트"
+                            android:textColor="#E2E8F0"
+                            android:textSize="12sp"
+                            android:checked="true" />
+
+                        <RadioButton
+                            android:id="@+id/rbDestFileToSheet"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="파일투시트"
+                            android:textColor="#E2E8F0"
+                            android:textSize="12sp" />
+                    </RadioGroup>
+
+                    <!-- 파일투시트(FileToSheet) 선택 시 활성화되는 연동 상태 및 QR 스캔 패널 -->
+                    <LinearLayout
+                        android:id="@+id/layoutFtsStatusContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#1E293B"
+                        android:padding="10dp"
+                        android:layout_marginTop="8dp"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <TextView
+                                android:id="@+id/tvFtsStatusTitle"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="⚪ 파일투시트 미연동"
+                                android:textColor="#E2E8F0"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/btnUnlinkFts"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_badge_version"
+                                android:backgroundTint="#EF4444"
+                                android:paddingHorizontal="8dp"
+                                android:paddingVertical="3dp"
+                                android:text="해제"
+                                android:textColor="#FFFFFF"
+                                android:textSize="10.5sp"
+                                android:textStyle="bold"
+                                android:visibility="gone"
+                                android:clickable="true"
+                                android:focusable="true" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tvFtsStatusDesc"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="PC 웹 화면의 [📱 모바일 연동] QR코드를 스캔하세요"
+                            android:textColor="#94A3B8"
+                            android:textSize="10.5sp"
+                            android:layout_marginTop="2dp"
+                            android:layout_marginBottom="8dp" />
+
+                        <Button
+                            android:id="@+id/btnScanFtsQr"
+                            android:layout_width="match_parent"
+                            android:layout_height="38dp"
+                            android:backgroundTint="#4F46E5"
+                            android:text="📷 파일투시트 QR코드 스캔"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </LinearLayout>
+
                 <Button
                     android:id="@+id/btnPickAndUploadFile"
                     android:layout_width="match_parent"

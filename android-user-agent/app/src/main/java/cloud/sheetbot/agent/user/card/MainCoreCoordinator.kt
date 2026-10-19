@@ -269,6 +269,10 @@ class MainCoreCoordinator(
                 card.serverStatusCardController.updateCardStatus(isPaired, email)
             }
 
+            if (card.isFileUploadInitialized) {
+                card.fileUploadCardController.refreshFtsUi()
+            }
+
             if (isPaired && !email.isNullOrBlank()) {
                 binding.layoutUnlinkZone.visibility = View.VISIBLE
                 binding.layoutWalletCard.visibility = View.VISIBLE

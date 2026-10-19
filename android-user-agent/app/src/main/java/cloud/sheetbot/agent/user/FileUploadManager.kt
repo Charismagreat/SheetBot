@@ -40,19 +40,30 @@ object FileUploadManager {
         ocrType: String? = null
     ): UploadGenericFileResult = withContext(Dispatchers.IO) {
         val prefs = PreferencesManager(context)
-        if (!prefs.isPaired) {
-            return@withContext UploadGenericFileResult(
-                success = false,
-                error = "시트봇 계정이 연동되어 있지 않습니다. 먼저 QR코드로 연동해 주세요."
-            )
-        }
+        val isFts = prefs.isDestinationFileToSheet
 
-        val userEmail = prefs.userEmail
-        if (userEmail.isNullOrBlank()) {
-            return@withContext UploadGenericFileResult(
-                success = false,
-                error = "연동된 계정 이메일이 없습니다."
-            )
+        if (isFts) {
+            if (!prefs.isFtsPaired) {
+                return@withContext UploadGenericFileResult(
+                    success = false,
+                    error = "파일투시트(FileToSheet)와 연동되어 있지 않습니다. 먼저 QR코드를 스캔해 주세요."
+                )
+            }
+        } else {
+            if (!prefs.isPaired) {
+                return@withContext UploadGenericFileResult(
+                    success = false,
+                    error = "시트봇 계정이 연동되어 있지 않습니다. 먼저 QR코드로 연동해 주세요."
+                )
+            }
+
+            val userEmail = prefs.userEmail
+            if (userEmail.isNullOrBlank()) {
+                return@withContext UploadGenericFileResult(
+                    success = false,
+                    error = "연동된 계정 이메일이 없습니다."
+                )
+            }
         }
 
         val meta = resolveUriMetadata(context, uri)
@@ -63,6 +74,65 @@ object FileUploadManager {
                 error = "파일을 읽어올 수 없습니다: ${meta.fileName}"
             )
         }
+
+        if (isFts) {
+            val endpoint = prefs.ftsEndpoint ?: "https://filetosheet.com/api/inbox/${prefs.ftsToken}"
+            val sheetName = prefs.ftsSheetName ?: "파일투시트"
+            val memo = customMemo ?: when (ocrType?.uppercase()) {
+                "RECEIPT" -> "스마트폰 카메라 영수증 촬영 건"
+                "BUSINESS_CARD" -> "스마트폰 카메라 명함 촬영 건"
+                else -> "스마트폰 직결 파일 전송 건"
+            }
+
+            Log.i(TAG, "⚡ [파일투시트 직결 전송 시작] ${meta.fileName} -> $endpoint ($sheetName)")
+            val ftsResult = try {
+                FileToSheetClient.uploadFile(
+                    endpoint = endpoint,
+                    file = tempFile,
+                    mimeType = meta.mimeType,
+                    memo = memo,
+                    ocrType = ocrType ?: "GENERIC",
+                    deviceId = "${Build.MANUFACTURER} ${Build.MODEL}"
+                )
+            } finally {
+                try {
+                    if (tempFile.exists()) tempFile.delete()
+                } catch (_: Exception) {}
+            }
+
+            if (ftsResult.success) {
+                val targetSheet = ftsResult.targetSheet?.takeIf { it.isNotBlank() } ?: sheetName
+                if (ocrType.equals("RECEIPT", ignoreCase = true)) {
+                    showOcrSuccessNotification(context, "🧾 [파일투시트 영수증 직결 전송 완료]", "[$targetSheet] 시트에 1건이 성공적으로 적재되었습니다.")
+                    if (prefs.isTtsEnabled) {
+                        TtsManager.speak(context, "$targetSheet 시트에 영수증이 전송되었습니다.")
+                    }
+                } else if (ocrType.equals("BUSINESS_CARD", ignoreCase = true)) {
+                    showUploadSuccessNotification(context, "🪪 [파일투시트 명함 직결 전송 완료]", "[$targetSheet] 시트에 1건이 성공적으로 적재되었습니다.")
+                    if (prefs.isTtsEnabled) {
+                        TtsManager.speak(context, "$targetSheet 시트에 명함이 전송되었습니다.")
+                    }
+                } else {
+                    showUploadSuccessNotification(context, "⚡ [파일투시트 파일 직결 전송 완료]", "[$targetSheet] 시트에 파일이 안전하게 적재되었습니다.")
+                    if (prefs.isTtsEnabled) {
+                        TtsManager.speak(context, "$targetSheet 시트에 파일이 전송되었습니다.")
+                    }
+                }
+                return@withContext UploadGenericFileResult(
+                    success = true,
+                    fileName = meta.fileName,
+                    folderName = targetSheet
+                )
+            } else {
+                val err = ftsResult.error ?: ftsResult.message ?: "파일투시트 전송 실패"
+                return@withContext UploadGenericFileResult(
+                    success = false,
+                    error = err
+                )
+            }
+        }
+
+        val userEmail = prefs.userEmail!!
 
         val targetFolder = when (ocrType?.uppercase()) {
             "RECEIPT" -> "[SheetBot] 영수증 보관함"
@@ -329,6 +399,52 @@ object FileUploadManager {
         meta: UriFileMetadata
     ): UploadGenericFileResult = withContext(Dispatchers.IO) {
         val prefs = PreferencesManager(context)
+        val isFts = prefs.isDestinationFileToSheet
+
+        if (isFts) {
+            if (!prefs.isFtsPaired) {
+                return@withContext UploadGenericFileResult(
+                    success = false,
+                    error = "파일투시트(FileToSheet)와 연동되어 있지 않습니다. 먼저 QR코드를 스캔해 주세요."
+                )
+            }
+            val endpoint = prefs.ftsEndpoint ?: "https://filetosheet.com/api/inbox/${prefs.ftsToken}"
+            val sheetName = prefs.ftsSheetName ?: "파일투시트"
+            val ftsResult = try {
+                FileToSheetClient.uploadFile(
+                    endpoint = endpoint,
+                    file = tempFile,
+                    mimeType = meta.mimeType,
+                    memo = "스마트폰 카메라 명함 촬영 건",
+                    ocrType = "BUSINESS_CARD",
+                    deviceId = "${Build.MANUFACTURER} ${Build.MODEL}"
+                )
+            } finally {
+                try {
+                    if (tempFile.exists()) tempFile.delete()
+                } catch (_: Exception) {}
+            }
+
+            if (ftsResult.success) {
+                val targetSheet = ftsResult.targetSheet?.takeIf { it.isNotBlank() } ?: sheetName
+                showUploadSuccessNotification(context, "🪪 [파일투시트 명함 직결 전송 완료]", "[$targetSheet] 시트에 1건이 성공적으로 적재되었습니다.")
+                if (prefs.isTtsEnabled) {
+                    TtsManager.speak(context, "$targetSheet 시트에 명함이 전송되었습니다.")
+                }
+                return@withContext UploadGenericFileResult(
+                    success = true,
+                    fileName = meta.fileName,
+                    folderName = targetSheet
+                )
+            } else {
+                val err = ftsResult.error ?: ftsResult.message ?: "파일투시트 전송 실패"
+                return@withContext UploadGenericFileResult(
+                    success = false,
+                    error = err
+                )
+            }
+        }
+
         val userEmail = prefs.userEmail
         if (userEmail.isNullOrBlank()) {
             return@withContext UploadGenericFileResult(

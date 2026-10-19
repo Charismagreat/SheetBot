@@ -45,7 +45,12 @@ class BusinessCardSyncCardController(
         }
 
         binding.btnPickBusinessCard.setOnClickListener {
-            if (!prefs.isPaired) {
+            if (prefs.isDestinationFileToSheet) {
+                if (!prefs.isFtsPaired) {
+                    Toast.makeText(activity, "먼저 파일투시트 QR코드를 스캔해 주세요.", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+            } else if (!prefs.isPaired) {
                 Toast.makeText(activity, "먼저 시트봇 워크스페이스와 연동해 주세요.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
@@ -110,10 +115,16 @@ class BusinessCardSyncCardController(
     }
 
     /**
-     * 명함 사진을 전송하여 Gemini AI OCR로 성함/직함/회사명/전화번호를 분석하고 [SheetBot] 스마트 명함 관리 대장에 자동 기록
+     * 명함 사진을 전송하여 구글 시트 또는 파일투시트(FileToSheet) 시트에 직결 자동 기록
      */
     fun uploadBusinessCard(uri: Uri) {
-        if (!prefs.isPaired) {
+        val isFts = prefs.isDestinationFileToSheet
+        if (isFts) {
+            if (!prefs.isFtsPaired) {
+                Toast.makeText(activity, "⚠️ 파일투시트 QR코드 연동 후 이용할 수 있습니다.", Toast.LENGTH_LONG).show()
+                return
+            }
+        } else if (!prefs.isPaired) {
             Toast.makeText(activity, "⚠️ 시트봇 계정 연동 후 이용할 수 있습니다.", Toast.LENGTH_LONG).show()
             return
         }
@@ -127,7 +138,8 @@ class BusinessCardSyncCardController(
         }
 
         binding.progressBar.visibility = View.VISIBLE
-        Toast.makeText(activity, "🪪 명함을 전송했습니다. 다른 앱을 이용하셔도 AI 분석 완료 시 상단 알림이 뜹니다.", Toast.LENGTH_SHORT).show()
+        val targetDesc = if (isFts) "파일투시트 [${prefs.ftsSheetName}]" else "구글 시트"
+        Toast.makeText(activity, "🪪 명함을 ${targetDesc}로 전송했습니다.", Toast.LENGTH_SHORT).show()
 
         val appContext = activity.applicationContext
         // 이제 로컬 파일이 캐시에 보관되어 있으므로 창 전환해도 100% 무중단 실행!
@@ -139,31 +151,42 @@ class BusinessCardSyncCardController(
                 }
 
                 if (result.success) {
-                    val ocr = result.ocrData
-                    val name = ocr?.optString("name", "명함") ?: "명함"
-                    val rawComp = ocr?.optString("company")
-                    val comp = if (!rawComp.isNullOrBlank()) "($rawComp)" else ""
+                    if (isFts) {
+                        val sName = prefs.ftsSheetName ?: "파일투시트"
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(
+                                appContext,
+                                "✅ [$sName] 시트에 1건이 전송되었습니다!",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            onAddLogItem("⚡ FTS 명함", "[$sName] 시트 직결 적재 완료", true)
+                        }
+                    } else {
+                        val ocr = result.ocrData
+                        val name = ocr?.optString("name", "명함") ?: "명함"
+                        val rawComp = ocr?.optString("company")
+                        val comp = if (!rawComp.isNullOrBlank()) "($rawComp)" else ""
 
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(
-                            appContext,
-                            "🎉 [명함 등록 완료] $name $comp\n인맥 관리 대장에 자동 기록되었습니다!",
-                            Toast.LENGTH_LONG
-                        ).show()
-                        onAddLogItem("🪪 명함 OCR", "$name $comp -> 인맥 대장", true)
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(
+                                appContext,
+                                "🎉 [명함 등록 완료] $name $comp\n인맥 관리 대장에 자동 기록되었습니다!",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            onAddLogItem("🪪 명함 OCR", "$name $comp -> 인맥 대장", true)
 
-                        // ★ [인맥 액션 다이얼로그 즉시 출현] 앱이 켜져 있을 때 연락처 저장 & 내 명함 발송 팝업창 다이렉트 표시!
-                        try {
-                            CardActionActivity.start(activity, ocr ?: JSONObject())
-                        } catch (dialogErr: Exception) {
-                            android.util.Log.w("BusinessCardController", "CardActionActivity 다이얼로그 팝업 실패: ${dialogErr.message}")
+                            // ★ [인맥 액션 다이얼로그 즉시 출현] 앱이 켜져 있을 때 연락처 저장 & 내 명함 발송 팝업창 다이렉트 표시!
+                            try {
+                                CardActionActivity.start(activity, ocr ?: JSONObject())
+                            } catch (dialogErr: Exception) {
+                                android.util.Log.w("BusinessCardController", "CardActionActivity 다이얼로그 팝업 실패: ${dialogErr.message}")
+                            }
                         }
                     }
                 } else {
-                    val err = result.error ?: "명함 분석 실패"
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(appContext, "⚠️ 명함 분석 실패: $err", Toast.LENGTH_LONG).show()
-                        onAddLogItem("명함 오류", err, false)
+                        Toast.makeText(appContext, "⚠️ 명함 전송 실패: ${result.error ?: "오류"}", Toast.LENGTH_LONG).show()
+                        onAddLogItem("명함 오류", result.error ?: "전송 실패", false)
                     }
                 }
             } catch (e: Exception) {

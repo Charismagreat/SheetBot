@@ -186,6 +186,20 @@ class AccountPairingController(
 
 
     fun handleQrScanResult(contents: String) {
+        val trimmed = contents.trim()
+
+        // ⚡ 파일투시트(FileToSheet) 직결 QR코드인지 선제 판별
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            try {
+                val json = org.json.JSONObject(trimmed)
+                val service = json.optString("service")
+                if (service.equals("FileToSheet", ignoreCase = true)) {
+                    handleFtsQrScan(json)
+                    return
+                }
+            } catch (_: Exception) {}
+        }
+
         val parsed = parseQrContents(contents)
         if (parsed != null) {
             val (email, token, pinCode) = parsed
@@ -193,9 +207,66 @@ class AccountPairingController(
         } else {
             AlertDialog.Builder(activity)
                 .setTitle("잘못된 QR코드")
-                .setMessage("시트봇 알림 센터 전용 QR코드가 아닙니다.\n화면의 QR코드를 다시 확인해 주세요.")
+                .setMessage("시트봇 또는 파일투시트 전용 QR코드가 아닙니다.\n화면의 QR코드를 다시 확인해 주세요.")
                 .setPositiveButton("확인", null)
                 .show()
+        }
+    }
+
+    /**
+     * ⚡ 파일투시트(FileToSheet) 모바일 직결 페어링 검증 및 저장
+     */
+    fun handleFtsQrScan(json: org.json.JSONObject) {
+        val token = json.optString("token")
+        val endpoint = json.optString("endpoint").takeIf { it.isNotBlank() }
+            ?: "https://filetosheet.com/api/inbox/$token"
+        val sheetName = json.optString("sheetName")
+        val projectName = json.optString("projectName")
+        val projectId = json.optString("projectId")
+
+        if (token.isBlank() || endpoint.isBlank()) {
+            Toast.makeText(activity, "유효하지 않은 파일투시트 QR코드 정보입니다.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        binding.progressBar.visibility = View.VISIBLE
+        Toast.makeText(activity, "⚡ 파일투시트 연결 상태를 검증하고 있습니다...", Toast.LENGTH_SHORT).show()
+
+        scope.launch {
+            val result = FileToSheetClient.verifyPairing(endpoint)
+            withContext(Dispatchers.Main) {
+                binding.progressBar.visibility = View.GONE
+                if (result.success && result.valid) {
+                    val sName = result.sheetName.ifBlank { sheetName }
+                    val pName = result.projectName.ifBlank { projectName }
+                    val pId = result.projectId.ifBlank { projectId }
+
+                    prefs.ftsToken = result.token.ifBlank { token }
+                    prefs.ftsEndpoint = endpoint
+                    prefs.ftsSheetName = sName
+                    prefs.ftsProjectName = pName
+                    prefs.ftsProjectId = pId
+                    prefs.uploadDestination = AppPreferences.DESTINATION_FILE_TO_SHEET
+
+                    AlertDialog.Builder(activity)
+                        .setTitle("🎉 파일투시트 연동 성공")
+                        .setMessage("연결 프로젝트: [${pName}]\n대상 시트: [${sName}]\n\n모바일 에이전트와 파일투시트가 성공적으로 직결되었습니다!\n이제 촬영하는 영수증과 사진이 파일투시트 시트로 즉시 전송됩니다.")
+                        .setPositiveButton("확인", null)
+                        .show()
+
+                    Toast.makeText(activity, "연결 성공: [$sName] 시트에 연결됨", Toast.LENGTH_LONG).show()
+                    addLogItem("⚡ FTS 연동", "$sName ($pName)", true)
+                    onPairingSuccess(sName)
+                } else {
+                    val err = result.error ?: "유효하지 않거나 만료된 토큰입니다."
+                    AlertDialog.Builder(activity)
+                        .setTitle("파일투시트 연동 실패")
+                        .setMessage("파일투시트 서버와의 검증에 실패했습니다.\n오류: $err")
+                        .setPositiveButton("확인", null)
+                        .show()
+                    addLogItem("⚡ FTS 실패", err, false)
+                }
+            }
         }
     }
 
