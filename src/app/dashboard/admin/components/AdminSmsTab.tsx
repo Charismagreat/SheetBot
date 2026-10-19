@@ -25,6 +25,7 @@ import {
   Info,
 } from "lucide-react";
 import { AdminSmsSettings } from "@/lib/admin-sms-types";
+import AdminManagerDevicesCard from "./AdminManagerDevicesCard";
 
 interface AdminSmsTabProps {
   smsSettings: AdminSmsSettings;
@@ -162,6 +163,8 @@ export default function AdminSmsTab({
       </div>
 
       {/* 마스터 스위치 및 발송 전화번호 설정 카드 */}
+      <AdminManagerDevicesCard />
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 좌측: 발송용 관리자 번호 & 마스터 활성화 */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">

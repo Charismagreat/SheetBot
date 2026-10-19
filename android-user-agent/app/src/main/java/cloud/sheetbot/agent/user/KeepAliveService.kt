@@ -320,18 +320,8 @@ class KeepAliveService : Service() {
                 } catch (e: Exception) {
                     Log.w(TAG, "영수증/알림 문자 대기열 자동 발송 중 오류: ${e.message}")
                 }
-
-                try {
-                    val bridgeCount = SmsSenderUtil.processRemoteSmsBridgeQueue(this@KeepAliveService)
-                    if (bridgeCount > 0) {
-                        Log.i(TAG, "🚀 [외부 브릿지 발송] FileToSheet 등 외부 연동 문자 ${bridgeCount}건 전송 완료")
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "외부 브릿지 문자 대기열 자동 발송 중 오류: ${e.message}")
-                }
-
-                // 실시간 반응성을 위해 15초마다 대기열 체크
-                delay(15 * 1000L)
+                // 실시간 반응성을 위해 20초마다 대기열 체크 (기존 3분에서 20초로 단축)
+                delay(20 * 1000L)
             }
         }
     }

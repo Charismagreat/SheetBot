@@ -309,7 +309,7 @@ object ApiClient {
                 for (i in 0 until assets.length()) {
                     val asset = assets.getJSONObject(i)
                     val name = asset.optString("name", "")
-                    if (name.endsWith(".apk")) {
+                    if (name.endsWith(".apk") && name.contains("deposit-agent")) {
                         downloadUrl = asset.optString("browser_download_url", "")
                         break
                     }

@@ -1,0 +1,141 @@
+name: Build SheetBot Android Apps
+
+# 3개 앱(android-agent / android-user-agent / android-manager-agent)을 항상 같은 버전으로 빌드하고
+# android-version.properties 의 VERSION_NAME 하나로 GitHub Release(v<VERSION>) 1개에 APK 3개를 묶어 배포합니다.
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'android-agent/**'
+      - 'android-user-agent/**'
+      - 'android-manager-agent/**'
+      - 'android-version.properties'
+      - '.github/workflows/build-android-apps.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: build-android-apps
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - dir: android-agent
+            apk: sheetbot-deposit-agent.apk
+            artifact: sheetbot-deposit-agent-apk
+          - dir: android-user-agent
+            apk: SheetBotAgent.apk
+            artifact: sheetbot-user-agent-apk
+          - dir: android-manager-agent
+            apk: SheetBotManagerAgent.apk
+            artifact: sheetbot-manager-agent-apk
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.5'
+
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | sdkmanager --licenses || true
+
+      # android-agent 는 자체 keystore, user/manager 는 android-user-agent/keystore 를 사용
+      - name: Ensure Keystores Exist
+        run: |
+          mkdir -p android-agent/keystore android-user-agent/keystore
+          gen() {
+            keytool -genkeypair -v -keystore "$1" -alias sheetbot_agent -keyalg RSA -keysize 2048 \
+              -validity 10000 -storetype JKS -storepass sheetbot_agent_key_2026 -keypass sheetbot_agent_key_2026 \
+              -dname "CN=SheetBot Agent, OU=SheetBot, O=SheetBot Cloud, L=Seoul, ST=Seoul, C=KR"
+          }
+          A=android-agent/keystore/sheetbot-agent.jks
+          U=android-user-agent/keystore/sheetbot-agent.jks
+          if [ ! -f "$A" ] && [ -f "$U" ]; then cp "$U" "$A"; fi
+          if [ ! -f "$U" ] && [ -f "$A" ]; then cp "$A" "$U"; fi
+          if [ ! -f "$A" ]; then gen "$A"; cp "$A" "$U"; fi
+
+      - name: Build Release APK
+        run: |
+          cd ${{ matrix.dir }}
+          gradle assembleRelease --stacktrace
+
+      - name: Collect APK
+        run: |
+          mkdir -p release-apk
+          find ${{ matrix.dir }}/app/build/outputs/apk/release/ -name "*.apk" -exec cp {} release-apk/${{ matrix.apk }} \;
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: release-apk/${{ matrix.apk }}
+          retention-days: 30
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download all APKs
+        uses: actions/download-artifact@v4
+        with:
+          path: release-apk
+          merge-multiple: true
+
+      - name: Read shared version
+        id: ver
+        run: |
+          VERSION_NAME=$(grep '^VERSION_NAME=' android-version.properties | cut -d'=' -f2 | tr -d '\r')
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_OUTPUT
+
+      # 업데이트 확인 API(/releases/latest)가 이 릴리즈를 읽으므로 반드시 최신(latest)으로 발행
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/heads/main')
+        with:
+          tag_name: v${{ steps.ver.outputs.VERSION_NAME }}
+          name: "SheetBot Android v${{ steps.ver.outputs.VERSION_NAME }}"
+          body: "SheetBot Android apps v${{ steps.ver.outputs.VERSION_NAME }} (Deposit Agent, User Agent, Manager SMS Agent — all share this version)"
+          make_latest: true
+          files: |
+            release-apk/sheetbot-deposit-agent.apk
+            release-apk/SheetBotAgent.apk
+            release-apk/SheetBotManagerAgent.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit APKs and keystores back to Main
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+          mkdir -p public/downloads
+          cp release-apk/sheetbot-deposit-agent.apk public/downloads/sheetbot-deposit-agent.apk
+          cp release-apk/SheetBotAgent.apk public/downloads/SheetBotAgent.apk
+          git add public/downloads/sheetbot-deposit-agent.apk public/downloads/SheetBotAgent.apk
+          if ! git diff --staged --quiet; then
+            git commit -m "build(android): bundle release apks v${{ steps.ver.outputs.VERSION_NAME }}"
+            git pull --rebase origin main || true
+            git push origin main || true
+          fi

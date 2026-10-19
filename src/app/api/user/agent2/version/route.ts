@@ -17,12 +17,16 @@ let versionCache: CachedVersion | null = null;
 const CACHE_TTL_MS = 5 * 1000; // 5초 캐시 (실시간 릴리즈 즉시 반영)
 
 function parseVersionToCode(versionName: string): number {
-  const clean = versionName.replace(/^(user-)?v?/i, "").trim();
+  const clean = versionName.replace(/^(user-|manager-)?v?/i, "").trim();
   const parts = clean.split(".").map((p) => parseInt(p, 10) || 0);
   if (parts.length >= 3) {
     const major = parts[0];
     const minor = parts[1];
     const patch = parts[2];
+    // 공통 버전 체계 (android-version.properties): 모든 앱 동일 versionCode
+    if (major > 2 || (major === 2 && minor >= 3)) {
+      return major * 10000 + minor * 100 + patch;
+    }
     if (major === 2 && minor >= 2) {
       return 121 + (minor - 2) * 100 + patch; // 2.2.0 = 121, 2.2.1 = 122
     }

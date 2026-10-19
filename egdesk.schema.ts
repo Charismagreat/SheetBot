@@ -185,6 +185,13 @@ export const TABLES = {
     columnCount: 19,
     rowCount: 0,
   },
+  sheetbot_manager_devices: {
+    name: 'sheetbot_manager_devices',
+    displayName: 'SheetBot Manager SMS Devices',
+    columns: ['id', 'label', 'status', 'pair_token_hash', 'pair_expires_at', 'device_key_hash', 'device_model', 'app_version', 'paired_at', 'last_seen_at', 'created_by', 'created_at', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by'],
+    columnCount: 19,
+    rowCount: 0,
+  },
   sheetbot_schedules: {
     name: 'sheetbot_schedules',
     displayName: 'SheetBot 스케줄 및 트리거 대장',

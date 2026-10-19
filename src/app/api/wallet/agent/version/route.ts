@@ -10,9 +10,9 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersionCode: 9,
-      latestVersionName: "1.5.2",
-      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/v1.5.2/sheetbot-deposit-agent.apk",
+      latestVersionCode: 20305,
+      latestVersionName: "2.3.5",
+      apkUrl: "https://github.com/Charismagreat/SheetBot/releases/download/v2.3.5/sheetbot-deposit-agent.apk",
       fallbackApkUrl: "https://sheetbot.cloud/downloads/sheetbot-deposit-agent.apk",
       releaseNotes: "시트봇 에이전트 M v1.5.2 (글로벌 GitHub API 직통 업데이트 보장)\n• sheetbot.cloud 서버가 꺼져 있어도 GitHub Releases API로 최신 버전 직통 감지\n• 서버 다운/점검 중에도 0초 만에 인앱 원클릭 덮어쓰기 업데이트 100% 보장\n• 버전 문자열 정밀 비교 알고리즘 탑재",
     },

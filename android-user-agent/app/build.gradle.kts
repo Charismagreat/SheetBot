@@ -3,6 +3,13 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// 버전은 repo 루트의 android-version.properties 한 곳에서만 관리 (3개 앱 공통)
+val sharedVersion = java.util.Properties().apply {
+    file("${rootDir}/../android-version.properties").inputStream().use { load(it) }
+}
+val appVersionName: String = sharedVersion.getProperty("VERSION_NAME")
+val appVersionCode: Int = appVersionName.split(".").map { it.toInt() }.let { it[0] * 10000 + it[1] * 100 + it[2] }
+
 android {
     namespace = "cloud.sheetbot.agent.user"
     compileSdk = 34
@@ -11,8 +18,8 @@ android {
         applicationId = "cloud.sheetbot.agent.user"
         minSdk = 24
         targetSdk = 34
-        versionCode = 135
-        versionName = "2.3.4"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

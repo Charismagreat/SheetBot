@@ -1,11 +1,10 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { insertRows, queryTable } from "@/lib/egdesk-helpers";
+import { insertRows } from "@/lib/egdesk-helpers";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import * as crypto from "crypto";
-
-const DEFAULT_BRIDGE_KEY = "sb_bridge_sec_98f41e0a82b3d17c";
+import { ALLOWED_SMS_PURPOSES, isAnyManagerOnline, safeEqual } from "@/lib/manager-devices";
 
 function normalizePhoneNumber(phone: string): string {
   if (!phone) return "";
@@ -21,20 +20,42 @@ function normalizePhoneNumber(phone: string): string {
   return clean;
 }
 
+function maskCode(text: string): string {
+  return String(text || "").replace(/\d{4,8}/g, "••••••");
+}
+
 /**
  * POST /api/sms/bridge/dispatch
- * 
- * 파일투시트(FileToSheet) 및 외부 시스템으로부터 발송 요청을 받아
- * 스마트폰 시트봇 모바일 에이전트 발송 대기 큐(sheetbot_sms_dispatch_queue)에 안전 적재합니다.
+ *
+ * FileToSheet 등 외부 시스템의 **인증번호 SMS** 발송 요청을 받아
+ * 매니저 휴대폰 앱(android-manager-agent)의 발송 대기 큐에 적재합니다.
+ *
+ * 헤더: x-sheetbot-bridge-key  (서버 환경변수 SHEETBOT_BRIDGE_API_KEY 와 일치해야 함)
+ * 본문: { purpose: 'send-code' | 'emergency-recovery' | 'transfer-account',
+ *         recipient, message, sourceService?, callbackUrl? }
+ *
+ * 매니저 폰이 오프라인이면 503 + code:"NO_MANAGER_ONLINE" 을 반환하므로
+ * 호출 측이 대체 수단(예: Aligo)으로 폴백할지 결정할 수 있습니다.
  */
 export async function POST(req: NextRequest) {
   try {
-    const configuredKey = process.env.SHEETBOT_BRIDGE_API_KEY || DEFAULT_BRIDGE_KEY;
-    const headerKey = req.headers.get("x-sheetbot-bridge-key") ||
-      req.headers.get("x-sheetbot-key") ||
-      req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+    const configuredKey = process.env.SHEETBOT_BRIDGE_API_KEY;
+    if (!configuredKey) {
+      console.error("[SmsBridgeDispatch] SHEETBOT_BRIDGE_API_KEY is not configured");
+      return NextResponse.json(
+        { success: false, error: "브릿지가 구성되지 않았습니다 (SHEETBOT_BRIDGE_API_KEY 미설정)." },
+        { status: 503 }
+      );
+    }
 
-    if (!headerKey || headerKey.trim() !== configuredKey.trim()) {
+    const headerKey = (
+      req.headers.get("x-sheetbot-bridge-key") ||
+      req.headers.get("x-sheetbot-key") ||
+      req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
+      ""
+    ).trim();
+
+    if (!headerKey || !safeEqual(headerKey, configuredKey.trim())) {
       return NextResponse.json(
         { success: false, error: "인증 실패: 유효하지 않은 브릿지 API 키입니다 (x-sheetbot-bridge-key)." },
         { status: 401 }
@@ -42,14 +63,17 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const {
-      sourceService = "FileToSheet",
-      recipient,
-      message,
-      senderPhone,
-      callbackUrl,
-      userEmail: requestedUserEmail,
-    } = body;
+    const { sourceService = "FileToSheet", purpose, recipient, message, callbackUrl } = body;
+
+    if (!ALLOWED_SMS_PURPOSES.includes(purpose)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `purpose는 ${ALLOWED_SMS_PURPOSES.join(", ")} 중 하나여야 합니다 (인증번호 SMS 전용).`,
+        },
+        { status: 400 }
+      );
+    }
 
     if (!recipient || !message) {
       return NextResponse.json(
@@ -59,49 +83,37 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanRecipient = normalizePhoneNumber(String(recipient));
-    if (!cleanRecipient) {
+    if (!/^01[016789]-?\d{3,4}-?\d{4}$/.test(cleanRecipient)) {
+      return NextResponse.json({ success: false, error: "유효하지 않은 휴대전화 번호입니다." }, { status: 400 });
+    }
+
+    if (callbackUrl && !/^https:\/\//i.test(String(callbackUrl))) {
+      return NextResponse.json({ success: false, error: "callbackUrl은 https 주소여야 합니다." }, { status: 400 });
+    }
+
+    if (!(await isAnyManagerOnline())) {
       return NextResponse.json(
-        { success: false, error: "유효하지 않은 수신 전화번호입니다." },
-        { status: 400 }
+        {
+          success: false,
+          code: "NO_MANAGER_ONLINE",
+          error: "온라인 상태의 매니저 휴대폰이 없습니다.",
+        },
+        { status: 503 }
       );
     }
 
-    // 대상 시트봇 매니저 사용자 이메일 확정
-    let targetEmail = (requestedUserEmail && String(requestedUserEmail).includes("@"))
-      ? String(requestedUserEmail).toLowerCase().trim()
-      : "";
-
-    if (!targetEmail) {
-      // 등록된 활성 디바이스 중 최신 연결된 기기의 계정 탐색
-      const devRes = await queryTable("sheetbot_user_devices", {
-        limit: 10,
-        orderBy: "id",
-        orderDirection: "DESC",
-      }).catch(() => ({ rows: [] }));
-
-      const activeDev = (devRes.rows || []).find((d: any) => !d.deleted_at && d.user_email);
-      if (activeDev?.user_email) {
-        targetEmail = String(activeDev.user_email).toLowerCase().trim();
-      } else {
-        // 기본 서비스 관리자 계정 Fallback
-        targetEmail = "charismagreat@gmail.com";
-      }
-    }
-
     const nowIso = new Date().toISOString();
-    const nowKr = getKoreanTimeString();
     const itemUuid = crypto.randomUUID();
 
-    // 1. 발송 대기 큐(sheetbot_sms_dispatch_queue)에 등록
     const queueInsertRes = await insertRows("sheetbot_sms_dispatch_queue", [
       {
         uuid: itemUuid,
         source_service: String(sourceService),
         recipient_phone: cleanRecipient,
         message_text: String(message),
-        sender_phone: senderPhone ? String(senderPhone) : null,
+        sender_phone: null,
         callback_url: callbackUrl ? String(callbackUrl) : null,
-        user_email: targetEmail,
+        user_email: "manager",
         device_id: null,
         status: "PENDING",
         error_message: null,
@@ -118,18 +130,17 @@ export async function POST(req: NextRequest) {
 
     const dispatchId = queueInsertRes?.insertedIds?.[0] || itemUuid;
 
-    // 2. 통합 알림 이력 대장(sheetbot_dispatch_logs)에도 감사 기록 누적
     try {
       await insertRows("sheetbot_dispatch_logs", [
         {
           uuid: crypto.randomUUID(),
           channel: "SMS_BRIDGE",
           event_type: "BRIDGE_DISPATCH",
-          rule_name: `[${sourceService}] 원격 문자 중계`,
+          rule_name: `[${sourceService}] ${purpose} 인증번호 중계`,
           recipient: cleanRecipient,
           recipient_type: "CUSTOMER",
-          title: `[${sourceService}] 문자 발송 대기`,
-          content: String(message),
+          title: `[${sourceService}] 인증번호 발송 대기 (${purpose})`,
+          content: maskCode(String(message)),
           status: "QUEUED",
           error_message: null,
           created_at: nowIso,
@@ -147,19 +158,15 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `[${sourceService}] 발송 요청이 시트봇 대기 큐에 성공적으로 적재되었습니다.`,
+      message: `[${sourceService}] 발송 요청이 매니저 폰 대기 큐에 적재되었습니다.`,
       dispatchId,
       uuid: itemUuid,
       status: "QUEUED",
-      targetEmail,
       recipient: cleanRecipient,
-      queuedAt: nowKr,
+      queuedAt: getKoreanTimeString(),
     });
   } catch (error: any) {
     console.error("[SmsBridgeDispatch] Error:", error);
-    return NextResponse.json(
-      { success: false, error: error.message || "원격 발송 처리 중 내부 오류가 발생했습니다." },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: "원격 발송 처리 중 내부 오류가 발생했습니다." }, { status: 500 });
   }
 }
