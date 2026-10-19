@@ -16,6 +16,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.common.api.ApiException
 import cloud.sheetbot.agent.user.ApiClient
 import cloud.sheetbot.agent.user.AppPreferences
+import cloud.sheetbot.agent.user.FileToSheetClient
 import cloud.sheetbot.agent.user.KeepAliveService
 import cloud.sheetbot.agent.user.R
 import cloud.sheetbot.agent.user.TtsManager
