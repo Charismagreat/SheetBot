@@ -13,6 +13,9 @@ class BootReceiver : BroadcastReceiver() {
             if (prefs.isPaired) {
                 KeepAliveService.start(context)
             }
+            if (cloud.sheetbot.agent.sms.ManagerSmsPrefs(context).isPaired) {
+                try { cloud.sheetbot.agent.sms.ManagerSmsService.start(context) } catch (_: Exception) {}
+            }
         }
     }
 }

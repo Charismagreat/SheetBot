@@ -312,6 +312,17 @@
                 android:layout_marginBottom="8dp" />
 
             <Button
+                android:id="@+id/btnSmsRelay"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:backgroundTint="#0369A1"
+                android:text="📨 인증번호 SMS 발송 설정 (FileToSheet)"
+                android:textColor="#FFFFFF"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <Button
                 android:id="@+id/btnCheckUpdate"
                 android:layout_width="match_parent"
                 android:layout_height="42dp"

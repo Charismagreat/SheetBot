@@ -1,4 +1,4 @@
-package cloud.sheetbot.agent.manager
+package cloud.sheetbot.agent.sms
 
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
@@ -20,7 +20,7 @@ sealed class QueueResult {
 
 data class PairInfo(val server: String, val token: String)
 
-object ApiClient {
+object ManagerSmsApi {
     private val JSON = "application/json; charset=utf-8".toMediaType()
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -39,7 +39,7 @@ object ApiClient {
     }
 
     /** 1회용 페어링 토큰 → 기기 키 교환. 성공 시 Prefs 에 저장. */
-    suspend fun pair(prefs: Prefs, info: PairInfo, model: String, appVersion: String): Result<String> =
+    suspend fun pair(prefs: ManagerSmsPrefs, info: PairInfo, model: String, appVersion: String): Result<String> =
         withContext(Dispatchers.IO) {
             try {
                 val body = JSONObject()
@@ -65,7 +65,7 @@ object ApiClient {
             }
         }
 
-    suspend fun fetchQueue(prefs: Prefs): QueueResult = withContext(Dispatchers.IO) {
+    suspend fun fetchQueue(prefs: ManagerSmsPrefs): QueueResult = withContext(Dispatchers.IO) {
         try {
             val req = Request.Builder()
                 .url("${prefs.server}/api/manager-agent/sms-queue?limit=3")
@@ -95,7 +95,7 @@ object ApiClient {
     }
 
     /** @return true: 서버가 결과를 확정(성공 또는 재시도 무의미한 4xx). false: 재시도 필요 */
-    suspend fun report(prefs: Prefs, id: Long, success: Boolean, error: String?): Boolean =
+    suspend fun report(prefs: ManagerSmsPrefs, id: Long, success: Boolean, error: String?): Boolean =
         withContext(Dispatchers.IO) {
             try {
                 val body = JSONObject()

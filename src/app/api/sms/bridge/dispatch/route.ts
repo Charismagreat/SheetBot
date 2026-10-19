@@ -28,7 +28,7 @@ function maskCode(text: string): string {
  * POST /api/sms/bridge/dispatch
  *
  * FileToSheet 등 외부 시스템의 **인증번호 SMS** 발송 요청을 받아
- * 매니저 휴대폰 앱(android-manager-agent)의 발송 대기 큐에 적재합니다.
+ * 매니저 휴대폰의 Agent M 앱(android-agent, 인증번호 SMS 릴레이)의 발송 대기 큐에 적재합니다.
  *
  * 헤더: x-sheetbot-bridge-key  (서버 환경변수 SHEETBOT_BRIDGE_API_KEY 와 일치해야 함)
  * 본문: { purpose: 'send-code' | 'emergency-recovery' | 'transfer-account',

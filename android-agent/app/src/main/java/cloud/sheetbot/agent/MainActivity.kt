@@ -244,6 +244,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.btnSmsRelay.setOnClickListener {
+            startActivity(Intent(this, cloud.sheetbot.agent.sms.ManagerSmsActivity::class.java))
+        }
+
         binding.btnCheckUpdate.setOnClickListener {
             UpdateManager.checkForUpdates(this, showToastIfLatest = true)
         }

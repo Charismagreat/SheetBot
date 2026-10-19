@@ -1,11 +1,11 @@
-package cloud.sheetbot.agent.manager
+package cloud.sheetbot.agent.sms
 
 import android.app.Activity
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.app.PendingIntent
 import android.os.Build
 import android.telephony.SmsManager
 import androidx.core.content.ContextCompat
@@ -15,7 +15,7 @@ import java.util.UUID
 
 data class SendResult(val success: Boolean, val error: String? = null)
 
-object SmsSender {
+object ManagerSmsSender {
     private val MOBILE = Regex("^01[016789]\\d{7,8}$")
     private const val MAX_LEN = 300
 
@@ -36,7 +36,7 @@ object SmsSender {
         ) return SendResult(false, "SEND_SMS 권한 없음")
 
         val app = context.applicationContext
-        val action = "cloud.sheetbot.agent.manager.SMS_SENT_" + UUID.randomUUID()
+        val action = "cloud.sheetbot.agent.sms.SMS_SENT_" + UUID.randomUUID()
         val sms = smsManager(app)
         val parts = sms.divideMessage(text)
         val total = parts.size

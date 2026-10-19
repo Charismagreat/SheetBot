@@ -1,12 +1,12 @@
-package cloud.sheetbot.agent.manager
+package cloud.sheetbot.agent.sms
 
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** 페어링 정보와 보고 대기열을 저장 (allowBackup=false 이므로 기기 밖으로 복사되지 않음) */
-class Prefs(context: Context) {
-    private val sp = context.applicationContext.getSharedPreferences("manager_agent", Context.MODE_PRIVATE)
+/** 인증번호 SMS 릴레이 페어링 정보와 보고 대기열 저장 (입금 감지 설정과 분리된 별도 저장소) */
+class ManagerSmsPrefs(context: Context) {
+    private val sp = context.applicationContext.getSharedPreferences("manager_sms_relay", Context.MODE_PRIVATE)
 
     var server: String?
         get() = sp.getString("server", null)

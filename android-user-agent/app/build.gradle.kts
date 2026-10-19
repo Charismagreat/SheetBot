@@ -1,10 +1,12 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
 
-// 버전은 repo 루트의 android-version.properties 한 곳에서만 관리 (3개 앱 공통)
-val sharedVersion = java.util.Properties().apply {
+// 버전은 repo 루트의 android-version.properties 한 곳에서만 관리 (앱 공통)
+val sharedVersion = Properties().apply {
     file("${rootDir}/../android-version.properties").inputStream().use { load(it) }
 }
 val appVersionName: String = sharedVersion.getProperty("VERSION_NAME")

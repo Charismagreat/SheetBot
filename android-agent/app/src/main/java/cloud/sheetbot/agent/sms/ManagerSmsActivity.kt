@@ -1,13 +1,10 @@
-package cloud.sheetbot.agent.manager
+package cloud.sheetbot.agent.sms
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
-import android.provider.Settings
 import android.view.Gravity
 import android.widget.Button
 import android.widget.EditText
@@ -23,8 +20,9 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.launch
 
-class MainActivity : AppCompatActivity() {
-    private lateinit var prefs: Prefs
+/** Agent M 안의 "인증번호 SMS 발송" 설정 화면: QR 페어링 / 권한 / 해제 */
+class ManagerSmsActivity : AppCompatActivity() {
+    private lateinit var prefs: ManagerSmsPrefs
     private lateinit var statusView: TextView
     private lateinit var pairButton: Button
     private lateinit var unpairButton: Button
@@ -41,10 +39,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        prefs = Prefs(this)
+        prefs = ManagerSmsPrefs(this)
         buildUi()
         requestRuntimePermissions()
-        if (prefs.isPaired) SmsQueueService.start(this)
+        if (prefs.isPaired) ManagerSmsService.start(this)
     }
 
     override fun onResume() {
@@ -57,15 +55,24 @@ class MainActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad, pad, pad)
+            setBackgroundColor(Color.parseColor("#0F172A"))
         }
-        fun title(t: String) = TextView(this).apply { text = t; textSize = 20f; setPadding(0, 0, 0, pad / 2) }
         fun button(t: String, onClick: () -> Unit) = Button(this).apply {
             text = t
             setOnClickListener { onClick() }
         }
 
-        root.addView(title("SheetBot 매니저 SMS"))
-        statusView = TextView(this).apply { textSize = 15f; setPadding(0, 0, 0, pad) }
+        root.addView(TextView(this).apply {
+            text = "인증번호 SMS 발송 (FileToSheet)"
+            textSize = 20f
+            setTextColor(Color.WHITE)
+            setPadding(0, 0, 0, pad / 2)
+        })
+        statusView = TextView(this).apply {
+            textSize = 15f
+            setTextColor(Color.parseColor("#E2E8F0"))
+            setPadding(0, 0, 0, pad)
+        }
         root.addView(statusView)
 
         pairButton = button("QR 스캔하여 페어링") {
@@ -78,6 +85,8 @@ class MainActivity : AppCompatActivity() {
 
         manualInput = EditText(this).apply {
             hint = "또는 페어링 주소(sheetbot-manager://...) 붙여넣기"
+            setHintTextColor(Color.parseColor("#64748B"))
+            setTextColor(Color.WHITE)
             gravity = Gravity.START
         }
         root.addView(manualInput)
@@ -85,9 +94,8 @@ class MainActivity : AppCompatActivity() {
         root.addView(manualButton)
 
         root.addView(button("SMS·알림 권한 허용") { requestRuntimePermissions() })
-        root.addView(button("배터리 최적화 제외 요청") { requestIgnoreBattery() })
         unpairButton = button("페어링 해제") {
-            SmsQueueService.stop(this)
+            ManagerSmsService.stop(this)
             prefs.clearPairing()
             refresh()
         }
@@ -97,20 +105,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handlePairPayload(raw: String) {
-        val info = ApiClient.parsePairUri(raw)
+        val info = ManagerSmsApi.parsePairUri(raw)
         if (info == null) {
             Toast.makeText(this, "올바른 SheetBot 매니저 페어링 코드가 아닙니다.", Toast.LENGTH_LONG).show()
             return
         }
         lifecycleScope.launch {
             val version = try { packageManager.getPackageInfo(packageName, 0).versionName ?: "" } catch (_: Exception) { "" }
-            val r = ApiClient.pair(prefs, info, "${Build.MANUFACTURER} ${Build.MODEL}", version)
+            val r = ManagerSmsApi.pair(prefs, info, "${Build.MANUFACTURER} ${Build.MODEL}", version)
             r.onSuccess {
-                Toast.makeText(this@MainActivity, "페어링 완료: $it", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@ManagerSmsActivity, "페어링 완료: $it", Toast.LENGTH_LONG).show()
                 manualInput.setText("")
-                SmsQueueService.start(this@MainActivity)
+                ManagerSmsService.start(this@ManagerSmsActivity)
             }.onFailure {
-                Toast.makeText(this@MainActivity, it.message ?: "페어링 실패", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@ManagerSmsActivity, it.message ?: "페어링 실패", Toast.LENGTH_LONG).show()
             }
             refresh()
         }
@@ -127,21 +135,6 @@ class MainActivity : AppCompatActivity() {
             needed.add(Manifest.permission.POST_NOTIFICATIONS)
         }
         if (needed.isNotEmpty()) permLauncher.launch(needed.toTypedArray())
-    }
-
-    private fun requestIgnoreBattery() {
-        val pm = getSystemService(POWER_SERVICE) as PowerManager
-        if (pm.isIgnoringBatteryOptimizations(packageName)) {
-            Toast.makeText(this, "이미 배터리 최적화에서 제외되어 있습니다.", Toast.LENGTH_SHORT).show()
-            return
-        }
-        try {
-            startActivity(
-                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
-            )
-        } catch (_: Exception) {
-            startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-        }
     }
 
     private fun refresh() {

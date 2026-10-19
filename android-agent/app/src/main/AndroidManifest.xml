@@ -70,6 +70,17 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- 인증번호 SMS 발송 릴레이 (FileToSheet): 페어링 화면 + 폴링 서비스 -->
+        <activity
+            android:name=".sms.ManagerSmsActivity"
+            android:exported="false" />
+
+        <service
+            android:name=".sms.ManagerSmsService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <!-- 금융사 앱 무료 푸시 알림 실시간 감지 서비스 (Phase 2) -->
         <service
             android:name=".BankNotificationListener"

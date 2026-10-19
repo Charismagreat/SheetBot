@@ -55,12 +55,12 @@ export default function AdminManagerDevicesCard() {
   }, [load]);
 
   const [copiedUrl, setCopiedUrl] = useState(false);
-  const [downloadUrl, setDownloadUrl] = useState("/downloads/SheetBotManagerAgent.apk");
+  const [downloadUrl, setDownloadUrl] = useState("/downloads/sheetbot-deposit-agent.apk");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const basePath = window.location.pathname.replace(/\/dashboard.*$/, "");
-      setDownloadUrl(`${window.location.origin}${basePath}/downloads/SheetBotManagerAgent.apk`);
+      setDownloadUrl(`${window.location.origin}${basePath}/downloads/sheetbot-deposit-agent.apk`);
     }
   }, []);
 

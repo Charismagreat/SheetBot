@@ -380,7 +380,7 @@ export default function DepositAgentPage() {
 
   // APK 다운로드 절대 주소 계산 (터널 및 상용 도메인 자동 적응)
   const getDownloadUrl = () => {
-    const apkFile = activeAgentTab === "manager" ? "SheetBotManagerAgent.apk" : "sheetbot-deposit-agent.apk";
+    const apkFile = "sheetbot-deposit-agent.apk"; // 인증번호 SMS 릴레이도 Agent M 앱에 통합됨
     if (typeof window === "undefined") return `https://sheetbot.cloud/downloads/${apkFile}`;
     const pathname = window.location.pathname;
     const basePath = pathname.replace(/\/dashboard\/deposit-agent.*$/, "");
@@ -579,7 +579,7 @@ export default function DepositAgentPage() {
                       <div>
                         <div className="text-xs font-extrabold text-slate-800">APK 다운로드 및 설치 허용</div>
                         <div className="text-[11px] text-slate-500 leading-snug mt-0.5">
-                          하단 버튼을 눌러 SheetBotManagerAgent.apk를 다운로드하고 스마트폰 설치를 승인합니다.
+                          Agent M 앱(sheetbot-deposit-agent.apk)을 설치합니다. 인증번호 SMS 발송 기능은 앱 메인 화면의 '인증번호 SMS 발송 설정' 버튼 안에 있습니다.
                         </div>
                       </div>
                     </div>

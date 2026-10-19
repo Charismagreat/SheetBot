@@ -24,9 +24,8 @@ export async function GET(
       const lower = safeFilename.toLowerCase();
       let cdnUrl = `https://github.com/Charismagreat/SheetBot/releases/latest/download/${safeFilename}`;
 
-      if (lower.includes("manager")) {
-        cdnUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotManagerAgent.apk";
-      } else if (lower.includes("deposit")) {
+      if (lower.includes("manager") || lower.includes("deposit")) {
+        // 인증번호 SMS 발송 기능은 Agent M(=deposit agent) APK 에 통합되어 있음
         cdnUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/sheetbot-deposit-agent.apk";
       } else if (lower.includes("sheetbotagent") || lower === "agent.apk") {
         cdnUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";

@@ -1,4 +1,4 @@
-package cloud.sheetbot.agent.manager
+package cloud.sheetbot.agent.sms
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import cloud.sheetbot.agent.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,17 +23,17 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /** 포그라운드 서비스: 5초마다 서버 큐를 폴링해 인증번호 SMS를 발송하고 결과를 보고 */
-class SmsQueueService : Service() {
+class ManagerSmsService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var loop: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
-    private lateinit var prefs: Prefs
+    private lateinit var prefs: ManagerSmsPrefs
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        prefs = Prefs(this)
+        prefs = ManagerSmsPrefs(this)
         createChannel()
     }
 
@@ -53,7 +54,7 @@ class SmsQueueService : Service() {
     private suspend fun pollLoop() {
         while (scope.isActive) {
             flushPendingReports()
-            when (val r = ApiClient.fetchQueue(prefs)) {
+            when (val r = ManagerSmsApi.fetchQueue(prefs)) {
                 is QueueResult.Unauthorized -> {
                     // 관리자가 기기를 폐기함 → 페어링 해제 후 종료
                     prefs.clearPairing()
@@ -75,15 +76,15 @@ class SmsQueueService : Service() {
         if (prefs.isHandled(job.id)) return // 이미 발송 시도한 작업은 재발송하지 않음
         prefs.markHandled(job.id)           // 발송 직전에 기록 → 크래시 시에도 중복 발송 방지
 
-        val result = SmsSender.send(this, job.recipient, job.message)
-        prefs.addPendingReport(Prefs.PendingReport(job.id, result.success, result.error))
+        val result = ManagerSmsSender.send(this, job.recipient, job.message)
+        prefs.addPendingReport(ManagerSmsPrefs.PendingReport(job.id, result.success, result.error))
         flushPendingReports()
         setStatus(if (result.success) "발송 완료 (ID ${job.id})" else "발송 실패: ${result.error}")
     }
 
     private suspend fun flushPendingReports() {
         for (p in prefs.pendingReports()) {
-            if (ApiClient.report(prefs, p.id, p.success, p.error)) prefs.removePendingReport(p.id)
+            if (ManagerSmsApi.report(prefs, p.id, p.success, p.error)) prefs.removePendingReport(p.id)
         }
     }
 
@@ -109,7 +110,7 @@ class SmsQueueService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
-            .setContentTitle("SheetBot 매니저 SMS")
+            .setContentTitle("SheetBot 인증번호 SMS 발송")
             .setContentText(text)
             .setOngoing(true)
             .setContentIntent(open)
@@ -120,7 +121,7 @@ class SmsQueueService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "SMS 발송 서비스", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(CHANNEL_ID, "인증번호 SMS 발송 서비스", NotificationManager.IMPORTANCE_LOW)
             )
         }
     }
@@ -137,12 +138,12 @@ class SmsQueueService : Service() {
         private const val NOTI_ID = 4101
 
         fun start(context: Context) {
-            val i = Intent(context, SmsQueueService::class.java)
+            val i = Intent(context, ManagerSmsService::class.java)
             androidx.core.content.ContextCompat.startForegroundService(context, i)
         }
 
         fun stop(context: Context) {
-            context.stopService(Intent(context, SmsQueueService::class.java))
+            context.stopService(Intent(context, ManagerSmsService::class.java))
         }
     }
 }
