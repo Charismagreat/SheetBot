@@ -31,6 +31,7 @@ import Navbar from "@/components/Navbar";
 import { apiFetch, getEgdeskBasePath } from "@/lib/api";
 import { onUserDataChanged } from "@/lib/egdesk-helpers";
 import { useAuthAdmin } from "@/contexts/AuthAdminContext";
+import AdminManagerDevicesCard from "@/app/dashboard/admin/components/AdminManagerDevicesCard";
 
 function formatDateTime(dateStr?: string | null): string {
   if (!dateStr) return "-";
@@ -79,6 +80,16 @@ export default function DepositAgentPage() {
   const [loadingPairing, setLoadingPairing] = useState(!cachedBundle);
   const [copiedPin, setCopiedPin] = useState(false);
   const [copiedDownloadUrl, setCopiedDownloadUrl] = useState(false);
+  const [activeAgentTab, setActiveAgentTab] = useState<"deposit" | "manager">("deposit");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const q = window.location.search.toLowerCase();
+      if (q.includes("manager") || q.includes("sms")) {
+        setActiveAgentTab("manager");
+      }
+    }
+  }, []);
 
   // 등록된 디바이스 상태 (단일 대표 및 전체 목록)
   const [device, setDevice] = useState<any>(() => cachedBundle?.device || null);
@@ -369,10 +380,11 @@ export default function DepositAgentPage() {
 
   // APK 다운로드 절대 주소 계산 (터널 및 상용 도메인 자동 적응)
   const getDownloadUrl = () => {
-    if (typeof window === "undefined") return "https://sheetbot.cloud/downloads/sheetbot-deposit-agent.apk";
+    const apkFile = activeAgentTab === "manager" ? "SheetBotManagerAgent.apk" : "sheetbot-deposit-agent.apk";
+    if (typeof window === "undefined") return `https://sheetbot.cloud/downloads/${apkFile}`;
     const pathname = window.location.pathname;
     const basePath = pathname.replace(/\/dashboard\/deposit-agent.*$/, "");
-    return `${window.location.origin}${basePath}/downloads/sheetbot-deposit-agent.apk`;
+    return `${window.location.origin}${basePath}/downloads/${apkFile}`;
   };
 
   // APK 다운로드 링크 클립보드 복사
@@ -391,13 +403,16 @@ export default function DepositAgentPage() {
   // APK 다운로드 링크 공유하기 (Web Share API 지원)
   const handleShareDownloadUrl = async () => {
     const url = getDownloadUrl();
+    const isMgr = activeAgentTab === "manager";
+    const title = isMgr
+      ? "SheetBot Manager SMS Agent (인증번호 발송 APK)"
+      : "SheetBot Agent M (관리자용 무통장 입금 감지 APK)";
+    const text = isMgr
+      ? "스마트폰에 SheetBot 매니저 SMS 앱을 설치하세요."
+      : "스마트폰에 SheetBot Agent M 앱을 설치하세요.";
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
-        await navigator.share({
-          title: "SheetBot Agent M (관리자용 무통장 입금 감지 APK)",
-          text: "스마트폰에 SheetBot Agent M 앱을 설치하세요.",
-          url,
-        });
+        await navigator.share({ title, text, url });
         return;
       } catch {
         // 취소 시 무시
@@ -445,53 +460,207 @@ export default function DepositAgentPage() {
               <span>관리자 센터</span>
             </Link>
             <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-slate-800 font-bold">SheetBot Agent M</span>
+            <span className="text-slate-800 font-bold">
+              {activeAgentTab === "manager" ? "SheetBot Manager SMS Agent" : "SheetBot Agent M"}
+            </span>
+          </div>
+
+          {/* 에이전트 종류 선택 탭 (Agent M vs Manager SMS Agent) */}
+          <div className="flex items-center gap-2 p-1 bg-slate-100/90 rounded-2xl w-fit mb-5 border border-slate-200/60 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setActiveAgentTab("deposit")}
+              className={`px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+                activeAgentTab === "deposit"
+                  ? "bg-white text-indigo-700 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Smartphone className="w-3.5 h-3.5 text-indigo-600" />
+              <span>무통장 입금 감지 (Agent M)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveAgentTab("manager")}
+              className={`px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+                activeAgentTab === "manager"
+                  ? "bg-white text-sky-700 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Radio className="w-3.5 h-3.5 text-sky-600" />
+              <span>인증번호 SMS 발송 (Manager Agent)</span>
+            </button>
           </div>
 
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-center gap-3.5">
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0">
-                <Smartphone className="w-6 h-6" />
+              <div className={`w-11 h-11 rounded-2xl bg-gradient-to-tr ${
+                activeAgentTab === "manager"
+                  ? "from-sky-600 to-blue-600 shadow-sky-500/20"
+                  : "from-indigo-600 to-violet-600 shadow-indigo-500/20"
+              } flex items-center justify-center text-white shadow-md shrink-0`}>
+                {activeAgentTab === "manager" ? <Radio className="w-6 h-6" /> : <Smartphone className="w-6 h-6" />}
               </div>
               <div>
                 <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
-                  시트봇 에이전트 M (SheetBot Agent M)
-                  <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200/80">
-                    전용 앱 v1.4.0
+                  {activeAgentTab === "manager" ? "시트봇 매니저 SMS 에이전트 (SheetBot Manager Agent)" : "시트봇 에이전트 M (SheetBot Agent M)"}
+                  <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold border ${
+                    activeAgentTab === "manager"
+                      ? "bg-sky-50 text-sky-700 border-sky-200/80"
+                      : "bg-indigo-50 text-indigo-700 border-indigo-200/80"
+                  }`}>
+                    {activeAgentTab === "manager" ? "인증번호 발송 전용 앱 v2.3.5" : "입금 감지 전용 앱 v2.3.5"}
                   </span>
                 </h1>
                 <p className="text-xs text-slate-500 font-medium mt-1">
-                  24시간 스마트폰 실시간 무통장 입금 감지 및 전역 토큰 지갑 자동 충전 시스템
+                  {activeAgentTab === "manager"
+                    ? "FileToSheet 회원가입·계정복구 인증번호 SMS를 관리자 스마트폰 통신사망으로 실시간 전송합니다."
+                    : "24시간 스마트폰 실시간 무통장 입금 감지 및 전역 토큰 지갑 자동 충전 시스템"}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 self-start md:self-auto">
-              {/* 실시간 DB 왓처 동기화 뱃지 (클릭 시 수동 즉시 동기화 통합) */}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsRealtimeLive(true);
-                  fetchDeviceStatus(true);
-                  fetchDepositLogs(true);
-                  showToast("success", "⚡ 실시간 감시 상태를 최신으로 동기화했습니다.");
-                }}
-                className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer group shadow-2xs ${
-                  isRealtimeLive
-                    ? "bg-slate-50 text-emerald-800 border-slate-200 hover:bg-slate-100"
-                    : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
-                }`}
-                title="실시간 0초 감시 중 (클릭 시 즉시 수동 동기화)"
-              >
-                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isRealtimeLive ? "bg-emerald-500 animate-pulse ring-4 ring-emerald-500/20" : "bg-slate-400"}`} />
-                <span className={isRealtimeLive ? "text-emerald-700 font-extrabold" : "text-slate-500"}>
-                  {isRealtimeLive ? "⚡ DB 왓처 실시간 동기화" : "스트림 연결 중..."}
-                </span>
-                <RefreshCw className="w-3 h-3 text-slate-400 group-hover:text-emerald-600 transition-colors shrink-0" />
-              </button>
-            </div>
+            {activeAgentTab === "deposit" && (
+              <div className="flex items-center gap-2 self-start md:self-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRealtimeLive(true);
+                    fetchDeviceStatus(true);
+                    fetchDepositLogs(true);
+                    showToast("success", "⚡ 실시간 감시 상태를 최신으로 동기화했습니다.");
+                  }}
+                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer group shadow-2xs ${
+                    isRealtimeLive
+                      ? "bg-slate-50 text-emerald-800 border-slate-200 hover:bg-slate-100"
+                      : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
+                  }`}
+                  title="실시간 0초 감시 중 (클릭 시 즉시 수동 동기화)"
+                >
+                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isRealtimeLive ? "bg-emerald-500 animate-pulse ring-4 ring-emerald-500/20" : "bg-slate-400"}`} />
+                  <span className={isRealtimeLive ? "text-emerald-700 font-extrabold" : "text-slate-500"}>
+                    {isRealtimeLive ? "⚡ DB 왓처 실시간 동기화" : "스트림 연결 중..."}
+                  </span>
+                  <RefreshCw className="w-3 h-3 text-slate-400 group-hover:text-emerald-600 transition-colors shrink-0" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
+
+        {activeAgentTab === "manager" ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
+              {/* Step 1: APK 다운로드 & 설치 카드 */}
+              <div className="bg-white rounded-2xl border border-sky-200/90 p-5 shadow-xs flex flex-col justify-between hover:border-sky-300 transition-all relative overflow-hidden">
+                <div className="absolute -top-10 -right-10 w-28 h-28 bg-sky-50 rounded-full blur-2xl pointer-events-none"></div>
+
+                <div>
+                  <div className="flex items-center justify-between pb-3.5 mb-3.5 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-md bg-sky-600 text-white text-[10px] font-black shrink-0 shadow-xs tracking-wider">
+                        STEP 1
+                      </span>
+                      <h3 className="text-sm font-black text-slate-900 tracking-tight">
+                        스마트폰에 매니저 앱 설치
+                      </h3>
+                    </div>
+                    <span className="text-[10px] bg-sky-50 text-sky-700 px-2.5 py-0.5 rounded-full font-bold border border-sky-100 shrink-0">
+                      1분 소요
+                    </span>
+                  </div>
+
+                  <div className="space-y-3 mb-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-5 h-5 rounded-full bg-sky-600 text-white flex items-center justify-center text-[11px] font-black shrink-0 mt-0.5 shadow-2xs">
+                        1
+                      </div>
+                      <div>
+                        <div className="text-xs font-extrabold text-slate-800">APK 다운로드 및 설치 허용</div>
+                        <div className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                          하단 버튼을 눌러 SheetBotManagerAgent.apk를 다운로드하고 스마트폰 설치를 승인합니다.
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <div className="w-5 h-5 rounded-full bg-sky-600 text-white flex items-center justify-center text-[11px] font-black shrink-0 mt-0.5 shadow-2xs">
+                        2
+                      </div>
+                      <div>
+                        <div className="text-xs font-extrabold text-slate-800">SMS 발송(SEND_SMS) 권한 허용</div>
+                        <div className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                          앱 실행 시 화면에 나타나는 통신사 SMS 문자 발송 권한을 허용합니다.
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <div className="w-5 h-5 rounded-full bg-sky-600 text-white flex items-center justify-center text-[11px] font-black shrink-0 mt-0.5 shadow-2xs">
+                        3
+                      </div>
+                      <div>
+                        <div className="text-xs font-extrabold text-slate-800">배터리 최적화 해제</div>
+                        <div className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                          24시간 백그라운드 발송 대기를 위해 배터리 제한 없음을 설정합니다.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
+                  <a
+                    href={getDownloadUrl()}
+                    download
+                    className="w-full h-11 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white text-xs font-black rounded-xl shadow-sm shadow-sky-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    스마트폰에 매니저 APK 직접 다운로드
+                  </a>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleCopyDownloadUrl}
+                      className="flex-1 h-9 bg-slate-100 hover:bg-slate-200/80 text-slate-700 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-slate-200"
+                      title="다운로드 웹 주소를 클립보드에 복사합니다"
+                    >
+                      {copiedDownloadUrl ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="text-emerald-700 font-extrabold">주소 복사됨!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-slate-500" />
+                          <span>다운로드 주소 복사</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleShareDownloadUrl}
+                      className="h-9 px-3 bg-sky-50 hover:bg-sky-100 text-sky-700 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-sky-200"
+                      title="카카오톡, 문자 등으로 다운로드 링크 공유하기"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span>공유</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 2 & 3: AdminManagerDevicesCard */}
+              <div className="lg:col-span-2">
+                <AdminManagerDevicesCard />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
 
         {/* 1단계: 사용자 온보딩 흐름에 맞춘 상단 3단 위젯 카드 (1.설치 -> 2.연결 -> 3.상태&테스트) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8 items-stretch">
@@ -555,7 +724,7 @@ export default function DepositAgentPage() {
 
             <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
               <a
-                href="/downloads/sheetbot-deposit-agent.apk"
+                href={getDownloadUrl()}
                 download
                 className="w-full h-11 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs font-black rounded-xl shadow-sm shadow-indigo-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
               >
@@ -1160,6 +1329,8 @@ export default function DepositAgentPage() {
             </div>
           )}
         </div>
+          </>
+        )}
       </main>
     </div>
   );

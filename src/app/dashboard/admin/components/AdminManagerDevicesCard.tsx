@@ -1,7 +1,9 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useCallback, useEffect, useState } from "react";
-import { QrCode, Smartphone, Trash2, RefreshCw, Plus, Download } from "lucide-react";
+import { QrCode, Smartphone, Trash2, RefreshCw, Plus, Download, Copy, Check, ExternalLink } from "lucide-react";
+import Link from "next/link";
 import QrCodeImage from "./QrCodeImage";
 
 interface ManagerDevice {
@@ -37,7 +39,7 @@ export default function AdminManagerDevicesCard() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/manager-devices", { cache: "no-store" });
+      const res = await apiFetch("/api/admin/manager-devices", { cache: "no-store" });
       const data = await res.json();
       if (data.success) setDevices(data.devices || []);
       else setError(data.error || "목록을 불러오지 못했습니다.");
@@ -52,16 +54,31 @@ export default function AdminManagerDevicesCard() {
     return () => clearInterval(t);
   }, [load]);
 
-  // 페어링 완료(ACTIVE) 감지 시 QR 닫기
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [downloadUrl, setDownloadUrl] = useState("/downloads/SheetBotManagerAgent.apk");
+
   useEffect(() => {
-    if (pairing && devices.find((d) => d.id === pairing.id)?.status === "ACTIVE") setPairing(null);
-  }, [devices, pairing]);
+    if (typeof window !== "undefined") {
+      const basePath = window.location.pathname.replace(/\/dashboard.*$/, "");
+      setDownloadUrl(`${window.location.origin}${basePath}/downloads/SheetBotManagerAgent.apk`);
+    }
+  }, []);
+
+  const handleCopyDownloadUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(downloadUrl);
+      setCopiedUrl(true);
+      setTimeout(() => setCopiedUrl(false), 2000);
+    } catch {
+      alert("다운로드 주소 복사에 실패했습니다.");
+    }
+  };
 
   const issue = async () => {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch("/api/admin/manager-devices", {
+      const res = await apiFetch("/api/admin/manager-devices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ label: label.trim() }),
@@ -81,7 +98,7 @@ export default function AdminManagerDevicesCard() {
 
   const revoke = async (d: ManagerDevice) => {
     if (!confirm(`[${d.label}] 기기를 폐기하시겠습니까? 이 기기는 더 이상 SMS를 발송할 수 없습니다.`)) return;
-    await fetch(`/api/admin/manager-devices?id=${encodeURIComponent(d.id)}`, { method: "DELETE" });
+    await apiFetch(`/api/admin/manager-devices?id=${encodeURIComponent(d.id)}`, { method: "DELETE" });
     load();
   };
 
@@ -110,7 +127,7 @@ export default function AdminManagerDevicesCard() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <a
-            href="/downloads/SheetBotManagerAgent.apk"
+            href={downloadUrl}
             download
             className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
             title="SheetBot Manager APK 다운로드"
@@ -118,11 +135,29 @@ export default function AdminManagerDevicesCard() {
             <Download className="w-3.5 h-3.5" />
             APK 다운로드
           </a>
+          <button
+            type="button"
+            onClick={handleCopyDownloadUrl}
+            className="px-2.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer border border-slate-200"
+            title="스마트폰 전송용 APK 다운로드 주소 복사"
+          >
+            {copiedUrl ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+            <span>{copiedUrl ? "복사됨!" : "주소 복사"}</span>
+          </button>
+          <Link
+            href="/dashboard/deposit-agent?agent=manager"
+            prefetch={false}
+            className="px-2.5 py-2 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer border border-sky-200"
+            title="전용 설치 및 상태 관제 센터 바로가기"
+          >
+            <ExternalLink className="w-3.5 h-3.5 text-sky-600" />
+            <span>설치 센터</span>
+          </Link>
           <input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="기기 이름 (예: 매니저 폰)"
-            className="px-3 py-2 rounded-lg border border-slate-200 text-xs w-40"
+            className="px-3 py-2 rounded-lg border border-slate-200 text-xs w-36"
           />
           <button
             type="button"
