@@ -219,8 +219,8 @@ class AccountPairingController(
      */
     fun handleFtsQrScan(json: org.json.JSONObject) {
         val token = json.optString("token")
-        val endpoint = json.optString("endpoint").takeIf { it.isNotBlank() }
-            ?: "https://filetosheet.com/api/inbox/$token"
+        val rawEndpoint = json.optString("endpoint")
+        val endpoint = FileToSheetClient.normalizeEndpoint(rawEndpoint, token)
         val sheetName = json.optString("sheetName")
         val projectName = json.optString("projectName")
         val projectId = json.optString("projectId")
@@ -241,9 +241,10 @@ class AccountPairingController(
                     val sName = result.sheetName.ifBlank { sheetName }
                     val pName = result.projectName.ifBlank { projectName }
                     val pId = result.projectId.ifBlank { projectId }
+                    val effectiveEndpoint = result.endpoint.ifBlank { endpoint }
 
                     prefs.ftsToken = result.token.ifBlank { token }
-                    prefs.ftsEndpoint = endpoint
+                    prefs.ftsEndpoint = effectiveEndpoint
                     prefs.ftsSheetName = sName
                     prefs.ftsProjectName = pName
                     prefs.ftsProjectId = pId

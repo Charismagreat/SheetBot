@@ -2775,7 +2775,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="📁 사진 &amp; 문서 드라이브에 안전 보관"
+                    android:text="📁 사진 · 문서 보관 &amp; 파일투시트(FileToSheet) 직결"
                     android:textColor="#E2E8F0"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />

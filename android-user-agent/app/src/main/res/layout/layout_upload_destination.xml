@@ -47,7 +47,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="파일투시트"
+            android:text="파일투시트 (file2sheet.cloud)"
             android:textColor="#E2E8F0"
             android:textSize="12sp" />
     </RadioGroup>
@@ -100,7 +100,7 @@
             android:id="@+id/tvFtsStatusDesc"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="PC 웹 화면의 [📱 모바일 연동] QR코드를 스캔하세요"
+            android:text="PC 웹(file2sheet.cloud) 화면의 [📱 모바일 연동] QR코드를 스캔하세요"
             android:textColor="#94A3B8"
             android:textSize="10.5sp"
             android:layout_marginTop="2dp"

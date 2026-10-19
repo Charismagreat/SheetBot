@@ -47,6 +47,9 @@ data class FtsUploadResult(
 
 object FileToSheetClient {
     private const val TAG = "FileToSheetClient"
+    const val FTS_OFFICIAL_DOMAIN = "https://file2sheet.cloud"
+    const val FTS_TUNNEL_BASE = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/FileToSheet"
+
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
     private val client = OkHttpClient.Builder()
@@ -57,10 +60,59 @@ object FileToSheetClient {
         .build()
 
     /**
+     * ⚡ 파일투시트 Ingest 엔드포인트 지능형 정규화
+     * - QR코드에서 전달된 endpoint가 0.0.0.0, 127.0.0.1, localhost 등 사설/루프백 주소이거나 비어있을 경우,
+     *   즉시 작동하는 공용 터널 URL로 자동 보정.
+     * - 구 도메인(filetosheet.com) 오타/미등록 주소도 공식 터널/도메인으로 안전 보정.
+     */
+    fun normalizeEndpoint(rawEndpoint: String?, token: String): String {
+        val trimmed = rawEndpoint?.trim().orEmpty()
+        val cleanToken = token.trim()
+        if (trimmed.isBlank() ||
+            trimmed.contains("0.0.0.0") ||
+            trimmed.contains("localhost") ||
+            trimmed.contains("127.0.0.1") ||
+            trimmed.contains("filetosheet.com")
+        ) {
+            return if (cleanToken.isNotBlank()) "$FTS_TUNNEL_BASE/api/inbox/$cleanToken" else FTS_TUNNEL_BASE
+        }
+        return trimmed
+    }
+
+    /**
+     * 보조 터널 폴백 엔드포인트 계산
+     */
+    fun getTunnelFallbackEndpoint(endpoint: String, token: String? = null): String {
+        val cleanToken = token?.takeIf { it.isNotBlank() }
+            ?: endpoint.substringAfterLast("/inbox/").substringBefore("?").trim()
+        return if (cleanToken.isNotBlank()) "$FTS_TUNNEL_BASE/api/inbox/$cleanToken" else FTS_TUNNEL_BASE
+    }
+
+    /**
      * API 1. 토큰 유효성 및 페어링 검증 (GET)
-     * URL: {endpoint} 또는 https://filetosheet.com/api/inbox/{token}
+     * URL: {endpoint} 또는 공식 터널/도메인
      */
     suspend fun verifyPairing(endpoint: String): FtsPairingResult = withContext(Dispatchers.IO) {
+        val primaryResult = doVerifyPairing(endpoint)
+        if (primaryResult.success && primaryResult.valid) {
+            return@withContext primaryResult
+        }
+
+        // 1차 시도 실패 시 (예: file2sheet.cloud DNS 전파 중이거나 사설 IP), 공용 터널로 자동 폴백 재시도
+        if (!endpoint.contains("tunneling-service.onrender.com")) {
+            val fallbackUrl = getTunnelFallbackEndpoint(endpoint)
+            if (fallbackUrl.isNotBlank() && fallbackUrl != endpoint) {
+                Log.w(TAG, "🔄 [FTS 페어링 터널 폴백 시도] $endpoint -> $fallbackUrl")
+                val fallbackResult = doVerifyPairing(fallbackUrl)
+                if (fallbackResult.success && fallbackResult.valid) {
+                    return@withContext fallbackResult.copy(endpoint = fallbackUrl)
+                }
+            }
+        }
+        return@withContext primaryResult
+    }
+
+    private fun doVerifyPairing(endpoint: String): FtsPairingResult {
         try {
             Log.i(TAG, "🔍 [FTS 페어링 검증] URL: $endpoint")
             val request = Request.Builder()
@@ -81,7 +133,7 @@ object FileToSheetClient {
                 val projectId = json.optString("projectId", "")
                 val message = json.optString("message", "페어링 성공")
                 Log.i(TAG, "🎉 [FTS 페어링 성공] 시트: $sheetName (프로젝트: $projectName)")
-                FtsPairingResult(
+                return FtsPairingResult(
                     success = true,
                     valid = true,
                     token = token,
@@ -94,7 +146,7 @@ object FileToSheetClient {
             } else {
                 val errMsg = json.optString("error", "HTTP ${response.code}")
                 Log.w(TAG, "⚠️ [FTS 페어링 실패] $errMsg")
-                FtsPairingResult(
+                return FtsPairingResult(
                     success = false,
                     valid = false,
                     error = errMsg
@@ -102,7 +154,7 @@ object FileToSheetClient {
             }
         } catch (e: Exception) {
             Log.e(TAG, "🚨 [FTS 페어링 예외] ${e.message}", e)
-            FtsPairingResult(
+            return FtsPairingResult(
                 success = false,
                 valid = false,
                 error = e.localizedMessage ?: "네트워크 연결 실패"
@@ -121,6 +173,31 @@ object FileToSheetClient {
         ocrType: String? = null,
         deviceId: String? = null
     ): FtsUploadResult = withContext(Dispatchers.IO) {
+        val devId = deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL}"
+        val primaryResult = doUploadFile(endpoint, file, mimeType, memo, ocrType, devId)
+        if (primaryResult.success) {
+            return@withContext primaryResult
+        }
+
+        // 파일 전송 실패 시 공용 터널로 1회 자동 재시도
+        if (!endpoint.contains("tunneling-service.onrender.com")) {
+            val fallbackUrl = getTunnelFallbackEndpoint(endpoint)
+            if (fallbackUrl.isNotBlank() && fallbackUrl != endpoint) {
+                Log.w(TAG, "🔄 [FTS 파일 전송 터널 폴백 시도] $endpoint -> $fallbackUrl")
+                return@withContext doUploadFile(fallbackUrl, file, mimeType, memo, ocrType, devId)
+            }
+        }
+        return@withContext primaryResult
+    }
+
+    private fun doUploadFile(
+        endpoint: String,
+        file: File,
+        mimeType: String,
+        memo: String?,
+        ocrType: String?,
+        devId: String
+    ): FtsUploadResult {
         try {
             Log.i(TAG, "🚀 [FTS 파일 전송] ${file.name} (${file.length() / 1024} KB) -> $endpoint (ocrType: $ocrType)")
             val multipartBuilder = MultipartBody.Builder()
@@ -137,7 +214,6 @@ object FileToSheetClient {
             if (!ocrType.isNullOrBlank()) {
                 multipartBuilder.addFormDataPart("ocrType", ocrType)
             }
-            val devId = deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL}"
             multipartBuilder.addFormDataPart("deviceId", devId)
 
             val request = Request.Builder()
@@ -156,7 +232,7 @@ object FileToSheetClient {
                 val token = json.optString("token", "")
                 val data = json.optJSONObject("data")
                 Log.i(TAG, "🎉 [FTS 파일 전송 완료] $message (targetSheet: $targetSheet)")
-                FtsUploadResult(
+                return FtsUploadResult(
                     success = true,
                     message = message,
                     targetSheet = targetSheet,
@@ -167,14 +243,14 @@ object FileToSheetClient {
             } else {
                 val errMsg = json.optString("error", "HTTP ${response.code}")
                 Log.w(TAG, "⚠️ [FTS 파일 전송 실패] $errMsg")
-                FtsUploadResult(
+                return FtsUploadResult(
                     success = false,
                     error = errMsg
                 )
             }
         } catch (e: Exception) {
             Log.e(TAG, "🚨 [FTS 파일 전송 예외] ${e.message}", e)
-            FtsUploadResult(
+            return FtsUploadResult(
                 success = false,
                 error = e.localizedMessage ?: "네트워크 연결 실패"
             )

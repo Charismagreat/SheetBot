@@ -52,7 +52,17 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putString("fts_token", value).apply()
 
     var ftsEndpoint: String?
-        get() = prefs.getString("fts_endpoint", null)
+        get() {
+            val raw = prefs.getString("fts_endpoint", null)
+            val tok = ftsToken
+            return if (!raw.isNullOrBlank()) {
+                FileToSheetClient.normalizeEndpoint(raw, tok ?: "")
+            } else if (!tok.isNullOrBlank()) {
+                FileToSheetClient.normalizeEndpoint(null, tok)
+            } else {
+                null
+            }
+        }
         set(value) = prefs.edit().putString("fts_endpoint", value).apply()
 
     var ftsSheetName: String?

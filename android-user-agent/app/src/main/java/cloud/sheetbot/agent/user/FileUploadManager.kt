@@ -76,7 +76,7 @@ object FileUploadManager {
         }
 
         if (isFts) {
-            val endpoint = prefs.ftsEndpoint ?: "https://filetosheet.com/api/inbox/${prefs.ftsToken}"
+            val endpoint = FileToSheetClient.normalizeEndpoint(prefs.ftsEndpoint, prefs.ftsToken ?: "")
             val sheetName = prefs.ftsSheetName ?: "파일투시트"
             val memo = customMemo ?: when (ocrType?.uppercase()) {
                 "RECEIPT" -> "스마트폰 카메라 영수증 촬영 건"
@@ -408,7 +408,7 @@ object FileUploadManager {
                     error = "파일투시트(FileToSheet)와 연동되어 있지 않습니다. 먼저 QR코드를 스캔해 주세요."
                 )
             }
-            val endpoint = prefs.ftsEndpoint ?: "https://filetosheet.com/api/inbox/${prefs.ftsToken}"
+            val endpoint = FileToSheetClient.normalizeEndpoint(prefs.ftsEndpoint, prefs.ftsToken ?: "")
             val sheetName = prefs.ftsSheetName ?: "파일투시트"
             val ftsResult = try {
                 FileToSheetClient.uploadFile(
