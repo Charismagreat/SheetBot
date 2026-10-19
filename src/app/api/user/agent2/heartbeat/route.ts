@@ -33,14 +33,16 @@ export async function POST(req: NextRequest) {
         await updateRows(
           "sheetbot_user_devices",
           {
-            status: "CONNECTED",
-            last_connected_at: now,
-            last_ping: now,
-            battery_level: battery !== undefined ? Number(battery) : dev.battery_level,
-            network_type: networkType || dev.network_type,
-            updated_at: now,
-          },
-          { filters: { id: dev.id } }
+            filters: { id: dev.id },
+            updates: {
+              status: "CONNECTED",
+              last_connected_at: now,
+              last_ping: now,
+              battery_level: battery !== undefined ? Number(battery) : dev.battery_level,
+              network_type: networkType || dev.network_type,
+              updated_at: now,
+            },
+          }
         ).catch(() => {});
       }
     }

@@ -88,21 +88,23 @@ export async function POST(req: NextRequest) {
       await updateRows(
         "sheetbot_user_devices",
         {
-          device_id: finalDeviceId,
-          device_name: cleanModel,
-          label: `${cleanModel} (SheetBot Agent)`,
-          status: "CONNECTED",
-          phone_number: cleanPhone || targetDev.phone_number || "",
-          pairing_mode: "agent2",
-          app_version: cleanVersion,
-          last_connected_at: nowIso,
-          last_ping: nowIso,
-          updated_at: nowIso,
-          updated_by: cleanEmail,
-          deleted_at: null,
-          deleted_by: null,
-        },
-        { filters: { id: String(targetDev.id) } }
+          filters: { id: String(targetDev.id) },
+          updates: {
+            device_id: finalDeviceId,
+            device_name: cleanModel,
+            label: `${cleanModel} (SheetBot Agent)`,
+            status: "CONNECTED",
+            phone_number: cleanPhone || targetDev.phone_number || "",
+            pairing_mode: "agent2",
+            app_version: cleanVersion,
+            last_connected_at: nowIso,
+            last_ping: nowIso,
+            updated_at: nowIso,
+            updated_by: cleanEmail,
+            deleted_at: null,
+            deleted_by: null,
+          },
+        }
       ).catch((e) => console.warn("[PairGoogle] device update warning:", e.message));
     } else {
       const recordId = `udev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;

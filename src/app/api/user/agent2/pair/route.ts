@@ -117,15 +117,17 @@ export async function POST(req: NextRequest) {
       await updateRows(
         "sheetbot_user_devices",
         {
-          status: "CONNECTED",
-          label: `${model} (SheetBot Agent)`,
-          phone_number: phoneNumber || existing.rows[0].phone_number || "",
-          device_id: deviceId,
-          last_connected_at: now,
-          updated_at: now,
-          deleted_at: null,
-        },
-        { filters: { id: recordId } }
+          filters: { id: recordId },
+          updates: {
+            status: "CONNECTED",
+            label: `${model} (SheetBot Agent)`,
+            phone_number: phoneNumber || existing.rows[0].phone_number || "",
+            device_id: deviceId,
+            last_connected_at: now,
+            updated_at: now,
+            deleted_at: null,
+          },
+        }
       );
     } else {
       recordId = `udev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
