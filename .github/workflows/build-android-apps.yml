@@ -133,7 +133,8 @@ jobs:
           mkdir -p public/downloads
           cp release-apk/sheetbot-deposit-agent.apk public/downloads/sheetbot-deposit-agent.apk
           cp release-apk/SheetBotAgent.apk public/downloads/SheetBotAgent.apk
-          git add public/downloads/sheetbot-deposit-agent.apk public/downloads/SheetBotAgent.apk
+          cp release-apk/SheetBotManagerAgent.apk public/downloads/SheetBotManagerAgent.apk
+          git add public/downloads/sheetbot-deposit-agent.apk public/downloads/SheetBotAgent.apk public/downloads/SheetBotManagerAgent.apk
           if ! git diff --staged --quiet; then
             git commit -m "build(android): bundle release apks v${{ steps.ver.outputs.VERSION_NAME }}"
             git pull --rebase origin main || true

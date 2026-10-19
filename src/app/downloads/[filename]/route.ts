@@ -21,14 +21,15 @@ export async function GET(
     // 1. APK 파일의 경우: 프록시/Next.js 라우트의 UTF-8 텍스트 오염(Binary Corruption)을 원천 차단하기 위해
     // GitHub Releases 고속 CDN 직통 링크로 즉시 302 리다이렉트
     if (safeFilename.toLowerCase().endsWith(".apk")) {
+      const lower = safeFilename.toLowerCase();
       let cdnUrl = `https://github.com/Charismagreat/SheetBot/releases/latest/download/${safeFilename}`;
 
-      if (safeFilename.toLowerCase().includes("sheetbotagent")) {
-        // 일반 이용자용 시트봇 에이전트 최신 정본 APK (GitHub Releases latest)
+      if (lower.includes("manager")) {
+        cdnUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotManagerAgent.apk";
+      } else if (lower.includes("deposit")) {
+        cdnUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/sheetbot-deposit-agent.apk";
+      } else if (lower.includes("sheetbotagent") || lower === "agent.apk") {
         cdnUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";
-      } else if (safeFilename.toLowerCase().includes("deposit")) {
-        // 관리자용 시트봇 에이전트 M 최신 정본 APK
-        cdnUrl = "https://github.com/Charismagreat/SheetBot/releases/download/v1.5.2/sheetbot-deposit-agent.apk";
       }
 
       return NextResponse.redirect(cdnUrl, 302);

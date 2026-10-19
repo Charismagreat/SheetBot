@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { QrCode, Smartphone, Trash2, RefreshCw, Plus } from "lucide-react";
+import { QrCode, Smartphone, Trash2, RefreshCw, Plus, Download } from "lucide-react";
 import QrCodeImage from "./QrCodeImage";
 
 interface ManagerDevice {
@@ -108,12 +108,21 @@ export default function AdminManagerDevicesCard() {
             FileToSheet 인증번호 문자를 통신사망으로 발송하는 전용 앱입니다. 앱(cloud.sheetbot.agent.manager)을 설치한 뒤 QR로 페어링하세요.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href="/downloads/SheetBotManagerAgent.apk"
+            download
+            className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+            title="SheetBot Manager APK 다운로드"
+          >
+            <Download className="w-3.5 h-3.5" />
+            APK 다운로드
+          </a>
           <input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="기기 이름 (예: 매니저 폰)"
-            className="px-3 py-2 rounded-lg border border-slate-200 text-xs w-44"
+            className="px-3 py-2 rounded-lg border border-slate-200 text-xs w-40"
           />
           <button
             type="button"
