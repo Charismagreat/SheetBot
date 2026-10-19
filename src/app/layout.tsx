@@ -3,10 +3,6 @@ import "./globals.css";
 import SessionWrapper from "@/components/SessionWrapper";
 import GlobalWidgetGate from "@/components/GlobalWidgetGate";
 
-/** Kakao/social scrapers need a binary-safe image URL (tunnel can mangle /images/*.png). */
-const OG_IMAGE_URL =
-  "https://cdn.jsdelivr.net/gh/Charismagreat/SheetBot@main/public/images/og-sheetbot.png";
-
 export const metadata: Metadata = {
   metadataBase: new URL("https://sheetbot.cloud"),
   title: "SheetBot (시트봇) - 구글 시트 AI 업무 자동화",
@@ -21,7 +17,7 @@ export const metadata: Metadata = {
     description: "복잡한 수식과 코딩 없이, 말 한마디로 구글 시트에 AI 비서를 달아보세요. 영수증·명함·문자·주문 자동화까지 한 번에!",
     images: [
       {
-        url: OG_IMAGE_URL,
+        url: "https://sheetbot.cloud/images/og-sheetbot.png",
         width: 1200,
         height: 630,
         alt: "SheetBot (시트봇) - 구글 시트 AI 업무 자동화",
@@ -33,7 +29,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "SheetBot (시트봇) - 구글 시트 AI 업무 자동화",
     description: "복잡한 수식과 코딩 없이, 말 한마디로 구글 시트에 AI 비서를 달아보세요. 영수증·명함·문자·주문 자동화까지 한 번에!",
-    images: [OG_IMAGE_URL],
+    images: ["https://sheetbot.cloud/images/og-sheetbot.png"],
   },
   icons: {
     icon: "/favicon.svg",
