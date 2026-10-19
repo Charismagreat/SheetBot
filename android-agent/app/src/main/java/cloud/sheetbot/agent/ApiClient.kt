@@ -406,6 +406,71 @@ object ApiClient {
             } catch (e: Exception) {
                 Log.w(TAG, "영수증 발송 완료 마킹 실패 ($host): ${e.message}")
             }
+    /**
+     * 인증번호 SMS 발송 대기열(FileToSheet 브릿지 큐) 조회 (1차 및 2차 폴백 지원)
+     */
+    suspend fun fetchSmsDispatchJobs(userEmail: String?, deviceToken: String?): List<SmsDispatchJob> = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            val endpoint = "$host/api/manager-agent/sms-queue?limit=3"
+            try {
+                val reqBuilder = Request.Builder().url(endpoint).get()
+                if (!userEmail.isNullOrBlank()) reqBuilder.header("x-sheetbot-user-email", userEmail)
+                if (!deviceToken.isNullOrBlank()) reqBuilder.header("x-sheetbot-device-token", deviceToken)
+                val response = client.newCall(reqBuilder.build()).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val array = resJson.optJSONArray("items") ?: continue
+                    val list = mutableListOf<SmsDispatchJob>()
+                    for (i in 0 until array.length()) {
+                        val item = array.getJSONObject(i)
+                        list.add(
+                            SmsDispatchJob(
+                                id = item.optLong("id", 0L),
+                                recipient = item.optString("recipient", ""),
+                                message = item.optString("message", ""),
+                                sourceService = item.optString("sourceService", "FileToSheet")
+                            )
+                        )
+                    }
+                    return@withContext list
+                }
+            } catch (_: Exception) {
+                // failover to fallback
+            }
+        }
+        emptyList()
+    }
+
+    /**
+     * 인증번호 SMS 발송 결과 서버 보고
+     */
+    suspend fun reportSmsDispatchJob(
+        id: Long,
+        success: Boolean,
+        error: String? = null,
+        userEmail: String? = null,
+        deviceToken: String? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            val endpoint = "$host/api/manager-agent/sms-queue/report"
+            try {
+                val json = JSONObject().apply {
+                    put("dispatchId", id)
+                    put("success", success)
+                    if (!error.isNullOrBlank()) put("error", error)
+                }
+                val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+                val reqBuilder = Request.Builder().url(endpoint).post(body)
+                if (!userEmail.isNullOrBlank()) reqBuilder.header("x-sheetbot-user-email", userEmail)
+                if (!deviceToken.isNullOrBlank()) reqBuilder.header("x-sheetbot-device-token", deviceToken)
+                val response = client.newCall(reqBuilder.build()).execute()
+                if (response.isSuccessful) return@withContext true
+            } catch (_: Exception) {
+                // failover to fallback
+            }
         }
         false
     }
@@ -447,6 +512,13 @@ data class PendingReceipt(
     val amountKrw: Int,
     val tokensToCredit: Int,
     val message: String
+)
+
+data class SmsDispatchJob(
+    val id: Long,
+    val recipient: String,
+    val message: String,
+    val sourceService: String
 )
 
 data class PingResult(

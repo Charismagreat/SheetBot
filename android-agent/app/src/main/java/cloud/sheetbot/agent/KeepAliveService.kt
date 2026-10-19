@@ -25,6 +25,7 @@ class KeepAliveService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Default + Job())
     private var heartbeatJob: Job? = null
     private var receiptQueueJob: Job? = null
+    private var smsDispatchJob: Job? = null
     private lateinit var prefs: PreferencesManager
 
     companion object {
@@ -53,10 +54,11 @@ class KeepAliveService : Service() {
         super.onCreate()
         prefs = PreferencesManager(this)
         createNotificationChannels()
-        startForeground(NOTIFICATION_ID, buildNotification("🟢 실시간 입금 감지 중 (${prefs.userEmail ?: "미연동"})"))
+        startForeground(NOTIFICATION_ID, buildNotification("🟢 실시간 입금 감지 & SMS 중계 중 (${prefs.userEmail ?: "미연동"})"))
         startHeartbeatLoop()
         startReceiptQueueLoop()
-        Log.i(TAG, "KeepAliveService created and foregrounded with 1-min Heartbeat Watchdog.")
+        startSmsDispatchLoop()
+        Log.i(TAG, "KeepAliveService created and foregrounded with 1-min Heartbeat Watchdog & 5s SMS Relay.")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -69,6 +71,7 @@ class KeepAliveService : Service() {
         super.onDestroy()
         heartbeatJob?.cancel()
         receiptQueueJob?.cancel()
+        smsDispatchJob?.cancel()
         Log.w(TAG, "KeepAliveService destroyed.")
     }
 
@@ -104,7 +107,7 @@ class KeepAliveService : Service() {
                                 Log.i(TAG, "대기열 ${drained}건 서버 자동 전송 완료")
                             }
                             // 포그라운드 노티 복구
-                            updateForegroundNotification("🟢 실시간 입금 감지 중 ($email)")
+                            updateForegroundNotification("🟢 실시간 입금 감지 & SMS 중계 중 ($email)")
                         }
                         consecutiveHeartbeatFailures = 0
                     } else {
@@ -223,6 +226,43 @@ class KeepAliveService : Service() {
         }
     }
 
+    /**
+     * 5초마다 인증번호 SMS 발송 대기열(FileToSheet 브릿지 큐)을 폴링하여 즉시 발송
+     */
+    private fun startSmsDispatchLoop() {
+        smsDispatchJob?.cancel()
+        smsDispatchJob = serviceScope.launch {
+            delay(3000L)
+            while (isActive) {
+                val email = prefs.userEmail
+                if (prefs.isPaired && !email.isNullOrBlank()) {
+                    try {
+                        val jobs = ApiClient.fetchSmsDispatchJobs(email, prefs.deviceToken)
+                        if (jobs.isNotEmpty()) {
+                            Log.i(TAG, "📨 [인증번호 SMS 대기열] ${jobs.size}건 발견, 즉시 순차 발송 개시")
+                        }
+                        for (job in jobs) {
+                            if (job.recipient.isBlank() || job.message.isBlank()) continue
+                            val isSent = SmsSenderUtil.sendSms(this@KeepAliveService, job.recipient, job.message)
+                            val errText = if (isSent) null else "휴대폰 기기 SMS 발송 실패"
+                            val reported = ApiClient.reportSmsDispatchJob(
+                                id = job.id,
+                                success = isSent,
+                                error = errText,
+                                userEmail = email,
+                                deviceToken = prefs.deviceToken
+                            )
+                            Log.i(TAG, "🚀 [인증번호 SMS 처리] ID: ${job.id}, 수신: ${job.recipient}, 발송성공: $isSent, 서버보고: $reported")
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "인증번호 SMS 대기열 폴링 오류: ${e.message}")
+                    }
+                }
+                delay(5000L)
+            }
+        }
+    }
+
     private fun updateForegroundNotification(statusText: String) {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(NOTIFICATION_ID, buildNotification(statusText))
@@ -238,7 +278,7 @@ class KeepAliveService : Service() {
         )
 
         val userEmail = prefs.userEmail ?: "미연동 (QR 스캔 필요)"
-        val text = statusText ?: if (prefs.isPaired) "🟢 실시간 입금 감지 중 ($userEmail)" else "⚠️ 미연동 상태: 앱을 열어 QR을 스캔하세요"
+        val text = statusText ?: if (prefs.isPaired) "🟢 실시간 입금 감지 & SMS 중계 중 ($userEmail)" else "⚠️ 미연동 상태: 앱을 열어 QR을 스캔하세요"
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("시트봇 에이전트 M (SheetBot Agent M)")

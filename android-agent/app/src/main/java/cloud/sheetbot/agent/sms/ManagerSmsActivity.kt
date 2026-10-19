@@ -139,19 +139,25 @@ class ManagerSmsActivity : AppCompatActivity() {
 
     private fun refresh() {
         val smsOk = ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
+        val mainPrefs = cloud.sheetbot.agent.PreferencesManager(this)
         val sb = StringBuilder()
-        if (prefs.isPaired) {
+        if (mainPrefs.isPaired) {
+            sb.append("✅ Agent M 일체형 연동 완료 (${mainPrefs.userEmail})\n")
+            sb.append("기기: ${Build.MANUFACTURER} ${Build.MODEL}\n")
+            sb.append("상태: 🟢 실시간 인증번호 SMS 릴레이 활성 중 (5초 주기 감시)\n")
+        } else if (prefs.isPaired) {
             sb.append("✅ 페어링됨: ${prefs.label ?: prefs.deviceId}\n서버: ${prefs.server}\n")
             sb.append("상태: ${prefs.lastStatus.ifBlank { "시작 중" }}\n")
         } else {
-            sb.append("⚠️ 페어링되지 않음. 관리자 화면의 QR을 스캔하세요.\n")
+            sb.append("⚠️ 미연동 상태입니다. 메인 화면에서 계정을 연동하거나 아래 QR을 스캔하세요.\n")
         }
         sb.append(if (smsOk) "✅ SMS 발송 권한 허용됨" else "⚠️ SMS 발송 권한이 필요합니다")
         statusView.text = sb.toString()
 
-        pairButton.isEnabled = !prefs.isPaired
-        manualButton.isEnabled = !prefs.isPaired
-        manualInput.isEnabled = !prefs.isPaired
+        val isAnyPaired = mainPrefs.isPaired || prefs.isPaired
+        pairButton.isEnabled = !isAnyPaired
+        manualButton.isEnabled = !isAnyPaired
+        manualInput.isEnabled = !isAnyPaired
         unpairButton.isEnabled = prefs.isPaired
     }
 }

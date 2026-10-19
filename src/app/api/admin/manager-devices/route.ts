@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   }).catch(() => ({ rows: [] as any[] }));
 
   const now = Date.now();
-  const devices = (res.rows || [])
+  const managerDevices = (res.rows || [])
     .filter((r: any) => !r.deleted_at)
     .map((r: any) => {
       const seen = r.last_seen_at ? Date.parse(r.last_seen_at) : NaN;
@@ -52,8 +52,40 @@ export async function GET(req: NextRequest) {
         lastSeenAt: r.last_seen_at || null,
         online: r.status === "ACTIVE" && Number.isFinite(seen) && now - seen <= MANAGER_ONLINE_WINDOW_MS,
         createdAt: r.created_at,
+        source: "MANAGER_RELAY",
       };
     });
+
+  // Agent M (입금 에이전트 + 인증번호 릴레이) 기기도 함께 목록에 표시
+  const userDevRes = await queryTable("sheetbot_user_devices", {
+    filters: { pairing_mode: "android_agent" },
+    limit: 20,
+    orderBy: "id",
+    orderDirection: "DESC",
+  }).catch(() => ({ rows: [] as any[] }));
+
+  const agentMDevices = (userDevRes.rows || [])
+    .filter((r: any) => !r.deleted_at)
+    .map((r: any) => {
+      const rawSeen = r.last_connected_at;
+      const timeStr = rawSeen ? (rawSeen.includes("T") ? rawSeen : rawSeen.replace(" ", "T") + "Z") : "";
+      const seen = timeStr ? Date.parse(timeStr) : NaN;
+      const isOnline = r.status === "CONNECTED" && Number.isFinite(seen) && now - seen <= 150 * 1000;
+      return {
+        id: `agent_m_${r.id}`,
+        label: `${r.label || "Agent M (입금 에이전트)"} (${r.user_email})`,
+        status: r.status === "CONNECTED" ? "ACTIVE" : r.status,
+        deviceModel: r.label || "Android Device",
+        appVersion: "Agent M v2.3.5+",
+        pairedAt: r.created_at || null,
+        lastSeenAt: r.last_connected_at || null,
+        online: isOnline,
+        createdAt: r.created_at,
+        source: "AGENT_M_UNIFIED",
+      };
+    });
+
+  const devices = [...agentMDevices, ...managerDevices];
 
   return NextResponse.json({ success: true, devices });
 }
