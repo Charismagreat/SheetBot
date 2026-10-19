@@ -406,6 +406,10 @@ object ApiClient {
             } catch (e: Exception) {
                 Log.w(TAG, "영수증 발송 완료 마킹 실패 ($host): ${e.message}")
             }
+        }
+        false
+    }
+
     /**
      * 인증번호 SMS 발송 대기열(FileToSheet 브릿지 큐) 조회 (1차 및 2차 폴백 지원)
      */
