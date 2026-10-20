@@ -643,22 +643,37 @@ class PreferencesManager(context: Context) {
         const val DESTINATION_FILE_TO_SHEET = "FILE_TO_SHEET"
 
         val DEFAULT_HIDDEN_CARDS = setOf(
+            // 6대 시스템 & 관제 카드
+            "cardStatus",
+            "cardTtsToggle",
+            "cardTasksHub",
+            "cardCopilot",
+            "cardLocalLogs",
+            "cardFeatureRequest",
+
+            // 통화 & 녹음
+            "cardCallRecording",
             "cardInCallSummary",
             "cardMissedCall",
             "cardCallEnded",
             "cardMeetingRecording",
-            "cardLawAdvisory",
+
+            // 메시지 & 업무
+            "cardSmsSync",
+            "cardKakaoSync",
+            "cardLinkScrap",
+            "cardFileUpload",
+            "cardQuoteSync",
+            "cardEstimateSync",
+            "cardDepositMonitor",
+
+            // AI & 마케팅
             "cardBlog",
             "cardInsta",
             "cardSite",
             "cardCompanyResearch",
-            "cardPaymentReceipt",
-            "cardQuoteSync",
-            "cardEstimateSync",
-            "cardLinkScrap",
-            "cardWebsiteMonitor",
-            "cardContactsBackup",
-            "cardDepositMonitor"
+            "cardLawAdvisory",
+            "cardWebsiteMonitor"
         )
     }
 }

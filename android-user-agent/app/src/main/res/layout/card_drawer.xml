@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 📦 추가 기능 보관함 (Card Drawer) -->
+<!-- 🛍️ 시트봇 스토어 (SheetBot Store) -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/cardDrawerBox"
     android:layout_width="match_parent"
@@ -24,9 +24,9 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="📦 추가 기능 보관함 (0개 보관 중)"
+            android:text="🛍️ 시트봇 스토어 (기능 꺼내기)"
             android:textColor="#38BDF8"
-            android:textSize="12.5sp"
+            android:textSize="13sp"
             android:textStyle="bold" />
 
         <TextView
@@ -35,13 +35,12 @@
             android:layout_height="wrap_content"
             android:background="@drawable/bg_badge_version"
             android:backgroundTint="#0284C7"
-            android:paddingHorizontal="8dp"
+            android:paddingHorizontal="9dp"
             android:paddingVertical="4dp"
-            android:text="🛍️ 카드 스토어"
+            android:text="스토어 열기 ›"
             android:textColor="#FFFFFF"
-            android:textSize="11sp"
+            android:textSize="11.5sp"
             android:textStyle="bold"
-            android:layout_marginEnd="6dp"
             android:clickable="true"
             android:focusable="true" />
 
@@ -49,37 +48,20 @@
             android:id="@+id/btnDrawerManage"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_badge_version"
-            android:backgroundTint="#1E293B"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="4dp"
-            android:text="⚙️ 편집"
-            android:textColor="#94A3B8"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:layout_marginEnd="6dp"
-            android:clickable="true"
-            android:focusable="true" />
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/btnToggleDrawer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_badge_version"
-            android:backgroundTint="#0F172A"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="3dp"
-            android:text="▼"
-            android:textColor="#E2E8F0"
-            android:textSize="12sp"
-            android:textStyle="bold" />
+            android:visibility="gone" />
     </LinearLayout>
 
     <TextView
         android:id="@+id/tvDrawerSubtitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="자주 쓰지 않는 기능을 보관함에 모아 메인 화면을 깔끔하게 유지합니다. 언제든 [+ 꺼내기]하여 메인에 배치할 수 있습니다."
+        android:text="필요한 기능을 스토어에서 자유롭게 홈으로 꺼내고 순서를 배치할 수 있습니다."
         android:textColor="#64748B"
         android:textSize="10.5sp"
         android:layout_marginTop="4dp" />

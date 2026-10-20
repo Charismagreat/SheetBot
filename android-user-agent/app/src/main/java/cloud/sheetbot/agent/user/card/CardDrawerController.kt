@@ -44,14 +44,15 @@ class CardDrawerController(
         val headerResId: Int? = null
     )
 
-    // 관리 대상 전체 카드 24종 목록 (카테고리별 정돈)
+    // 관리 대상 전체 카드 25종 목록 (시트봇 스토어 카테고리별 정돈)
     val allCards = listOf(
-        // [1] 시스템 & 관제
+        // [1] 시스템 & 관제 (6대 시스템 카드)
         CardInfo("cardStatus", "시트봇 / File to Sheet 관제 상태", "🟢", "시스템 & 관제", R.id.cardStatus, R.id.layoutIntegratedHeader),
-        CardInfo("cardLocalLogs", "실시간 감지 및 입금 로그", "📜", "시스템 & 관제", R.id.cardLocalLogs),
-        CardInfo("cardFeatureRequest", "우리 가게 맞춤 기능 제작 의뢰", "💡", "시스템 & 관제", R.id.cardFeatureRequest, R.id.layoutFeatureRequestHeader),
+        CardInfo("cardCopilot", "말 한마디로 실행하는 AI 비서", "🎙️", "시스템 & 관제", R.id.cardCopilot, R.id.layoutCopilotHeader),
         CardInfo("cardTasksHub", "스마트 통합 할 일 허브", "📋", "시스템 & 관제", R.id.cardTasksHub, R.id.btnOpenTasksHub),
         CardInfo("cardTtsToggle", "실시간 AI 음성 안내 (TTS)", "🔊", "시스템 & 관제", R.id.cardTtsToggle),
+        CardInfo("cardLocalLogs", "실시간 감지 및 입금 로그", "📜", "시스템 & 관제", R.id.cardLocalLogs),
+        CardInfo("cardFeatureRequest", "우리 가게 맞춤 기능 제작 의뢰", "💡", "시스템 & 관제", R.id.cardFeatureRequest, R.id.layoutFeatureRequestHeader),
 
         // [2] 핵심 업무 & 장부
         CardInfo("cardPaymentReceipt", "매장 결제 확인 & 영수증 문자", "🧾", "업무 & 장부", R.id.cardPaymentReceipt, R.id.layoutPaymentReceiptHeader),
@@ -145,11 +146,11 @@ class CardDrawerController(
      */
     private fun showHideConfirmDialog(cardInfo: CardInfo) {
         android.app.AlertDialog.Builder(activity)
-            .setTitle("📦 기능 보관함으로 이동")
-            .setMessage("'${cardInfo.icon} ${cardInfo.title}' 카드를 추가 기능 보관함으로 이동하시겠습니까?\n\n메인 화면에서 숨겨지며, 언제든 보관함에서 꺼낼 수 있습니다.")
-            .setPositiveButton("보관함으로 이동") { _, _ ->
+            .setTitle("🛍️ 시트봇 스토어로 보관")
+            .setMessage("'${cardInfo.icon} ${cardInfo.title}' 카드를 시트봇 스토어로 보관하시겠습니까?\n\n홈 화면에서 숨겨지며, 언제든 스토어에서 다시 꺼낼 수 있습니다.")
+            .setPositiveButton("스토어에 보관") { _, _ ->
                 hideCard(cardInfo.key)
-                Toast.makeText(activity, "'${cardInfo.title}' 카드가 보관함으로 이동되었습니다.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(activity, "'${cardInfo.title}' 카드가 시트봇 스토어로 보관되었습니다.", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("취소", null)
             .show()
@@ -298,7 +299,7 @@ class CardDrawerController(
     fun refreshDrawerList() {
         val hiddenKeys = prefs.hiddenCardKeys
         val hiddenCards = allCards.filter { hiddenKeys.contains(it.key) }
-        tvDrawerTitle?.text = "📦 추가 기능 보관함 (${hiddenCards.size}개 보관 중)"
+        tvDrawerTitle?.text = "🛍️ 시트봇 스토어 (${hiddenCards.size}개 보관 중)"
     }
 
     /**
@@ -345,7 +346,7 @@ class CardDrawerController(
             }
         }
         val titleTv = TextView(activity).apply {
-            text = "⚙️ 카드 보관함 & 홈 순서 편집"
+            text = "🛍️ 시트봇 스토어 & 홈 화면 순서 편집"
             setTextColor(Color.parseColor("#F8FAFC"))
             textSize = 17f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
@@ -469,7 +470,7 @@ class CardDrawerController(
 
                     // [✕ 보관] 버튼
                     val hideBtn = TextView(activity).apply {
-                        text = "✕ 보관"
+                        text = "✕ 스토어 보관"
                         setTextColor(Color.parseColor("#F43F5E"))
                         textSize = 11f
                         typeface = android.graphics.Typeface.DEFAULT_BOLD
@@ -483,7 +484,7 @@ class CardDrawerController(
                         setOnClickListener {
                             hideCard(card.key)
                             renderContent()
-                            Toast.makeText(activity, "'${card.title}' 카드가 보관함으로 이동되었습니다.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(activity, "'${card.title}' 카드가 시트봇 스토어로 보관되었습니다.", Toast.LENGTH_SHORT).show()
                         }
                     }
                     row.addView(hideBtn)
@@ -503,10 +504,10 @@ class CardDrawerController(
             rootLayout.addView(divider)
 
             // ══════════════════════════════════════════════════════════
-            // [섹션 2: 📦 보관함에 보관된 카드 (하단에 카테고리별 노출)]
+            // [섹션 2: 🛍️ 시트봇 스토어에 보관된 카드 (하단에 카테고리별 노출)]
             // ══════════════════════════════════════════════════════════
             val archiveHeader = TextView(activity).apply {
-                text = "📦 보관함에 대기 중인 카드 (${archivedCards.size}개) - 터치하여 홈으로 꺼내기"
+                text = "🛍️ 시트봇 스토어에 보관된 카드 (${archivedCards.size}개) - 터치하여 홈으로 꺼내기"
                 setTextColor(Color.parseColor("#A855F7"))
                 textSize = 13f
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
@@ -584,6 +585,107 @@ class CardDrawerController(
                     }
                 }
             }
+
+            // ══════════════════════════════════════════════════════════
+            // [섹션 3: 🔗 다른 방법으로 시트봇 시작 / 연동 (스토어 보관 시작 버튼)]
+            // ══════════════════════════════════════════════════════════
+            val divider2 = View(activity).apply {
+                setBackgroundColor(Color.parseColor("#334155"))
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply {
+                    topMargin = dp(20)
+                    bottomMargin = dp(16)
+                }
+            }
+            rootLayout.addView(divider2)
+
+            val altAuthHeader = TextView(activity).apply {
+                text = "🔗 다른 방법으로 시트봇 시작 / 연동"
+                setTextColor(Color.parseColor("#F59E0B"))
+                textSize = 13f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setPadding(0, 0, 0, dp(6))
+            }
+            rootLayout.addView(altAuthHeader)
+
+            val altAuthDesc = TextView(activity).apply {
+                text = "스마트폰 번호 문자 인증 외에 구글 계정 연동이나 PC 화면 QR 코드 스캔 방식으로도 즉시 시작할 수 있습니다."
+                setTextColor(Color.parseColor("#94A3B8"))
+                textSize = 11f
+                setPadding(0, 0, 0, dp(10))
+            }
+            rootLayout.addView(altAuthDesc)
+
+            val authBtnContainer = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            }
+
+            // 1. Google 계정 로그인 버튼
+            val btnGoogle = Button(activity).apply {
+                text = "🌐 Google 계정으로 로그인 / 연동"
+                setTextColor(Color.parseColor("#FFFFFF"))
+                textSize = 12f
+                val gd = GradientDrawable().apply {
+                    setColor(Color.parseColor("#2563EB"))
+                    cornerRadius = dp(8).toFloat()
+                }
+                background = gd
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)).apply {
+                    bottomMargin = dp(8)
+                }
+                setOnClickListener {
+                    dialog.dismiss()
+                    activity.findViewById<View>(R.id.btnGoogleSignIn)?.performClick()
+                }
+            }
+            authBtnContainer.addView(btnGoogle)
+
+            // 2. PC QR 스캔 & 수신함 핀코드 수동 입력 버튼 (가로 2분할)
+            val subBtnLayout = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+
+            val btnQr = Button(activity).apply {
+                text = "📷 PC 화면 QR 스캔"
+                setTextColor(Color.parseColor("#E2E8F0"))
+                textSize = 11.5f
+                val gd = GradientDrawable().apply {
+                    setColor(Color.parseColor("#1E293B"))
+                    cornerRadius = dp(8).toFloat()
+                    setStroke(dp(1), Color.parseColor("#475569"))
+                }
+                background = gd
+                layoutParams = LinearLayout.LayoutParams(0, dp(40), 1f).apply {
+                    marginEnd = dp(6)
+                }
+                setOnClickListener {
+                    dialog.dismiss()
+                    activity.findViewById<View>(R.id.btnScanQr)?.performClick()
+                }
+            }
+            subBtnLayout.addView(btnQr)
+
+            val btnPin = Button(activity).apply {
+                text = "⌨️ 수신함 PIN 입력"
+                setTextColor(Color.parseColor("#E2E8F0"))
+                textSize = 11.5f
+                val gd = GradientDrawable().apply {
+                    setColor(Color.parseColor("#1E293B"))
+                    cornerRadius = dp(8).toFloat()
+                    setStroke(dp(1), Color.parseColor("#475569"))
+                }
+                background = gd
+                layoutParams = LinearLayout.LayoutParams(0, dp(40), 1f)
+                setOnClickListener {
+                    dialog.dismiss()
+                    activity.findViewById<View>(R.id.btnManualPin)?.performClick()
+                }
+            }
+            subBtnLayout.addView(btnPin)
+            authBtnContainer.addView(subBtnLayout)
+
+            rootLayout.addView(authBtnContainer)
         }
 
         renderContent()

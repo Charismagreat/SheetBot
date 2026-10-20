@@ -537,6 +537,7 @@
 
         <!-- 자연어 AI 시트 코파일럿 제어 센터 -->
         <LinearLayout
+            android:id="@+id/cardCopilot"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -855,6 +856,14 @@
                 android:textStyle="bold"
                 android:layout_marginBottom="10dp" />
 
+<!-- 🔗 기타 연동 방식 (시트봇 스토어 보관 및 기본 숨김) -->
+            <LinearLayout
+                android:id="@+id/layoutLegacyPairingControls"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
 <Button
                 android:id="@+id/btnGoogleSignIn"
                 android:layout_width="match_parent"
@@ -885,6 +894,7 @@
                 android:text="🔢 6자리 핀코드로 직접 연동"
                 android:textColor="#CBD5E1"
                 android:textSize="13sp" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- Phase 1 & 2: 매장 결제 & 영수증 문자 전송 제어 패널 (v2.0.6) -->
