@@ -4067,6 +4067,27 @@
         <!-- 📦 추가 기능 보관함 (Card Drawer, v2.1.99 모듈 분리) -->
         <include layout="@layout/card_drawer" />
 
+        <!-- 🌙 유틸리티: 올웨이즈 블랙 모드 (AOD 절전 & 번인 방지) -->
+        <LinearLayout
+            android:id="@+id/cardUtility"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="16dp"
+            android:gravity="center">
+
+            <Button
+                android:id="@+id/btnEnterAod"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:backgroundTint="#0F172A"
+                android:text="🌙 올웨이즈 블랙 모드 (절전 &amp; 번인 방지)"
+                android:textColor="#94A3B8"
+                android:textSize="11.5sp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp" />
+        </LinearLayout>
+
         <!-- 계정 연동 해제 (실수 터치 방지 최하단 배치) -->
         <LinearLayout
             android:id="@+id/layoutUnlinkZone"

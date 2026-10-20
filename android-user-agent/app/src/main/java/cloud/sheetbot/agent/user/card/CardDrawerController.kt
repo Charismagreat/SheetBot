@@ -1,5 +1,6 @@
-import kotlinx.coroutines.launch
 package cloud.sheetbot.agent.user.card
+
+import kotlinx.coroutines.launch
 
 import android.app.Activity
 import android.graphics.Color
