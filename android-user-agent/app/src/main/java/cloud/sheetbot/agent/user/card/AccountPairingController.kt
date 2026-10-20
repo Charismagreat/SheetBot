@@ -571,14 +571,7 @@ class AccountPairingController(
 
                             AlertDialog.Builder(activity)
                                 .setTitle("🎉 [File to Sheet] 연결 성공")
-                                .setMessage("환영합니다!
-
-• 연결 프로젝트: [${prefs.ftsProjectName}]
-• 2대 기본 시트 생성 완료:
-  - 🧾 영수증대장
-  - 🪪 명함관리
-
-이제 사진을 찍기만 하면 [File to Sheet]에 0.1초 만에 안전하게 자동 기록됩니다!")
+                                .setMessage("환영합니다!\n\n• 연결 프로젝트: [${prefs.ftsProjectName}]\n• 2대 기본 시트 생성 완료:\n  - 🧾 영수증대장\n  - 🪪 명함관리\n\n이제 사진을 찍기만 하면 [File to Sheet]에 0.1초 만에 안전하게 자동 기록됩니다!")
                                 .setPositiveButton("시작하기") { _, _ ->
                                     onPairingSuccess(prefs.ftsProjectName ?: "File to Sheet")
                                 }
