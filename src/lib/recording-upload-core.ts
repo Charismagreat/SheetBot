@@ -428,27 +428,39 @@ async function executeBackgroundFullPipeline(params: {
           }
         } catch {}
 
-        // 🛡️ [시트 C열 정규화 중복 검사] 이미 등록된 파일이면 새 행 추가 금지, 기존 행 갱신만 수행
+        // 🛡️ [시트 C~E열 정규화 중복 검사] 이미 등록 및 AI 분석 완료 여부까지 정밀 감지
         let isDuplicate = false;
+        let isAlreadyAnalyzed = false;
         try {
           const filesCheck = await callSheetsTool("sheets_get_range", {
             spreadsheetId: targetSpreadsheetId,
-            range: "시트1!C:C",
+            range: "시트1!C:E",
             preferOAuth: true,
           }, callOptions);
           const cleanTarget = targetFileName.replace(/^\[SheetBot\]\s*/i, "").trim();
-          const existingFiles: string[] = (filesCheck?.values || []).map((row: any[]) => String(row[0] || ""));
-          const matchIndex = existingFiles.findIndex((name, idx) => {
+          const rows: any[][] = filesCheck?.values || [];
+          const matchIndex = rows.findIndex((row: any[], idx: number) => {
             if (idx <= 0) return false;
+            const name = String(row[0] || "");
             const cleanName = name.replace(/^\[SheetBot\]\s*/i, "").trim();
             return cleanName === cleanTarget || name.trim() === targetFileName.trim();
           });
           if (matchIndex !== -1) {
             isDuplicate = true;
             targetRowIndex = matchIndex + 1;
-            writeDebugLog(`Step 3: Found existing row in sheet at row ${targetRowIndex} for ${targetFileName}`);
+            const existingSummary = String(rows[matchIndex]?.[2] || ""); // E열: AI 3줄 요약
+            if (
+              existingSummary.trim().length > 0 &&
+              !existingSummary.includes("⏳") &&
+              !existingSummary.includes("대기") &&
+              !existingSummary.includes("준비 중")
+            ) {
+              isAlreadyAnalyzed = true;
+              writeDebugLog(`Step 3: File '${targetFileName}' at row ${targetRowIndex} is ALREADY ANALYZED. Existing summary: ${existingSummary.slice(0, 30)}...`);
+            }
+            writeDebugLog(`Step 3: Found existing row in sheet at row ${targetRowIndex} for ${targetFileName}, alreadyAnalyzed=${isAlreadyAnalyzed}`);
           } else {
-            targetRowIndex = existingFiles.length + 1;
+            targetRowIndex = rows.length + 1;
           }
         } catch (sheetCheckErr: any) {
           writeDebugLog(`Step 3 sheet check warning: ${sheetCheckErr.message}`);
@@ -460,13 +472,30 @@ async function executeBackgroundFullPipeline(params: {
           : "-";
 
         if (isDuplicate && targetRowIndex) {
-          writeDebugLog(`Step 3: Updating existing duplicate row ${targetRowIndex}...`);
-          await callSheetsTool("sheets_update_range", {
-            spreadsheetId: targetSpreadsheetId,
-            range: `D${targetRowIndex}:H${targetRowIndex}`,
-            values: [[fileSizeMb, "⏳ AI 배치 분석 대기 중 (비용 50% 절감)", "⏳ 분석 준비 중...", "⏳ 음성 전사 대기 중...", listenLinkFormula]],
-            preferOAuth: true,
-          }, callOptions).catch(() => {});
+          if (isAlreadyAnalyzed) {
+            // 💡 [사용자 원칙 3] 이미 AI 분석이 완료된 행은 E~G(요약/STT)를 절대 덮어쓰지 않고 크기 및 바로듣기 링크만 보존 갱신
+            writeDebugLog(`Step 3: Preserving existing AI analysis results for row ${targetRowIndex}. Updating only size & listen link.`);
+            await callSheetsTool("sheets_update_range", {
+              spreadsheetId: targetSpreadsheetId,
+              range: `시트1!D${targetRowIndex}`,
+              values: [[fileSizeMb]],
+              preferOAuth: true,
+            }, callOptions).catch(() => {});
+            await callSheetsTool("sheets_update_range", {
+              spreadsheetId: targetSpreadsheetId,
+              range: `시트1!H${targetRowIndex}`,
+              values: [[listenLinkFormula]],
+              preferOAuth: true,
+            }, callOptions).catch(() => {});
+          } else {
+            writeDebugLog(`Step 3: Updating existing duplicate row ${targetRowIndex}...`);
+            await callSheetsTool("sheets_update_range", {
+              spreadsheetId: targetSpreadsheetId,
+              range: `시트1!D${targetRowIndex}:H${targetRowIndex}`,
+              values: [[fileSizeMb, "⏳ AI 배치 분석 대기 중 (비용 50% 절감)", "⏳ 분석 준비 중...", "⏳ 음성 전사 대기 중...", listenLinkFormula]],
+              preferOAuth: true,
+            }, callOptions).catch(() => {});
+          }
         } else {
           const initialRowValues = [
             [callTime, contactName, targetFileName, fileSizeMb, "⏳ AI 배치 분석 대기 중 (비용 50% 절감)", "⏳ 분석 준비 중...", "⏳ 음성 전사 대기 중...", listenLinkFormula],
@@ -502,7 +531,7 @@ async function executeBackgroundFullPipeline(params: {
     ]).catch(() => {});
 
     // 5. 백그라운드 AI 음성 전사(STT) 및 3줄 요약 실행
-    if (targetSpreadsheetId) {
+    if (targetSpreadsheetId && !isAlreadyAnalyzed) {
       await triggerAiAudioAnalysis({
         base64Audio,
         fileName: targetFileName,
@@ -513,6 +542,8 @@ async function executeBackgroundFullPipeline(params: {
         channelCount,
         callOptions,
       }).catch((e) => writeDebugLog(`Background AI error: ${e.message}`));
+    } else if (isAlreadyAnalyzed) {
+      writeDebugLog(`Step 5: [Zero Token Guard] Skipping AI analysis completely for already analyzed file: ${targetFileName} (0 Tokens consumed).`);
     }
   } catch (err: any) {
     writeDebugLog(`[BackgroundPipeline] Fatal error: ${err.message}`);
@@ -559,6 +590,32 @@ async function triggerAiAudioAnalysis(params: {
     const cleanEmail = userEmail.toLowerCase().trim();
     if (!effectiveCallOptions) {
       effectiveCallOptions = await getWorkspaceCallOptionsForEmail(cleanEmail);
+    }
+
+    // 0. [DB 감사 티켓 사전 검사] 이미 완료(SUCCEEDED)되었거나 처리 중(PENDING)인 배치 작업이 있는지 확인
+    try {
+      const existingJobs = await queryTable("sheetbot_ai_batch_jobs", {
+        where: [
+          { column: "user_email", operator: "=", value: cleanEmail },
+          { column: "file_name", operator: "=", value: fileName },
+        ],
+        limit: 5,
+      }).catch(() => null);
+
+      if (existingJobs && existingJobs.rows && existingJobs.rows.length > 0) {
+        const hasSucceeded = existingJobs.rows.some((j: any) => j.status === "SUCCEEDED");
+        if (hasSucceeded) {
+          writeDebugLog(`[AI Audio Analysis Skip] File '${fileName}' was already successfully analyzed in DB tickets. Skipping re-analysis to guarantee 0 tokens.`);
+          return;
+        }
+        const hasPending = existingJobs.rows.some((j: any) => j.status === "PENDING");
+        if (hasPending) {
+          writeDebugLog(`[AI Audio Analysis Skip] File '${fileName}' already has a PENDING batch ticket. Skipping duplicate submission.`);
+          return;
+        }
+      }
+    } catch (checkJobErr: any) {
+      writeDebugLog(`Check existing jobs error: ${checkJobErr.message}`);
     }
 
     // 1. 최소 오디오 크기 검사 (1KB 미만은 더미/손상 파일이므로 API 에러 방지)

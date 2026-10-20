@@ -76,6 +76,10 @@ class CallRecordCardController(
             val msg = if (isChecked) "통화 녹음 드라이브 자동 저장이 켜졌습니다." else "통화 녹음 드라이브 저장이 꺼졌습니다."
             Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
             if (isChecked) {
+                // 💡 기능을 켠 시점 타임스탬프 기록 (기능 활성화 이후 새로 생성된 통화 녹음 파일만 수집하고 과거 파일은 전면 무시)
+                if (prefs.callRecordingEnabledAt == 0L) {
+                    prefs.callRecordingEnabledAt = System.currentTimeMillis()
+                }
                 checkAndRequestAllFilesAccess()
                 provisionSheetAsync("RECORDING", "[SheetBot] 통화 녹음 대장", prefs.callRecordingDriveFolder)
             }

@@ -218,8 +218,14 @@ object CallRecordingManager {
 
         // 최근 파일 중 아직 업로드되지 않은 파일 순회 (최대 15개씩 배치)
         val nowMs = System.currentTimeMillis()
+        val enabledAt = prefs.callRecordingEnabledAt
         for (file in recordingFiles.take(15)) {
             val fileName = file.name
+
+            // 💡 [사용자 원칙 2] 기능을 켠 이후 새롭게 생성된 통화 녹음 파일만 수집 (과거 파일 무차별 업로드 원천 차단)
+            if (!forceReupload && enabledAt > 0L && file.lastModified() < enabledAt) {
+                continue
+            }
 
             // 7일 이상 지난 과거 오래된 녹음 파일은 자동 백업 루프에서 제외 (사용자가 드라이브를 비웠을 때 옛날 파일들이 다시 쏟아지는 현상 원천 차단)
             if (!forceReupload && (nowMs - file.lastModified() > 7L * 24 * 3600 * 1000)) {

@@ -213,7 +213,15 @@ export async function GET(request: Request) {
     for (const u of usageRows) {
       totalTokens += Number(u.total_tokens || 0);
       totalCalls += 1;
-      totalCostKrw += Number(u.cost_krw || 0);
+      totalCostKrw += Number(u.estimated_cost_krw || u.cost_krw || 0);
+    }
+
+    // 💡 [지갑 잔액-당월 사용량 완전 동기화] 지갑의 누적 사용 토큰(totalUsedTokens)과 로그 집계 중 큰 값을 채택
+    if (resolvedWallet && resolvedWallet.totalUsedTokens > totalTokens) {
+      totalTokens = resolvedWallet.totalUsedTokens;
+      if (totalCalls === 0 && totalTokens > 0) {
+        totalCalls = Math.max(1, usageRows.length);
+      }
     }
 
     const elapsedMs = Date.now() - startTime;

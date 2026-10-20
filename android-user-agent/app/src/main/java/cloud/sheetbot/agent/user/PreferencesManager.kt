@@ -244,6 +244,11 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_call_recording_sync_enabled", false)
         set(value) = prefs.edit().putBoolean("is_call_recording_sync_enabled", value).apply()
 
+    // 💡 통화 녹음 기능 활성화 시점 타임스탬프 (이 시각 이전에 녹음된 과거 파일은 전면 무시/스킵하여 토큰 소모 방어)
+    var callRecordingEnabledAt: Long
+        get() = prefs.getLong("call_recording_enabled_at", 0L)
+        set(value) = prefs.edit().putLong("call_recording_enabled_at", value).apply()
+
     var callRecordingTargetFilter: String
         get() = prefs.getString("call_recording_target_filter", "") ?: ""
         set(value) = prefs.edit().putString("call_recording_target_filter", value).apply()
