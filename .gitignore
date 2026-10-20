@@ -54,4 +54,5 @@ public/uploads/*
 !public/uploads/quote-images/
 
 # Android APKs — publish via GitHub Releases; /downloads/*.apk redirects there
-public/downloads/*.apk
+# Android APKs
+!public/downloads/*.apk
