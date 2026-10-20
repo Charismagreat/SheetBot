@@ -275,7 +275,8 @@ class MainCoreCoordinator(
 
             if (isPaired && !email.isNullOrBlank()) {
                 binding.layoutUnlinkZone.visibility = View.VISIBLE
-                binding.layoutWalletCard.visibility = View.VISIBLE
+                val isWalletHidden = prefs.hiddenCardKeys.contains("cardWallet")
+                binding.layoutWalletCard.visibility = if (isWalletHidden) View.GONE else View.VISIBLE
                 binding.layoutUnpairedControls.visibility = View.GONE
                 if (card.isTokenWalletInitialized) {
                     card.tokenWalletCardController.loadWalletBalance(email)
@@ -291,6 +292,10 @@ class MainCoreCoordinator(
         }
 
         checkAppUpdateBadge()
+
+        if (::cardDrawerController.isInitialized) {
+            cardDrawerController.applyCardVisibilityAndOrder()
+        }
     }
 
     fun enterAodMode() = aodModeController.enterAodMode()

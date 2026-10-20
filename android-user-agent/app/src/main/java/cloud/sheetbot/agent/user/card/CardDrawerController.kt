@@ -44,13 +44,14 @@ class CardDrawerController(
         val headerResId: Int? = null
     )
 
-    // 관리 대상 전체 카드 25종 목록 (시트봇 스토어 카테고리별 정돈)
+    // 관리 대상 전체 카드 26종 목록 (시트봇 스토어 카테고리별 정돈)
     val allCards = listOf(
-        // [1] 시스템 & 관제 (6대 시스템 카드)
+        // [1] 시스템 & 관제 (7대 시스템 카드 전원 스토어 보관 지원)
         CardInfo("cardStatus", "시트봇 / File to Sheet 관제 상태", "🟢", "시스템 & 관제", R.id.cardStatus, R.id.layoutIntegratedHeader),
-        CardInfo("cardCopilot", "말 한마디로 실행하는 AI 비서", "🎙️", "시스템 & 관제", R.id.cardCopilot, R.id.layoutCopilotHeader),
-        CardInfo("cardTasksHub", "스마트 통합 할 일 허브", "📋", "시스템 & 관제", R.id.cardTasksHub, R.id.btnOpenTasksHub),
         CardInfo("cardTtsToggle", "실시간 AI 음성 안내 (TTS)", "🔊", "시스템 & 관제", R.id.cardTtsToggle),
+        CardInfo("cardWallet", "내 토큰 지갑", "💰", "시스템 & 관제", R.id.layoutWalletCard, R.id.layoutWalletHeader),
+        CardInfo("cardTasksHub", "스마트 통합 할 일 허브", "📋", "시스템 & 관제", R.id.cardTasksHub),
+        CardInfo("cardCopilot", "말 한마디로 실행하는 AI 비서", "🎙️", "시스템 & 관제", R.id.cardCopilot, R.id.layoutCopilotHeader),
         CardInfo("cardLocalLogs", "실시간 감지 및 입금 로그", "📜", "시스템 & 관제", R.id.cardLocalLogs),
         CardInfo("cardFeatureRequest", "우리 가게 맞춤 기능 제작 의뢰", "💡", "시스템 & 관제", R.id.cardFeatureRequest, R.id.layoutFeatureRequestHeader),
 
@@ -96,6 +97,7 @@ class CardDrawerController(
     fun setup() {
         findViews()
         setupListeners()
+        prefs.migrateSystemCardsToStoreIfNeeded()
         syncDefaultOrderIfEmpty()
         applyCardVisibilityAndOrder()
         refreshDrawerList()
@@ -129,15 +131,18 @@ class CardDrawerController(
             CardMarketplaceController(activity, prefs, this, scope).openMarketplace()
         }
 
-        // 각 카드의 헤더 롱클릭 시 "보관함으로 이동" 지원
+        // 각 카드의 헤더 및 본체 롱클릭 시 "시트봇 스토어로 보관" 다이얼로그 지원
         allCards.forEach { cardInfo ->
-            val targetView = cardInfo.headerResId?.let { activity.findViewById<View>(it) }
-                ?: activity.findViewById<View>(cardInfo.cardResId)
+            val cardView = activity.findViewById<View>(cardInfo.cardResId)
+            val headerView = cardInfo.headerResId?.let { activity.findViewById<View>(it) }
 
-            targetView?.setOnLongClickListener {
+            val longClickListener = View.OnLongClickListener {
                 showHideConfirmDialog(cardInfo)
                 true
             }
+
+            headerView?.setOnLongClickListener(longClickListener)
+            cardView?.setOnLongClickListener(longClickListener)
         }
     }
 

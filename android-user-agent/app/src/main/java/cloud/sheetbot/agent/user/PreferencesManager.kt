@@ -634,6 +634,41 @@ class PreferencesManager(context: Context) {
         reservedNotificationCardKeys = current
     }
 
+    /**
+     * 🔄 v2.3.8+ 신규 스토어 체계 1회 자동 마이그레이션:
+     * 기존 설치 사용자의 기기에서도 7대 시스템 카드가 스토어로 안전하게 들어가도록 보정
+     */
+    var isSystemCardsV238Migrated: Boolean
+        get() = prefs.getBoolean("is_system_cards_v238_migrated", false)
+        set(value) = prefs.edit().putBoolean("is_system_cards_v238_migrated", value).apply()
+
+    fun migrateSystemCardsToStoreIfNeeded() {
+        if (!isSystemCardsV238Migrated) {
+            val currentHidden = (prefs.getStringSet("hidden_card_keys", null) ?: DEFAULT_HIDDEN_CARDS).toMutableSet()
+            // 7대 시스템 카드 스토어 보관 등록
+            currentHidden.addAll(listOf(
+                "cardStatus", "cardTtsToggle", "cardWallet",
+                "cardTasksHub", "cardCopilot", "cardLocalLogs", "cardFeatureRequest"
+            ))
+            // 2대 핵심 시트 카드는 홈에 노출되도록 보관 목록에서 해제
+            currentHidden.remove("cardPaymentReceipt")
+            currentHidden.remove("cardContactsBackup")
+            hiddenCardKeys = currentHidden
+
+            // 활성 순서 정리
+            val curOrder = activeCardOrder.toMutableList()
+            curOrder.removeAll(listOf(
+                "cardStatus", "cardTtsToggle", "cardWallet",
+                "cardTasksHub", "cardCopilot", "cardLocalLogs", "cardFeatureRequest"
+            ))
+            if (!curOrder.contains("cardPaymentReceipt")) curOrder.add("cardPaymentReceipt")
+            if (!curOrder.contains("cardContactsBackup")) curOrder.add("cardContactsBackup")
+            activeCardOrder = curOrder
+
+            isSystemCardsV238Migrated = true
+        }
+    }
+
     fun clear() {
         prefs.edit().clear().apply()
     }
@@ -643,9 +678,10 @@ class PreferencesManager(context: Context) {
         const val DESTINATION_FILE_TO_SHEET = "FILE_TO_SHEET"
 
         val DEFAULT_HIDDEN_CARDS = setOf(
-            // 6대 시스템 & 관제 카드
+            // 7대 시스템 & 관제 카드 (토큰 지갑 포함 전원 스토어 기본 보관)
             "cardStatus",
             "cardTtsToggle",
+            "cardWallet",
             "cardTasksHub",
             "cardCopilot",
             "cardLocalLogs",

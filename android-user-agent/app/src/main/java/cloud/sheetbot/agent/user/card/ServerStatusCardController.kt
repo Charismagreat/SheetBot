@@ -175,7 +175,7 @@ class ServerStatusCardController(
             binding.tvConnectedAccount.text = "연결된 계정: $email"
             binding.btnRefreshServerStatus.visibility = View.VISIBLE
             binding.btnToggleStatusDetails.visibility = View.VISIBLE
-            binding.cardTasksHub.visibility = View.VISIBLE
+            binding.cardTasksHub.visibility = if (prefs.hiddenCardKeys.contains("cardTasksHub")) View.GONE else View.VISIBLE
             checkServerAndQueueStatus(showToast = false)
             refreshTasksBadge(email)
         } else {
@@ -185,6 +185,11 @@ class ServerStatusCardController(
             binding.btnRefreshServerStatus.visibility = View.GONE
             binding.btnToggleStatusDetails.visibility = View.GONE
             binding.cardTasksHub.visibility = View.GONE
+        }
+
+        // 🛍️ 시트봇 스토어 보관 상태 존중 (보관 시 홈 화면에서 안전하게 숨김)
+        if (prefs.hiddenCardKeys.contains("cardStatus")) {
+            binding.cardStatus.visibility = View.GONE
         }
     }
 }
