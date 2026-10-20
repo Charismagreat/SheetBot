@@ -89,7 +89,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="🟢 시트봇 정상 작동 중"
+                        android:text="🟢 [File to Sheet] 연결 중"
                         android:textColor="#FFFFFF"
                         android:textSize="13.5sp"
                         android:textStyle="bold" />
@@ -844,7 +844,18 @@
             android:orientation="vertical"
             android:layout_marginBottom="16dp">
 
-            <Button
+                        <Button
+                android:id="@+id/btnPhoneSignIn"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:backgroundTint="#6366F1"
+                android:text="📱 휴대폰 번호로 1초 시작 (인증문자)"
+                android:textColor="#FFFFFF"
+                android:textSize="14.5sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="10dp" />
+
+<Button
                 android:id="@+id/btnGoogleSignIn"
                 android:layout_width="match_parent"
                 android:layout_height="54dp"
@@ -3952,37 +3963,7 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- 독립 카드: utility -->
-        <LinearLayout
-            android:id="@+id/cardUtility"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@drawable/bg_card_scenario"
-            android:padding="13dp"
-            android:layout_marginBottom="12dp">
-
-<Button
-                android:id="@+id/btnCheckUpdate"
-                android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:backgroundTint="#475569"
-                android:text="🔄 최신 업데이트 확인 (원클릭 덮어쓰기)"
-                android:textColor="#FFFFFF"
-                android:textSize="11.5sp"
-                android:textStyle="bold" />
-
-            <Button
-                android:id="@+id/btnEnterAod"
-                android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:backgroundTint="#0F172A"
-                android:text="🌙 올웨이즈 블랙 모드 (화면 번인 방지)"
-                android:textColor="#94A3B8"
-                android:textSize="11.5sp"
-                android:textStyle="bold"
-                android:layout_marginTop="8dp" />
-        </LinearLayout>
+        
 
         <!-- 최근 감지된 입금 내역 요약 -->
         <LinearLayout
@@ -4011,7 +3992,17 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- 실시간 입금 감지 로그 창 (최대 1,000건 로컬 영구 보관 + 부드러운 스크롤) -->
+        <!-- 독립 카드: cardLocalLogs (실시간 감지 로그) -->
+        <LinearLayout
+            android:id="@+id/cardLocalLogs"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_scenario"
+            android:padding="13dp"
+            android:layout_marginBottom="12dp">
+
+<!-- 실시간 입금 감지 로그 창 (최대 1,000건 로컬 영구 보관 + 부드러운 스크롤) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -4068,6 +4059,7 @@
             android:fadeScrollbars="false"
             android:overScrollMode="always"
             android:text="대기 중... 은행 입금 알림, 결제 푸시, 고객 SMS가 수신되면 실시간 기록됩니다.\n" />
+        </LinearLayout>
 
         <!-- 💡 맞춤 기능 제작 의뢰 / 아이디어 제안함 (v2.1.99 모듈 분리) -->
         <include layout="@layout/card_feature_request" />

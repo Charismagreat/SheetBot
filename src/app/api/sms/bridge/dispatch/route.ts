@@ -87,8 +87,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "유효하지 않은 휴대전화 번호입니다." }, { status: 400 });
     }
 
-    if (callbackUrl && !/^https:\/\//i.test(String(callbackUrl))) {
-      return NextResponse.json({ success: false, error: "callbackUrl은 https 주소여야 합니다." }, { status: 400 });
+    if (callbackUrl) {
+      const urlStr = String(callbackUrl);
+      const isHttps = /^https:\/\//i.test(urlStr);
+      const isLocal = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/.*)?$/i.test(urlStr);
+      if (!isHttps && !isLocal) {
+        return NextResponse.json({ success: false, error: "callbackUrl은 https 주소이거나 로컬호스트 주소여야 합니다." }, { status: 400 });
+      }
     }
 
     if (!(await isAnyManagerOnline())) {

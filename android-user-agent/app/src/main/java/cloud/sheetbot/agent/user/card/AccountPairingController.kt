@@ -52,6 +52,11 @@ class AccountPairingController(
 ) {
 
     fun setup() {
+        // 📱 휴대폰 번호로 1초 시작 (SMS 인증문자)
+        binding.btnPhoneSignIn.setOnClickListener {
+            showPhoneAuthDialog()
+        }
+
         // Google 원클릭 로그인 버튼 (v1.8.0 / v2.0.1 무중단 연동 강화)
         binding.btnGoogleSignIn.setOnClickListener {
             startGoogleSignIn()
@@ -465,4 +470,137 @@ class AccountPairingController(
             }
         }
     }
+
+    /**
+     * 📱 휴대폰 번호로 1초 시작: SMS 인증번호 요청 및 검증 다이얼로그
+     */
+    fun showPhoneAuthDialog() {
+        val input = EditText(activity).apply {
+            hint = "010-0000-0000"
+            inputType = android.text.InputType.TYPE_CLASS_PHONE
+            setPadding(40, 30, 40, 30)
+            setText(prefs.ftsPhoneNumber ?: "")
+        }
+
+        AlertDialog.Builder(activity)
+            .setTitle("📱 휴대폰 번호로 1초 시작")
+            .setMessage("휴대폰 번호를 입력하시면 인증번호 문자가 발송되며, [File to Sheet]에 회원 가입 및 2대 핵심 시트(영수증대장, 명함관리)가 0.1초 만에 자동 생성됩니다.")
+            .setView(input)
+            .setPositiveButton("인증문자 받기") { _, _ ->
+                val phone = input.text.toString().trim()
+                val cleanPhone = phone.replace("[^0-9]".toRegex(), "")
+                if (cleanPhone.length < 10 || !cleanPhone.startsWith("010")) {
+                    Toast.makeText(activity, "올바른 010 휴대폰 번호를 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+
+                binding.progressBar.visibility = View.VISIBLE
+                Toast.makeText(activity, "인증문자를 발송하고 있습니다...", Toast.LENGTH_SHORT).show()
+
+                scope.launch {
+                    val (success, msg) = FileToSheetClient.requestPhoneSmsCode(cleanPhone)
+                    withContext(Dispatchers.Main) {
+                        binding.progressBar.visibility = View.GONE
+                        if (success) {
+                            Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
+                            showVerifyCodeDialog(cleanPhone)
+                        } else {
+                            AlertDialog.Builder(activity)
+                                .setTitle("인증문자 발송 실패")
+                                .setMessage(msg)
+                                .setPositiveButton("확인", null)
+                                .show()
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    /**
+     * 💬 6자리 인증번호 입력 및 2대 시트(영수증, 명함) 자동 바인딩 다이얼로그
+     */
+    private fun showVerifyCodeDialog(phoneNumber: String) {
+        val input = EditText(activity).apply {
+            hint = "인증번호 6자리"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setPadding(40, 30, 40, 30)
+        }
+
+        AlertDialog.Builder(activity)
+            .setTitle("💬 인증번호 6자리 입력")
+            .setMessage("[$phoneNumber]로 발송된 6자리 인증문자를 5분 이내에 입력해 주세요.")
+            .setView(input)
+            .setPositiveButton("인증 완료 및 시작") { _, _ ->
+                val code = input.text.toString().trim()
+                if (code.length != 6) {
+                    Toast.makeText(activity, "6자리 인증번호를 정확히 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+
+                binding.progressBar.visibility = View.VISIBLE
+                Toast.makeText(activity, "인증 및 2대 핵심 시트를 생성하고 있습니다...", Toast.LENGTH_SHORT).show()
+
+                scope.launch {
+                    val result = FileToSheetClient.verifyPhoneSmsCode(phoneNumber, code)
+                    withContext(Dispatchers.Main) {
+                        binding.progressBar.visibility = View.GONE
+                        if (result.success) {
+                            prefs.ftsPhoneNumber = phoneNumber
+                            prefs.ftsProjectId = result.projectId
+                            prefs.ftsProjectName = result.projectName ?: "내 비즈니스 장부"
+                            prefs.ftsEndpoint = FileToSheetClient.FTS_OFFICIAL_DOMAIN
+                            prefs.uploadDestination = AppPreferences.DESTINATION_FILE_TO_SHEET
+
+                            // 2대 기본 시트 토큰 자동 바인딩
+                            for (sheet in result.defaultSheets) {
+                                if (sheet.type == "receipt") {
+                                    prefs.ftsReceiptToken = sheet.token
+                                    prefs.ftsReceiptSheetName = sheet.sheetName
+                                    prefs.ftsSheetName = sheet.sheetName
+                                    prefs.ftsToken = sheet.token
+                                } else if (sheet.type == "business_card") {
+                                    prefs.ftsBusinessCardToken = sheet.token
+                                    prefs.ftsBusinessCardSheetName = sheet.sheetName
+                                }
+                            }
+
+                            // 2대 핵심 카드(영수증, 명함)만 홈 화면에 미니멀하게 기본 배치
+                            prefs.activeCardOrder = listOf("cardPaymentReceipt", "cardContactsBackup")
+
+                            AlertDialog.Builder(activity)
+                                .setTitle("🎉 [File to Sheet] 연결 성공")
+                                .setMessage("환영합니다!
+
+• 연결 프로젝트: [${prefs.ftsProjectName}]
+• 2대 기본 시트 생성 완료:
+  - 🧾 영수증대장
+  - 🪪 명함관리
+
+이제 사진을 찍기만 하면 [File to Sheet]에 0.1초 만에 안전하게 자동 기록됩니다!")
+                                .setPositiveButton("시작하기") { _, _ ->
+                                    onPairingSuccess(prefs.ftsProjectName ?: "File to Sheet")
+                                }
+                                .show()
+
+                            addLogItem("⚡ FTS 인증", "2대 핵심 시트 생성 및 연결 완료", true)
+                        } else {
+                            val errMsg = result.error ?: "인증번호가 일치하지 않습니다."
+                            AlertDialog.Builder(activity)
+                                .setTitle("인증 실패")
+                                .setMessage(errMsg)
+                                .setPositiveButton("다시 시도") { _, _ ->
+                                    showVerifyCodeDialog(phoneNumber)
+                                }
+                                .setNegativeButton("취소", null)
+                                .show()
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
 }

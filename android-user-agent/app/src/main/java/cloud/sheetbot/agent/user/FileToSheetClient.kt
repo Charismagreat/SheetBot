@@ -35,6 +35,34 @@ data class FtsPairingResult(
     val error: String? = null
 )
 
+data class FtsDefaultSheet(
+    val type: String,
+    val sheetName: String,
+    val token: String,
+    val webhookUrl: String
+)
+
+data class FtsVerifyResult(
+    val success: Boolean,
+    val message: String? = null,
+    val projectId: String? = null,
+    val projectName: String? = null,
+    val defaultSheets: List<FtsDefaultSheet> = emptyList(),
+    val error: String? = null
+)
+
+data class FtsEnsureSheetResult(
+    val success: Boolean,
+    val isNew: Boolean = false,
+    val projectId: String? = null,
+    val projectName: String? = null,
+    val sheetType: String? = null,
+    val sheetName: String? = null,
+    val token: String? = null,
+    val webhookUrl: String? = null,
+    val error: String? = null
+)
+
 data class FtsUploadResult(
     val success: Boolean,
     val message: String? = null,
@@ -314,5 +342,145 @@ object FileToSheetClient {
                 error = e.localizedMessage ?: "네트워크 연결 실패"
             )
         }
+    }
+
+    /**
+     * 📱 휴대폰 인증번호 발송 요청 (POST /api/auth/phone/send-code)
+     */
+    suspend fun requestPhoneSmsCode(phoneNumber: String): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        val cleanPhone = phoneNumber.replace("[^0-9]".toRegex(), "")
+        val endpoints = listOf(
+            "$FTS_OFFICIAL_DOMAIN/api/auth/phone/send-code",
+            "$FTS_TUNNEL_BASE/api/auth/phone/send-code"
+        )
+        for (ep in endpoints) {
+            try {
+                val json = JSONObject().apply { put("phoneNumber", cleanPhone) }
+                val request = Request.Builder()
+                    .url(ep)
+                    .post(json.toString().toRequestBody(JSON_MEDIA_TYPE))
+                    .build()
+                val response = client.newCall(request).execute()
+                val bodyStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(bodyStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val msg = resJson.optString("message", "인증번호가 발송되었습니다.")
+                    return@withContext Pair(true, msg)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "send-code 실패 ($ep): ${e.message}")
+            }
+        }
+        Pair(false, "인증문자 발송에 실패했습니다. 번호를 확인해 주세요.")
+    }
+
+    /**
+     * 📱 휴대폰 6자리 인증번호 검증 및 2대 시트(영수증, 명함) 수신 (POST /api/auth/phone/verify-code)
+     */
+    suspend fun verifyPhoneSmsCode(phoneNumber: String, code: String): FtsVerifyResult = withContext(Dispatchers.IO) {
+        val cleanPhone = phoneNumber.replace("[^0-9]".toRegex(), "")
+        val cleanCode = code.trim()
+        val endpoints = listOf(
+            "$FTS_OFFICIAL_DOMAIN/api/auth/phone/verify-code",
+            "$FTS_TUNNEL_BASE/api/auth/phone/verify-code"
+        )
+        for (ep in endpoints) {
+            try {
+                val json = JSONObject().apply {
+                    put("phoneNumber", cleanPhone)
+                    put("code", cleanCode)
+                }
+                val request = Request.Builder()
+                    .url(ep)
+                    .post(json.toString().toRequestBody(JSON_MEDIA_TYPE))
+                    .build()
+                val response = client.newCall(request).execute()
+                val bodyStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(bodyStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val pId = resJson.optString("projectId", "")
+                    val pName = resJson.optString("projectName", "내 비즈니스 장부")
+                    val msg = resJson.optString("message", "인증되었습니다.")
+                    val defaultSheetsList = mutableListOf<FtsDefaultSheet>()
+                    val sheetsArr = resJson.optJSONArray("defaultSheets")
+                    if (sheetsArr != null) {
+                        for (i in 0 until sheetsArr.length()) {
+                            val obj = sheetsArr.getJSONObject(i)
+                            defaultSheetsList.add(
+                                FtsDefaultSheet(
+                                    type = obj.optString("type", ""),
+                                    sheetName = obj.optString("sheetName", ""),
+                                    token = obj.optString("token", ""),
+                                    webhookUrl = obj.optString("webhookUrl", "")
+                                )
+                            )
+                        }
+                    }
+                    return@withContext FtsVerifyResult(
+                        success = true,
+                        message = msg,
+                        projectId = pId,
+                        projectName = pName,
+                        defaultSheets = defaultSheetsList
+                    )
+                } else {
+                    val errMsg = resJson.optString("error", "인증번호가 일치하지 않습니다.")
+                    return@withContext FtsVerifyResult(success = false, error = errMsg)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "verify-code 실패 ($ep): ${e.message}")
+            }
+        }
+        FtsVerifyResult(success = false, error = "인증 서버와 연결할 수 없습니다.")
+    }
+
+    /**
+     * ⚡ 보관함 카드 활성화 시 온디맨드 시트 자동 생성 (POST /api/inbox/ensure-sheet)
+     */
+    suspend fun ensureSheet(
+        phoneNumber: String,
+        projectId: String?,
+        sheetType: String,
+        customSheetName: String? = null
+    ): FtsEnsureSheetResult = withContext(Dispatchers.IO) {
+        val cleanPhone = phoneNumber.replace("[^0-9]".toRegex(), "")
+        val endpoints = listOf(
+            "$FTS_OFFICIAL_DOMAIN/api/inbox/ensure-sheet",
+            "$FTS_TUNNEL_BASE/api/inbox/ensure-sheet"
+        )
+        for (ep in endpoints) {
+            try {
+                val json = JSONObject().apply {
+                    put("phoneNumber", cleanPhone)
+                    if (!projectId.isNullOrBlank()) put("projectId", projectId)
+                    put("sheetType", sheetType)
+                    if (!customSheetName.isNullOrBlank()) put("customSheetName", customSheetName)
+                }
+                val request = Request.Builder()
+                    .url(ep)
+                    .post(json.toString().toRequestBody(JSON_MEDIA_TYPE))
+                    .build()
+                val response = client.newCall(request).execute()
+                val bodyStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(bodyStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext FtsEnsureSheetResult(
+                        success = true,
+                        isNew = resJson.optBoolean("isNew", false),
+                        projectId = resJson.optString("projectId", ""),
+                        projectName = resJson.optString("projectName", ""),
+                        sheetType = resJson.optString("sheetType", sheetType),
+                        sheetName = resJson.optString("sheetName", ""),
+                        token = resJson.optString("token", ""),
+                        webhookUrl = resJson.optString("webhookUrl", "")
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "ensure-sheet 실패 ($ep): ${e.message}")
+            }
+        }
+        FtsEnsureSheetResult(success = false, error = "시트 생성 및 연결에 실패했습니다.")
     }
 }

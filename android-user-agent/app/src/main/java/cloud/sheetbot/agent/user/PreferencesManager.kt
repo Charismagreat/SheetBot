@@ -80,6 +80,54 @@ class PreferencesManager(context: Context) {
     val isFtsPaired: Boolean
         get() = !ftsToken.isNullOrBlank() && !ftsEndpoint.isNullOrBlank()
 
+    // 📱 [File to Sheet] 2대 핵심 시트 & 온디맨드 바인딩 정보
+    var ftsPhoneNumber: String?
+        get() = prefs.getString("fts_phone_number", null)
+        set(value) = prefs.edit().putString("fts_phone_number", value).apply()
+
+    var ftsReceiptToken: String?
+        get() = prefs.getString("fts_receipt_token", null) ?: ftsToken
+        set(value) = prefs.edit().putString("fts_receipt_token", value).apply()
+
+    var ftsReceiptSheetName: String?
+        get() = prefs.getString("fts_receipt_sheet_name", "영수증대장")
+        set(value) = prefs.edit().putString("fts_receipt_sheet_name", value).apply()
+
+    var ftsBusinessCardToken: String?
+        get() = prefs.getString("fts_business_card_token", null) ?: ftsToken
+        set(value) = prefs.edit().putString("fts_business_card_token", value).apply()
+
+    var ftsBusinessCardSheetName: String?
+        get() = prefs.getString("fts_business_card_sheet_name", "명함관리")
+        set(value) = prefs.edit().putString("fts_business_card_sheet_name", value).apply()
+
+    var ftsDepositToken: String?
+        get() = prefs.getString("fts_deposit_token", null) ?: ftsToken
+        set(value) = prefs.edit().putString("fts_deposit_token", value).apply()
+
+    var ftsDepositSheetName: String?
+        get() = prefs.getString("fts_deposit_sheet_name", "결제입금내역")
+        set(value) = prefs.edit().putString("fts_deposit_sheet_name", value).apply()
+
+    var ftsCallRecordingToken: String?
+        get() = prefs.getString("fts_call_recording_token", null) ?: ftsToken
+        set(value) = prefs.edit().putString("fts_call_recording_token", value).apply()
+
+    var ftsCallRecordingSheetName: String?
+        get() = prefs.getString("fts_call_recording_sheet_name", "통화녹음대장")
+        set(value) = prefs.edit().putString("fts_call_recording_sheet_name", value).apply()
+
+    fun getFtsTokenFor(type: String): String? {
+        return when (type.lowercase()) {
+            "receipt" -> ftsReceiptToken
+            "business_card" -> ftsBusinessCardToken
+            "payment_sms", "deposit" -> ftsDepositToken
+            "call_recording" -> ftsCallRecordingToken
+            else -> ftsToken
+        }
+    }
+
+
     fun clearFtsPairing() {
         prefs.edit()
             .remove("fts_token")
@@ -551,6 +599,30 @@ class PreferencesManager(context: Context) {
     var hiddenCardKeys: Set<String>
         get() = prefs.getStringSet("hidden_card_keys", null) ?: DEFAULT_HIDDEN_CARDS
         set(value) = prefs.edit().putStringSet("hidden_card_keys", value).apply()
+
+    /**
+     * 📱 메인 홈 화면에 꺼내놓은 활성 카드들의 사용자 맞춤 순서 목록
+     */
+    var activeCardOrder: List<String>
+        get() {
+            val raw = prefs.getString("active_card_order", null)
+            if (raw.isNullOrBlank()) return emptyList()
+            return try {
+                val jsonArr = org.json.JSONArray(raw)
+                val list = mutableListOf<String>()
+                for (i in 0 until jsonArr.length()) {
+                    list.add(jsonArr.getString(i))
+                }
+                list
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+        set(value) {
+            val jsonArr = org.json.JSONArray()
+            value.forEach { jsonArr.put(it) }
+            prefs.edit().putString("active_card_order", jsonArr.toString()).apply()
+        }
 
     var reservedNotificationCardKeys: Set<String>
         get() = prefs.getStringSet("reserved_notification_card_keys", null) ?: setOf("cardInventory")

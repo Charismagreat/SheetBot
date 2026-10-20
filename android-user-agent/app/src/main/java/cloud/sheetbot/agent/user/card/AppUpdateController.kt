@@ -19,11 +19,7 @@ class AppUpdateController(
     private val binding: ActivityMainBinding
 ) {
     fun setup() {
-        binding.btnCheckUpdate.setOnClickListener {
-            UpdateManager.checkForUpdates(activity, showToastIfLatest = true)
-        }
-
-        binding.tvAppVersionBadge.setOnClickListener {
+                binding.tvAppVersionBadge.setOnClickListener {
             UpdateManager.checkForUpdates(activity, showToastIfLatest = true)
         }
 
