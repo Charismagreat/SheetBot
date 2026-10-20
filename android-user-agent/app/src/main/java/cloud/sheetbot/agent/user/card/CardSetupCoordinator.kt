@@ -368,7 +368,7 @@ class CardSetupCoordinator(
     private fun setupLawAdvisoryCard() {
         lawCardController = LawAdvisoryCardController(
             activity = activity,
-            binding = binding,
+            binding = binding.cardLawAdvisory,
             prefs = prefs,
             onPickFile = { launchers.lawAdvisoryFilePickerLauncher.launch("image/*") },
             onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }

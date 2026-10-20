@@ -10,7 +10,7 @@ import androidx.lifecycle.lifecycleScope
 import cloud.sheetbot.agent.user.ApiClient
 import cloud.sheetbot.agent.user.MainActivity
 import cloud.sheetbot.agent.user.PreferencesManager
-import cloud.sheetbot.agent.user.databinding.ActivityMainBinding
+import cloud.sheetbot.agent.user.databinding.CardLawAdvisoryBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -22,7 +22,7 @@ import java.io.File
  */
 class LawAdvisoryCardController(
     private val activity: MainActivity,
-    private val binding: ActivityMainBinding,
+    private val binding: CardLawAdvisoryBinding,
     private val prefs: PreferencesManager,
     private val onPickFile: () -> Unit,
     private val onOpenSheetChooser: (sheetType: String, defaultTitle: String) -> Unit
