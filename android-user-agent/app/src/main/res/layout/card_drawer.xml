@@ -1,91 +1,153 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 🛍️ 시트봇 스토어 (SheetBot Store) -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/cardDrawerBox"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:background="@drawable/bg_card_scenario"
-    android:padding="13dp"
-    android:layout_marginTop="16dp"
-    android:layout_marginBottom="12dp">
+    android:orientation="vertical">
 
+    <!-- 🛍️ [카드 1] 시트봇 스토어 (독립 카드: 옵션 A 상단 배치) -->
     <LinearLayout
-        android:id="@+id/layoutDrawerHeader"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:clickable="true"
-        android:focusable="true">
-
-        <TextView
-            android:id="@+id/tvDrawerTitle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="🛍️ 시트봇 스토어 (기능 꺼내기)"
-            android:textColor="#38BDF8"
-            android:textSize="13sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/btnOpenMarketplace"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_badge_version"
-            android:backgroundTint="#0284C7"
-            android:paddingHorizontal="9dp"
-            android:paddingVertical="4dp"
-            android:text="스토어 열기 ›"
-            android:textColor="#FFFFFF"
-            android:textSize="11.5sp"
-            android:textStyle="bold"
-            android:clickable="true"
-            android:focusable="true" />
-
-        <TextView
-            android:id="@+id/btnDrawerManage"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:visibility="gone" />
-
-        <TextView
-            android:id="@+id/btnToggleDrawer"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:visibility="gone" />
-    </LinearLayout>
-
-    <TextView
-        android:id="@+id/tvDrawerSubtitle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="필요한 기능을 스토어에서 자유롭게 홈으로 꺼내고 순서를 배치할 수 있습니다."
-        android:textColor="#64748B"
-        android:textSize="10.5sp"
-        android:layout_marginTop="4dp" />
-
-    <!-- 보관된 카드 목록 컨테이너 (접힘 기본: gone) -->
-    <LinearLayout
-        android:id="@+id/layoutDrawerContent"
+        android:id="@+id/cardStoreBox"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:layout_marginTop="10dp"
-        android:visibility="gone">
+        android:background="@drawable/bg_card_scenario"
+        android:padding="13dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="10dp"
+        android:clickable="true"
+        android:focusable="true">
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#334155"
-            android:layout_marginBottom="8dp" />
-
-        <!-- 동적으로 추가되는 보관 카드 항목들 -->
         <LinearLayout
-            android:id="@+id/layoutDrawerItems"
+            android:id="@+id/layoutStoreHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/tvStoreTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="🛍️ 시트봇 스토어"
+                android:textColor="#38BDF8"
+                android:textSize="13.5sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/btnOpenMarketplace"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_badge_version"
+                android:backgroundTint="#0284C7"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4.5dp"
+                android:text="스토어 둘러보기 ›"
+                android:textColor="#FFFFFF"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                android:clickable="true"
+                android:focusable="true" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvStoreSubtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="우리 가게/회사에 꼭 맞는 업무 시트와 자동화 템플릿을 둘러보세요."
+            android:textColor="#94A3B8"
+            android:textSize="11sp"
+            android:layout_marginTop="5dp" />
+    </LinearLayout>
+
+    <!-- 📦 [카드 2] 시트봇 보관함 (독립 카드: 옵션 A 하단 배치) -->
+    <LinearLayout
+        android:id="@+id/cardDrawerBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/bg_card_scenario"
+        android:padding="13dp"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="12dp"
+        android:clickable="true"
+        android:focusable="true">
+
+        <LinearLayout
+            android:id="@+id/layoutDrawerHeader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/tvDrawerTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="📦 시트봇 보관함 (23)"
+                android:textColor="#CBD5E1"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/btnOpenDrawerManage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_badge_version"
+                android:backgroundTint="#334155"
+                android:paddingHorizontal="9dp"
+                android:paddingVertical="4dp"
+                android:text="편집 / 꺼내기 ›"
+                android:textColor="#E2E8F0"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/btnDrawerManage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/btnToggleDrawer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvDrawerSubtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="터치하여 숨겨둔 기능을 홈으로 꺼내거나 순서를 바꿀 수 있습니다."
+            android:textColor="#64748B"
+            android:textSize="10.5sp"
+            android:layout_marginTop="4dp" />
+
+        <!-- 보관된 카드 목록 컨테이너 (접힘 기본: gone) -->
+        <LinearLayout
+            android:id="@+id/layoutDrawerContent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="10dp"
+            android:visibility="gone">
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginBottom="8dp" />
+
+            <!-- 동적으로 추가되는 보관 카드 항목들 -->
+            <LinearLayout
+                android:id="@+id/layoutDrawerItems"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

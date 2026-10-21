@@ -145,7 +145,21 @@ const DEFAULT_CATALOG: MarketplaceCardItem[] = [
     version: '2.0.0',
     updatedAt: '2026-10-06',
   },
-  {
+    {
+    key: 'cardSheetSmsCheckbox',
+    title: '시트 체크박스 문자 자동발송',
+    icon: '☑️',
+    category: 'crm',
+    categoryName: '고객 · 영업',
+    description: '구글 시트의 [V] 체크박스를 누르면 작성된 문구와 전화번호로 스마트폰 0원 문자가 즉시 자동 발송되고 발송 결과가 시트에 실시간 기록됩니다.',
+    badge: '신규',
+    author: '시트봇 공식',
+    isExclusive: false,
+    isInstalledByDefault: false,
+    version: '1.0.0',
+    updatedAt: '2026-10-21',
+  },
+{
     key: 'cardKakaoSync',
     title: '카카오톡 비즈니스 대화 기록',
     icon: '🟡',

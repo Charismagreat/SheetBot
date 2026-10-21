@@ -2003,6 +2003,9 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- ☑️ 시트 체크박스 문자 자동 발송 카드 -->
+        <include layout="@layout/card_sheet_sms_checkbox" />
+
         <!-- 독립 카드: kakao -->
         <LinearLayout
             android:id="@+id/cardKakaoSync"

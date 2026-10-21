@@ -36,7 +36,8 @@ export type SheetBindingType =
   | "DISPATCH_LOG"
   | "QUOTE"
   | "ESTIMATE"
-  | "CONTACTS";
+  | "CONTACTS"
+  | "SHEET_SMS_CHECKBOX";
 
 export interface ResolveSheetOptions {
   userEmail: string;

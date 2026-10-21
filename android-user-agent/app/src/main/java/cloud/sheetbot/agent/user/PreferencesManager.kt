@@ -701,6 +701,7 @@ class PreferencesManager(context: Context) {
 
             // 메시지 & 업무
             "cardSmsSync",
+            "cardSheetSmsCheckbox",
             "cardKakaoSync",
             "cardLinkScrap",
             "cardFileUpload",

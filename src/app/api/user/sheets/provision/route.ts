@@ -86,6 +86,11 @@ export const SHEET_DEFINITIONS: Record<string, SheetDefinition> = {
     headers: ["카테고리", "품목코드", "품목명", "규격/단위", "기준단가(원)", "할인단가(원)", "대표사진", "상세설명", "최소수량", "비고"],
     range: "A1:J1",
   },
+  SHEET_SMS_CHECKBOX: {
+    defaultTitle: "[SheetBot] 체크박스 문자 발송 대장",
+    headers: ["수신 번호", "고객명", "문자 내용", "발송 [V]", "발송 결과 및 일시"],
+    range: "A1:E1",
+  },
   CONTACTS: {
     defaultTitle: "[SheetBot] 스마트폰 연락처 대장",
     headers: ["ID", "이름", "휴대전화", "추가 번호", "이메일", "회사/상호", "직함/부서", "메모", "주소", "동기화 기기", "최종 갱신일시"],

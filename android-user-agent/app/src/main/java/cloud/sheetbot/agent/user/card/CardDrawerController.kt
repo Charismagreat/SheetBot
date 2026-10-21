@@ -47,6 +47,7 @@ class CardDrawerController(
     // 관리 대상 전체 카드 26종 목록 (시트봇 스토어 카테고리별 정돈)
     val allCards = listOf(
         // [1] 시스템 & 관제 (7대 시스템 카드 전원 스토어 보관 지원)
+        CardInfo("cardStore", "시트봇 스토어 (새 템플릿 탐색)", "🛍️", "시스템 & 관제", R.id.cardStoreBox, R.id.layoutStoreHeader),
         CardInfo("cardStatus", "시트봇 / File to Sheet 관제 상태", "🟢", "시스템 & 관제", R.id.cardStatus, R.id.layoutIntegratedHeader),
         CardInfo("cardTtsToggle", "실시간 AI 음성 안내 (TTS)", "🔊", "시스템 & 관제", R.id.cardTtsToggle),
         CardInfo("cardWallet", "내 토큰 지갑", "💰", "시스템 & 관제", R.id.layoutWalletCard, R.id.layoutWalletHeader),
@@ -70,6 +71,7 @@ class CardDrawerController(
         CardInfo("cardMeetingRecording", "회의 녹음 자동 회의록", "🎙️", "통화 & 녹음", R.id.cardMeetingRecording, R.id.layoutMeetingRecordingHeader),
 
         // [4] 메시지 & 대화
+        CardInfo("cardSheetSmsCheckbox", "시트 체크박스 문자 자동 발송", "☑️", "메시지 & 대화", R.id.cardSheetSmsCheckbox, R.id.layoutSheetSmsCheckboxHeader),
         CardInfo("cardSmsSync", "스마트폰 문자 시트 동기화", "💬", "메시지 & 대화", R.id.cardSmsSync, R.id.layoutSmsSyncHeader),
         CardInfo("cardKakaoSync", "카카오톡 대화 자동 기록", "🟡", "메시지 & 대화", R.id.cardKakaoSync, R.id.layoutKakaoSyncHeader),
         CardInfo("cardLinkScrap", "웹 링크 & 유튜브 요약 스크랩", "🔗", "메시지 & 대화", R.id.cardLinkScrap, R.id.layoutLinkScrapHeader),
@@ -83,10 +85,13 @@ class CardDrawerController(
         CardInfo("cardWebsiteMonitor", "웹사이트 실시간 장애 감시", "🚨", "AI & 마케팅", R.id.cardWebsiteMonitor, R.id.layoutWebsiteMonitorHeader)
     )
 
+    private var cardStoreBox: View? = null
+    private var layoutStoreHeader: View? = null
     private var cardDrawerBox: View? = null
     private var layoutDrawerHeader: View? = null
     private var tvDrawerTitle: TextView? = null
     private var btnOpenMarketplace: TextView? = null
+    private var btnOpenDrawerManage: TextView? = null
     private var btnDrawerManage: TextView? = null
     private var btnToggleDrawer: TextView? = null
     private var layoutDrawerContent: View? = null
@@ -104,10 +109,13 @@ class CardDrawerController(
     }
 
     private fun findViews() {
+        cardStoreBox = activity.findViewById(R.id.cardStoreBox)
+        layoutStoreHeader = activity.findViewById(R.id.layoutStoreHeader)
         cardDrawerBox = activity.findViewById(R.id.cardDrawerBox)
         layoutDrawerHeader = activity.findViewById(R.id.layoutDrawerHeader)
         tvDrawerTitle = activity.findViewById(R.id.tvDrawerTitle)
         btnOpenMarketplace = activity.findViewById(R.id.btnOpenMarketplace)
+        btnOpenDrawerManage = activity.findViewById(R.id.btnOpenDrawerManage)
         btnDrawerManage = activity.findViewById(R.id.btnDrawerManage)
         btnToggleDrawer = activity.findViewById(R.id.btnToggleDrawer)
         layoutDrawerContent = activity.findViewById(R.id.layoutDrawerContent)
@@ -115,21 +123,23 @@ class CardDrawerController(
     }
 
     private fun setupListeners() {
-        // 보관함 바텀시트 열기 (헤더 터치 시 또는 편집 버튼 터치 시)
-        layoutDrawerHeader?.setOnClickListener {
-            openReorderingBottomSheet()
-        }
-
-        btnDrawerManage?.setOnClickListener {
-            openReorderingBottomSheet()
-        }
-
-        // 🛍️ 시트봇 카드 스토어 열기
-        btnOpenMarketplace?.setOnClickListener {
+        // [스토어 열기] 시트봇 스토어 카드 또는 둘러보기 버튼 터치 시 마켓플레이스 바텀시트 오픈
+        val openStoreAction = View.OnClickListener {
             val scope = (activity as? androidx.lifecycle.LifecycleOwner)?.lifecycleScope
                 ?: kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main)
             CardMarketplaceController(activity, prefs, this, scope).openMarketplace()
         }
+        cardStoreBox?.setOnClickListener(openStoreAction)
+        btnOpenMarketplace?.setOnClickListener(openStoreAction)
+
+        // [보관함 열기] 시트봇 보관함 카드 헤더 또는 편집 버튼 터치 시 바텀시트 오픈
+        val openDrawerAction = View.OnClickListener {
+            openReorderingBottomSheet()
+        }
+        cardDrawerBox?.setOnClickListener(openDrawerAction)
+        layoutDrawerHeader?.setOnClickListener(openDrawerAction)
+        btnOpenDrawerManage?.setOnClickListener(openDrawerAction)
+        btnDrawerManage?.setOnClickListener(openDrawerAction)
 
         // 각 카드의 헤더 및 본체 롱클릭 시 "시트봇 스토어로 보관" 다이얼로그 지원
         allCards.forEach { cardInfo ->
@@ -151,11 +161,11 @@ class CardDrawerController(
      */
     private fun showHideConfirmDialog(cardInfo: CardInfo) {
         android.app.AlertDialog.Builder(activity)
-            .setTitle("🛍️ 시트봇 스토어로 보관")
-            .setMessage("'${cardInfo.icon} ${cardInfo.title}' 카드를 시트봇 스토어로 보관하시겠습니까?\n\n홈 화면에서 숨겨지며, 언제든 스토어에서 다시 꺼낼 수 있습니다.")
-            .setPositiveButton("스토어에 보관") { _, _ ->
+            .setTitle("📦 시트봇 보관함으로 보관")
+            .setMessage("'${cardInfo.icon} ${cardInfo.title}' 카드를 시트봇 보관함으로 보관하시겠습니까?\n\n홈 화면에서 숨겨지며, 언제든 보관함에서 다시 꺼낼 수 있습니다.")
+            .setPositiveButton("보관함에 보관") { _, _ ->
                 hideCard(cardInfo.key)
-                Toast.makeText(activity, "'${cardInfo.title}' 카드가 시트봇 스토어로 보관되었습니다.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(activity, "'${cardInfo.title}' 카드가 시트봇 보관함으로 보관되었습니다.", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("취소", null)
             .show()
@@ -304,7 +314,7 @@ class CardDrawerController(
     fun refreshDrawerList() {
         val hiddenKeys = prefs.hiddenCardKeys
         val hiddenCards = allCards.filter { hiddenKeys.contains(it.key) }
-        tvDrawerTitle?.text = "🛍️ 시트봇 스토어 (${hiddenCards.size}개 보관 중)"
+        tvDrawerTitle?.text = "📦 시트봇 보관함 (${hiddenCards.size})"
     }
 
     /**
@@ -351,7 +361,7 @@ class CardDrawerController(
             }
         }
         val titleTv = TextView(activity).apply {
-            text = "🛍️ 시트봇 스토어 & 홈 화면 순서 편집"
+            text = "📦 시트봇 보관함 & 홈 화면 순서 편집"
             setTextColor(Color.parseColor("#F8FAFC"))
             textSize = 17f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
@@ -489,7 +499,7 @@ class CardDrawerController(
                         setOnClickListener {
                             hideCard(card.key)
                             renderContent()
-                            Toast.makeText(activity, "'${card.title}' 카드가 시트봇 스토어로 보관되었습니다.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(activity, "'${card.title}' 카드가 시트봇 보관함으로 보관되었습니다.", Toast.LENGTH_SHORT).show()
                         }
                     }
                     row.addView(hideBtn)
@@ -512,7 +522,7 @@ class CardDrawerController(
             // [섹션 2: 🛍️ 시트봇 스토어에 보관된 카드 (하단에 카테고리별 노출)]
             // ══════════════════════════════════════════════════════════
             val archiveHeader = TextView(activity).apply {
-                text = "🛍️ 시트봇 스토어에 보관된 카드 (${archivedCards.size}개) - 터치하여 홈으로 꺼내기"
+                text = "📦 시트봇 보관함에 둔 카드 (${archivedCards.size}개) - 터치하여 홈으로 꺼내기"
                 setTextColor(Color.parseColor("#A855F7"))
                 textSize = 13f
                 typeface = android.graphics.Typeface.DEFAULT_BOLD

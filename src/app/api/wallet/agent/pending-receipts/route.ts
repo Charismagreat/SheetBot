@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { queryTable, updateRows } from "@/lib/egdesk-helpers";
+import { queryTable, updateRows, callSheetsTool } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 
 /**
@@ -112,6 +112,42 @@ export async function POST(req: NextRequest) {
         ).catch(() => {});
       }
     });
+
+    // 🎯 [시트 체크박스 문자 발송 결과 실시간 시트 역동기화]
+    try {
+      const logRecordRes = await queryTable("sheetbot_user_dispatch_logs", {
+        filters: targetFilter,
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+      const logRecord = (logRecordRes.rows || [])[0];
+
+      if (logRecord && logRecord.rule_id && logRecord.rule_id.startsWith("{")) {
+        const meta = JSON.parse(logRecord.rule_id);
+        if (meta.spreadsheetId && meta.rowIndex) {
+          const tab = meta.tabName || "문자발송";
+          const nowFormatted = new Date().toLocaleString("ko-KR", {
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          });
+          const resultText = newStatus === "SUCCESS"
+            ? `✅ 발송완료 (${nowFormatted})`
+            : `❌ 발송실패 (${errorMessage || "단말기 오류"})`;
+
+          await callSheetsTool("sheets_update_range", {
+            spreadsheetId: meta.spreadsheetId,
+            range: `'${tab}'!E${meta.rowIndex}:E${meta.rowIndex}`,
+            values: [[resultText]],
+          }).catch((err: any) => {
+            console.warn("[Pending-Receipts] Sheet sync warning:", err?.message);
+          });
+        }
+      }
+    } catch (sheetSyncErr: any) {
+      console.warn("[Pending-Receipts] Sheet sync parse error:", sheetSyncErr?.message);
+    }
 
     return NextResponse.json({
       success: true,

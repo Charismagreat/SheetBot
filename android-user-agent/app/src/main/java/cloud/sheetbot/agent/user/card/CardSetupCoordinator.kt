@@ -57,6 +57,7 @@ class CardSetupCoordinator(
     lateinit var aiCopilotCardController: AiCopilotCardController
     lateinit var receiptCardController: ReceiptSyncCardController
     lateinit var businessCardController: BusinessCardSyncCardController
+    lateinit var sheetSmsCheckboxCardController: SheetSmsCheckboxCardController
     lateinit var smsSyncCardController: SmsSyncCardController
     lateinit var kakaoCardController: KakaoSyncCardController
     lateinit var quoteCardController: QuoteSyncCardController
@@ -85,6 +86,7 @@ class CardSetupCoordinator(
     val isReceiptInitialized get() = ::receiptCardController.isInitialized
     val isBusinessCardInitialized get() = ::businessCardController.isInitialized
     val isCallEndedInitialized get() = ::callEndedCardController.isInitialized
+    val isSheetSmsCheckboxInitialized get() = ::sheetSmsCheckboxCardController.isInitialized
     val isSmsSyncInitialized get() = ::smsSyncCardController.isInitialized
     val isKakaoInitialized get() = ::kakaoCardController.isInitialized
     val isQuoteInitialized get() = ::quoteCardController.isInitialized
@@ -473,6 +475,18 @@ class CardSetupCoordinator(
             onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) }
         )
         businessCardController.setup()
+    }
+
+    private fun setupSheetSmsCheckboxCard() {
+        sheetSmsCheckboxCardController = SheetSmsCheckboxCardController(
+            activity = activity,
+            binding = binding,
+            prefs = prefs,
+            scope = scope,
+            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
+            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle, null) }
+        )
+        sheetSmsCheckboxCardController.setup()
     }
 
     private fun setupSmsCard() {
