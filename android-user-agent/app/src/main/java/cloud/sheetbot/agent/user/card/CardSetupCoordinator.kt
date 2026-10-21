@@ -150,6 +150,9 @@ class CardSetupCoordinator(
         // 🪪 명함 AI OCR 자동 인맥 등록 카드 초기화 (v2.1.99 리팩토링 모듈화)
         try { setupBusinessCardSyncCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupBusinessCardSyncCard 실패 방어", e) }
 
+        // ☑️ 시트 체크박스 문자 자동 발송 카드 초기화
+        try { setupSheetSmsCheckboxCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupSheetSmsCheckboxCard 실패 방어", e) }
+
         // 🎯 문자(SMS/LMS) 송수신 구글 시트 동기화 카드 초기화 (v2.1.99 리팩토링 모듈화)
         try { setupSmsCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupSmsCard 실패 방어", e) }
 
