@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     }
 
     const nowIso = new Date().toISOString();
-    const logId = `disp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const logId = String(Date.now() + Math.floor(Math.random() * 1000));
 
     // 2. 부가 정보 (시트 역추적용 메타데이터)
     const ruleInfo = customerName ? `시트 체크박스 문자 (${customerName})` : "시트 체크박스 문자";

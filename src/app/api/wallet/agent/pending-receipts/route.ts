@@ -91,26 +91,48 @@ export async function POST(req: NextRequest) {
     const newStatus = success !== false ? "SUCCESS" : "FAILED";
     const errorMessage = success !== false ? null : (body.errorMessage || "스마트폰 SMS 전송 실패");
 
-    // id 또는 logId로 dispatch log 업데이트
-    const targetFilter = logId ? { id: logId } : { id: String(id) };
+    // id 또는 logId로 dispatch log 업데이트 (숫자/문자열/prefix 다중 폴백 정밀 매칭)
+    const rawId = logId || id;
+    let targetActualId: string | null = rawId ? String(rawId).trim() : null;
+    let updateRes: any = null;
 
-    await updateRows(
-      "sheetbot_user_dispatch_logs",
-      {
-        status: newStatus,
-        error_message: errorMessage,
-        updated_at: nowIso,
-      },
-      { filters: targetFilter }
-    ).catch(async () => {
-      // 숫자 ID로 매칭되지 않았을 경우를 대비해 최근 PENDING 레코드 중 검색
+    if (targetActualId) {
+      updateRes = await updateRows(
+        "sheetbot_user_dispatch_logs",
+        {
+          status: newStatus,
+          error_message: errorMessage,
+          updated_at: nowIso,
+        },
+        { filters: { id: targetActualId } }
+      ).catch(() => null);
+    }
+
+    // 정확한 ID로 매칭되지 않았거나 updated가 0인 경우 (숫자 파싱 차이 등)
+    if (!updateRes || updateRes.updated === 0) {
+      const searchKey = String(id || logId || "").trim();
+      const numOnly = searchKey.replace(/\D/g, "");
+
       const pendingRes = await queryTable("sheetbot_user_dispatch_logs", {
         filters: { status: "PENDING" },
-        limit: 10,
+        limit: 30,
+        orderBy: "id",
+        orderDirection: "DESC",
       }).catch(() => ({ rows: [] }));
 
-      const target = (pendingRes.rows || []).find((r: any) => String(r.id).includes(String(id)));
+      const target = (pendingRes.rows || []).find((r: any) => {
+        const rowIdStr = String(r.id);
+        const rowIdNum = rowIdStr.replace(/\D/g, "");
+        return (
+          rowIdStr === searchKey ||
+          rowIdStr.includes(searchKey) ||
+          (numOnly.length >= 8 && rowIdNum.includes(numOnly)) ||
+          (numOnly.length >= 8 && numOnly.includes(rowIdNum))
+        );
+      });
+
       if (target) {
+        targetActualId = String(target.id);
         await updateRows(
           "sheetbot_user_dispatch_logs",
           {
@@ -118,18 +140,21 @@ export async function POST(req: NextRequest) {
             error_message: errorMessage,
             updated_at: nowIso,
           },
-          { filters: { id: target.id } }
+          { filters: { id: targetActualId } }
         ).catch(() => {});
       }
-    });
+    }
 
     // 🎯 [시트 체크박스 문자 발송 결과 실시간 시트 역동기화]
     try {
-      const logRecordRes = await queryTable("sheetbot_user_dispatch_logs", {
-        filters: targetFilter,
-        limit: 1,
-      }).catch(() => ({ rows: [] }));
-      const logRecord = (logRecordRes.rows || [])[0];
+      let logRecord: any = null;
+      if (targetActualId) {
+        const logRecordRes = await queryTable("sheetbot_user_dispatch_logs", {
+          filters: { id: targetActualId },
+          limit: 1,
+        }).catch(() => ({ rows: [] }));
+        logRecord = (logRecordRes.rows || [])[0];
+      }
 
       if (logRecord && logRecord.rule_id && logRecord.rule_id.startsWith("{")) {
         const meta = JSON.parse(logRecord.rule_id);

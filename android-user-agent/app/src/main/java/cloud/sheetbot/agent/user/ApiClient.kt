@@ -654,9 +654,11 @@ object ApiClient {
                     val list = mutableListOf<PendingReceipt>()
                     for (i in 0 until array.length()) {
                         val item = array.getJSONObject(i)
+                        val itemLogId = item.optString("logId", "")
                         list.add(
                             PendingReceipt(
                                 id = item.optLong("id", 0L),
+                                logId = if (itemLogId.isNotBlank()) itemLogId else null,
                                 recipientPhone = item.optString("recipientPhone", ""),
                                 depositorName = item.optString("depositorName", ""),
                                 amountKrw = item.optInt("amountKrw", 0),
@@ -677,13 +679,16 @@ object ApiClient {
     /**
      * 영수증 SMS 발송 완료 상태를 서버에 보고
      */
-    suspend fun markReceiptSent(id: Long, success: Boolean = true): Boolean = withContext(Dispatchers.IO) {
+    suspend fun markReceiptSent(id: Long, success: Boolean = true, logId: String? = null): Boolean = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         for (host in hosts) {
             val endpoint = "$host/api/wallet/agent/pending-receipts"
             try {
                 val json = JSONObject().apply {
                     put("id", id)
+                    if (!logId.isNullOrBlank()) {
+                        put("logId", logId)
+                    }
                     put("success", success)
                 }
                 val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
@@ -3055,6 +3060,7 @@ data class VersionInfo(
 
 data class PendingReceipt(
     val id: Long,
+    val logId: String? = null,
     val recipientPhone: String,
     val depositorName: String,
     val amountKrw: Int,
