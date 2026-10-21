@@ -358,3 +358,65 @@ async function doResolveUserSpreadsheet(
     isNew,
   };
 }
+
+
+/**
+ * 사용자가 입력한 기존 구글 스프레드시트를 특정 sheetType의 연동 시트로 강제/명시적 영구 바인딩
+ */
+export async function bindExistingUserSpreadsheet(params: {
+  userEmail: string;
+  sheetType: SheetBindingType;
+  spreadsheetId: string;
+  spreadsheetUrl?: string;
+  sheetTitle?: string;
+}): Promise<void> {
+  const cleanEmail = params.userEmail.trim().toLowerCase();
+  const normalizedType = (params.sheetType || "").toUpperCase() as SheetBindingType;
+  const bindingKey = `${cleanEmail}_${normalizedType}`;
+  const now = new Date().toISOString().replace("T", " ").slice(0, 19);
+  const url = params.spreadsheetUrl || `https://docs.google.com/spreadsheets/d/${params.spreadsheetId}/edit`;
+
+  resolvedBindingCache.set(bindingKey, {
+    result: {
+      spreadsheetId: params.spreadsheetId,
+      spreadsheetUrl: url,
+      isNew: false,
+    },
+    timestamp: Date.now(),
+  });
+
+  try {
+    const existing = await queryTable("sheetbot_user_sheet_bindings", {
+      filters: { user_email: cleanEmail, sheet_type: normalizedType },
+      limit: 1,
+    }).catch(() => null);
+
+    if (existing?.rows?.length > 0) {
+      await updateRows("sheetbot_user_sheet_bindings", {
+        filters: { user_email: cleanEmail, sheet_type: normalizedType },
+        updates: {
+          spreadsheet_id: params.spreadsheetId,
+          spreadsheet_url: url,
+          sheet_title: params.sheetTitle || existing.rows[0].sheet_title || "기존 연동 시트",
+          updated_at: now,
+        },
+      });
+    } else {
+      await insertRows("sheetbot_user_sheet_bindings", [
+        {
+          id: Date.now(),
+          user_email: cleanEmail,
+          sheet_type: normalizedType,
+          spreadsheet_id: params.spreadsheetId,
+          spreadsheet_url: url,
+          sheet_title: params.sheetTitle || "기존 연동 시트",
+          created_at: now,
+          updated_at: now,
+        },
+      ]);
+    }
+    console.log(`[SheetBinding] 🔗 Bound existing spreadsheet: ${params.spreadsheetId} for ${bindingKey}`);
+  } catch (err: any) {
+    console.warn(`[SheetBinding] Failed to bind existing spreadsheet to DB: ${err?.message}`);
+  }
+}

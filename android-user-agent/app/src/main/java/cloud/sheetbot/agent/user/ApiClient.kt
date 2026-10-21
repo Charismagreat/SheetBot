@@ -2225,6 +2225,62 @@ object ApiClient {
     }
 
     /**
+     * 기존 구글 스프레드시트에 신규 탭(서식 포함) 추가 및 연동 바인딩
+     */
+    suspend fun addTabToSpreadsheet(
+        userEmail: String,
+        spreadsheetUrlOrId: String,
+        tabName: String = "문자발송목록",
+        sheetType: String = "SHEET_SMS_CHECKBOX"
+    ): AddTabResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastError = "기존 시트 탭 추가 요청 실패"
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/sheets/add-tab"
+            try {
+                val json = JSONObject().apply {
+                    put("userEmail", userEmail)
+                    put("spreadsheetUrlOrId", spreadsheetUrlOrId)
+                    put("tabName", tabName)
+                    put("sheetType", sheetType)
+                }
+                val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(body)
+                    .build()
+
+                val response = longTimeoutClient.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val spreadsheetUrl = resJson.optString("spreadsheetUrl", "")
+                    val sheetTitle = resJson.optString("sheetTitle", "")
+                    val returnedTab = resJson.optString("tabName", tabName)
+                    val isNewTab = resJson.optBoolean("isNewTab", false)
+                    Log.i(TAG, "➕ [기존 시트 탭 추가 완료] $sheetTitle -> $returnedTab ($spreadsheetUrl)")
+                    return@withContext AddTabResult(
+                        success = true,
+                        spreadsheetId = resJson.optString("spreadsheetId", "").takeIf { it.isNotBlank() },
+                        spreadsheetUrl = spreadsheetUrl.takeIf { it.isNotBlank() },
+                        sheetTitle = sheetTitle,
+                        tabName = returnedTab,
+                        isNewTab = isNewTab,
+                        message = resJson.optString("message", "시트에 탭이 추가되었습니다.")
+                    )
+                } else {
+                    lastError = resJson.optString("error", "HTTP ${response.code}")
+                }
+            } catch (e: Exception) {
+                lastError = "[$host] ${e.localizedMessage ?: "통신 오류"}"
+            }
+        }
+        AddTabResult(success = false, error = lastError)
+    }
+
+    /**
      * 사장님 상호명/프로필 조회 (type: "order" 또는 "estimate")
      */
     suspend fun getBusinessProfile(email: String, type: String = "order"): BusinessProfileResult = withContext(Dispatchers.IO) {
@@ -3133,6 +3189,17 @@ data class ReferralClaimResult(
     val message: String = "",
     val rewardTokens: Int = 10000,
     val inviterEmail: String = "",
+    val error: String? = null
+)
+
+data class AddTabResult(
+    val success: Boolean,
+    val spreadsheetId: String? = null,
+    val spreadsheetUrl: String? = null,
+    val sheetTitle: String? = null,
+    val tabName: String? = null,
+    val isNewTab: Boolean = false,
+    val message: String? = null,
     val error: String? = null
 )
 
