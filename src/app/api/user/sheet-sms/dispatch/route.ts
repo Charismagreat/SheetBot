@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { insertRows, queryTable, callSheetsTool } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { getCurrentUserEmail } from "@/lib/auth";
+import { realtimeHub } from "@/lib/realtime-hub";
 
 /**
  * 📨 시트 체크박스 문자 웹훅 디스패처
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
     const messageText = String(body.messageText || body.message || body.content || "").trim();
     const customerName = String(body.customerName || body.name || "").trim();
     const spreadsheetId = String(body.spreadsheetId || "").trim();
-    const tabName = String(body.tabName || "문자발송").trim();
+    const tabName = String(body.tabName || "문자발송목록").trim();
     const rowIndex = Number(body.rowIndex || 0);
 
     // 1. 유효성 검증
@@ -81,6 +82,13 @@ export async function POST(req: NextRequest) {
         restored_by: null,
       },
     ]);
+
+    // 3-1. 모바일 에이전트(KeepAliveService SSE)에 0초 즉각 발송 신호 푸시
+    try {
+      realtimeHub.notifyDispatchAdded(userEmail, logId, cleanPhone);
+    } catch (sseErr: any) {
+      console.warn("[Sheet-Sms-Dispatch] Realtime SSE notify warning:", sseErr?.message);
+    }
 
     // 4. (선택적) 구글 시트 E열(결과)에 ⏳ 대기 상태 선제 기입
     if (spreadsheetId && rowIndex >= 2) {

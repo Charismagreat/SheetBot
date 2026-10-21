@@ -147,7 +147,7 @@ object SmsSenderUtil {
             Log.d(TAG, "미연동 상태이므로 영수증 대기열 처리를 건너뜁니다.")
             return@withContext 0
         }
-        if (!prefs.isReceiptSmsEnabled) {
+        if (!prefs.isReceiptSmsEnabled && !prefs.isSheetSmsCheckboxEnabled) {
             Log.d(TAG, "영수증 SMS 자동 회신 기능이 꺼져 있어 처리를 건너뜁니다.")
             return@withContext 0
         }
@@ -174,17 +174,25 @@ object SmsSenderUtil {
                 continue
             }
 
-            val msgToSend = if (receipt.message.isNotBlank() && !receipt.message.contains("[SheetBot]")) {
+            val isExplicitReceipt = receipt.amountKrw > 0
+            val msgToSend = if (!isExplicitReceipt && receipt.message.isNotBlank()) {
                 receipt.message
-            } else if (prefs.receiptSmsTemplate.isNotBlank()) {
+            } else if (isExplicitReceipt && prefs.receiptSmsTemplate.isNotBlank()) {
                 formatReceiptMessage(
                     template = prefs.receiptSmsTemplate,
                     customerName = receipt.depositorName,
                     amountKrw = receipt.amountKrw.toLong()
                 )
-            } else {
+            } else if (receipt.message.isNotBlank()) {
                 receipt.message
+            } else {
+                formatReceiptMessage(
+                    template = prefs.receiptSmsTemplate,
+                    customerName = receipt.depositorName,
+                    amountKrw = 0L
+                )
             }
+
 
             val (isSent, finalMsg) = sendSmsDetailed(context, receipt.recipientPhone, msgToSend)
             if (isSent) {

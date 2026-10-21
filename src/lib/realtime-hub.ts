@@ -40,6 +40,7 @@ const TABLE_TOPIC_MAP: Record<string, RealtimeTopic[]> = {
   sheetbot_sms_logs: ['sms', 'deposit', 'all'],
   sheetbot_user_devices: ['sms', 'deposit', 'all'],
   sheetbot_smart_rules: ['sms', 'all'],
+  sheetbot_user_dispatch_logs: ['sms', 'all'],
   sheetbot_schedules: ['schedules', 'all'],
   sheetbot_projects: ['projects', 'all'],
   sheetbot_users: ['wallet', 'all'],
@@ -174,6 +175,21 @@ class SheetBotRealtimeHub {
   /**
    * 서버 내부에서 직접 테이블 변경 알림을 브로드캐스트할 때 호출
    */
+  /**
+   * 📲 신규 발송 대기열(SMS/알림) 등록 시 모바일 에이전트에 0초 즉시 알림
+   */
+  public notifyDispatchAdded(userEmail: string, logId: string | number, recipient?: string): void {
+    this.broadcast('sms', {
+      type: 'NEW_DISPATCH',
+      source: 'dispatch_queue',
+      tableName: 'sheetbot_user_dispatch_logs',
+      userEmail,
+      logId,
+      recipient,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   public notifyTableChanged(tableName: string, action = 'update'): void {
     const topics = TABLE_TOPIC_MAP[tableName] || ['all'];
     for (const topic of topics) {

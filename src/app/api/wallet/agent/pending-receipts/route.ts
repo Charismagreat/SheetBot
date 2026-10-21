@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { queryTable, updateRows, callSheetsTool } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { realtimeHub } from "@/lib/realtime-hub";
 
 /**
  * GET /api/wallet/agent/pending-receipts
@@ -17,11 +18,20 @@ export async function GET(req: NextRequest) {
     const headerEmail = req.headers.get("x-sheetbot-user-email");
     const targetEmail = (queryEmail || headerEmail || "").toLowerCase().trim();
 
-    // 1. 발송 대기 중인(PENDING) SMS 목록 조회
-    const filters: Record<string, string> = { status: "PENDING" };
-    if (targetEmail && targetEmail.includes("@")) {
-      filters.user_email = targetEmail;
+    // 🛡️ [멀티테넌시 데이터 격리] 사용자 이메일 필수 강제
+    if (!targetEmail || !targetEmail.includes("@")) {
+      return NextResponse.json({
+        success: false,
+        error: "사용자 이메일(userEmail) 파라미터가 누락되었거나 올바르지 않습니다.",
+        pendingReceipts: [],
+      }, { status: 400 });
     }
+
+    // 1. 발송 대기 중인(PENDING) SMS 목록 조회
+    const filters: Record<string, string> = {
+      status: "PENDING",
+      user_email: targetEmail,
+    };
 
     const logsRes = await queryTable("sheetbot_user_dispatch_logs", {
       filters,
@@ -124,7 +134,7 @@ export async function POST(req: NextRequest) {
       if (logRecord && logRecord.rule_id && logRecord.rule_id.startsWith("{")) {
         const meta = JSON.parse(logRecord.rule_id);
         if (meta.spreadsheetId && meta.rowIndex) {
-          const tab = meta.tabName || "문자발송";
+          const tab = meta.tabName || "문자발송목록";
           const nowFormatted = new Date().toLocaleString("ko-KR", {
             month: "2-digit",
             day: "2-digit",
@@ -147,6 +157,13 @@ export async function POST(req: NextRequest) {
       }
     } catch (sheetSyncErr: any) {
       console.warn("[Pending-Receipts] Sheet sync parse error:", sheetSyncErr?.message);
+    }
+
+    // 3. SSE 허브에 상태 변경 브로드캐스트 (대시보드 실시간 반영)
+    try {
+      realtimeHub.notifyTableChanged("sheetbot_user_dispatch_logs", "update");
+    } catch (sseErr: any) {
+      console.warn("[Pending-Receipts] Realtime notify warning:", sseErr?.message);
     }
 
     return NextResponse.json({

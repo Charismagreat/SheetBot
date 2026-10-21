@@ -25,6 +25,7 @@ class KeepAliveService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Default + Job())
     private var heartbeatJob: Job? = null
     private var receiptQueueJob: Job? = null
+    private var dispatchSseJob: Job? = null
     private var recordingSyncJob: Job? = null
     private var websiteMonitorJob: Job? = null
     private var smsSentObserver: SmsSentObserver? = null
@@ -59,6 +60,7 @@ class KeepAliveService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification("🟢 24시간 실시간 고객 알림 문자 발송 대기 중 (${prefs.userEmail ?: "미연동"})"))
         startHeartbeatLoop()
         startReceiptQueueLoop()
+        startDispatchSseLoop()
         startRecordingSyncLoop()
         startWebsiteMonitorLoop()
         registerSmsSentObserver()
@@ -75,6 +77,7 @@ class KeepAliveService : Service() {
         super.onDestroy()
         heartbeatJob?.cancel()
         receiptQueueJob?.cancel()
+        dispatchSseJob?.cancel()
         recordingSyncJob?.cancel()
         websiteMonitorJob?.cancel()
         unregisterSmsSentObserver()
@@ -321,7 +324,82 @@ class KeepAliveService : Service() {
                     Log.w(TAG, "영수증/알림 문자 대기열 자동 발송 중 오류: ${e.message}")
                 }
                 // 실시간 반응성을 위해 20초마다 대기열 체크 (기존 3분에서 20초로 단축)
-                delay(20 * 1000L)
+                delay(60 * 1000L)
+            }
+        }
+    }
+
+        // ==========================================
+    // ⚡ 실시간 SSE 대기열 감시 (0초 발송)
+    // ==========================================
+    private fun startDispatchSseLoop() {
+        dispatchSseJob?.cancel()
+        dispatchSseJob = serviceScope.launch(Dispatchers.IO) {
+            delay(1500L)
+            while (isActive) {
+                val email = prefs.userEmail
+                if (!prefs.isPaired || email.isNullOrBlank()) {
+                    delay(10000L)
+                    continue
+                }
+
+                try {
+                    val hosts = listOf(ApiClient.PRIMARY_HOST, ApiClient.FALLBACK_HOST)
+                    var connected = false
+
+                    for (host in hosts) {
+                        if (!isActive) break
+                        val sseUrl = "$host/api/user/dispatch/stream?userEmail=" + java.net.URLEncoder.encode(email, "UTF-8")
+                        Log.i(TAG, "⚡ [SSE] 실시간 발송 대기열 스트림 연결 시도: $sseUrl")
+
+                        val request = okhttp3.Request.Builder()
+                            .url(sseUrl)
+                            .header("Accept", "text/event-stream")
+                            .header("Cache-Control", "no-cache")
+                            .build()
+
+                        val streamClient = okhttp3.OkHttpClient.Builder()
+                            .readTimeout(0, java.util.concurrent.TimeUnit.MILLISECONDS)
+                            .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                            .build()
+
+                        try {
+                            val response = streamClient.newCall(request).execute()
+                            if (response.isSuccessful && response.body != null) {
+                                connected = true
+                                Log.i(TAG, "⚡ [SSE] 실시간 발송 대기열 연결 수립 성공 ($host)")
+
+                                // 연결 수립 즉시 밀린 대기열 1회 확인
+                                SmsSenderUtil.processPendingReceipts(this@KeepAliveService)
+
+                                val reader = response.body!!.byteStream().bufferedReader(Charsets.UTF_8)
+                                while (isActive) {
+                                    val line = reader.readLine() ?: break
+                                    val trimmed = line.trim()
+                                    if (trimmed.startsWith("data:")) {
+                                        val data = trimmed.substring(5).trim()
+                                        if (data.contains("NEW_DISPATCH") || data.contains("DATA_CHANGED")) {
+                                            Log.i(TAG, "⚡ [SSE 이벤트 감지] 신규 발송 요청 즉각 처리!")
+                                            serviceScope.launch {
+                                                SmsSenderUtil.processPendingReceipts(this@KeepAliveService)
+                                            }
+                                        }
+                                    }
+                                }
+                                response.close()
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "⚡ [SSE] 스트림 연결 중단 ($host): " + e.message)
+                        }
+
+                        if (connected) break
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "⚡ [SSE] 루프 예외: " + e.message)
+                }
+
+                // 연결 단절 시 3초 후 재연결 시도
+                delay(3000L)
             }
         }
     }

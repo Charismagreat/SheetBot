@@ -13,6 +13,7 @@ import {
   createDriveFolder,
   insertRows,
   updateRows,
+  queryTable,
 } from "@/lib/egdesk-helpers";
 import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
@@ -459,6 +460,7 @@ async function executeBackgroundFullPipeline(params: {
     writeDebugLog(`Step 3: Resolving spreadsheet for ${cleanEmail}...`);
     let targetSpreadsheetId: string | null = null;
     let targetRowIndex: number | null = null;
+    let isAlreadyAnalyzed = false;
 
     try {
       const sheetTitle = "[SheetBot] 통화 녹음 대장";
@@ -512,7 +514,7 @@ async function executeBackgroundFullPipeline(params: {
 
         // 🛡️ [시트 C~E열 정규화 중복 검사] 이미 등록 및 AI 분석 완료 여부까지 정밀 감지
         let isDuplicate = false;
-        let isAlreadyAnalyzed = false;
+        isAlreadyAnalyzed = false;
         try {
           const filesCheck = await callSheetsTool("sheets_get_range", {
             spreadsheetId: targetSpreadsheetId,
