@@ -8,6 +8,7 @@
 ## 📋 목차
 
 - **시트 래핑:** [`docs/WRAPPING.md`](docs/WRAPPING.md) — **wrap** · **updateAutomation** · **bridge**. EGDesk MCP 노출 목록(선택): [`docs/WRAPPING-MCP-CATALOG.md`](docs/WRAPPING-MCP-CATALOG.md). 구현: [`WRAPPING-PLAN.md`](docs/WRAPPING-PLAN.md). 터널/런타임 키 로테이션: [`docs/RUNTIME-ROTATION.md`](docs/RUNTIME-ROTATION.md). Runtime 6-lite: `POST /api/runtime/call`, [`docs/RUNTIME-LONG-AI.md`](docs/RUNTIME-LONG-AI.md).
+- **체크박스 0원 문자 발송:** [`docs/CHECKBOX-SMS-PIPELINE.md`](docs/CHECKBOX-SMS-PIPELINE.md) — 구글 시트 D열 체크박스([V]) 클릭 ➔ Apps Script 웹훅 ➔ 안드로이드 에이전트(0원 SMS) ➔ E열 결과 역반영 전 구간 상세 명세.
 
 1. [프로젝트 개요 및 핵심 가치](#1-프로젝트-개요-및-핵심-가치)
 2. [전체 시스템 아키텍처 다이어그램](#2-전체-시스템-아키텍처-다이어그램)
@@ -19,6 +20,7 @@
 8. [디렉토리 및 핵심 파일 구조](#8-디렉토리-및-핵심-파일-구조)
 9. [최근 트러블슈팅 이력 및 운영 원칙](#9-최근-트러블슈팅-이력-및-운영-원칙)
 10. [통화 녹음 AI 파이프라인 및 토큰 정산 현안 점검 & 해결 과제 목록 (To-Do)](#10-통화-녹음-ai-파이프라인-및-토큰-정산-현안-점검--해결-과제-목록-to-do)
+11. [스프레드시트 체크박스 0원 문자 발송 파이프라인](#11-스프레드시트-체크박스-0원-문자-발송-파이프라인)
 
 ---
 
@@ -360,3 +362,36 @@ flowchart TD
 
 - [ ] **[To-Do 5: 파일 정리] 미완료 잔여 임시 파일(.pending) 정리 및 클라이언트 알림 정비**
   - 과거 업로드 중단 등으로 드라이브에 남아있는 `.pending-...` 더미 파일 처리 가이드 수립.
+
+
+---
+
+## 11. 스프레드시트 체크박스 0원 문자 발송 파이프라인
+
+> 📖 **상세 기술 지침서:** [`docs/CHECKBOX-SMS-PIPELINE.md`](docs/CHECKBOX-SMS-PIPELINE.md) (Apps Script 전체 소스 코드, API 규격, 트러블슈팅 가이드 포함)
+
+### 1) 시스템 개요
+구글 스프레드시트의 `문자발송목록` 탭에서 **D열의 체크박스(`[V]`)를 클릭**하면, Google Apps Script 설치형 트리거(`onEditTrigger`)가 작동하여 SheetBot 백엔드로 웹훅을 발송하고, 사용자의 안드로이드 스마트폰(SheetBot Agent v2.4.6+)에서 **통신사 기본 문자(SMS)를 0원에 발송**한 뒤, 시트 E열에 발송 완료 일시를 자동 기록하는 파이프라인입니다.
+
+```mermaid
+flowchart LR
+    A["구글 시트 D열<br/>체크박스 [V] 클릭"] -->|onEditTrigger| B["Google Apps Script<br/>(설치형 트리거)"]
+    B -->|Fast-Return Webhook| C["SheetBot 백엔드<br/>(/api/user/sheet-sms/dispatch)"]
+    C -->|PENDING 적재| D[("sheetbot_user_dispatch_logs<br/>(대기열 DB)")]
+    C -->|0.05s SSE 푸시| E["안드로이드 스마트폰<br/>(SheetBot Agent v2.4.6+)"]
+    E -->|단말기 0원 발송| F["수신자 휴대전화<br/>(SMS 수신)"]
+    E -->|마감 콜백| G["/api/wallet/agent/pending-receipts<br/>(status: SUCCESS)"]
+    G -->|시트 역반영| H["구글 시트 E열<br/>(✅ 발송완료 기록)"]
+```
+
+### 2) 핵심 구성 요소 요약
+1. **Google Apps Script**:
+   - `onEditTrigger(e)`: 단순 트리거(`onEdit`)의 `UrlFetchApp` 권한 차단을 극복하기 위해 **설치형 트리거(Installable Trigger)**로 등록.
+   - D열(4번째 열) 체크박스가 `TRUE`로 변경될 때만 실행되며, 즉시 E열에 `⏳ 발송 준비중...`을 기입하여 중복 클릭 방지.
+   - A열(수신번호), B열(고객명), C열(문자내용), `userEmail`을 조립하여 `POST /api/user/sheet-sms/dispatch`로 발송.
+2. **백엔드 대기열 및 SSE 푸시**:
+   - `sheetbot_user_dispatch_logs` 테이블에 숫자형 `logId`와 함께 `PENDING` 상태로 저장.
+   - `realtimeHub.notifyDispatchAdded(userEmail, logId, recipient)`를 통해 모바일 기기 SSE 연결(`/api/user/dispatch/stream`)로 0.05초 만에 신호 푸시.
+3. **안드로이드 에이전트 (v2.4.6+)**:
+   - `startDispatchSseLoop()`가 실시간 수신하여 백그라운드에서 SMS 즉각 발송.
+   - 발송 완료 즉시 `POST /api/wallet/agent/pending-receipts`를 호출하여 대기열을 `SUCCESS`로 청소하고, 시트 E열에 `✅ 발송완료 (MM. DD. HH:mm)` 자동 기록.

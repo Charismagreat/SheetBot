@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveUserSpreadsheet, SheetBindingType } from "@/lib/sheet-binding-helper";
 import { callSheetsTool, callDriveTool, listDriveFiles, createDriveFolder, trashDriveFile, WorkspaceVisitorCallOptions } from "@/lib/egdesk-helpers";
 import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
+import { deploySmsCheckboxScript } from "@/lib/gas-sms-checkbox-service";
 
 interface SheetDefinition {
   defaultTitle: string;
@@ -462,7 +463,19 @@ export async function POST(req: NextRequest) {
       ? `https://drive.google.com/drive/folders/${createdFolderId}`
       : null;
 
-    // 2-1. 기존 시트인 경우(isNew === false) 불필요한 시트 탭 조회 및 헤더 검사를 생략하고 즉시 0ms 반환 (Fast-Path)
+    // 2-1. 기존 시트인 경우(isNew === false)라도 CHECKBOX 시트는 Apps Script 배포 점검 후 반환
+    if (!resolved.isNew && typeKey === "SHEET_SMS_CHECKBOX") {
+      try {
+        await deploySmsCheckboxScript({
+          spreadsheetId: targetSpreadsheetId,
+          tabName: "문자발송목록",
+          userEmail: cleanEmail,
+          callOptions,
+        });
+      } catch (gasErr: any) {
+        console.warn(`[ProvisionSheet] Apps Script deploy warning for existing sheet:`, gasErr?.message);
+      }
+    }
     if (!resolved.isNew) {
       return NextResponse.json({
         success: true,
@@ -477,9 +490,10 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    let primaryTabName = typeKey === "SHEET_SMS_CHECKBOX" ? "문자발송목록" : "시트1";
     // 3. 신규 생성 시트인 경우 첫 번째 메인 탭 이름 동적 확인 및 1행 A1 헤더 주입
     try {
-      let primaryTabName = "시트1";
+      primaryTabName = "시트1";
       try {
         const meta = await callSheetsTool(
           "sheets_get_spreadsheet",
@@ -543,6 +557,21 @@ export async function POST(req: NextRequest) {
       }
     } catch (fmtErr: any) {
       console.warn(`[ProvisionSheet] Header format warning:`, fmtErr.message);
+    }
+
+    // 4. 체크박스 문자 발송 대장인 경우 Apps Script 자동화 스크립트 배포
+    let scriptDeployResult = null;
+    if (typeKey === "SHEET_SMS_CHECKBOX") {
+      try {
+        scriptDeployResult = await deploySmsCheckboxScript({
+          spreadsheetId: targetSpreadsheetId,
+          tabName: primaryTabName || "문자발송목록",
+          userEmail: cleanEmail,
+          callOptions,
+        });
+      } catch (gasErr: any) {
+        console.warn(`[ProvisionSheet] Apps Script deploy warning:`, gasErr?.message);
+      }
     }
 
     return NextResponse.json({

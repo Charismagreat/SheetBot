@@ -183,31 +183,31 @@ async function doResolveUserSpreadsheet(
   if (boundRecord?.spreadsheet_id) {
     const candidateId = boundRecord.spreadsheet_id;
     try {
-      let activeFiles: any[] = [];
-      // 2-1. 지정 폴더가 있으면 해당 폴더 내 활성 시트 확인
-      if (folderId) {
-        const folderQuery = `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${targetTitle}' and trashed = false`;
-        const folderRes = await listDriveFiles({ query: folderQuery }, { preferOAuth, ...callOptions }).catch(() => ({ files: [] }));
-        activeFiles = folderRes?.files || [];
-      }
-      // 2-2. 폴더 내에 없으면 드라이브 전체에서 동일 제목의 활성 시트 확인
-      if (activeFiles.length === 0) {
-        const globalQuery = `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${targetTitle}' and trashed = false`;
-        const globalRes = await listDriveFiles({ query: globalQuery }, { preferOAuth, ...callOptions }).catch(() => ({ files: [] }));
-        activeFiles = globalRes?.files || [];
-      }
-
-      if (activeFiles.some((f: any) => f.id === candidateId)) {
-        // 기존 바인딩 시트가 정상적으로 활성 상태임 (휴지통에 없음)
+      // 2-0. [우선 검증] candidateId 파일이 드라이브에 직접 존재하고 활성 상태(휴지통 제외)인지 확인 (맞춤 제목/기존 연동 시트 보존)
+      const directFile = await getDriveFile(candidateId, { preferOAuth, ...callOptions }).catch(() => null);
+      if (directFile && directFile.id === candidateId && !directFile.trashed) {
         targetSpreadsheetId = candidateId;
-      } else if (activeFiles.length > 0) {
-        // 기존 candidateId는 사용자에 의해 휴지통으로 이동되었으나 동일 제목의 다른 활성 시트가 존재함 -> 자동 리바인딩
-        console.log(`[SheetBinding] 🔄 Candidate sheet ${candidateId} was trashed/superseded. Auto-rebinding to active sheet ${activeFiles[0].id} for '${targetTitle}'...`);
-        targetSpreadsheetId = activeFiles[0].id;
       } else {
-        // 동일 제목의 활성 시트가 드라이브에 전무함 -> 사용자가 시트를 휴지통으로 버렸거나 영구 삭제함!
-        console.warn(`[SheetBinding] ⚠️ Sheet ${candidateId} for '${targetTitle}' was TRASHED by user! Invalidating stale binding to trigger fresh creation...`);
-        targetSpreadsheetId = null;
+        // candidateId 파일이 없거나 휴지통에 들어간 경우에만 동일 제목 대체 파일 탐색
+        let activeFiles: any[] = [];
+        if (folderId) {
+          const folderQuery = `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${targetTitle}' and trashed = false`;
+          const folderRes = await listDriveFiles({ query: folderQuery }, { preferOAuth, ...callOptions }).catch(() => ({ files: [] }));
+          activeFiles = folderRes?.files || [];
+        }
+        if (activeFiles.length === 0) {
+          const globalQuery = `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${targetTitle}' and trashed = false`;
+          const globalRes = await listDriveFiles({ query: globalQuery }, { preferOAuth, ...callOptions }).catch(() => ({ files: [] }));
+          activeFiles = globalRes?.files || [];
+        }
+
+        if (activeFiles.length > 0) {
+          console.log(`[SheetBinding] 🔄 Candidate sheet ${candidateId} was trashed/superseded. Auto-rebinding to active sheet ${activeFiles[0].id} for '${targetTitle}'...`);
+          targetSpreadsheetId = activeFiles[0].id;
+        } else {
+          console.warn(`[SheetBinding] ⚠️ Sheet ${candidateId} was TRASHED by user! Invalidating stale binding to trigger fresh creation...`);
+          targetSpreadsheetId = null;
+        }
       }
     } catch (checkErr: any) {
       console.warn(`[SheetBinding] Active check warning for ${targetTitle}:`, checkErr?.message);

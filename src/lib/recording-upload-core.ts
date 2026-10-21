@@ -682,10 +682,10 @@ async function triggerAiAudioAnalysis(params: {
     // 0. [DB 감사 티켓 사전 검사] 이미 완료(SUCCEEDED)되었거나 처리 중(PENDING)인 배치 작업이 있는지 확인
     try {
       const existingJobs = await queryTable("sheetbot_ai_batch_jobs", {
-        where: [
-          { column: "user_email", operator: "=", value: cleanEmail },
-          { column: "file_name", operator: "=", value: fileName },
-        ],
+        filters: {
+          user_email: cleanEmail,
+          file_name: fileName,
+        },
         limit: 5,
       }).catch(() => null);
 

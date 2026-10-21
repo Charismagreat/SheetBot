@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import { callSheetsTool } from "@/lib/egdesk-helpers";
 import { bindExistingUserSpreadsheet, SheetBindingType } from "@/lib/sheet-binding-helper";
+import { deploySmsCheckboxScript } from "@/lib/gas-sms-checkbox-service";
 
 export const dynamic = "force-dynamic";
 
@@ -116,7 +117,22 @@ export async function POST(req: NextRequest) {
       console.warn(`[AddTab] Header formatting warning:`, fmtErr.message);
     }
 
-    // 4. 시트봇 연동 대장 영구 바인딩
+    // 4. 체크박스 문자 자동화 Apps Script 배포
+    let scriptDeployResult = null;
+    if (sheetType === "SHEET_SMS_CHECKBOX") {
+      try {
+        scriptDeployResult = await deploySmsCheckboxScript({
+          spreadsheetId,
+          tabName,
+          userEmail,
+          callOptions,
+        });
+      } catch (gasErr: any) {
+        console.warn(`[AddTab] Apps Script deploy warning:`, gasErr?.message);
+      }
+    }
+
+    // 5. 시트봇 연동 대장 영구 바인딩
     const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
     await bindExistingUserSpreadsheet({
       userEmail,
@@ -133,7 +149,9 @@ export async function POST(req: NextRequest) {
       sheetTitle,
       tabName,
       isNewTab: !tabExists,
-      message: `'${sheetTitle}' 시트에 '${tabName}' 탭이 성공적으로 추가 및 연동되었습니다.`,
+      scriptApplied: scriptDeployResult?.success ?? false,
+      scriptUrl: scriptDeployResult?.scriptUrl,
+      message: `'${sheetTitle}' 시트에 '${tabName}' 탭 및 문자 발송 자동화 스크립트가 성공적으로 설정되었습니다.`,
     });
   } catch (err: any) {
     console.error("[AddTab] Fatal error:", err);
