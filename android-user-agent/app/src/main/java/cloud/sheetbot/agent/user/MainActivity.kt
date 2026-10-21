@@ -150,6 +150,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        UpdateManager.onActivityResumed(this)
         if (::coreCoordinator.isInitialized) {
             coreCoordinator.onResume()
         }

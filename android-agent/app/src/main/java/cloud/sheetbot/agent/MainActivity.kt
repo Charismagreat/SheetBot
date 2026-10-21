@@ -105,6 +105,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        UpdateManager.onActivityResumed(this)
         checkNotificationListenerPermission()
         checkAndRequestBatteryOptimization()
         startServerMonitorLoop()

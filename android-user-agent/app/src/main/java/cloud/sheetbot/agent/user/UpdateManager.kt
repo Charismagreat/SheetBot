@@ -2,10 +2,16 @@ package cloud.sheetbot.agent.user
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.DownloadManager
 import android.app.ProgressDialog
+import android.content.ContentUris
+import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
@@ -25,6 +31,11 @@ import java.util.concurrent.TimeUnit
  */
 object UpdateManager {
     private const val TAG = "UpdateManager"
+    private const val CACHE_APK_FILE = "sheetbot_user_agent_update.apk"
+    private const val DOWNLOADS_APK_NAME = "SheetBotAgent.apk"
+
+    private var pendingInstallTargetVersion: String? = null
+    private var pendingApkFile: File? = null
 
     private val downloadClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -32,6 +43,21 @@ object UpdateManager {
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
+
+    fun onActivityResumed(activity: Activity) {
+        val targetVersion = pendingInstallTargetVersion ?: return
+        val apkFile = pendingApkFile
+        if (apkFile == null || !apkFile.exists()) {
+            clearPendingInstall()
+            return
+        }
+        if (!isStillBehindTarget(activity, targetVersion)) {
+            clearPendingInstall()
+            return
+        }
+        clearPendingInstall()
+        showSaveToDownloadsDialog(activity, apkFile, DOWNLOADS_APK_NAME)
+    }
 
     fun checkForUpdates(activity: Activity, showToastIfLatest: Boolean = false) {
         CoroutineScope(Dispatchers.IO).launch {
@@ -142,13 +168,24 @@ object UpdateManager {
             .setTitle("🚀 새로운 업데이트 (v${info.latestVersionName})")
             .setMessage("${notes}\n\n기존 앱을 삭제하지 않고 [업데이트] 버튼으로 바로 덮어쓰기 설치가 가능합니다. 지금 진행하시겠습니까?")
             .setPositiveButton("지금 업데이트") { _, _ ->
-                checkInstallPermissionAndDownload(activity, info)
+                checkInstallPermissionAndDownload(activity, info, saveToDownloadsOnly = false)
+            }
+            .setNeutralButton("다운로드 폴더에 저장") { _, _ ->
+                downloadAndInstall(activity, info, saveToDownloadsOnly = true)
             }
             .setNegativeButton("나중에", null)
             .show()
     }
 
-    private fun checkInstallPermissionAndDownload(activity: Activity, info: VersionInfo) {
+    private fun checkInstallPermissionAndDownload(
+        activity: Activity,
+        info: VersionInfo,
+        saveToDownloadsOnly: Boolean
+    ) {
+        if (saveToDownloadsOnly) {
+            downloadAndInstall(activity, info, saveToDownloadsOnly = true)
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (!activity.packageManager.canRequestPackageInstalls()) {
                 AlertDialog.Builder(activity)
@@ -167,10 +204,14 @@ object UpdateManager {
             }
         }
 
-        downloadAndInstall(activity, info)
+        downloadAndInstall(activity, info, saveToDownloadsOnly = false)
     }
 
-    private fun downloadAndInstall(activity: Activity, info: VersionInfo) {
+    private fun downloadAndInstall(
+        activity: Activity,
+        info: VersionInfo,
+        saveToDownloadsOnly: Boolean
+    ) {
         @Suppress("DEPRECATION")
         val progressDialog = ProgressDialog(activity).apply {
             setTitle("업데이트 다운로드")
@@ -188,7 +229,7 @@ object UpdateManager {
             )
 
             var downloadSuccess = false
-            val apkFile = File(activity.cacheDir, "sheetbot_user_agent_update.apk")
+            val apkFile = File(activity.cacheDir, CACHE_APK_FILE)
             if (apkFile.exists()) {
                 apkFile.delete()
             }
@@ -241,7 +282,11 @@ object UpdateManager {
                 progressDialog.dismiss()
 
                 if (downloadSuccess && apkFile.exists() && apkFile.length() > 0) {
-                    installApk(activity, apkFile)
+                    if (saveToDownloadsOnly) {
+                        saveToDownloadsAndNotify(activity, apkFile, DOWNLOADS_APK_NAME)
+                    } else {
+                        installApk(activity, info, apkFile)
+                    }
                 } else {
                     Toast.makeText(activity, "업데이트 파일 다운로드에 실패했습니다. 네트워크를 확인해 주세요.", Toast.LENGTH_LONG).show()
                 }
@@ -249,7 +294,85 @@ object UpdateManager {
         }
     }
 
-    private fun installApk(activity: Activity, apkFile: File) {
+    private fun showSaveToDownloadsDialog(activity: Activity, apkFile: File, displayName: String) {
+        if (activity.isFinishing || activity.isDestroyed) return
+        AlertDialog.Builder(activity)
+            .setTitle("설치가 완료되지 않았습니다")
+            .setMessage(
+                "보안 정책으로 설치가 차단되었을 수 있습니다.\n" +
+                    "업데이트 파일을 다운로드 폴더에 저장할까요?"
+            )
+            .setPositiveButton("다운로드 폴더에 저장") { _, _ ->
+                saveToDownloadsAndNotify(activity, apkFile, displayName)
+            }
+            .setNegativeButton("닫기", null)
+            .show()
+    }
+
+    private fun saveToDownloadsAndNotify(activity: Activity, apk: File, displayName: String) {
+        val uri = saveToDownloads(activity, apk, displayName)
+        if (uri != null) {
+            Toast.makeText(activity, "다운로드 폴더에 저장됨", Toast.LENGTH_LONG).show()
+            openDownloads(activity)
+        } else {
+            Toast.makeText(activity, "다운로드 폴더 저장에 실패했습니다.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun saveToDownloads(context: Context, apk: File, name: String = DOWNLOADS_APK_NAME): Uri? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            Log.w(TAG, "MediaStore Downloads export requires API 29+")
+            return null
+        }
+        deleteExistingDownload(context, name)
+        val resolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, name)
+            put(MediaStore.Downloads.MIME_TYPE, "application/vnd.android.package-archive")
+            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
+        try {
+            resolver.openOutputStream(uri)?.use { out ->
+                apk.inputStream().use { it.copyTo(out) }
+            }
+            values.clear()
+            values.put(MediaStore.Downloads.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+            return uri
+        } catch (e: Exception) {
+            Log.e(TAG, "saveToDownloads failed", e)
+            resolver.delete(uri, null, null)
+            return null
+        }
+    }
+
+    private fun deleteExistingDownload(context: Context, displayName: String) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        val resolver = context.contentResolver
+        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(MediaStore.Downloads._ID)
+        val selection = "${MediaStore.Downloads.DISPLAY_NAME} = ?"
+        resolver.query(collection, projection, selection, arrayOf(displayName), null)?.use { cursor ->
+            val idCol = cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID)
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(idCol)
+                val uri = ContentUris.withAppendedId(collection, id)
+                resolver.delete(uri, null, null)
+            }
+        }
+    }
+
+    private fun openDownloads(activity: Activity) {
+        try {
+            activity.startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS))
+        } catch (e: Exception) {
+            Log.w(TAG, "openDownloads failed: ${e.message}")
+        }
+    }
+
+    private fun installApk(activity: Activity, info: VersionInfo, apkFile: File) {
         try {
             val contentUri = FileProvider.getUriForFile(
                 activity,
@@ -263,11 +386,30 @@ object UpdateManager {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
 
+            pendingInstallTargetVersion = info.latestVersionName
+            pendingApkFile = apkFile
+
             Log.i(TAG, "🚀 안드로이드 패키지 인스톨러 호출: $contentUri")
             activity.startActivity(installIntent)
         } catch (e: Exception) {
             Log.e(TAG, "인스톨러 호출 실패", e)
+            clearPendingInstall()
             Toast.makeText(activity, "설치 화면 호출 실패: ${e.message}", Toast.LENGTH_LONG).show()
         }
+    }
+
+    private fun isStillBehindTarget(activity: Activity, targetVersionName: String): Boolean {
+        val currentName = try {
+            activity.packageManager.getPackageInfo(activity.packageName, 0).versionName ?: ""
+        } catch (_: Exception) {
+            return true
+        }
+        if (normalizeVersion(targetVersionName).isBlank()) return false
+        return normalizeVersion(currentName) != normalizeVersion(targetVersionName)
+    }
+
+    private fun clearPendingInstall() {
+        pendingInstallTargetVersion = null
+        pendingApkFile = null
     }
 }
