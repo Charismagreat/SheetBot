@@ -61,15 +61,27 @@ function cleanRecentUploads() {
 }
 
 /**
- * 파일명에서 상대방 이름 및 전화번호, 통화 일시 지능형 파싱 (단말기 파싱 누락 대비 2중 안전망)
+ * 파일명에서 상대방 이름 및 전화번호, 통화 일시 지능형 파싱 (단말기 파싱 누락 및 왜곡 대비 2중 안전망)
  */
-function parseContactFromFileName(fileName: string): { name: string; time?: string } {
+export interface ParsedContactInfo {
+  name: string;
+  rawName?: string;
+  phone?: string;
+  normalizedPhone?: string;
+  time?: string;
+  isDefinitive: boolean;
+}
+
+export function parseContactFromFileName(fileName: string): ParsedContactInfo {
+  // 접두사([SheetBot], ext_rec_..., sb_rec_...) 및 확장자 제거
   const clean = fileName
     .replace(/^\[SheetBot\]\s*/i, "")
+    .replace(/^ext_rec_\d+_/i, "")
+    .replace(/^sb_rec_\d+_/i, "")
     .replace(/\.[^.]+$/, "")
     .trim();
 
-  // 1. 이름_전화번호_날짜시간 (예: 시댁_01077249063_20261003165911)
+  // 1. 이름_전화번호_날짜시간 (예: 박종찬오마이프린트_01073360131_20260408134731)
   const m1 = clean.match(/^([^_]+)_(\d{9,12})_(\d{8,14})$/);
   if (m1) {
     const rawName = m1[1].trim();
@@ -79,27 +91,97 @@ function parseContactFromFileName(fileName: string): { name: string; time?: stri
       ? `${phone.slice(0, 3)}-${phone.slice(3, 7)}-${phone.slice(7)}` 
       : phone.length === 10 && phone.startsWith("02")
       ? `${phone.slice(0, 2)}-${phone.slice(2, 6)}-${phone.slice(6)}`
+      : phone.length === 10
+      ? `${phone.slice(0, 3)}-${phone.slice(3, 6)}-${phone.slice(6)}`
       : phone;
     let callTimeStr: string | undefined;
     if (dt.length >= 14) {
       callTimeStr = `${dt.slice(0, 4)}-${dt.slice(4, 6)}-${dt.slice(6, 8)} ${dt.slice(8, 10)}:${dt.slice(10, 12)}:${dt.slice(12, 14)}`;
     }
-    return { name: `${rawName} (${formattedPhone})`, time: callTimeStr };
+    return {
+      name: `${rawName} (${formattedPhone})`,
+      rawName,
+      phone: formattedPhone,
+      normalizedPhone: phone,
+      time: callTimeStr,
+      isDefinitive: true,
+    };
   }
 
   // 2. 통화 녹음 이름_날짜_시간
   const m2 = clean.match(/(?:통화\s*녹음|T전화통화녹음)[\s_]+([^_]+)_(\d{6,8})_?(\d{4,6})?/i);
   if (m2) {
-    return { name: m2[1].trim() };
+    const rawName = m2[1].trim();
+    return {
+      name: rawName,
+      rawName,
+      isDefinitive: false,
+    };
   }
 
   // 3. Fallback: 언더스코어로 분리하여 첫 번째 토큰
   const tokens = clean.split("_").map((t) => t.trim()).filter(Boolean);
   if (tokens.length > 0 && !tokens[0].match(/^\d{6,}$/)) {
-    return { name: tokens[0] };
+    const rawName = tokens[0];
+    return {
+      name: rawName,
+      rawName,
+      isDefinitive: false,
+    };
   }
 
-  return { name: "미지정 연락처" };
+  return { name: "미지정 연락처", isDefinitive: false };
+}
+
+/**
+ * 🛡️ [Source of Truth Override]
+ * 파일명은 안드로이드 OS/통화앱이 통화 시점에 직접 생성한 가장 신뢰도 높은 원천 데이터입니다.
+ * 클라이언트에서 넘어온 contactName이 파일명 내 전화번호/이름과 불일치하거나 왜곡된 경우,
+ * 파일명의 정보를 최우선(Source of Truth)으로 삼아 완벽히 교차 검증 및 자동 보정합니다.
+ */
+export function resolveDefinitiveContact(
+  fileName: string,
+  providedContact: string | null | undefined,
+  providedCallTime?: string | null
+): { contactName: string; callTime?: string } {
+  const parsed = parseContactFromFileName(fileName);
+
+  // 1. 파일명에서 이름과 전화번호가 명확히 추출된 경우 (최우선 Source of Truth)
+  if (parsed.isDefinitive && parsed.phone) {
+    const providedClean = (providedContact || "").trim();
+    const providedDigits = providedClean.replace(/\D/g, "");
+
+    // 클라이언트 값이 비어있거나, '미지정 연락처'이거나,
+    // 클라이언트 번호가 파일명 번호와 다르거나,
+    // 클라이언트 이름에 파일명의 상대방 이름이 포함되지 않은 경우 100% 파일명 우선 덮어쓰기
+    const isMismatched = !providedClean ||
+      providedClean === "미지정 연락처" ||
+      (providedDigits.length >= 8 && parsed.normalizedPhone && providedDigits !== parsed.normalizedPhone) ||
+      (parsed.rawName && !providedClean.includes(parsed.rawName));
+
+    if (isMismatched) {
+      writeDebugLog(`[SourceOfTruth Override] Correcting contact: '${providedClean}' -> '${parsed.name}' (File: ${fileName})`);
+      return {
+        contactName: parsed.name,
+        callTime: parsed.time || (providedCallTime && !providedCallTime.includes("T") ? providedCallTime : parsed.time),
+      };
+    }
+  }
+
+  // 2. 클라이언트 값이 비어있는 경우 Fallback
+  if (!providedContact || providedContact === "미지정 연락처" || providedContact.trim().length === 0) {
+    if (parsed.name && parsed.name !== "미지정 연락처") {
+      return {
+        contactName: parsed.name,
+        callTime: parsed.time || (providedCallTime && !providedCallTime.includes("T") ? providedCallTime : parsed.time),
+      };
+    }
+  }
+
+  return {
+    contactName: providedContact && providedContact.trim().length > 0 ? providedContact.trim() : "미지정 연락처",
+    callTime: parsed.time && (!providedCallTime || providedCallTime.includes("T")) ? parsed.time : (providedCallTime || undefined),
+  };
 }
 
 export interface RecordingUploadInput {
@@ -164,15 +246,12 @@ export async function acceptRecordingUpload(input: RecordingUploadInput): Promis
       targetFileName = `[SheetBot] ${targetFileName}`;
     }
 
-    // 상대방 이름이 미지정이거나 비어있으면 파일명에서 자동 복원
-    if (!contactName || contactName === "미지정 연락처" || contactName.trim().length === 0) {
-      const parsed = parseContactFromFileName(targetFileName);
-      if (parsed.name && parsed.name !== "미지정 연락처") {
-        contactName = parsed.name;
-        if (parsed.time && (!callTime || callTime.includes("T"))) {
-          callTime = parsed.time;
-        }
-      }
+    // 🛡️ [Source of Truth 2중 교차 검증]
+    // 파일명 정보를 기반으로 상대방 정보 왜곡 방어 (타 연락처 누수 원천 차단)
+    const resolvedContact = resolveDefinitiveContact(targetFileName, contactName, callTime);
+    contactName = resolvedContact.contactName;
+    if (resolvedContact.callTime) {
+      callTime = resolvedContact.callTime;
     }
 
     // ⚡ [10분 멱등성 중복 방어] 단말기 루프/재전송에 의한 중복 저장 100% 원천 차단
@@ -272,8 +351,6 @@ async function executeBackgroundFullPipeline(params: {
   const {
     cleanEmail,
     targetFileName,
-    contactName,
-    callTime,
     fileSizeMb,
     targetFolderName,
     tempFilePath,
@@ -281,6 +358,11 @@ async function executeBackgroundFullPipeline(params: {
     dedupeKey,
     channelCount,
   } = params;
+
+  // 🛡️ 백그라운드 파이프라인 진입 시에도 파일명 기반 2중 교차 검증 적용
+  const resolved = resolveDefinitiveContact(targetFileName, params.contactName, params.callTime);
+  const contactName = resolved.contactName;
+  const callTime = resolved.callTime || params.callTime;
 
   try {
     writeDebugLog(`[BackgroundPipeline] Started for ${targetFileName}...`);
@@ -579,10 +661,13 @@ async function triggerAiAudioAnalysis(params: {
     spreadsheetId,
     rowIndex,
     userEmail,
-    contactName,
     channelCount = 2,
     callOptions: inputCallOptions,
   } = params;
+
+  // 🛡️ AI 프롬프트 생성 전 상대방 정보 파일명 교차 검증 확정
+  const resolvedAiContact = resolveDefinitiveContact(fileName, params.contactName);
+  const contactName = resolvedAiContact.contactName;
 
   let effectiveCallOptions: any = inputCallOptions || null;
 

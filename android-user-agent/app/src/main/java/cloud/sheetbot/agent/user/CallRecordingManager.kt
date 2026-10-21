@@ -221,7 +221,7 @@ object CallRecordingManager {
         val enabledAt = prefs.callRecordingEnabledAt
         for (file in recordingFiles.take(15)) {
             val fileName = file.name
-
+    
             // 💡 [사용자 원칙 2] 기능을 켠 이후 새롭게 생성된 통화 녹음 파일만 수집 (과거 파일 무차별 업로드 원천 차단)
             if (!forceReupload && enabledAt > 0L && file.lastModified() < enabledAt) {
                 continue
@@ -381,7 +381,7 @@ object CallRecordingManager {
                     continue
                 }
 
-                val parsedInfo = parseRecordingFileInfo(tempFile)
+                val parsedInfo = parseRecordingFileInfo(tempFile, rawFileName)
                 var contactName = parsedInfo.contactName
                 if (contactName == "미지정 연락처") {
                     val cleanBase = rawFileName.substringBeforeLast(".")
@@ -446,8 +446,9 @@ object CallRecordingManager {
     /**
      * 파일명에서 상대방(이름/번호) 및 통화 일시 추출 및 오디오 채널 수 감지
      */
-    private fun parseRecordingFileInfo(file: File): RecordingFileInfo {
-        val fileName = file.name
+    private fun parseRecordingFileInfo(file: File, originalFileName: String? = null): RecordingFileInfo {
+        val rawName = (originalFileName ?: file.name).trim()
+        val fileName = rawName.replace(Regex("""^ext_rec_\d+_"""), "").replace(Regex("""^\[SheetBot\]\s*"""), "")
         val nameWithoutExt = fileName.substringBeforeLast(".")
         val channelCount = detectAudioChannelCount(file) // 2단계: 2채널(Stereo) 여부 감지
 

@@ -28,6 +28,9 @@ function formatBusinessNumber(raw: any): string {
 let isSweeperRunning = false;
 let sweeperInterval: NodeJS.Timeout | null = null;
 
+// 🛡️ 처리 완료된 배치 잡 메모리 캐시 (프로세스 내 중복 수거 2차 원천 차단)
+const processedBatchJobs = new Set<string>();
+
 export function ensureBatchSweeperLoop(): void {
   if (typeof window !== "undefined") return;
   if (sweeperInterval) return;
@@ -88,6 +91,10 @@ export async function processPendingBatchJobs(): Promise<{
       const targetModel = String(job.model || 'gemini-2.5-flash');
 
       if (!jobName || !jobName.startsWith('batches/')) {
+        continue;
+      }
+
+      if (processedBatchJobs.has(jobName)) {
         continue;
       }
 
@@ -473,9 +480,19 @@ export async function processPendingBatchJobs(): Promise<{
             });
           }
 
-          // 공통: 잡 상태 SUCCEEDED로 마감
-          if (!jobId.startsWith('auto-')) {
-            const nowStr = getKoreanTimeString();
+          processedBatchJobs.add(jobName);
+
+          // 공통: 잡 상태 SUCCEEDED로 마감 (job_name 유일키 필터 + ids 2중 안전 갱신)
+          const nowStr = getKoreanTimeString();
+          await updateRows('sheetbot_ai_batch_jobs', {
+            status: 'SUCCEEDED',
+            completed_at: nowStr,
+            updated_at: nowStr,
+          }, { filters: { job_name: jobName } }).catch((err: any) => {
+            console.warn(`[BatchSweeper] Warning updating status by job_name: ${err?.message}`);
+          });
+
+          if (!jobId.startsWith('auto-') && !isNaN(Number(jobId)) && Number(jobId) > 0) {
             await updateRows('sheetbot_ai_batch_jobs', {
               status: 'SUCCEEDED',
               completed_at: nowStr,
@@ -486,13 +503,23 @@ export async function processPendingBatchJobs(): Promise<{
           succeeded++;
         } else if (batchRes.state === 'JOB_STATE_FAILED' || batchRes.state === 'JOB_STATE_CANCELLED') {
           console.warn(`[BatchSweeper] ❌ Job ${jobName} FAILED (${batchRes.error || batchRes.state})`);
+          processedBatchJobs.add(jobName);
           const nowStr = getKoreanTimeString();
           await updateRows('sheetbot_ai_batch_jobs', {
             status: 'FAILED',
             error_message: batchRes.error || 'Gemini Batch failed',
             completed_at: nowStr,
             updated_at: nowStr,
-          }, { ids: [Number(jobId)] }).catch(() => {});
+          }, { filters: { job_name: jobName } }).catch(() => {});
+
+          if (!jobId.startsWith('auto-') && !isNaN(Number(jobId)) && Number(jobId) > 0) {
+            await updateRows('sheetbot_ai_batch_jobs', {
+              status: 'FAILED',
+              error_message: batchRes.error || 'Gemini Batch failed',
+              completed_at: nowStr,
+              updated_at: nowStr,
+            }, { ids: [Number(jobId)] }).catch(() => {});
+          }
 
           // 실패 문구 기입 시에도 핑거프린트 가드 적용
           let failTargetRow: number | null = rowIndex;

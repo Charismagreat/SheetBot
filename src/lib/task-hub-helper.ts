@@ -42,6 +42,9 @@ function normalizePriority(raw?: string): "URGENT 🔴" | "HIGH 🟡" | "NORMAL 
 // 사용자별 마스터 할 일 시트 ID 메모리 캐시 (0초 즉각 매핑)
 const userTaskSheetCache = new Map<string, string>();
 
+// 🛡️ 1시간 멱등성 메모리 캐시 (동일 출처 + 동일 제목 중복 등록 원천 차단)
+const recentTasksMemoryCache = new Set<string>();
+
 /**
  * 회원별 '[SheetBot] 통합 할 일 대장' 구글 스프레드시트 탐색 또는 자동 프로비저닝
  */
@@ -129,6 +132,37 @@ export async function createTaskItem(input: TaskItemInput): Promise<{ success: b
     const taskId = Date.now();
     const finalTitle = (input.taskTitle || input.title || "새로운 할 일").trim();
     const finalSourceId = input.sourceRef || input.sourceId || null;
+    // 🛡️ 중복 방어 키 생성 (사용자 + 출처식별자 + 할일제목)
+    const idempotencyKey = `${cleanEmail}::${finalSourceId || 'none'}::${finalTitle}`;
+    if (recentTasksMemoryCache.has(idempotencyKey)) {
+      console.log(`[TaskHubHelper] 🛡️ Duplicate task blocked by memory cache: "${finalTitle}" (${finalSourceId})`);
+      return { success: true, taskId };
+    }
+
+    // DB 기존 등록 여부 사전 검증
+    if (finalSourceId) {
+      const existingRes = await queryTable("sheetbot_tasks", {
+        filters: {
+          user_email: cleanEmail,
+          source_id: String(finalSourceId),
+        },
+        limit: 50,
+      }).catch(() => ({ rows: [] }));
+
+      const isDuplicate = (existingRes?.rows || []).some(
+        (r: any) => !r.deleted_at && String(r.title).trim() === finalTitle
+      );
+
+      if (isDuplicate) {
+        console.log(`[TaskHubHelper] 🛡️ Task already registered in DB: "${finalTitle}" (${finalSourceId}). Skipping duplicate.`);
+        recentTasksMemoryCache.add(idempotencyKey);
+        return { success: true, taskId };
+      }
+    }
+
+    recentTasksMemoryCache.add(idempotencyKey);
+    setTimeout(() => recentTasksMemoryCache.delete(idempotencyKey), 3600000);
+
 
     // 1. My DB sheetbot_tasks 테이블 적재
     await insertRows("sheetbot_tasks", [
