@@ -328,6 +328,19 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("sms_drive_sheet_title", "[SheetBot] 스마트폰 문자(SMS) 송수신 대장") ?: "[SheetBot] 스마트폰 문자(SMS) 송수신 대장"
         set(value) = prefs.edit().putString("sms_drive_sheet_title", value).apply()
 
+    // 💡 구글 시트 체크박스 감지 문자 자동 발송 카드 설정
+    var isSheetSmsCheckboxEnabled: Boolean
+        get() = prefs.getBoolean("is_sheet_sms_checkbox_enabled", false)
+        set(value) = prefs.edit().putBoolean("is_sheet_sms_checkbox_enabled", value).apply()
+
+    var isSheetSmsCheckboxDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_sheet_sms_checkbox_details_hidden", true)
+        set(value) = prefs.edit().putBoolean("is_sheet_sms_checkbox_details_hidden", value).apply()
+
+    var sheetSmsTargetTab: String
+        get() = prefs.getString("sheet_sms_target_tab", "문자발송목록") ?: "문자발송목록"
+        set(value) = prefs.edit().putString("sheet_sms_target_tab", value).apply()
+
     // 카카오톡 수신 메시지 구글 시트 자동 동기화 설정 (신규 설치 시 기본 꺼짐: false)
     var isKakaoSheetSyncEnabled: Boolean
         get() = prefs.getBoolean("is_kakao_sheet_sync_enabled", false)
