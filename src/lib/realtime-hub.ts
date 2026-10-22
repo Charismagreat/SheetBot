@@ -305,7 +305,10 @@ class SheetBotRealtimeHub {
 
       const timer = setTimeout(() => {
         this.debounceTimers.delete(debounceKey);
-        console.log(`[RealtimeHub] 📩 DB 변경 브로드캐스트: table=${tableName}, action=${params.action}`);
+        // 빈번한 기기 핑/하트비트 갱신으로 인한 로그 스팸 방지
+        if (tableName !== 'sheetbot_user_devices') {
+          console.log(`[RealtimeHub] 📩 DB 변경 브로드캐스트: table=${tableName}, action=${params.action}`);
+        }
 
         for (const topic of topics) {
           this.broadcast(topic, {
