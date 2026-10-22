@@ -35,7 +35,7 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putString("device_token", value).apply()
 
     var isPaired: Boolean
-        get() = prefs.getBoolean("is_paired", false) && !userEmail.isNullOrBlank()
+        get() = (prefs.getBoolean("is_paired", false) && !userEmail.isNullOrBlank()) || isFtsPaired
         set(value) = prefs.edit().putBoolean("is_paired", value).apply()
 
     // 🎯 전송 목적지 제어: GOOGLE_SHEETS (구글 시트/드라이브) vs FILE_TO_SHEET (파일투시트 직결)

@@ -20,3 +20,9 @@
 ./gradlew assembleDebug
 ```
 빌드된 APK는 `app/build/outputs/apk/release/`에 생성됩니다.
+
+---
+
+## 🔍 페어링 트러블슈팅 가이드
+앱 설치 후 페어링 반복, 구글 원클릭 로그인 오류(DEVELOPER_ERROR 10), 수동 PIN 또는 QR 인증 이슈가 발생할 경우 아래 문서를 참조하세요:
+- [모바일 앱 페어링 트러블슈팅 가이드 (OAuth SHA-1, PIN 및 FTS 인증)](../../docs/MOBILE_APP_PAIRING_TROUBLESHOOTING.md)

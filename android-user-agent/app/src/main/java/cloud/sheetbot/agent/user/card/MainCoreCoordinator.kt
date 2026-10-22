@@ -273,16 +273,19 @@ class MainCoreCoordinator(
                 card.fileUploadCardController.refreshFtsUi()
             }
 
-            if (isPaired && !email.isNullOrBlank()) {
+            val isFts = prefs.isDestinationFileToSheet && prefs.isFtsPaired
+            if (isPaired) {
                 binding.layoutUnlinkZone.visibility = View.VISIBLE
                 val isWalletHidden = prefs.hiddenCardKeys.contains("cardWallet")
-                binding.layoutWalletCard.visibility = if (isWalletHidden) View.GONE else View.VISIBLE
+                binding.layoutWalletCard.visibility = if (isWalletHidden || isFts) View.GONE else View.VISIBLE
                 binding.layoutUnpairedControls.visibility = View.GONE
-                if (card.isTokenWalletInitialized) {
-                    card.tokenWalletCardController.loadWalletBalance(email)
-                }
-                if (card.isCallRecordInitialized) {
-                    card.callRecordCardController.refreshVoiceProfileStatus(email)
+                if (!email.isNullOrBlank()) {
+                    if (card.isTokenWalletInitialized) {
+                        card.tokenWalletCardController.loadWalletBalance(email)
+                    }
+                    if (card.isCallRecordInitialized) {
+                        card.callRecordCardController.refreshVoiceProfileStatus(email)
+                    }
                 }
             } else {
                 binding.layoutUnlinkZone.visibility = View.GONE

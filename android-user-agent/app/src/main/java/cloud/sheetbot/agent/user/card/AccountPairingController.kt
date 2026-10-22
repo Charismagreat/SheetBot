@@ -84,11 +84,11 @@ class AccountPairingController(
 
     fun showUnlinkConfirmDialog() {
         AlertDialog.Builder(activity)
-            .setTitle("계정 삭제")
-            .setMessage("시트봇 계정 및 등록된 스마트폰 기기 정보를 삭제하시겠습니까?\n삭제 시 더 이상 고객 알림 및 구글 시트 자동화가 연동되지 않습니다.")
-            .setPositiveButton("삭제") { _, _ ->
+            .setTitle("연동 해제 및 초기화")
+            .setMessage("연동된 계정 및 스마트폰 기기 연결을 해제하시겠습니까?\n해제 시 더 이상 데이터가 실시간 연동되지 않습니다.")
+            .setPositiveButton("해제") { _, _ ->
                 val emailToUnlink = prefs.userEmail
-                if (!emailToUnlink.isNullOrBlank()) {
+                if (!emailToUnlink.isNullOrBlank() && !emailToUnlink.endsWith("@filetosheet.cloud")) {
                     scope.launch {
                         ApiClient.unlinkDevice(emailToUnlink, "${Build.MANUFACTURER} ${Build.MODEL}")
                     }
@@ -96,7 +96,7 @@ class AccountPairingController(
                 prefs.clear()
                 KeepAliveService.stop(activity)
                 onUnlinkSuccess()
-                Toast.makeText(activity, "계정 정보가 삭제되고 연동이 해제되었습니다.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(activity, "연동이 정상적으로 해제되었습니다.", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("취소", null)
             .show()
@@ -254,6 +254,10 @@ class AccountPairingController(
                     prefs.ftsProjectName = pName
                     prefs.ftsProjectId = pId
                     prefs.uploadDestination = AppPreferences.DESTINATION_FILE_TO_SHEET
+                    prefs.isPaired = true
+                    if (prefs.userEmail.isNullOrBlank()) {
+                        prefs.userEmail = "fts_${pName.replace(' ', '_')}@filetosheet.cloud"
+                    }
 
                     AlertDialog.Builder(activity)
                         .setTitle("🎉 파일투시트 연동 성공")
@@ -552,6 +556,10 @@ class AccountPairingController(
                             prefs.ftsProjectName = result.projectName ?: "내 비즈니스 장부"
                             prefs.ftsEndpoint = FileToSheetClient.FTS_OFFICIAL_DOMAIN
                             prefs.uploadDestination = AppPreferences.DESTINATION_FILE_TO_SHEET
+                            prefs.isPaired = true
+                            if (prefs.userEmail.isNullOrBlank()) {
+                                prefs.userEmail = "fts_${phoneNumber.takeLast(4)}@filetosheet.cloud"
+                            }
 
                             // 2대 기본 시트 토큰 자동 바인딩
                             for (sheet in result.defaultSheets) {
