@@ -32,6 +32,8 @@ interface StreamClient {
   topic: RealtimeTopic;
   encoder: TextEncoder;
   pingTimer: NodeJS.Timeout;
+  lifetimeTimer?: NodeJS.Timeout;
+  closeOnEvent?: boolean;
 }
 
 // 테이블과 토픽 간의 매핑 관계
@@ -76,20 +78,41 @@ class SheetBotRealtimeHub {
   }
 
   /**
-   * 브라우저 클라이언트 등록
+   * 브라우저 및 모바일 클라이언트 등록
    */
   public registerClient(
     controller: ReadableStreamDefaultController<Uint8Array>,
     reqSignal: AbortSignal,
-    options: { userEmail: string; topic?: RealtimeTopic }
+    options: {
+      userEmail: string;
+      topic?: RealtimeTopic;
+      closeOnEvent?: boolean;
+      maxLifetimeMs?: number;
+      dedupeByEmailAndTopic?: boolean;
+    }
   ): void {
     const clientId = `client_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const encoder = new TextEncoder();
     const topic = options.topic || 'all';
+    const normalizedEmail = (options.userEmail || '').toLowerCase().trim();
 
-    // 1. 프록시/리버스 프록시 버퍼 즉시 플러시용 난수 프리앰블(압축 후에도 5KB+ 유지되어 Render/Nginx 4KB 버퍼 즉시 관통) 및 웰컴 패킷
-    const randomBuffer = crypto.randomBytes(4096).toString('base64');
-    const preamble = `: ${randomBuffer}\n\n`;
+    // 동일 이메일+토픽의 기존 유휴 연결이 남아있으면 즉시 정리하여 좀비 연결 누적 방지
+    if (options.dedupeByEmailAndTopic && normalizedEmail) {
+      for (const [existingId, existingClient] of this.clients.entries()) {
+        if (
+          existingClient.userEmail.toLowerCase().trim() === normalizedEmail &&
+          existingClient.topic === topic &&
+          existingClient.closeOnEvent === options.closeOnEvent
+        ) {
+          this.unregisterClient(existingId);
+        }
+      }
+    }
+
+    // 1. 프록시/리버스 프록시 버퍼 즉시 플러시용 난수 프리앰블 및 웰컴 패킷
+    const preamble = options.closeOnEvent
+      ? ''
+      : `: ${crypto.randomBytes(4096).toString('base64')}\n\n`;
     const welcome = `data: ${JSON.stringify({
       type: 'CONNECTED',
       topic,
@@ -114,6 +137,17 @@ class SheetBotRealtimeHub {
       }
     }, 15000);
 
+    // 3. 터널 프록시 호환용 최대 수명 타이머 (지정 시간 도달 시 정상 종료하여 응답 플러시 보장)
+    const lifetimeTimer =
+      options.maxLifetimeMs && options.maxLifetimeMs > 0
+        ? setTimeout(() => {
+            try {
+              controller.enqueue(encoder.encode(': keepalive\n\n'));
+            } catch {}
+            this.unregisterClient(clientId);
+          }, options.maxLifetimeMs)
+        : undefined;
+
     const client: StreamClient = {
       id: clientId,
       controller,
@@ -121,10 +155,14 @@ class SheetBotRealtimeHub {
       topic,
       encoder,
       pingTimer,
+      lifetimeTimer,
+      closeOnEvent: options.closeOnEvent,
     };
 
     this.clients.set(clientId, client);
-    console.log(`[RealtimeHub] 클라이언트 연결됨: ${clientId} (${options.userEmail}) [Topic: ${topic}] | 총 활성: ${this.clients.size}`);
+    if (!options.closeOnEvent) {
+      console.log(`[RealtimeHub] 클라이언트 연결됨: ${clientId} (${options.userEmail}) [Topic: ${topic}] | 총 활성: ${this.clients.size}`);
+    }
 
     // 업스트림(이지데스크 SSE) 연결 확인 및 보장
     this.ensureUpstream();
@@ -143,11 +181,16 @@ class SheetBotRealtimeHub {
     if (!client) return;
 
     clearInterval(client.pingTimer);
+    if (client.lifetimeTimer) {
+      clearTimeout(client.lifetimeTimer);
+    }
     try {
       client.controller.close();
     } catch {}
     this.clients.delete(clientId);
-    console.log(`[RealtimeHub] 클라이언트 연결 종료: ${clientId} | 남은 접속자: ${this.clients.size}`);
+    if (!client.closeOnEvent) {
+      console.log(`[RealtimeHub] 클라이언트 연결 종료: ${clientId} | 남은 접속자: ${this.clients.size}`);
+    }
   }
 
   /**
@@ -155,19 +198,39 @@ class SheetBotRealtimeHub {
    */
   public broadcast(targetTopic: RealtimeTopic, payload: Record<string, any>): void {
     const dataString = `data: ${JSON.stringify(payload)}\n\n`;
-    const deadClients: string[] = [];
+    const clientsToClose: string[] = [];
 
     for (const [id, client] of this.clients.entries()) {
       if (client.topic === 'all' || client.topic === targetTopic) {
+        // 모바일 단발성 스트림(closeOnEvent)은 실제 발송 대기열 이벤트에만 반응하도록 필터링
+        if (client.closeOnEvent) {
+          const isDispatchEvent =
+            payload.type === 'NEW_DISPATCH' ||
+            payload.tableName === 'sheetbot_user_dispatch_logs';
+          if (!isDispatchEvent) continue;
+
+          if (
+            payload.userEmail &&
+            client.userEmail &&
+            String(payload.userEmail).toLowerCase().trim() !==
+              client.userEmail.toLowerCase().trim()
+          ) {
+            continue;
+          }
+        }
+
         try {
           client.controller.enqueue(client.encoder.encode(dataString));
+          if (client.closeOnEvent) {
+            clientsToClose.push(id);
+          }
         } catch {
-          deadClients.push(id);
+          clientsToClose.push(id);
         }
       }
     }
 
-    for (const id of deadClients) {
+    for (const id of clientsToClose) {
       this.unregisterClient(id);
     }
   }

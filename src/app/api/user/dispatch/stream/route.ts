@@ -35,6 +35,9 @@ export async function GET(req: NextRequest) {
       realtimeHub.registerClient(controller, req.signal, {
         userEmail,
         topic: "sms",
+        closeOnEvent: true,
+        maxLifetimeMs: 25000,
+        dedupeByEmailAndTopic: true,
       });
     },
   });

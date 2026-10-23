@@ -329,28 +329,41 @@ class KeepAliveService : Service() {
         }
     }
 
-        // ==========================================
+    // ==========================================
     // ⚡ 실시간 SSE 대기열 감시 (0초 발송)
     // ==========================================
+    private val sseStreamClient: okhttp3.OkHttpClient by lazy {
+        okhttp3.OkHttpClient.Builder()
+            .readTimeout(45, java.util.concurrent.TimeUnit.SECONDS)
+            .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
+
     private fun startDispatchSseLoop() {
         dispatchSseJob?.cancel()
         dispatchSseJob = serviceScope.launch(Dispatchers.IO) {
             delay(1500L)
+            var hasSyncedInitialQueue = false
+            var consecutiveFastDisconnects = 0
+
             while (isActive) {
                 val email = prefs.userEmail
-                if (!prefs.isPaired || email.isNullOrBlank()) {
-                    delay(10000L)
+                if (!prefs.isPaired || email.isNullOrBlank() || email.endsWith("@filetosheet.cloud")) {
+                    delay(15000L)
                     continue
                 }
 
+                var connectedAndHealthy = false
+                var receivedDispatchEvent = false
+                val attemptStartMs = System.currentTimeMillis()
+
                 try {
                     val hosts = listOf(ApiClient.PRIMARY_HOST, ApiClient.FALLBACK_HOST)
-                    var connected = false
 
                     for (host in hosts) {
                         if (!isActive) break
                         val sseUrl = "$host/api/user/dispatch/stream?userEmail=" + java.net.URLEncoder.encode(email, "UTF-8")
-                        Log.i(TAG, "⚡ [SSE] 실시간 발송 대기열 스트림 연결 시도: $sseUrl")
 
                         val request = okhttp3.Request.Builder()
                             .url(sseUrl)
@@ -358,48 +371,67 @@ class KeepAliveService : Service() {
                             .header("Cache-Control", "no-cache")
                             .build()
 
-                        val streamClient = okhttp3.OkHttpClient.Builder()
-                            .readTimeout(0, java.util.concurrent.TimeUnit.MILLISECONDS)
-                            .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                            .build()
-
                         try {
-                            val response = streamClient.newCall(request).execute()
-                            if (response.isSuccessful && response.body != null) {
-                                connected = true
-                                Log.i(TAG, "⚡ [SSE] 실시간 발송 대기열 연결 수립 성공 ($host)")
+                            sseStreamClient.newCall(request).execute().use { response ->
+                                if (response.isSuccessful && response.body != null) {
+                                    if (!hasSyncedInitialQueue) {
+                                        hasSyncedInitialQueue = true
+                                        Log.i(TAG, "⚡ [SSE] 실시간 발송 대기열 최초 연결 성공 ($host)")
+                                        SmsSenderUtil.processPendingReceipts(this@KeepAliveService)
+                                    }
 
-                                // 연결 수립 즉시 밀린 대기열 1회 확인
-                                SmsSenderUtil.processPendingReceipts(this@KeepAliveService)
-
-                                val reader = response.body!!.byteStream().bufferedReader(Charsets.UTF_8)
-                                while (isActive) {
-                                    val line = reader.readLine() ?: break
-                                    val trimmed = line.trim()
-                                    if (trimmed.startsWith("data:")) {
-                                        val data = trimmed.substring(5).trim()
-                                        if (data.contains("NEW_DISPATCH") || data.contains("DATA_CHANGED")) {
-                                            Log.i(TAG, "⚡ [SSE 이벤트 감지] 신규 발송 요청 즉각 처리!")
-                                            serviceScope.launch {
-                                                SmsSenderUtil.processPendingReceipts(this@KeepAliveService)
+                                    val reader = response.body!!.byteStream().bufferedReader(Charsets.UTF_8)
+                                    while (isActive) {
+                                        val line = reader.readLine() ?: break
+                                        val trimmed = line.trim()
+                                        if (trimmed.startsWith("data:")) {
+                                            val data = trimmed.substring(5).trim()
+                                            if (
+                                                data.contains("NEW_DISPATCH") ||
+                                                (data.contains("DATA_CHANGED") && data.contains("sheetbot_user_dispatch_logs"))
+                                            ) {
+                                                receivedDispatchEvent = true
+                                                Log.i(TAG, "⚡ [SSE 이벤트 감지] 신규 발송 요청 즉각 처리!")
+                                                serviceScope.launch {
+                                                    SmsSenderUtil.processPendingReceipts(this@KeepAliveService)
+                                                }
                                             }
                                         }
                                     }
+                                    val elapsedMs = System.currentTimeMillis() - attemptStartMs
+                                    if (receivedDispatchEvent || elapsedMs >= 15000L) {
+                                        connectedAndHealthy = true
+                                    }
+                                } else {
+                                    Log.w(TAG, "⚡ [SSE] 비정상 응답 (HTTP ${response.code}, $host)")
                                 }
-                                response.close()
                             }
                         } catch (e: Exception) {
-                            Log.w(TAG, "⚡ [SSE] 스트림 연결 중단 ($host): " + e.message)
+                            val elapsedMs = System.currentTimeMillis() - attemptStartMs
+                            if (elapsedMs >= 15000L) {
+                                connectedAndHealthy = true
+                            } else {
+                                Log.w(TAG, "⚡ [SSE] 스트림 연결 중단 ($host): " + e.message)
+                            }
                         }
 
-                        if (connected) break
+                        if (connectedAndHealthy || receivedDispatchEvent) break
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "⚡ [SSE] 루프 예외: " + e.message)
                 }
 
-                // 연결 단절 시 3초 후 재연결 시도
-                delay(3000L)
+                if (receivedDispatchEvent) {
+                    consecutiveFastDisconnects = 0
+                    delay(1000L)
+                } else if (connectedAndHealthy) {
+                    consecutiveFastDisconnects = 0
+                    delay(3000L)
+                } else {
+                    consecutiveFastDisconnects = (consecutiveFastDisconnects + 1).coerceAtMost(6)
+                    val backoffMs = (10000L * (1 shl (consecutiveFastDisconnects - 1))).coerceAtMost(60000L)
+                    delay(backoffMs)
+                }
             }
         }
     }
