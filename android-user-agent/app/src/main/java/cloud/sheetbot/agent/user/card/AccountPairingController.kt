@@ -569,19 +569,39 @@ class AccountPairingController(
 
                             // 2대 기본 시트 토큰 자동 바인딩
                             for (sheet in result.defaultSheets) {
-                                if (sheet.type == "receipt") {
-                                    prefs.ftsReceiptToken = sheet.token
-                                    prefs.ftsReceiptSheetName = sheet.sheetName
-                                    prefs.ftsSheetName = sheet.sheetName
-                                    prefs.ftsToken = sheet.token
-                                } else if (sheet.type == "business_card") {
-                                    prefs.ftsBusinessCardToken = sheet.token
-                                    prefs.ftsBusinessCardSheetName = sheet.sheetName
+                                prefs.saveFtsSheetBinding(
+                                    cardIdOrType = sheet.type,
+                                    token = sheet.token,
+                                    sheetName = sheet.sheetName,
+                                    webhookUrl = sheet.webhookUrl,
+                                    projectId = result.projectId
+                                )
+                            }
+
+                            // 신규 ensure-sheet API를 백그라운드로 호출하여 표준 헤더 스키마(Schema Evolution) 및 토큰 100% 보장
+                            scope.launch(Dispatchers.IO) {
+                                for (coreCardId in listOf("receipt_scanner", "business_card")) {
+                                    val ensureRes = FileToSheetClient.ensureSheet(
+                                        phoneNumber = phoneNumber,
+                                        cardId = coreCardId,
+                                        projectId = prefs.ftsProjectId
+                                    )
+                                    if (ensureRes.success && !ensureRes.token.isNullOrBlank()) {
+                                        prefs.saveFtsSheetBinding(
+                                            cardIdOrType = coreCardId,
+                                            token = ensureRes.token,
+                                            sheetName = ensureRes.sheetName,
+                                            webhookUrl = ensureRes.webhookUrl,
+                                            projectId = ensureRes.projectId
+                                        )
+                                    }
                                 }
                             }
 
-                            // 2대 핵심 카드(영수증, 명함)만 홈 화면에 미니멀하게 기본 배치
-                            prefs.activeCardOrder = listOf("cardPaymentReceipt", "cardContactsBackup")
+                            // 핵심 카드(영수증/명함 카메라 업로드 카드, 매장결제, 연락처) 홈 화면에 기본 배치 및 숨김 해제
+                            val coreCards = listOf("cardFileUpload", "cardPaymentReceipt", "cardContactsBackup")
+                            prefs.hiddenCardKeys = prefs.hiddenCardKeys - coreCards.toSet()
+                            prefs.activeCardOrder = coreCards
 
                             AlertDialog.Builder(activity)
                                 .setTitle("🎉 [File to Sheet] 연결 성공")

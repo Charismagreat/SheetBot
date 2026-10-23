@@ -100,8 +100,8 @@ class FileUploadCardController(
 
         binding.btnPickAndUploadFile.setOnClickListener {
             if (prefs.isDestinationFileToSheet) {
-                if (!prefs.isFtsPaired) {
-                    Toast.makeText(activity, "먼저 파일투시트 QR코드를 스캔해 주세요.", Toast.LENGTH_SHORT).show()
+                if (!prefs.isFtsPaired && prefs.ftsPhoneNumber.isNullOrBlank()) {
+                    Toast.makeText(activity, "먼저 파일투시트 번호 인증 또는 QR코드를 스캔해 주세요.", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
             } else if (!prefs.isPaired) {
@@ -120,9 +120,9 @@ class FileUploadCardController(
         if (isFts) {
             rbDestFileToSheet.isChecked = true
             layoutFtsStatusContainer.visibility = View.VISIBLE
-            if (prefs.isFtsPaired) {
-                val sheetName = prefs.ftsSheetName ?: "파일투시트"
-                val projectName = prefs.ftsProjectName ?: ""
+            if (prefs.isFtsPaired || !prefs.ftsPhoneNumber.isNullOrBlank()) {
+                val sheetName = prefs.ftsSheetName ?: prefs.getFtsSheetNameFor("receipt_scanner") ?: "파일투시트"
+                val projectName = prefs.ftsProjectName ?: "내 비즈니스 장부"
                 tvFtsStatusTitle.text = "🟢 직결 연결됨: [$sheetName]"
                 tvFtsStatusDesc.text = "프로젝트: [$projectName]\n사진/영수증 촬영 시 구글 드라이브 없이 0.2초 만에 즉시 적재"
                 btnScanFtsQr.text = "📷 QR 다시 스캔 (대상 시트 변경)"
@@ -158,8 +158,8 @@ class FileUploadCardController(
     fun uploadFiles(uris: List<Uri>, memo: String) {
         val isFts = prefs.isDestinationFileToSheet
         if (isFts) {
-            if (!prefs.isFtsPaired) {
-                Toast.makeText(activity, "⚠️ 파일투시트 QR코드 연동 후 파일을 전송할 수 있습니다.", Toast.LENGTH_LONG).show()
+            if (!prefs.isFtsPaired && prefs.ftsPhoneNumber.isNullOrBlank()) {
+                Toast.makeText(activity, "⚠️ 파일투시트 번호 인증 또는 QR코드 연동 후 파일을 전송할 수 있습니다.", Toast.LENGTH_LONG).show()
                 return
             }
         } else if (!prefs.isPaired) {
@@ -168,7 +168,8 @@ class FileUploadCardController(
         }
 
         binding.progressBar.visibility = View.VISIBLE
-        val targetDesc = if (isFts) "파일투시트 [${prefs.ftsSheetName}]" else "구글 드라이브"
+        val ftsTargetName = prefs.getFtsSheetNameFor("file_upload") ?: prefs.ftsSheetName ?: "파일투시트"
+        val targetDesc = if (isFts) "파일투시트 [$ftsTargetName]" else "구글 드라이브"
         Toast.makeText(activity, "🚀 ${uris.size}건의 파일을 ${targetDesc}로 전송합니다...", Toast.LENGTH_SHORT).show()
 
         scope.launch {
@@ -179,7 +180,10 @@ class FileUploadCardController(
 
                 if (successCount > 0) {
                     if (isFts) {
-                        val sName = prefs.ftsSheetName ?: "파일투시트"
+                        val sName = results.firstOrNull { it.success }?.folderName?.takeIf { it.isNotBlank() }
+                            ?: prefs.getFtsSheetNameFor("file_upload")
+                            ?: prefs.ftsSheetName
+                            ?: "파일투시트"
                         Toast.makeText(
                             activity,
                             "✅ [$sName] 시트에 ${successCount}건이 전송되었습니다!",

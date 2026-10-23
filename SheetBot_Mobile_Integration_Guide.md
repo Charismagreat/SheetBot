@@ -1,9 +1,9 @@
 # 📱 [공식 가이드] 시트봇 모바일 에이전트앱 ↔ 파일투시트(FileToSheet) 직결 연동 기술 명세서
 
-> **버전**: v1.0.0 (Release)  
+> **버전**: v1.1.0 (Release)  
 > **대상**: 시트봇 모바일앱(Android / iOS / Flutter) 클라이언트 개발팀  
 > **서버 호환성**: 파일투시트 API v1 (`/api/inbox/*`)  
-> **작성 일시**: 2026-10-18  
+> **작성 일시**: 2026-10-23  
 
 ---
 
@@ -19,12 +19,11 @@ sequenceDiagram
     participant FTS as ⚡ 파일투시트 서버 (/api/inbox)
     participant DB as 💾 파일투시트 물리 DB
 
-    Note over User, FTS: 1단계: 1초 페어링 (최초 1회)
-    User->>FTS: 웹 화면 [📱 모바일 연동] 클릭 ➔ QR코드 표시
-    User->>App: [목적지 추가] ➔ 카메라로 QR코드 스캔
-    App->>FTS: GET /api/inbox/{token} (유효성 검증)
-    FTS-->>App: 200 OK (프로젝트명, 시트명 반환)
-    App-->>User: "연결 성공: [법인카드 영수증] 시트에 연결됨"
+    Note over User, FTS: 1단계: 1초 페어링 & 시트 자동 프로비저닝
+    User->>App: 휴대폰 번호 인증 또는 QR코드 스캔
+    App->>FTS: POST /api/inbox/ensure-sheet (cardId, sheetName, headers)
+    FTS-->>App: 200 OK (시트 재사용/신규생성, Schema Evolution, token 반환)
+    App-->>User: "연결 성공: [영수증대장] 시트에 연결됨"
 
     Note over User, FTS: 2단계: 실시간 데이터 전송 (반복 실행)
     User->>App: 스마트폰에서 영수증 촬영 또는 공유하기
@@ -46,7 +45,7 @@ sequenceDiagram
   "service": "FileToSheet",
   "action": "sheet_ingest",
   "token": "fts_inbox_g3ayjwzb7q",
-  "endpoint": "https://filetosheet.com/api/inbox/fts_inbox_g3ayjwzb7q",
+  "endpoint": "https://file2sheet.cloud/api/inbox/fts_inbox_g3ayjwzb7q",
   "sheetName": "법인카드_영수증_대장",
   "projectName": "2026 하반기 지출결의",
   "projectId": "proj_179230584"
@@ -63,9 +62,6 @@ sequenceDiagram
 | `sheetName` | `string` | 연동될 파일투시트의 대상 시트 이름 |
 | `projectName`| `string` | 대상 프로젝트 이름 |
 
-> **앱 클라이언트 처리 팁**:  
-> 사용자가 QR코드를 스캔했을 때 `service === "FileToSheet"`인 경우, 앱 내부 로컬 DB(SharedPreferences 또는 Room)에 `token`, `endpoint`, `sheetName`을 저장하고 즉시 페어링 검증 API(1번)를 호출하십시오.
-
 ---
 
 ## 3. API 상세 명세
@@ -75,7 +71,7 @@ sequenceDiagram
 모바일앱이 QR 코드를 스캔하거나 사용자가 토큰을 직접 붙여넣었을 때, 대상 시트가 실존하고 활성 상태인지 확인합니다.
 
 - **HTTP Method**: `GET`
-- **URL**: `{endpoint}` 또는 `https://filetosheet.com/api/inbox/{token}`
+- **URL**: `{endpoint}` 또는 `https://file2sheet.cloud/api/inbox/{token}`
 - **Headers**:
   ```http
   Accept: application/json
@@ -113,7 +109,7 @@ sequenceDiagram
 **Multipart/Form-Data(사진 바이너리)** 또는 **JSON(정형 데이터)** 2가지 방식을 모두 지원합니다.
 
 - **HTTP Method**: `POST`
-- **URL**: `{endpoint}` 또는 `https://filetosheet.com/api/inbox/{token}`
+- **URL**: `{endpoint}` 또는 `https://file2sheet.cloud/api/inbox/{token}`
 
 #### [방식 A] 사진/파일 직접 전송 (`multipart/form-data`) — 가장 권장
 
@@ -121,7 +117,7 @@ sequenceDiagram
 | :--- | :---: | :---: | :--- |
 | `file` | `Binary/File` | **필수** | 영수증/발주서/명함 이미지 (`.jpg`, `.png`, `.pdf`) |
 | `memo` | `string` | 선택 | 사용자 메모 (예: "고객사 접대 미팅") |
-| `ocrType` | `string` | 선택 | 문서 종류 (`RECEIPT`, `ORDER`, `INVOICE`, `GENERIC`) |
+| `ocrType` | `string` | 선택 | 문서 종류 (`RECEIPT`, `BUSINESS_CARD`, `ORDER`, `INVOICE`, `GENERIC`) |
 | `deviceId` | `string` | 선택 | 스마트폰 기기 식별명 (예: "Galaxy S24 Ultra") |
 
 #### [방식 B] 정형 데이터 직접 전송 (`application/json`)
@@ -164,123 +160,82 @@ sequenceDiagram
 
 ---
 
-## 4. 클라이언트 구현 샘플 코드
+### API 3. 시트 자동 프로비저닝 및 스키마 확장 (POST)
 
-### 1) Android (Kotlin + OkHttp)
+모바일 카드가 활성화되거나 데이터를 최초 전송할 때 대상 시트를 자동으로 생성·조회하고 헤더 스키마를 동기화합니다.
 
-```kotlin
-import okhttp3.*
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.RequestBody.Companion.asRequestBody
-import java.io.File
+- **호출 URL**: `POST https://file2sheet.cloud/api/inbox/ensure-sheet`  
+  *(로컬 개발 시: `http://localhost:4007/api/inbox/ensure-sheet`)*
+- **Content-Type**: `application/json`
 
-class FileToSheetClient(private val endpoint: String) {
-    private val client = OkHttpClient()
-
-    // 1. QR코드 스캔 후 페어링 검증
-    fun verifyPairing(onResult: (Boolean, String?) -> Unit) {
-        val request = Request.Builder().url(endpoint).get().build()
-        client.newCall(request).enqueue(object : Callback {
-            override fun onResponse(call: Call, response: Response) {
-                onResult(response.isSuccessful, response.body?.string())
-            }
-            override fun onFailure(call: Call, e: java.io.IOException) {
-                onResult(false, e.message)
-            }
-        })
-    }
-
-    // 2. 영수증 사진 파일 전송
-    fun uploadReceiptPhoto(imageFile: File, memo: String, onResult: (Boolean) -> Unit) {
-        val requestBody = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart(
-                "file",
-                imageFile.name,
-                imageFile.asRequestBody("image/jpeg".toMediaTypeOrNull())
-            )
-            .addFormDataPart("memo", memo)
-            .addFormDataPart("ocrType", "RECEIPT")
-            .build()
-
-        val request = Request.Builder()
-            .url(endpoint)
-            .post(requestBody)
-            .build()
-
-        client.newCall(request).enqueue(object : Callback {
-            override fun onResponse(call: Call, response: Response) {
-                onResult(response.isSuccessful)
-            }
-            override fun onFailure(call: Call, e: java.io.IOException) {
-                onResult(false)
-            }
-        })
-    }
+#### Request Body:
+```json
+{
+  "phoneNumber": "01072165884",
+  "cardId": "receipt_scanner",
+  "sheetName": "영수증대장",
+  "headers": [
+    "일련번호", "거래일자", "상호", "품목",
+    "공급가액", "부가가치세", "합계금액", "결제수단"
+  ]
 }
 ```
 
-### 2) Flutter / Dart (http 패키지)
-
-```dart
-import 'dart:io';
-import 'package:http/http.dart' as http;
-
-Future<bool> uploadToSheet({
-  required String endpoint,
-  required File imageFile,
-  required String memo,
-}) async {
-  final uri = Uri.parse(endpoint);
-  final request = http.MultipartRequest('POST', uri)
-    ..fields['memo'] = memo
-    ..fields['ocrType'] = 'RECEIPT'
-    ..files.add(await http.MultipartFile.fromPath('file', imageFile.path));
-
-  final response = await request.send();
-  return response.statusCode == 200;
+#### Response (HTTP 200 OK):
+```json
+{
+  "success": true,
+  "isNew": true,
+  "projectId": 46,
+  "sheetName": "영수증대장",
+  "headers": ["일련번호", "거래일자", "상호", "품목", "공급가액", "부가가치세", "합계금액", "결제수단"],
+  "token": "fts_inbox_wqxwabdt39",
+  "webhookUrl": "https://file2sheet.cloud/api/inbox/fts_inbox_wqxwabdt39"
 }
 ```
 
-### 3) cURL 모의 테스트 명령
+#### 핵심 특징:
+- **멱등성 보장 (Idempotency)**: 중복 호출 시 이미 존재하는 시트를 찾아 안전하게 재사용합니다.
+- **스키마 자동 진화 (Schema Evolution)**: 모바일 카드가 새 컬럼을 추가해 보내면 기존 시트의 헤더도 자동으로 확장됩니다.
+
+---
+
+## 4. cURL 모의 테스트 명령
 
 ```bash
+# 0. 시트 자동 프로비저닝 (ensure-sheet)
+curl -X POST "http://localhost:4007/api/inbox/ensure-sheet" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phoneNumber": "01072165884",
+    "cardId": "receipt_scanner",
+    "sheetName": "영수증대장",
+    "headers": ["일련번호", "거래일자", "상호", "품목", "공급가액", "부가가치세", "합계금액", "결제수단"]
+  }'
+
 # 1. 페어링 검증
-curl -X GET "http://localhost:4003/api/inbox/fts_inbox_g3ayjwzb7q"
+curl -X GET "http://localhost:4007/api/inbox/fts_inbox_wqxwabdt39"
 
 # 2. 사진 파일 전송 (Multipart)
-curl -X POST "http://localhost:4003/api/inbox/fts_inbox_g3ayjwzb7q" \
+curl -X POST "http://localhost:4007/api/inbox/fts_inbox_wqxwabdt39" \
   -F "file=@/path/to/receipt.jpg" \
   -F "memo=스타벅스 미팅" \
   -F "ocrType=RECEIPT"
 
 # 3. JSON 데이터 전송
-curl -X POST "http://localhost:4003/api/inbox/fts_inbox_g3ayjwzb7q" \
+curl -X POST "http://localhost:4007/api/inbox/fts_inbox_wqxwabdt39" \
   -H "Content-Type: application/json" \
   -d '{
     "fileName": "receipt.jpg",
     "memo": "강남역 점심 식대",
     "amount": 25000,
     "rowData": {
-      "일자": "2026-10-18",
-      "가맹점명": "을지다락 강남점",
-      "금액": 25000
+      "거래일자": "2026-10-18",
+      "상호": "을지다락 강남점",
+      "합계금액": 25000
     }
   }'
 ```
-
----
-
-## 5. 모바일앱 권장 UI/UX 흐름
-
-1. **설정 메뉴 내 전송 목적지 관리**:
-   - `[구글 스프레드시트]`와 `[파일투시트(FileToSheet)]` 라디오 버튼 제공.
-2. **파일투시트 선택 시**:
-   - **`[📷 QR 코드 스캔]`** 버튼 터치 ➔ 카메라 프리뷰 활성화 ➔ PC 화면 QR 인식 ➔ 대상 시트명 팝업 표시 및 저장.
-3. **촬영 및 전송 완료 화면**:
-   - 사진 촬영 후 전송 완료 시:  
-     `"✅ [법인카드_영수증_대장] 시트에 1건이 전송되었습니다!"`  
-     녹색 토스트 알림 노출 후 카메라 복귀.
 
 ---
 

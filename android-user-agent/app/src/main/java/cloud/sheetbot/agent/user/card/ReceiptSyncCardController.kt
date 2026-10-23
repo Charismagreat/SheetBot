@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
  *
  * - 영수증 사진/문서 선택 런처 연동
  * - Gemini AI OCR 결제 금액/상호명/품목 자동 분석
- * - 스마트 경비 영수증 구글 시트 대장 자동 기록
+ * - 스마트 경비 영수증 구글 시트 대장 또는 파일투시트(영수증대장) 자동 기록
  * - 시트 대장 원터치 뷰어 오픈
  */
 class ReceiptSyncCardController(
@@ -32,8 +32,8 @@ class ReceiptSyncCardController(
     fun setup() {
         binding.btnPickReceipt.setOnClickListener {
             if (prefs.isDestinationFileToSheet) {
-                if (!prefs.isFtsPaired) {
-                    Toast.makeText(activity, "먼저 파일투시트 QR코드를 스캔해 주세요.", Toast.LENGTH_SHORT).show()
+                if (!prefs.isFtsPaired && prefs.ftsPhoneNumber.isNullOrBlank()) {
+                    Toast.makeText(activity, "먼저 파일투시트 번호 인증 또는 QR코드를 스캔해 주세요.", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
             } else if (!prefs.isPaired) {
@@ -54,8 +54,8 @@ class ReceiptSyncCardController(
     fun uploadReceipt(uri: Uri) {
         val isFts = prefs.isDestinationFileToSheet
         if (isFts) {
-            if (!prefs.isFtsPaired) {
-                Toast.makeText(activity, "⚠️ 파일투시트 QR코드 연동 후 이용할 수 있습니다.", Toast.LENGTH_LONG).show()
+            if (!prefs.isFtsPaired && prefs.ftsPhoneNumber.isNullOrBlank()) {
+                Toast.makeText(activity, "⚠️ 파일투시트 번호 인증 또는 QR코드 연동 후 이용할 수 있습니다.", Toast.LENGTH_LONG).show()
                 return
             }
         } else if (!prefs.isPaired) {
@@ -64,7 +64,8 @@ class ReceiptSyncCardController(
         }
 
         binding.progressBar.visibility = View.VISIBLE
-        val targetName = if (isFts) "파일투시트 [${prefs.ftsSheetName}]" else "구글 시트"
+        val receiptSheetName = prefs.getFtsSheetNameFor("receipt_scanner") ?: "영수증대장"
+        val targetName = if (isFts) "파일투시트 [$receiptSheetName]" else "구글 시트"
         Toast.makeText(activity, "🧾 영수증을 $targetName 시트로 전송합니다...", Toast.LENGTH_SHORT).show()
 
         activity.lifecycleScope.launch {
@@ -74,7 +75,9 @@ class ReceiptSyncCardController(
 
                 if (result.success) {
                     if (isFts) {
-                        val sName = prefs.ftsSheetName ?: "파일투시트"
+                        val sName = result.folderName?.takeIf { it.isNotBlank() }
+                            ?: prefs.getFtsSheetNameFor("receipt_scanner")
+                            ?: "영수증대장"
                         Toast.makeText(
                             activity,
                             "✅ [$sName] 시트에 1건이 전송되었습니다!",

@@ -25,10 +25,52 @@ import java.util.Locale
  * - 갤러리/파일 탐색기 '공유하기(Share)' 인텐트 및 앱 내 직접 파일/사진 선택 지원
  * - 구글 드라이브 지정 폴더에 자동 업로드 및 [SheetBot] 대장 시트 실시간 기록
  * - v1.5.0: 영수증(RECEIPT) 및 명함(BUSINESS_CARD) AI OCR 자동 장부화 지원
+ * - v2.4.9: 파일투시트(FileToSheet) 카드별 전용 토큰 라우팅 및 ensure-sheet 온디맨드 자동 프로비저닝 연동
  */
 object FileUploadManager {
     private const val TAG = "FileUploadManager"
     private const val NOTIFICATION_CHANNEL_ID = "sheetbot_file_upload_channel"
+
+    /**
+     * ⚡ 파일투시트(FileToSheet) 업로드 전 대상 카드의 전용 시트 토큰/엔드포인트 보장 헬퍼
+     * - 휴대폰 번호 인증 사용자(`ftsPhoneNumber` 보유)인 경우 카드별 전용 토큰이 없으면
+     *   즉시 `POST /api/inbox/ensure-sheet`를 호출하여 시트 및 스키마 헤더를 자동 프로비저닝.
+     */
+    suspend fun resolveOrEnsureFtsSheet(
+        prefs: PreferencesManager,
+        typeOrOcrType: String?,
+        forceRefresh: Boolean = false
+    ): Pair<String, String> {
+        val canonicalId = FileToSheetClient.resolveCanonicalCardId(typeOrOcrType)
+        val existingSpecificToken = prefs.getSpecificFtsTokenFor(canonicalId)
+        val phone = prefs.ftsPhoneNumber
+
+        if ((forceRefresh || existingSpecificToken.isNullOrBlank()) && !phone.isNullOrBlank()) {
+            try {
+                val ensureRes = FileToSheetClient.ensureSheet(
+                    phoneNumber = phone,
+                    cardId = canonicalId,
+                    projectId = prefs.ftsProjectId
+                )
+                if (ensureRes.success && !ensureRes.token.isNullOrBlank()) {
+                    prefs.saveFtsSheetBinding(
+                        cardIdOrType = canonicalId,
+                        token = ensureRes.token,
+                        sheetName = ensureRes.sheetName,
+                        webhookUrl = ensureRes.webhookUrl,
+                        projectId = ensureRes.projectId
+                    )
+                    Log.i(TAG, "✅ [FTS 시트 자동 보장 완료] cardId=$canonicalId -> sheet=${ensureRes.sheetName} (${ensureRes.token})")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "⚠️ [FTS 시트 자동 보장 예외] cardId=$canonicalId: ${e.message}")
+            }
+        }
+
+        val endpoint = prefs.getFtsEndpointFor(canonicalId)
+        val sheetName = prefs.getFtsSheetNameFor(canonicalId) ?: "파일투시트"
+        return Pair(endpoint, sheetName)
+    }
 
     /**
      * 단일 URI 파일 업로드 (일반 파일 및 OCR 공용)
@@ -43,10 +85,10 @@ object FileUploadManager {
         val isFts = prefs.isDestinationFileToSheet
 
         if (isFts) {
-            if (!prefs.isFtsPaired) {
+            if (!prefs.isFtsPaired && prefs.ftsPhoneNumber.isNullOrBlank()) {
                 return@withContext UploadGenericFileResult(
                     success = false,
-                    error = "파일투시트(FileToSheet)와 연동되어 있지 않습니다. 먼저 QR코드를 스캔해 주세요."
+                    error = "파일투시트(FileToSheet)와 연동되어 있지 않습니다. 먼저 번호 인증 또는 QR코드를 스캔해 주세요."
                 )
             }
         } else {
@@ -76,9 +118,9 @@ object FileUploadManager {
         }
 
         if (isFts) {
-            val endpoint = FileToSheetClient.normalizeEndpoint(prefs.ftsEndpoint, prefs.ftsToken ?: "")
-            val sheetName = prefs.ftsSheetName ?: "파일투시트"
-            val memo = customMemo ?: when (ocrType?.uppercase()) {
+            val effectiveOcrType = ocrType ?: "GENERIC"
+            var (endpoint, sheetName) = resolveOrEnsureFtsSheet(prefs, effectiveOcrType)
+            val memo = customMemo ?: when (effectiveOcrType.uppercase()) {
                 "RECEIPT" -> "스마트폰 카메라 영수증 촬영 건"
                 "BUSINESS_CARD" -> "스마트폰 카메라 명함 촬영 건"
                 else -> "스마트폰 직결 파일 전송 건"
@@ -86,14 +128,29 @@ object FileUploadManager {
 
             Log.i(TAG, "⚡ [파일투시트 직결 전송 시작] ${meta.fileName} -> $endpoint ($sheetName)")
             val ftsResult = try {
-                FileToSheetClient.uploadFile(
+                var attempt = FileToSheetClient.uploadFile(
                     endpoint = endpoint,
                     file = tempFile,
                     mimeType = meta.mimeType,
                     memo = memo,
-                    ocrType = ocrType ?: "GENERIC",
+                    ocrType = effectiveOcrType,
                     deviceId = "${Build.MANUFACTURER} ${Build.MODEL}"
                 )
+                // 만료/변경된 시트 토큰일 경우 휴대폰 번호 기반으로 시트 재보장 후 1회 자동 재시도
+                if (!attempt.success && !prefs.ftsPhoneNumber.isNullOrBlank()) {
+                    val refreshed = resolveOrEnsureFtsSheet(prefs, effectiveOcrType, forceRefresh = true)
+                    endpoint = refreshed.first
+                    sheetName = refreshed.second
+                    attempt = FileToSheetClient.uploadFile(
+                        endpoint = endpoint,
+                        file = tempFile,
+                        mimeType = meta.mimeType,
+                        memo = memo,
+                        ocrType = effectiveOcrType,
+                        deviceId = "${Build.MANUFACTURER} ${Build.MODEL}"
+                    )
+                }
+                attempt
             } finally {
                 try {
                     if (tempFile.exists()) tempFile.delete()
@@ -121,7 +178,8 @@ object FileUploadManager {
                 return@withContext UploadGenericFileResult(
                     success = true,
                     fileName = meta.fileName,
-                    folderName = targetSheet
+                    folderName = targetSheet,
+                    ocrData = ftsResult.data
                 )
             } else {
                 val err = ftsResult.error ?: ftsResult.message ?: "파일투시트 전송 실패"
@@ -402,16 +460,15 @@ object FileUploadManager {
         val isFts = prefs.isDestinationFileToSheet
 
         if (isFts) {
-            if (!prefs.isFtsPaired) {
+            if (!prefs.isFtsPaired && prefs.ftsPhoneNumber.isNullOrBlank()) {
                 return@withContext UploadGenericFileResult(
                     success = false,
-                    error = "파일투시트(FileToSheet)와 연동되어 있지 않습니다. 먼저 QR코드를 스캔해 주세요."
+                    error = "파일투시트(FileToSheet)와 연동되어 있지 않습니다. 먼저 번호 인증 또는 QR코드를 스캔해 주세요."
                 )
             }
-            val endpoint = FileToSheetClient.normalizeEndpoint(prefs.ftsEndpoint, prefs.ftsToken ?: "")
-            val sheetName = prefs.ftsSheetName ?: "파일투시트"
+            var (endpoint, sheetName) = resolveOrEnsureFtsSheet(prefs, "business_card")
             val ftsResult = try {
-                FileToSheetClient.uploadFile(
+                var attempt = FileToSheetClient.uploadFile(
                     endpoint = endpoint,
                     file = tempFile,
                     mimeType = meta.mimeType,
@@ -419,6 +476,20 @@ object FileUploadManager {
                     ocrType = "BUSINESS_CARD",
                     deviceId = "${Build.MANUFACTURER} ${Build.MODEL}"
                 )
+                if (!attempt.success && !prefs.ftsPhoneNumber.isNullOrBlank()) {
+                    val refreshed = resolveOrEnsureFtsSheet(prefs, "business_card", forceRefresh = true)
+                    endpoint = refreshed.first
+                    sheetName = refreshed.second
+                    attempt = FileToSheetClient.uploadFile(
+                        endpoint = endpoint,
+                        file = tempFile,
+                        mimeType = meta.mimeType,
+                        memo = "스마트폰 카메라 명함 촬영 건",
+                        ocrType = "BUSINESS_CARD",
+                        deviceId = "${Build.MANUFACTURER} ${Build.MODEL}"
+                    )
+                }
+                attempt
             } finally {
                 try {
                     if (tempFile.exists()) tempFile.delete()
@@ -434,7 +505,8 @@ object FileUploadManager {
                 return@withContext UploadGenericFileResult(
                     success = true,
                     fileName = meta.fileName,
-                    folderName = targetSheet
+                    folderName = targetSheet,
+                    ocrData = ftsResult.data
                 )
             } else {
                 val err = ftsResult.error ?: ftsResult.message ?: "파일투시트 전송 실패"

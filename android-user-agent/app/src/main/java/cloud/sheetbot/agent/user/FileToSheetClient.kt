@@ -11,6 +11,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -22,6 +23,7 @@ import java.util.concurrent.TimeUnit
  * - API 1: GET /api/inbox/{token} (토큰 유효성 및 대상 시트 페어링 검증)
  * - API 2 [방식 A]: POST /api/inbox/{token} (Multipart/Form-Data 사진/바이너리 파일 직결 전송)
  * - API 2 [방식 B]: POST /api/inbox/{token} (Application/JSON 정형 데이터 직접 전송)
+ * - API 3: POST /api/inbox/ensure-sheet (시트 자동 프로비저닝 & Schema Evolution)
  */
 data class FtsPairingResult(
     val success: Boolean,
@@ -51,13 +53,21 @@ data class FtsVerifyResult(
     val error: String? = null
 )
 
+data class FtsCardSheetSpec(
+    val cardId: String,
+    val sheetName: String,
+    val headers: List<String>
+)
+
 data class FtsEnsureSheetResult(
     val success: Boolean,
     val isNew: Boolean = false,
     val projectId: String? = null,
     val projectName: String? = null,
+    val cardId: String? = null,
     val sheetType: String? = null,
     val sheetName: String? = null,
+    val headers: List<String> = emptyList(),
     val token: String? = null,
     val webhookUrl: String? = null,
     val error: String? = null
@@ -88,10 +98,111 @@ object FileToSheetClient {
         .build()
 
     /**
+     * 📋 모바일 카드별 파일투시트(FileToSheet) 표준 시트 스키마 레지스트리
+     * - POST /api/inbox/ensure-sheet 호출 시 cardId, sheetName, headers 자동 매핑 및 Schema Evolution 지원
+     */
+    val CARD_SHEET_SPECS: Map<String, FtsCardSheetSpec> = mapOf(
+        "receipt_scanner" to FtsCardSheetSpec(
+            cardId = "receipt_scanner",
+            sheetName = "영수증대장",
+            headers = listOf("일련번호", "거래일자", "상호", "품목", "공급가액", "부가가치세", "합계금액", "결제수단")
+        ),
+        "business_card" to FtsCardSheetSpec(
+            cardId = "business_card",
+            sheetName = "명함관리",
+            headers = listOf("일련번호", "등록일시", "성함", "직함", "회사명", "휴대폰", "이메일", "유선전화", "회사주소", "상세정보")
+        ),
+        "payment_sms" to FtsCardSheetSpec(
+            cardId = "payment_sms",
+            sheetName = "결제입금내역",
+            headers = listOf("일련번호", "일시", "구분", "금융사/채널", "계좌/카드번호", "고객/가맹점명", "금액", "거래내용", "수신기기")
+        ),
+        "call_recording" to FtsCardSheetSpec(
+            cardId = "call_recording",
+            sheetName = "통화녹음대장",
+            headers = listOf("일련번호", "통화일시", "상대방", "파일명", "파일크기", "요약내용", "비고")
+        ),
+        "sms_sync" to FtsCardSheetSpec(
+            cardId = "sms_sync",
+            sheetName = "문자송수신대장",
+            headers = listOf("일련번호", "일시", "구분", "상대방이름", "전화번호", "메시지내용", "기기명")
+        ),
+        "kakao_sync" to FtsCardSheetSpec(
+            cardId = "kakao_sync",
+            sheetName = "카카오톡대화대장",
+            headers = listOf("일련번호", "수신일시", "채팅방/발신자", "메시지내용", "기기명", "동기화일시")
+        ),
+        "file_upload" to FtsCardSheetSpec(
+            cardId = "file_upload",
+            sheetName = "파일보관대장",
+            headers = listOf("일련번호", "업로드일시", "구분", "파일명", "파일크기", "메모", "기기명")
+        ),
+        "contacts_backup" to FtsCardSheetSpec(
+            cardId = "contacts_backup",
+            sheetName = "연락처대장",
+            headers = listOf("일련번호", "이름", "휴대전화", "이메일", "회사/상호", "직함/부서", "메모", "주소", "갱신일시")
+        ),
+        "link_scrap" to FtsCardSheetSpec(
+            cardId = "link_scrap",
+            sheetName = "링크스크랩대장",
+            headers = listOf("일련번호", "등록일시", "구분", "제목", "URL", "출처", "AI요약", "메모")
+        ),
+        "missed_call" to FtsCardSheetSpec(
+            cardId = "missed_call",
+            sheetName = "부재중전화대장",
+            headers = listOf("일련번호", "부재중일시", "발신번호", "연락처이름", "자동회신내용", "회신상태", "기기명")
+        ),
+        "quote_order" to FtsCardSheetSpec(
+            cardId = "quote_order",
+            sheetName = "간편주문대장",
+            headers = listOf("일련번호", "주문일시", "고객명", "연락처", "품목내역", "공급가액", "부가가치세", "합계금액", "상태")
+        ),
+        "estimate_issue" to FtsCardSheetSpec(
+            cardId = "estimate_issue",
+            sheetName = "견적서발행대장",
+            headers = listOf("일련번호", "발행일시", "고객명", "연락처", "견적내용", "공급가액", "부가가치세", "합계금액", "상태")
+        )
+    )
+
+    /**
+     * 카드 키(cardPaymentReceipt 등), OCR 타입(RECEIPT 등), 시트 타입을 표준 cardId로 정규화
+     */
+    fun resolveCanonicalCardId(keyOrType: String?): String {
+        val raw = keyOrType?.trim().orEmpty()
+        if (raw.isEmpty()) return "receipt_scanner"
+        return when (raw.lowercase()) {
+            "receipt", "receipt_scanner", "cardreceipt" -> "receipt_scanner"
+            "business_card", "cardbusinesscard", "call_ended_card", "cardcallended" -> "business_card"
+            "payment_sms", "deposit", "payment_push", "receipt_sms", "cardpaymentreceipt" -> "payment_sms"
+            "call_recording", "recording", "cardcallrecording", "cardmeetingrecording" -> "call_recording"
+            "sms", "sms_sync", "cardsmssync", "sheet_sms_checkbox", "cardsheetsmscheckbox" -> "sms_sync"
+            "kakao", "kakao_sync", "cardkakaosync" -> "kakao_sync"
+            "file_upload", "generic", "cardfileupload" -> "file_upload"
+            "contacts", "contacts_backup", "cardcontactsbackup" -> "contacts_backup"
+            "link_bookmark", "link_scrap", "cardlinkscrap" -> "link_scrap"
+            "missed_call", "cardmissedcall" -> "missed_call"
+            "quote", "quote_order", "cardquotesync" -> "quote_order"
+            "estimate", "estimate_issue", "cardestimatesync" -> "estimate_issue"
+            else -> raw.lowercase()
+        }
+    }
+
+    /**
+     * 카드 키(cardPaymentReceipt 등), OCR 타입(RECEIPT 등), 시트 타입을 표준 FtsCardSheetSpec으로 변환
+     */
+    fun resolveSheetSpec(keyOrType: String?): FtsCardSheetSpec? {
+        val raw = keyOrType?.trim().orEmpty()
+        if (raw.isEmpty()) return null
+        val canonicalId = resolveCanonicalCardId(raw)
+        return CARD_SHEET_SPECS[canonicalId]
+    }
+
+    /**
      * ⚡ 파일투시트 Ingest 엔드포인트 지능형 정규화
      * - QR코드에서 전달된 endpoint가 0.0.0.0, 127.0.0.1, localhost 등 사설/루프백 주소이거나 비어있을 경우,
-     *   즉시 작동하는 공용 터널 URL로 자동 보정.
-     * - 구 도메인(filetosheet.com) 오타/미등록 주소도 공식 터널/도메인으로 안전 보정.
+     *   즉시 작동하는 공식 도메인(또는 터널) URL로 자동 보정.
+     * - 구 도메인(filetosheet.com) 오타/미등록 주소도 공식 도메인으로 안전 보정.
+     * - token이 전달된 경우 항상 /api/inbox/{token} 경로가 정확히 매핑되도록 보장.
      */
     fun normalizeEndpoint(rawEndpoint: String?, token: String): String {
         val trimmed = rawEndpoint?.trim().orEmpty()
@@ -102,7 +213,15 @@ object FileToSheetClient {
             trimmed.contains("127.0.0.1") ||
             trimmed.contains("filetosheet.com")
         ) {
-            return if (cleanToken.isNotBlank()) "$FTS_TUNNEL_BASE/api/inbox/$cleanToken" else FTS_TUNNEL_BASE
+            return if (cleanToken.isNotBlank()) "$FTS_OFFICIAL_DOMAIN/api/inbox/$cleanToken" else FTS_OFFICIAL_DOMAIN
+        }
+        if (cleanToken.isNotBlank()) {
+            return if (trimmed.contains("/api/inbox/")) {
+                val basePrefix = trimmed.substringBefore("/api/inbox/").trimEnd('/')
+                "$basePrefix/api/inbox/$cleanToken"
+            } else {
+                "${trimmed.trimEnd('/')}/api/inbox/$cleanToken"
+            }
         }
         return trimmed
     }
@@ -295,7 +414,29 @@ object FileToSheetClient {
         amount: Long? = null,
         rowData: JSONObject? = null
     ): FtsUploadResult = withContext(Dispatchers.IO) {
-        try {
+        val primaryResult = doUploadJson(endpoint, fileName, memo, amount, rowData)
+        if (primaryResult.success) {
+            return@withContext primaryResult
+        }
+
+        if (!endpoint.contains("tunneling-service.onrender.com")) {
+            val fallbackUrl = getTunnelFallbackEndpoint(endpoint)
+            if (fallbackUrl.isNotBlank() && fallbackUrl != endpoint) {
+                Log.w(TAG, "🔄 [FTS JSON 전송 터널 폴백 시도] $endpoint -> $fallbackUrl")
+                return@withContext doUploadJson(fallbackUrl, fileName, memo, amount, rowData)
+            }
+        }
+        return@withContext primaryResult
+    }
+
+    private fun doUploadJson(
+        endpoint: String,
+        fileName: String?,
+        memo: String?,
+        amount: Long?,
+        rowData: JSONObject?
+    ): FtsUploadResult {
+        return try {
             val json = JSONObject().apply {
                 if (!fileName.isNullOrBlank()) put("fileName", fileName)
                 if (!memo.isNullOrBlank()) put("memo", memo)
@@ -436,27 +577,51 @@ object FileToSheetClient {
     }
 
     /**
-     * ⚡ 보관함 카드 활성화 시 온디맨드 시트 자동 생성 (POST /api/inbox/ensure-sheet)
+     * ⚡ 파일투시트 시트 자동 프로비저닝 API (POST /api/inbox/ensure-sheet)
+     * - 중복 호출 시 이미 존재하는 시트를 찾아 안전하게 재사용 (멱등성 보장)
+     * - 모바일 카드가 새 컬럼을 추가해 보내면 기존 시트의 헤더도 자동으로 확장 (Schema Evolution)
+     *
+     * Request Body:
+     * {
+     *   "phoneNumber": "01072165884",
+     *   "cardId": "receipt_scanner",
+     *   "sheetName": "영수증대장",
+     *   "headers": ["일련번호", "거래일자", "상호", "품목", "공급가액", "부가가치세", "합계금액", "결제수단"]
+     * }
      */
     suspend fun ensureSheet(
         phoneNumber: String,
-        projectId: String?,
-        sheetType: String,
-        customSheetName: String? = null
+        cardId: String,
+        sheetName: String? = null,
+        headers: List<String>? = null,
+        projectId: String? = null
     ): FtsEnsureSheetResult = withContext(Dispatchers.IO) {
         val cleanPhone = phoneNumber.replace("[^0-9]".toRegex(), "")
+        val spec = resolveSheetSpec(cardId)
+        val resolvedCardId = spec?.cardId ?: cardId
+        val resolvedSheetName = sheetName?.takeIf { it.isNotBlank() } ?: spec?.sheetName ?: "기본대장"
+        val resolvedHeaders = headers?.takeIf { it.isNotEmpty() } ?: spec?.headers ?: listOf("일련번호", "일시", "내용", "비고")
+
         val endpoints = listOf(
             "$FTS_OFFICIAL_DOMAIN/api/inbox/ensure-sheet",
             "$FTS_TUNNEL_BASE/api/inbox/ensure-sheet"
         )
+        var lastError: String? = null
         for (ep in endpoints) {
             try {
+                val headersArray = JSONArray()
+                resolvedHeaders.forEach { headersArray.put(it) }
+
                 val json = JSONObject().apply {
                     put("phoneNumber", cleanPhone)
-                    if (!projectId.isNullOrBlank()) put("projectId", projectId)
-                    put("sheetType", sheetType)
-                    if (!customSheetName.isNullOrBlank()) put("customSheetName", customSheetName)
+                    put("cardId", resolvedCardId)
+                    put("sheetName", resolvedSheetName)
+                    put("headers", headersArray)
+                    if (!projectId.isNullOrBlank()) {
+                        put("projectId", projectId)
+                    }
                 }
+                Log.i(TAG, "⚡ [FTS ensure-sheet 요청] $ep -> cardId=$resolvedCardId, sheetName=$resolvedSheetName, headers=${resolvedHeaders.size}개")
                 val request = Request.Builder()
                     .url(ep)
                     .post(json.toString().toRequestBody(JSON_MEDIA_TYPE))
@@ -466,21 +631,43 @@ object FileToSheetClient {
                 val resJson = try { JSONObject(bodyStr) } catch (_: Exception) { JSONObject() }
 
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val returnedHeaders = mutableListOf<String>()
+                    val resHeadersArr = resJson.optJSONArray("headers")
+                    if (resHeadersArr != null) {
+                        for (i in 0 until resHeadersArr.length()) {
+                            val h = resHeadersArr.optString(i, "")
+                            if (h.isNotBlank()) returnedHeaders.add(h)
+                        }
+                    }
+                    val pId = if (resJson.has("projectId") && !resJson.isNull("projectId")) {
+                        resJson.opt("projectId")?.toString() ?: ""
+                    } else ""
+                    val tok = resJson.optString("token", "")
+                    val rawWebhook = resJson.optString("webhookUrl", "")
+                    val normalizedWebhook = if (rawWebhook.isNotBlank() || tok.isNotBlank()) {
+                        normalizeEndpoint(rawWebhook, tok)
+                    } else ""
+
                     return@withContext FtsEnsureSheetResult(
                         success = true,
                         isNew = resJson.optBoolean("isNew", false),
-                        projectId = resJson.optString("projectId", ""),
+                        projectId = pId,
                         projectName = resJson.optString("projectName", ""),
-                        sheetType = resJson.optString("sheetType", sheetType),
-                        sheetName = resJson.optString("sheetName", ""),
-                        token = resJson.optString("token", ""),
-                        webhookUrl = resJson.optString("webhookUrl", "")
+                        cardId = resJson.optString("cardId", resolvedCardId),
+                        sheetType = resJson.optString("sheetType", resolvedCardId),
+                        sheetName = resJson.optString("sheetName", resolvedSheetName),
+                        headers = if (returnedHeaders.isNotEmpty()) returnedHeaders else resolvedHeaders,
+                        token = tok,
+                        webhookUrl = normalizedWebhook.ifBlank { rawWebhook }
                     )
+                } else {
+                    lastError = resJson.optString("error", "HTTP ${response.code}").takeIf { it.isNotBlank() }
                 }
             } catch (e: Exception) {
+                lastError = e.localizedMessage
                 Log.w(TAG, "ensure-sheet 실패 ($ep): ${e.message}")
             }
         }
-        FtsEnsureSheetResult(success = false, error = "시트 생성 및 연결에 실패했습니다.")
+        FtsEnsureSheetResult(success = false, error = lastError ?: "시트 생성 및 연결에 실패했습니다.")
     }
 }

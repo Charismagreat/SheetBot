@@ -78,7 +78,7 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putString("fts_project_id", value).apply()
 
     val isFtsPaired: Boolean
-        get() = !ftsToken.isNullOrBlank() && !ftsEndpoint.isNullOrBlank()
+        get() = (!ftsToken.isNullOrBlank() && !ftsEndpoint.isNullOrBlank()) || !ftsPhoneNumber.isNullOrBlank()
 
     // 📱 [File to Sheet] 2대 핵심 시트 & 온디맨드 바인딩 정보
     var ftsPhoneNumber: String?
@@ -117,26 +117,124 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("fts_call_recording_sheet_name", "통화녹음대장")
         set(value) = prefs.edit().putString("fts_call_recording_sheet_name", value).apply()
 
-    fun getFtsTokenFor(type: String): String? {
-        return when (type.lowercase()) {
-            "receipt" -> ftsReceiptToken
-            "business_card" -> ftsBusinessCardToken
-            "payment_sms", "deposit" -> ftsDepositToken
-            "call_recording" -> ftsCallRecordingToken
-            else -> ftsToken
+    fun getSpecificFtsTokenFor(type: String): String? {
+        val canonicalId = FileToSheetClient.resolveCanonicalCardId(type)
+        val byCardId = prefs.getString("fts_card_token_$canonicalId", null)
+        if (!byCardId.isNullOrBlank()) return byCardId
+        return when (canonicalId) {
+            "receipt_scanner" -> prefs.getString("fts_receipt_token", null)
+            "business_card" -> prefs.getString("fts_business_card_token", null)
+            "payment_sms" -> prefs.getString("fts_deposit_token", null)
+            "call_recording" -> prefs.getString("fts_call_recording_token", null)
+            else -> null
         }
     }
 
+    fun getFtsTokenFor(type: String): String? {
+        return getSpecificFtsTokenFor(type) ?: ftsToken
+    }
+
+    fun getFtsSheetNameFor(type: String): String? {
+        val canonicalId = FileToSheetClient.resolveCanonicalCardId(type)
+        val byCardId = prefs.getString("fts_card_sheet_$canonicalId", null)
+        if (!byCardId.isNullOrBlank()) return byCardId
+        val legacy = when (canonicalId) {
+            "receipt_scanner" -> prefs.getString("fts_receipt_sheet_name", null)
+            "business_card" -> prefs.getString("fts_business_card_sheet_name", null)
+            "payment_sms" -> prefs.getString("fts_deposit_sheet_name", null)
+            "call_recording" -> prefs.getString("fts_call_recording_sheet_name", null)
+            else -> null
+        }
+        if (!legacy.isNullOrBlank()) return legacy
+        return FileToSheetClient.resolveSheetSpec(canonicalId)?.sheetName ?: ftsSheetName
+    }
+
+    fun getFtsEndpointFor(type: String): String {
+        val canonicalId = FileToSheetClient.resolveCanonicalCardId(type)
+        val tok = getFtsTokenFor(canonicalId) ?: ""
+        val rawWebhook = prefs.getString("fts_card_webhook_$canonicalId", null)
+            ?: prefs.getString("fts_endpoint", null)
+        return FileToSheetClient.normalizeEndpoint(rawWebhook, tok)
+    }
+
+    fun saveFtsSheetBinding(
+        cardIdOrType: String,
+        token: String,
+        sheetName: String?,
+        webhookUrl: String? = null,
+        projectId: String? = null
+    ) {
+        if (token.isBlank()) return
+        val canonicalId = FileToSheetClient.resolveCanonicalCardId(cardIdOrType)
+        val resolvedSheetName = sheetName?.takeIf { it.isNotBlank() }
+            ?: FileToSheetClient.resolveSheetSpec(canonicalId)?.sheetName
+            ?: "파일투시트"
+
+        val editor = prefs.edit()
+        editor.putString("fts_card_token_$canonicalId", token)
+        editor.putString("fts_card_sheet_$canonicalId", resolvedSheetName)
+        if (!webhookUrl.isNullOrBlank()) {
+            editor.putString("fts_card_webhook_$canonicalId", webhookUrl)
+        }
+        if (!projectId.isNullOrBlank()) {
+            editor.putString("fts_project_id", projectId)
+        }
+
+        when (canonicalId) {
+            "receipt_scanner" -> {
+                editor.putString("fts_receipt_token", token)
+                editor.putString("fts_receipt_sheet_name", resolvedSheetName)
+            }
+            "business_card" -> {
+                editor.putString("fts_business_card_token", token)
+                editor.putString("fts_business_card_sheet_name", resolvedSheetName)
+            }
+            "payment_sms" -> {
+                editor.putString("fts_deposit_token", token)
+                editor.putString("fts_deposit_sheet_name", resolvedSheetName)
+            }
+            "call_recording" -> {
+                editor.putString("fts_call_recording_token", token)
+                editor.putString("fts_call_recording_sheet_name", resolvedSheetName)
+            }
+        }
+
+        // 기본 대표 FTS 토큰이 비어있거나 영수증 시트인 경우 대표 토큰/시트명/엔드포인트도 함께 동기화
+        if (ftsToken.isNullOrBlank() || canonicalId == "receipt_scanner") {
+            editor.putString("fts_token", token)
+            editor.putString("fts_sheet_name", resolvedSheetName)
+            val ep = if (!webhookUrl.isNullOrBlank()) webhookUrl else FileToSheetClient.FTS_OFFICIAL_DOMAIN
+            editor.putString("fts_endpoint", ep)
+        }
+        editor.apply()
+    }
 
     fun clearFtsPairing() {
-        prefs.edit()
-            .remove("fts_token")
+        val editor = prefs.edit()
+        editor.remove("fts_token")
             .remove("fts_endpoint")
             .remove("fts_sheet_name")
             .remove("fts_project_name")
             .remove("fts_project_id")
+            .remove("fts_phone_number")
+            .remove("fts_receipt_token")
+            .remove("fts_receipt_sheet_name")
+            .remove("fts_business_card_token")
+            .remove("fts_business_card_sheet_name")
+            .remove("fts_deposit_token")
+            .remove("fts_deposit_sheet_name")
+            .remove("fts_call_recording_token")
+            .remove("fts_call_recording_sheet_name")
             .putString("upload_destination", DESTINATION_GOOGLE_SHEETS)
-            .apply()
+
+        prefs.all.keys.filter {
+            it.startsWith("fts_card_token_") ||
+                it.startsWith("fts_card_sheet_") ||
+                it.startsWith("fts_card_webhook_")
+        }.forEach { key ->
+            editor.remove(key)
+        }
+        editor.apply()
     }
 
     var lastSyncTime: Long

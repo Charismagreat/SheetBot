@@ -7,6 +7,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import cloud.sheetbot.agent.user.ApiClient
 import cloud.sheetbot.agent.user.AppPreferences
+import cloud.sheetbot.agent.user.FileToSheetClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -29,8 +30,43 @@ class SheetActionController(
 ) {
 
     fun provisionSheetAsync(sheetType: String, sheetTitle: String, folderName: String? = null) {
+        // ⚡ 파일투시트(FileToSheet) 목적지 모드이고 휴대폰 번호가 연동된 경우 ensure-sheet API로 시트 자동 프로비저닝
+        if (prefs.isDestinationFileToSheet && !prefs.ftsPhoneNumber.isNullOrBlank()) {
+            val phone = prefs.ftsPhoneNumber!!
+            val spec = FileToSheetClient.resolveSheetSpec(sheetType)
+            if (spec != null) {
+                scope.launch {
+                    try {
+                        val ftsRes = FileToSheetClient.ensureSheet(
+                            phoneNumber = phone,
+                            cardId = spec.cardId,
+                            sheetName = spec.sheetName,
+                            headers = spec.headers,
+                            projectId = prefs.ftsProjectId
+                        )
+                        if (ftsRes.success && !ftsRes.token.isNullOrBlank()) {
+                            prefs.saveFtsSheetBinding(
+                                cardIdOrType = spec.cardId,
+                                token = ftsRes.token,
+                                sheetName = ftsRes.sheetName ?: spec.sheetName,
+                                webhookUrl = ftsRes.webhookUrl,
+                                projectId = ftsRes.projectId
+                            )
+                            val sName = ftsRes.sheetName ?: spec.sheetName
+                            val statusPrefix = if (ftsRes.isNew) "🎉 새 파일투시트 생성 완료" else "✅ 기존 파일투시트 연결 확인"
+                            Toast.makeText(activity, "⚡ [$sName]\n$statusPrefix", Toast.LENGTH_SHORT).show()
+                            addLogItem("FTS 대장 준비", "[$sName] 시트 프로비저닝 완료", true)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("SheetActionController", "FTS ensure-sheet 통신 예외: ${e.message}")
+                    }
+                }
+            }
+            return
+        }
+
         val userEmail = prefs.userEmail
-        if (!prefs.isPaired || userEmail.isNullOrBlank()) {
+        if (!prefs.isPaired || userEmail.isNullOrBlank() || userEmail.endsWith("@filetosheet.cloud")) {
             return
         }
 
@@ -72,8 +108,44 @@ class SheetActionController(
      */
     fun preloadActiveSheetUrls(force: Boolean = false) {
         try {
+            if (prefs.isDestinationFileToSheet && !prefs.ftsPhoneNumber.isNullOrBlank()) {
+                val phone = prefs.ftsPhoneNumber!!
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        val ftsCards = mutableListOf("receipt_scanner", "business_card")
+                        if (prefs.isPushDetectionEnabled || prefs.isReceiptSmsEnabled) ftsCards.add("payment_sms")
+                        if (prefs.isCallRecordingSyncEnabled) ftsCards.add("call_recording")
+                        if (prefs.isSmsSheetSyncEnabled) ftsCards.add("sms_sync")
+                        if (prefs.isKakaoSheetSyncEnabled) ftsCards.add("kakao_sync")
+                        if (prefs.isFileUploadSyncEnabled) ftsCards.add("file_upload")
+
+                        for (cardId in ftsCards.distinct()) {
+                            if (force || prefs.getSpecificFtsTokenFor(cardId).isNullOrBlank()) {
+                                val res = FileToSheetClient.ensureSheet(
+                                    phoneNumber = phone,
+                                    cardId = cardId,
+                                    projectId = prefs.ftsProjectId
+                                )
+                                if (res.success && !res.token.isNullOrBlank()) {
+                                    prefs.saveFtsSheetBinding(
+                                        cardIdOrType = cardId,
+                                        token = res.token,
+                                        sheetName = res.sheetName,
+                                        webhookUrl = res.webhookUrl,
+                                        projectId = res.projectId
+                                    )
+                                }
+                            }
+                        }
+                    } catch (e: Throwable) {
+                        android.util.Log.w("SheetActionController", "preloadActiveSheetUrls FTS 방어: ${e.message}")
+                    }
+                }
+                return
+            }
+
             val userEmail = prefs.userEmail
-            if (!prefs.isPaired || userEmail.isNullOrBlank()) return
+            if (!prefs.isPaired || userEmail.isNullOrBlank() || userEmail.endsWith("@filetosheet.cloud")) return
 
             scope.launch(Dispatchers.IO) {
                 try {

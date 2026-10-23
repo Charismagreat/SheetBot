@@ -16,6 +16,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import cloud.sheetbot.agent.user.FileToSheetClient
 import cloud.sheetbot.agent.user.PreferencesManager
 import cloud.sheetbot.agent.user.R
 
@@ -219,27 +220,39 @@ class CardDrawerController(
         applyCardVisibilityAndOrder()
         refreshDrawerList()
 
-        // 🌟 온디맨드 시트 프로비저닝 (FTS 연동 시 결제문자, 통화녹음 등 신규 시트 실시간 자동 생성)
-        if (prefs.isDestinationFileToSheet && prefs.isFtsPaired) {
-            val sheetTypeToEnsure = when (key) {
-                "cardPaymentReceipt", "cardSmsSync" -> "payment_sms"
-                "cardCallRecording", "cardMeetingRecording" -> "call_recording"
-                else -> null
+        // 🌟 온디맨드 시트 자동 프로비저닝 (POST /api/inbox/ensure-sheet: cardId, sheetName, headers 전송)
+        val phone = prefs.ftsPhoneNumber
+        if (prefs.isDestinationFileToSheet && !phone.isNullOrBlank()) {
+            val specsToEnsure = if (key == "cardFileUpload") {
+                listOfNotNull(
+                    FileToSheetClient.resolveSheetSpec("receipt_scanner"),
+                    FileToSheetClient.resolveSheetSpec("business_card"),
+                    FileToSheetClient.resolveSheetSpec("file_upload")
+                )
+            } else {
+                listOfNotNull(FileToSheetClient.resolveSheetSpec(key))
             }
 
-            val phone = prefs.ftsPhoneNumber
-            if (sheetTypeToEnsure != null && !phone.isNullOrBlank()) {
+            if (specsToEnsure.isNotEmpty()) {
                 (activity as? androidx.lifecycle.LifecycleOwner)?.lifecycleScope?.launch(kotlinx.coroutines.Dispatchers.IO) {
-                    val result = cloud.sheetbot.agent.user.FileToSheetClient.ensureSheet(phone, prefs.ftsProjectId, sheetTypeToEnsure)
-                    if (result.success && !result.token.isNullOrBlank()) {
-                        if (sheetTypeToEnsure == "payment_sms") {
-                            prefs.ftsDepositToken = result.token
-                            prefs.ftsDepositSheetName = result.sheetName
-                        } else if (sheetTypeToEnsure == "call_recording") {
-                            prefs.ftsCallRecordingToken = result.token
-                            prefs.ftsCallRecordingSheetName = result.sheetName
+                    for (spec in specsToEnsure) {
+                        val result = FileToSheetClient.ensureSheet(
+                            phoneNumber = phone,
+                            cardId = spec.cardId,
+                            sheetName = spec.sheetName,
+                            headers = spec.headers,
+                            projectId = prefs.ftsProjectId
+                        )
+                        if (result.success && !result.token.isNullOrBlank()) {
+                            prefs.saveFtsSheetBinding(
+                                cardIdOrType = spec.cardId,
+                                token = result.token,
+                                sheetName = result.sheetName ?: spec.sheetName,
+                                webhookUrl = result.webhookUrl,
+                                projectId = result.projectId
+                            )
+                            android.util.Log.i("CardDrawerController", "온디맨드 시트 연결 완료: ${result.sheetName} (${spec.cardId})")
                         }
-                        android.util.Log.i("CardDrawerController", "온디맨드 시트 연결 완료: ${result.sheetName}")
                     }
                 }
             }

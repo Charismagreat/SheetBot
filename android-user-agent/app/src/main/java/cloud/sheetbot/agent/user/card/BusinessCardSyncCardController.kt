@@ -23,7 +23,7 @@ import org.json.JSONObject
  *
  * - 명함 사진/문서 선택 런처 연동
  * - Gemini AI OCR 성함/직함/회사명/연락처 자동 분석
- * - 스마트 명함 관리 구글 시트 대장 자동 등록
+ * - 스마트 명함 관리 구글 시트 대장 또는 파일투시트(명함관리) 자동 등록
  * - 인맥 액션 다이얼로그(CardActionActivity) 즉시 출현
  * - 헤드업 알림 및 팝업 3초 카운트다운 디버그 테스트
  * - 시트 대장 원터치 뷰어 오픈
@@ -46,8 +46,8 @@ class BusinessCardSyncCardController(
 
         binding.btnPickBusinessCard.setOnClickListener {
             if (prefs.isDestinationFileToSheet) {
-                if (!prefs.isFtsPaired) {
-                    Toast.makeText(activity, "먼저 파일투시트 QR코드를 스캔해 주세요.", Toast.LENGTH_SHORT).show()
+                if (!prefs.isFtsPaired && prefs.ftsPhoneNumber.isNullOrBlank()) {
+                    Toast.makeText(activity, "먼저 파일투시트 번호 인증 또는 QR코드를 스캔해 주세요.", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
             } else if (!prefs.isPaired) {
@@ -120,8 +120,8 @@ class BusinessCardSyncCardController(
     fun uploadBusinessCard(uri: Uri) {
         val isFts = prefs.isDestinationFileToSheet
         if (isFts) {
-            if (!prefs.isFtsPaired) {
-                Toast.makeText(activity, "⚠️ 파일투시트 QR코드 연동 후 이용할 수 있습니다.", Toast.LENGTH_LONG).show()
+            if (!prefs.isFtsPaired && prefs.ftsPhoneNumber.isNullOrBlank()) {
+                Toast.makeText(activity, "⚠️ 파일투시트 번호 인증 또는 QR코드 연동 후 이용할 수 있습니다.", Toast.LENGTH_LONG).show()
                 return
             }
         } else if (!prefs.isPaired) {
@@ -138,7 +138,8 @@ class BusinessCardSyncCardController(
         }
 
         binding.progressBar.visibility = View.VISIBLE
-        val targetDesc = if (isFts) "파일투시트 [${prefs.ftsSheetName}]" else "구글 시트"
+        val bizSheetName = prefs.getFtsSheetNameFor("business_card") ?: "명함관리"
+        val targetDesc = if (isFts) "파일투시트 [$bizSheetName]" else "구글 시트"
         Toast.makeText(activity, "🪪 명함을 ${targetDesc}로 전송했습니다.", Toast.LENGTH_SHORT).show()
 
         val appContext = activity.applicationContext
@@ -152,7 +153,9 @@ class BusinessCardSyncCardController(
 
                 if (result.success) {
                     if (isFts) {
-                        val sName = prefs.ftsSheetName ?: "파일투시트"
+                        val sName = result.folderName?.takeIf { it.isNotBlank() }
+                            ?: prefs.getFtsSheetNameFor("business_card")
+                            ?: "명함관리"
                         withContext(Dispatchers.Main) {
                             Toast.makeText(
                                 appContext,
