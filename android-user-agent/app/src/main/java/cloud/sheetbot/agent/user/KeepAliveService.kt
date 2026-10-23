@@ -428,8 +428,13 @@ class KeepAliveService : Service() {
                     consecutiveFastDisconnects = 0
                     delay(3000L)
                 } else {
-                    consecutiveFastDisconnects = (consecutiveFastDisconnects + 1).coerceAtMost(6)
-                    val backoffMs = (10000L * (1 shl (consecutiveFastDisconnects - 1))).coerceAtMost(60000L)
+                    consecutiveFastDisconnects = (consecutiveFastDisconnects + 1).coerceAtMost(4)
+                    val backoffMs = when (consecutiveFastDisconnects) {
+                        1 -> 10000L
+                        2 -> 20000L
+                        3 -> 40000L
+                        else -> 60000L
+                    }
                     delay(backoffMs)
                 }
             }
