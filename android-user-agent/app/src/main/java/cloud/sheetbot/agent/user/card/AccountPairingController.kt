@@ -366,6 +366,7 @@ class AccountPairingController(
                     prefs.clearSheetBindingsCache()
                 }
                 prefs.userEmail = email
+                prefs.uploadDestination = AppPreferences.DESTINATION_GOOGLE_SHEETS
                 prefs.isPaired = true
                 if (!result.webhookUrl.isNullOrBlank()) prefs.webhookUrl = result.webhookUrl
                 if (!result.fallbackWebhookUrl.isNullOrBlank()) prefs.fallbackWebhookUrl = result.fallbackWebhookUrl
@@ -433,6 +434,7 @@ class AccountPairingController(
                     prefs.clearSheetBindingsCache()
                 }
                 prefs.userEmail = finalEmail
+                prefs.uploadDestination = AppPreferences.DESTINATION_GOOGLE_SHEETS
                 prefs.isPaired = true
                 if (!result.webhookUrl.isNullOrBlank()) prefs.webhookUrl = result.webhookUrl
                 if (!result.fallbackWebhookUrl.isNullOrBlank()) prefs.fallbackWebhookUrl = result.fallbackWebhookUrl

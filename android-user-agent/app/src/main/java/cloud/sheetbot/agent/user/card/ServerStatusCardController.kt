@@ -96,6 +96,19 @@ class ServerStatusCardController(
     fun checkServerAndQueueStatus(showToast: Boolean = false) {
         if (!prefs.isPaired) return
 
+        if (prefs.isDestinationFileToSheet && prefs.isFtsPaired) {
+            val pName = prefs.ftsProjectName ?: "File to Sheet"
+            val sName = prefs.ftsSheetName ?: "기본 시트"
+            binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
+            binding.tvStatusTitle.text = "🟢 [File to Sheet] 연결 중"
+            binding.tvConnectedAccount.text = "연결 대상: [$pName - $sName]"
+            binding.tvServerStatus.text = "🌐 서버 통신: 🟢 정상 (file2sheet.cloud)"
+            if (showToast) {
+                Toast.makeText(activity, "✅ file2sheet.cloud 연결 정상", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+
         scope.launch {
             val ping = withContext(Dispatchers.IO) { ApiClient.pingServer() }
             val email = prefs.userEmail ?: ""
@@ -154,7 +167,7 @@ class ServerStatusCardController(
     /**
      * 연동/미연동 상태에 따른 상태 카드 및 관련 뷰 가시성/스타일 갱신
      */
-        fun updateCardStatus(isPaired: Boolean, email: String?) {
+    fun updateCardStatus(isPaired: Boolean, email: String?) {
         updateStatusDetailsVisibility(prefs.isStatusDetailsHidden)
 
         val isFts = prefs.isDestinationFileToSheet && prefs.isFtsPaired
@@ -181,7 +194,7 @@ class ServerStatusCardController(
         } else {
             binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
             binding.tvStatusTitle.text = "⚠️ 미연동 상태"
-            binding.tvConnectedAccount.text = "연결된 계정: 미연동 (휴대폰 번호 또는 QR 인증 필요)"
+            binding.tvConnectedAccount.text = "연결된 계정: 미연동 (휴대폰 번호 또는 구글/QR 인증 필요)"
             binding.btnRefreshServerStatus.visibility = View.GONE
             binding.btnToggleStatusDetails.visibility = View.GONE
             binding.cardTasksHub.visibility = View.GONE

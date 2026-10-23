@@ -89,7 +89,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="🟢 [File to Sheet] 연결 중"
+                        android:text="🟢 시트봇 · 파일투시트 연결 상태"
                         android:textColor="#FFFFFF"
                         android:textSize="13.5sp"
                         android:textStyle="bold" />
@@ -837,7 +837,7 @@
             android:layout_margin="8dp"
             android:visibility="gone" />
 
-        <!-- 미연동 시 컨트롤 (Google 원클릭 로그인 & QR 스캔 & 핀코드 입력) -->
+        <!-- 미연동 시 컨트롤 (파일투시트 & 시트봇 양쪽 옵션 모두 표시) -->
         <LinearLayout
             android:id="@+id/layoutUnpairedControls"
             android:layout_width="match_parent"
@@ -845,7 +845,16 @@
             android:orientation="vertical"
             android:layout_marginBottom="16dp">
 
-                        <Button
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="⚡ 파일투시트 (File to Sheet) 연동"
+                android:textColor="#A5B4FC"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <Button
                 android:id="@+id/btnPhoneSignIn"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
@@ -854,46 +863,55 @@
                 android:textColor="#FFFFFF"
                 android:textSize="14.5sp"
                 android:textStyle="bold"
-                android:layout_marginBottom="10dp" />
+                android:layout_marginBottom="14dp" />
 
-<!-- 🔗 기타 연동 방식 (시트봇 스토어 보관 및 기본 숨김) -->
+            <!-- 🔗 시트봇 (SheetBot 구글 시트) 연동 방식 -->
             <LinearLayout
                 android:id="@+id/layoutLegacyPairingControls"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:visibility="gone">
+                android:visibility="visible">
 
-<Button
-                android:id="@+id/btnGoogleSignIn"
-                android:layout_width="match_parent"
-                android:layout_height="54dp"
-                android:backgroundTint="#FFFFFF"
-                android:text="G  Google 계정으로 1초 로그인 (PC 불필요)"
-                android:textColor="#1F2937"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="10dp" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🚀 시트봇 (SheetBot 구글 시트) 연동"
+                    android:textColor="#38BDF8"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="6dp" />
 
-            <Button
-                android:id="@+id/btnScanQr"
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:backgroundTint="#4F46E5"
-                android:text="📷 워크스페이스 QR코드 스캔 (PC 화면 연동)"
-                android:textColor="#FFFFFF"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp" />
+                <Button
+                    android:id="@+id/btnGoogleSignIn"
+                    android:layout_width="match_parent"
+                    android:layout_height="54dp"
+                    android:backgroundTint="#FFFFFF"
+                    android:text="G  Google 계정으로 1초 로그인 (PC 불필요)"
+                    android:textColor="#1F2937"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="10dp" />
 
-            <Button
-                android:id="@+id/btnManualPin"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:backgroundTint="#1E293B"
-                android:text="🔢 6자리 핀코드로 직접 연동"
-                android:textColor="#CBD5E1"
-                android:textSize="13sp" />
+                <Button
+                    android:id="@+id/btnScanQr"
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:backgroundTint="#4F46E5"
+                    android:text="📷 워크스페이스 QR코드 스캔 (시트봇 · 파일투시트)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <Button
+                    android:id="@+id/btnManualPin"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="🔢 6자리 핀코드로 직접 연동"
+                    android:textColor="#CBD5E1"
+                    android:textSize="13sp" />
             </LinearLayout>
         </LinearLayout>
 
