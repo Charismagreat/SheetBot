@@ -37,7 +37,6 @@ export async function GET(req: NextRequest) {
         topic: "sms",
         closeOnEvent: true,
         maxLifetimeMs: 25000,
-        dedupeByEmailAndTopic: true,
       });
     },
   });
