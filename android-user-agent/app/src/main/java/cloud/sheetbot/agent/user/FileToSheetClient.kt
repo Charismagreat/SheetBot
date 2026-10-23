@@ -127,6 +127,11 @@ object FileToSheetClient {
             sheetName = "문자송수신대장",
             headers = listOf("일련번호", "일시", "구분", "상대방이름", "전화번호", "메시지내용", "기기명")
         ),
+        "sheet_sms_checkbox" to FtsCardSheetSpec(
+            cardId = "sheet_sms_checkbox",
+            sheetName = "체크박스문자발송대장",
+            headers = listOf("발송선택", "고객명", "전화번호", "발송할문자내용", "발송상태", "발송일시")
+        ),
         "kakao_sync" to FtsCardSheetSpec(
             cardId = "kakao_sync",
             sheetName = "카카오톡대화대장",
@@ -161,6 +166,51 @@ object FileToSheetClient {
             cardId = "estimate_issue",
             sheetName = "견적서발행대장",
             headers = listOf("일련번호", "발행일시", "고객명", "연락처", "견적내용", "공급가액", "부가가치세", "합계금액", "상태")
+        ),
+        "meeting_recording" to FtsCardSheetSpec(
+            cardId = "meeting_recording",
+            sheetName = "회의록대장",
+            headers = listOf("일련번호", "회의일시", "회의제목", "파일명", "AI요약", "주요결정사항", "비고")
+        ),
+        "call_ended_card" to FtsCardSheetSpec(
+            cardId = "call_ended_card",
+            sheetName = "모바일명함발송대장",
+            headers = listOf("일련번호", "발송일시", "수신자명", "전화번호", "발송문구", "상태")
+        ),
+        "receipt_sms" to FtsCardSheetSpec(
+            cardId = "receipt_sms",
+            sheetName = "영수증문자발송대장",
+            headers = listOf("일련번호", "발송일시", "고객명", "전화번호", "결제금액", "발송문구", "상태")
+        ),
+        "website_monitor" to FtsCardSheetSpec(
+            cardId = "website_monitor",
+            sheetName = "웹사이트모니터링대장",
+            headers = listOf("일련번호", "점검일시", "대상URL", "상태코드", "응답시간", "장애여부", "비고")
+        ),
+        "company_research" to FtsCardSheetSpec(
+            cardId = "company_research",
+            sheetName = "기업리서치대장",
+            headers = listOf("일련번호", "등록일시", "기업명", "대표자", "업종", "핵심요약", "비고")
+        ),
+        "law_advisory" to FtsCardSheetSpec(
+            cardId = "law_advisory",
+            sheetName = "법률계약검토대장",
+            headers = listOf("일련번호", "검토일시", "문서/질의제목", "법률검토요약", "리스크수준", "권고사항")
+        ),
+        "naver_blog" to FtsCardSheetSpec(
+            cardId = "naver_blog",
+            sheetName = "블로그마케팅대장",
+            headers = listOf("일련번호", "발행일시", "포스트제목", "키워드", "블로그URL", "상태")
+        ),
+        "instagram" to FtsCardSheetSpec(
+            cardId = "instagram",
+            sheetName = "인스타그램마케팅대장",
+            headers = listOf("일련번호", "게시일시", "캡션요약", "해시태그", "게시물URL", "상태")
+        ),
+        "mobile_site" to FtsCardSheetSpec(
+            cardId = "mobile_site",
+            sheetName = "모바일홈페이지대장",
+            headers = listOf("일련번호", "생성일시", "사이트명", "도메인/URL", "주요메뉴", "상태")
         )
     )
 
@@ -172,10 +222,14 @@ object FileToSheetClient {
         if (raw.isEmpty()) return "receipt_scanner"
         return when (raw.lowercase()) {
             "receipt", "receipt_scanner", "cardreceipt" -> "receipt_scanner"
-            "business_card", "cardbusinesscard", "call_ended_card", "cardcallended" -> "business_card"
-            "payment_sms", "deposit", "payment_push", "receipt_sms", "cardpaymentreceipt" -> "payment_sms"
-            "call_recording", "recording", "cardcallrecording", "cardmeetingrecording" -> "call_recording"
-            "sms", "sms_sync", "cardsmssync", "sheet_sms_checkbox", "cardsheetsmscheckbox" -> "sms_sync"
+            "business_card", "cardbusinesscard" -> "business_card"
+            "call_ended_card", "cardcallended" -> "call_ended_card"
+            "payment_sms", "deposit", "payment_push", "cardpaymentreceipt" -> "payment_sms"
+            "receipt_sms" -> "receipt_sms"
+            "call_recording", "recording", "cardcallrecording" -> "call_recording"
+            "meeting", "meeting_recording", "cardmeetingrecording" -> "meeting_recording"
+            "sms", "sms_sync", "cardsmssync" -> "sms_sync"
+            "sheet_sms_checkbox", "cardsheetsmscheckbox" -> "sheet_sms_checkbox"
             "kakao", "kakao_sync", "cardkakaosync" -> "kakao_sync"
             "file_upload", "generic", "cardfileupload" -> "file_upload"
             "contacts", "contacts_backup", "cardcontactsbackup" -> "contacts_backup"
@@ -183,6 +237,12 @@ object FileToSheetClient {
             "missed_call", "cardmissedcall" -> "missed_call"
             "quote", "quote_order", "cardquotesync" -> "quote_order"
             "estimate", "estimate_issue", "cardestimatesync" -> "estimate_issue"
+            "website_monitor", "cardwebsitemonitor" -> "website_monitor"
+            "company_research", "cardcompanyresearch" -> "company_research"
+            "law_advisory", "cardlawadvisory" -> "law_advisory"
+            "naver_blog", "cardblog" -> "naver_blog"
+            "instagram", "cardinsta" -> "instagram"
+            "mobile_site", "cardsite" -> "mobile_site"
             else -> raw.lowercase()
         }
     }

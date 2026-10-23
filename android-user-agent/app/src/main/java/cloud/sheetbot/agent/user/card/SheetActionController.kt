@@ -222,28 +222,145 @@ class SheetActionController(
     }
 
     /**
-     * 구글 시트 원본 vs 모바일 스마트 웹앱 선택 다이얼로그 (v2.2.9)
-     * - 하드코딩 프리셋 제거 및 실시간 드라이브 활성(휴지통 제외) 검증 연동
+     * 구글 시트 원본 vs 모바일 스마트 웹앱 vs 파일투시트(File to Sheet) 선택 다이얼로그 (v2.4.12)
+     * - 3가지 옵션을 제공하여 구글 시트 원본, 모바일 웹앱, 파일투시트 자동 프로비저닝/열기를 모두 지원
      */
     fun showOpenSheetChooserDialog(sheetType: String, defaultTitle: String) {
-        val userEmail = prefs.userEmail
-        if (!prefs.isPaired || userEmail.isNullOrBlank()) {
-            Toast.makeText(activity, "먼저 상단에서 시트봇 계정 연동을 완료해 주세요.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
         val items = arrayOf(
             "📊 구글 스프레드시트 원본 (실시간 드라이브 연동)",
-            "🌐 모바일 스마트 웹앱 (모바일 최적화)"
+            "🌐 모바일 스마트 웹앱 (모바일 최적화)",
+            "⚡ 파일투시트 (File to Sheet) 웹 대장 열기"
         )
 
         AlertDialog.Builder(activity)
             .setTitle(defaultTitle)
             .setItems(items) { _, which ->
-                openSheetWithProgress(sheetType, defaultTitle, isWebApp = (which == 1))
+                when (which) {
+                    0 -> openSheetWithProgress(sheetType, defaultTitle, isWebApp = false)
+                    1 -> openSheetWithProgress(sheetType, defaultTitle, isWebApp = true)
+                    2 -> openFtsSheetWithProgress(sheetType, defaultTitle)
+                }
             }
             .setNegativeButton("닫기", null)
             .show()
+    }
+
+    /**
+     * ⚡ 파일투시트(File to Sheet) 시트 자동 프로비저닝(POST /api/inbox/ensure-sheet) 후 웹 대장 즉시 열기
+     */
+    fun openFtsSheetWithProgress(sheetType: String, defaultTitle: String) {
+        val existingPhone = prefs.ftsPhoneNumber?.replace("[^0-9]".toRegex(), "").orEmpty()
+        if (existingPhone.length < 10) {
+            val input = android.widget.EditText(activity).apply {
+                hint = "010-0000-0000"
+                inputType = android.text.InputType.TYPE_CLASS_PHONE
+                setPadding(45, 35, 45, 35)
+            }
+            AlertDialog.Builder(activity)
+                .setTitle("⚡ 파일투시트(File to Sheet) 대장 연결")
+                .setMessage("'${defaultTitle}' 시트를 파일투시트에서 자동 생성 및 연결하기 위해 휴대폰 번호를 입력해 주세요.")
+                .setView(input)
+                .setPositiveButton("대장 생성 및 열기") { _, _ ->
+                    val cleanPhone = input.text.toString().replace("[^0-9]".toRegex(), "")
+                    if (cleanPhone.length < 10 || !cleanPhone.startsWith("010")) {
+                        Toast.makeText(activity, "올바른 010 휴대폰 번호를 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                        return@setPositiveButton
+                    }
+                    prefs.ftsPhoneNumber = cleanPhone
+                    executeEnsureAndOpenFtsSheet(cleanPhone, sheetType, defaultTitle)
+                }
+                .setNegativeButton("취소", null)
+                .show()
+            return
+        }
+
+        executeEnsureAndOpenFtsSheet(existingPhone, sheetType, defaultTitle)
+    }
+
+    private fun executeEnsureAndOpenFtsSheet(phoneNumber: String, sheetType: String, defaultTitle: String) {
+        val spec = FileToSheetClient.resolveSheetSpec(sheetType)
+        val cleanDefaultName = defaultTitle.replace("[SheetBot]", "").trim().ifBlank { "기본시트" }
+        val targetCardId = spec?.cardId ?: FileToSheetClient.resolveCanonicalCardId(sheetType)
+        val targetSheetName = spec?.sheetName ?: cleanDefaultName
+        val targetHeaders = spec?.headers
+
+        val progressDialog = AlertDialog.Builder(activity)
+            .setTitle("⚡ 파일투시트 대장 준비 중")
+            .setMessage("파일투시트(file2sheet.cloud)에서 '${targetSheetName}' 시트를 확인 및 생성하고 있습니다...\n\n준비되는 즉시 자동으로 열립니다.")
+            .setCancelable(true)
+            .setNegativeButton("닫기") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .create()
+        progressDialog.show()
+
+        scope.launch {
+            try {
+                val ftsRes = FileToSheetClient.ensureSheet(
+                    phoneNumber = phoneNumber,
+                    cardId = targetCardId,
+                    sheetName = targetSheetName,
+                    headers = targetHeaders,
+                    projectId = prefs.ftsProjectId
+                )
+
+                withContext(Dispatchers.Main) {
+                    if (progressDialog.isShowing) {
+                        progressDialog.dismiss()
+                    }
+
+                    if (ftsRes.success && !ftsRes.token.isNullOrBlank()) {
+                        val finalSheetName = ftsRes.sheetName ?: targetSheetName
+                        prefs.saveFtsSheetBinding(
+                            cardIdOrType = targetCardId,
+                            token = ftsRes.token,
+                            sheetName = finalSheetName,
+                            webhookUrl = ftsRes.webhookUrl,
+                            projectId = ftsRes.projectId
+                        )
+                        if (!ftsRes.projectName.isNullOrBlank()) {
+                            prefs.ftsProjectName = ftsRes.projectName
+                        }
+                        prefs.uploadDestination = AppPreferences.DESTINATION_FILE_TO_SHEET
+                        prefs.isPaired = true
+                        if (prefs.userEmail.isNullOrBlank()) {
+                            prefs.userEmail = "fts_${phoneNumber.takeLast(4)}@filetosheet.cloud"
+                        }
+
+                        val statusPrefix = if (ftsRes.isNew) "🎉 새 파일투시트 생성 완료!" else "✅ 파일투시트 대장 연결 완료!"
+                        Toast.makeText(activity, "$statusPrefix [$finalSheetName]", Toast.LENGTH_SHORT).show()
+                        addLogItem("⚡ FTS 대장", "[$finalSheetName] 시트 열기", true)
+
+                        val ftsWebUrl = buildString {
+                            append(FileToSheetClient.FTS_OFFICIAL_DOMAIN)
+                            append("/?phone=")
+                            append(Uri.encode(phoneNumber))
+                            if (!ftsRes.projectId.isNullOrBlank()) {
+                                append("&projectId=")
+                                append(Uri.encode(ftsRes.projectId))
+                            }
+                            append("&sheet=")
+                            append(Uri.encode(finalSheetName))
+                        }
+                        openExternalUrl(ftsWebUrl)
+                    } else {
+                        val errMsg = ftsRes.error ?: "파일투시트 서버와 연결할 수 없습니다."
+                        AlertDialog.Builder(activity)
+                            .setTitle("⚠️ 파일투시트 대장 연결 실패")
+                            .setMessage("파일투시트 시트를 준비하는 중 오류가 발생했습니다.\n\n원인: $errMsg")
+                            .setPositiveButton("확인", null)
+                            .show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    if (progressDialog.isShowing) {
+                        progressDialog.dismiss()
+                    }
+                    Toast.makeText(activity, "파일투시트 통신 오류: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     /**
@@ -251,8 +368,8 @@ class SheetActionController(
      */
     fun openSheetWithProgress(sheetType: String, defaultTitle: String, isWebApp: Boolean) {
         val userEmail = prefs.userEmail
-        if (!prefs.isPaired || userEmail.isNullOrBlank()) {
-            Toast.makeText(activity, "먼저 상단에서 시트봇 계정 연동을 완료해 주세요.", Toast.LENGTH_SHORT).show()
+        if (!prefs.isPaired || userEmail.isNullOrBlank() || userEmail.endsWith("@filetosheet.cloud")) {
+            Toast.makeText(activity, "구글 시트 연동을 위해 상단에서 구글 계정(시트봇) 로그인을 먼저 완료해 주세요.", Toast.LENGTH_LONG).show()
             return
         }
 
