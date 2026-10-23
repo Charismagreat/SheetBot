@@ -7,6 +7,7 @@
  */
 
 import { callSheetsTool, insertRows } from "@/lib/egdesk-helpers";
+import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import { resolveUserSpreadsheet } from "./sheet-binding-helper";
 import { KakaoChatParseResult } from "./kakao-chat-parser";
 
@@ -47,6 +48,8 @@ export async function syncKakaoChatToSheet(
   let targetSpreadsheetId: string | null = null;
   let spreadsheetUrl = "";
 
+  const callOptions = await getWorkspaceCallOptionsForEmail(userEmail);
+
   try {
     const resolved = await resolveUserSpreadsheet({
       userEmail,
@@ -54,6 +57,7 @@ export async function syncKakaoChatToSheet(
       defaultTitle: "[SheetBot] 카카오톡 메시지 대장",
       requestedTitle: sheetTitle,
       preferOAuth: true,
+      callOptions,
     });
     targetSpreadsheetId = resolved.spreadsheetId;
     spreadsheetUrl = resolved.spreadsheetUrl;
@@ -79,36 +83,52 @@ export async function syncKakaoChatToSheet(
     ["일시", "구분", "채팅방/상대방 이름", "발신자", "메시지 내용", "기기명"]
   ];
 
-  const firstRowCheck = await callSheetsTool("sheets_get_range", {
-    spreadsheetId: targetSpreadsheetId,
-    range: "시트1!A1:F1",
-    preferOAuth: true,
-  }).catch(() => null);
+  const firstRowCheck = await callSheetsTool(
+    "sheets_get_range",
+    {
+      spreadsheetId: targetSpreadsheetId,
+      range: "시트1!A1:F1",
+      preferOAuth: true,
+    },
+    callOptions
+  ).catch(() => null);
 
   const hasHeader = firstRowCheck?.values && firstRowCheck.values.length > 0 && firstRowCheck.values[0]?.[0];
   if (!hasHeader) {
-    await callSheetsTool("sheets_update_range", {
-      spreadsheetId: targetSpreadsheetId,
-      range: "시트1!A1:F1",
-      values: headers,
-      preferOAuth: true,
-    }).catch(() => {});
+    await callSheetsTool(
+      "sheets_update_range",
+      {
+        spreadsheetId: targetSpreadsheetId,
+        range: "시트1!A1:F1",
+        values: headers,
+        preferOAuth: true,
+      },
+      callOptions
+    ).catch(() => {});
 
-    await callSheetsTool("sheets_format_headers", {
-      spreadsheetId: targetSpreadsheetId,
-      tabName: "시트1",
-      headerBgColor: "#1e293b",
-      headerTextColor: "#ffffff",
-      preferOAuth: true,
-    }).catch(() => {});
+    await callSheetsTool(
+      "sheets_format_headers",
+      {
+        spreadsheetId: targetSpreadsheetId,
+        tabName: "시트1",
+        headerBgColor: "#1e293b",
+        headerTextColor: "#ffffff",
+        preferOAuth: true,
+      },
+      callOptions
+    ).catch(() => {});
   }
 
   // 3. 기존 대화 데이터 전체 로드 (A2:F)
-  const existingDataRes = await callSheetsTool("sheets_get_range", {
-    spreadsheetId: targetSpreadsheetId,
-    range: "시트1!A2:F",
-    preferOAuth: true,
-  }).catch(() => null);
+  const existingDataRes = await callSheetsTool(
+    "sheets_get_range",
+    {
+      spreadsheetId: targetSpreadsheetId,
+      range: "시트1!A2:F",
+      preferOAuth: true,
+    },
+    callOptions
+  ).catch(() => null);
 
   const existingRows: any[][] = existingDataRes?.values || [];
 
@@ -150,23 +170,31 @@ export async function syncKakaoChatToSheet(
   mergedRows.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
 
   // 5. 시트 갱신: 기존 A2:F 영역 비우고, 병합된 전체 데이터 덮어쓰기
-  await callSheetsTool("sheets_clear_range", {
-    spreadsheetId: targetSpreadsheetId,
-    range: "시트1!A2:F",
-    preferOAuth: true,
-  }).catch(() => {});
+  await callSheetsTool(
+    "sheets_clear_range",
+    {
+      spreadsheetId: targetSpreadsheetId,
+      range: "시트1!A2:F",
+      preferOAuth: true,
+    },
+    callOptions
+  ).catch(() => {});
 
   if (mergedRows.length > 0) {
     // 500줄 단위로 분할 청크 전송 (Google Sheets API 페이로드 한도 방어)
     const CHUNK_SIZE = 500;
     for (let i = 0; i < mergedRows.length; i += CHUNK_SIZE) {
       const chunk = mergedRows.slice(i, i + CHUNK_SIZE);
-      await callSheetsTool("sheets_append_values", {
-        spreadsheetId: targetSpreadsheetId,
-        range: "시트1!A2",
-        values: chunk,
-        preferOAuth: true,
-      }).catch((err: any) => {
+      await callSheetsTool(
+        "sheets_append_values",
+        {
+          spreadsheetId: targetSpreadsheetId,
+          range: "시트1!A2",
+          values: chunk,
+          preferOAuth: true,
+        },
+        callOptions
+      ).catch((err: any) => {
         console.error("[KakaoSheetSync] 행 추가 청크 실패:", err.message);
       });
     }

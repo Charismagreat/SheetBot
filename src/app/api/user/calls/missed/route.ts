@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import {
   callSheetsTool,
   listDriveFiles,
@@ -96,12 +96,14 @@ export async function POST(req: NextRequest) {
     let spreadsheetUrl = "";
     if (autoRecordSheet) {
       try {
+        const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req);
         const resolved = await resolveUserSpreadsheet({
           userEmail: cleanEmail,
           sheetType: "MISSED_CALL",
           defaultTitle: "[SheetBot] 부재중 전화 대장",
           requestedTitle: sheetTitle,
           preferOAuth: true,
+          callOptions,
         });
 
         const targetSpreadsheetId = resolved.spreadsheetId;
@@ -112,21 +114,29 @@ export async function POST(req: NextRequest) {
           const headers = [
             ["부재중 일시", "발신 번호", "연락처 이름", "자동 회신 내용", "회신 상태", "기기명"]
           ];
-          await callSheetsTool("sheets_update_range", {
-            spreadsheetId: targetSpreadsheetId,
-            range: "A1:F1",
-            values: headers,
-            preferOAuth: true,
-          }).catch(() => {});
+          await callSheetsTool(
+            "sheets_update_range",
+            {
+              spreadsheetId: targetSpreadsheetId,
+              range: "A1:F1",
+              values: headers,
+              preferOAuth: true,
+            },
+            callOptions
+          ).catch(() => {});
 
           // 헤더 서식 스타일링 (앰버/레드 테마)
-          await callSheetsTool("sheets_format_headers", {
-            spreadsheetId: targetSpreadsheetId,
-            tabName: "시트1",
-            headerBgColor: "#7c2d12",
-            headerTextColor: "#fed7aa",
-            preferOAuth: true,
-          }).catch(() => {});
+          await callSheetsTool(
+            "sheets_format_headers",
+            {
+              spreadsheetId: targetSpreadsheetId,
+              tabName: "시트1",
+              headerBgColor: "#7c2d12",
+              headerTextColor: "#fed7aa",
+              preferOAuth: true,
+            },
+            callOptions
+          ).catch(() => {});
         }
 
         // 시트에 신규 부재중 기록 행 추가 (헤더 순서와 100% 일치)
@@ -134,12 +144,16 @@ export async function POST(req: NextRequest) {
           const newRowValues = [
             [callTime, callerPhone, displayName, replyMessage, replyStatusLabel, deviceId]
           ];
-          await callSheetsTool("sheets_append_values", {
-            spreadsheetId: targetSpreadsheetId,
-            range: "A:F",
-            values: newRowValues,
-            preferOAuth: true,
-          }).catch((err: any) => console.warn("[MissedCalls] append_values warning:", err.message));
+          await callSheetsTool(
+            "sheets_append_values",
+            {
+              spreadsheetId: targetSpreadsheetId,
+              range: "A:F",
+              values: newRowValues,
+              preferOAuth: true,
+            },
+            callOptions
+          ).catch((err: any) => console.warn("[MissedCalls] append_values warning:", err.message));
         }
       } catch (sheetErr: any) {
         console.warn("[MissedCalls] Sheet auto-record warning:", sheetErr.message);

@@ -38,7 +38,8 @@ class CardSetupCoordinator(
     private val requestNotificationListenerPermission: () -> Unit,
     private val updateCardCollapseState: (container: View, toggleBtn: View, isHidden: Boolean) -> Unit,
     private val updateUiState: () -> Unit,
-    private val setupCardCollapseExpandListeners: () -> Unit
+    private val setupCardCollapseExpandListeners: () -> Unit,
+    private val preloadActiveSheetUrls: (force: Boolean) -> Unit = {}
 ) {
     // 🎛️ 카드별/기능별 전담 컨트롤러 프로퍼티
     lateinit var serverStatusCardController: ServerStatusCardController
@@ -279,9 +280,11 @@ class CardSetupCoordinator(
             launchQrScan = { launchQrScanner() },
             onPairingSuccess = { _ ->
                 updateUiState()
+                preloadActiveSheetUrls(true)
             },
             onUnlinkSuccess = {
                 updateUiState()
+                prefs.clearSheetBindingsCache()
             },
             addLogItem = { title, detail, success -> addLogItem(title, detail, success) }
         )

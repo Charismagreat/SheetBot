@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import {
   callSheetsTool,
   listDriveFiles,
@@ -164,12 +164,14 @@ export async function POST(req: NextRequest) {
     if (autoRecordSheet) {
       (async () => {
         try {
+          const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req);
           const resolved = await resolveUserSpreadsheet({
             userEmail: cleanEmail,
             sheetType: "SMS",
             defaultTitle: "[SheetBot] 스마트폰 문자(SMS) 송수신 대장",
             requestedTitle: sheetTitle,
             preferOAuth: true,
+            callOptions,
           });
 
           const targetSpreadsheetId = resolved.spreadsheetId;
@@ -181,40 +183,56 @@ export async function POST(req: NextRequest) {
             ];
 
             // 1행 A1 셀 확인하여 비어있으면 헤더 선제 주입
-            const firstRowCheck = await callSheetsTool("sheets_get_range", {
-              spreadsheetId: targetSpreadsheetId,
-              range: "A1:A1",
-              preferOAuth: true,
-            }).catch(() => null);
+            const firstRowCheck = await callSheetsTool(
+              "sheets_get_range",
+              {
+                spreadsheetId: targetSpreadsheetId,
+                range: "A1:A1",
+                preferOAuth: true,
+              },
+              callOptions
+            ).catch(() => null);
 
             const hasHeaderOrData = firstRowCheck?.values && firstRowCheck.values.length > 0 && firstRowCheck.values[0]?.[0];
 
             if (!hasHeaderOrData) {
-              await callSheetsTool("sheets_update_range", {
-                spreadsheetId: targetSpreadsheetId,
-                range: "A1:F1",
-                values: headerValues,
-                preferOAuth: true,
-              }).catch(() => {});
+              await callSheetsTool(
+                "sheets_update_range",
+                {
+                  spreadsheetId: targetSpreadsheetId,
+                  range: "A1:F1",
+                  values: headerValues,
+                  preferOAuth: true,
+                },
+                callOptions
+              ).catch(() => {});
 
-              await callSheetsTool("sheets_format_headers", {
-                spreadsheetId: targetSpreadsheetId,
-                tabName: "시트1",
-                headerBgColor: "#1e293b",
-                headerTextColor: "#ffffff",
-                preferOAuth: true,
-              }).catch(() => {});
+              await callSheetsTool(
+                "sheets_format_headers",
+                {
+                  spreadsheetId: targetSpreadsheetId,
+                  tabName: "시트1",
+                  headerBgColor: "#1e293b",
+                  headerTextColor: "#ffffff",
+                  preferOAuth: true,
+                },
+                callOptions
+              ).catch(() => {});
             }
 
             const newRowValues = [
               [nowStr, directionLabel, displayName, phoneNumber, message, deviceId]
             ];
-            await callSheetsTool("sheets_append_values", {
-              spreadsheetId: targetSpreadsheetId,
-              range: "A:F",
-              values: newRowValues,
-              preferOAuth: true,
-            }).catch((err: any) => console.warn("[SmsSync] append_values warning:", err.message));
+            await callSheetsTool(
+              "sheets_append_values",
+              {
+                spreadsheetId: targetSpreadsheetId,
+                range: "A:F",
+                values: newRowValues,
+                preferOAuth: true,
+              },
+              callOptions
+            ).catch((err: any) => console.warn("[SmsSync] append_values warning:", err.message));
           }
         } catch (sheetErr: any) {
           console.warn("[SmsSync] Sheet auto-record warning:", sheetErr.message);

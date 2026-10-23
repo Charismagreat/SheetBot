@@ -2,6 +2,7 @@ import {
   callSheetsTool,
   listDriveFiles,
 } from "@/lib/egdesk-helpers";
+import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { getKoreanTimeString } from "@/lib/date-utils";
 
@@ -56,6 +57,8 @@ export async function recordBusinessCardToGoogleSheet(
 
     const nowStr = sentTime || getKoreanTimeString();
 
+    const callOptions = await getWorkspaceCallOptionsForEmail(userEmail);
+
     // 1. 회원별 대장 고유 ID 영구 바인딩 및 0초 즉각 조회
     const resolved = await resolveUserSpreadsheet({
       userEmail,
@@ -63,6 +66,7 @@ export async function recordBusinessCardToGoogleSheet(
       defaultTitle: "[SheetBot] 모바일 명함 발송 대장",
       requestedTitle: sheetTitle,
       preferOAuth: true,
+      callOptions,
     });
 
     const targetSpreadsheetId = resolved.spreadsheetId;
@@ -77,31 +81,43 @@ export async function recordBusinessCardToGoogleSheet(
       ["발송 일시", "상대방 번호", "연락처 이름", "발송 방식", "명함 내용/URL", "발송 결과", "기기명"]
     ];
 
-    const firstRowCheck = await callSheetsTool("sheets_get_range", {
-      spreadsheetId: targetSpreadsheetId,
-      range: "A1:G1",
-      preferOAuth: true,
-    }).catch(() => null);
+    const firstRowCheck = await callSheetsTool(
+      "sheets_get_range",
+      {
+        spreadsheetId: targetSpreadsheetId,
+        range: "A1:G1",
+        preferOAuth: true,
+      },
+      callOptions
+    ).catch(() => null);
 
     const firstRowValues = firstRowCheck?.values?.[0] || [];
     const hasHeaderOrData = firstRowValues.length > 0 && Boolean(firstRowValues[0]);
 
     if (!hasHeaderOrData) {
-      await callSheetsTool("sheets_update_range", {
-        spreadsheetId: targetSpreadsheetId,
-        range: "A1:G1",
-        values: headerValues,
-        preferOAuth: true,
-      }).catch(() => {});
+      await callSheetsTool(
+        "sheets_update_range",
+        {
+          spreadsheetId: targetSpreadsheetId,
+          range: "A1:G1",
+          values: headerValues,
+          preferOAuth: true,
+        },
+        callOptions
+      ).catch(() => {});
 
       // 인디고/퍼플 비즈니스 테마 헤더 서식 스타일링
-      await callSheetsTool("sheets_format_headers", {
-        spreadsheetId: targetSpreadsheetId,
-        tabName: "시트1",
-        headerBgColor: "#4338ca", // Dark Indigo
-        headerTextColor: "#eef2ff", // Light Indigo
-        preferOAuth: true,
-      }).catch(() => {});
+      await callSheetsTool(
+        "sheets_format_headers",
+        {
+          spreadsheetId: targetSpreadsheetId,
+          tabName: "시트1",
+          headerBgColor: "#4338ca", // Dark Indigo
+          headerTextColor: "#eef2ff", // Light Indigo
+          preferOAuth: true,
+        },
+        callOptions
+      ).catch(() => {});
     }
 
     // 3. 새 모바일 명함 발송 내역 행 추가
@@ -109,12 +125,16 @@ export async function recordBusinessCardToGoogleSheet(
       [nowStr, recipientPhone, contactName || "미등록 연락처", sendMode, cardContentOrUrl, status, deviceId],
     ];
 
-    await callSheetsTool("sheets_append_values", {
-      spreadsheetId: targetSpreadsheetId,
-      range: "A:G",
-      values: newRowValues,
-      preferOAuth: true,
-    }).catch((err: any) => {
+    await callSheetsTool(
+      "sheets_append_values",
+      {
+        spreadsheetId: targetSpreadsheetId,
+        range: "A:G",
+        values: newRowValues,
+        preferOAuth: true,
+      },
+      callOptions
+    ).catch((err: any) => {
       console.warn("[BusinessCardSync] append_values warning:", err.message);
     });
 

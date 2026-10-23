@@ -603,6 +603,20 @@ class PreferencesManager(context: Context) {
         return prefs.getString("sheet_id_${sheetType.uppercase()}", null)
     }
 
+    /**
+     * 🔄 계정 전환 또는 재페어링 시 구글 시트 바인딩 캐시 일괄 초기화
+     */
+    fun clearSheetBindingsCache() {
+        val editor = prefs.edit()
+        val allKeys = prefs.all.keys
+        for (key in allKeys) {
+            if (key.startsWith("sheet_url_") || key.startsWith("folder_url_") || key.startsWith("sheet_id_")) {
+                editor.remove(key)
+            }
+        }
+        editor.apply()
+    }
+
     var naverBlogId: String
         get() = prefs.getString("naver_blog_id", "") ?: ""
         set(value) = prefs.edit().putString("naver_blog_id", value).apply()

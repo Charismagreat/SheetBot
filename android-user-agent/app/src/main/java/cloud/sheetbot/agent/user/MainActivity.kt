@@ -134,7 +134,8 @@ class MainActivity : AppCompatActivity() {
             requestNotificationListenerPermission = { coreCoordinator.permissionController.requestNotificationListenerPermission() },
             updateCardCollapseState = { container, toggleBtn, isHidden -> coreCoordinator.updateCardCollapseState(container, toggleBtn, isHidden) },
             updateUiState = { coreCoordinator.updateUiState() },
-            setupCardCollapseExpandListeners = { coreCoordinator.setupCardCollapseExpandListeners() }
+            setupCardCollapseExpandListeners = { coreCoordinator.setupCardCollapseExpandListeners() },
+            preloadActiveSheetUrls = { force -> coreCoordinator.preloadActiveSheetUrls(force) }
         )
         cardCoordinator = coordinator
         coordinator.setupAllCards()

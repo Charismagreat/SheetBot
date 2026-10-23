@@ -328,6 +328,12 @@ class MainCoreCoordinator(
     fun handleSharedIntent(intent: Intent?) =
         sharedIntentRouter.handleSharedIntent(intent)
 
+    fun preloadActiveSheetUrls(force: Boolean = false) {
+        if (::sheetActionController.isInitialized) {
+            sheetActionController.preloadActiveSheetUrls(force)
+        }
+    }
+
     fun showOpenSheetChooserDialog(sheetType: String, defaultTitle: String) =
         sheetActionController.showOpenSheetChooserDialog(sheetType, defaultTitle)
 

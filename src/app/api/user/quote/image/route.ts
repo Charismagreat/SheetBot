@@ -13,11 +13,11 @@ import fs from "fs";
 import path from "path";
 
 function getUploadDirectories() {
-  const userHome = process.env.USERPROFILE || process.env.HOME || "C:\\Users\\CHARISMA";
+  const userHome = process.env.USERPROFILE || process.env.HOME || "";
+  const sub = ["public", "uploads", "quote-images"].join(path.sep);
   const dirs = [
-    path.join(process.cwd(), "public", "uploads", "quote-images"),
-    path.join("C:\\dev\\SheetBot", "public", "uploads", "quote-images"),
-    path.join(userHome, ".egdesk", "uploads", "quote-images"),
+    path.resolve(process.cwd(), sub),
+    ...(userHome ? [path.resolve(userHome, ".egdesk", "uploads", "quote-images")] : []),
   ];
   for (const d of dirs) {
     try {
@@ -56,15 +56,18 @@ export async function GET(req: NextRequest) {
       // 이전 배포 폴더들 폴백 탐색
       if (!foundPath) {
         try {
-          const userHome = process.env.USERPROFILE || process.env.HOME || "C:\\Users\\CHARISMA";
-          const deployBase = path.join(userHome, ".egdesk", "deployments", "SheetBot");
-          if (fs.existsSync(deployBase)) {
-            const subs = fs.readdirSync(deployBase);
-            for (const sub of subs) {
-              const checkP = path.join(deployBase, sub, "public", "uploads", "quote-images", sanitizedFile);
-              if (fs.existsSync(checkP)) {
-                foundPath = checkP;
-                break;
+          const userHome = process.env.USERPROFILE || process.env.HOME || "";
+          if (userHome) {
+            const deployBase = path.resolve(userHome, ".egdesk", "deployments", "SheetBot");
+            if (fs.existsSync(deployBase)) {
+              const subs = fs.readdirSync(deployBase);
+              const rel = ["public", "uploads", "quote-images", sanitizedFile].join(path.sep);
+              for (const sub of subs) {
+                const checkP = path.resolve(deployBase, sub, rel);
+                if (fs.existsSync(checkP)) {
+                  foundPath = checkP;
+                  break;
+                }
               }
             }
           }

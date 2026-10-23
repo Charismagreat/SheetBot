@@ -2,6 +2,7 @@ import {
   callSheetsTool,
   listDriveFiles,
 } from "@/lib/egdesk-helpers";
+import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import { FinancialTransactionType } from "@/lib/bank-sms-parser";
@@ -108,6 +109,8 @@ export async function recordPaymentToGoogleSheet(
 
     let isNewSheet = false;
 
+    const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail);
+
     // 1. 회원별 대장 고유 ID 영구 바인딩 및 0초 즉각 조회
     try {
       const resolved = await resolveUserSpreadsheet({
@@ -116,6 +119,7 @@ export async function recordPaymentToGoogleSheet(
         defaultTitle: "[SheetBot] 매장 결제 및 매출 대장",
         requestedTitle: sheetTitle,
         preferOAuth: true,
+        callOptions,
       });
       if (resolved?.spreadsheetId) {
         targetSpreadsheetId = resolved.spreadsheetId;
@@ -129,10 +133,13 @@ export async function recordPaymentToGoogleSheet(
     // 2. 바인딩 조회가 없을 경우 드라이브 검색 폴백
     if (!targetSpreadsheetId) {
       const queryStr = `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${sheetTitle}' and trashed = false`;
-      const sheetSearch = await (listDriveFiles as any)({
-        query: queryStr,
-        preferOAuth: true,
-      }).catch(() => ({ files: [] }));
+      const sheetSearch = await (listDriveFiles as any)(
+        {
+          query: queryStr,
+          preferOAuth: true,
+        },
+        callOptions
+      ).catch(() => ({ files: [] }));
 
       const foundSheets = sheetSearch?.files || [];
       if (foundSheets.length > 0) {
@@ -140,10 +147,14 @@ export async function recordPaymentToGoogleSheet(
         spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
       } else {
         // 대장 시트 신규 생성
-        const createRes = await callSheetsTool("sheets_create_spreadsheet", {
-          title: sheetTitle,
-          preferOAuth: true,
-        }).catch((err: any) => {
+        const createRes = await callSheetsTool(
+          "sheets_create_spreadsheet",
+          {
+            title: sheetTitle,
+            preferOAuth: true,
+          },
+          callOptions
+        ).catch((err: any) => {
           console.warn("[PaymentSheetSync] sheets_create_spreadsheet warning:", err.message);
           return null;
         });
@@ -166,21 +177,29 @@ export async function recordPaymentToGoogleSheet(
         ["일시", "구분", "금융사/채널", "계좌/카드번호", "고객/가맹점명", "금액(원)", "거래/결제 내용", "수신 기기"],
       ];
 
-      await callSheetsTool("sheets_update_range", {
-        spreadsheetId: targetSpreadsheetId,
-        range: "A1:H1",
-        values: headerValues,
-        preferOAuth: true,
-      }).catch(() => {});
+      await callSheetsTool(
+        "sheets_update_range",
+        {
+          spreadsheetId: targetSpreadsheetId,
+          range: "A1:H1",
+          values: headerValues,
+          preferOAuth: true,
+        },
+        callOptions
+      ).catch(() => {});
 
       // 에메랄드 그린 비즈니스 테마 헤더 서식 스타일링
-      await callSheetsTool("sheets_format_headers", {
-        spreadsheetId: targetSpreadsheetId,
-        tabName: "시트1",
-        headerBgColor: "#065f46", // Dark Emerald
-        headerTextColor: "#ecfdf5", // Light Mint
-        preferOAuth: true,
-      }).catch(() => {});
+      await callSheetsTool(
+        "sheets_format_headers",
+        {
+          spreadsheetId: targetSpreadsheetId,
+          tabName: "시트1",
+          headerBgColor: "#065f46", // Dark Emerald
+          headerTextColor: "#ecfdf5", // Light Mint
+          preferOAuth: true,
+        },
+        callOptions
+      ).catch(() => {});
     }
 
     // 4. 새 결제/입출금 내역 행 추가 (F열 금액은 순수 숫자 타입 유지)
@@ -188,12 +207,16 @@ export async function recordPaymentToGoogleSheet(
       [nowStr, transactionType, channelOrBank, accountOrCardNumber || "-", customerName, Number(amount) || 0, memoOrRawText, deviceId],
     ];
 
-    await callSheetsTool("sheets_append_values", {
-      spreadsheetId: targetSpreadsheetId,
-      range: "A:H",
-      values: newRowValues,
-      preferOAuth: true,
-    }).catch((err: any) => {
+    await callSheetsTool(
+      "sheets_append_values",
+      {
+        spreadsheetId: targetSpreadsheetId,
+        range: "A:H",
+        values: newRowValues,
+        preferOAuth: true,
+      },
+      callOptions
+    ).catch((err: any) => {
       console.warn("[PaymentSheetSync] append_values warning:", err.message);
     });
 

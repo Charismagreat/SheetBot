@@ -68,8 +68,9 @@ class SheetActionController(
 
     /**
      * 활성화된 기능들의 구글 시트 URL을 백그라운드에서 사전 캐싱 (v2.1.5)
+     * @param force true 전달 시 캐시 존재 여부와 무관하게 서버 바인딩 시트 URL로 강제 동기화 (계정 전환/재페어링 시 필수)
      */
-    fun preloadActiveSheetUrls() {
+    fun preloadActiveSheetUrls(force: Boolean = false) {
         try {
             val userEmail = prefs.userEmail
             if (!prefs.isPaired || userEmail.isNullOrBlank()) return
@@ -77,44 +78,44 @@ class SheetActionController(
             scope.launch(Dispatchers.IO) {
                 try {
                     val targets = mutableListOf<Triple<String, String, String?>>()
-                    if (prefs.isSmsSheetSyncEnabled && prefs.getSheetUrl("SMS").isNullOrBlank()) {
+                    if (prefs.isSmsSheetSyncEnabled && (force || prefs.getSheetUrl("SMS").isNullOrBlank())) {
                         targets.add(Triple("SMS", prefs.smsDriveSheetTitle, null))
                     }
-                    if (prefs.isKakaoSheetSyncEnabled && prefs.getSheetUrl("KAKAO").isNullOrBlank()) {
+                    if (prefs.isKakaoSheetSyncEnabled && (force || prefs.getSheetUrl("KAKAO").isNullOrBlank())) {
                         targets.add(Triple("KAKAO", prefs.kakaoDriveSheetTitle, null))
                     }
-                    if (prefs.isMissedCallAutoReplyEnabled && prefs.getSheetUrl("MISSED_CALL").isNullOrBlank()) {
+                    if (prefs.isMissedCallAutoReplyEnabled && (force || prefs.getSheetUrl("MISSED_CALL").isNullOrBlank())) {
                         targets.add(Triple("MISSED_CALL", prefs.missedCallDriveSheetTitle, null))
                     }
-                    if (prefs.isCallRecordingSyncEnabled && prefs.getSheetUrl("RECORDING").isNullOrBlank()) {
+                    if (prefs.isCallRecordingSyncEnabled && (force || prefs.getSheetUrl("RECORDING").isNullOrBlank())) {
                         targets.add(Triple("RECORDING", "[SheetBot] 통화 녹음 대장", prefs.callRecordingDriveFolder))
                     }
-                    if (prefs.isFileUploadSyncEnabled && prefs.getSheetUrl("FILE_UPLOAD").isNullOrBlank()) {
+                    if (prefs.isFileUploadSyncEnabled && (force || prefs.getSheetUrl("FILE_UPLOAD").isNullOrBlank())) {
                         targets.add(Triple("FILE_UPLOAD", "[SheetBot] 파일 업로드 대장", prefs.fileUploadDriveFolder))
                     }
-                    if (prefs.isLinkScrapEnabled && prefs.getSheetUrl("LINK_BOOKMARK").isNullOrBlank()) {
+                    if (prefs.isLinkScrapEnabled && (force || prefs.getSheetUrl("LINK_BOOKMARK").isNullOrBlank())) {
                         targets.add(Triple("LINK_BOOKMARK", prefs.linkScrapDriveSheetTitle, null))
                     }
-                    if (prefs.isCallEndedCardPromptEnabled && prefs.getSheetUrl("CALL_ENDED_CARD").isNullOrBlank()) {
+                    if (prefs.isCallEndedCardPromptEnabled && (force || prefs.getSheetUrl("CALL_ENDED_CARD").isNullOrBlank())) {
                         targets.add(Triple("CALL_ENDED_CARD", "[SheetBot] 모바일 명함 발송 대장", null))
                     }
-                    if (prefs.isPushDetectionEnabled && prefs.getSheetUrl("PAYMENT_PUSH").isNullOrBlank()) {
+                    if (prefs.isPushDetectionEnabled && (force || prefs.getSheetUrl("PAYMENT_PUSH").isNullOrBlank())) {
                         targets.add(Triple("PAYMENT_PUSH", "[SheetBot] 매장 결제 및 매출 대장", null))
                     }
-                    if (prefs.isReceiptSmsEnabled && prefs.getSheetUrl("RECEIPT_SMS").isNullOrBlank()) {
+                    if (prefs.isReceiptSmsEnabled && (force || prefs.getSheetUrl("RECEIPT_SMS").isNullOrBlank())) {
                         targets.add(Triple("RECEIPT_SMS", "[SheetBot] 고객 영수증 문자 발송 대장", null))
                     }
-                    if (prefs.isWebsiteMonitorEnabled && prefs.getSheetUrl("WEBSITE_MONITOR").isNullOrBlank()) {
+                    if (prefs.isWebsiteMonitorEnabled && (force || prefs.getSheetUrl("WEBSITE_MONITOR").isNullOrBlank())) {
                         targets.add(Triple("WEBSITE_MONITOR", "[SheetBot] 웹사이트 모니터링 & 장애 대장", null))
                     }
                     val quoteUrl = prefs.getSheetUrl("QUOTE")
-                    if (prefs.isQuoteSheetSyncEnabled && (quoteUrl.isNullOrBlank() || quoteUrl.contains("1feIe5"))) {
+                    if (prefs.isQuoteSheetSyncEnabled && (force || quoteUrl.isNullOrBlank() || quoteUrl.contains("1feIe5"))) {
                         targets.add(Triple("QUOTE", prefs.quoteDriveSheetTitle, null))
                     }
-                    if (prefs.getSheetUrl("RECEIPT").isNullOrBlank()) {
+                    if (force || prefs.getSheetUrl("RECEIPT").isNullOrBlank()) {
                         targets.add(Triple("RECEIPT", prefs.receiptDriveSheetTitle, "[SheetBot] 영수증 보관함"))
                     }
-                    if (prefs.getSheetUrl("BUSINESS_CARD").isNullOrBlank()) {
+                    if (force || prefs.getSheetUrl("BUSINESS_CARD").isNullOrBlank()) {
                         targets.add(Triple("BUSINESS_CARD", prefs.businessCardDriveSheetTitle, "[SheetBot] 명함 보관함"))
                     }
 

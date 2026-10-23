@@ -362,6 +362,9 @@ class AccountPairingController(
             }
 
             if (result.success) {
+                if (prefs.userEmail != email) {
+                    prefs.clearSheetBindingsCache()
+                }
                 prefs.userEmail = email
                 prefs.isPaired = true
                 if (!result.webhookUrl.isNullOrBlank()) prefs.webhookUrl = result.webhookUrl
@@ -426,6 +429,9 @@ class AccountPairingController(
 
             if (result.success) {
                 val finalEmail = result.userEmail ?: email
+                if (prefs.userEmail != finalEmail) {
+                    prefs.clearSheetBindingsCache()
+                }
                 prefs.userEmail = finalEmail
                 prefs.isPaired = true
                 if (!result.webhookUrl.isNullOrBlank()) prefs.webhookUrl = result.webhookUrl
