@@ -372,7 +372,8 @@ class KeepAliveService : Service() {
                             .build()
 
                         try {
-                            sseStreamClient.newCall(request).execute().use { response ->
+                            val response = sseStreamClient.newCall(request).execute()
+                            try {
                                 if (response.isSuccessful && response.body != null) {
                                     if (!hasSyncedInitialQueue) {
                                         hasSyncedInitialQueue = true
@@ -405,6 +406,8 @@ class KeepAliveService : Service() {
                                 } else {
                                     Log.w(TAG, "⚡ [SSE] 비정상 응답 (HTTP ${response.code}, $host)")
                                 }
+                            } finally {
+                                response.close()
                             }
                         } catch (e: Exception) {
                             val elapsedMs = System.currentTimeMillis() - attemptStartMs

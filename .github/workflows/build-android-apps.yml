@@ -45,7 +45,6 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.5'
-          cache-disabled: true
 
       - name: Accept Android SDK Licenses
         run: |
@@ -69,14 +68,7 @@ jobs:
       - name: Build Release APK
         run: |
           cd ${{ matrix.dir }}
-          if ! gradle assembleRelease --stacktrace > build.log 2>&1; then
-            echo "### ❌ Build Failure in ${{ matrix.dir }}" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -n 120 build.log >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            cat build.log
-            exit 1
-          fi
+          gradle assembleRelease --stacktrace
 
       - name: Collect APK
         run: |
