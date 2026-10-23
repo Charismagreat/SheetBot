@@ -333,7 +333,9 @@ class SheetActionController(
 
                         val ftsWebUrl = buildString {
                             append(FileToSheetClient.FTS_OFFICIAL_DOMAIN)
-                            append("/?phone=")
+                            append("/?token=")
+                            append(Uri.encode(ftsRes.token))
+                            append("&phone=")
                             append(Uri.encode(phoneNumber))
                             if (!ftsRes.projectId.isNullOrBlank()) {
                                 append("&projectId=")
