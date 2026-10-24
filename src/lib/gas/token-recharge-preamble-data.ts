@@ -37,7 +37,7 @@ function getUserTokenBalanceData() {
     if (!email) email = "chachogreat@gmail.com";
     email = email.toLowerCase().trim();
 
-    var isAdmin = (email === "chachogreat@gmail.com" || email.indexOf("charisma") !== -1 || email.indexOf("chacho") !== -1);
+    var isAdmin = (email === "minseochh02@gmail.com" || email.indexOf("charisma") !== -1 || email.indexOf("minseochh02") !== -1);
 
     // 1. 🌐 클라우드 서버 실시간 잔액 API 우선 조회 (0초 즉시 동기화)
     try {
@@ -425,7 +425,7 @@ function simulateAdminDepositApproval(requestId, depositCode, pkgId) {
     var email = Session.getActiveUser().getEmail() || "";
     email = email.toLowerCase().trim();
 
-    var isAuthorizedAdmin = (email === "chachogreat@gmail.com" || email.indexOf("charisma") !== -1 || email.indexOf("chacho") !== -1);
+    var isAuthorizedAdmin = (email === "minseochh02@gmail.com" || email.indexOf("charisma") !== -1 || email.indexOf("minseochh02") !== -1);
     if (!isAuthorizedAdmin) {
       return {
         success: false,

@@ -31,7 +31,7 @@ sequenceDiagram
     Admin->>Page: 페이지 진입
     Page->>CheckAPI: GET /api/admin/check (인증 상태 점검)
     CheckAPI->>Auth: isCurrentUserAdmin(session.user.email)
-    Auth->>DB: 1. 기본 관리자 목록 (chachogreat, charismagreat 등)<br/>2. sheetbot_users (role === 'ADMIN')<br/>3. 환경변수 ADMIN_EMAIL 대조
+    Auth->>DB: 1. 기본 관리자 목록 (minseochh02, charismagreat 등)<br/>2. sheetbot_users (role === 'ADMIN')<br/>3. 환경변수 ADMIN_EMAIL 대조
     DB-->>CheckAPI: 권한 검증 결과 반환
     alt 권한 없음 (일반 회원 또는 비로그인)
         CheckAPI-->>Page: { success: true, isAdmin: false }

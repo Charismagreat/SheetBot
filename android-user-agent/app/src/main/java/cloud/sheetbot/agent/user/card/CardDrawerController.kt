@@ -173,13 +173,13 @@ class CardDrawerController(
     }
 
     /**
-     * 기본 순서가 없을 경우 활성화된 카드들의 기본 순서를 자동 초기화
+     * 기본 순서가 없을 경우 활성화된 카드들의 기본 순서를 자동 초기화 (하단 스토어 배너 cardStore는 제외)
      */
     private fun syncDefaultOrderIfEmpty() {
         val currentOrder = prefs.activeCardOrder
         if (currentOrder.isEmpty()) {
             val hiddenKeys = prefs.hiddenCardKeys
-            val initialActive = allCards.filter { !hiddenKeys.contains(it.key) }.map { it.key }
+            val initialActive = allCards.filter { it.key != "cardStore" && !hiddenKeys.contains(it.key) }.map { it.key }
             if (initialActive.isNotEmpty()) {
                 prefs.activeCardOrder = initialActive
             }
@@ -300,19 +300,25 @@ class CardDrawerController(
             val mainScrollView = activity.findViewById<ScrollView>(R.id.mainScrollView)
             val parentLayout = mainScrollView?.getChildAt(0) as? LinearLayout ?: return
 
-            // cardDrawerBox의 현재 위치를 기준으로 그 이전에 활성 카드들을 순서대로 배치
-            val drawerIndex = parentLayout.indexOfChild(cardDrawerBox)
-            if (drawerIndex != -1 && activeOrder.isNotEmpty()) {
+            // cardDrawerBox(또는 card_drawer.xml 루트 컨테이너)의 현재 위치를 기준으로 그 이전에 활성 카드들을 순서대로 배치
+            val drawerAnchorView = if (parentLayout.indexOfChild(cardDrawerBox) != -1) {
+                cardDrawerBox
+            } else {
+                cardDrawerBox?.parent as? View
+            }
+            if (drawerAnchorView != null && parentLayout.indexOfChild(drawerAnchorView) != -1 && activeOrder.isNotEmpty()) {
                 activeOrder.forEach { cardKey ->
                     val cardInfo = allCards.firstOrNull { it.key == cardKey } ?: return@forEach
                     val cardView = activity.findViewById<View>(cardInfo.cardResId) ?: return@forEach
 
-                    val curIdx = parentLayout.indexOfChild(cardView)
-                    val targetDrawerIdx = parentLayout.indexOfChild(cardDrawerBox)
-                    if (curIdx != -1 && targetDrawerIdx != -1 && curIdx > targetDrawerIdx) {
+                    if (cardView.parent === parentLayout) {
                         parentLayout.removeView(cardView)
-                        val newDrawerIdx = parentLayout.indexOfChild(cardDrawerBox)
-                        parentLayout.addView(cardView, newDrawerIdx)
+                        val newDrawerIdx = parentLayout.indexOfChild(drawerAnchorView)
+                        if (newDrawerIdx != -1) {
+                            parentLayout.addView(cardView, newDrawerIdx)
+                        } else {
+                            parentLayout.addView(cardView)
+                        }
                     }
                 }
             }
@@ -397,7 +403,7 @@ class CardDrawerController(
             rootLayout.removeViews(2, rootLayout.childCount - 2)
 
             val hiddenKeys = prefs.hiddenCardKeys
-            val activeKeys = prefs.activeCardOrder.filter { !hiddenKeys.contains(it) }
+            val activeKeys = prefs.activeCardOrder.filter { it != "cardStore" && !hiddenKeys.contains(it) }
             val activeCards = activeKeys.mapNotNull { key -> allCards.firstOrNull { it.key == key } }
             val archivedCards = allCards.filter { hiddenKeys.contains(it.key) }
 

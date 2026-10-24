@@ -24,7 +24,7 @@ export interface AuthAdminContextValue {
 
 const KNOWN_ADMINS = [
   "charismagreat@gmail.com",
-  "chachogreat@gmail.com",
+  "minseochh02@gmail.com",
 ];
 
 const AuthAdminContext = createContext<AuthAdminContextValue>({

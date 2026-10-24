@@ -23,7 +23,7 @@ async function handleMigration(req: NextRequest) {
     const cleanSessionEmail = (sessionEmail || "").toLowerCase().trim();
 
     // 관리자 또는 로컬 개발 환경 검증 (chachogreat@gmail.com)
-    const isAdmin = cleanSessionEmail === "chachogreat@gmail.com" || 
+    const isAdmin = cleanSessionEmail === "minseochh02@gmail.com" || 
                     cleanSessionEmail === "charismagreat@gmail.com" || 
                     await isCurrentUserAdmin(cleanSessionEmail);
 
@@ -33,7 +33,7 @@ async function handleMigration(req: NextRequest) {
     await setupDatabase(true);
 
     const nowStr = new Date().toISOString().replace("T", " ").slice(0, 19);
-    const targetEmail = "chachogreat@gmail.com";
+    const targetEmail = "minseochh02@gmail.com";
 
     // 2. sheetbot_users 관리자 계정 보장
     const userRes = await queryTable("sheetbot_users", {
@@ -57,7 +57,7 @@ async function handleMigration(req: NextRequest) {
     } else {
       await insertRows("sheetbot_users", [
         {
-          id: "user_admin_chachogreat",
+          id: "user_admin_minseochh02",
           email: targetEmail,
           name: "차호석",
           role: "ADMIN",

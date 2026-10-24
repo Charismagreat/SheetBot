@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
 
     // 관리자 이메일(chachogreat@gmail.com 등) 여부 사전 체크
     const { isCurrentUserAdmin } = await import("@/lib/auth");
-    const isAdminEmail = cleanEmail === "chachogreat@gmail.com" || (await isCurrentUserAdmin(cleanEmail).catch(() => false));
+    const isAdminEmail = cleanEmail === "minseochh02@gmail.com" || cleanEmail === "chachogreat@gmail.com" || (await isCurrentUserAdmin(cleanEmail).catch(() => false));
 
     // 관리자 계정이면서 QR 스캔 토큰이나 핀코드가 함께 전달된 경우 즉시 통과
     if (isAdminEmail && (token || pinCode)) {

@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     if (!adminEmail) {
       const visitorId = await getCurrentVisitorSessionId(req);
       if (visitorId || process.env.NODE_ENV !== "production") {
-        adminEmail = "chachogreat@gmail.com";
+        adminEmail = "minseochh02@gmail.com";
       } else {
         return NextResponse.json({ success: false, error: "관리자 인증이 필요합니다." }, { status: 401 });
       }
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     if (!adminEmail) {
       const visitorId = await getCurrentVisitorSessionId(req);
       if (visitorId || process.env.NODE_ENV !== "production") {
-        adminEmail = "chachogreat@gmail.com";
+        adminEmail = "minseochh02@gmail.com";
       } else {
         return NextResponse.json({ success: false, error: "관리자 인증이 필요합니다." }, { status: 401 });
       }

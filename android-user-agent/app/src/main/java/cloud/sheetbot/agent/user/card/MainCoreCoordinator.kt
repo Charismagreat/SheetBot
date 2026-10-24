@@ -298,6 +298,7 @@ class MainCoreCoordinator(
 
         if (::cardDrawerController.isInitialized) {
             cardDrawerController.applyCardVisibilityAndOrder()
+            cardDrawerController.refreshDrawerList()
         }
     }
 

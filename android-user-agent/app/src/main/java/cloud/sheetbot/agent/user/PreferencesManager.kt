@@ -765,8 +765,9 @@ class PreferencesManager(context: Context) {
     }
 
     /**
-     * 🔄 v2.3.8+ 신규 스토어 체계 1회 자동 마이그레이션:
-     * 기존 설치 사용자의 기기에서도 7대 시스템 카드가 스토어로 안전하게 들어가도록 보정
+     * 🔄 v2.3.8+ 신규 스토어 체계 및 v2.4.14 초기 전체 보관 마이그레이션:
+     * 최초 설치 시 모든 기능/시스템 카드(매장결제, 연락처백업 포함 25종 전원)가
+     * 시트봇 보관함에 기본 보관된 상태(홈 화면 활성 카드 0개)로 시작하도록 보장
      */
     var isSystemCardsV238Migrated: Boolean
         get() = prefs.getBoolean("is_system_cards_v238_migrated", false)
@@ -775,24 +776,14 @@ class PreferencesManager(context: Context) {
     fun migrateSystemCardsToStoreIfNeeded() {
         if (!isSystemCardsV238Migrated) {
             val currentHidden = (prefs.getStringSet("hidden_card_keys", null) ?: DEFAULT_HIDDEN_CARDS).toMutableSet()
-            // 7대 시스템 카드 스토어 보관 등록
-            currentHidden.addAll(listOf(
-                "cardStatus", "cardTtsToggle", "cardWallet",
-                "cardTasksHub", "cardCopilot", "cardLocalLogs", "cardFeatureRequest"
-            ))
-            // 2대 핵심 시트 카드는 홈에 노출되도록 보관 목록에서 해제
-            currentHidden.remove("cardPaymentReceipt")
-            currentHidden.remove("cardContactsBackup")
+            // 7대 시스템 카드 및 기본 숨김 카드 전원 보관함 등록
+            currentHidden.addAll(DEFAULT_HIDDEN_CARDS)
             hiddenCardKeys = currentHidden
 
-            // 활성 순서 정리
+            // 활성 순서 정리 (보관함 대상 카드 제외)
             val curOrder = activeCardOrder.toMutableList()
-            curOrder.removeAll(listOf(
-                "cardStatus", "cardTtsToggle", "cardWallet",
-                "cardTasksHub", "cardCopilot", "cardLocalLogs", "cardFeatureRequest"
-            ))
-            if (!curOrder.contains("cardPaymentReceipt")) curOrder.add("cardPaymentReceipt")
-            if (!curOrder.contains("cardContactsBackup")) curOrder.add("cardContactsBackup")
+            curOrder.removeAll(DEFAULT_HIDDEN_CARDS)
+            curOrder.remove("cardStore")
             activeCardOrder = curOrder
 
             isSystemCardsV238Migrated = true
@@ -808,7 +799,7 @@ class PreferencesManager(context: Context) {
         const val DESTINATION_FILE_TO_SHEET = "FILE_TO_SHEET"
 
         val DEFAULT_HIDDEN_CARDS = setOf(
-            // 7대 시스템 & 관제 카드 (토큰 지갑 포함 전원 스토어 기본 보관)
+            // 7대 시스템 & 관제 카드 (토큰 지갑 포함 전원 보관함 기본 보관)
             "cardStatus",
             "cardTtsToggle",
             "cardWallet",
@@ -816,6 +807,14 @@ class PreferencesManager(context: Context) {
             "cardCopilot",
             "cardLocalLogs",
             "cardFeatureRequest",
+
+            // 핵심 업무 & 장부 (전원 보관함 기본 보관 - 최초 설치 시 홈 화면 0개 시작)
+            "cardPaymentReceipt",
+            "cardQuoteSync",
+            "cardEstimateSync",
+            "cardFileUpload",
+            "cardContactsBackup",
+            "cardDepositMonitor",
 
             // 통화 & 녹음
             "cardCallRecording",
@@ -829,10 +828,6 @@ class PreferencesManager(context: Context) {
             "cardSheetSmsCheckbox",
             "cardKakaoSync",
             "cardLinkScrap",
-            "cardFileUpload",
-            "cardQuoteSync",
-            "cardEstimateSync",
-            "cardDepositMonitor",
 
             // AI & 마케팅
             "cardBlog",

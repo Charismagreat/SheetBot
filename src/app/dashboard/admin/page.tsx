@@ -244,7 +244,7 @@ export default function AdminDashboardPage() {
     const email = userEmail || (session?.user?.email || "").toLowerCase().trim();
     const KNOWN_ADMINS = [
       "charismagreat@gmail.com",
-      "chachogreat@gmail.com",
+      "minseochh02@gmail.com",
     ];
 
     // 비관리자 접근 사전 차단

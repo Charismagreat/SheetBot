@@ -358,7 +358,7 @@ const DEFAULT_CATALOG: MarketplaceCardItem[] = [
     badge: 'VIP전용',
     author: '시트봇 파트너스',
     isExclusive: true,
-    allowedEmails: ['chachogreat@gmail.com', 'charismagreat@gmail.com'],
+    allowedEmails: ['minseochh02@gmail.com', 'charismagreat@gmail.com'],
     isInstalledByDefault: false,
     version: '1.0.0',
     updatedAt: '2026-10-09',

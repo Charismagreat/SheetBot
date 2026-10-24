@@ -27,7 +27,7 @@ export interface UseAuthReturn {
 
 const DEFAULT_ADMIN_EMAILS = [
   "charismagreat@gmail.com",
-  "chachogreat@gmail.com",
+  "minseochh02@gmail.com",
 ];
 
 let isGlobalSigningIn = false;
