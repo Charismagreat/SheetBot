@@ -30,26 +30,35 @@
         android:id="@+id/rgUploadDestination"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
-
-        <RadioButton
-            android:id="@+id/rbDestGoogleSheet"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="구글 시트"
-            android:textColor="#E2E8F0"
-            android:textSize="12sp"
-            android:checked="true" />
+        android:orientation="vertical">
 
         <RadioButton
             android:id="@+id/rbDestFileToSheet"
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="파일투시트 (file2sheet.cloud)"
+            android:text="⚡ 파일투시트 (file2sheet.cloud) 직결"
             android:textColor="#E2E8F0"
-            android:textSize="12sp" />
+            android:textSize="11.5sp"
+            android:paddingVertical="3dp" />
+
+        <RadioButton
+            android:id="@+id/rbDestGoogleSheet"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📊 구글 스프레드시트 / 드라이브 보관"
+            android:textColor="#E2E8F0"
+            android:textSize="11.5sp"
+            android:paddingVertical="3dp" />
+
+        <RadioButton
+            android:id="@+id/rbDestBoth"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🌟 둘 다 동시 전송 (파일투시트 + 구글 시트)"
+            android:textColor="#FBBF24"
+            android:textSize="11.5sp"
+            android:textStyle="bold"
+            android:paddingVertical="3dp" />
     </RadioGroup>
 
     <!-- 파일투시트(FileToSheet) 선택 시 활성화되는 연동 상태 및 QR 스캔 패널 -->

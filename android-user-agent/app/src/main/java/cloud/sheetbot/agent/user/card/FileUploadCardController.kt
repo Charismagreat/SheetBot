@@ -44,6 +44,7 @@ class FileUploadCardController(
     private val rgUploadDestination: RadioGroup by lazy { binding.root.findViewById(R.id.rgUploadDestination) }
     private val rbDestGoogleSheet: RadioButton by lazy { binding.root.findViewById(R.id.rbDestGoogleSheet) }
     private val rbDestFileToSheet: RadioButton by lazy { binding.root.findViewById(R.id.rbDestFileToSheet) }
+    private val rbDestBoth: RadioButton by lazy { binding.root.findViewById(R.id.rbDestBoth) }
     private val layoutFtsStatusContainer: View by lazy { binding.root.findViewById(R.id.layoutFtsStatusContainer) }
     private val tvFtsStatusTitle: TextView by lazy { binding.root.findViewById(R.id.tvFtsStatusTitle) }
     private val tvFtsStatusDesc: TextView by lazy { binding.root.findViewById(R.id.tvFtsStatusDesc) }
@@ -55,14 +56,22 @@ class FileUploadCardController(
         refreshFtsUi()
 
         rgUploadDestination.setOnCheckedChangeListener { _, checkedId ->
-            if (checkedId == rbDestFileToSheet.id) {
-                prefs.uploadDestination = AppPreferences.DESTINATION_FILE_TO_SHEET
-                refreshFtsUi()
-                Toast.makeText(activity, "⚡ 파일투시트(FileToSheet) 직결 전송 모드가 선택되었습니다.", Toast.LENGTH_SHORT).show()
-            } else {
-                prefs.uploadDestination = AppPreferences.DESTINATION_GOOGLE_SHEETS
-                refreshFtsUi()
-                Toast.makeText(activity, "📊 구글 스프레드시트 연동 모드가 선택되었습니다.", Toast.LENGTH_SHORT).show()
+            when (checkedId) {
+                rbDestBoth.id -> {
+                    prefs.uploadDestination = AppPreferences.DESTINATION_BOTH
+                    refreshFtsUi()
+                    Toast.makeText(activity, "🌟 파일투시트 + 구글 시트 동시 전송 모드가 선택되었습니다.", Toast.LENGTH_SHORT).show()
+                }
+                rbDestFileToSheet.id -> {
+                    prefs.uploadDestination = AppPreferences.DESTINATION_FILE_TO_SHEET
+                    refreshFtsUi()
+                    Toast.makeText(activity, "⚡ 파일투시트(FileToSheet) 직결 전송 모드가 선택되었습니다.", Toast.LENGTH_SHORT).show()
+                }
+                rbDestGoogleSheet.id -> {
+                    prefs.uploadDestination = AppPreferences.DESTINATION_GOOGLE_SHEETS
+                    refreshFtsUi()
+                    Toast.makeText(activity, "📊 구글 스프레드시트 연동 모드가 선택되었습니다.", Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
@@ -116,12 +125,44 @@ class FileUploadCardController(
      * ⚡ 파일투시트 연동 상태 및 전송 목적지 UI 갱신
      */
     fun refreshFtsUi() {
-        val isFts = prefs.isDestinationFileToSheet
-        if (isFts) {
-            rbDestFileToSheet.isChecked = true
+        val isSheetBotPaired = prefs.isPaired && !prefs.userEmail.isNullOrBlank() && !prefs.userEmail!!.endsWith("@filetosheet.cloud")
+        val isFileToSheetPaired = prefs.isFtsPaired || !prefs.ftsPhoneNumber.isNullOrBlank()
+        val isBothPaired = isSheetBotPaired && isFileToSheetPaired
+
+        // 1. 라디오 버튼 활성화/비활성화 가드 제어
+        rbDestGoogleSheet.isEnabled = isSheetBotPaired
+        rbDestGoogleSheet.alpha = if (isSheetBotPaired) 1.0f else 0.45f
+        rbDestGoogleSheet.text = if (isSheetBotPaired) "📊 구글 스프레드시트 / 드라이브 보관" else "📊 구글 스프레드시트 (시트봇 연동 필요)"
+
+        rbDestFileToSheet.isEnabled = isFileToSheetPaired
+        rbDestFileToSheet.alpha = if (isFileToSheetPaired) 1.0f else 0.45f
+        rbDestFileToSheet.text = if (isFileToSheetPaired) "⚡ 파일투시트 (file2sheet.cloud) 직결" else "⚡ 파일투시트 (QR/번호 연동 필요)"
+
+        rbDestBoth.isEnabled = isBothPaired
+        rbDestBoth.alpha = if (isBothPaired) 1.0f else 0.45f
+        rbDestBoth.text = if (isBothPaired) "🌟 둘 다 동시 전송 (파일투시트 + 구글 시트)" else "🌟 둘 다 동시 전송 (양측 모두 연동 시 활성화)"
+
+        // 2. 현재 선택값이 비활성화된 상태면 유효한 옵션으로 자동 선택 보정
+        val currentDest = prefs.uploadDestination
+        if (currentDest == AppPreferences.DESTINATION_BOTH && !isBothPaired) {
+            prefs.uploadDestination = if (isFileToSheetPaired) AppPreferences.DESTINATION_FILE_TO_SHEET else AppPreferences.DESTINATION_GOOGLE_SHEETS
+        } else if (currentDest == AppPreferences.DESTINATION_GOOGLE_SHEETS && !isSheetBotPaired) {
+            if (isFileToSheetPaired) prefs.uploadDestination = AppPreferences.DESTINATION_FILE_TO_SHEET
+        } else if (currentDest == AppPreferences.DESTINATION_FILE_TO_SHEET && !isFileToSheetPaired) {
+            if (isSheetBotPaired) prefs.uploadDestination = AppPreferences.DESTINATION_GOOGLE_SHEETS
+        }
+
+        when (prefs.uploadDestination) {
+            AppPreferences.DESTINATION_BOTH -> rbDestBoth.isChecked = true
+            AppPreferences.DESTINATION_FILE_TO_SHEET -> rbDestFileToSheet.isChecked = true
+            else -> rbDestGoogleSheet.isChecked = true
+        }
+
+        // 3. 파일투시트 연동 상태 패널 노출 여부 (FTS 포함 시 노출)
+        if (prefs.isDestinationFileToSheet || isFileToSheetPaired) {
             layoutFtsStatusContainer.visibility = View.VISIBLE
-            if (prefs.isFtsPaired || !prefs.ftsPhoneNumber.isNullOrBlank()) {
-                val sheetName = prefs.ftsSheetName ?: prefs.getFtsSheetNameFor("receipt_scanner") ?: "파일투시트"
+            if (isFileToSheetPaired) {
+                val sheetName = prefs.ftsSheetName ?: prefs.getFtsSheetNameFor("file_upload") ?: "파일투시트"
                 val projectName = prefs.ftsProjectName ?: "내 비즈니스 장부"
                 tvFtsStatusTitle.text = "🟢 직결 연결됨: [$sheetName]"
                 tvFtsStatusDesc.text = "프로젝트: [$projectName]\n사진/영수증 촬영 시 구글 드라이브 없이 0.2초 만에 즉시 적재"
@@ -134,7 +175,6 @@ class FileUploadCardController(
                 btnUnlinkFts.visibility = View.GONE
             }
         } else {
-            rbDestGoogleSheet.isChecked = true
             layoutFtsStatusContainer.visibility = View.GONE
         }
     }

@@ -82,30 +82,22 @@ object FileUploadManager {
         ocrType: String? = null
     ): UploadGenericFileResult = withContext(Dispatchers.IO) {
         val prefs = PreferencesManager(context)
+        val isBoth = prefs.isDestinationBoth
         val isFts = prefs.isDestinationFileToSheet
+        val isGoogle = prefs.isDestinationGoogleSheet
 
-        if (isFts) {
-            if (!prefs.isFtsPaired && prefs.ftsPhoneNumber.isNullOrBlank()) {
-                return@withContext UploadGenericFileResult(
-                    success = false,
-                    error = "파일투시트(FileToSheet)와 연동되어 있지 않습니다. 먼저 번호 인증 또는 QR코드를 스캔해 주세요."
-                )
-            }
-        } else {
-            if (!prefs.isPaired) {
-                return@withContext UploadGenericFileResult(
-                    success = false,
-                    error = "시트봇 계정이 연동되어 있지 않습니다. 먼저 QR코드로 연동해 주세요."
-                )
-            }
-
-            val userEmail = prefs.userEmail
-            if (userEmail.isNullOrBlank()) {
-                return@withContext UploadGenericFileResult(
-                    success = false,
-                    error = "연동된 계정 이메일이 없습니다."
-                )
-            }
+        // 🛡️ 사전 연동 상태 검증
+        if (isFts && !prefs.isFtsPaired && prefs.ftsPhoneNumber.isNullOrBlank()) {
+            return@withContext UploadGenericFileResult(
+                success = false,
+                error = "파일투시트(FileToSheet)와 연동되어 있지 않습니다. 먼저 번호 인증 또는 QR코드를 스캔해 주세요."
+            )
+        }
+        if (isGoogle && (!prefs.isPaired || prefs.userEmail.isNullOrBlank() || prefs.userEmail!!.endsWith("@filetosheet.cloud"))) {
+            return@withContext UploadGenericFileResult(
+                success = false,
+                error = "시트봇 워크스페이스(sheetbot.cloud)와 구글 시트가 연동되어 있지 않습니다."
+            )
         }
 
         val meta = resolveUriMetadata(context, uri)
@@ -117,17 +109,28 @@ object FileUploadManager {
             )
         }
 
-        if (isFts) {
-            val effectiveOcrType = ocrType ?: "GENERIC"
-            var (endpoint, sheetName) = resolveOrEnsureFtsSheet(prefs, effectiveOcrType)
-            val memo = customMemo ?: when (effectiveOcrType.uppercase()) {
-                "RECEIPT" -> "스마트폰 카메라 영수증 촬영 건"
-                "BUSINESS_CARD" -> "스마트폰 카메라 명함 촬영 건"
-                else -> "스마트폰 직결 파일 전송 건"
-            }
+        var ftsResult: FileToSheetClient.FtsUploadResult? = null
+        var ftsTargetSheetName: String = "파일투시트"
+        var googleResult: ApiClient.UploadGenericResult? = null
+        val targetGoogleFolder = when (ocrType?.uppercase()) {
+            "RECEIPT" -> "[SheetBot] 영수증 보관함"
+            "BUSINESS_CARD" -> "[SheetBot] 명함 보관함"
+            else -> prefs.fileUploadDriveFolder.takeIf { it.isNotBlank() } ?: "[SheetBot] 파일 보관함"
+        }
 
-            Log.i(TAG, "⚡ [파일투시트 직결 전송 시작] ${meta.fileName} -> $endpoint ($sheetName)")
-            val ftsResult = try {
+        try {
+            // 🌟 A. 파일투시트(FileToSheet) 직결 전송 수행
+            if (isFts) {
+                val effectiveOcrType = ocrType ?: "GENERIC"
+                var (endpoint, sheetName) = resolveOrEnsureFtsSheet(prefs, effectiveOcrType)
+                ftsTargetSheetName = sheetName
+                val memo = customMemo ?: when (effectiveOcrType.uppercase()) {
+                    "RECEIPT" -> "스마트폰 카메라 영수증 촬영 건"
+                    "BUSINESS_CARD" -> "스마트폰 카메라 명함 촬영 건"
+                    else -> "스마트폰 직결 파일 전송 건"
+                }
+
+                Log.i(TAG, "⚡ [파일투시트 직결 전송 시작] ${meta.fileName} -> $endpoint ($sheetName)")
                 var attempt = FileToSheetClient.uploadFile(
                     endpoint = endpoint,
                     file = tempFile,
@@ -136,11 +139,11 @@ object FileUploadManager {
                     ocrType = effectiveOcrType,
                     deviceId = "${Build.MANUFACTURER} ${Build.MODEL}"
                 )
-                // 만료/변경된 시트 토큰일 경우 휴대폰 번호 기반으로 시트 재보장 후 1회 자동 재시도
                 if (!attempt.success && !prefs.ftsPhoneNumber.isNullOrBlank()) {
                     val refreshed = resolveOrEnsureFtsSheet(prefs, effectiveOcrType, forceRefresh = true)
                     endpoint = refreshed.first
                     sheetName = refreshed.second
+                    ftsTargetSheetName = sheetName
                     attempt = FileToSheetClient.uploadFile(
                         endpoint = endpoint,
                         file = tempFile,
@@ -150,15 +153,82 @@ object FileUploadManager {
                         deviceId = "${Build.MANUFACTURER} ${Build.MODEL}"
                     )
                 }
-                attempt
-            } finally {
-                try {
-                    if (tempFile.exists()) tempFile.delete()
-                } catch (_: Exception) {}
+                ftsResult = attempt
             }
 
-            if (ftsResult.success) {
-                val targetSheet = ftsResult.targetSheet?.takeIf { it.isNotBlank() } ?: sheetName
+            // 🌟 B. 구글 스프레드시트 / 드라이브 보관함 전송 수행
+            if (isGoogle) {
+                val userEmail = prefs.userEmail!!
+                val autoRecordSheet = if (ocrType.equals("RECEIPT", ignoreCase = true) || ocrType.equals("BUSINESS_CARD", ignoreCase = true)) {
+                    true
+                } else {
+                    prefs.isFileUploadSheetEnabled
+                }
+                val memo = customMemo ?: when (ocrType?.uppercase()) {
+                    "RECEIPT" -> "스마트폰 시트봇 에이전트 영수증 AI 장부화"
+                    "BUSINESS_CARD" -> "스마트폰 시트봇 에이전트 명함 AI 인맥화"
+                    else -> "스마트폰 시트봇 에이전트 업로드"
+                }
+
+                Log.i(TAG, "🚀 [구글 드라이브/시트 업로드 시작] ${meta.fileName} -> $targetGoogleFolder (ocr: $ocrType)")
+                googleResult = ApiClient.uploadGenericFile(
+                    file = tempFile,
+                    fileName = meta.fileName,
+                    mimeType = meta.mimeType,
+                    userEmail = userEmail,
+                    folderName = targetGoogleFolder,
+                    memo = memo,
+                    autoRecordSheet = autoRecordSheet,
+                    ocrType = ocrType
+                )
+            }
+        } finally {
+            try {
+                if (tempFile.exists()) tempFile.delete()
+            } catch (_: Exception) {}
+        }
+
+        // 🌟 1) [둘 다 동시 전송(BOTH)] 결과 종합 판정
+        if (isBoth) {
+            val ftsOk = ftsResult?.success == true
+            val googleOk = googleResult?.success == true
+
+            if (ftsOk && googleOk) {
+                val combinedFolder = "[$ftsTargetSheetName] & 구글 드라이브"
+                showUploadSuccessNotification(context, "🌟 [파일투시트 + 구글 시트 동시 전송 완료]", "${meta.fileName} 파일이 양쪽에 안전하게 전송 및 기록되었습니다.")
+                if (prefs.isTtsEnabled) TtsManager.speak(context, "파일투시트와 구글 시트 양쪽에 전송되었습니다.")
+                return@withContext UploadGenericFileResult(
+                    success = true,
+                    fileName = meta.fileName,
+                    folderName = combinedFolder,
+                    ocrData = ftsResult?.data ?: googleResult?.ocrData
+                )
+            } else if (ftsOk) {
+                showUploadSuccessNotification(context, "⚡ [파일투시트 전송 성공 (구글 시트 실패)]", "파일투시트 적재 완료 (구글: ${googleResult?.error ?: "오류"})")
+                return@withContext UploadGenericFileResult(
+                    success = true,
+                    fileName = meta.fileName,
+                    folderName = ftsTargetSheetName,
+                    ocrData = ftsResult?.data
+                )
+            } else if (googleOk) {
+                showUploadSuccessNotification(context, "📊 [구글 시트 전송 성공 (파일투시트 실패)]", "구글 드라이브 업로드 완료 (FTS: ${ftsResult?.error ?: "오류"})")
+                return@withContext UploadGenericFileResult(
+                    success = true,
+                    fileName = meta.fileName,
+                    folderName = targetGoogleFolder,
+                    ocrData = googleResult?.ocrData
+                )
+            } else {
+                val err = "FTS: ${ftsResult?.error ?: "실패"}, Google: ${googleResult?.error ?: "실패"}"
+                return@withContext UploadGenericFileResult(success = false, error = err)
+            }
+        }
+
+        // 🌟 2) [파일투시트만 전송] 단독 처리
+        if (isFts) {
+            if (ftsResult?.success == true) {
+                val targetSheet = ftsResult.targetSheet?.takeIf { it.isNotBlank() } ?: ftsTargetSheetName
                 if (ocrType.equals("RECEIPT", ignoreCase = true)) {
                     showOcrSuccessNotification(context, "🧾 [파일투시트 영수증 직결 전송 완료]", "[$targetSheet] 시트에 1건이 성공적으로 적재되었습니다.")
                     if (prefs.isTtsEnabled) {
@@ -182,57 +252,18 @@ object FileUploadManager {
                     ocrData = ftsResult.data
                 )
             } else {
-                val err = ftsResult.error ?: ftsResult.message ?: "파일투시트 전송 실패"
-                return@withContext UploadGenericFileResult(
-                    success = false,
-                    error = err
-                )
+                val err = ftsResult?.error ?: ftsResult?.message ?: "파일투시트 전송 실패"
+                return@withContext UploadGenericFileResult(success = false, error = err)
             }
         }
 
-        val userEmail = prefs.userEmail!!
-
-        val targetFolder = when (ocrType?.uppercase()) {
-            "RECEIPT" -> "[SheetBot] 영수증 보관함"
-            "BUSINESS_CARD" -> "[SheetBot] 명함 보관함"
-            else -> prefs.fileUploadDriveFolder.takeIf { it.isNotBlank() } ?: "[SheetBot] 파일 보관함"
-        }
-        val autoRecordSheet = if (ocrType.equals("RECEIPT", ignoreCase = true) || ocrType.equals("BUSINESS_CARD", ignoreCase = true)) {
-            true
-        } else {
-            prefs.isFileUploadSheetEnabled
-        }
-        val memo = customMemo ?: when (ocrType?.uppercase()) {
-            "RECEIPT" -> "스마트폰 시트봇 에이전트 영수증 AI 장부화"
-            "BUSINESS_CARD" -> "스마트폰 시트봇 에이전트 명함 AI 인맥화"
-            else -> "스마트폰 시트봇 에이전트 업로드"
-        }
-
-        Log.i(TAG, "🚀 [파일 업로드 시작] ${meta.fileName} (${meta.mimeType}) -> $targetFolder (ocr: $ocrType)")
-
-        val result = try {
-            ApiClient.uploadGenericFile(
-                file = tempFile,
-                fileName = meta.fileName,
-                mimeType = meta.mimeType,
-                userEmail = userEmail,
-                folderName = targetFolder,
-                memo = memo,
-                autoRecordSheet = autoRecordSheet,
-                ocrType = ocrType
-            )
-        } finally {
-            try {
-                if (tempFile.exists()) tempFile.delete()
-            } catch (_: Exception) {}
-        }
-
-        if (result.success) {
-            val uploadedName = result.fileName ?: meta.fileName
-            val folderName = result.folderName ?: targetFolder
+        // 🌟 3) [구글 시트만 전송] 단독 처리
+        if (googleResult?.success == true) {
+            val uploadedName = googleResult.fileName ?: meta.fileName
+            val folderName = googleResult.folderName ?: targetGoogleFolder
 
             if (ocrType.equals("RECEIPT", ignoreCase = true)) {
-                val ocrData = result.ocrData
+                val ocrData = googleResult.ocrData
                 val mName = ocrData?.optString("merchantName", "영수증") ?: "영수증"
                 val amt = ocrData?.optString("amount")?.let { "${it}원" } ?: ""
                 showOcrSuccessNotification(context, "🧾 [영수증 AI 자동 장부화 완료]", "$mName $amt 결제 내역이 경비 대장에 기록되었습니다.")
@@ -240,14 +271,11 @@ object FileUploadManager {
                     TtsManager.speak(context, "영수증이 분석되어 경비 대장에 자동 기록되었습니다.")
                 }
             } else if (ocrType.equals("BUSINESS_CARD", ignoreCase = true)) {
-                val ocrData = result.ocrData ?: org.json.JSONObject()
+                val ocrData = googleResult.ocrData ?: org.json.JSONObject()
                 val cName = ocrData.optString("name", "명함 고객").ifBlank { "명함 고객" }
                 val rawComp = ocrData.optString("company", "")
                 val comp = if (rawComp.isNotBlank()) "($rawComp)" else ""
-
-                // 상단 헤드업 알림을 띄우고, 사용자가 알림을 터치했을 때 CardActionActivity 팝업이 열리도록 보장
                 showBusinessCardActionNotification(context, cName, comp, ocrData)
-
                 if (prefs.isTtsEnabled) {
                     TtsManager.speak(context, "${cName}님의 명함이 분석되어 인맥 대장에 등록되었습니다.")
                 }
@@ -257,9 +285,13 @@ object FileUploadManager {
                     TtsManager.speak(context, "파일이 구글 드라이브 보관함에 안전하게 업로드되었습니다.")
                 }
             }
+            return@withContext googleResult
+        } else {
+            return@withContext UploadGenericFileResult(
+                success = false,
+                error = googleResult?.error ?: "구글 드라이브 업로드 실패"
+            )
         }
-
-        result
     }
 
     /**

@@ -44,7 +44,13 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putString("upload_destination", value).apply()
 
     val isDestinationFileToSheet: Boolean
-        get() = uploadDestination == DESTINATION_FILE_TO_SHEET
+        get() = uploadDestination == DESTINATION_FILE_TO_SHEET || uploadDestination == DESTINATION_BOTH
+
+    val isDestinationGoogleSheet: Boolean
+        get() = uploadDestination == DESTINATION_GOOGLE_SHEETS || uploadDestination == DESTINATION_BOTH
+
+    val isDestinationBoth: Boolean
+        get() = uploadDestination == DESTINATION_BOTH
 
     // ⚡ 파일투시트(FileToSheet) 직결 수신함 연동 정보
     var ftsToken: String?
@@ -797,6 +803,7 @@ class PreferencesManager(context: Context) {
     companion object {
         const val DESTINATION_GOOGLE_SHEETS = "GOOGLE_SHEETS"
         const val DESTINATION_FILE_TO_SHEET = "FILE_TO_SHEET"
+        const val DESTINATION_BOTH = "BOTH"
 
         val DEFAULT_HIDDEN_CARDS = setOf(
             // 7대 시스템 & 관제 카드 (토큰 지갑 포함 전원 보관함 기본 보관)
