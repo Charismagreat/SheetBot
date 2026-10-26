@@ -86,7 +86,8 @@ data class FtsUploadResult(
 object FileToSheetClient {
     private const val TAG = "FileToSheetClient"
     const val FTS_OFFICIAL_DOMAIN = "https://file2sheet.cloud"
-    const val FTS_TUNNEL_BASE = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/FileToSheet"
+    const val FTS_TUNNEL_BASE = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1-i01o2oa/p/FileToSheet"
+    const val FTS_TUNNEL_BASE_LEGACY = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/FileToSheet"
 
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
@@ -751,8 +752,10 @@ object FileToSheetClient {
         if (cleanToken.isNotBlank()) {
             val officialUrl = "$FTS_OFFICIAL_DOMAIN/api/inbox/$cleanToken?includeRows=true"
             val tunnelUrl = "$FTS_TUNNEL_BASE/api/inbox/$cleanToken?includeRows=true"
-            if (!endpointsToTry.contains(officialUrl)) endpointsToTry.add(officialUrl)
+            val legacyTunnelUrl = "$FTS_TUNNEL_BASE_LEGACY/api/inbox/$cleanToken?includeRows=true"
             if (!endpointsToTry.contains(tunnelUrl)) endpointsToTry.add(tunnelUrl)
+            if (!endpointsToTry.contains(officialUrl)) endpointsToTry.add(officialUrl)
+            if (!endpointsToTry.contains(legacyTunnelUrl)) endpointsToTry.add(legacyTunnelUrl)
         }
 
         for (targetUrl in endpointsToTry) {
