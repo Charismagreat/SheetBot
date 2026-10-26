@@ -109,9 +109,9 @@ object FileUploadManager {
             )
         }
 
-        var ftsResult: FileToSheetClient.FtsUploadResult? = null
+        var ftsResult: FtsUploadResult? = null
         var ftsTargetSheetName: String = "파일투시트"
-        var googleResult: ApiClient.UploadGenericResult? = null
+        var googleResult: UploadGenericFileResult? = null
         val targetGoogleFolder = when (ocrType?.uppercase()) {
             "RECEIPT" -> "[SheetBot] 영수증 보관함"
             "BUSINESS_CARD" -> "[SheetBot] 명함 보관함"
@@ -228,7 +228,7 @@ object FileUploadManager {
         // 🌟 2) [파일투시트만 전송] 단독 처리
         if (isFts) {
             if (ftsResult?.success == true) {
-                val targetSheet = ftsResult.targetSheet?.takeIf { it.isNotBlank() } ?: ftsTargetSheetName
+                val targetSheet = ftsResult?.targetSheet?.takeIf { it.isNotBlank() } ?: ftsTargetSheetName
                 if (ocrType.equals("RECEIPT", ignoreCase = true)) {
                     showOcrSuccessNotification(context, "🧾 [파일투시트 영수증 직결 전송 완료]", "[$targetSheet] 시트에 1건이 성공적으로 적재되었습니다.")
                     if (prefs.isTtsEnabled) {
