@@ -108,39 +108,10 @@ class SheetActionController(
      */
     fun preloadActiveSheetUrls(force: Boolean = false) {
         try {
-            if (prefs.isDestinationFileToSheet && !prefs.ftsPhoneNumber.isNullOrBlank()) {
-                val phone = prefs.ftsPhoneNumber!!
-                scope.launch(Dispatchers.IO) {
-                    try {
-                        val ftsCards = mutableListOf("receipt_scanner", "business_card")
-                        if (prefs.isPushDetectionEnabled || prefs.isReceiptSmsEnabled) ftsCards.add("payment_sms")
-                        if (prefs.isCallRecordingSyncEnabled) ftsCards.add("call_recording")
-                        if (prefs.isSmsSheetSyncEnabled) ftsCards.add("sms_sync")
-                        if (prefs.isKakaoSheetSyncEnabled) ftsCards.add("kakao_sync")
-                        if (prefs.isFileUploadSyncEnabled) ftsCards.add("file_upload")
-
-                        for (cardId in ftsCards.distinct()) {
-                            if (force || prefs.getSpecificFtsTokenFor(cardId).isNullOrBlank()) {
-                                val res = FileToSheetClient.ensureSheet(
-                                    phoneNumber = phone,
-                                    cardId = cardId,
-                                    projectId = prefs.ftsProjectId
-                                )
-                                if (res.success && !res.token.isNullOrBlank()) {
-                                    prefs.saveFtsSheetBinding(
-                                        cardIdOrType = cardId,
-                                        token = res.token,
-                                        sheetName = res.sheetName,
-                                        webhookUrl = res.webhookUrl,
-                                        projectId = res.projectId
-                                    )
-                                }
-                            }
-                        }
-                    } catch (e: Throwable) {
-                        android.util.Log.w("SheetActionController", "preloadActiveSheetUrls FTS 방어: ${e.message}")
-                    }
-                }
+            // 🌟 파일투시트(FileToSheet) 모드: 사전 일괄 생성(Preload) 전면 차단!
+            // 각 카드의 [시트 열기] 또는 실제 데이터 전송 시점에만 순수 온디맨드(On-demand) 1:1로 시트를 생성/연결합니다.
+            if (prefs.isDestinationFileToSheet) {
+                android.util.Log.d("SheetActionController", "FTS 모드는 순수 온디맨드 1:1 시트 생성을 유지하므로 preload를 건너뜁니다.")
                 return
             }
 

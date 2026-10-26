@@ -223,15 +223,8 @@ class CardDrawerController(
         // 🌟 온디맨드 시트 자동 프로비저닝 (POST /api/inbox/ensure-sheet: cardId, sheetName, headers 전송)
         val phone = prefs.ftsPhoneNumber
         if (prefs.isDestinationFileToSheet && !phone.isNullOrBlank()) {
-            val specsToEnsure = if (key == "cardFileUpload") {
-                listOfNotNull(
-                    FileToSheetClient.resolveSheetSpec("receipt_scanner"),
-                    FileToSheetClient.resolveSheetSpec("business_card"),
-                    FileToSheetClient.resolveSheetSpec("file_upload")
-                )
-            } else {
-                listOfNotNull(FileToSheetClient.resolveSheetSpec(key))
-            }
+            // 오직 현재 꺼낸 카드(key) 1개만 단독으로 시트 프로비저닝 (일괄 생성 방지)
+            val specsToEnsure = listOfNotNull(FileToSheetClient.resolveSheetSpec(key))
 
             if (specsToEnsure.isNotEmpty()) {
                 (activity as? androidx.lifecycle.LifecycleOwner)?.lifecycleScope?.launch(kotlinx.coroutines.Dispatchers.IO) {

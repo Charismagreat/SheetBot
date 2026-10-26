@@ -580,29 +580,11 @@ class AccountPairingController(
                                 )
                             }
 
-                            // 신규 ensure-sheet API를 백그라운드로 호출하여 표준 헤더 스키마(Schema Evolution) 및 토큰 100% 보장
-                            scope.launch(Dispatchers.IO) {
-                                for (coreCardId in listOf("receipt_scanner", "business_card")) {
-                                    val ensureRes = FileToSheetClient.ensureSheet(
-                                        phoneNumber = phoneNumber,
-                                        cardId = coreCardId,
-                                        projectId = prefs.ftsProjectId
-                                    )
-                                    if (ensureRes.success && !ensureRes.token.isNullOrBlank()) {
-                                        prefs.saveFtsSheetBinding(
-                                            cardIdOrType = coreCardId,
-                                            token = ensureRes.token,
-                                            sheetName = ensureRes.sheetName,
-                                            webhookUrl = ensureRes.webhookUrl,
-                                            projectId = ensureRes.projectId
-                                        )
-                                    }
-                                }
-                            }
-
+                            // 🌟 순수 온디맨드 1:1 바인딩 원칙:
+                            // 번호 인증 성공 시 영수증/명함 시트를 일괄 강제 생성하지 않고, 사용자가 해당 카드를 직접 사용할 때 1개씩 생성합니다.
                             AlertDialog.Builder(activity)
                                 .setTitle("🎉 [File to Sheet] 연결 성공")
-                                .setMessage("환영합니다!\n\n• 연결 프로젝트: [${prefs.ftsProjectName}]\n• 2대 기본 시트 생성 완료:\n  - 🧾 영수증대장\n  - 🪪 명함관리\n\n하단 [📦 시트봇 보관함]에서 필요한 기능 카드를 홈 화면으로 꺼내어 바로 사용해 보세요!")
+                                .setMessage("환영합니다!\n\n• 연결 프로젝트: [${prefs.ftsProjectName}]\n\n각 기능 카드의 [시트 열기] 또는 데이터 전송 시 필요한 시트가 1:1 온디맨드로 깔끔하게 자동 생성됩니다.")
                                 .setPositiveButton("시작하기") { _, _ ->
                                     onPairingSuccess(prefs.ftsProjectName ?: "File to Sheet")
                                 }
