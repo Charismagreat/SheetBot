@@ -280,60 +280,111 @@ class BusinessCardSyncCardController(
         }
     }
 
+    private data class ParsedContact(
+        val name: String,
+        val mobile: String,
+        val company: String?,
+        val title: String?,
+        val department: String?,
+        val email: String?,
+        val address: String?,
+        val memo: String?
+    )
+
+    /**
+     * 시트 행 또는 OCR 결과 JSON으로부터 동의어 사전을 종합 적용하여 정규화된 연락처 데이터 추출
+     */
+    private fun parseContactFromRow(json: JSONObject): ParsedContact {
+        val name = json.optString("성명").takeIf { it.isNotBlank() }
+            ?: json.optString("이름").takeIf { it.isNotBlank() }
+            ?: json.optString("성함").takeIf { it.isNotBlank() }
+            ?: json.optString("대표자").takeIf { it.isNotBlank() }
+            ?: json.optString("name").takeIf { it.isNotBlank() }
+            ?: ""
+
+        val mobile = json.optString("휴대폰").takeIf { it.isNotBlank() }
+            ?: json.optString("휴대전화").takeIf { it.isNotBlank() }
+            ?: json.optString("휴대폰번호").takeIf { it.isNotBlank() }
+            ?: json.optString("핸드폰").takeIf { it.isNotBlank() }
+            ?: json.optString("모바일").takeIf { it.isNotBlank() }
+            ?: json.optString("mobile").takeIf { it.isNotBlank() }
+            ?: json.optString("cellphone").takeIf { it.isNotBlank() }
+            ?: json.optString("phone").takeIf { it.isNotBlank() }
+            ?: ""
+
+        val company = json.optString("회사명").takeIf { it.isNotBlank() }
+            ?: json.optString("상호").takeIf { it.isNotBlank() }
+            ?: json.optString("회사").takeIf { it.isNotBlank() }
+            ?: json.optString("직장명").takeIf { it.isNotBlank() }
+            ?: json.optString("company").takeIf { it.isNotBlank() }
+
+        val department = json.optString("부서").takeIf { it.isNotBlank() }
+            ?: json.optString("department").takeIf { it.isNotBlank() }
+
+        val title = json.optString("직급").takeIf { it.isNotBlank() }
+            ?: json.optString("직함").takeIf { it.isNotBlank() }
+            ?: json.optString("직책").takeIf { it.isNotBlank() }
+            ?: json.optString("부서직책").takeIf { it.isNotBlank() }
+            ?: json.optString("부서/직급").takeIf { it.isNotBlank() }
+            ?: json.optString("title").takeIf { it.isNotBlank() }
+            ?: json.optString("position").takeIf { it.isNotBlank() }
+
+        val email = json.optString("이메일").takeIf { it.isNotBlank() }
+            ?: json.optString("메일").takeIf { it.isNotBlank() }
+            ?: json.optString("email").takeIf { it.isNotBlank() }
+            ?: json.optString("e-mail").takeIf { it.isNotBlank() }
+
+        val address = json.optString("회사주소").takeIf { it.isNotBlank() }
+            ?: json.optString("주소").takeIf { it.isNotBlank() }
+            ?: json.optString("소재지").takeIf { it.isNotBlank() }
+            ?: json.optString("사업장주소").takeIf { it.isNotBlank() }
+            ?: json.optString("address").takeIf { it.isNotBlank() }
+
+        val memo = json.optString("상세정보").takeIf { it.isNotBlank() }
+            ?: json.optString("비고").takeIf { it.isNotBlank() }
+            ?: json.optString("메모").takeIf { it.isNotBlank() }
+            ?: json.optString("details").takeIf { it.isNotBlank() }
+            ?: json.optString("memo").takeIf { it.isNotBlank() }
+
+        return ParsedContact(
+            name = name,
+            mobile = mobile,
+            company = company,
+            title = title,
+            department = department,
+            email = email,
+            address = address,
+            memo = memo
+        )
+    }
+
     /**
      * OCR 데이터 객체(한글 컬럼 또는 영문 키 지원)를 파싱하여 내 스마트폰 연락처에 추가
      */
     private suspend fun saveContactFromOcrData(context: Context, ocr: JSONObject) {
-        val cName = ocr.optString("성명").takeIf { it.isNotBlank() }
-            ?: ocr.optString("이름").takeIf { it.isNotBlank() }
-            ?: ocr.optString("name").takeIf { it.isNotBlank() }
-            ?: ""
-
-        val cMobile = ocr.optString("휴대폰").takeIf { it.isNotBlank() }
-            ?: ocr.optString("휴대전화").takeIf { it.isNotBlank() }
-            ?: ocr.optString("휴대폰번호").takeIf { it.isNotBlank() }
-            ?: ocr.optString("mobile").takeIf { it.isNotBlank() }
-            ?: ocr.optString("phone").takeIf { it.isNotBlank() }
-            ?: ""
-
-        if (cName.isBlank() && cMobile.isBlank()) return
-
-        val cCompany = ocr.optString("회사명").takeIf { it.isNotBlank() }
-            ?: ocr.optString("company").takeIf { it.isNotBlank() }
-
-        val cTitle = ocr.optString("직함").takeIf { it.isNotBlank() }
-            ?: ocr.optString("부서직책").takeIf { it.isNotBlank() }
-            ?: ocr.optString("title").takeIf { it.isNotBlank() }
-
-        val cEmail = ocr.optString("이메일").takeIf { it.isNotBlank() }
-            ?: ocr.optString("email").takeIf { it.isNotBlank() }
-
-        val cAddress = ocr.optString("회사주소").takeIf { it.isNotBlank() }
-            ?: ocr.optString("address").takeIf { it.isNotBlank() }
-
-        val cMemo = ocr.optString("상세정보").takeIf { it.isNotBlank() }
-            ?: ocr.optString("details").takeIf { it.isNotBlank() }
-            ?: ocr.optString("비고").takeIf { it.isNotBlank() }
+        val c = parseContactFromRow(ocr)
+        if (c.name.isBlank() && c.mobile.isBlank()) return
 
         val res = ContactHelper.insertContactIfNotExists(
             context = context,
-            name = cName,
-            mobile = cMobile,
-            company = cCompany,
-            title = cTitle,
-            email = cEmail,
-            address = cAddress,
-            memo = cMemo
+            name = c.name,
+            mobile = c.mobile,
+            company = c.company,
+            title = c.title,
+            email = c.email,
+            address = c.address,
+            memo = c.memo,
+            department = c.department
         )
 
         withContext(Dispatchers.Main) {
             when (res) {
                 1 -> {
-                    Toast.makeText(context, "📇 스마트폰 연락처에 [$cName]님이 자동 추가되었습니다.", Toast.LENGTH_SHORT).show()
-                    onAddLogItem("📇 연락처 동기화", "$cName ($cMobile) 내 폰에 추가 완료", true)
+                    Toast.makeText(context, "📇 스마트폰 연락처에 [${c.name}]님이 자동 추가되었습니다.", Toast.LENGTH_SHORT).show()
+                    onAddLogItem("📇 연락처 동기화", "${c.name} (${c.mobile}) 내 폰에 추가 완료", true)
                 }
                 0 -> {
-                    android.util.Log.d("BusinessCardController", "이미 존재하는 연락처로 추가 생략: $cName ($cMobile)")
+                    android.util.Log.d("BusinessCardController", "이미 존재하는 연락처로 추가 생략: ${c.name} (${c.mobile})")
                 }
                 else -> {
                     Toast.makeText(context, "⚠️ 연락처 저장 실패 (주소록 권한을 확인해주세요)", Toast.LENGTH_SHORT).show()
@@ -381,48 +432,21 @@ class BusinessCardSyncCardController(
                 var failedCount = 0
 
                 for (row in rows) {
-                    val cName = row.optString("성명").takeIf { it.isNotBlank() }
-                        ?: row.optString("이름").takeIf { it.isNotBlank() }
-                        ?: row.optString("name").takeIf { it.isNotBlank() }
-                        ?: ""
-
-                    val cMobile = row.optString("휴대폰").takeIf { it.isNotBlank() }
-                        ?: row.optString("휴대전화").takeIf { it.isNotBlank() }
-                        ?: row.optString("휴대폰번호").takeIf { it.isNotBlank() }
-                        ?: row.optString("mobile").takeIf { it.isNotBlank() }
-                        ?: row.optString("phone").takeIf { it.isNotBlank() }
-                        ?: ""
-
-                    if (cName.isBlank() && cMobile.isBlank()) {
+                    val c = parseContactFromRow(row)
+                    if (c.name.isBlank() && c.mobile.isBlank()) {
                         continue
                     }
 
-                    val cCompany = row.optString("회사명").takeIf { it.isNotBlank() }
-                        ?: row.optString("company").takeIf { it.isNotBlank() }
-
-                    val cTitle = row.optString("직함").takeIf { it.isNotBlank() }
-                        ?: row.optString("부서직책").takeIf { it.isNotBlank() }
-                        ?: row.optString("title").takeIf { it.isNotBlank() }
-
-                    val cEmail = row.optString("이메일").takeIf { it.isNotBlank() }
-                        ?: row.optString("email").takeIf { it.isNotBlank() }
-
-                    val cAddress = row.optString("회사주소").takeIf { it.isNotBlank() }
-                        ?: row.optString("address").takeIf { it.isNotBlank() }
-
-                    val cMemo = row.optString("상세정보").takeIf { it.isNotBlank() }
-                        ?: row.optString("details").takeIf { it.isNotBlank() }
-                        ?: row.optString("비고").takeIf { it.isNotBlank() }
-
                     val insertRes = ContactHelper.insertContactIfNotExists(
                         context = appContext,
-                        name = cName,
-                        mobile = cMobile,
-                        company = cCompany,
-                        title = cTitle,
-                        email = cEmail,
-                        address = cAddress,
-                        memo = cMemo
+                        name = c.name,
+                        mobile = c.mobile,
+                        company = c.company,
+                        title = c.title,
+                        email = c.email,
+                        address = c.address,
+                        memo = c.memo,
+                        department = c.department
                     )
 
                     when (insertRes) {

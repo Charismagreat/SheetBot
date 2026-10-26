@@ -219,7 +219,8 @@ object ContactHelper {
         title: String? = null,
         email: String? = null,
         address: String? = null,
-        memo: String? = null
+        memo: String? = null,
+        department: String? = null
     ): Boolean {
         if (name.isBlank() && mobile.isBlank()) return false
 
@@ -246,15 +247,17 @@ object ContactHelper {
                     .build()
             )
 
-            // 2. 성함 (Display Name)
+            // 2. 성함 (Display Name + Given Name)
+            // ★ 중요: 삼성 및 안드로이드 주소록은 DISPLAY_NAME이 읽기전용/계산 뷰인 경우가 많아
+            // 반드시 GIVEN_NAME을 명시해야 주소록 이름 필드에 성명이 100% 정상 저장됩니다.
             if (name.isNotBlank()) {
-                ops.add(
-                    android.content.ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
-                        .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, rawContactInsertIndex)
-                        .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
-                        .withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, name.trim())
-                        .build()
-                )
+                val cleanName = name.trim()
+                val nameOp = android.content.ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, rawContactInsertIndex)
+                    .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
+                    .withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, cleanName)
+                    .withValue(ContactsContract.CommonDataKinds.StructuredName.GIVEN_NAME, cleanName)
+                ops.add(nameOp.build())
             }
 
             // 3. 휴대전화번호
@@ -269,16 +272,20 @@ object ContactHelper {
                 )
             }
 
-            // 4. 회사명 및 직함
-            if (!company.isNullOrBlank() || !title.isNullOrBlank()) {
+            // 4. 회사명, 부서 및 직함 (직장 TYPE_WORK 명시)
+            if (!company.isNullOrBlank() || !title.isNullOrBlank() || !department.isNullOrBlank()) {
                 val orgOp = android.content.ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
                     .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, rawContactInsertIndex)
                     .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE)
+                    .withValue(ContactsContract.CommonDataKinds.Organization.TYPE, ContactsContract.CommonDataKinds.Organization.TYPE_WORK)
                 if (!company.isNullOrBlank()) {
                     orgOp.withValue(ContactsContract.CommonDataKinds.Organization.COMPANY, company.trim())
                 }
                 if (!title.isNullOrBlank()) {
                     orgOp.withValue(ContactsContract.CommonDataKinds.Organization.TITLE, title.trim())
+                }
+                if (!department.isNullOrBlank()) {
+                    orgOp.withValue(ContactsContract.CommonDataKinds.Organization.DEPARTMENT, department.trim())
                 }
                 ops.add(orgOp.build())
             }
@@ -341,7 +348,8 @@ object ContactHelper {
         title: String? = null,
         email: String? = null,
         address: String? = null,
-        memo: String? = null
+        memo: String? = null,
+        department: String? = null
     ): Int {
         val cleanMobile = mobile.trim()
         val cleanName = name.trim()
@@ -370,7 +378,8 @@ object ContactHelper {
             title = title,
             email = email,
             address = address,
-            memo = memo
+            memo = memo,
+            department = department
         )
         return if (success) 1 else -1
     }
