@@ -29,7 +29,33 @@ class ReceiptSyncCardController(
     /**
      * 카드 초기화 및 버튼 이벤트 바인딩
      */
+    fun toggleCollapse() {
+        val isHidden = !prefs.isReceiptDetailsHidden
+        prefs.isReceiptDetailsHidden = isHidden
+        refreshCollapseState()
+    }
+
+    fun refreshCollapseState() {
+        val isHidden = prefs.isReceiptDetailsHidden
+        binding.layoutReceiptScannerDetails.visibility = if (isHidden) View.GONE else View.VISIBLE
+        binding.btnToggleReceiptScannerDetails.text = if (isHidden) "▼" else "▲"
+    }
+
+    /**
+     * 카드 초기화 및 버튼 이벤트 바인딩
+     */
     fun setup() {
+        refreshCollapseState()
+        binding.switchReceiptScannerSync.isChecked = prefs.isReceiptScannerSyncEnabled
+        binding.switchReceiptScannerSync.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isReceiptScannerSyncEnabled = isChecked
+            onAddLogItem(
+                "스마트 경비 영수증 관리",
+                if (isChecked) "스마트 경비 영수증 자동화가 활성화되었습니다." else "스마트 경비 영수증 자동화가 비활성화되었습니다.",
+                true
+            )
+        }
+
         binding.btnPickReceipt.setOnClickListener {
             if (prefs.isDestinationFileToSheet) {
                 if (!prefs.isFtsPaired && prefs.ftsPhoneNumber.isNullOrBlank()) {

@@ -129,11 +129,29 @@ object CardSearchRegistry {
         SearchableCard(
             index = 10,
             key = "cardFileUpload",
-            title = "사진 & 문서 드라이브 보관",
+            title = "사진 & 문서 직결 보관",
             icon = "📁",
-            chosung = "ㅅㅈㅁㅅㄷㄹㅇㅂㅂㄱ",
-            keywords = listOf("사진", "문서", "파일", "드라이브", "업로드", "영수증사진", "명함사진", "백업"),
+            chosung = "ㅅㅈㅁㅅㅈㄱㅂㄱ",
+            keywords = listOf("사진", "문서", "파일", "드라이브", "업로드", "파일투시트", "백업"),
             cardResId = R.id.cardFileUpload
+        ),
+        SearchableCard(
+            index = 27,
+            key = "cardReceiptScanner",
+            title = "스마트 경비 영수증 관리",
+            icon = "🧾",
+            chosung = "ㅅㅁㅌㄱㅂㅇㅅㅈㄱㄹ",
+            keywords = listOf("영수증", "경비", "비용", "세무", "AI", "OCR", "영수증대장"),
+            cardResId = R.id.cardReceiptScanner
+        ),
+        SearchableCard(
+            index = 28,
+            key = "cardBusinessCard",
+            title = "스마트 명함 관리",
+            icon = "🪪",
+            chosung = "ㅅㅁㅌㅁㅎㄱㄹ",
+            keywords = listOf("명함", "인맥", "연락처", "회사원", "AI", "OCR", "명함관리"),
+            cardResId = R.id.cardBusinessCard
         ),
         SearchableCard(
             index = 11,

@@ -221,7 +221,7 @@ object FileToSheetClient {
         val raw = keyOrType?.trim().orEmpty()
         if (raw.isEmpty()) return "receipt_scanner"
         return when (raw.lowercase()) {
-            "receipt", "receipt_scanner", "cardreceipt" -> "receipt_scanner"
+            "receipt", "receipt_scanner", "cardreceipt", "cardreceiptscanner" -> "receipt_scanner"
             "business_card", "cardbusinesscard" -> "business_card"
             "call_ended_card", "cardcallended" -> "call_ended_card"
             "payment_sms", "deposit", "payment_push", "cardpaymentreceipt" -> "payment_sms"

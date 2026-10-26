@@ -402,6 +402,24 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_file_upload_sync_enabled", false)
         set(value) = prefs.edit().putBoolean("is_file_upload_sync_enabled", value).apply()
 
+    // 스마트 경비 영수증 관리 (AI OCR)
+    var isReceiptScannerSyncEnabled: Boolean
+        get() = prefs.getBoolean("is_receipt_scanner_sync_enabled", false)
+        set(value) = prefs.edit().putBoolean("is_receipt_scanner_sync_enabled", value).apply()
+
+    var isReceiptDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_receipt_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_receipt_details_hidden", value).apply()
+
+    // 스마트 명함 관리 (AI OCR)
+    var isBusinessCardSyncEnabled: Boolean
+        get() = prefs.getBoolean("is_business_card_sync_enabled", false)
+        set(value) = prefs.edit().putBoolean("is_business_card_sync_enabled", value).apply()
+
+    var isBusinessCardDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_business_card_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_business_card_details_hidden", value).apply()
+
     var fileUploadDriveFolder: String
         get() = prefs.getString("file_upload_drive_folder", "[SheetBot] 파일 보관함") ?: "[SheetBot] 파일 보관함"
         set(value) = prefs.edit().putString("file_upload_drive_folder", value).apply()

@@ -2864,130 +2864,245 @@
                     android:textStyle="bold"
                     android:layout_marginBottom="8dp" />
 
-                <!-- AI OCR 비즈니스 원터치 자동화 버튼 2종 (v1.5) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:layout_marginBottom="10dp">
+                    android:layout_marginBottom="8dp">
 
                     <Button
-                        android:id="@+id/btnPickReceipt"
+                        android:id="@+id/btnOpenFileSheet"
                         android:layout_width="0dp"
-                        android:layout_height="44dp"
+                        android:layout_height="40dp"
                         android:layout_weight="1"
-                        android:backgroundTint="#059669"
-                        android:text="🧾 영수증 사진 업로드"
-                        android:textColor="#FFFFFF"
+                        android:backgroundTint="#1E293B"
+                        android:text="📊 사진 문서 보관 시트 ↗"
+                        android:textColor="#38BDF8"
                         android:textSize="11.5sp"
                         android:textStyle="bold"
                         android:layout_marginEnd="4dp" />
 
                     <Button
-                        android:id="@+id/btnPickBusinessCard"
+                        android:id="@+id/btnOpenFileFolder"
                         android:layout_width="0dp"
-                        android:layout_height="44dp"
+                        android:layout_height="40dp"
                         android:layout_weight="1"
-                        android:backgroundTint="#2563EB"
-                        android:text="🪪 명함 사진 업로드"
-                        android:textColor="#FFFFFF"
+                        android:backgroundTint="#1E293B"
+                        android:text="📁 사진 문서 보관 폴더 ↗"
+                        android:textColor="#A78BFA"
                         android:textSize="11.5sp"
                         android:textStyle="bold"
                         android:layout_marginStart="4dp" />
                 </LinearLayout>
 
-                <!-- 🧪 [디버깅] 명함 헤드업 알림 & 팝업 즉시 테스트 버튼 -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="💡 팁: 갤러리에서 사진을 [공유] ➔ [시트봇]만 누르면 알아서 드라이브에 보관돼요."
+                    android:textColor="#64748B"
+                    android:textSize="10.5sp"
+                    android:lineSpacingExtra="2dp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 독립 카드: receipt_scanner (스마트 경비 영수증 관리) -->
+        <LinearLayout
+            android:id="@+id/cardReceiptScanner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_scenario"
+            android:padding="13dp"
+            android:layout_marginBottom="12dp">
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:id="@+id/layoutReceiptScannerHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="🧾 스마트 경비 영수증 관리 (AI OCR)"
+                    android:textColor="#E2E8F0"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchReceiptScannerSync"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="false"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btnToggleReceiptScannerDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutReceiptScannerDetails"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <Button
+                    android:id="@+id/btnPickReceipt"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:backgroundTint="#059669"
+                    android:text="🧾 영수증 사진 촬영 / 업로드 (AI 자동인식)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <Button
+                    android:id="@+id/btnOpenReceiptSheet"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="🧾 경비 영수증 대장 열기 ↗"
+                    android:textColor="#34D399"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="💡 팁: 종이 영수증을 촬영하면 AI가 상호명, 결제금액, 품목을 인식하여 영수증 대장에 자동 기록합니다."
+                    android:textColor="#64748B"
+                    android:textSize="10.5sp"
+                    android:lineSpacingExtra="2dp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 독립 카드: business_card (스마트 명함 관리) -->
+        <LinearLayout
+            android:id="@+id/cardBusinessCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_scenario"
+            android:padding="13dp"
+            android:layout_marginBottom="12dp">
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:id="@+id/layoutBusinessCardHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="🪪 스마트 명함 관리 (AI OCR)"
+                    android:textColor="#E2E8F0"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchBusinessCardSync"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="false"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btnToggleBusinessCardDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#0F172A"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:text="▲"
+                    android:textColor="#E2E8F0"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutBusinessCardDetails"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <Button
+                    android:id="@+id/btnPickBusinessCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:backgroundTint="#2563EB"
+                    android:text="🪪 명함 사진 촬영 / 업로드 (AI 자동인식)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <Button
+                    android:id="@+id/btnOpenBusinessCardSheet"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="🪪 명함 관리 대장 열기 ↗"
+                    android:textColor="#60A5FA"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
                 <Button
                     android:id="@+id/btnTestBusinessCardNotification"
                     android:layout_width="match_parent"
-                    android:layout_height="40dp"
-                    android:layout_marginBottom="8dp"
+                    android:layout_height="36dp"
                     android:backgroundTint="#334155"
                     android:text="🧪 [디버깅] 명함 헤드업 알림 &amp; 팝업 3초 테스트"
                     android:textColor="#F8FAFC"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
 
-                <LinearLayout
+                <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:background="#0F172A"
-                    android:padding="10dp"
-                    android:layout_marginBottom="12dp">
-
-                    <!-- 시트 열기 & 드라이브 폴더 열기 바로가기 뱃지 -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginBottom="8dp">
-
-                        <Button
-                            android:id="@+id/btnOpenFileSheet"
-                            android:layout_width="0dp"
-                            android:layout_height="40dp"
-                            android:layout_weight="1"
-                            android:backgroundTint="#1E293B"
-                            android:text="📊 사진 문서 보관 시트 ↗"
-                            android:textColor="#38BDF8"
-                            android:textSize="11.5sp"
-                            android:textStyle="bold"
-                            android:layout_marginEnd="4dp" />
-
-                        <Button
-                            android:id="@+id/btnOpenFileFolder"
-                            android:layout_width="0dp"
-                            android:layout_height="40dp"
-                            android:layout_weight="1"
-                            android:backgroundTint="#1E293B"
-                            android:text="📁 사진 문서 보관 폴더 ↗"
-                            android:textColor="#A78BFA"
-                            android:textSize="11.5sp"
-                            android:textStyle="bold"
-                            android:layout_marginStart="4dp" />
-                    </LinearLayout>
-
-                    <!-- 스마트 경비 영수증 대장 & 스마트 명함 관리 대장 열기 바로가기 뱃지 -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginBottom="8dp">
-
-                        <Button
-                            android:id="@+id/btnOpenReceiptSheet"
-                            android:layout_width="0dp"
-                            android:layout_height="40dp"
-                            android:layout_weight="1"
-                            android:backgroundTint="#1E293B"
-                            android:text="🧾 경비 영수증 시트 ↗"
-                            android:textColor="#34D399"
-                            android:textSize="11.5sp"
-                            android:textStyle="bold"
-                            android:layout_marginEnd="4dp" />
-
-                        <Button
-                            android:id="@+id/btnOpenBusinessCardSheet"
-                            android:layout_width="0dp"
-                            android:layout_height="40dp"
-                            android:layout_weight="1"
-                            android:backgroundTint="#1E293B"
-                            android:text="🪪 명함 관리 시트 ↗"
-                            android:textColor="#60A5FA"
-                            android:textSize="11.5sp"
-                            android:textStyle="bold"
-                            android:layout_marginStart="4dp" />
-                    </LinearLayout>
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="💡 팁: 갤러리에서 사진을 [공유] ➔ [시트봇]만 누르면 알아서 드라이브에 보관돼요."
-                        android:textColor="#64748B"
-                        android:textSize="10.5sp"
-                        android:lineSpacingExtra="2dp" />
-                </LinearLayout>
+                    android:text="💡 팁: 받은 명함을 촬영하면 AI가 성함, 직책, 회사명, 연락처를 인식하여 인맥 대장에 자동 등록합니다."
+                    android:textColor="#64748B"
+                    android:textSize="10.5sp"
+                    android:lineSpacingExtra="2dp" />
             </LinearLayout>
         </LinearLayout>
 

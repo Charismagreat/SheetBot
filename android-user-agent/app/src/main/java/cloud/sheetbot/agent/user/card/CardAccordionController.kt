@@ -43,6 +43,8 @@ class CardAccordionController(
         try { getPaymentReceipt().refreshCollapseState() } catch (_: Throwable) {}
         try { getCallRecord().refreshCollapseState() } catch (_: Throwable) {}
         try { getFileUpload().refreshCollapseState() } catch (_: Throwable) {}
+        try { updateCardCollapseState(binding.layoutReceiptScannerDetails, binding.btnToggleReceiptScannerDetails, prefs.isReceiptDetailsHidden) } catch (_: Throwable) {}
+        try { updateCardCollapseState(binding.layoutBusinessCardDetails, binding.btnToggleBusinessCardDetails, prefs.isBusinessCardDetailsHidden) } catch (_: Throwable) {}
         updateCardCollapseState(binding.layoutLinkScrapSettings, binding.btnToggleLinkScrapDetails, prefs.isLinkScrapDetailsHidden)
         if (isSmsSyncInitialized()) {
             getSmsSync().refreshCollapseState()
@@ -93,5 +95,23 @@ class CardAccordionController(
         // 5. 사진 & 문서 보관 카드
         binding.layoutFileUploadHeader.setOnClickListener { try { getFileUpload().toggleCollapse() } catch (_: Throwable) {} }
         binding.btnToggleFileUploadDetails.setOnClickListener { try { getFileUpload().toggleCollapse() } catch (_: Throwable) {} }
+
+        // 6. 스마트 경비 영수증 카드
+        val toggleReceipt = {
+            val isHidden = !prefs.isReceiptDetailsHidden
+            prefs.isReceiptDetailsHidden = isHidden
+            updateCardCollapseState(binding.layoutReceiptScannerDetails, binding.btnToggleReceiptScannerDetails, isHidden)
+        }
+        binding.layoutReceiptScannerHeader.setOnClickListener { toggleReceipt() }
+        binding.btnToggleReceiptScannerDetails.setOnClickListener { toggleReceipt() }
+
+        // 7. 스마트 명함 관리 카드
+        val toggleBiz = {
+            val isHidden = !prefs.isBusinessCardDetailsHidden
+            prefs.isBusinessCardDetailsHidden = isHidden
+            updateCardCollapseState(binding.layoutBusinessCardDetails, binding.btnToggleBusinessCardDetails, isHidden)
+        }
+        binding.layoutBusinessCardHeader.setOnClickListener { toggleBiz() }
+        binding.btnToggleBusinessCardDetails.setOnClickListener { toggleBiz() }
     }
 }

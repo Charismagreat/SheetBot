@@ -39,7 +39,33 @@ class BusinessCardSyncCardController(
     /**
      * 카드 초기화 및 버튼 이벤트 바인딩
      */
+    fun toggleCollapse() {
+        val isHidden = !prefs.isBusinessCardDetailsHidden
+        prefs.isBusinessCardDetailsHidden = isHidden
+        refreshCollapseState()
+    }
+
+    fun refreshCollapseState() {
+        val isHidden = prefs.isBusinessCardDetailsHidden
+        binding.layoutBusinessCardDetails.visibility = if (isHidden) View.GONE else View.VISIBLE
+        binding.btnToggleBusinessCardDetails.text = if (isHidden) "▼" else "▲"
+    }
+
+    /**
+     * 카드 초기화 및 버튼 이벤트 바인딩
+     */
     fun setup() {
+        refreshCollapseState()
+        binding.switchBusinessCardSync.isChecked = prefs.isBusinessCardSyncEnabled
+        binding.switchBusinessCardSync.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isBusinessCardSyncEnabled = isChecked
+            onAddLogItem(
+                "스마트 명함 관리",
+                if (isChecked) "스마트 명함 자동화가 활성화되었습니다." else "스마트 명함 자동화가 비활성화되었습니다.",
+                true
+            )
+        }
+
         binding.btnOpenBusinessCardSheet.setOnClickListener {
             onOpenSheetChooser("BUSINESS_CARD", prefs.businessCardDriveSheetTitle)
         }

@@ -62,6 +62,8 @@ class CardDrawerController(
         CardInfo("cardQuoteSync", "간편 주문 접수 기록", "📑", "업무 & 장부", R.id.cardQuoteSync, R.id.layoutQuoteSyncHeader),
         CardInfo("cardEstimateSync", "간편 견적서 발행 대장", "📑", "업무 & 장부", R.id.cardEstimateSync, R.id.layoutEstimateSyncHeader),
         CardInfo("cardFileUpload", "사진 & 문서 직결 보관", "📁", "업무 & 장부", R.id.cardFileUpload, R.id.layoutFileUploadHeader),
+        CardInfo("cardReceiptScanner", "스마트 경비 영수증 관리", "🧾", "업무 & 장부", R.id.cardReceiptScanner, R.id.layoutReceiptScannerHeader),
+        CardInfo("cardBusinessCard", "스마트 명함 관리", "🪪", "업무 & 장부", R.id.cardBusinessCard, R.id.layoutBusinessCardHeader),
         CardInfo("cardContactsBackup", "스마트폰 연락처 백업", "📇", "업무 & 장부", R.id.cardContactsBackup, R.id.layoutContactsHeader),
 
         // [3] 통화 & 녹음
