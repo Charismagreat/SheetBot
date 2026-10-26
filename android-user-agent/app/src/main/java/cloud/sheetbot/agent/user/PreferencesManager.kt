@@ -420,6 +420,11 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_business_card_details_hidden", false)
         set(value) = prefs.edit().putBoolean("is_business_card_details_hidden", value).apply()
 
+    // 스마트폰 연락처 자동 동기화 옵션 (명함 분석 시 내 폰 연락처에도 자동 저장)
+    var isBusinessCardAutoAddContactsEnabled: Boolean
+        get() = prefs.getBoolean("is_biz_card_auto_add_contacts", false)
+        set(value) = prefs.edit().putBoolean("is_biz_card_auto_add_contacts", value).apply()
+
     var fileUploadDriveFolder: String
         get() = prefs.getString("file_upload_drive_folder", "[SheetBot] 파일 보관함") ?: "[SheetBot] 파일 보관함"
         set(value) = prefs.edit().putString("file_upload_drive_folder", value).apply()

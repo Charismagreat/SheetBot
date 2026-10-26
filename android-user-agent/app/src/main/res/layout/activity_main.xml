@@ -3085,6 +3085,57 @@
                     android:textStyle="bold"
                     android:layout_marginBottom="8dp" />
 
+                <!-- 📇 스마트폰 연락처 자동 동기화 스위치 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="#1E293B"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="8dp"
+                    android:layout_marginBottom="8dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="스마트폰 연락처 자동 동기화"
+                            android:textColor="#F1F5F9"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="명함 인식 시 내 휴대전화 주소록에도 즉시 저장합니다."
+                            android:textColor="#94A3B8"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchBusinessCardAutoAddContacts"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="false" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btnSyncContactsFromFileToSheet"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:backgroundTint="#0F766E"
+                    android:text="📲 파일투시트 명함 ➔ 내 연락처로 일괄 가져오기"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
                 <Button
                     android:id="@+id/btnTestBusinessCardNotification"
                     android:layout_width="match_parent"

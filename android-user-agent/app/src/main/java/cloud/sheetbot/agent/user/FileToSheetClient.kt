@@ -730,4 +730,63 @@ object FileToSheetClient {
         }
         FtsEnsureSheetResult(success = false, error = lastError ?: "시트 생성 및 연결에 실패했습니다.")
     }
+
+    /**
+     * 파일투시트 인박스 토큰에 연결된 시트의 전체 데이터 행(rows) 목록을 조회합니다.
+     * GET /api/inbox/{token}?includeRows=true
+     *
+     * @return Pair<Boolean, List<JSONObject>> (성공 여부, 행 데이터 목록)
+     */
+    suspend fun fetchSheetRows(
+        endpoint: String,
+        token: String? = null
+    ): Pair<Boolean, List<JSONObject>> = withContext(Dispatchers.IO) {
+        val cleanToken = token?.takeIf { it.isNotBlank() }
+            ?: endpoint.substringAfterLast("/inbox/").substringBefore("?").trim()
+
+        val endpointsToTry = mutableListOf<String>()
+        val baseEp = if (endpoint.contains("?")) endpoint.substringBefore("?") else endpoint
+        endpointsToTry.add("$baseEp?includeRows=true")
+
+        if (cleanToken.isNotBlank()) {
+            val officialUrl = "$FTS_OFFICIAL_DOMAIN/api/inbox/$cleanToken?includeRows=true"
+            val tunnelUrl = "$FTS_TUNNEL_BASE/api/inbox/$cleanToken?includeRows=true"
+            if (!endpointsToTry.contains(officialUrl)) endpointsToTry.add(officialUrl)
+            if (!endpointsToTry.contains(tunnelUrl)) endpointsToTry.add(tunnelUrl)
+        }
+
+        for (targetUrl in endpointsToTry) {
+            try {
+                Log.i(TAG, "📥 [FTS 시트 행 조회 시도] $targetUrl")
+                val request = Request.Builder()
+                    .url(targetUrl)
+                    .header("Accept", "application/json")
+                    .get()
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val bodyString = response.body?.string() ?: ""
+                val json = try { JSONObject(bodyString) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && json.optBoolean("success", false)) {
+                    val rowsArray = json.optJSONArray("rows")
+                    val resultList = mutableListOf<JSONObject>()
+                    if (rowsArray != null) {
+                        for (i in 0 until rowsArray.length()) {
+                            val rowObj = rowsArray.optJSONObject(i)
+                            if (rowObj != null) {
+                                resultList.add(rowObj)
+                            }
+                        }
+                    }
+                    Log.i(TAG, "✅ [FTS 시트 행 조회 완료] 총 ${resultList.size}건 수신")
+                    return@withContext Pair(true, resultList)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "⚠️ [FTS 시트 행 조회 실패] $targetUrl: ${e.message}")
+            }
+        }
+
+        return@withContext Pair(false, emptyList<JSONObject>())
+    }
 }

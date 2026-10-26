@@ -1,12 +1,18 @@
 package cloud.sheetbot.agent.user.card
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.view.View
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import cloud.sheetbot.agent.user.CardActionActivity
+import cloud.sheetbot.agent.user.ContactHelper
+import cloud.sheetbot.agent.user.FileToSheetClient
 import cloud.sheetbot.agent.user.FileUploadManager
 import cloud.sheetbot.agent.user.MainActivity
 import cloud.sheetbot.agent.user.PreferencesManager
@@ -24,6 +30,7 @@ import org.json.JSONObject
  * - 명함 사진/문서 선택 런처 연동
  * - Gemini AI OCR 성함/직함/회사명/연락처 자동 분석
  * - 스마트 명함 관리 구글 시트 대장 또는 파일투시트(명함관리) 자동 등록
+ * - 스마트폰 연락처 자동 동기화 (내 주소록에 자동 추가 & 일괄 가져오기)
  * - 인맥 액션 다이얼로그(CardActionActivity) 즉시 출현
  * - 헤드업 알림 및 팝업 3초 카운트다운 디버그 테스트
  * - 시트 대장 원터치 뷰어 오픈
@@ -37,7 +44,7 @@ class BusinessCardSyncCardController(
     private val onAddLogItem: (title: String, detail: String, success: Boolean) -> Unit
 ) {
     /**
-     * 카드 초기화 및 버튼 이벤트 바인딩
+     * 카드 접기/펼치기 토글
      */
     fun toggleCollapse() {
         val isHidden = !prefs.isBusinessCardDetailsHidden
@@ -64,6 +71,25 @@ class BusinessCardSyncCardController(
                 if (isChecked) "스마트 명함 자동화가 활성화되었습니다." else "스마트 명함 자동화가 비활성화되었습니다.",
                 true
             )
+        }
+
+        // 📇 스마트폰 연락처 자동 동기화 스위치
+        binding.switchBusinessCardAutoAddContacts.isChecked = prefs.isBusinessCardAutoAddContactsEnabled
+        binding.switchBusinessCardAutoAddContacts.setOnCheckedChangeListener { _, isChecked ->
+            prefs.isBusinessCardAutoAddContactsEnabled = isChecked
+            if (isChecked) {
+                checkAndRequestContactPermissions()
+            }
+            onAddLogItem(
+                "연락처 동기화",
+                if (isChecked) "명함 등록 시 내 연락처 자동 추가 활성화됨" else "내 연락처 자동 추가 비활성화됨",
+                true
+            )
+        }
+
+        // 📲 파일투시트 명함 ➔ 내 연락처로 일괄 가져오기 버튼
+        binding.btnSyncContactsFromFileToSheet.setOnClickListener {
+            syncContactsFromFileToSheet()
         }
 
         binding.btnOpenBusinessCardSheet.setOnClickListener {
@@ -140,6 +166,28 @@ class BusinessCardSyncCardController(
         }
     }
 
+    private fun checkAndRequestContactPermissions(): Boolean {
+        val hasWrite = ContextCompat.checkSelfPermission(
+            activity,
+            Manifest.permission.WRITE_CONTACTS
+        ) == PackageManager.PERMISSION_GRANTED
+
+        val hasRead = ContextCompat.checkSelfPermission(
+            activity,
+            Manifest.permission.READ_CONTACTS
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasWrite || !hasRead) {
+            ActivityCompat.requestPermissions(
+                activity,
+                arrayOf(Manifest.permission.WRITE_CONTACTS, Manifest.permission.READ_CONTACTS),
+                101
+            )
+            return false
+        }
+        return true
+    }
+
     /**
      * 명함 사진을 전송하여 구글 시트 또는 파일투시트(FileToSheet) 시트에 직결 자동 기록
      */
@@ -178,6 +226,11 @@ class BusinessCardSyncCardController(
                 }
 
                 if (result.success) {
+                    // 📇 스마트폰 연락처 자동 동기화 옵션이 켜져 있는 경우 내 폰 주소록에 자동 추가
+                    if (prefs.isBusinessCardAutoAddContactsEnabled && result.ocrData != null) {
+                        saveContactFromOcrData(appContext, result.ocrData)
+                    }
+
                     if (isFts) {
                         val sName = result.folderName?.takeIf { it.isNotBlank() }
                             ?: prefs.getFtsSheetNameFor("business_card")
@@ -222,6 +275,173 @@ class BusinessCardSyncCardController(
                 withContext(Dispatchers.Main) {
                     binding.progressBar.visibility = View.GONE
                     Toast.makeText(appContext, "명함 처리 예외: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    /**
+     * OCR 데이터 객체(한글 컬럼 또는 영문 키 지원)를 파싱하여 내 스마트폰 연락처에 추가
+     */
+    private suspend fun saveContactFromOcrData(context: Context, ocr: JSONObject) {
+        val cName = ocr.optString("성명").takeIf { it.isNotBlank() }
+            ?: ocr.optString("이름").takeIf { it.isNotBlank() }
+            ?: ocr.optString("name").takeIf { it.isNotBlank() }
+            ?: ""
+
+        val cMobile = ocr.optString("휴대폰").takeIf { it.isNotBlank() }
+            ?: ocr.optString("휴대전화").takeIf { it.isNotBlank() }
+            ?: ocr.optString("휴대폰번호").takeIf { it.isNotBlank() }
+            ?: ocr.optString("mobile").takeIf { it.isNotBlank() }
+            ?: ocr.optString("phone").takeIf { it.isNotBlank() }
+            ?: ""
+
+        if (cName.isBlank() && cMobile.isBlank()) return
+
+        val cCompany = ocr.optString("회사명").takeIf { it.isNotBlank() }
+            ?: ocr.optString("company").takeIf { it.isNotBlank() }
+
+        val cTitle = ocr.optString("직함").takeIf { it.isNotBlank() }
+            ?: ocr.optString("부서직책").takeIf { it.isNotBlank() }
+            ?: ocr.optString("title").takeIf { it.isNotBlank() }
+
+        val cEmail = ocr.optString("이메일").takeIf { it.isNotBlank() }
+            ?: ocr.optString("email").takeIf { it.isNotBlank() }
+
+        val cAddress = ocr.optString("회사주소").takeIf { it.isNotBlank() }
+            ?: ocr.optString("address").takeIf { it.isNotBlank() }
+
+        val cMemo = ocr.optString("상세정보").takeIf { it.isNotBlank() }
+            ?: ocr.optString("details").takeIf { it.isNotBlank() }
+            ?: ocr.optString("비고").takeIf { it.isNotBlank() }
+
+        val res = ContactHelper.insertContactIfNotExists(
+            context = context,
+            name = cName,
+            mobile = cMobile,
+            company = cCompany,
+            title = cTitle,
+            email = cEmail,
+            address = cAddress,
+            memo = cMemo
+        )
+
+        withContext(Dispatchers.Main) {
+            when (res) {
+                1 -> {
+                    Toast.makeText(context, "📇 스마트폰 연락처에 [$cName]님이 자동 추가되었습니다.", Toast.LENGTH_SHORT).show()
+                    onAddLogItem("📇 연락처 동기화", "$cName ($cMobile) 내 폰에 추가 완료", true)
+                }
+                0 -> {
+                    android.util.Log.d("BusinessCardController", "이미 존재하는 연락처로 추가 생략: $cName ($cMobile)")
+                }
+                else -> {
+                    Toast.makeText(context, "⚠️ 연락처 저장 실패 (주소록 권한을 확인해주세요)", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    /**
+     * 파일투시트 명함관리 시트의 전체 목록을 가져와 내 휴대전화 주소록으로 일괄 동기화
+     */
+    private fun syncContactsFromFileToSheet() {
+        if (!checkAndRequestContactPermissions()) {
+            Toast.makeText(activity, "주소록 쓰기 권한이 필요합니다. 권한을 허용한 후 다시 시도해 주세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (!prefs.isFtsPaired && prefs.ftsPhoneNumber.isNullOrBlank()) {
+            Toast.makeText(activity, "⚠️ 파일투시트 번호 인증 또는 연동 후 이용할 수 있습니다.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        binding.progressBar.visibility = View.VISIBLE
+        Toast.makeText(activity, "📲 파일투시트 명함 데이터를 조회 중입니다...", Toast.LENGTH_SHORT).show()
+
+        val appContext = activity.applicationContext
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val (endpoint, sheetName) = FileUploadManager.resolveOrEnsureFtsSheet(prefs, "business_card")
+                val token = prefs.ftsBusinessCardToken?.takeIf { it.isNotBlank() }
+
+                val (fetchSuccess, rows) = FileToSheetClient.fetchSheetRows(endpoint, token)
+
+                if (!fetchSuccess || rows.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        binding.progressBar.visibility = View.GONE
+                        val msg = if (!fetchSuccess) "파일투시트 시트 데이터를 불러오지 못했습니다." else "[$sheetName] 시트에 등록된 명함 데이터가 없습니다."
+                        Toast.makeText(appContext, "⚠️ $msg", Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+
+                var addedCount = 0
+                var skippedCount = 0
+                var failedCount = 0
+
+                for (row in rows) {
+                    val cName = row.optString("성명").takeIf { it.isNotBlank() }
+                        ?: row.optString("이름").takeIf { it.isNotBlank() }
+                        ?: row.optString("name").takeIf { it.isNotBlank() }
+                        ?: ""
+
+                    val cMobile = row.optString("휴대폰").takeIf { it.isNotBlank() }
+                        ?: row.optString("휴대전화").takeIf { it.isNotBlank() }
+                        ?: row.optString("휴대폰번호").takeIf { it.isNotBlank() }
+                        ?: row.optString("mobile").takeIf { it.isNotBlank() }
+                        ?: row.optString("phone").takeIf { it.isNotBlank() }
+                        ?: ""
+
+                    if (cName.isBlank() && cMobile.isBlank()) {
+                        continue
+                    }
+
+                    val cCompany = row.optString("회사명").takeIf { it.isNotBlank() }
+                        ?: row.optString("company").takeIf { it.isNotBlank() }
+
+                    val cTitle = row.optString("직함").takeIf { it.isNotBlank() }
+                        ?: row.optString("부서직책").takeIf { it.isNotBlank() }
+                        ?: row.optString("title").takeIf { it.isNotBlank() }
+
+                    val cEmail = row.optString("이메일").takeIf { it.isNotBlank() }
+                        ?: row.optString("email").takeIf { it.isNotBlank() }
+
+                    val cAddress = row.optString("회사주소").takeIf { it.isNotBlank() }
+                        ?: row.optString("address").takeIf { it.isNotBlank() }
+
+                    val cMemo = row.optString("상세정보").takeIf { it.isNotBlank() }
+                        ?: row.optString("details").takeIf { it.isNotBlank() }
+                        ?: row.optString("비고").takeIf { it.isNotBlank() }
+
+                    val insertRes = ContactHelper.insertContactIfNotExists(
+                        context = appContext,
+                        name = cName,
+                        mobile = cMobile,
+                        company = cCompany,
+                        title = cTitle,
+                        email = cEmail,
+                        address = cAddress,
+                        memo = cMemo
+                    )
+
+                    when (insertRes) {
+                        1 -> addedCount++
+                        0 -> skippedCount++
+                        else -> failedCount++
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    binding.progressBar.visibility = View.GONE
+                    val summary = "🎉 동기화 완료: 총 ${rows.size}건 중 신규 추가 ${addedCount}건, 기존 보유 ${skippedCount}건"
+                    Toast.makeText(appContext, summary, Toast.LENGTH_LONG).show()
+                    onAddLogItem("📲 연락처 일괄 동기화", "신규 $addedCount / 기존 $skippedCount / 총 ${rows.size}건", true)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    binding.progressBar.visibility = View.GONE
+                    Toast.makeText(appContext, "연락처 일괄 동기화 오류: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }

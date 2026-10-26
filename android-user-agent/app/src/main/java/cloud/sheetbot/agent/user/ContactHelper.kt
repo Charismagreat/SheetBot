@@ -328,4 +328,50 @@ object ContactHelper {
             return false
         }
     }
+
+    /**
+     * 이미 존재하는 연락처인지(전화번호 또는 동명이인) 확인 후 없는 경우에만 스마트폰 주소록에 등록
+     * @return 1: 신규 등록 완료, 0: 이미 존재하여 건너뜀, -1: 등록 실패 또는 권한 없음
+     */
+    fun insertContactIfNotExists(
+        context: Context,
+        name: String,
+        mobile: String,
+        company: String? = null,
+        title: String? = null,
+        email: String? = null,
+        address: String? = null,
+        memo: String? = null
+    ): Int {
+        val cleanMobile = mobile.trim()
+        val cleanName = name.trim()
+        if (cleanMobile.isBlank() && cleanName.isBlank()) return 0
+
+        // 1. 전화번호가 있으면 전화번호로 중복 검사
+        if (cleanMobile.isNotBlank() && isContactExists(context, cleanMobile)) {
+            android.util.Log.d("ContactHelper", "이미 존재하는 전화번호로 주소록 등록 건너뜀: $cleanMobile ($cleanName)")
+            return 0
+        }
+
+        // 2. 전화번호가 없고 이름만 있는 경우 이름으로 중복 검사
+        if (cleanMobile.isBlank() && cleanName.isNotBlank()) {
+            val existingPhone = getPhoneNumberByName(context, cleanName)
+            if (existingPhone != null) {
+                android.util.Log.d("ContactHelper", "이미 존재하는 이름으로 주소록 등록 건너뜀: $cleanName")
+                return 0
+            }
+        }
+
+        val success = insertContact(
+            context = context,
+            name = cleanName,
+            mobile = cleanMobile,
+            company = company,
+            title = title,
+            email = email,
+            address = address,
+            memo = memo
+        )
+        return if (success) 1 else -1
+    }
 }
