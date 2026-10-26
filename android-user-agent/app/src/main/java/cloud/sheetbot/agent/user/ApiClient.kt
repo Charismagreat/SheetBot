@@ -273,6 +273,15 @@ object ApiClient {
         PingResult(isOnline = false, error = "서버 및 터널 응답 없음")
     }
 
+    // 웹사이트 헬스체크 전용 클라이언트 (3분 주기 점검 시 유휴 소켓 재사용으로 인한 HTTP 400 오탐 원천 차단)
+    private val healthCheckClient = client.newBuilder()
+        .connectionPool(okhttp3.ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .writeTimeout(6, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
+
     /**
      * 감시 대상 웹사이트(홈페이지/쇼핑몰) 실시간 헬스체크 (HEAD 또는 GET)
      */
@@ -294,38 +303,58 @@ object ApiClient {
 
         val startTime = System.currentTimeMillis()
         try {
-            // 1단계: 가벼운 HEAD 요청 시도
+            // 1단계: 가벼운 HEAD 요청 시도 (유휴 소켓 재사용 방지 및 리소스 즉시 해제)
             val headRequest = Request.Builder()
                 .url(normalizedUrl)
                 .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) SheetBotSentinel/1.0")
+                .header("Cache-Control", "no-cache")
+                .header("Connection", "close")
                 .head()
                 .build()
 
-            var response = try {
-                client.newCall(headRequest).execute()
+            var statusCode = 0
+            var statusMsg = ""
+            try {
+                healthCheckClient.newCall(headRequest).execute().use { res ->
+                    statusCode = res.code
+                    statusMsg = res.message
+                }
             } catch (_: Exception) {
-                null
+                statusCode = 0
             }
 
-            // HEAD가 지원되지 않거나 405 Method Not Allowed인 경우 GET으로 재시도
-            if (response == null || response.code == 405) {
+            // HEAD가 실패하거나 2xx/3xx가 아닌 경우(HTTP 400, 403, 404, 405 등 프록시/터널의 HEAD 거부 포함) 즉시 GET으로 재검증
+            if (statusCode !in 200..399) {
                 val getRequest = Request.Builder()
                     .url(normalizedUrl)
                     .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) SheetBotSentinel/1.0")
+                    .header("Cache-Control", "no-cache")
+                    .header("Connection", "close")
                     .get()
                     .build()
-                response = client.newCall(getRequest).execute()
+                healthCheckClient.newCall(getRequest).execute().use { res ->
+                    statusCode = res.code
+                    statusMsg = res.message
+                }
+            }
+
+            // sheetbot.cloud 도메인 감시 중 일시적 프록시 지연/400 발생 시 공식 핑 엔드포인트로 한 번 더 교차 검증
+            if (statusCode !in 200..399 && normalizedUrl.contains("sheetbot.cloud", ignoreCase = true)) {
+                val pingRes = pingServer()
+                if (pingRes.isOnline) {
+                    statusCode = 200
+                    statusMsg = "OK"
+                }
             }
 
             val elapsed = System.currentTimeMillis() - startTime
-            val statusCode = response.code
-            val isOk = response.isSuccessful || statusCode in 200..399
+            val isOk = statusCode in 200..399
 
             WebsiteCheckResult(
                 isOnline = isOk,
                 statusCode = statusCode,
                 responseTimeMs = elapsed,
-                errorMessage = if (!isOk) "HTTP $statusCode ${response.message}" else null,
+                errorMessage = if (!isOk) "HTTP $statusCode $statusMsg".trim() else null,
                 checkedUrl = normalizedUrl
             )
         } catch (e: Exception) {
@@ -352,8 +381,9 @@ object ApiClient {
                 .header("User-Agent", "SheetBotSentinel/1.0")
                 .get()
                 .build()
-            val response = client.newCall(request).execute()
-            response.isSuccessful || response.code == 204
+            client.newCall(request).execute().use { response ->
+                response.isSuccessful || response.code == 204
+            }
         } catch (_: Exception) {
             // 보조 검증: 시트봇 서버 핑 시도
             try {
