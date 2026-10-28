@@ -646,10 +646,12 @@ ${voiceProfileHint}
     );
 
     if (batchSubmitRes.success && batchSubmitRes.jobName) {
-      let batchJobId: number | null = null;
+      const generatedJobId = Date.now();
+      let batchJobId: number | null = generatedJobId;
       try {
         const insertRes = await insertRows("sheetbot_ai_batch_jobs", [
           {
+            id: generatedJobId,
             job_name: batchSubmitRes.jobName,
             job_type: "MEETING",
             user_email: cleanEmail,
@@ -661,7 +663,7 @@ ${voiceProfileHint}
             created_at: getKoreanTimeString(),
           },
         ]);
-        batchJobId = insertRes?.insertedIds?.[0] || null;
+        batchJobId = insertRes?.insertedIds?.[0] || generatedJobId;
         writeDebugLog(`Meeting batch ticket registered in DB: ID ${batchJobId}`);
       } catch (e: any) {
         writeDebugLog(`[BatchJobs] Insert error: ${e.message}`);
@@ -685,6 +687,11 @@ ${voiceProfileHint}
         if (rawText.length > 0) {
           writeDebugLog(`Fast-Check Meeting Batch job succeeded! Text length: ${rawText.length}`);
           const nowStr = getKoreanTimeString();
+          await updateRows("sheetbot_ai_batch_jobs", {
+            status: "SUCCEEDED",
+            completed_at: nowStr,
+            updated_at: nowStr,
+          }, { filters: { job_name: batchSubmitRes.jobName } }).catch(() => {});
           if (batchJobId) {
             await updateRows("sheetbot_ai_batch_jobs", {
               status: "SUCCEEDED",
@@ -718,6 +725,7 @@ ${voiceProfileHint}
             spreadsheetId,
             expectedRow: rowIndex && rowIndex > 1 ? rowIndex : 2,
             fileName,
+            userEmail: cleanEmail,
           });
           const targetRow = guardRes.safeRow;
 

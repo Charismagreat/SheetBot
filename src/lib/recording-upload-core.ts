@@ -827,10 +827,12 @@ ${voiceProfileHint}
       );
 
       if (batchSubmitRes.success && batchSubmitRes.jobName) {
-        let batchJobId: number | null = null;
+        const generatedJobId = Date.now();
+        let batchJobId: number | null = generatedJobId;
         try {
           const insertRes = await insertRows("sheetbot_ai_batch_jobs", [
             {
+              id: generatedJobId,
               job_name: batchSubmitRes.jobName,
               job_type: "RECORDING",
               user_email: cleanEmail,
@@ -842,7 +844,7 @@ ${voiceProfileHint}
               created_at: getKoreanTimeString(),
             },
           ]);
-          batchJobId = insertRes?.insertedIds?.[0] || null;
+          batchJobId = insertRes?.insertedIds?.[0] || generatedJobId;
           writeDebugLog(`Batch ticket registered in DB: ID ${batchJobId} (${batchSubmitRes.jobName})`);
         } catch (e: any) {
           writeDebugLog(`[BatchJobs] Insert error: ${e.message}`);
@@ -861,18 +863,17 @@ ${voiceProfileHint}
             isBatchSuccess = true;
             writeDebugLog(`Fast-Check Batch job succeeded! Text length: ${rawText.length}`);
             const nowStr = getKoreanTimeString();
+            await updateRows("sheetbot_ai_batch_jobs", {
+              status: "SUCCEEDED",
+              completed_at: nowStr,
+              updated_at: nowStr,
+            }, { filters: { job_name: batchSubmitRes.jobName } }).catch(() => {});
             if (batchJobId) {
               await updateRows("sheetbot_ai_batch_jobs", {
                 status: "SUCCEEDED",
                 completed_at: nowStr,
                 updated_at: nowStr,
               }, { ids: [batchJobId] }).catch(() => {});
-            } else {
-              await updateRows("sheetbot_ai_batch_jobs", {
-                status: "SUCCEEDED",
-                completed_at: nowStr,
-                updated_at: nowStr,
-              }, { filters: { job_name: batchSubmitRes.jobName } }).catch(() => {});
             }
           }
         } else {
@@ -964,6 +965,8 @@ ${voiceProfileHint}
         spreadsheetId,
         expectedRow: rowIndex,
         fileName,
+        userEmail: cleanEmail,
+        callOptions: effectiveCallOptions,
       });
 
       const safeRow = guardRes.safeRow;
@@ -975,7 +978,7 @@ ${voiceProfileHint}
           preferOAuth: true,
         }, effectiveCallOptions).catch((e: any) => console.warn("[AiAudioAnalysis] Sheet update warning:", e.message));
       } else {
-        console.warn(`[AiAudioAnalysis] 🛑 Target row for ${fileName} was deleted by user (${guardRes.reason}). Skipping sheet update.`);
+        console.warn(`[AiAudioAnalysis] 🛑 Target row for ${fileName} was deleted by user or already completed (${guardRes.reason}). Skipping sheet update.`);
       }
     }
 
@@ -1008,6 +1011,8 @@ ${voiceProfileHint}
         spreadsheetId,
         expectedRow: rowIndex,
         fileName,
+        userEmail,
+        callOptions: effectiveCallOptions,
       }).catch(() => ({ safeRow: null }));
 
       const safeRow = guardRes.safeRow;

@@ -13,6 +13,7 @@ import { recordAiUsageLog } from './ai-usage';
 import { calculateBillableTokens } from './token-calculator';
 import { getKoreanTimeString } from './date-utils';
 import { resolveSafeTargetRow } from './sheet-fingerprint-guard';
+import { getWorkspaceCallOptionsForEmail } from './auth';
 import { createTaskItem, parseActionItems, autoResolveMissedCallTasks } from './task-hub-helper';
 
 function formatBusinessNumber(raw: any): string {
@@ -100,6 +101,9 @@ export async function processPendingBatchJobs(): Promise<{
 
       // 2. 단일 0초 상태 조회 (waitMs: 0)
       try {
+        const callOptions = userEmail
+          ? await getWorkspaceCallOptionsForEmail(userEmail).catch(() => ({}))
+          : {};
         const batchRes = await callAiBatchGet(jobName, { waitMs: 0 });
 
         if (batchRes.success && batchRes.state === 'JOB_STATE_SUCCEEDED') {
@@ -123,13 +127,70 @@ export async function processPendingBatchJobs(): Promise<{
               spreadsheetId,
               expectedRow: rowIndex > 1 ? rowIndex : 2,
               fileName,
+              userEmail,
+              callOptions,
             });
 
             targetRow = guardRes.safeRow;
             if (!targetRow) {
+              const nowStr = getKoreanTimeString();
+              if (guardRes.reason === 'ALREADY_COMPLETED') {
+                console.log(`[BatchSweeper] ✅ Row for job ${jobName} (${fileName}) is already completed in sheet. Marking ticket SUCCEEDED.`);
+                processedBatchJobs.add(jobName);
+                await updateRows('sheetbot_ai_batch_jobs', {
+                  status: 'SUCCEEDED',
+                  completed_at: nowStr,
+                  updated_at: nowStr,
+                }, { filters: { job_name: jobName } }).catch(() => {});
+                if (!jobId.startsWith('auto-') && !isNaN(Number(jobId)) && Number(jobId) > 0) {
+                  await updateRows('sheetbot_ai_batch_jobs', {
+                    status: 'SUCCEEDED',
+                    completed_at: nowStr,
+                    updated_at: nowStr,
+                  }, { ids: [Number(jobId)] }).catch(() => {});
+                }
+                succeeded++;
+                continue;
+              }
+
+              if (guardRes.reason === 'ERROR') {
+                // 권한 또는 일시적 네트워크 에러 시: 24시간 이상 경과한 오래된 작업만 마감하고, 최신 작업은 다음 주기에 재시도
+                const createdMs = job.created_at ? new Date(String(job.created_at).replace(' ', 'T')).getTime() : 0;
+                const isExpired = createdMs > 0 && Date.now() - createdMs > 24 * 60 * 60 * 1000;
+                if (isExpired) {
+                  console.warn(`[BatchSweeper] 🛑 Job ${jobName} sheet access error & expired (>24h). Closing ticket.`);
+                  processedBatchJobs.add(jobName);
+                  await updateRows('sheetbot_ai_batch_jobs', {
+                    status: 'FAILED',
+                    error_message: '시트 접근 권한 만료 또는 24시간 경과로 자동 마감',
+                    completed_at: nowStr,
+                    updated_at: nowStr,
+                  }, { filters: { job_name: jobName } }).catch(() => {});
+                  if (!jobId.startsWith('auto-') && !isNaN(Number(jobId)) && Number(jobId) > 0) {
+                    await updateRows('sheetbot_ai_batch_jobs', {
+                      status: 'FAILED',
+                      error_message: '시트 접근 권한 만료 또는 24시간 경과로 자동 마감',
+                      completed_at: nowStr,
+                      updated_at: nowStr,
+                    }, { ids: [Number(jobId)] }).catch(() => {});
+                  }
+                  failed++;
+                } else {
+                  pending++;
+                }
+                continue;
+              }
+
               console.warn(`[BatchSweeper] 🛑 Row for job ${jobName} was deleted by user or not found (${guardRes.reason}). Skipping sheet write.`);
-              if (!jobId.startsWith('auto-')) {
-                const nowStr = getKoreanTimeString();
+              processedBatchJobs.add(jobName);
+              await updateRows('sheetbot_ai_batch_jobs', {
+                status: 'CANCELLED_USER_DELETED',
+                error_message: '사용자가 구글 시트에서 해당 행을 삭제하여 시트 덮어쓰기를 안전하게 취소함',
+                completed_at: nowStr,
+                updated_at: nowStr,
+              }, { filters: { job_name: jobName } }).catch(() => {});
+
+              if (!jobId.startsWith('auto-') && !isNaN(Number(jobId)) && Number(jobId) > 0) {
                 await updateRows('sheetbot_ai_batch_jobs', {
                   status: 'CANCELLED_USER_DELETED',
                   error_message: '사용자가 구글 시트에서 해당 행을 삭제하여 시트 덮어쓰기를 안전하게 취소함',
@@ -178,14 +239,14 @@ export async function processPendingBatchJobs(): Promise<{
                   ocrData.approvalNumber || '-',
                 ]],
                 preferOAuth: true,
-              }).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
+              }, callOptions).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
 
               await callSheetsTool('sheets_update_range', {
                 spreadsheetId,
                 range: `시트1!L${targetRow}`,
                 values: [['✅ 분석 완료']],
                 preferOAuth: true,
-              }).catch(() => {});
+              }, callOptions).catch(() => {});
             }
 
             const receiptPromptText = `비동기 영수증 분석: ${fileName}`;
@@ -233,7 +294,7 @@ export async function processPendingBatchJobs(): Promise<{
                   ocrData.details || '-',
                 ]],
                 preferOAuth: true,
-              }).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
+              }, callOptions).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
             }
 
             const cardPromptText = `비동기 명함 분석: ${fileName}`;
@@ -274,7 +335,7 @@ export async function processPendingBatchJobs(): Promise<{
                 range: `시트1!F${targetRow}:F${targetRow}`,
                 values: [[finalSummary]],
                 preferOAuth: true,
-              }).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
+              }, callOptions).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
             }
 
             const linkPromptText = `비동기 수거 링크 분석: ${fileName}`;
@@ -331,7 +392,7 @@ export async function processPendingBatchJobs(): Promise<{
                 range: `시트1!B${targetRow}:C${targetRow}`,
                 values: [[meetingTitle, participants]],
                 preferOAuth: true,
-              }).catch((err: any) => console.warn(`[BatchSweeper] Meeting B:C update warning: ${err.message}`));
+              }, callOptions).catch((err: any) => console.warn(`[BatchSweeper] Meeting B:C update warning: ${err.message}`));
 
               // F~H열 (요약, Action Items, 상세 회의록) 갱신
               await callSheetsTool('sheets_update_range', {
@@ -339,7 +400,7 @@ export async function processPendingBatchJobs(): Promise<{
                 range: `시트1!F${targetRow}:H${targetRow}`,
                 values: [[summary, actionItems, transcript]],
                 preferOAuth: true,
-              }).catch((err: any) => console.warn(`[BatchSweeper] Meeting F:H update warning: ${err.message}`));
+              }, callOptions).catch((err: any) => console.warn(`[BatchSweeper] Meeting F:H update warning: ${err.message}`));
             }
 
             // [스마트 통합 할 일 허브 (Task Hub) 연동]
@@ -405,7 +466,7 @@ export async function processPendingBatchJobs(): Promise<{
                 range: `시트1!E${targetRow}:G${targetRow}`,
                 values: [[summary, actionItems, transcript]],
                 preferOAuth: true,
-              }).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
+              }, callOptions).catch((err: any) => console.warn(`[BatchSweeper] Sheet update warning: ${err.message}`));
 
               // 파일명에서 상대방 이름 복원하여 B열 보정
               try {
@@ -421,7 +482,7 @@ export async function processPendingBatchJobs(): Promise<{
                     range: `시트1!B${targetRow}`,
                     values: [[fullContact]],
                     preferOAuth: true,
-                  }).catch(() => {});
+                  }, callOptions).catch(() => {});
                 }
               } catch {}
             }
@@ -528,6 +589,8 @@ export async function processPendingBatchJobs(): Promise<{
               spreadsheetId,
               expectedRow: rowIndex,
               fileName,
+              userEmail,
+              callOptions,
             });
             failTargetRow = guardRes.safeRow;
           }
@@ -540,14 +603,14 @@ export async function processPendingBatchJobs(): Promise<{
                 range: `시트1!F${failTargetRow}:F${failTargetRow}`,
                 values: [['⚠️ AI 배치 요약 실패 (재시도 요망)']],
                 preferOAuth: true,
-              }).catch(() => {});
+              }, callOptions).catch(() => {});
             } else {
               await callSheetsTool('sheets_update_range', {
                 spreadsheetId,
                 range: `시트1!E${failTargetRow}:G${failTargetRow}`,
                 values: [['⚠️ AI 배치 분석 실패 (재분석 지원)', '-', '-']],
                 preferOAuth: true,
-              }).catch(() => {});
+              }, callOptions).catch(() => {});
             }
           }
           failed++;

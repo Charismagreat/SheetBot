@@ -1,4 +1,5 @@
 import { callSheetsTool } from "./egdesk-helpers";
+import { getWorkspaceCallOptionsForEmail } from "./auth";
 
 /**
  * 🛡️ 지능형 행 핑거프린트 가드 (Fingerprint Row Guard)
@@ -13,7 +14,9 @@ import { callSheetsTool } from "./egdesk-helpers";
  * @param options.fileName 업로드된 파일명 또는 고유 제목
  * @param options.fileUrl 구글 드라이브 파일 보기 URL (하이퍼링크 등)
  * @param options.pendingKeywords 해당 행에 존재해야 할 대기 표식 키워드 목록
- * @returns 갱신할 안전한 유효 행 번호 (number), 사용자가 삭제한 경우 null
+ * @param options.userEmail 멀티테넌시 시트 접근 권한용 사용자 이메일
+ * @param options.callOptions 이미 조회된 WorkspaceVisitorCallOptions
+ * @returns 갱신할 안전한 유효 행 번호 (number), 사용자가 삭제했거나 이미 완료된 경우 null
  */
 export async function resolveSafeTargetRow(options: {
   spreadsheetId: string;
@@ -21,8 +24,13 @@ export async function resolveSafeTargetRow(options: {
   fileName?: string;
   fileUrl?: string;
   pendingKeywords?: string[];
-}): Promise<{ safeRow: number | null; reason: "MATCH_EXPECTED" | "MATCH_RELOCATED" | "ABORT_USER_DELETED" | "ERROR" }> {
-  const { spreadsheetId, expectedRow, fileName, fileUrl, pendingKeywords = [] } = options;
+  userEmail?: string;
+  callOptions?: any;
+}): Promise<{
+  safeRow: number | null;
+  reason: "MATCH_EXPECTED" | "MATCH_RELOCATED" | "ALREADY_COMPLETED" | "ABORT_USER_DELETED" | "ERROR";
+}> {
+  const { spreadsheetId, expectedRow, fileName, fileUrl, pendingKeywords = [], userEmail, callOptions } = options;
   if (!spreadsheetId || expectedRow <= 1) {
     return { safeRow: null, reason: "ERROR" };
   }
@@ -30,6 +38,7 @@ export async function resolveSafeTargetRow(options: {
   const defaultKeywords = [
     "[AI 배치",
     "대기중",
+    "대기 중",
     "분석 대기",
     "⏳",
     "AI 요약",
@@ -39,52 +48,105 @@ export async function resolveSafeTargetRow(options: {
   ];
 
   try {
-    // 1단계: 기대 행(expectedRow)을 0.1초 읽어와 핑거프린트 점검
+    const effectiveCallOptions =
+      callOptions || (userEmail ? await getWorkspaceCallOptionsForEmail(userEmail).catch(() => ({})) : {});
+
+    const cleanFileName = fileName
+      ? fileName.replace(/^\[SheetBot\]\s*/i, "").replace(/\.[^.]+$/, "").trim()
+      : "";
+
+    const checkLineMatchesFile = (lineStr: string): boolean => {
+      if (!fileUrl && !fileName) return false;
+      return Boolean(
+        (fileUrl && lineStr.includes(fileUrl)) ||
+          (fileName && lineStr.includes(fileName)) ||
+          (cleanFileName.length >= 4 && lineStr.includes(cleanFileName))
+      );
+    };
+
+    // 1단계: 기대 행(expectedRow)을 읽어와 핑거프린트 점검
     const testRange = `시트1!A${expectedRow}:M${expectedRow}`;
-    const rowRes = await callSheetsTool("sheets_get_range", {
-      spreadsheetId,
-      range: testRange,
-      preferOAuth: true,
-    }).catch(() => null);
+    let rowFetchError = false;
+    const rowRes = await callSheetsTool(
+      "sheets_get_range",
+      {
+        spreadsheetId,
+        range: testRange,
+        preferOAuth: true,
+      },
+      effectiveCallOptions
+    ).catch((err: any) => {
+      rowFetchError = true;
+      console.warn(`[FingerprintGuard] Row read warning (${spreadsheetId} R${expectedRow}): ${err?.message || err}`);
+      return null;
+    });
 
-    const rowValues: string[] = (rowRes?.values && rowRes.values[0]) || [];
-    const rowText = rowValues.join(" ");
+    if (!rowFetchError && rowRes && Array.isArray(rowRes.values)) {
+      const rowValues: string[] = rowRes.values[0] || [];
+      const rowText = rowValues.join(" ");
 
-    // 1-1. 대기 표식이 있거나, 해당 파일명/URL이 일치하는지 확인
-    const hasPendingIndicator = defaultKeywords.some((kw) => rowText.includes(kw));
-    const hasFileMatch = (fileName && rowText.includes(fileName)) || (fileUrl && rowText.includes(fileUrl));
+      const hasPendingIndicator = defaultKeywords.some((kw) => rowText.includes(kw));
+      const hasFileMatch = checkLineMatchesFile(rowText);
 
-    if (hasPendingIndicator || hasFileMatch) {
-      // 기대 행 번호가 여전히 정확함!
-      return { safeRow: expectedRow, reason: "MATCH_EXPECTED" };
+      if (fileName || fileUrl) {
+        if (hasFileMatch && hasPendingIndicator) {
+          return { safeRow: expectedRow, reason: "MATCH_EXPECTED" };
+        }
+        if (hasFileMatch && !hasPendingIndicator && rowText.trim().length > 0) {
+          console.log(`[FingerprintGuard] ✅ Row ${expectedRow} for '${fileName}' is already analyzed. Skipping duplicate write.`);
+          return { safeRow: null, reason: "ALREADY_COMPLETED" };
+        }
+      } else if (hasPendingIndicator) {
+        return { safeRow: expectedRow, reason: "MATCH_EXPECTED" };
+      }
     }
 
     // 2단계: 기대 행에 대기 표식이나 파일명이 없다 -> 행이 밀렸거나 삭제됨!
     console.warn(`[FingerprintGuard] ⚠️ Row ${expectedRow} does not match expected fingerprint. Starting dynamic relocation scan...`);
 
-    // 최근 100행 범위를 읽어와 위치 역추적
-    const scanRes = await callSheetsTool("sheets_get_range", {
-      spreadsheetId,
-      range: "시트1!A1:M100",
-      preferOAuth: true,
-    }).catch(() => null);
+    let scanFetchError = false;
+    const scanRes = await callSheetsTool(
+      "sheets_get_range",
+      {
+        spreadsheetId,
+        range: "시트1!A1:M200",
+        preferOAuth: true,
+      },
+      effectiveCallOptions
+    ).catch((err: any) => {
+      scanFetchError = true;
+      console.warn(`[FingerprintGuard] Scan read error (${spreadsheetId}): ${err?.message || err}`);
+      return null;
+    });
 
-    const allRows: string[][] = scanRes?.values || [];
+    if (scanFetchError || !scanRes || !Array.isArray(scanRes.values)) {
+      console.warn(`[FingerprintGuard] ⚠️ Cannot read sheet ${spreadsheetId} (permission or network error). Deferring without aborting.`);
+      return { safeRow: null, reason: "ERROR" };
+    }
 
-    // 2-1. 파일 URL 또는 파일명으로 매칭되는 행 탐색 (역순: 최신 등록건 우선)
+    const allRows: string[][] = scanRes.values;
+
+    // 2-1. 파일 URL 또는 파일명 + 대기 표식으로 매칭되는 행 탐색 (역순: 최신 등록건 우선)
     if (fileUrl || fileName) {
-      const cleanFileName = fileName ? fileName.replace(/^\[SheetBot\]\s*/i, "").replace(/\.[^.]+$/, "").trim() : "";
       for (let i = allRows.length - 1; i >= 1; i--) {
         const lineStr = (allRows[i] || []).join(" ");
-        const matchesFile = (fileUrl && lineStr.includes(fileUrl)) ||
-          (fileName && lineStr.includes(fileName)) ||
-          (cleanFileName.length >= 4 && lineStr.includes(cleanFileName));
+        const matchesFile = checkLineMatchesFile(lineStr);
         const matchesPending = defaultKeywords.some((kw) => lineStr.includes(kw));
 
         if (matchesFile && matchesPending) {
           const relocatedRow = i + 1;
           console.log(`[FingerprintGuard] 🎯 Relocated row found by strict file match: ${relocatedRow} for ${fileName}`);
           return { safeRow: relocatedRow, reason: "MATCH_RELOCATED" };
+        }
+      }
+
+      // 2-2. 파일명은 존재하지만 대기 표식이 없는 경우 -> 이미 분석 완료된 행!
+      for (let i = allRows.length - 1; i >= 1; i--) {
+        const lineStr = (allRows[i] || []).join(" ");
+        if (checkLineMatchesFile(lineStr)) {
+          const completedRow = i + 1;
+          console.log(`[FingerprintGuard] ✅ Relocated row ${completedRow} for '${fileName}' is already completed. Skipping duplicate write.`);
+          return { safeRow: null, reason: "ALREADY_COMPLETED" };
         }
       }
     }
@@ -94,7 +156,6 @@ export async function resolveSafeTargetRow(options: {
     return { safeRow: null, reason: "ABORT_USER_DELETED" };
   } catch (err: any) {
     console.error("[FingerprintGuard] Unexpected error during fingerprint check:", err.message);
-    // 예외 발생 시 다른 데이터 오염을 막기 위해 안전하게 null 반환
     return { safeRow: null, reason: "ERROR" };
   }
 }
