@@ -355,27 +355,89 @@ export async function lookupVisitorSessionIdForEmail(email: string): Promise<str
 
 /**
  * 특정 이메일 사용자의 작업공간(Drive/Sheets/Apps Script) 호출 옵션 생성
- * - DB에 저장된 visitor_session_id가 있으면 해당 세션으로 격리 호출 (asVisitor: true)
- * - 관리자이고 세션이 없는 경우에만 호스트 기본 권한({}) 폴백
+ * - 요청 헤더/쿠키(모바일 앱·웹 브라우저) 및 DB에 저장된 visitor_session_id 후보들을 수집하여
+ *   이지데스크에 실제 연결(connected: true)된 유효 세션을 선택합니다.
+ * - 앱/브라우저가 보낸 신규 유효 세션이 DB와 다르면 즉시 DB(sheetbot_users.visitor_session_id)에 자동 동기화합니다.
+ * - 저장된 방문자 세션이 만료/연결 해제된 경우 죽은 세션을 강제 주입하지 않고 호스트 기본 권한({})으로 안전하게 폴백합니다.
  */
 export async function getWorkspaceCallOptionsForEmail(
   email: string,
   req?: Request
 ): Promise<WorkspaceVisitorCallOptions> {
   const normalized = email.toLowerCase().trim();
-  const visitorSessionId = await lookupVisitorSessionIdForEmail(normalized);
-  const origin = req ? resolveVisitorSiteOriginFromRequest(req) : resolveVisitorSiteOriginFromRequest();
-  if (visitorSessionId) {
-    return {
-      asVisitor: true,
-      visitorSessionId,
-      visitorOrigin: origin,
-    };
+  let h: Headers | null = req ? req.headers : null;
+  if (!h) {
+    try {
+      const { headers } = await import("next/headers");
+      h = new Headers(await headers());
+    } catch {
+      h = null;
+    }
   }
-  const isAdmin = await isCurrentUserAdmin(normalized);
-  if (isAdmin) {
-    return {};
+
+  const candidates: string[] = [];
+  const push = (v?: string | null) => {
+    const s = (v || "").trim();
+    if (s && !candidates.includes(s)) candidates.push(s);
+  };
+
+  if (h) {
+    push(h.get("x-visitor-session-id") || h.get("x-egdesk-visitor-session"));
+    const cookieHeader = h.get("cookie") || "";
+    for (const m of cookieHeader.matchAll(/(?:^|;\s*)egdesk_visitor_session=([^;]+)/g)) {
+      try {
+        push(decodeURIComponent(m[1]));
+      } catch {
+        push(m[1]);
+      }
+    }
   }
+
+  const dbSessionId = await lookupVisitorSessionIdForEmail(normalized);
+  push(dbSessionId);
+
+  const origin = req
+    ? resolveVisitorSiteOriginFromRequest(req)
+    : h
+      ? originFromHeaders(h)
+      : resolveVisitorSiteOriginFromRequest();
+
+  if (candidates.length > 0) {
+    const checks = await Promise.all(
+      candidates.map((sid) => checkVisitorSessionConnected(sid, origin))
+    );
+    const validIdx = checks.findIndex(
+      (c) => c.connected && (!c.email || c.email === normalized)
+    );
+
+    if (validIdx >= 0) {
+      const validSid = candidates[validIdx];
+      if (validSid !== dbSessionId) {
+        void (async () => {
+          try {
+            const { updateRows } = await import("@/lib/egdesk-helpers");
+            await updateRows(
+              "sheetbot_users",
+              { visitor_session_id: validSid, updated_at: new Date().toISOString() },
+              { filters: { email: normalized } }
+            );
+            const { syncVisitorSessionToUser } = await import("@/lib/api-keys");
+            await syncVisitorSessionToUser(normalized, validSid);
+          } catch {}
+        })();
+      }
+      return {
+        asVisitor: true,
+        visitorSessionId: validSid,
+        visitorOrigin: origin,
+      };
+    }
+
+    console.warn(
+      `[Auth] Visitor session candidate(s) for ${normalized} are disconnected/expired; falling back to host workspace auth.`
+    );
+  }
+
   return {};
 }
 
@@ -386,24 +448,22 @@ export async function buildWorkspaceVisitorCallOptions(
   req: Request,
   userEmail?: string | null,
 ): Promise<WorkspaceVisitorCallOptions> {
-  const visitorSessionId = await getCurrentVisitorSessionId(req);
-  if (visitorSessionId) {
-    return {
-      asVisitor: true,
-      visitorSessionId,
-      visitorOrigin: resolveVisitorSiteOriginFromRequest(req),
-    };
-  }
-  const targetEmail = userEmail || await getCurrentUserEmail().catch(() => null);
+  const targetEmail = userEmail || (await getCurrentUserEmail(req).catch(() => null));
   if (targetEmail) {
     const emailOptions = await getWorkspaceCallOptionsForEmail(targetEmail, req);
     if (emailOptions.asVisitor) return emailOptions;
   }
-  const isAdmin = targetEmail
-    ? await isCurrentUserAdmin(targetEmail)
-    : await isCurrentUserAdmin();
-  if (isAdmin) {
-    return {};
+  const visitorSessionId = await getCurrentVisitorSessionId(req);
+  if (visitorSessionId) {
+    const origin = resolveVisitorSiteOriginFromRequest(req);
+    const check = await checkVisitorSessionConnected(visitorSessionId, origin);
+    if (check.connected) {
+      return {
+        asVisitor: true,
+        visitorSessionId,
+        visitorOrigin: origin,
+      };
+    }
   }
   return {};
 }

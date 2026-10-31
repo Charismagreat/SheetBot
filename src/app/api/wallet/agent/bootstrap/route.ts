@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail, isCurrentUserAdmin } from "@/lib/auth";
+import { getCurrentUserEmail, isCurrentUserAdmin, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import { cachedQueryTable, fetchWithCache } from "@/lib/server-cache";
 import crypto from "crypto";
 
@@ -36,13 +36,18 @@ export async function GET(req: NextRequest) {
     const pinHash = crypto.createHash("md5").update(`${cleanEmail}-${token}`).digest("hex");
     const pinCode = "SB-" + ((parseInt(pinHash.slice(0, 6), 16) % 900000) + 100000);
 
-    const qrUri = `sheetbot://pair?email=${encodeURIComponent(cleanEmail)}&token=${encodeURIComponent(token)}&pin=${encodeURIComponent(pinCode)}`;
+    const wsOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req).catch(() => ({}));
+    const visitorSessionId = wsOptions.visitorSessionId || null;
+    const sidParam = visitorSessionId ? `&sid=${encodeURIComponent(visitorSessionId)}` : "";
+
+    const qrUri = `sheetbot://pair?email=${encodeURIComponent(cleanEmail)}&token=${encodeURIComponent(token)}&pin=${encodeURIComponent(pinCode)}${sidParam}`;
 
     const pairingData = {
       success: true,
       userEmail: cleanEmail,
       token,
       pinCode,
+      visitorSessionId,
       qrData: qrUri,
       webhookUrl: "https://sheetbot.cloud/api/wallet/bank-webhook",
       fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/bank-webhook",

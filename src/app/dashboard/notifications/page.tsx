@@ -167,13 +167,16 @@ export default function NotificationsPage() {
       }
 
       const pinCode = `SB-${pinNum}`;
-      const qrUri = `sheetbot://pair?email=${encodeURIComponent(cleanEmail)}&token=${encodeURIComponent(token)}&pin=${encodeURIComponent(pinCode)}`;
+      const visitorSid = typeof window !== "undefined" ? (localStorage.getItem("egdesk_visitor_session") || "").trim() : "";
+      const sidParam = visitorSid ? `&sid=${encodeURIComponent(visitorSid)}` : "";
+      const qrUri = `sheetbot://pair?email=${encodeURIComponent(cleanEmail)}&token=${encodeURIComponent(token)}&pin=${encodeURIComponent(pinCode)}${sidParam}`;
 
       setAgent2PairData({
         success: true,
         userEmail: cleanEmail,
         token,
         pinCode,
+        visitorSessionId: visitorSid || null,
         qrData: qrUri,
         webhookUrl: "https://sheetbot.cloud/api/webhooks/dispatch",
         fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/webhooks/dispatch",

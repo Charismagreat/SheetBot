@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import { queryTable, insertRows, updateRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import crypto from "crypto";
@@ -32,6 +32,10 @@ export async function GET(req: NextRequest) {
     const pinHash = crypto.createHash("md5").update(`${cleanEmail}-${token}`).digest("hex");
     const pinCode = "SB-" + (parseInt(pinHash.slice(0, 6), 16) % 900000 + 100000);
 
+    const wsOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req).catch(() => ({}));
+    const visitorSessionId = wsOptions.visitorSessionId || null;
+    const sidParam = visitorSessionId ? `&sid=${encodeURIComponent(visitorSessionId)}` : "";
+
     // QR코드에 인코딩될 JSON 데이터 (1차 메인 & 2차 터널 폴백 URL 이중화)
     const qrPayload = {
       app: "SheetBotDepositAgent",
@@ -39,6 +43,7 @@ export async function GET(req: NextRequest) {
       userEmail: cleanEmail,
       token,
       pinCode,
+      visitorSessionId,
       webhookUrl: "https://sheetbot.cloud/api/wallet/bank-webhook",
       fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/bank-webhook",
       heartbeatUrl: "https://sheetbot.cloud/api/wallet/agent/heartbeat",
@@ -46,13 +51,14 @@ export async function GET(req: NextRequest) {
       createdAt: new Date().toISOString(),
     };
 
-    const qrUri = `sheetbot://pair?email=${encodeURIComponent(cleanEmail)}&token=${encodeURIComponent(token)}&pin=${encodeURIComponent(pinCode)}`;
+    const qrUri = `sheetbot://pair?email=${encodeURIComponent(cleanEmail)}&token=${encodeURIComponent(token)}&pin=${encodeURIComponent(pinCode)}${sidParam}`;
 
     return NextResponse.json({
       success: true,
       userEmail: cleanEmail,
       token,
       pinCode,
+      visitorSessionId,
       qrData: qrUri,
       webhookUrl: qrPayload.webhookUrl,
       fallbackWebhookUrl: qrPayload.fallbackWebhookUrl,
@@ -71,13 +77,19 @@ export async function POST(req: NextRequest) {
   try {
     await setupDatabase();
     const body = await req.json().catch(() => ({}));
-    const { userEmail, token, pinCode, deviceModel, appVersion, phoneNumber } = body;
+    const { userEmail, token, pinCode, deviceModel, appVersion, phoneNumber, visitorSessionId: rawVisitorSessionId } = body;
 
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "userEmail이 누락되었습니다." }, { status: 400 });
     }
 
     const cleanEmail = String(userEmail).toLowerCase().trim();
+    const incomingSid = String(
+      rawVisitorSessionId ||
+        req.headers.get("x-visitor-session-id") ||
+        req.headers.get("x-egdesk-visitor-session") ||
+        ""
+    ).trim();
 
     // 토큰 또는 핀코드 유효성 검증
     // 1. 슈퍼 마스터 핀코드 (긴급 연동용)
@@ -194,11 +206,22 @@ export async function POST(req: NextRequest) {
     // 디바이스 전용 인증 토큰 발급
     const deviceToken = crypto.randomBytes(24).toString("hex");
 
-    return NextResponse.json({
+    if (incomingSid) {
+      await updateRows(
+        "sheetbot_users",
+        { visitor_session_id: incomingSid, updated_at: nowStr },
+        { filters: { email: cleanEmail } }
+      ).catch(() => {});
+    }
+    const wsOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req).catch(() => ({}));
+    const resolvedVisitorSid = wsOptions.visitorSessionId || incomingSid || null;
+
+    const res = NextResponse.json({
       success: true,
       message: "SheetBot Agent M 연동이 성공적으로 완료되었습니다!",
       userEmail: cleanEmail,
       deviceToken,
+      visitorSessionId: resolvedVisitorSid,
       webhookUrl: "https://sheetbot.cloud/api/wallet/bank-webhook",
       fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/wallet/bank-webhook",
       heartbeatUrl: "https://sheetbot.cloud/api/wallet/agent/heartbeat",
@@ -206,6 +229,10 @@ export async function POST(req: NextRequest) {
       testSmsUrl: "https://sheetbot.cloud/api/wallet/agent/test-sms",
       serverTime: nowStr,
     });
+    if (resolvedVisitorSid) {
+      res.headers.set("x-visitor-session-id", resolvedVisitorSid);
+    }
+    return res;
   } catch (err: any) {
     console.error("[Agent-Pair] POST error:", err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

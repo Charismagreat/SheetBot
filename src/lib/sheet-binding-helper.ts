@@ -133,6 +133,33 @@ export async function resolveUserSpreadsheet(
   return promise;
 }
 
+const DEFAULT_SHEET_TITLES: Record<string, string> = {
+  SMS: "[SheetBot] 스마트폰 문자(SMS) 송수신 대장",
+  KAKAO: "[SheetBot] 카카오톡 메시지 대장",
+  MISSED_CALL: "[SheetBot] 부재중 전화 대장",
+  RECORDING: "[SheetBot] 통화 녹음 대장",
+  CALL_RECORDING: "[SheetBot] 통화 녹음 대장",
+  MEETING: "[SheetBot] 스마트 회의록 대장",
+  COMPANY_RESEARCH: "[SheetBot] AI 기업심층조사 대장",
+  LAW_ADVISORY: "[SheetBot] AI 법률·계약 자문 대장",
+  NAVER_BLOG: "[SheetBot] AI 네이버 블로그 발행 대장",
+  INSTAGRAM: "[SheetBot] AI 인스타그램 발행 대장",
+  MOBILE_SITE: "[SheetBot] AI 모바일 홈페이지 대장",
+  FILE_UPLOAD: "[SheetBot] 파일 업로드 대장",
+  RECEIPT: "[SheetBot] 스마트 경비 영수증 대장",
+  BUSINESS_CARD: "[SheetBot] 스마트 명함 관리 대장",
+  LINK_BOOKMARK: "[SheetBot] 웹 링크 & 유튜브 스크랩 대장",
+  CALL_ENDED_CARD: "[SheetBot] 모바일 명함 발송 대장",
+  PAYMENT_PUSH: "[SheetBot] 매장 결제 및 매출 대장",
+  RECEIPT_SMS: "[SheetBot] 고객 영수증 문자 발송 대장",
+  WEBSITE_MONITOR: "[SheetBot] 웹사이트 모니터링 & 장애 대장",
+  DISPATCH_LOG: "[SheetBot] 고객 알림 발송 및 수신 대장",
+  QUOTE: "[SheetBot] 스마트 간편 주문 및 품목 대장",
+  ESTIMATE: "[SheetBot] 스마트 간편 견적 및 단가 대장",
+  CONTACTS: "[SheetBot] 스마트폰 연락처 대장",
+  SHEET_SMS_CHECKBOX: "[SheetBot] 체크박스 문자 발송 대장",
+};
+
 async function doResolveUserSpreadsheet(
   options: ResolveSheetOptions
 ): Promise<ResolveSheetResult> {
@@ -148,9 +175,11 @@ async function doResolveUserSpreadsheet(
   const cleanEmail = userEmail.trim().toLowerCase();
   const normalizedType = (sheetType || "").toUpperCase() as SheetBindingType;
   const bindingId = `${cleanEmail}_${normalizedType}`;
-  const targetTitle = (requestedTitle && requestedTitle.trim().length > 0)
-    ? requestedTitle.trim()
-    : defaultTitle;
+  const targetTitle =
+    (requestedTitle && requestedTitle.trim().length > 0 ? requestedTitle.trim() : null) ||
+    (defaultTitle && defaultTitle.trim().length > 0 ? defaultTitle.trim() : null) ||
+    DEFAULT_SHEET_TITLES[normalizedType] ||
+    `[SheetBot] ${normalizedType} 대장`;
 
   // 1. My DB에서 기존 영구 바인딩된 고유 spreadsheetId 확인 (지연 초기화 적용)
   let boundRecord: any = null;
@@ -184,20 +213,32 @@ async function doResolveUserSpreadsheet(
     const candidateId = boundRecord.spreadsheet_id;
     try {
       // 2-0. [우선 검증] candidateId 파일이 드라이브에 직접 존재하고 활성 상태(휴지통 제외)인지 확인 (맞춤 제목/기존 연동 시트 보존)
-      const directFile = await getDriveFile(candidateId, { preferOAuth, ...callOptions }).catch(() => null);
+      let directFile: any = null;
+      let directFileNotFound = false;
+      try {
+        directFile = await getDriveFile(candidateId, { preferOAuth, ...callOptions });
+      } catch (fileErr: any) {
+        const msg = String(fileErr?.message || "").toLowerCase();
+        if (msg.includes("not found") || msg.includes("404")) {
+          directFileNotFound = true;
+        } else {
+          throw fileErr;
+        }
+      }
+
       if (directFile && directFile.id === candidateId && !directFile.trashed) {
         targetSpreadsheetId = candidateId;
-      } else {
-        // candidateId 파일이 없거나 휴지통에 들어간 경우에만 동일 제목 대체 파일 탐색
+      } else if (directFile?.trashed || directFileNotFound) {
+        // candidateId 파일이 실제로 삭제(404)되었거나 휴지통(trashed=true)에 들어간 경우에만 동일 제목 대체 파일 탐색
         let activeFiles: any[] = [];
         if (folderId) {
           const folderQuery = `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${targetTitle}' and trashed = false`;
-          const folderRes = await listDriveFiles({ query: folderQuery }, { preferOAuth, ...callOptions }).catch(() => ({ files: [] }));
+          const folderRes = await listDriveFiles({ query: folderQuery }, { preferOAuth, ...callOptions });
           activeFiles = folderRes?.files || [];
         }
         if (activeFiles.length === 0) {
           const globalQuery = `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${targetTitle}' and trashed = false`;
-          const globalRes = await listDriveFiles({ query: globalQuery }, { preferOAuth, ...callOptions }).catch(() => ({ files: [] }));
+          const globalRes = await listDriveFiles({ query: globalQuery }, { preferOAuth, ...callOptions });
           activeFiles = globalRes?.files || [];
         }
 
@@ -208,9 +249,11 @@ async function doResolveUserSpreadsheet(
           console.warn(`[SheetBinding] ⚠️ Sheet ${candidateId} was TRASHED by user! Invalidating stale binding to trigger fresh creation...`);
           targetSpreadsheetId = null;
         }
+      } else {
+        targetSpreadsheetId = candidateId;
       }
     } catch (checkErr: any) {
-      console.warn(`[SheetBinding] Active check warning for ${targetTitle}:`, checkErr?.message);
+      console.warn(`[SheetBinding] Active check warning for ${targetTitle} (preserving bound sheet ${candidateId}):`, checkErr?.message);
       targetSpreadsheetId = candidateId;
     }
 

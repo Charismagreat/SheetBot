@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import { queryTable, insertRows, updateRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import crypto from "crypto";
@@ -22,6 +22,8 @@ export async function GET(req: NextRequest) {
     }
 
     const cleanEmail = userEmail.toLowerCase().trim();
+    const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req).catch(() => ({} as any));
+    const visitorSessionId = callOptions?.visitorSessionId || null;
 
     // 1회용/지속 페어링 해시 생성
     const secretKey = process.env.NEXTAUTH_SECRET || "sheetbot-agent2-secret-key-2026";
@@ -36,13 +38,15 @@ export async function GET(req: NextRequest) {
     const pinHash = crypto.createHash("md5").update(`${cleanEmail}-${token}`).digest("hex");
     const pinCode = "SB-" + ((parseInt(pinHash.slice(0, 6), 16) % 900000) + 100000);
 
-    const qrUri = `sheetbot://pair?email=${encodeURIComponent(cleanEmail)}&token=${encodeURIComponent(token)}&pin=${encodeURIComponent(pinCode)}`;
+    const sidParam = visitorSessionId ? `&sid=${encodeURIComponent(visitorSessionId)}` : "";
+    const qrUri = `sheetbot://pair?email=${encodeURIComponent(cleanEmail)}&token=${encodeURIComponent(token)}&pin=${encodeURIComponent(pinCode)}${sidParam}`;
 
     return NextResponse.json({
       success: true,
       userEmail: cleanEmail,
       token,
       pinCode,
+      visitorSessionId,
       qrData: qrUri,
       webhookUrl: "https://sheetbot.cloud/api/webhooks/dispatch",
       fallbackWebhookUrl: "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot/api/webhooks/dispatch",
@@ -61,13 +65,26 @@ export async function POST(req: NextRequest) {
   try {
     await setupDatabase().catch(() => {});
     const body = await req.json().catch(() => ({}));
-    const { userEmail, token, pinCode, deviceModel, appVersion, phoneNumber } = body;
+    const { userEmail, token, pinCode, deviceModel, appVersion, phoneNumber, visitorSessionId: clientVisitorSid } = body;
 
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "userEmail이 누락되었습니다." }, { status: 400 });
     }
 
     const cleanEmail = String(userEmail).toLowerCase().trim();
+
+    if (clientVisitorSid && typeof clientVisitorSid === "string" && clientVisitorSid.trim()) {
+      await updateRows(
+        "sheetbot_users",
+        { visitor_session_id: clientVisitorSid.trim(), updated_at: new Date().toISOString() },
+        { filters: { email: cleanEmail } }
+      ).catch(() => {});
+    }
+    const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req).catch(() => ({} as any));
+    const resolvedVisitorSessionId =
+      callOptions?.visitorSessionId ||
+      (clientVisitorSid && typeof clientVisitorSid === "string" ? clientVisitorSid.trim() : null) ||
+      null;
 
     // 핀코드 또는 토큰 유효성 검증
     const normalizedPin = String(pinCode || "").replace(/[^0-9]/g, "");
@@ -146,14 +163,19 @@ export async function POST(req: NextRequest) {
       ]);
     }
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       success: true,
       message: "SheetBot Agent가 성공적으로 연동되었습니다! 이제 시트에서 0원 문자 발송과 수신 연동이 가능합니다.",
       deviceId,
       userEmail: cleanEmail,
+      visitorSessionId: resolvedVisitorSessionId,
       status: "CONNECTED",
       connectedAt: now,
     });
+    if (resolvedVisitorSessionId) {
+      res.headers.set("x-visitor-session-id", resolvedVisitorSessionId);
+    }
+    return res;
   } catch (err: any) {
     console.error("[Agent2-Pair] POST error:", err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

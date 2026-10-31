@@ -100,6 +100,44 @@ export function AuthAdminProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (status === "loading") return;
 
+    // 🔄 브라우저 localStorage에 egdesk_visitor_session이 있으면 기존 NextAuth 쿠키 유무와 무관하게 서버 DB(sheetbot_users.visitor_session_id)에 즉시 동기화
+    if (typeof window !== "undefined") {
+      const currentVisitorSid = localStorage.getItem("egdesk_visitor_session")?.trim();
+      const lastSyncedSid = sessionStorage.getItem("sb_synced_visitor_sid");
+      if (currentVisitorSid && currentVisitorSid !== lastSyncedSid) {
+        void (async () => {
+          try {
+            const statusRes = await getVisitorGoogleStatus();
+            if (statusRes?.connected && statusRes?.email) {
+              const vEmail = statusRes.email.toLowerCase().trim();
+              const vName = (statusRes as any).name || vEmail.split("@")[0];
+              const vImage =
+                (statusRes as any).picture ||
+                "https://lh3.googleusercontent.com/a/default-user=s96-c";
+
+              const isSecure = window.location.protocol === "https:";
+              document.cookie = `egdesk_visitor_session=${encodeURIComponent(
+                currentVisitorSid,
+              )}; path=/; max-age=2592000; SameSite=Lax${isSecure ? "; Secure" : ""}`;
+
+              await apiFetch("/api/auth/google/session", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  email: vEmail,
+                  name: vName,
+                  image: vImage,
+                  visitorSessionId: currentVisitorSid,
+                }),
+              });
+              sessionStorage.setItem("sb_synced_visitor_sid", currentVisitorSid);
+              window.dispatchEvent(new Event("sheetbot-auth-change"));
+            }
+          } catch {}
+        })();
+      }
+    }
+
     if (session?.user?.email) {
       const email = session.user.email.toLowerCase().trim();
       const name = session.user.name || email.split("@")[0];

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { queryTable, updateRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { emitDepositEvent } from "@/lib/deposit-events";
+import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 
 /**
  * POST /api/wallet/agent/heartbeat
@@ -70,13 +71,21 @@ export async function POST(req: NextRequest) {
 
     const pendingCount = (pendingRes.rows || []).length;
 
-    return NextResponse.json({
+    const wsOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req).catch(() => ({}));
+    const resolvedVisitorSid = wsOptions.visitorSessionId || null;
+
+    const res = NextResponse.json({
       success: true,
       status: "CONNECTED",
       serverTime: nowIso,
       pendingDepositsCount: pendingCount,
+      visitorSessionId: resolvedVisitorSid,
       message: "정상 통신 중입니다.",
     });
+    if (resolvedVisitorSid) {
+      res.headers.set("x-visitor-session-id", resolvedVisitorSid);
+    }
+    return res;
   } catch (err: any) {
     console.error("[Agent-Heartbeat] POST error:", err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

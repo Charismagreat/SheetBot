@@ -31,8 +31,43 @@ object ChunkedUploader {
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     private val OCTET_STREAM_MEDIA_TYPE = "application/octet-stream".toMediaType()
 
+    private val sessionInterceptor = okhttp3.Interceptor { chain ->
+        val original = chain.request()
+        val reqBuilder = original.newBuilder()
+        try {
+            val prefs = PreferencesManager(SheetBotApp.appContext)
+            val sid = prefs.visitorSessionId
+            if (!sid.isNullOrBlank()) {
+                if (original.header("x-visitor-session-id") == null) {
+                    reqBuilder.header("x-visitor-session-id", sid)
+                }
+                if (original.header("x-egdesk-visitor-session") == null) {
+                    reqBuilder.header("x-egdesk-visitor-session", sid)
+                }
+            }
+            val email = prefs.userEmail
+            if (!email.isNullOrBlank() && original.header("x-sheetbot-user-email") == null) {
+                reqBuilder.header("x-sheetbot-user-email", email)
+            }
+        } catch (_: Exception) {}
+
+        val response = chain.proceed(reqBuilder.build())
+        try {
+            val returnedSid = response.header("x-visitor-session-id")
+                ?: response.header("x-egdesk-visitor-session")
+            if (!returnedSid.isNullOrBlank()) {
+                val prefs = PreferencesManager(SheetBotApp.appContext)
+                if (prefs.visitorSessionId != returnedSid) {
+                    prefs.visitorSessionId = returnedSid
+                }
+            }
+        } catch (_: Exception) {}
+        response
+    }
+
     // 청크 전송용 클라이언트 (청크당 0.1~0.5초 소요, 30초 제한)
     private val chunkClient = OkHttpClient.Builder()
+        .addInterceptor(sessionInterceptor)
         .connectTimeout(15, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -41,6 +76,7 @@ object ChunkedUploader {
 
     // 병합 및 최종 비즈니스 처리용 클라이언트 (구글 드라이브/OCR 대기, 90초 제한)
     private val completeClient = OkHttpClient.Builder()
+        .addInterceptor(sessionInterceptor)
         .connectTimeout(20, TimeUnit.SECONDS)
         .writeTimeout(90, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)

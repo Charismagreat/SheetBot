@@ -25,8 +25,45 @@ object ApiClient {
     // 2차 백업 호스트
     const val FALLBACK_HOST = "https://sheetbot.cloud"
 
+    // 모든 요청에 이용자 세션(visitorSessionId) 및 이메일 헤더를 자동 주입하고,
+    // 서버 응답에 갱신된 x-visitor-session-id 헤더가 있으면 자동으로 Preferences에 동기화하는 인터셉터
+    private val sessionInterceptor = okhttp3.Interceptor { chain ->
+        val original = chain.request()
+        val reqBuilder = original.newBuilder()
+        try {
+            val prefs = PreferencesManager(SheetBotApp.appContext)
+            val sid = prefs.visitorSessionId
+            if (!sid.isNullOrBlank()) {
+                if (original.header("x-visitor-session-id") == null) {
+                    reqBuilder.header("x-visitor-session-id", sid)
+                }
+                if (original.header("x-egdesk-visitor-session") == null) {
+                    reqBuilder.header("x-egdesk-visitor-session", sid)
+                }
+            }
+            val email = prefs.userEmail
+            if (!email.isNullOrBlank() && original.header("x-sheetbot-user-email") == null) {
+                reqBuilder.header("x-sheetbot-user-email", email)
+            }
+        } catch (_: Exception) {}
+
+        val response = chain.proceed(reqBuilder.build())
+        try {
+            val returnedSid = response.header("x-visitor-session-id")
+                ?: response.header("x-egdesk-visitor-session")
+            if (!returnedSid.isNullOrBlank()) {
+                val prefs = PreferencesManager(SheetBotApp.appContext)
+                if (prefs.visitorSessionId != returnedSid) {
+                    prefs.visitorSessionId = returnedSid
+                }
+            }
+        } catch (_: Exception) {}
+        response
+    }
+
     // 빠른 2단계 폴백을 위한 타임아웃 최적화 (1차 서버 장애 시 3.5초 내 2차로 즉시 전환)
     private val client = OkHttpClient.Builder()
+        .addInterceptor(sessionInterceptor)
         .connectTimeout(3500, TimeUnit.MILLISECONDS)
         .readTimeout(6000, TimeUnit.MILLISECONDS)
         .writeTimeout(4000, TimeUnit.MILLISECONDS)
@@ -50,10 +87,13 @@ object ApiClient {
     suspend fun pairDevice(
         userEmail: String,
         token: String? = null,
-        pinCode: String? = null
+        pinCode: String? = null,
+        visitorSessionId: String? = null
     ): PairResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         var lastError = "페어링 요청 실패"
+        val effectiveSid = visitorSessionId?.takeIf { it.isNotBlank() }
+            ?: try { PreferencesManager(SheetBotApp.appContext).visitorSessionId } catch (_: Exception) { null }
 
         for ((index, host) in hosts.withIndex()) {
             val endpoint = "$host/api/user/agent2/pair"
@@ -64,6 +104,7 @@ object ApiClient {
                     put("userEmail", userEmail)
                     if (!token.isNullOrBlank()) put("token", token)
                     if (!pinCode.isNullOrBlank()) put("pinCode", pinCode)
+                    if (!effectiveSid.isNullOrBlank()) put("visitorSessionId", effectiveSid)
                     put("deviceModel", "${Build.MANUFACTURER} ${Build.MODEL}")
                     put("appVersion", "1.0.0")
                 }
@@ -79,11 +120,18 @@ object ApiClient {
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
 
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
-                    Log.i(TAG, "🎉 [페어링 성공] 호스트: $host")
+                    val resolvedSid = resJson.optString("visitorSessionId", "").takeIf { it.isNotBlank() }
+                        ?: response.header("x-visitor-session-id")
+                        ?: effectiveSid
+                    if (!resolvedSid.isNullOrBlank()) {
+                        try { PreferencesManager(SheetBotApp.appContext).visitorSessionId = resolvedSid } catch (_: Exception) {}
+                    }
+                    Log.i(TAG, "🎉 [페어링 성공] 호스트: $host (sid=${resolvedSid ?: "none"})")
                     return@withContext PairResult(
                         success = true,
                         userEmail = resJson.optString("userEmail", userEmail),
                         deviceToken = resJson.optString("deviceId", resJson.optString("deviceToken", "")),
+                        visitorSessionId = resolvedSid,
                         webhookUrl = resJson.optString("webhookUrl", "$PRIMARY_HOST/api/user/agent2/inbound-sms"),
                         fallbackWebhookUrl = resJson.optString("fallbackWebhookUrl", "$FALLBACK_HOST/api/user/agent2/inbound-sms"),
                         heartbeatUrl = resJson.optString("heartbeatUrl", "$PRIMARY_HOST/api/user/agent2/heartbeat"),
@@ -112,10 +160,13 @@ object ApiClient {
         userEmail: String?,
         deviceModel: String = "${Build.MANUFACTURER} ${Build.MODEL}",
         appVersion: String = "2.0.1",
-        referralCode: String? = null
+        referralCode: String? = null,
+        visitorSessionId: String? = null
     ): PairResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         var lastError = "구글 로그인 페어링 실패"
+        val effectiveSid = visitorSessionId?.takeIf { it.isNotBlank() }
+            ?: try { PreferencesManager(SheetBotApp.appContext).visitorSessionId } catch (_: Exception) { null }
 
         for ((index, host) in hosts.withIndex()) {
             val endpoint = "$host/api/user/agent2/pair-google"
@@ -125,6 +176,7 @@ object ApiClient {
                 val json = JSONObject().apply {
                     if (!idToken.isNullOrBlank()) put("idToken", idToken)
                     if (!userEmail.isNullOrBlank()) put("userEmail", userEmail)
+                    if (!effectiveSid.isNullOrBlank()) put("visitorSessionId", effectiveSid)
                     put("deviceModel", deviceModel)
                     put("appVersion", appVersion)
                     if (!referralCode.isNullOrBlank()) put("referralCode", referralCode.trim())
@@ -143,11 +195,18 @@ object ApiClient {
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
                     val finalEmail = resJson.optString("userEmail", userEmail ?: "")
                     val refMsg = resJson.optString("referralMessage", "")
-                    Log.i(TAG, "🎉 [구글 로그인 페어링 성공] 이메일: $finalEmail ($host)")
+                    val resolvedSid = resJson.optString("visitorSessionId", "").takeIf { it.isNotBlank() }
+                        ?: response.header("x-visitor-session-id")
+                        ?: effectiveSid
+                    if (!resolvedSid.isNullOrBlank()) {
+                        try { PreferencesManager(SheetBotApp.appContext).visitorSessionId = resolvedSid } catch (_: Exception) {}
+                    }
+                    Log.i(TAG, "🎉 [구글 로그인 페어링 성공] 이메일: $finalEmail ($host, sid=${resolvedSid ?: "none"})")
                     return@withContext PairResult(
                         success = true,
                         userEmail = finalEmail,
                         deviceToken = resJson.optString("deviceId", resJson.optString("deviceToken", resJson.optString("token", ""))),
+                        visitorSessionId = resolvedSid,
                         webhookUrl = resJson.optString("webhookUrl", "$PRIMARY_HOST/api/user/agent2/inbound-sms"),
                         fallbackWebhookUrl = resJson.optString("fallbackWebhookUrl", "$FALLBACK_HOST/api/user/agent2/inbound-sms"),
                         heartbeatUrl = resJson.optString("heartbeatUrl", "$PRIMARY_HOST/api/user/agent2/heartbeat"),
@@ -3050,6 +3109,7 @@ data class PairResult(
     val success: Boolean,
     val userEmail: String? = null,
     val deviceToken: String? = null,
+    val visitorSessionId: String? = null,
     val webhookUrl: String? = null,
     val fallbackWebhookUrl: String? = null,
     val heartbeatUrl: String? = null,

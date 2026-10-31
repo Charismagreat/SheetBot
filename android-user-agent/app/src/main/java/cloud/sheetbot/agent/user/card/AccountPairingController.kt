@@ -291,6 +291,10 @@ class AccountPairingController(
                 val email = json.optString("userEmail", json.optString("email", ""))
                 val token = json.optString("token").takeIf { it.isNotBlank() }
                 val pinCode = json.optString("pinCode").takeIf { it.isNotBlank() }
+                val sid = json.optString("visitorSessionId", json.optString("sid", "")).takeIf { it.isNotBlank() }
+                if (!sid.isNullOrBlank()) {
+                    prefs.visitorSessionId = sid
+                }
                 if (email.isNotBlank()) {
                     return Triple(email, token, pinCode)
                 }
@@ -304,6 +308,10 @@ class AccountPairingController(
             val uri = Uri.parse(trimmed)
             val scheme = uri.scheme
             val host = uri.host
+            val sid = (uri.getQueryParameter("sid") ?: uri.getQueryParameter("visitorSessionId"))?.takeIf { it.isNotBlank() }
+            if (!sid.isNullOrBlank()) {
+                prefs.visitorSessionId = sid
+            }
 
             if (scheme == "sheetbot" && host == "pair") {
                 val email = uri.getQueryParameter("email") ?: return null
@@ -368,6 +376,7 @@ class AccountPairingController(
                 prefs.userEmail = email
                 prefs.uploadDestination = AppPreferences.DESTINATION_GOOGLE_SHEETS
                 prefs.isPaired = true
+                if (!result.visitorSessionId.isNullOrBlank()) prefs.visitorSessionId = result.visitorSessionId
                 if (!result.webhookUrl.isNullOrBlank()) prefs.webhookUrl = result.webhookUrl
                 if (!result.fallbackWebhookUrl.isNullOrBlank()) prefs.fallbackWebhookUrl = result.fallbackWebhookUrl
                 if (!result.heartbeatUrl.isNullOrBlank()) prefs.heartbeatUrl = result.heartbeatUrl
@@ -436,6 +445,7 @@ class AccountPairingController(
                 prefs.userEmail = finalEmail
                 prefs.uploadDestination = AppPreferences.DESTINATION_GOOGLE_SHEETS
                 prefs.isPaired = true
+                if (!result.visitorSessionId.isNullOrBlank()) prefs.visitorSessionId = result.visitorSessionId
                 if (!result.webhookUrl.isNullOrBlank()) prefs.webhookUrl = result.webhookUrl
                 if (!result.fallbackWebhookUrl.isNullOrBlank()) prefs.fallbackWebhookUrl = result.fallbackWebhookUrl
                 if (!result.heartbeatUrl.isNullOrBlank()) prefs.heartbeatUrl = result.heartbeatUrl
@@ -476,6 +486,10 @@ class AccountPairingController(
             val email = uri.getQueryParameter("email")
             val token = uri.getQueryParameter("token")
             val pin = uri.getQueryParameter("pin")
+            val sid = (uri.getQueryParameter("sid") ?: uri.getQueryParameter("visitorSessionId"))?.takeIf { it.isNotBlank() }
+            if (!sid.isNullOrBlank()) {
+                prefs.visitorSessionId = sid
+            }
             if (!email.isNullOrBlank()) {
                 Toast.makeText(activity, "딥링크 원터치 페어링 진행 중: $email", Toast.LENGTH_SHORT).show()
                 performPairing(email, token = token, pinCode = pin)

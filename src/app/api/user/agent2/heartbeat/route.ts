@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { queryTable, updateRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 
 /**
  * POST /api/user/agent2/heartbeat
@@ -47,12 +48,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    const wsOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req).catch(() => ({}));
+    const resolvedVisitorSid = wsOptions.visitorSessionId || null;
+
+    const res = NextResponse.json({
       success: true,
       status: "CONNECTED",
       timestamp: now,
-
+      visitorSessionId: resolvedVisitorSid,
     });
+    if (resolvedVisitorSid) {
+      res.headers.set("x-visitor-session-id", resolvedVisitorSid);
+    }
+    return res;
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }

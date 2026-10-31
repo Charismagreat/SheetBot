@@ -34,6 +34,10 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("device_token", null)
         set(value) = prefs.edit().putString("device_token", value).apply()
 
+    var visitorSessionId: String?
+        get() = prefs.getString("visitor_session_id", null)
+        set(value) = prefs.edit().putString("visitor_session_id", value).apply()
+
     var isPaired: Boolean
         get() = (prefs.getBoolean("is_paired", false) && !userEmail.isNullOrBlank()) || isFtsPaired
         set(value) = prefs.edit().putBoolean("is_paired", value).apply()

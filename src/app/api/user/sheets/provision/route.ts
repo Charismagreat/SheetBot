@@ -477,7 +477,7 @@ export async function POST(req: NextRequest) {
       }
     }
     if (!resolved.isNew) {
-      return NextResponse.json({
+      const res = NextResponse.json({
         success: true,
         isNew: false,
         spreadsheetId: targetSpreadsheetId,
@@ -486,8 +486,13 @@ export async function POST(req: NextRequest) {
         folderUrl: finalFolderUrl,
         folderName: targetFolder,
         title: sheetTitle || def.defaultTitle,
+        visitorSessionId: callOptions.visitorSessionId || null,
         message: "기존 연결된 구글 스프레드시트 대장을 확인하였습니다.",
       });
+      if (callOptions.visitorSessionId) {
+        res.headers.set("x-visitor-session-id", callOptions.visitorSessionId);
+      }
+      return res;
     }
 
     let primaryTabName = typeKey === "SHEET_SMS_CHECKBOX" ? "문자발송목록" : "시트1";
@@ -574,7 +579,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       success: true,
       isNew: resolved.isNew,
       spreadsheetId: targetSpreadsheetId,
@@ -583,10 +588,15 @@ export async function POST(req: NextRequest) {
       folderUrl: finalFolderUrl,
       folderName: targetFolder,
       title: sheetTitle || def.defaultTitle,
+      visitorSessionId: callOptions.visitorSessionId || null,
       message: resolved.isNew
         ? "새 구글 스프레드시트 대장과 헤더가 성공적으로 준비되었습니다."
         : "기존 연결된 구글 스프레드시트 대장을 확인하였습니다.",
     });
+    if (callOptions.visitorSessionId) {
+      res.headers.set("x-visitor-session-id", callOptions.visitorSessionId);
+    }
+    return res;
   } catch (error: any) {
     console.error("[ProvisionSheet] Unexpected error:", error);
     return NextResponse.json(

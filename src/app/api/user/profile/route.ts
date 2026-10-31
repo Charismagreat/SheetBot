@@ -182,9 +182,13 @@ export async function POST(req: NextRequest) {
       try {
         const { resolveUserSpreadsheet } = await import("@/lib/sheet-binding-helper");
         const { callSheetsTool } = await import("@/lib/egdesk-helpers");
+        const { getWorkspaceCallOptionsForEmail } = await import("@/lib/auth");
+        const callOptions = await getWorkspaceCallOptionsForEmail(targetEmail, req);
         const resolved = await resolveUserSpreadsheet({
           userEmail: targetEmail,
           sheetType: "QUOTE",
+          defaultTitle: "[SheetBot] 스마트 간편 주문 및 품목 대장",
+          callOptions,
         });
         if (resolved.spreadsheetId) {
           await callSheetsTool(
@@ -195,7 +199,7 @@ export async function POST(req: NextRequest) {
               values: [[businessName]],
               preferOAuth: true,
             },
-            { preferOAuth: true }
+            { preferOAuth: true, ...callOptions }
           ).catch((e: any) => console.warn("[Profile POST] sheets_update_range error:", e?.message));
         }
       } catch (sheetErr: any) {
