@@ -2691,12 +2691,14 @@ object ApiClient {
                         }
                     }
 
+                    val computedPending = taskList.count { it.status == "PENDING" }
+                    val computedDone = taskList.count { it.status == "DONE" }
                     return@withContext TaskListResult(
                         success = true,
                         tasks = taskList,
                         totalCount = resJson.optInt("totalCount", taskList.size),
-                        pendingCount = resJson.optInt("pendingCount", 0),
-                        doneCount = resJson.optInt("doneCount", 0),
+                        pendingCount = resJson.optInt("pendingCount", computedPending),
+                        doneCount = resJson.optInt("doneCount", computedDone),
                         spreadsheetUrl = resJson.optString("spreadsheetUrl", null)
                     )
                 } else {

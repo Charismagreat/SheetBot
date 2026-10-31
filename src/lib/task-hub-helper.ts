@@ -304,7 +304,14 @@ export function parseActionItems(actionItemsText: string): ParsedTaskItem[] {
 
   for (const line of lines) {
     const cleaned = line.replace(/^[•\-\*\d\.\s]+/, "").trim();
-    if (cleaned.length >= 4 && !cleaned.includes("확인 완료") && !cleaned.includes("특이사항 없음")) {
+    if (
+      cleaned.length >= 4 &&
+      !cleaned.includes("확인 완료") &&
+      !cleaned.includes("특이사항 없음") &&
+      !/^\[후속\s*조치\s*\d*\]$/i.test(cleaned) &&
+      !cleaned.startsWith("(없음") &&
+      !cleaned.startsWith("없음 -")
+    ) {
       let priority: "URGENT 🔴" | "HIGH 🟡" | "NORMAL ⚪" = "NORMAL ⚪";
       if (cleaned.includes("긴급") || cleaned.includes("당일") || cleaned.includes("즉시")) {
         priority = "URGENT 🔴";

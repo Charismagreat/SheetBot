@@ -78,6 +78,11 @@ class ServerStatusCardController(
         serverMonitorJob?.cancel()
         if (!prefs.isPaired) return
 
+        val email = prefs.userEmail ?: ""
+        if (email.isNotBlank() && !(prefs.isDestinationFileToSheet && prefs.isFtsPaired)) {
+            refreshTasksBadge(email)
+        }
+
         serverMonitorJob = scope.launch {
             while (isActive) {
                 checkServerAndQueueStatus(showToast = false)
@@ -149,14 +154,16 @@ class ServerStatusCardController(
             val result = ApiClient.fetchTasks(userEmail, "PENDING")
             withContext(Dispatchers.Main) {
                 if (!activity.isFinishing && !activity.isDestroyed && result.success) {
-                    val count = result.pendingCount
+                    val count = if (result.pendingCount > 0 || result.tasks.isEmpty()) result.pendingCount else result.tasks.size
                     if (count > 0) {
                         binding.tvTasksHubBadge.text = "대기 ${count}건 ›"
-                        binding.tvTasksHubBadge.setBackgroundColor(Color.parseColor("#B45309")) // Amber
+                        binding.tvTasksHubBadge.backgroundTintList =
+                            android.content.res.ColorStateList.valueOf(Color.parseColor("#B45309")) // Amber
                         binding.tvTasksHubSubtitle.text = "현재 진행해야 할 후속 과업이 ${count}건 있습니다."
                     } else {
                         binding.tvTasksHubBadge.text = "완료됨 ✓"
-                        binding.tvTasksHubBadge.setBackgroundColor(Color.parseColor("#047857")) // Emerald
+                        binding.tvTasksHubBadge.backgroundTintList =
+                            android.content.res.ColorStateList.valueOf(Color.parseColor("#047857")) // Emerald
                         binding.tvTasksHubSubtitle.text = "모든 후속 조치 및 할 일이 완료되었습니다."
                     }
                 }

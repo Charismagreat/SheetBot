@@ -33,27 +33,69 @@ export async function GET(req: NextRequest) {
 
     // 2. 쿼리 파라미터 파싱
     const { searchParams } = new URL(req.url);
-    const statusFilter = searchParams.get("status"); // PENDING, DONE, ALL
-    const sourceFilter = searchParams.get("source"); // CALL_RECORDING, MISSED_CALL, ORDER_DELAY 등
+    const statusFilter = (searchParams.get("status") || "ALL").toUpperCase(); // PENDING, DONE, URGENT, ALL
+    const sourceFilter = (searchParams.get("source") || "ALL").toUpperCase(); // CALL_RECORDING, MISSED_CALL, ORDER_DELAY 등
 
-    const filters: Record<string, any> = {
+    const baseFilters: Record<string, any> = {
       user_email: cleanEmail,
     };
-    if (statusFilter && statusFilter !== "ALL") {
-      filters.status = statusFilter;
-    }
     if (sourceFilter && sourceFilter !== "ALL") {
-      filters.source_type = sourceFilter;
+      baseFilters.source_type = sourceFilter;
     }
 
     const res = await queryTable("sheetbot_tasks", {
-      filters,
-      limit: 200,
+      filters: baseFilters,
+      limit: 500,
       orderBy: "id",
       orderDirection: "DESC",
     }).catch(() => ({ rows: [] }));
 
-    const tasks = (res.rows || []).filter((r: any) => !r.deleted_at);
+    // 3. 소프트 삭제 필터링, 더미 항목 제거 및 (source_type + source_id + title) 기준 중복 제거
+    const activeRows = (res.rows || []).filter((r: any) => {
+      if (r.deleted_at) return false;
+      const t = String(r.title || "").trim();
+      if (!t || /^\[후속\s*조치\s*\d*\]$/i.test(t) || t.startsWith("(없음")) return false;
+      return true;
+    });
+
+    const dedupMap = new Map<string, any>();
+    for (const row of activeRows) {
+      const key = `${row.source_type || ""}::${row.source_id || row.id}::${String(row.title || "").trim()}`;
+      const existing = dedupMap.get(key);
+      if (!existing) {
+        dedupMap.set(key, row);
+      } else if (row.status === "DONE" && existing.status !== "DONE") {
+        // 동일 과업 중복 레코드 중 하나라도 완료 처리되었다면 DONE 상태를 우선 보존
+        dedupMap.set(key, row);
+      }
+    }
+
+    const allDedupedTasks = Array.from(dedupMap.values());
+    const pendingCount = allDedupedTasks.filter((t: any) => t.status === "PENDING").length;
+    const doneCount = allDedupedTasks.filter((t: any) => t.status === "DONE").length;
+    const urgentCount = allDedupedTasks.filter(
+      (t: any) =>
+        t.status === "PENDING" &&
+        (String(t.priority || "").includes("URGENT") ||
+          String(t.priority || "").includes("HIGH") ||
+          String(t.priority || "").includes("긴급") ||
+          String(t.priority || "").includes("높음"))
+    ).length;
+
+    const tasks = allDedupedTasks.filter((t: any) => {
+      if (statusFilter === "PENDING") return t.status === "PENDING";
+      if (statusFilter === "DONE") return t.status === "DONE";
+      if (statusFilter === "URGENT") {
+        return (
+          t.status === "PENDING" &&
+          (String(t.priority || "").includes("URGENT") ||
+            String(t.priority || "").includes("HIGH") ||
+            String(t.priority || "").includes("긴급") ||
+            String(t.priority || "").includes("높음"))
+        );
+      }
+      return true;
+    });
 
     // 마스터 스프레드시트 ID 확인
     const spreadsheetId = await resolveUserTaskSpreadsheet(cleanEmail).catch(() => null);
@@ -61,9 +103,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       tasks,
-      totalCount: tasks.length,
-      pendingCount: tasks.filter((t: any) => t.status === "PENDING").length,
-      doneCount: tasks.filter((t: any) => t.status === "DONE").length,
+      totalCount: allDedupedTasks.length,
+      pendingCount,
+      doneCount,
+      urgentCount,
       spreadsheetId,
       spreadsheetUrl: spreadsheetId
         ? `https://docs.google.com/spreadsheets/d/${spreadsheetId}`
@@ -140,18 +183,38 @@ export async function PATCH(req: NextRequest) {
 
     const nextStatus = status === "DONE" ? "DONE" : "PENDING";
     const nowStr = getKoreanTimeString();
+    const updatesPayload = {
+      status: nextStatus,
+      completed_at: nextStatus === "DONE" ? nowStr : null,
+      completed_by: nextStatus === "DONE" ? cleanEmail : null,
+      updated_at: nowStr,
+      updated_by: cleanEmail,
+    };
+
+    // 대상 할 일 조회 후 id(문자열/숫자 호환) 및 동일 (source_id, title) 중복 건 일괄 동기화
+    const targetRes = await queryTable("sheetbot_tasks", {
+      filters: { id: String(taskId), user_email: cleanEmail },
+      limit: 5,
+    }).catch(() => ({ rows: [] }));
 
     await callUserDataTool("user_data_update_rows", {
       tableName: "sheetbot_tasks",
-      filters: { id: taskId, user_email: cleanEmail },
-      updates: {
-        status: nextStatus,
-        completed_at: nextStatus === "DONE" ? nowStr : null,
-        completed_by: nextStatus === "DONE" ? cleanEmail : null,
-        updated_at: nowStr,
-        updated_by: cleanEmail,
-      },
+      filters: { id: String(taskId), user_email: cleanEmail },
+      updates: updatesPayload,
     });
+
+    const targetRow = targetRes.rows?.[0];
+    if (targetRow?.source_id && targetRow?.title) {
+      await callUserDataTool("user_data_update_rows", {
+        tableName: "sheetbot_tasks",
+        filters: {
+          user_email: cleanEmail,
+          source_id: String(targetRow.source_id),
+          title: String(targetRow.title),
+        },
+        updates: updatesPayload,
+      }).catch(() => {});
+    }
 
     realtimeHub.notifyTableChanged("sheetbot_tasks");
 

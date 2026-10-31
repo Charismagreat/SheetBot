@@ -2,8 +2,10 @@ package cloud.sheetbot.agent.user
 
 import android.app.AlertDialog
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -87,44 +89,82 @@ class TasksActivity : AppCompatActivity() {
         binding.rvTasksList.adapter = adapter
     }
 
+    private fun isUrgentTask(task: TaskItemDto): Boolean {
+        return task.status == "PENDING" && (
+            task.priority.contains("URGENT", ignoreCase = true) ||
+            task.priority.contains("HIGH", ignoreCase = true) ||
+            task.priority.contains("긴급") ||
+            task.priority.contains("높음")
+        )
+    }
+
     private fun setupFilters() {
         binding.tabPending.setOnClickListener {
             currentFilter = "PENDING"
-            updateFilterUi()
             applyFilter()
         }
         binding.tabDone.setOnClickListener {
             currentFilter = "DONE"
-            updateFilterUi()
             applyFilter()
         }
         binding.tabAll.setOnClickListener {
             currentFilter = "ALL"
-            updateFilterUi()
             applyFilter()
         }
 
         binding.cardFilterPending.setOnClickListener {
             currentFilter = "PENDING"
-            updateFilterUi()
             applyFilter()
         }
         binding.cardFilterUrgent.setOnClickListener {
-            currentFilter = "PENDING"
-            updateFilterUi()
+            currentFilter = if (currentFilter == "URGENT") "PENDING" else "URGENT"
             applyFilter()
         }
         binding.cardFilterDone.setOnClickListener {
             currentFilter = "DONE"
-            updateFilterUi()
             applyFilter()
         }
     }
 
+    private fun styleFilterTab(tab: TextView, isSelected: Boolean, activeColorHex: String = "#059669") {
+        val bgColor = if (isSelected) Color.parseColor(activeColorHex) else Color.parseColor("#1E293B")
+        val txtColor = if (isSelected) Color.parseColor("#FFFFFF") else Color.parseColor("#94A3B8")
+        tab.backgroundTintList = ColorStateList.valueOf(bgColor)
+        tab.setTextColor(txtColor)
+        tab.setTypeface(null, if (isSelected) Typeface.BOLD else Typeface.NORMAL)
+    }
+
     private fun updateFilterUi() {
-        binding.tabPending.setBackgroundColor(if (currentFilter == "PENDING") Color.parseColor("#059669") else Color.parseColor("#1E293B"))
-        binding.tabDone.setBackgroundColor(if (currentFilter == "DONE") Color.parseColor("#059669") else Color.parseColor("#1E293B"))
-        binding.tabAll.setBackgroundColor(if (currentFilter == "ALL") Color.parseColor("#059669") else Color.parseColor("#1E293B"))
+        val isPendingOrUrgent = currentFilter == "PENDING" || currentFilter == "URGENT"
+        val pendingTabColor = if (currentFilter == "URGENT") "#E11D48" else "#059669"
+
+        styleFilterTab(binding.tabPending, isPendingOrUrgent, pendingTabColor)
+        styleFilterTab(binding.tabDone, currentFilter == "DONE", "#059669")
+        styleFilterTab(binding.tabAll, currentFilter == "ALL", "#059669")
+
+        // 상단 요약 통계 카드 선택 강조 상태 동기화
+        binding.cardFilterPending.alpha = if (currentFilter == "PENDING" || currentFilter == "ALL") 1.0f else 0.55f
+        binding.cardFilterUrgent.alpha = if (currentFilter == "URGENT" || currentFilter == "ALL") 1.0f else 0.55f
+        binding.cardFilterDone.alpha = if (currentFilter == "DONE" || currentFilter == "ALL") 1.0f else 0.55f
+    }
+
+    private fun updateTaskCountsUi() {
+        val pendingCount = allTasks.count { it.status == "PENDING" }
+        val doneCount = allTasks.count { it.status == "DONE" }
+        val urgentCount = allTasks.count { isUrgentTask(it) }
+        val totalCount = allTasks.size
+
+        binding.tvStatPendingCount.text = pendingCount.toString()
+        binding.tvStatDoneCount.text = doneCount.toString()
+        binding.tvStatUrgentCount.text = urgentCount.toString()
+
+        binding.tabPending.text = if (currentFilter == "URGENT") {
+            "긴급/높음 ($urgentCount)"
+        } else {
+            "미완료 ($pendingCount)"
+        }
+        binding.tabDone.text = "완료됨 ($doneCount)"
+        binding.tabAll.text = "전체 ($totalCount)"
     }
 
     private fun loadTasks() {
@@ -138,14 +178,6 @@ class TasksActivity : AppCompatActivity() {
                 binding.pbLoadingTasks.visibility = View.GONE
                 if (result.success) {
                     allTasks = result.tasks
-                    val pendingCount = allTasks.count { it.status == "PENDING" }
-                    val doneCount = allTasks.count { it.status == "DONE" }
-                    val urgentCount = allTasks.count { it.status == "PENDING" && (it.priority.contains("URGENT") || it.priority.contains("HIGH")) }
-
-                    binding.tvStatPendingCount.text = pendingCount.toString()
-                    binding.tvStatDoneCount.text = doneCount.toString()
-                    binding.tvStatUrgentCount.text = urgentCount.toString()
-
                     applyFilter()
                 } else {
                     Toast.makeText(this@TasksActivity, result.error ?: "할 일 목록을 불러오지 못했습니다.", Toast.LENGTH_SHORT).show()
@@ -155,8 +187,12 @@ class TasksActivity : AppCompatActivity() {
     }
 
     private fun applyFilter() {
+        updateTaskCountsUi()
+        updateFilterUi()
+
         val filtered = when (currentFilter) {
             "PENDING" -> allTasks.filter { it.status == "PENDING" }
+            "URGENT" -> allTasks.filter { isUrgentTask(it) }
             "DONE" -> allTasks.filter { it.status == "DONE" }
             else -> allTasks
         }
@@ -165,14 +201,20 @@ class TasksActivity : AppCompatActivity() {
     }
 
     private fun toggleTask(taskId: Long, nextStatus: String) {
-        // 낙관적 UI 업데이트
+        // 낙관적 UI 업데이트 (통계 숫자 + 탭 건수 + 필터링 목록 동시 즉시 반영)
         allTasks = allTasks.map {
             if (it.id == taskId) it.copy(status = nextStatus) else it
         }
         applyFilter()
 
         CoroutineScope(Dispatchers.IO).launch {
-            ApiClient.toggleTaskStatus(userEmail, taskId, nextStatus)
+            val ok = ApiClient.toggleTaskStatus(userEmail, taskId, nextStatus)
+            if (!ok) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@TasksActivity, "상태 변경 저장에 실패하여 다시 불러옵니다.", Toast.LENGTH_SHORT).show()
+                    loadTasks()
+                }
+            }
         }
     }
 
