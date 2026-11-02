@@ -3,6 +3,7 @@ import { resolveUserSpreadsheet, SheetBindingType } from "@/lib/sheet-binding-he
 import { callSheetsTool, callDriveTool, listDriveFiles, createDriveFolder, trashDriveFile, WorkspaceVisitorCallOptions } from "@/lib/egdesk-helpers";
 import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import { deploySmsCheckboxScript } from "@/lib/gas-sms-checkbox-service";
+import { resolveDynamicCardManifest } from "@/lib/dynamic-card-helper";
 
 interface SheetDefinition {
   defaultTitle: string;
@@ -419,7 +420,27 @@ export async function POST(req: NextRequest) {
     const cleanEmail = userEmail.trim().toLowerCase();
     const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req);
     const typeKey = (sheetType || "").toUpperCase();
-    const def = SHEET_DEFINITIONS[typeKey];
+    let def = SHEET_DEFINITIONS[typeKey];
+
+    if (!def && sheetType) {
+      const rawCardKey = String(sheetType).replace(/^DYNAMIC_/i, "");
+      const dynManifest = await resolveDynamicCardManifest(
+        rawCardKey,
+        body.manifestJson || null,
+        sheetTitle || rawCardKey
+      );
+      const customHeaders =
+        Array.isArray(body.headers) && body.headers.length > 0
+          ? body.headers.map(String)
+          : dynManifest.sheetSpec?.headers || ["일련번호", "등록일시", "구분", "핵심내용", "AI상세분석", "첨부파일URL", "비고"];
+      const colEndLetter = String.fromCharCode(65 + Math.min(25, Math.max(0, customHeaders.length - 1)));
+      def = {
+        defaultTitle: sheetTitle || dynManifest.sheetSpec?.sheetName || `[SheetBot] ${rawCardKey} 대장`,
+        headers: customHeaders,
+        range: `A1:${colEndLetter}1`,
+        defaultFolder: folderName || dynManifest.sheetSpec?.folderName || `[SheetBot] ${rawCardKey} 보관함`,
+      };
+    }
 
     if (!def) {
       return NextResponse.json(

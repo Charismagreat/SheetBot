@@ -34,14 +34,13 @@ function parseVersionToCode(versionName: string): number {
       return 97 + (patch - 76);
     }
   }
-  return 122;
+  return 20426;
 }
 
 /**
  * GET /api/user/agent2/version
- * 
+ *
  * GitHub Releases API를 실시간 조회하여 가장 최신 버전 정보와 APK 직통 다운로드 링크를 자동 제공합니다.
- * 더 이상 서버 측 수동 버전 수정이나 배포가 필요 없습니다.
  */
 export async function GET() {
   const now = Date.now();
@@ -52,10 +51,11 @@ export async function GET() {
     );
   }
 
-  let latestName = "2.2.1";
-  let latestCode = 122;
+  let latestName = "2.4.26";
+  let latestCode = 20426;
   let apkUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";
-  let releaseNotes = "🛍️ 카드 스토어(Marketplace) 1단계 출시: 22종 업무 자동화 카드 카탈로그, 원클릭 설치 및 맞춤 제작 의뢰 지원";
+  let releaseNotes =
+    "⚡ 무중단 OTA 동적 카드 엔진 & AI 나만의 맞춤 카드 제작 탑재 (v2.4.26): 이제 앱 업데이트 없이 시트봇 스토어 신규 카드 및 안티그라비티 맞춤 카드를 즉시 다운로드·생성하여 사용할 수 있습니다.";
 
   try {
     const ghRes = await fetch("https://api.github.com/repos/Charismagreat/SheetBot/releases/latest", {
@@ -83,9 +83,11 @@ export async function GET() {
 
       // assets에서 SheetBotAgent.apk 직통 URL 탐색
       const assets = ghJson.assets || [];
-      const apkAsset = assets.find((a: any) =>
-        (a.name || "").toLowerCase().includes("sheetbotagent") && (a.name || "").endsWith(".apk")
-      ) || assets.find((a: any) => (a.name || "").endsWith(".apk"));
+      const apkAsset =
+        assets.find(
+          (a: any) =>
+            (a.name || "").toLowerCase().includes("sheetbotagent") && (a.name || "").endsWith(".apk")
+        ) || assets.find((a: any) => (a.name || "").endsWith(".apk"));
 
       if (apkAsset?.browser_download_url) {
         apkUrl = apkAsset.browser_download_url;

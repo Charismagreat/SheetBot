@@ -38,6 +38,7 @@ export interface MarketplaceCard {
   status: "ACTIVE" | "UPCOMING" | "INACTIVE";
   display_order: number;
   version: string;
+  manifest_json?: string;
   updated_at?: string;
 }
 
@@ -84,6 +85,46 @@ export default function AdminCardsCmsTab({
   const [editingCard, setEditingCard] = useState<MarketplaceCard | null>(null);
   const [formData, setFormData] = useState<MarketplaceCard>(INITIAL_FORM);
   const [saving, setSaving] = useState<boolean>(false);
+  const [generatingManifest, setGeneratingManifest] = useState<boolean>(false);
+
+  // AI로 카드 설계도(Manifest JSON) 및 메타데이터 자동 생성
+  const handleAiGenerateManifest = async () => {
+    const promptSeed = formData.description.trim() || formData.title.trim();
+    if (!promptSeed) {
+      alert("카드 제목이나 상세 설명에 원하는 기능을 먼저 입력해 주세요.");
+      return;
+    }
+    setGeneratingManifest(true);
+    try {
+      const res = await apiFetch("/api/user/cards/custom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: `${formData.title} ${formData.description}`.trim(),
+          key: formData.key || undefined,
+          title: formData.title || undefined,
+          previewOnly: true,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.card) {
+        setFormData((prev) => ({
+          ...prev,
+          key: prev.key || data.card.key,
+          title: prev.title || data.card.title,
+          icon: data.card.icon || prev.icon,
+          description: prev.description || data.card.description,
+          manifest_json: data.card.manifestJson || JSON.stringify(data.card.manifest, null, 2),
+        }));
+      } else {
+        alert("AI 설계도 생성 실패: " + (data.error || "오류"));
+      }
+    } catch (err: any) {
+      alert("AI 설계도 생성 오류: " + err.message);
+    } finally {
+      setGeneratingManifest(false);
+    }
+  };
 
   // 필터링 적용된 목록
   const filteredList = useMemo(() => {
@@ -723,6 +764,34 @@ export default function AdminCardsCmsTab({
                     </span>
                   </label>
                 </div>
+              </div>
+
+              {/* ⚡ OTA 동적 카드 실행 설계도 (Manifest JSON) 설정 */}
+              <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-black text-indigo-900 flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                    무중단 동적 카드 실행 설계도 (Manifest JSON)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAiGenerateManifest}
+                    disabled={generatingManifest}
+                    className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black shadow-2xs transition-all"
+                  >
+                    {generatingManifest ? "AI 설계 중..." : "🤖 AI로 설계도 자동 생성"}
+                  </button>
+                </div>
+                <p className="text-[10px] text-indigo-700/80 leading-relaxed">
+                  모바일 앱 업데이트(APK 재설치) 없이 스토어에서 즉시 다운로드하여 입력폼·AI 판독·구글 시트 자동 생성을 수행하는 동적 카드 규격입니다. (비워두면 저장 시 기본 규격이 자동 생성됩니다.)
+                </p>
+                <textarea
+                  rows={5}
+                  placeholder='{"uiType":"DYNAMIC_NATIVE","sheetSpec":{"cardId":"custom_card","sheetName":"[SheetBot] 맞춤 대장","headers":["일련번호","등록일시","내용","비고"]},"inputs":[...]}'
+                  value={formData.manifest_json || ""}
+                  onChange={(e) => setFormData({ ...formData, manifest_json: e.target.value })}
+                  className="w-full text-[11px] font-mono p-2.5 bg-white border border-indigo-200 rounded-lg outline-none focus:border-indigo-500 text-slate-800 leading-relaxed"
+                />
               </div>
 
               {/* VIP 전용 카드 설정 */}

@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  DynamicCardManifest,
+  DEFAULT_DYNAMIC_MANIFESTS,
+  buildDefaultManifestForCard,
+} from '@/lib/dynamic-card-helper';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +21,8 @@ export interface MarketplaceCardItem {
   isInstalledByDefault: boolean;
   version: string;
   updatedAt: string;
+  manifest?: DynamicCardManifest;
+  manifestJson?: string;
 }
 
 // 🛍️ 시트봇 카드 마켓플레이스 기본 내장 카탈로그
@@ -386,7 +393,12 @@ export async function GET(req: NextRequest) {
     // 1. 기본 카탈로그를 맵으로 초기화 (key 기준)
     const cardMap = new Map<string, MarketplaceCardItem>();
     for (const card of DEFAULT_CATALOG) {
-      cardMap.set(card.key, { ...card });
+      const defaultManifest = DEFAULT_DYNAMIC_MANIFESTS[card.key];
+      cardMap.set(card.key, {
+        ...card,
+        manifest: defaultManifest,
+        manifestJson: defaultManifest ? JSON.stringify(defaultManifest) : undefined,
+      });
     }
 
     // 2. DB(sheetbot_marketplace_cards)에서 활성/출시준비 카드 조회 및 동적 병합
@@ -413,6 +425,22 @@ export async function GET(req: NextRequest) {
             ? r.allowed_emails.split(',').map((e: string) => e.trim().toLowerCase()).filter(Boolean)
             : [];
 
+          let parsedManifest: DynamicCardManifest | undefined;
+          if (r.manifest_json && String(r.manifest_json).trim().startsWith('{')) {
+            try {
+              parsedManifest = JSON.parse(String(r.manifest_json));
+            } catch {
+              parsedManifest = undefined;
+            }
+          }
+          if (!parsedManifest) {
+            parsedManifest = buildDefaultManifestForCard(
+              r.key,
+              r.title || r.key,
+              r.description || ''
+            );
+          }
+
           const dbCardItem: MarketplaceCardItem = {
             key: r.key,
             title: r.title,
@@ -427,6 +455,8 @@ export async function GET(req: NextRequest) {
             isInstalledByDefault: Boolean(r.is_installed_by_default),
             version: r.version || '1.0.0',
             updatedAt: r.updated_at ? r.updated_at.split('T')[0] : '2026-10-09',
+            manifest: parsedManifest,
+            manifestJson: JSON.stringify(parsedManifest),
           };
 
           cardMap.set(r.key, dbCardItem);

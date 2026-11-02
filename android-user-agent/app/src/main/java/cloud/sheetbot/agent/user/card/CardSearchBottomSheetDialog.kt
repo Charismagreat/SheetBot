@@ -40,8 +40,8 @@ class CardSearchBottomSheetDialog(
         val tvCount = view.findViewById<TextView>(R.id.tvSearchResultCount)
         val layoutResults = view.findViewById<LinearLayout>(R.id.layoutSearchResults)
 
-        // 초기 목록 표시 (전체 20종)
-        renderResults(layoutResults, tvCount, CardSearchRegistry.CARDS, dialog)
+        // 초기 목록 표시 (내장 카드 + 설치된 OTA 동적 카드 전체)
+        renderResults(layoutResults, tvCount, CardSearchRegistry.getAllSearchableCards(prefs), dialog)
 
         // 텍스트 변경 실시간 감지
         etInput.addTextChangedListener(object : TextWatcher {
@@ -49,7 +49,7 @@ class CardSearchBottomSheetDialog(
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val query = s?.toString() ?: ""
                 btnClear.visibility = if (query.isNotEmpty()) View.VISIBLE else View.GONE
-                val results = CardSearchRegistry.search(query)
+                val results = CardSearchRegistry.search(query, prefs)
                 renderResults(layoutResults, tvCount, results, dialog)
             }
             override fun afterTextChanged(s: Editable?) {}
@@ -95,7 +95,7 @@ class CardSearchBottomSheetDialog(
             emptyLayout.addView(emptyTv)
 
             val subTv = TextView(activity).apply {
-                text = "세금계산서, 재고 관리, 출퇴근 체크 등 사장님께 꼭 필요한 자동화 카드를 시트봇이 직접 제작해 드립니다."
+                text = "시트봇 스토어에서 AI로 나만의 맞춤 카드를 즉시 생성하거나 시트봇에 제작을 의뢰할 수 있습니다."
                 setTextColor(Color.parseColor("#94A3B8"))
                 textSize = 11f
                 gravity = Gravity.CENTER
@@ -109,7 +109,7 @@ class CardSearchBottomSheetDialog(
             }
 
             val storeBtn = Button(activity).apply {
-                text = "🛍️ 카드 스토어(Marketplace) 둘러보기"
+                text = "🛍️ 카드 스토어 / AI 맞춤 카드 만들기"
                 setTextColor(Color.parseColor("#38BDF8"))
                 setBackgroundColor(Color.parseColor("#1E293B"))
                 textSize = 11.5f
@@ -277,7 +277,12 @@ class CardSearchBottomSheetDialog(
             Toast.makeText(activity, "'${card.title}' 카드를 보관함에서 꺼냈습니다.", Toast.LENGTH_SHORT).show()
         }
 
-        val targetView = activity.findViewById<View>(card.cardResId)
+        val targetView = if (card.cardResId != 0) {
+            activity.findViewById<View>(card.cardResId)
+        } else {
+            val parentLayout = scrollView?.getChildAt(0) as? LinearLayout
+            parentLayout?.findViewWithTag<View>("${DynamicCardController.TAG_PREFIX}${card.key}")
+        }
         if (targetView != null && scrollView != null) {
             scrollView.post {
                 // 부드럽게 대상 카드 위치로 스크롤

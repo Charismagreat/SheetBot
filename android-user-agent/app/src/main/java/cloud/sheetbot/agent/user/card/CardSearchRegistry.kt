@@ -1,11 +1,12 @@
 package cloud.sheetbot.agent.user.card
 
+import cloud.sheetbot.agent.user.PreferencesManager
 import cloud.sheetbot.agent.user.R
 
 /**
- * 🔍 카드 자연어 · 초성 · 숫자번호 다중 검색 레지스트리
+ * 🔍 카드 자연어 · 초성 · 숫자번호 다중 검색 레지스트리 (OTA 동적 카드 및 사용자 맞춤 카드 통합 지원)
  *
- * 20종 카드의 번호(1~20), 한글 초성, 시나리오별 유의어(Synonyms) 사전을 보유하고
+ * 내장 업무 카드 및 사용자가 설치/제작한 모든 OTA 동적 카드의 번호, 한글 초성, 시나리오별 유의어(Synonyms) 사전을 보유하고
  * 0.001초 만에 최적의 카드를 찾아내는 초경량 검색 엔진입니다.
  */
 object CardSearchRegistry {
@@ -43,7 +44,7 @@ object CardSearchRegistry {
         return sb.toString()
     }
 
-    // 20종 업무 카드의 상세 검색 메타데이터 사전
+    // 내장 업무 카드의 상세 검색 메타데이터 사전
     val CARDS = listOf(
         SearchableCard(
             index = 1,
@@ -254,17 +255,38 @@ object CardSearchRegistry {
         )
     )
 
+    fun getAllSearchableCards(prefs: PreferencesManager? = null): List<SearchableCard> {
+        if (prefs == null) return CARDS
+        val builtInKeys = CARDS.map { it.key }.toSet()
+        val dynamicCards = prefs.getInstalledDynamicCards()
+            .filter { it.key !in builtInKeys }
+            .mapIndexed { idx, dto ->
+                val words = dto.description.split(" ", ",", "·", "/").map { it.trim().lowercase() }.filter { it.length >= 2 }.take(6)
+                SearchableCard(
+                    index = 30 + idx,
+                    key = dto.key,
+                    title = dto.title,
+                    icon = dto.icon,
+                    chosung = extractChosung(dto.title),
+                    keywords = (listOf(dto.categoryName.lowercase(), "동적카드", "맞춤카드") + words).distinct(),
+                    cardResId = 0
+                )
+            }
+        return dynamicCards + CARDS
+    }
+
     /**
      * 다중 검색 엔진 (자연어, 한글 초성, 숫자 번호 매칭)
      */
-    fun search(rawQuery: String): List<SearchableCard> {
+    fun search(rawQuery: String, prefs: PreferencesManager? = null): List<SearchableCard> {
+        val allCards = getAllSearchableCards(prefs)
         val query = rawQuery.trim().lowercase()
-        if (query.isEmpty()) return CARDS
+        if (query.isEmpty()) return allCards
 
         // 1. 숫자 번호 검색 (예: "1", "7", "13")
         val number = query.toIntOrNull()
         if (number != null) {
-            val matchedByNumber = CARDS.filter {
+            val matchedByNumber = allCards.filter {
                 it.index == number || it.index.toString().startsWith(query)
             }
             if (matchedByNumber.isNotEmpty()) return matchedByNumber
@@ -273,7 +295,7 @@ object CardSearchRegistry {
         // 2. 한글 초성 검색 (예: "ㅌㅎ", "ㅂㅈㅇ", "ㄱㅈㅅ")
         val isChosungQuery = query.all { it in CHOSUNG_LIST }
         if (isChosungQuery) {
-            val matchedByChosung = CARDS.filter {
+            val matchedByChosung = allCards.filter {
                 it.chosung.contains(query) || extractChosung(it.title).contains(query)
             }
             if (matchedByChosung.isNotEmpty()) return matchedByChosung
@@ -281,14 +303,11 @@ object CardSearchRegistry {
 
         // 3. 자연어 및 키워드 / 유의어 검색
         val queryChosung = extractChosung(query)
-        return CARDS.filter { card ->
-            // 제목 일치
+        return allCards.filter { card ->
             card.title.lowercase().contains(query) ||
-            // 유의어 키워드 일치
             card.keywords.any { keyword ->
                 keyword.contains(query) || query.contains(keyword)
             } ||
-            // 쿼리의 초성과 카드의 초성 매칭
             (queryChosung.isNotEmpty() && card.chosung.contains(queryChosung))
         }
     }

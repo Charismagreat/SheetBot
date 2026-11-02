@@ -814,6 +814,90 @@ class PreferencesManager(context: Context) {
     }
 
     /**
+     * ⚡ OTA 동적 다운로드/생성 카드 영구 저장소 (APK 재빌드 없이 설치·실행되는 카드 목록)
+     */
+    fun getInstalledDynamicCards(): List<MarketplaceCardItemDto> {
+        val raw = prefs.getString("installed_dynamic_cards_v1", null)
+        if (raw.isNullOrBlank()) return emptyList()
+        return try {
+            val arr = org.json.JSONArray(raw)
+            val result = mutableListOf<MarketplaceCardItemDto>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                result.add(
+                    MarketplaceCardItemDto(
+                        key = obj.optString("key"),
+                        title = obj.optString("title"),
+                        icon = obj.optString("icon", "⚡"),
+                        category = obj.optString("category", "exclusive"),
+                        categoryName = obj.optString("categoryName", "나만의 맞춤 카드"),
+                        description = obj.optString("description", ""),
+                        badge = obj.optString("badge").takeIf { it.isNotBlank() },
+                        author = obj.optString("author", "시트봇 공식"),
+                        isExclusive = obj.optBoolean("isExclusive", false),
+                        isInstalledByDefault = obj.optBoolean("isInstalledByDefault", false),
+                        version = obj.optString("version", "1.0.0"),
+                        manifestJson = obj.optString("manifestJson").takeIf { it.isNotBlank() }
+                    )
+                )
+            }
+            result
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveInstalledDynamicCard(card: MarketplaceCardItemDto) {
+        val current = getInstalledDynamicCards().toMutableList()
+        val existingIdx = current.indexOfFirst { it.key == card.key }
+        if (existingIdx >= 0) {
+            current[existingIdx] = card
+        } else {
+            current.add(card)
+        }
+        persistInstalledDynamicCards(current)
+    }
+
+    fun removeInstalledDynamicCard(cardKey: String) {
+        val current = getInstalledDynamicCards().filter { it.key != cardKey }
+        persistInstalledDynamicCards(current)
+    }
+
+    private fun persistInstalledDynamicCards(cards: List<MarketplaceCardItemDto>) {
+        val arr = org.json.JSONArray()
+        cards.forEach { c ->
+            val obj = org.json.JSONObject().apply {
+                put("key", c.key)
+                put("title", c.title)
+                put("icon", c.icon)
+                put("category", c.category)
+                put("categoryName", c.categoryName)
+                put("description", c.description)
+                put("badge", c.badge ?: "")
+                put("author", c.author)
+                put("isExclusive", c.isExclusive)
+                put("isInstalledByDefault", c.isInstalledByDefault)
+                put("version", c.version)
+                put("manifestJson", c.manifestJson ?: "")
+            }
+            arr.put(obj)
+        }
+        prefs.edit().putString("installed_dynamic_cards_v1", arr.toString()).apply()
+    }
+
+    fun isDynamicCardEnabled(cardKey: String): Boolean =
+        prefs.getBoolean("dyn_card_enabled_$cardKey", true)
+
+    fun setDynamicCardEnabled(cardKey: String, enabled: Boolean) =
+        prefs.edit().putBoolean("dyn_card_enabled_$cardKey", enabled).apply()
+
+    fun isDynamicCardCollapsed(cardKey: String): Boolean =
+        prefs.getBoolean("dyn_card_collapsed_$cardKey", false)
+
+    fun setDynamicCardCollapsed(cardKey: String, collapsed: Boolean) =
+        prefs.edit().putBoolean("dyn_card_collapsed_$cardKey", collapsed).apply()
+
+    /**
      * 🔄 v2.3.8+ 신규 스토어 체계 및 v2.4.14 초기 전체 보관 마이그레이션:
      * 최초 설치 시 모든 기능/시스템 카드(매장결제, 연락처백업 포함 25종 전원)가
      * 시트봇 보관함에 기본 보관된 상태(홈 화면 활성 카드 0개)로 시작하도록 보장

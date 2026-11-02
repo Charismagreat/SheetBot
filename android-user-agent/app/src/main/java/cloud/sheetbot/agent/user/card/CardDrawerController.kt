@@ -45,8 +45,8 @@ class CardDrawerController(
         val headerResId: Int? = null
     )
 
-    // 관리 대상 전체 카드 26종 목록 (시트봇 스토어 카테고리별 정돈)
-    val allCards = listOf(
+    // 관리 대상 내장 카드 26종 목록 (시트봇 스토어 카테고리별 정돈)
+    val builtInCards = listOf(
         // [1] 시스템 & 관제 (7대 시스템 카드 전원 스토어 보관 지원)
         CardInfo("cardStore", "시트봇 스토어 (새 템플릿 탐색)", "🛍️", "시스템 & 관제", R.id.cardStoreBox, R.id.layoutStoreHeader),
         CardInfo("cardStatus", "시트봇 / File to Sheet 관제 상태", "🟢", "시스템 & 관제", R.id.cardStatus, R.id.layoutIntegratedHeader),
@@ -87,6 +87,32 @@ class CardDrawerController(
         CardInfo("cardLawAdvisory", "AI 법률/계약서 팩트체크", "⚖️", "AI & 마케팅", R.id.cardLawAdvisory, R.id.layoutLawAdvisoryHeader),
         CardInfo("cardWebsiteMonitor", "웹사이트 실시간 장애 감시", "🚨", "AI & 마케팅", R.id.cardWebsiteMonitor, R.id.layoutWebsiteMonitorHeader)
     )
+
+    // 내장 26종 + OTA 동적 다운로드/맞춤 카드 통합 리스트
+    val allCards: List<CardInfo>
+        get() {
+            val dynamicInfos = prefs.getInstalledDynamicCards()
+                .filter { dyn -> builtInCards.none { it.key == dyn.key } }
+                .map { dyn ->
+                    CardInfo(
+                        key = dyn.key,
+                        title = dyn.title,
+                        icon = dyn.icon,
+                        category = dyn.categoryName.ifBlank { "나만의 맞춤" },
+                        cardResId = 0,
+                        headerResId = null
+                    )
+                }
+            return builtInCards + dynamicInfos
+        }
+
+    fun findCardView(cardInfo: CardInfo): View? {
+        if (cardInfo.cardResId != 0) {
+            return activity.findViewById(cardInfo.cardResId)
+        }
+        val mainScrollView = activity.findViewById<ScrollView>(R.id.mainScrollView)
+        return mainScrollView?.findViewWithTag("${DynamicCardController.TAG_PREFIX}${cardInfo.key}")
+    }
 
     private var cardStoreBox: View? = null
     private var layoutStoreHeader: View? = null
@@ -145,8 +171,8 @@ class CardDrawerController(
         btnDrawerManage?.setOnClickListener(openDrawerAction)
 
         // 각 카드의 헤더 및 본체 롱클릭 시 "시트봇 스토어로 보관" 다이얼로그 지원
-        allCards.forEach { cardInfo ->
-            val cardView = activity.findViewById<View>(cardInfo.cardResId)
+        builtInCards.forEach { cardInfo ->
+            val cardView = findCardView(cardInfo)
             val headerView = cardInfo.headerResId?.let { activity.findViewById<View>(it) }
 
             val longClickListener = View.OnLongClickListener {
@@ -157,6 +183,12 @@ class CardDrawerController(
             headerView?.setOnLongClickListener(longClickListener)
             cardView?.setOnLongClickListener(longClickListener)
         }
+    }
+
+    fun showHideConfirmDialogByKey(cardKey: String, fallbackTitle: String) {
+        val cardInfo = allCards.firstOrNull { it.key == cardKey }
+            ?: CardInfo(cardKey, fallbackTitle, "⚡", "나만의 맞춤", 0, null)
+        showHideConfirmDialog(cardInfo)
     }
 
     /**
@@ -226,7 +258,7 @@ class CardDrawerController(
         val phone = prefs.ftsPhoneNumber
         if (prefs.isDestinationFileToSheet && !phone.isNullOrBlank()) {
             // 오직 현재 꺼낸 카드(key) 1개만 단독으로 시트 프로비저닝 (일괄 생성 방지)
-            val specsToEnsure = listOfNotNull(FileToSheetClient.resolveSheetSpec(key))
+            val specsToEnsure = listOfNotNull(FileToSheetClient.resolveSheetSpec(key, prefs))
 
             if (specsToEnsure.isNotEmpty()) {
                 (activity as? androidx.lifecycle.LifecycleOwner)?.lifecycleScope?.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -278,12 +310,19 @@ class CardDrawerController(
      * 메인 화면의 각 카드 뷰들을 물리적으로 재배치하고 가시성을 적용
      */
     fun applyCardVisibilityAndOrder() {
+        // 0. 설치된 동적 카드 뷰 마운트 보장
+        try {
+            DynamicCardController.instance?.mountAllInstalledDynamicCards()
+        } catch (e: Exception) {
+            android.util.Log.w("CardDrawerController", "동적 카드 마운트 경고: ${e.message}")
+        }
+
         val hiddenKeys = prefs.hiddenCardKeys
         val activeOrder = prefs.activeCardOrder
 
         // 1. 가시성 적용
         allCards.forEach { cardInfo ->
-            val cardView = activity.findViewById<View>(cardInfo.cardResId)
+            val cardView = findCardView(cardInfo)
             if (cardView != null) {
                 val isHidden = hiddenKeys.contains(cardInfo.key)
                 cardView.visibility = if (isHidden) View.GONE else View.VISIBLE
@@ -304,7 +343,7 @@ class CardDrawerController(
             if (drawerAnchorView != null && parentLayout.indexOfChild(drawerAnchorView) != -1 && activeOrder.isNotEmpty()) {
                 activeOrder.forEach { cardKey ->
                     val cardInfo = allCards.firstOrNull { it.key == cardKey } ?: return@forEach
-                    val cardView = activity.findViewById<View>(cardInfo.cardResId) ?: return@forEach
+                    val cardView = findCardView(cardInfo) ?: return@forEach
 
                     if (cardView.parent === parentLayout) {
                         parentLayout.removeView(cardView)

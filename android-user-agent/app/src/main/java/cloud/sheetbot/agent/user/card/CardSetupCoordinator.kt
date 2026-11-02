@@ -16,7 +16,8 @@ import cloud.sheetbot.agent.user.PreferencesManager
 /**
  * 🎛️ 전 카드 초기화 및 생명주기 관리 전담 코디네이터 (CardSetupCoordinator)
  *
- * 24종 카드 컨트롤러의 생성, 바인딩, 생명주기 이벤트(onResume, onPause, onDestroy)를 전담하여
+ * 24종 내장 카드 컨트롤러 및 무중단 OTA 동적 카드 엔진(DynamicCardController)의 생성, 바인딩,
+ * 생명주기 이벤트(onResume, onPause, onDestroy)를 전담하여
  * MainActivity.kt의 비대화를 원천 차단하고 단일 책임 원칙(SRP)을 완성합니다.
  */
 class CardSetupCoordinator(
@@ -69,6 +70,7 @@ class CardSetupCoordinator(
     lateinit var contactsCardController: ContactsBackupCardController
     lateinit var featureRequestCardController: FeatureRequestCardController
     lateinit var callEndedCardController: CallEndedCardController
+    lateinit var dynamicCardController: DynamicCardController
 
     // 🔍 초기화 여부 안전 확인 게터 프로퍼티
     val isAccountPairingInitialized get() = ::accountPairingController.isInitialized
@@ -98,9 +100,10 @@ class CardSetupCoordinator(
     val isContactsInitialized get() = ::contactsCardController.isInitialized
     val isFeatureRequestInitialized get() = ::featureRequestCardController.isInitialized
     val isServerStatusInitialized get() = ::serverStatusCardController.isInitialized
+    val isDynamicCardInitialized get() = ::dynamicCardController.isInitialized
 
     /**
-     * 🚀 24종 카드 컨트롤러 일괄 초기화 및 바인딩
+     * 🚀 24종 내장 카드 및 무중단 OTA 동적 카드 컨트롤러 일괄 초기화 및 바인딩
      */
     fun setupAllCards() {
         // 0-0. 통합 모바일 에이전트 & 서버 관제 상태 카드 초기화 (v2.1.54 / 리팩토링)
@@ -184,6 +187,9 @@ class CardSetupCoordinator(
         // 💡 우리 가게·회사 맞춤 기능 제작 의뢰 카드 초기화 (v2.1.99)
         try { setupFeatureRequestCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupFeatureRequestCard 실패 방어", e) }
 
+        // ⚡ 무중단 OTA 동적 카드 엔진 및 사용자 커스텀 카드 마운트 초기화
+        try { setupDynamicCards() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupDynamicCards 실패 방어", e) }
+
         // ★ [중요] 모든 카드 컨트롤러 인스턴스 초기화가 완벽히 완료된 후 아코디언 토글 리스너 등록!
         try { setupCardCollapseExpandListeners() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupCardCollapseExpandListeners 실패 방어", e) }
     }
@@ -233,6 +239,13 @@ class CardSetupCoordinator(
             }
         } catch (e: Throwable) {
             android.util.Log.w("CardSetupCoordinator", "updateOverlayPermissionStatus 방어: ${e.message}")
+        }
+        try {
+            if (::dynamicCardController.isInitialized) {
+                dynamicCardController.mountAllInstalledDynamicCards()
+            }
+        } catch (e: Throwable) {
+            android.util.Log.w("CardSetupCoordinator", "dynamicCardController mount 방어: ${e.message}")
         }
     }
 
@@ -624,5 +637,21 @@ class CardSetupCoordinator(
             prefs = prefs
         )
         featureRequestCardController.setup()
+    }
+
+    private fun setupDynamicCards() {
+        dynamicCardController = DynamicCardController(
+            activity = activity,
+            prefs = prefs,
+            scope = scope,
+            launchers = launchers,
+            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
+            onProvisionSheet = { sheetType, defaultTitle, folderName -> provisionSheetAsync(sheetType, defaultTitle, folderName) },
+            onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) },
+            onHideCardRequested = { cardKey, cardTitle ->
+                CardDrawerController(activity, prefs).showHideConfirmDialogByKey(cardKey, cardTitle)
+            }
+        )
+        dynamicCardController.mountAllInstalledDynamicCards()
     }
 }

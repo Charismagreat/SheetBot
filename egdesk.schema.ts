@@ -118,8 +118,8 @@ export const TABLES = {
   sheetbot_marketplace_cards: {
     name: 'sheetbot_marketplace_cards',
     displayName: 'SheetBot 마켓플레이스 카드 CMS',
-    columns: ['key', 'title', 'icon', 'category', 'category_name', 'description', 'badge', 'author', 'is_exclusive', 'allowed_emails', 'is_installed_by_default', 'status', 'display_order', 'version', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by'],
-    columnCount: 21,
+    columns: ['key', 'title', 'icon', 'category', 'category_name', 'description', 'badge', 'author', 'is_exclusive', 'allowed_emails', 'is_installed_by_default', 'status', 'display_order', 'version', 'manifest_json', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by'],
+    columnCount: 22,
     rowCount: 0,
   },
   sheetbot_payment_orders: {

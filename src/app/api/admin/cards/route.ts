@@ -3,6 +3,11 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, insertRows, updateRows } from "@/lib/egdesk-helpers";
+import {
+  buildDefaultManifestForCard,
+  generateCardSpecWithAi,
+  saveDynamicCardManifestBackup,
+} from "@/lib/dynamic-card-helper";
 import crypto from "crypto";
 
 /**
@@ -83,11 +88,37 @@ export async function POST(req: NextRequest) {
       status,
       display_order,
       version,
+      manifest_json,
+      manifest,
+      autoGenerateManifest,
     } = body;
 
     if (!key || !title) {
       return NextResponse.json({ success: false, error: "카드 고유키(key)와 제목(title)은 필수입니다." }, { status: 400 });
     }
+
+    let resolvedManifestObj = manifest || null;
+    if (!resolvedManifestObj && manifest_json && typeof manifest_json === "string" && manifest_json.trim().startsWith("{")) {
+      try {
+        resolvedManifestObj = JSON.parse(manifest_json.trim());
+      } catch {
+        resolvedManifestObj = null;
+      }
+    }
+    if (!resolvedManifestObj) {
+      if (autoGenerateManifest) {
+        const generated = await generateCardSpecWithAi({
+          prompt: `${title} - ${description || title}`,
+          userEmail,
+          preferredKey: key.trim(),
+          preferredTitle: title.trim(),
+        });
+        resolvedManifestObj = generated.manifest;
+      } else {
+        resolvedManifestObj = buildDefaultManifestForCard(key.trim(), title.trim(), (description || "").trim());
+      }
+    }
+    const finalManifestJson = JSON.stringify(resolvedManifestObj);
 
     const now = new Date().toISOString();
     const newCard = {
@@ -105,6 +136,7 @@ export async function POST(req: NextRequest) {
       status: status || "ACTIVE",
       display_order: Number(display_order) || 10,
       version: version ? version.trim() : "1.0.0",
+      manifest_json: finalManifestJson,
       uuid: crypto.randomUUID(),
       updated_at: now,
       updated_by: userEmail,
@@ -115,6 +147,7 @@ export async function POST(req: NextRequest) {
     };
 
     await insertRows("sheetbot_marketplace_cards", [newCard]);
+    await saveDynamicCardManifestBackup(key.trim(), resolvedManifestObj, userEmail);
 
     return NextResponse.json({
       success: true,
@@ -167,6 +200,14 @@ export async function PUT(req: NextRequest) {
     if (updateFields.status !== undefined) patchData.status = updateFields.status;
     if (updateFields.display_order !== undefined) patchData.display_order = Number(updateFields.display_order) || 0;
     if (updateFields.version !== undefined) patchData.version = updateFields.version;
+    if (updateFields.manifest_json !== undefined) {
+      patchData.manifest_json =
+        typeof updateFields.manifest_json === "string"
+          ? updateFields.manifest_json.trim()
+          : JSON.stringify(updateFields.manifest_json);
+    } else if (updateFields.manifest !== undefined) {
+      patchData.manifest_json = JSON.stringify(updateFields.manifest);
+    }
 
     await updateRows("sheetbot_marketplace_cards", {
       filters: { id: String(id) },

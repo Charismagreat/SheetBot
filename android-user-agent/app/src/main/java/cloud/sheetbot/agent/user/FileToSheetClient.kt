@@ -256,12 +256,41 @@ object FileToSheetClient {
 
     /**
      * 카드 키(cardPaymentReceipt 등), OCR 타입(RECEIPT 등), 시트 타입을 표준 FtsCardSheetSpec으로 변환
+     * - OTA 동적 카드(installedDynamicCards)의 manifestJson.sheetSpec도 자동 지원
      */
-    fun resolveSheetSpec(keyOrType: String?): FtsCardSheetSpec? {
+    fun resolveSheetSpec(keyOrType: String?, prefs: PreferencesManager? = null): FtsCardSheetSpec? {
         val raw = keyOrType?.trim().orEmpty()
         if (raw.isEmpty()) return null
         val canonicalId = resolveCanonicalCardId(raw)
-        return CARD_SHEET_SPECS[canonicalId]
+        CARD_SHEET_SPECS[canonicalId]?.let { return it }
+
+        // 동적 카드(Manifest JSON)에서 sheetSpec 추출
+        val dynCard = prefs?.getInstalledDynamicCards()?.firstOrNull {
+            it.key.equals(raw, ignoreCase = true) || "dynamic_${it.key}".equals(raw, ignoreCase = true)
+        }
+        if (dynCard != null && !dynCard.manifestJson.isNullOrBlank()) {
+            try {
+                val mObj = JSONObject(dynCard.manifestJson)
+                val sObj = mObj.optJSONObject("sheetSpec")
+                if (sObj != null) {
+                    val cId = sObj.optString("cardId", dynCard.key.lowercase())
+                    val sName = sObj.optString("sheetName", "${dynCard.title}대장")
+                    val hArr = sObj.optJSONArray("headers")
+                    val hList = mutableListOf<String>()
+                    if (hArr != null) {
+                        for (i in 0 until hArr.length()) {
+                            val h = hArr.optString(i)
+                            if (h.isNotBlank()) hList.add(h)
+                        }
+                    }
+                    if (hList.isEmpty()) {
+                        hList.addAll(listOf("일련번호", "등록일시", "구분", "핵심내용", "AI상세분석", "비고"))
+                    }
+                    return FtsCardSheetSpec(cardId = cId, sheetName = sName, headers = hList)
+                }
+            } catch (_: Exception) {}
+        }
+        return null
     }
 
     /**

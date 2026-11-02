@@ -3144,6 +3144,9 @@ object ApiClient {
                     val cardsList = mutableListOf<MarketplaceCardItemDto>()
                     for (i in 0 until cardsArray.length()) {
                         val c = cardsArray.optJSONObject(i) ?: continue
+                        val manifestStr = c.optJSONObject("manifest")?.toString()
+                            ?: c.optString("manifestJson").takeIf { it.isNotBlank() }
+                            ?: c.optString("manifest_json").takeIf { it.isNotBlank() }
                         cardsList.add(
                             MarketplaceCardItemDto(
                                 key = c.optString("key"),
@@ -3156,7 +3159,8 @@ object ApiClient {
                                 author = c.optString("author", "시트봇 공식"),
                                 isExclusive = c.optBoolean("isExclusive", false),
                                 isInstalledByDefault = c.optBoolean("isInstalledByDefault", false),
-                                version = c.optString("version", "1.0.0")
+                                version = c.optString("version", "1.0.0"),
+                                manifestJson = manifestStr
                             )
                         )
                     }
@@ -3226,6 +3230,148 @@ object ApiClient {
             }
         }
         FeatureRequestResult(success = false, error = lastError)
+    }
+
+    /**
+     * 🛠️ 사용자 맞춤형 동적 카드 생성·등록 API (AI 자연어 설계 또는 안티그라비티 JSON 직접 등록)
+     */
+    suspend fun createCustomCard(
+        userEmail: String,
+        prompt: String? = null,
+        title: String? = null,
+        icon: String? = null,
+        description: String? = null,
+        manifestJson: String? = null
+    ): CustomCardCreateResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastError = "맞춤 카드 생성 실패"
+
+        val bodyJson = JSONObject().apply {
+            put("userEmail", userEmail)
+            if (!prompt.isNullOrBlank()) put("prompt", prompt)
+            if (!title.isNullOrBlank()) put("title", title)
+            if (!icon.isNullOrBlank()) put("icon", icon)
+            if (!description.isNullOrBlank()) put("description", description)
+            if (!manifestJson.isNullOrBlank()) put("manifestJson", manifestJson)
+        }
+        val requestBody = bodyJson.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            try {
+                val endpoint = "$host/api/user/cards/custom"
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(requestBody)
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val c = resJson.optJSONObject("card")
+                    val createdDto = if (c != null) {
+                        val mStr = c.optJSONObject("manifest")?.toString()
+                            ?: c.optString("manifestJson").takeIf { it.isNotBlank() }
+                        MarketplaceCardItemDto(
+                            key = c.optString("key"),
+                            title = c.optString("title"),
+                            icon = c.optString("icon", "⚡"),
+                            category = c.optString("category", "exclusive"),
+                            categoryName = c.optString("categoryName", "나만의 맞춤 카드"),
+                            description = c.optString("description"),
+                            badge = c.optString("badge", "맞춤"),
+                            author = c.optString("author", "맞춤 제작"),
+                            isExclusive = c.optBoolean("isExclusive", true),
+                            isInstalledByDefault = false,
+                            version = c.optString("version", "1.0.0"),
+                            manifestJson = mStr
+                        )
+                    } else null
+
+                    return@withContext CustomCardCreateResult(
+                        success = true,
+                        message = resJson.optString("message", "나만의 카드가 생성되었습니다."),
+                        card = createdDto
+                    )
+                } else {
+                    lastError = resJson.optString("error", "서버 응답 오류 (HTTP ${response.code})")
+                }
+            } catch (e: Exception) {
+                lastError = e.message ?: "네트워크 연결 오류"
+            }
+        }
+        CustomCardCreateResult(success = false, error = lastError)
+    }
+
+    /**
+     * 🚀 동적 카드(Server-Driven Dynamic Card) 실행 API (파일 첨부 + 텍스트 필드 + AI 판독 + 시트 기록)
+     */
+    suspend fun executeDynamicCard(
+        userEmail: String,
+        cardKey: String,
+        cardTitle: String,
+        manifestJson: String?,
+        fields: Map<String, String>,
+        attachedFile: java.io.File? = null
+    ): DynamicCardExecuteResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastError = "동적 카드 실행 실패"
+
+        val fieldsJsonObj = JSONObject()
+        fields.forEach { (k, v) -> fieldsJsonObj.put(k, v) }
+
+        for (host in hosts) {
+            try {
+                val endpoint = "$host/api/cards/dynamic/execute"
+                val multipartBuilder = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("userEmail", userEmail)
+                    .addFormDataPart("cardKey", cardKey)
+                    .addFormDataPart("cardTitle", cardTitle)
+                    .addFormDataPart("fieldsJson", fieldsJsonObj.toString())
+
+                if (!manifestJson.isNullOrBlank()) {
+                    multipartBuilder.addFormDataPart("manifestJson", manifestJson)
+                }
+
+                if (attachedFile != null && attachedFile.exists()) {
+                    val mime = if (attachedFile.name.endsWith(".png", true)) "image/png" else "image/jpeg"
+                    multipartBuilder.addFormDataPart(
+                        "file",
+                        attachedFile.name,
+                        attachedFile.asRequestBody(mime.toMediaTypeOrNull())
+                    )
+                    multipartBuilder.addFormDataPart("fileName", attachedFile.name)
+                }
+
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(multipartBuilder.build())
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext DynamicCardExecuteResult(
+                        success = true,
+                        summary = resJson.optString("summary", "성공적으로 처리되었습니다."),
+                        message = resJson.optString("message", "시트에 기록되었습니다."),
+                        spreadsheetUrl = resJson.optString("spreadsheetUrl").takeIf { it.isNotBlank() },
+                        driveFileUrl = resJson.optString("driveFileUrl").takeIf { it.isNotBlank() }
+                    )
+                } else {
+                    lastError = resJson.optString("error", "서버 오류 (HTTP ${response.code})")
+                }
+            } catch (e: Exception) {
+                lastError = e.message ?: "네트워크 오류"
+            }
+        }
+        DynamicCardExecuteResult(success = false, error = lastError)
     }
 }
 
@@ -3623,13 +3769,30 @@ data class MarketplaceCardItemDto(
     val author: String = "시트봇 공식",
     val isExclusive: Boolean = false,
     val isInstalledByDefault: Boolean = false,
-    val version: String = "1.0.0"
+    val version: String = "1.0.0",
+    val manifestJson: String? = null
 )
 
 data class MarketplaceCatalogResult(
     val success: Boolean,
     val totalCount: Int = 0,
     val cards: List<MarketplaceCardItemDto> = emptyList(),
+    val error: String? = null
+)
+
+data class CustomCardCreateResult(
+    val success: Boolean,
+    val message: String = "",
+    val card: MarketplaceCardItemDto? = null,
+    val error: String? = null
+)
+
+data class DynamicCardExecuteResult(
+    val success: Boolean,
+    val summary: String = "",
+    val message: String = "",
+    val spreadsheetUrl: String? = null,
+    val driveFileUrl: String? = null,
     val error: String? = null
 )
 

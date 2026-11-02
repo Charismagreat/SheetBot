@@ -25,13 +25,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 🛍️ 카드 마켓플레이스 (Card App Store) 전담 컨트롤러 (v2.2.0)
+ * 🛍️ 카드 마켓플레이스 (Card App Store) 전담 컨트롤러 (v2.3.0 OTA 동적 카드 & 커스텀 카드 지원)
  *
  * - 서버 카탈로그 API(GET /api/user/cards/catalog) 비동기 조회 및 캐싱
  * - 카테고리별(전체, 매장·정산, 고객·영업, AI 자동화, 나만의 맞춤) 실시간 필터링
  * - 검색어 실시간 필터링
- * - 대시보드 원클릭 설치 (+ 설치하기) 및 보관함 이동 (- 보관함으로 이동) 제어
- * - 나만의 맞춤 기능 의뢰(Feature Request) 직결
+ * - 앱 업데이트(APK 재설치) 없이 서버 동적 카드 & 사용자 커스텀 카드 원클릭 설치 (+ 설치하기) 및 보관함 이동 제어
+ * - AI 자연어 / 안티그라비티 JSON 기반 나만의 맞춤 카드 즉시 생성 지원
  */
 class CardMarketplaceController(
     private val activity: Activity,
@@ -43,6 +43,22 @@ class CardMarketplaceController(
     private var allCatalogCards: List<MarketplaceCardItemDto> = DEFAULT_FALLBACK_CATALOG
     private var currentCategory: String = "all"
     private var currentSearchQuery: String = ""
+
+    private fun mergeWithInstalledDynamic(catalog: List<MarketplaceCardItemDto>): List<MarketplaceCardItemDto> {
+        val installed = prefs.getInstalledDynamicCards()
+        if (installed.isEmpty()) return catalog
+        // 서버 카탈로그에 최신 manifestJson이 있으면 로컬 동적 카드 정보도 동기화
+        val catalogByKey = catalog.associateBy { it.key }
+        installed.forEach { localCard ->
+            val remoteCard = catalogByKey[localCard.key]
+            if (remoteCard != null && !remoteCard.manifestJson.isNullOrBlank() && remoteCard.manifestJson != localCard.manifestJson) {
+                prefs.saveInstalledDynamicCard(remoteCard)
+            }
+        }
+        val existingKeys = catalog.map { it.key }.toSet()
+        val extras = installed.filter { it.key !in existingKeys }
+        return extras + catalog
+    }
 
     /**
      * 🛍️ 카드 마켓플레이스 바텀시트 열기
@@ -71,14 +87,79 @@ class CardMarketplaceController(
             FeatureRequestCardController(activity, prefs).openRequestDialog()
         }
 
+        allCatalogCards = mergeWithInstalledDynamic(allCatalogCards)
+
         fun renderCards() {
             container.removeAllViews()
+
+            // ⚡ 상단 배너: AI로 나만의 맞춤 카드 만들기 / 안티그라비티 JSON 등록
+            val createCustomBanner = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setBackgroundResource(R.drawable.bg_card_scenario)
+                backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#0F172A"))
+                setPadding(14, 12, 14, 12)
+                val lp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                lp.setMargins(0, 0, 0, 12)
+                layoutParams = lp
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    DynamicCardController.openCreateCustomCardDialog(
+                        activity = activity,
+                        prefs = prefs,
+                        scope = scope,
+                        onCardCreated = { createdCard ->
+                            allCatalogCards = listOf(createdCard) + allCatalogCards.filter { it.key != createdCard.key }
+                            cardDrawerController.restoreCard(createdCard.key)
+                            renderCards()
+                        }
+                    )
+                }
+            }
+
+            val bannerTextLayout = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginEnd = 8
+                }
+            }
+            val bannerTitle = TextView(activity).apply {
+                text = "⚡ AI로 나만의 맞춤 카드 만들기 (안티그라비티 호환)"
+                setTextColor(Color.parseColor("#38BDF8"))
+                textSize = 12f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+            }
+            val bannerSub = TextView(activity).apply {
+                text = "앱 업데이트 없이 필요한 업무 카드를 AI로 즉시 생성하거나 안티그라비티 JSON 설계도를 등록해 바로 사용합니다."
+                setTextColor(Color.parseColor("#94A3B8"))
+                textSize = 10.5f
+                setPadding(0, 3, 0, 0)
+            }
+            bannerTextLayout.addView(bannerTitle)
+            bannerTextLayout.addView(bannerSub)
+            createCustomBanner.addView(bannerTextLayout)
+
+            val bannerBtn = TextView(activity).apply {
+                text = "+ 카드 생성"
+                setTextColor(Color.parseColor("#FFFFFF"))
+                textSize = 11f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setBackgroundResource(R.drawable.bg_badge_version)
+                backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#0284C7"))
+                setPadding(12, 6, 12, 6)
+            }
+            createCustomBanner.addView(bannerBtn)
+            container.addView(createCustomBanner)
 
             val hiddenKeys = prefs.hiddenCardKeys
             val filtered = allCatalogCards.filter { card ->
                 val matchesCategory = when (currentCategory) {
                     "all" -> true
-                    "exclusive" -> card.isExclusive
+                    "exclusive" -> card.isExclusive || card.key.startsWith("cardCustom_")
                     else -> card.category == currentCategory
                 }
                 val q = currentSearchQuery.trim().lowercase()
@@ -93,7 +174,7 @@ class CardMarketplaceController(
 
             if (filtered.isEmpty()) {
                 val emptyTv = TextView(activity).apply {
-                    text = "해당 조건의 카드가 없습니다.\n새로운 기능이 필요하시면 아래에서 의뢰해 주세요."
+                    text = "해당 조건의 카드가 없습니다.\n상단의 [+ 카드 생성] 버튼으로 직접 만들거나 아래에서 맞춤 제작을 의뢰해 보세요."
                     setTextColor(Color.parseColor("#94A3B8"))
                     textSize = 12f
                     gravity = Gravity.CENTER
@@ -154,7 +235,7 @@ class CardMarketplaceController(
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        // 1. 0초 즉시 렌더링 (기본 카탈로그 또는 이전 캐시 카드)
+        // 1. 0초 즉시 렌더링 (기본 카탈로그 + 로컬 설치된 동적/커스텀 카드)
         renderCards()
         dialog.show()
 
@@ -166,7 +247,8 @@ class CardMarketplaceController(
             withContext(Dispatchers.Main) {
                 progressLoading?.visibility = View.GONE
                 if (result.success && result.cards.isNotEmpty()) {
-                    allCatalogCards = result.cards
+                    allCatalogCards = mergeWithInstalledDynamic(result.cards)
+                    DynamicCardController.instance?.mountAllInstalledDynamicCards()
                     renderCards()
                 }
             }
@@ -240,9 +322,10 @@ class CardMarketplaceController(
             headerLayout.addView(badgeTv)
         }
 
-        // 설치 상태 판별: SharedPreferences의 hiddenCardKeys에 없으면 활성(설치됨)
-        val isCardCurrentlyActive = !hiddenKeys.contains(card.key)
-        val isRecognizedInLocal = cardDrawerController.allCards.any { it.key == card.key }
+        // 설치 상태 판별: 내장 카드이거나 로컬에 설치된 동적 카드이면서 hiddenCardKeys에 없으면 활성(사용 중)
+        val isBuiltIn = cardDrawerController.builtInCards.any { it.key == card.key }
+        val isInstalledDynamic = prefs.getInstalledDynamicCards().any { it.key == card.key }
+        val isCardCurrentlyActive = (isBuiltIn || isInstalledDynamic) && !hiddenKeys.contains(card.key)
 
         val actionBtn = Button(activity).apply {
             val lp = LinearLayout.LayoutParams(
@@ -254,66 +337,7 @@ class CardMarketplaceController(
             setTypeface(null, android.graphics.Typeface.BOLD)
             setPadding(10, 0, 10, 0)
 
-            if (!isRecognizedInLocal) {
-                // 아직 로컬에 빌드되지 않은 준비 중 카드 (세금계산서, 스마트재고 등)
-                val isAlreadyReserved = prefs.reservedNotificationCardKeys.contains(card.key)
-                if (isAlreadyReserved) {
-                    text = "✓ 알림 예약됨"
-                    setTextColor(Color.parseColor("#34D399"))
-                    backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#064E3B"))
-                    setOnClickListener {
-                        val email = prefs.userEmail ?: "회원님"
-                        AlertDialog.Builder(activity)
-                            .setTitle("✅ ${card.title}")
-                            .setMessage("'${card.title}' 기능의 출시 알림이 이미 정상 예약되어 있습니다.\n\n기능이 오픈되면 등록하신 이메일($email)로 가장 먼저 안내해 드립니다.\n\n사전 맞춤 개발이나 특별 도입이 필요하시면 1:1 맞춤 제작을 의뢰해 주세요.")
-                            .setPositiveButton("확인", null)
-                            .setNeutralButton("💡 맞춤 제작 의뢰") { _, _ ->
-                                FeatureRequestCardController(activity, prefs).openRequestDialog(card.title)
-                            }
-                            .show()
-                    }
-                } else {
-                    text = "✨ 출시 알림"
-                    setTextColor(Color.parseColor("#F59E0B"))
-                    backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#1E293B"))
-                    setOnClickListener {
-                        AlertDialog.Builder(activity)
-                            .setTitle("🚀 ${card.title}")
-                            .setMessage("'${card.title}' 기능은 정식 출시 준비 중입니다.\n\n출시 알림을 예약하시면 기능 오픈 즉시 알려드리며, 빠른 맞춤 제작을 원하시면 1:1 의뢰를 신청해 주세요.")
-                            .setPositiveButton("✨ 출시 알림 예약") { _, _ ->
-                                val userEmail = prefs.userEmail ?: ""
-                                if (userEmail.isBlank()) {
-                                    Toast.makeText(activity, "로그인 후 알림 예약이 가능합니다.", Toast.LENGTH_SHORT).show()
-                                    return@setPositiveButton
-                                }
-                                Toast.makeText(activity, "출시 알림을 예약하는 중입니다...", Toast.LENGTH_SHORT).show()
-                                scope.launch {
-                                    val result = ApiClient.submitFeatureRequest(
-                                        userEmail = userEmail,
-                                        title = "[출시알림 예약] ${card.title}",
-                                        description = "신규 기능 카드 '${card.title}'(key: ${card.key}) 출시 알림 신청",
-                                        requestType = "RELEASE_NOTIFY",
-                                        contact = userEmail
-                                    )
-                                    withContext(Dispatchers.Main) {
-                                        if (result.success) {
-                                            prefs.addReservedNotificationCard(card.key)
-                                            Toast.makeText(activity, "🎉 '${card.title}' 출시 알림이 성공적으로 예약되었습니다!", Toast.LENGTH_LONG).show()
-                                            onStateChanged()
-                                        } else {
-                                            Toast.makeText(activity, "알림 예약 실패: ${result.message}", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                }
-                            }
-                            .setNeutralButton("💡 맞춤 제작 의뢰") { _, _ ->
-                                FeatureRequestCardController(activity, prefs).openRequestDialog(card.title)
-                            }
-                            .setNegativeButton("닫기", null)
-                            .show()
-                    }
-                }
-            } else if (isCardCurrentlyActive) {
+            if (isCardCurrentlyActive) {
                 // 이미 메인 화면에 활성화되어 있는 경우
                 text = "✓ 사용 중"
                 setTextColor(Color.parseColor("#34D399"))
@@ -331,13 +355,18 @@ class CardMarketplaceController(
                         .show()
                 }
             } else {
-                // 보관함에 들어가 있는 경우 -> 원클릭 설치 (메인 화면에 꺼내기)
+                // 내장 보관함 카드이거나 서버 OTA 동적 카드 / 커스텀 카드 -> 앱 업데이트 없이 원클릭 즉시 설치!
                 text = "+ 설치하기"
                 setTextColor(Color.parseColor("#FFFFFF"))
                 backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#0284C7"))
                 setOnClickListener {
+                    if (!isBuiltIn) {
+                        // 서버 OTA 동적 카드 또는 커스텀 카드를 로컬에 저장 후 동적 엔진으로 즉시 마운트
+                        prefs.saveInstalledDynamicCard(card)
+                        prefs.setDynamicCardEnabled(card.key, true)
+                    }
                     cardDrawerController.restoreCard(card.key)
-                    Toast.makeText(activity, "🎉 '${card.title}' 카드가 메인 대시보드에 설치되었습니다!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(activity, "🎉 '${card.title}' 카드가 메인 대시보드에 즉시 설치되었습니다!", Toast.LENGTH_SHORT).show()
                     onStateChanged()
                 }
             }
@@ -368,7 +397,8 @@ class CardMarketplaceController(
         }
 
         val authorTv = TextView(activity).apply {
-            text = "제작: ${card.author} • v${card.version}"
+            val modeLabel = if (!isBuiltIn) " • ⚡ OTA 동적카드" else ""
+            text = "제작: ${card.author} • v${card.version}$modeLabel"
             setTextColor(Color.parseColor("#64748B"))
             textSize = 9.5f
             val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -385,6 +415,25 @@ class CardMarketplaceController(
 
         itemLayout.addView(metaLayout)
 
+        // 동적/커스텀 카드는 길게 눌러 로컬 설치 해제 가능
+        if (!isBuiltIn && isInstalledDynamic) {
+            itemLayout.setOnLongClickListener {
+                AlertDialog.Builder(activity)
+                    .setTitle("🗑️ 동적 카드 설치 해제")
+                    .setMessage("'${card.title}' 카드를 내 스마트폰에서 설치 해제하시겠습니까?\n(언제든 스토어에서 다시 + 설치하기를 눌러 추가할 수 있습니다.)")
+                    .setPositiveButton("설치 해제") { _, _ ->
+                        prefs.removeInstalledDynamicCard(card.key)
+                        DynamicCardController.instance?.mountAllInstalledDynamicCards()
+                        cardDrawerController.applyCardVisibilityAndOrder()
+                        Toast.makeText(activity, "'${card.title}' 카드가 설치 해제되었습니다.", Toast.LENGTH_SHORT).show()
+                        onStateChanged()
+                    }
+                    .setNegativeButton("취소", null)
+                    .show()
+                true
+            }
+        }
+
         return itemLayout
     }
 
@@ -397,7 +446,7 @@ class CardMarketplaceController(
                 category = "store",
                 categoryName = "매장 · 정산",
                 description = "홈택스 연동 없이 구글 시트 거래처 내역에서 1초 만에 전자세금계산서/계산서를 자동 발행하고 국세청에 전송합니다.",
-                badge = "출시준비",
+                badge = "OTA 신규",
                 author = "시트봇 공식",
                 isExclusive = false,
                 isInstalledByDefault = false,
@@ -410,7 +459,7 @@ class CardMarketplaceController(
                 category = "store",
                 categoryName = "매장 · 정산",
                 description = "바코드/QR 촬영 및 입출고 송장 스캔 시 구글 시트 재고 수량을 실시간 자동 계산하고 품절 임박 알림을 전송합니다.",
-                badge = "출시준비",
+                badge = "OTA 신규",
                 author = "시트봇 공식",
                 isExclusive = false,
                 isInstalledByDefault = false,

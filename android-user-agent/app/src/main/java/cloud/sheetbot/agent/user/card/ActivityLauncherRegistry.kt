@@ -240,4 +240,24 @@ class ActivityLauncherRegistry(
             getAccountPairing().handleAccountPickerResult(result.resultCode, result.data)
         }
     }
+
+    // 21. ⚡ 동적 카드(Dynamic Card) 공용 파일/갤러리 선택 런처 & 카메라 촬영 런처
+    var onDynamicCardFilePicked: ((android.net.Uri) -> Unit)? = null
+    var onDynamicCardCameraBitmap: ((android.graphics.Bitmap) -> Unit)? = null
+
+    val dynamicCardFilePickerLauncher: ActivityResultLauncher<String> = activity.registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            onDynamicCardFilePicked?.invoke(uri)
+        }
+    }
+
+    val dynamicCardCameraLauncher: ActivityResultLauncher<Void?> = activity.registerForActivityResult(
+        ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            onDynamicCardCameraBitmap?.invoke(bitmap)
+        }
+    }
 }
