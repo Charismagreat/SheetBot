@@ -56,6 +56,8 @@ EGDesk automatically sets these when starting your dev server:
 - `NEXT_PUBLIC_EGDESK_API_KEY` - Your EGDesk API key (for database/sheets access)
 - `NEXT_PUBLIC_EGDESK_API_URL` - Local MCP endpoint (`http://localhost:8080`) for API routes and helpers
 - `NEXT_PUBLIC_EGDESK_TUNNEL_URL` - Public tunnel MCP root when a prod tunnel is configured (visitor OAuth)
+- `NEXT_PUBLIC_EGDESK_PROJECT_ID` - This project's stable id, forwarded as `X-EGDesk-Project-Id`
+- `NEXT_PUBLIC_EGDESK_ENV` - `development` or `production`, forwarded as `X-EGDesk-Env`
 
 ## What Works Automatically
 
