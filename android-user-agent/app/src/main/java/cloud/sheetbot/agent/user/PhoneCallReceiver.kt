@@ -656,11 +656,17 @@ class PhoneCallReceiver : BroadcastReceiver() {
 
     private fun showMissedCallNotification(context: Context, nameOrPhone: String, autoReplied: Boolean) {
         ensureNotificationChannel(context)
+        val prefs = PreferencesManager(context)
         val replyStatus = if (autoReplied) "자동 회신 완료" else "대장 기록 완료"
+        val destLabel = if (prefs.isDestinationFileToSheet) {
+            "파일투시트 [부재중전화대장] 기록"
+        } else {
+            "구글 시트 [SheetBot] 부재중 전화 대장 기록"
+        }
 
         val notification = NotificationCompat.Builder(context, MISSED_CALL_CHANNEL_ID)
             .setContentTitle("📞 [부재중 전화 감지] $nameOrPhone")
-            .setContentText("$replyStatus (구글 시트 [SheetBot] 부재중 전화 대장 기록)")
+            .setContentText("$replyStatus ($destLabel)")
             .setSmallIcon(android.R.drawable.sym_call_missed)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)

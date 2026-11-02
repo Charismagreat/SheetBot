@@ -10,8 +10,22 @@ class PreferencesManager(context: Context) {
         context.getSharedPreferences("sheetbot_agent_prefs", Context.MODE_PRIVATE)
 
     var userEmail: String?
-        get() = prefs.getString("user_email", null)
+        get() {
+            val saved = prefs.getString("user_email", null)
+            if (!saved.isNullOrBlank()) return saved
+            val ftsPhone = prefs.getString("fts_phone_number", null)?.replace("[^0-9]".toRegex(), "")
+            if (!ftsPhone.isNullOrBlank()) return "fts_${ftsPhone.takeLast(4)}@filetosheet.cloud"
+            val ftsTok = prefs.getString("fts_token", null)
+            if (!ftsTok.isNullOrBlank()) return "fts_${ftsTok.takeLast(6)}@filetosheet.cloud"
+            return null
+        }
         set(value) = prefs.edit().putString("user_email", value).apply()
+
+    val hasGoogleAccount: Boolean
+        get() {
+            val raw = prefs.getString("user_email", null)
+            return !raw.isNullOrBlank() && !raw.endsWith("@filetosheet.cloud")
+        }
 
     var webhookUrl: String
         get() = prefs.getString("webhook_url", "https://sheetbot.cloud/api/user/agent2/inbound-sms") ?: "https://sheetbot.cloud/api/user/agent2/inbound-sms"
@@ -48,7 +62,9 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putString("upload_destination", value).apply()
 
     val isDestinationFileToSheet: Boolean
-        get() = uploadDestination == DESTINATION_FILE_TO_SHEET || uploadDestination == DESTINATION_BOTH
+        get() = uploadDestination == DESTINATION_FILE_TO_SHEET ||
+                uploadDestination == DESTINATION_BOTH ||
+                (!hasGoogleAccount && isFtsPaired)
 
     val isDestinationGoogleSheet: Boolean
         get() = uploadDestination == DESTINATION_GOOGLE_SHEETS || uploadDestination == DESTINATION_BOTH

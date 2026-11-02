@@ -547,6 +547,102 @@ object FileToSheetClient {
     }
 
     /**
+     * ⚡ 카드별 정형 데이터(JSON rowData)를 온디맨드 시트 보장(ensure-sheet) 후 파일투시트에 즉시 기록
+     */
+    suspend fun syncCardRowToFts(
+        cardIdOrType: String,
+        rowData: JSONObject,
+        fileName: String? = null,
+        memo: String? = null,
+        amount: Long? = null
+    ): FtsUploadResult = withContext(Dispatchers.IO) {
+        try {
+            val prefs = PreferencesManager(SheetBotApp.appContext)
+            var (endpoint, _) = FileUploadManager.resolveOrEnsureFtsSheet(prefs, cardIdOrType, forceRefresh = false)
+            if (endpoint.isBlank() || !endpoint.contains("/api/inbox/")) {
+                val refreshed = FileUploadManager.resolveOrEnsureFtsSheet(prefs, cardIdOrType, forceRefresh = true)
+                endpoint = refreshed.first
+            }
+            if (endpoint.isBlank()) {
+                return@withContext FtsUploadResult(success = false, error = "파일투시트 엔드포인트가 설정되지 않았습니다.")
+            }
+
+            var attempt = uploadJson(
+                endpoint = endpoint,
+                fileName = fileName,
+                memo = memo,
+                amount = amount,
+                rowData = rowData
+            )
+            if (!attempt.success && !prefs.ftsPhoneNumber.isNullOrBlank()) {
+                val refreshed = FileUploadManager.resolveOrEnsureFtsSheet(prefs, cardIdOrType, forceRefresh = true)
+                if (refreshed.first.isNotBlank()) {
+                    attempt = uploadJson(
+                        endpoint = refreshed.first,
+                        fileName = fileName,
+                        memo = memo,
+                        amount = amount,
+                        rowData = rowData
+                    )
+                }
+            }
+            attempt
+        } catch (e: Exception) {
+            Log.w(TAG, "syncCardRowToFts 예외 ($cardIdOrType): ${e.message}")
+            FtsUploadResult(success = false, error = e.localizedMessage ?: "전송 실패")
+        }
+    }
+
+    /**
+     * ⚡ 카드별 파일(통화녹음, 회의녹음 등)을 온디맨드 시트 보장(ensure-sheet) 후 파일투시트에 즉시 업로드
+     */
+    suspend fun syncCardFileToFts(
+        cardIdOrType: String,
+        file: File,
+        mimeType: String = "audio/mp4",
+        memo: String? = null,
+        ocrType: String? = null
+    ): FtsUploadResult = withContext(Dispatchers.IO) {
+        try {
+            val prefs = PreferencesManager(SheetBotApp.appContext)
+            var (endpoint, _) = FileUploadManager.resolveOrEnsureFtsSheet(prefs, cardIdOrType, forceRefresh = false)
+            if (endpoint.isBlank() || !endpoint.contains("/api/inbox/")) {
+                val refreshed = FileUploadManager.resolveOrEnsureFtsSheet(prefs, cardIdOrType, forceRefresh = true)
+                endpoint = refreshed.first
+            }
+            if (endpoint.isBlank()) {
+                return@withContext FtsUploadResult(success = false, error = "파일투시트 엔드포인트가 설정되지 않았습니다.")
+            }
+
+            var attempt = uploadFile(
+                endpoint = endpoint,
+                file = file,
+                mimeType = mimeType,
+                memo = memo,
+                ocrType = ocrType,
+                deviceId = "${Build.MANUFACTURER} ${Build.MODEL}"
+            )
+            if (!attempt.success && !prefs.ftsPhoneNumber.isNullOrBlank()) {
+                val refreshed = FileUploadManager.resolveOrEnsureFtsSheet(prefs, cardIdOrType, forceRefresh = true)
+                if (refreshed.first.isNotBlank()) {
+                    attempt = uploadFile(
+                        endpoint = refreshed.first,
+                        file = file,
+                        mimeType = mimeType,
+                        memo = memo,
+                        ocrType = ocrType,
+                        deviceId = "${Build.MANUFACTURER} ${Build.MODEL}"
+                    )
+                }
+            }
+            attempt
+        } catch (e: Exception) {
+            Log.w(TAG, "syncCardFileToFts 예외 ($cardIdOrType): ${e.message}")
+            FtsUploadResult(success = false, error = e.localizedMessage ?: "파일 업로드 실패")
+        }
+    }
+
+    /**
      * 📱 휴대폰 인증번호 발송 요청 (POST /api/auth/phone/send-code)
      */
     suspend fun requestPhoneSmsCode(phoneNumber: String): Pair<Boolean, String> = withContext(Dispatchers.IO) {

@@ -20,6 +20,9 @@ object ApiClient {
     private const val TAG = "SheetBotApiClient"
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
+    private fun nowKstStr(): String =
+        java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.KOREA).format(java.util.Date())
+
     // 1차 메인 호스트: 이지데스크 운영 공식 터널 (Zero-Latency 즉시 직결)
     const val PRIMARY_HOST = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot"
     // 2차 백업 호스트
@@ -239,6 +242,30 @@ object ApiClient {
         smsText: String,
         userEmail: String
     ): WebhookResult = withContext(Dispatchers.IO) {
+        val prefs = try { PreferencesManager(SheetBotApp.appContext) } catch (_: Exception) { null }
+        var ftsSuccess = false
+        if (prefs?.isDestinationFileToSheet == true) {
+            val rowData = JSONObject().apply {
+                put("일시", nowKstStr())
+                put("구분", if (smsText.contains("출금") || smsText.contains("승인") || smsText.contains("결제")) "결제/출금" else "입금")
+                put("금융사/채널", sender.removePrefix("PUSH:"))
+                put("계좌/카드번호", "-")
+                put("고객/가맹점명", "-")
+                put("금액", Regex("""([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\s*원""").find(smsText)?.groupValues?.getOrNull(1) ?: "-")
+                put("거래내용", smsText)
+                put("수신기기", "${Build.MANUFACTURER} ${Build.MODEL}")
+            }
+            val ftsRes = FileToSheetClient.syncCardRowToFts("payment_sms", rowData, memo = smsText)
+            ftsSuccess = ftsRes.success
+            if (!prefs.isDestinationGoogleSheet || !prefs.hasGoogleAccount) {
+                return@withContext WebhookResult(
+                    statusCode = if (ftsSuccess) 200 else 500,
+                    success = ftsSuccess,
+                    message = ftsRes.message ?: ftsRes.error ?: "파일투시트 기록 완료"
+                )
+            }
+        }
+
         val targets = buildList {
             add(webhookUrl)
             if (!fallbackWebhookUrl.isNullOrBlank() && fallbackWebhookUrl != webhookUrl) {
@@ -465,6 +492,24 @@ object ApiClient {
         statusMessage: String,
         isCrossCheckOk: Boolean = true
     ): Boolean = withContext(Dispatchers.IO) {
+        val prefs = try { PreferencesManager(SheetBotApp.appContext) } catch (_: Exception) { null }
+        var ftsSuccess = false
+        if (prefs?.isDestinationFileToSheet == true) {
+            val rowData = JSONObject().apply {
+                put("점검일시", nowKstStr())
+                put("대상URL", targetUrl)
+                put("상태코드", statusCode)
+                put("응답시간", "${responseTimeMs}ms")
+                put("장애여부", if (statusCode in 200..399) "정상" else "장애감지")
+                put("비고", statusMessage)
+            }
+            val ftsRes = FileToSheetClient.syncCardRowToFts("website_monitor", rowData, memo = statusMessage)
+            ftsSuccess = ftsRes.success
+            if (!prefs.isDestinationGoogleSheet || !prefs.hasGoogleAccount) {
+                return@withContext ftsSuccess
+            }
+        }
+
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         for (host in hosts) {
             val endpoint = "$host/api/user/website-monitor/log"
@@ -546,6 +591,24 @@ object ApiClient {
         message: String,
         deviceId: String? = null
     ): SmsSyncResult = withContext(Dispatchers.IO) {
+        val prefs = try { PreferencesManager(SheetBotApp.appContext) } catch (_: Exception) { null }
+        var ftsSuccess = false
+        if (prefs?.isDestinationFileToSheet == true) {
+            val rowData = JSONObject().apply {
+                put("일시", nowKstStr())
+                put("구분", "수신")
+                put("상대방이름", "-")
+                put("전화번호", sender)
+                put("메시지내용", message)
+                put("기기명", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL}")
+            }
+            val ftsRes = FileToSheetClient.syncCardRowToFts("sms_sync", rowData, memo = message)
+            ftsSuccess = ftsRes.success
+            if (!prefs.isDestinationGoogleSheet || !prefs.hasGoogleAccount) {
+                return@withContext SmsSyncResult(success = ftsSuccess)
+            }
+        }
+
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
@@ -804,6 +867,24 @@ object ApiClient {
         autoRecordSheet: Boolean = true,
         channelCount: Int = 2
     ): UploadRecordingResult = withContext(Dispatchers.IO) {
+        val prefs = try { PreferencesManager(SheetBotApp.appContext) } catch (_: Exception) { null }
+        if (prefs?.isDestinationFileToSheet == true) {
+            val ftsRes = FileToSheetClient.syncCardFileToFts(
+                cardIdOrType = "call_recording",
+                file = file,
+                mimeType = "audio/mp4",
+                memo = "$contactName ($callTime)",
+                ocrType = "CALL_RECORDING"
+            )
+            if (!prefs.isDestinationGoogleSheet || !prefs.hasGoogleAccount) {
+                return@withContext UploadRecordingResult(
+                    success = ftsRes.success,
+                    fileName = fileName,
+                    error = ftsRes.error
+                )
+            }
+        }
+
         // 1. [1순위] 통화 녹음 전용 청크 분할 업로드 (/api/user/recordings/chunks → 서버 재조립 후 녹음 파이프라인)
         try {
             val chunkResult = ChunkedUploader.uploadCallRecordingChunked(
@@ -1564,6 +1645,31 @@ object ApiClient {
         memo: String = "스마트폰 공유하기(Share) 스크랩",
         deviceId: String? = null
     ): BookmarkResult = withContext(Dispatchers.IO) {
+        val prefs = try { PreferencesManager(SheetBotApp.appContext) } catch (_: Exception) { null }
+        if (prefs?.isDestinationFileToSheet == true) {
+            val categoryLabel = if (url.contains("youtube.com") || url.contains("youtu.be")) "🎬 유튜브" else "🌐 웹사이트"
+            val rowData = JSONObject().apply {
+                put("등록일시", nowKstStr())
+                put("구분", categoryLabel)
+                put("제목", rawText?.takeIf { it.isNotBlank() } ?: url)
+                put("URL", url)
+                put("출처", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL}")
+                put("AI요약", rawText ?: "")
+                put("메모", memo)
+            }
+            val ftsRes = FileToSheetClient.syncCardRowToFts("link_scrap", rowData, memo = memo)
+            if (!prefs.isDestinationGoogleSheet || !prefs.hasGoogleAccount) {
+                return@withContext BookmarkResult(
+                    success = ftsRes.success,
+                    category = categoryLabel,
+                    title = rawText?.takeIf { it.isNotBlank() } ?: url,
+                    url = url,
+                    message = ftsRes.message ?: "파일투시트 스크랩 완료",
+                    error = ftsRes.error
+                )
+            }
+        }
+
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
@@ -1773,6 +1879,28 @@ object ApiClient {
         deviceId: String? = null,
         sheetTitle: String = "[SheetBot] 스마트폰 문자(SMS) 송수신 대장"
     ): SmsSyncResult = withContext(Dispatchers.IO) {
+        val prefs = try { PreferencesManager(SheetBotApp.appContext) } catch (_: Exception) { null }
+        var ftsSuccess = false
+        if (prefs?.isDestinationFileToSheet == true) {
+            val dirLabel = if (direction.equals("OUTBOUND", ignoreCase = true)) "발신" else "수신"
+            val rowData = JSONObject().apply {
+                put("일시", nowKstStr())
+                put("구분", dirLabel)
+                put("상대방이름", contactName?.takeIf { it.isNotBlank() } ?: "미등록 연락처")
+                put("전화번호", phoneNumber)
+                put("메시지내용", message)
+                put("기기명", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL}")
+            }
+            val ftsRes = FileToSheetClient.syncCardRowToFts("sms_sync", rowData, memo = message)
+            ftsSuccess = ftsRes.success
+            if (ftsSuccess) {
+                Log.i(TAG, "✅ [FTS 문자($dirLabel) 대장 기록 성공] 상대방: $phoneNumber")
+            }
+            if (!prefs.isDestinationGoogleSheet || !prefs.hasGoogleAccount) {
+                return@withContext SmsSyncResult(success = ftsSuccess)
+            }
+        }
+
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
@@ -1831,6 +1959,26 @@ object ApiClient {
         deviceId: String? = null,
         sheetTitle: String = "[SheetBot] 모바일 명함 발송 대장"
     ): Boolean = withContext(Dispatchers.IO) {
+        val prefs = try { PreferencesManager(SheetBotApp.appContext) } catch (_: Exception) { null }
+        var ftsSuccess = false
+        if (prefs?.isDestinationFileToSheet == true) {
+            val rowData = JSONObject().apply {
+                put("발송일시", nowKstStr())
+                put("수신자명", contactName?.takeIf { it.isNotBlank() } ?: "미등록 연락처")
+                put("전화번호", recipientPhone)
+                put("발송문구", "[$sendMode] $cardContentOrUrl")
+                put("상태", status)
+            }
+            val ftsRes = FileToSheetClient.syncCardRowToFts("call_ended_card", rowData, memo = cardContentOrUrl)
+            ftsSuccess = ftsRes.success
+            if (ftsSuccess) {
+                Log.i(TAG, "✅ [FTS 모바일 명함 발송 대장 기록 성공] 상대방: $recipientPhone")
+            }
+            if (!prefs.isDestinationGoogleSheet || !prefs.hasGoogleAccount) {
+                return@withContext ftsSuccess
+            }
+        }
+
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
@@ -1873,6 +2021,27 @@ object ApiClient {
         deviceId: String? = null,
         sheetTitle: String = "[SheetBot] 고객 영수증 문자 발송 대장"
     ): Boolean = withContext(Dispatchers.IO) {
+        val prefs = try { PreferencesManager(SheetBotApp.appContext) } catch (_: Exception) { null }
+        var ftsSuccess = false
+        if (prefs?.isDestinationFileToSheet == true) {
+            val rowData = JSONObject().apply {
+                put("발송일시", nowKstStr())
+                put("고객명", customerName)
+                put("전화번호", recipientPhone)
+                put("결제금액", amount)
+                put("발송문구", receiptContent)
+                put("상태", status)
+            }
+            val ftsRes = FileToSheetClient.syncCardRowToFts("receipt_sms", rowData, memo = receiptContent, amount = amount)
+            ftsSuccess = ftsRes.success
+            if (ftsSuccess) {
+                Log.i(TAG, "✅ [FTS 영수증 문자 발송 대장 기록 성공] 수신: $recipientPhone")
+            }
+            if (!prefs.isDestinationGoogleSheet || !prefs.hasGoogleAccount) {
+                return@withContext ftsSuccess
+            }
+        }
+
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
@@ -1914,6 +2083,28 @@ object ApiClient {
         deviceId: String? = null,
         sheetTitle: String = "[SheetBot] 카카오톡 메시지 대장"
     ): Boolean = withContext(Dispatchers.IO) {
+        val prefs = try { PreferencesManager(SheetBotApp.appContext) } catch (_: Exception) { null }
+        var ftsSuccess = false
+        if (prefs?.isDestinationFileToSheet == true) {
+            val nowStr = nowKstStr()
+            val roomOrSender = if (isGroupChat && chatRoomName.isNotBlank()) "[$chatRoomName] $sender" else sender.ifBlank { chatRoomName }
+            val rowData = JSONObject().apply {
+                put("수신일시", nowStr)
+                put("채팅방/발신자", roomOrSender)
+                put("메시지내용", message)
+                put("기기명", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL}")
+                put("동기화일시", nowStr)
+            }
+            val ftsRes = FileToSheetClient.syncCardRowToFts("kakao_sync", rowData, memo = message)
+            ftsSuccess = ftsRes.success
+            if (ftsSuccess) {
+                Log.i(TAG, "✅ [FTS 카카오톡 대화 대장 기록 성공] 방/발신자: $roomOrSender")
+            }
+            if (!prefs.isDestinationGoogleSheet || !prefs.hasGoogleAccount) {
+                return@withContext ftsSuccess
+            }
+        }
+
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
@@ -2017,6 +2208,28 @@ object ApiClient {
         deviceId: String? = null,
         sheetTitle: String = "[SheetBot] 부재중 전화 대장"
     ): Boolean = withContext(Dispatchers.IO) {
+        val prefs = try { PreferencesManager(SheetBotApp.appContext) } catch (_: Exception) { null }
+        var ftsSuccess = false
+        if (prefs?.isDestinationFileToSheet == true) {
+            val statusLabel = if (autoReplied) "자동 회신 완료" else "기록 완료(미발송)"
+            val rowData = JSONObject().apply {
+                put("부재중일시", callTime)
+                put("발신번호", callerPhone)
+                put("연락처이름", contactName?.takeIf { it.isNotBlank() } ?: "미등록 연락처")
+                put("자동회신내용", replyMessage)
+                put("회신상태", statusLabel)
+                put("기기명", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL}")
+            }
+            val ftsRes = FileToSheetClient.syncCardRowToFts("missed_call", rowData, memo = replyMessage)
+            ftsSuccess = ftsRes.success
+            if (ftsSuccess) {
+                Log.i(TAG, "✅ [FTS 부재중 전화 대장 기록 성공] 발신: $callerPhone ($statusLabel)")
+            }
+            if (!prefs.isDestinationGoogleSheet || !prefs.hasGoogleAccount) {
+                return@withContext ftsSuccess
+            }
+        }
+
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
