@@ -33,6 +33,9 @@ data class FtsPairingResult(
     val sheetName: String = "",
     val projectName: String = "",
     val projectId: String = "",
+    val googleSheetId: String? = null,
+    val googleSheetUrl: String? = null,
+    val googleSheetTab: String? = null,
     val message: String? = null,
     val error: String? = null
 )
@@ -70,6 +73,9 @@ data class FtsEnsureSheetResult(
     val headers: List<String> = emptyList(),
     val token: String? = null,
     val webhookUrl: String? = null,
+    val googleSheetId: String? = null,
+    val googleSheetUrl: String? = null,
+    val googleSheetTab: String? = null,
     val error: String? = null
 )
 
@@ -339,6 +345,9 @@ object FileToSheetClient {
                 val sheetName = json.optString("sheetName", "")
                 val projectName = json.optString("projectName", "")
                 val projectId = json.optString("projectId", "")
+                val gSheetId = if (!json.isNull("googleSheetId")) json.optString("googleSheetId", "").takeIf { it.isNotBlank() } else null
+                val gSheetUrl = if (!json.isNull("googleSheetUrl")) json.optString("googleSheetUrl", "").takeIf { it.isNotBlank() } else null
+                val gSheetTab = if (!json.isNull("googleSheetTab")) json.optString("googleSheetTab", "").takeIf { it.isNotBlank() } else null
                 val message = json.optString("message", "페어링 성공")
                 Log.i(TAG, "🎉 [FTS 페어링 성공] 시트: $sheetName (프로젝트: $projectName)")
                 return FtsPairingResult(
@@ -349,6 +358,9 @@ object FileToSheetClient {
                     sheetName = sheetName,
                     projectName = projectName,
                     projectId = projectId,
+                    googleSheetId = gSheetId,
+                    googleSheetUrl = gSheetUrl,
+                    googleSheetTab = gSheetTab,
                     message = message
                 )
             } else {
@@ -805,6 +817,10 @@ object FileToSheetClient {
                         normalizeEndpoint(rawWebhook, tok)
                     } else ""
 
+                    val gSheetId = if (!resJson.isNull("googleSheetId")) resJson.optString("googleSheetId", "").takeIf { it.isNotBlank() } else null
+                    val gSheetUrl = if (!resJson.isNull("googleSheetUrl")) resJson.optString("googleSheetUrl", "").takeIf { it.isNotBlank() } else null
+                    val gSheetTab = if (!resJson.isNull("googleSheetTab")) resJson.optString("googleSheetTab", "").takeIf { it.isNotBlank() } else null
+
                     return@withContext FtsEnsureSheetResult(
                         success = true,
                         isNew = resJson.optBoolean("isNew", false),
@@ -815,7 +831,10 @@ object FileToSheetClient {
                         sheetName = resJson.optString("sheetName", resolvedSheetName),
                         headers = if (returnedHeaders.isNotEmpty()) returnedHeaders else resolvedHeaders,
                         token = tok,
-                        webhookUrl = normalizedWebhook.ifBlank { rawWebhook }
+                        webhookUrl = normalizedWebhook.ifBlank { rawWebhook },
+                        googleSheetId = gSheetId,
+                        googleSheetUrl = gSheetUrl,
+                        googleSheetTab = gSheetTab
                     )
                 } else {
                     lastError = resJson.optString("error", "HTTP ${response.code}").takeIf { it.isNotBlank() }

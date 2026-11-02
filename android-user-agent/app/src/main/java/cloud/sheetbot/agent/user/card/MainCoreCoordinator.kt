@@ -63,7 +63,19 @@ class MainCoreCoordinator(
             activity = activity,
             prefs = prefs,
             scope = scope,
-            addLogItem = { title, detail, success -> addLogItem(title, detail, success) }
+            addLogItem = { title, detail, success -> addLogItem(title, detail, success) },
+            onRequestFtsLogin = {
+                val card = getCardCoordinator()
+                if (card != null && card.isAccountPairingInitialized) {
+                    card.accountPairingController.showPhoneAuthDialog()
+                }
+            },
+            onRequestGoogleLogin = {
+                val card = getCardCoordinator()
+                if (card != null && card.isAccountPairingInitialized) {
+                    card.accountPairingController.startGoogleSignIn()
+                }
+            }
         )
 
         targetFilterController = TargetFilterController(
