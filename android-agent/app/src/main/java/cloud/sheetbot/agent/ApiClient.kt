@@ -171,14 +171,16 @@ object ApiClient {
             try {
                 val request = Request.Builder().url(endpoint).get().build()
                 val startTime = System.currentTimeMillis()
-                val response = client.newCall(request).execute()
-                val elapsed = System.currentTimeMillis() - startTime
-                if (response.isSuccessful) {
-                    return@withContext PingResult(
-                        isOnline = true,
-                        latencyMs = elapsed,
-                        connectedHost = host
-                    )
+                client.newCall(request).execute().use { response ->
+                    val elapsed = System.currentTimeMillis() - startTime
+                    if (response.isSuccessful) {
+                        return@withContext PingResult(
+                            isOnline = true,
+                            latencyMs = elapsed,
+                            connectedHost = host
+                        )
+                    }
+                    Log.w(TAG, "서버 핑 HTTP ${response.code} ($endpoint)")
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "서버 핑 확인 실패 ($host): ${e.message}")
