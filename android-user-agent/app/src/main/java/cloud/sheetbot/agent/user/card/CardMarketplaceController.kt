@@ -112,7 +112,7 @@ class CardMarketplaceController(
                         activity = activity,
                         prefs = prefs,
                         scope = scope,
-                        onCardCreated = { createdCard ->
+                        onCardInstalled = { createdCard ->
                             allCatalogCards = listOf(createdCard) + allCatalogCards.filter { it.key != createdCard.key }
                             cardDrawerController.restoreCard(createdCard.key)
                             renderCards()
