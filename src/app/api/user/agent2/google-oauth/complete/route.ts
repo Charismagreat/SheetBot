@@ -9,10 +9,122 @@ import { syncVisitorSessionToUser } from "@/lib/api-keys";
 import { EGDESK_CONFIG } from "../../../../../../../egdesk.config";
 import crypto from "crypto";
 
+// 60초 1회용 code 교환 멱등성 캐시 (모바일 브라우저 중복 호출 / StrictMode 시 "Invalid or expired visitor login code" 원천 방지)
+const recentCodeExchanges = new Map<string, { sessionId: string; ts: number }>();
+const inFlightCodeExchanges = new Map<string, Promise<string>>();
+
+export function recordVisitorCodeExchange(code: string, sessionId: string) {
+  if (!code || !sessionId) return;
+  recentCodeExchanges.set(code, { sessionId, ts: Date.now() });
+  if (recentCodeExchanges.size > 200) {
+    const now = Date.now();
+    for (const [k, v] of recentCodeExchanges.entries()) {
+      if (now - v.ts > 120_000) recentCodeExchanges.delete(k);
+    }
+  }
+}
+
+export function getCachedVisitorCodeExchange(code: string): string | null {
+  const hit = recentCodeExchanges.get(code);
+  if (hit && Date.now() - hit.ts < 120_000) {
+    return hit.sessionId;
+  }
+  return null;
+}
+
+function resolveClientIp(req: NextRequest): string | undefined {
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) {
+    const first = xff.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  const realIp = req.headers.get("x-real-ip");
+  if (realIp?.trim()) return realIp.trim();
+  return undefined;
+}
+
+async function exchangeOneTimeCode(req: NextRequest, code: string, siteOrigin: string): Promise<{ sessionId: string; error?: string }> {
+  const cached = getCachedVisitorCodeExchange(code);
+  if (cached) {
+    return { sessionId: cached };
+  }
+
+  const existingPromise = inFlightCodeExchanges.get(code);
+  if (existingPromise) {
+    const sid = await existingPromise.catch(() => "");
+    if (sid) return { sessionId: sid };
+  }
+
+  const task = (async () => {
+    const apiUrl = getServerEgdeskApiUrl();
+    const clientIp = resolveClientIp(req);
+
+    const attemptConfigs: Array<{ baseUrl: string; includeIp: boolean; origin: string }> = [
+      { baseUrl: apiUrl, includeIp: true, origin: siteOrigin },
+      { baseUrl: apiUrl, includeIp: false, origin: siteOrigin },
+      { baseUrl: apiUrl, includeIp: true, origin: "https://tunneling-service.onrender.com" },
+    ];
+
+    let lastError = "세션 교환에 실패했습니다.";
+    for (const cfg of attemptConfigs) {
+      try {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          "X-Api-Key": EGDESK_CONFIG.apiKey,
+          Origin: cfg.origin,
+          "X-Visitor-Origin": cfg.origin,
+        };
+        if (cfg.includeIp && clientIp) {
+          headers["X-EGDesk-Visitor-Client-Ip"] = clientIp;
+          headers["X-Forwarded-For"] = clientIp;
+        }
+
+        const exRes = await fetch(`${cfg.baseUrl}/visitor-auth/tools/call`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            tool: "exchange",
+            arguments: {
+              code,
+              visitorOrigin: cfg.origin,
+            },
+          }),
+          signal: AbortSignal.timeout(12_000),
+        });
+
+        const exJson: any = await exRes.json().catch(() => null);
+        const exText = exJson?.result?.content?.[0]?.text;
+        const exParsed = exText ? JSON.parse(exText) : exJson?.result || exJson;
+        const sid = String(exParsed?.sessionId || "").trim();
+        if (sid) {
+          recordVisitorCodeExchange(code, sid);
+          return sid;
+        }
+        if (exParsed?.error || exJson?.error) {
+          lastError = String(exParsed?.error || exJson?.error);
+        }
+      } catch (e: any) {
+        if (e?.message) lastError = e.message;
+      }
+    }
+    throw new Error(lastError);
+  })();
+
+  inFlightCodeExchanges.set(code, task);
+  try {
+    const sessionId = await task;
+    return { sessionId };
+  } catch (err: any) {
+    return { sessionId: "", error: err?.message || "세션 교환에 실패했습니다." };
+  } finally {
+    inFlightCodeExchanges.delete(code);
+  }
+}
+
 /**
  * POST /api/user/agent2/google-oauth/complete
- * 모바일 브라우저(/auth/mobile-callback)에서 전달된 1회용 EGDesk OAuth code를
- * visitorSessionId로 교환하고, DB(sheetbot_users, sheetbot_user_api_keys)에 즉시 동기화한 뒤
+ * 모바일 브라우저(/auth/mobile-callback)에서 전달된 1회용 EGDesk OAuth code 또는 visitorSessionId를 받아
+ * DB(sheetbot_users, sheetbot_user_api_keys)에 즉시 동기화한 뒤
  * 앱 복귀용 딥링크(sheetbot://pair?...&sid=...)를 반환합니다.
  */
 export async function POST(req: NextRequest) {
@@ -20,56 +132,57 @@ export async function POST(req: NextRequest) {
     await setupDatabase().catch(() => {});
     const body = await req.json().catch(() => ({}));
     const code = String(body.code || "").trim();
+    const preExchangedSid = String(body.visitorSessionId || "").trim();
     const refCode = String(body.ref || "").trim();
+    const emailHint = String(body.email || "").toLowerCase().trim();
 
-    if (!code) {
+    if (!code && !preExchangedSid) {
       return NextResponse.json(
-        { success: false, error: "인증 코드(code)가 누락되었습니다." },
+        { success: false, error: "인증 코드(code) 또는 세션 ID가 누락되었습니다." },
         { status: 400 }
       );
     }
 
     const siteOrigin = "https://sheetbot.cloud";
     const apiUrl = getServerEgdeskApiUrl();
+    const clientIp = resolveClientIp(req);
 
-    // 1. 1회용 code를 visitorSessionId로 교환
-    const exRes = await fetch(`${apiUrl}/visitor-auth/tools/call`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Api-Key": EGDESK_CONFIG.apiKey,
-        Origin: siteOrigin,
-        "X-Visitor-Origin": siteOrigin,
-      },
-      body: JSON.stringify({
-        tool: "exchange",
-        arguments: {
-          code,
-          visitorOrigin: siteOrigin,
-        },
-      }),
-      signal: AbortSignal.timeout(15_000),
-    });
+    // 1. visitorSessionId 확정 (브라우저에서 선교환된 세션이 있으면 즉시 사용, 없으면 서버에서 교환)
+    let sessionId = preExchangedSid;
+    let exchangeError = "";
 
-    const exJson: any = await exRes.json().catch(() => null);
-    const exText = exJson?.result?.content?.[0]?.text;
-    const exParsed = exText ? JSON.parse(exText) : exJson?.result || exJson;
-    const sessionId = String(exParsed?.sessionId || "").trim();
+    if (sessionId && code) {
+      recordVisitorCodeExchange(code, sessionId);
+    }
+
+    if (!sessionId && code) {
+      const ex = await exchangeOneTimeCode(req, code, siteOrigin);
+      sessionId = ex.sessionId;
+      exchangeError = ex.error || "";
+    }
 
     if (!sessionId) {
-      const errMsg = exParsed?.error || exJson?.error || "세션 교환에 실패했습니다.";
-      return NextResponse.json({ success: false, error: errMsg }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: exchangeError || "세션 교환에 실패했습니다." },
+        { status: 400 }
+      );
     }
 
     // 2. visitor-google status로 로그인된 이메일 및 프로필 조회
+    const statusHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+      "X-Api-Key": EGDESK_CONFIG.apiKey,
+      Authorization: `Bearer ${sessionId}`,
+      Origin: siteOrigin,
+      "X-Visitor-Origin": siteOrigin,
+    };
+    if (clientIp) {
+      statusHeaders["X-EGDesk-Visitor-Client-Ip"] = clientIp;
+    }
+
     const statusRes = await fetch(`${apiUrl}/visitor-google/tools/call`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${sessionId}`,
-        Origin: siteOrigin,
-        "X-Visitor-Origin": siteOrigin,
-      },
+      headers: statusHeaders,
       body: JSON.stringify({ tool: "status", arguments: {} }),
       signal: AbortSignal.timeout(12_000),
     });
@@ -78,7 +191,7 @@ export async function POST(req: NextRequest) {
     const statusText = statusJson?.result?.content?.[0]?.text;
     const statusParsed = statusText ? JSON.parse(statusText) : statusJson?.result || statusJson;
 
-    const cleanEmail = String(statusParsed?.email || "").toLowerCase().trim();
+    const cleanEmail = String(statusParsed?.email || emailHint || "").toLowerCase().trim();
     if (!cleanEmail || !cleanEmail.includes("@")) {
       return NextResponse.json(
         { success: false, error: "Google 계정 이메일을 확인할 수 없습니다." },
@@ -133,7 +246,7 @@ export async function POST(req: NextRequest) {
     await getOrCreateUserWallet(cleanEmail).catch(() => {});
 
     if (refCode && refCode.length >= 2) {
-      const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "";
+      const ip = clientIp || "";
       await processReferralReward({
         inviterCodeOrEmail: refCode,
         inviteeEmail: cleanEmail,
@@ -157,7 +270,7 @@ export async function POST(req: NextRequest) {
 
     const deepLinkUri = `sheetbot://pair?email=${encodeURIComponent(cleanEmail)}&token=${encodeURIComponent(pairToken)}&pin=${encodeURIComponent(pinCode)}&sid=${encodeURIComponent(sessionId)}`;
 
-    // 5. NextAuth 쿠키도 함께 발급하여 웹 대시보드 접근도 즉시 허용
+    // 5. NextAuth 쿠키 + egdesk_visitor_session 쿠키 발급하여 웹 대시보드 접근도 즉시 허용
     const jwtSecret = process.env.NEXTAUTH_SECRET || "sheetbot_secret_2026_default_key_32chars";
     const maxAge = 30 * 24 * 60 * 60;
     const sessionToken = await encode({
@@ -187,6 +300,12 @@ export async function POST(req: NextRequest) {
     response.cookies.set("__Secure-next-auth.session-token", sessionToken, {
       ...cookieOptions,
       secure: true,
+    });
+    response.cookies.set("egdesk_visitor_session", sessionId, {
+      path: "/",
+      maxAge,
+      httpOnly: false,
+      sameSite: "lax",
     });
 
     return response;
