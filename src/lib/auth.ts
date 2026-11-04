@@ -4,6 +4,8 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { decode } from "next-auth/jwt";
 import type { WorkspaceVisitorCallOptions } from "@/lib/egdesk-helpers";
 
+export const HOST_WORKSPACE_OWNER_EMAIL = "chachogreat@gmail.com";
+
 /** Visitor OAuth / workspace MCP calls must match the browser origin (tunnel path included). */
 export function resolveVisitorSiteOriginFromRequest(req?: Request): string {
   if (req) {
@@ -19,7 +21,12 @@ export function resolveVisitorSiteOriginFromRequest(req?: Request): string {
         }
         return `${proto}://${host}`;
       }
-      if (url.hostname.includes("sheetbot.cloud") || url.hostname.includes("onrender.com") || url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+      if (
+        url.hostname.includes("sheetbot.cloud") ||
+        url.hostname.includes("onrender.com") ||
+        url.hostname === "localhost" ||
+        url.hostname === "127.0.0.1"
+      ) {
         return "https://sheetbot.cloud";
       }
       return url.origin;
@@ -197,7 +204,7 @@ export async function getCurrentUserEmail(req?: Request): Promise<string | null>
   try {
     const visitorSessionId = await getCurrentVisitorSessionId(req);
     if (visitorSessionId) {
-      const { queryTable, updateRows, insertRows } = await import("@/lib/egdesk-helpers");
+      const { queryTable, updateRows } = await import("@/lib/egdesk-helpers");
 
       // 3-1. sheetbot_users 테이블 매핑 확인 (캐시)
       const userRes = await queryTable("sheetbot_users", {
@@ -347,6 +354,16 @@ export async function lookupVisitorSessionIdForEmail(email: string): Promise<str
     if (sid && String(sid).trim()) {
       return String(sid).trim();
     }
+
+    const keyRes = await queryTable("sheetbot_user_api_keys", {
+      filters: { user_email: normalized, status: "ACTIVE" },
+      limit: 1,
+    }).catch(() => ({ rows: [] }));
+    const keyRow = (keyRes.rows || []).find((r: any) => !r.deleted_at);
+    const keySid = keyRow?.visitor_session_id;
+    if (keySid && String(keySid).trim()) {
+      return String(keySid).trim();
+    }
   } catch {
     /* ignore */
   }
@@ -358,7 +375,8 @@ export async function lookupVisitorSessionIdForEmail(email: string): Promise<str
  * - 요청 헤더/쿠키(모바일 앱·웹 브라우저) 및 DB에 저장된 visitor_session_id 후보들을 수집하여
  *   이지데스크에 실제 연결(connected: true)된 유효 세션을 선택합니다.
  * - 앱/브라우저가 보낸 신규 유효 세션이 DB와 다르면 즉시 DB(sheetbot_users.visitor_session_id)에 자동 동기화합니다.
- * - 저장된 방문자 세션이 만료/연결 해제된 경우 죽은 세션을 강제 주입하지 않고 호스트 기본 권한({})으로 안전하게 폴백합니다.
+ * - [멀티테넌트 격리 강제] 호스트 소유자(chachogreat@gmail.com)가 아닌 일반 회원의 경우,
+ *   유효한 방문자 OAuth 세션이 없을 때 호스트 기본 권한({})으로 폴백하는 것을 원천 차단합니다.
  */
 export async function getWorkspaceCallOptionsForEmail(
   email: string,
@@ -434,11 +452,21 @@ export async function getWorkspaceCallOptionsForEmail(
     }
 
     console.warn(
-      `[Auth] Visitor session candidate(s) for ${normalized} are disconnected/expired; falling back to host workspace auth.`
+      `[Auth] Visitor session candidate(s) for ${normalized} are disconnected/expired.`
     );
   }
 
-  return {};
+  // 호스트 소유자(chachogreat@gmail.com)만 호스트 기본 Google OAuth({}) 사용 허용
+  if (normalized === HOST_WORKSPACE_OWNER_EMAIL) {
+    return {};
+  }
+
+  // 타 회원은 호스트 구글 드라이브/시트 접근을 원천 차단 (asVisitor: true & 빈 세션 ID → 호출 시 즉시 차단)
+  return {
+    asVisitor: true,
+    visitorSessionId: "",
+    visitorOrigin: origin,
+  };
 }
 
 /**
@@ -448,16 +476,19 @@ export async function buildWorkspaceVisitorCallOptions(
   req: Request,
   userEmail?: string | null,
 ): Promise<WorkspaceVisitorCallOptions> {
-  const targetEmail = userEmail || (await getCurrentUserEmail(req).catch(() => null));
+  const targetEmail = (userEmail || (await getCurrentUserEmail(req).catch(() => null)) || "")
+    .toLowerCase()
+    .trim();
   if (targetEmail) {
     const emailOptions = await getWorkspaceCallOptionsForEmail(targetEmail, req);
-    if (emailOptions.asVisitor) return emailOptions;
+    if (emailOptions.asVisitor && emailOptions.visitorSessionId) return emailOptions;
+    if (targetEmail === HOST_WORKSPACE_OWNER_EMAIL) return {};
   }
+  const origin = resolveVisitorSiteOriginFromRequest(req);
   const visitorSessionId = await getCurrentVisitorSessionId(req);
   if (visitorSessionId) {
-    const origin = resolveVisitorSiteOriginFromRequest(req);
     const check = await checkVisitorSessionConnected(visitorSessionId, origin);
-    if (check.connected) {
+    if (check.connected && (!targetEmail || !check.email || check.email === targetEmail)) {
       return {
         asVisitor: true,
         visitorSessionId,
@@ -465,7 +496,14 @@ export async function buildWorkspaceVisitorCallOptions(
       };
     }
   }
-  return {};
+  if (targetEmail === HOST_WORKSPACE_OWNER_EMAIL) {
+    return {};
+  }
+  return {
+    asVisitor: true,
+    visitorSessionId: "",
+    visitorOrigin: origin,
+  };
 }
 
 /** 방문자 세션 검증 결과 캐시 (sid|origin → 결과). 연결됨 60초 / 실패 15초 */
@@ -522,8 +560,17 @@ function extractApiKey(h: Headers): string {
 function originFromHeaders(h: Headers): string {
   const forwardedHost = h.get("x-forwarded-host");
   if (forwardedHost) {
+    const host = forwardedHost.split(",")[0].trim();
+    if (
+      host.includes("sheetbot.cloud") ||
+      host.includes("onrender.com") ||
+      host.includes("localhost") ||
+      host.includes("127.0.0.1")
+    ) {
+      return "https://sheetbot.cloud";
+    }
     const proto = h.get("x-forwarded-proto") || "https";
-    return `${proto}://${forwardedHost.split(",")[0].trim()}`;
+    return `${proto}://${host}`;
   }
   return resolveVisitorSiteOriginFromRequest();
 }

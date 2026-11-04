@@ -439,7 +439,10 @@ class AccountPairingController(
 
             if (result.success) {
                 val finalEmail = result.userEmail ?: email
-                if (prefs.userEmail != finalEmail) {
+                val needsOAuth = result.requiresWorkspaceOAuth ||
+                    (result.visitorSessionId.isNullOrBlank() && !finalEmail.equals("chachogreat@gmail.com", ignoreCase = true))
+
+                if (prefs.userEmail != finalEmail || needsOAuth) {
                     prefs.clearSheetBindingsCache()
                 }
                 prefs.userEmail = finalEmail
@@ -461,11 +464,24 @@ class AccountPairingController(
                     TtsManager.speak(activity, "구글 계정으로 성공적으로 연동되었습니다.")
                 }
 
-                AlertDialog.Builder(activity)
-                    .setTitle("🎉 Google 원클릭 연동 완료!")
-                    .setMessage("${finalEmail} 계정으로 시트봇 에이전트가 0초 만에 연동되었습니다.\n\nPC 화면의 QR 코드를 스캔할 필요 없이 스마트폰 단독으로 연동이 완료되었습니다.\n지금부터 문자/통화/사진/링크가 구글 시트와 실시간 동기화됩니다.")
-                    .setPositiveButton("시작하기", null)
-                    .show()
+                if (needsOAuth) {
+                    val oauthUrl = result.oauthStartUrl
+                        ?: "https://sheetbot.cloud/api/user/agent2/google-oauth/start?email=${Uri.encode(finalEmail)}"
+                    AlertDialog.Builder(activity)
+                        .setTitle("🔐 내 구글 드라이브 시트 생성 권한 동의")
+                        .setMessage("${finalEmail} 계정이 연결되었습니다!\n\n본인의 구글 드라이브에 전용 시트(영수증, 명함, 문자 대장 등)를 생성하고 기록하려면 Google 드라이브/스프레드시트 권한 동의(1회)가 필요합니다.\n\n아래 버튼을 눌러 권한 동의를 완료하면 자동으로 앱으로 돌아옵니다.")
+                        .setPositiveButton("🔑 Google 권한 동의하기 (10초)") { _, _ ->
+                            startMobileBrowserGoogleOAuth(finalEmail, detectedRefCode, oauthUrl)
+                        }
+                        .setNegativeButton("나중에 하기", null)
+                        .show()
+                } else {
+                    AlertDialog.Builder(activity)
+                        .setTitle("🎉 Google 원클릭 연동 완료!")
+                        .setMessage("${finalEmail} 계정으로 시트봇 에이전트가 0초 만에 연동되었습니다.\n\nPC 화면의 QR 코드를 스캔할 필요 없이 스마트폰 단독으로 연동이 완료되었습니다.\n지금부터 문자/통화/사진/링크가 내 구글 시트와 실시간 동기화됩니다.")
+                        .setPositiveButton("시작하기", null)
+                        .show()
+                }
             } else {
                 AlertDialog.Builder(activity)
                     .setTitle("구글 연동 실패")
@@ -473,6 +489,32 @@ class AccountPairingController(
                     .setPositiveButton("확인", null)
                     .show()
             }
+        }
+    }
+
+    /**
+     * 🌐 모바일 브라우저를 통해 실제 Google Drive/Sheets OAuth 동의 플로우 실행 후 sheetbot://pair로 복귀
+     */
+    fun startMobileBrowserGoogleOAuth(
+        emailHint: String? = null,
+        referralCode: String? = null,
+        overrideUrl: String? = null
+    ) {
+        try {
+            val targetUrl = overrideUrl?.takeIf { it.isNotBlank() } ?: buildString {
+                append("https://sheetbot.cloud/api/user/agent2/google-oauth/start")
+                val params = mutableListOf<String>()
+                if (!emailHint.isNullOrBlank()) params.add("email=${Uri.encode(emailHint.trim())}")
+                if (!referralCode.isNullOrBlank()) params.add("ref=${Uri.encode(referralCode.trim())}")
+                if (params.isNotEmpty()) {
+                    append("?")
+                    append(params.joinToString("&"))
+                }
+            }
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
+            activity.startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(activity, "브라우저를 열 수 없습니다: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -489,6 +531,7 @@ class AccountPairingController(
             val sid = (uri.getQueryParameter("sid") ?: uri.getQueryParameter("visitorSessionId"))?.takeIf { it.isNotBlank() }
             if (!sid.isNullOrBlank()) {
                 prefs.visitorSessionId = sid
+                prefs.clearSheetBindingsCache()
             }
             if (!email.isNullOrBlank()) {
                 Toast.makeText(activity, "딥링크 원터치 페어링 진행 중: $email", Toast.LENGTH_SHORT).show()

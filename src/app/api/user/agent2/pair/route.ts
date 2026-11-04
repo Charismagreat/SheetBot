@@ -1,9 +1,10 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail, HOST_WORKSPACE_OWNER_EMAIL } from "@/lib/auth";
 import { queryTable, insertRows, updateRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { syncVisitorSessionToUser } from "@/lib/api-keys";
 import crypto from "crypto";
 
 /**
@@ -23,7 +24,10 @@ export async function GET(req: NextRequest) {
 
     const cleanEmail = userEmail.toLowerCase().trim();
     const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req).catch(() => ({} as any));
-    const visitorSessionId = callOptions?.visitorSessionId || null;
+    const visitorSessionId =
+      callOptions?.visitorSessionId && callOptions.visitorSessionId.trim()
+        ? callOptions.visitorSessionId.trim()
+        : null;
 
     // 1회용/지속 페어링 해시 생성
     const secretKey = process.env.NEXTAUTH_SECRET || "sheetbot-agent2-secret-key-2026";
@@ -72,18 +76,54 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanEmail = String(userEmail).toLowerCase().trim();
+    const now = new Date().toISOString();
+    const trimmedClientSid =
+      clientVisitorSid && typeof clientVisitorSid === "string" ? clientVisitorSid.trim() : "";
 
-    if (clientVisitorSid && typeof clientVisitorSid === "string" && clientVisitorSid.trim()) {
-      await updateRows(
-        "sheetbot_users",
-        { visitor_session_id: clientVisitorSid.trim(), updated_at: new Date().toISOString() },
-        { filters: { email: cleanEmail } }
-      ).catch(() => {});
-    }
+    // sheetbot_users 및 sheetbot_user_api_keys에 visitor_session_id 보장
+    const userId = `google_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
+    try {
+      const existingUserRes = await queryTable("sheetbot_users", {
+        filters: { email: cleanEmail },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+      const existingUser = (existingUserRes.rows || []).find((r: any) => !r.deleted_at);
+
+      if (existingUser) {
+        if (trimmedClientSid) {
+          await updateRows(
+            "sheetbot_users",
+            { visitor_session_id: trimmedClientSid, updated_at: now },
+            { filters: { id: String(existingUser.id) } }
+          ).catch(() => {});
+        }
+      } else {
+        await insertRows("sheetbot_users", [
+          {
+            id: userId,
+            uuid: crypto.randomUUID(),
+            email: cleanEmail,
+            name: cleanEmail.split("@")[0],
+            role: "USER",
+            status: "ACTIVE",
+            tier: "FREE",
+            created_at: now,
+            last_login_at: now,
+            updated_at: now,
+            visitor_session_id: trimmedClientSid || null,
+          },
+        ]).catch(() => {});
+      }
+
+      if (trimmedClientSid) {
+        await syncVisitorSessionToUser(cleanEmail, trimmedClientSid).catch(() => {});
+      }
+    } catch {}
+
     const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req).catch(() => ({} as any));
     const resolvedVisitorSessionId =
-      callOptions?.visitorSessionId ||
-      (clientVisitorSid && typeof clientVisitorSid === "string" ? clientVisitorSid.trim() : null) ||
+      (callOptions?.visitorSessionId && callOptions.visitorSessionId.trim()) ||
+      trimmedClientSid ||
       null;
 
     // 핀코드 또는 토큰 유효성 검증
@@ -118,7 +158,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const now = new Date().toISOString();
     const model = deviceModel || "안드로이드 스마트폰";
     const deviceId = `agent2_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}_${Date.now()}`;
 
@@ -140,6 +179,7 @@ export async function POST(req: NextRequest) {
             label: `${model} (SheetBot Agent)`,
             phone_number: phoneNumber || existing.rows[0].phone_number || "",
             device_id: deviceId,
+            app_version: appVersion || existing.rows[0].app_version || "2.4.28",
             last_connected_at: now,
             updated_at: now,
             deleted_at: null,
@@ -155,7 +195,8 @@ export async function POST(req: NextRequest) {
           label: `${model} (SheetBot Agent)`,
           phone_number: phoneNumber || "",
           device_id: deviceId,
-          pairing_mode: "agent",
+          pairing_mode: "agent2",
+          app_version: appVersion || "2.4.28",
           status: "CONNECTED",
           last_connected_at: now,
           created_at: now,
@@ -163,12 +204,17 @@ export async function POST(req: NextRequest) {
       ]);
     }
 
+    const requiresWorkspaceOAuth =
+      cleanEmail !== HOST_WORKSPACE_OWNER_EMAIL && !resolvedVisitorSessionId;
+
     const res = NextResponse.json({
       success: true,
       message: "SheetBot Agent가 성공적으로 연동되었습니다! 이제 시트에서 0원 문자 발송과 수신 연동이 가능합니다.",
       deviceId,
       userEmail: cleanEmail,
       visitorSessionId: resolvedVisitorSessionId,
+      requiresWorkspaceOAuth,
+      oauthStartUrl: `https://sheetbot.cloud/api/user/agent2/google-oauth/start?email=${encodeURIComponent(cleanEmail)}`,
       status: "CONNECTED",
       connectedAt: now,
     });

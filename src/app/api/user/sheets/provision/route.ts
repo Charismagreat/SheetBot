@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUserSpreadsheet, SheetBindingType } from "@/lib/sheet-binding-helper";
 import { callSheetsTool, callDriveTool, listDriveFiles, createDriveFolder, trashDriveFile, WorkspaceVisitorCallOptions } from "@/lib/egdesk-helpers";
-import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
+import { getWorkspaceCallOptionsForEmail, HOST_WORKSPACE_OWNER_EMAIL } from "@/lib/auth";
 import { deploySmsCheckboxScript } from "@/lib/gas-sms-checkbox-service";
 import { resolveDynamicCardManifest } from "@/lib/dynamic-card-helper";
 
@@ -150,9 +150,6 @@ async function setupQuoteSpreadsheet(
   callOptions?: WorkspaceVisitorCallOptions
 ): Promise<void> {
   console.log(`[ProvisionSheet] Setting up ORDER & ITEMS spreadsheet layout for ${spreadsheetId}...`);
-
-  // 기본 생성된 첫 번째 탭 이름을 '품목'으로 변경 (또는 primaryTabName)
-  const itemsTabName = "품목";
 
   // 1. 첫 번째 탭: '품목' 데이터 주입
   const catalogHeaders = [
@@ -419,6 +416,24 @@ export async function POST(req: NextRequest) {
 
     const cleanEmail = userEmail.trim().toLowerCase();
     const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req);
+
+    // [멀티테넌트 격리 가드] 일반 회원이 본인 Google OAuth 권한 연동(visitorSessionId)이 없으면 시트 생성 차단 및 연동 안내 반환
+    if (
+      cleanEmail !== HOST_WORKSPACE_OWNER_EMAIL &&
+      (!callOptions?.asVisitor || !callOptions?.visitorSessionId?.trim())
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          errorCode: "GOOGLE_OAUTH_REQUIRED",
+          oauthUrl: `https://sheetbot.cloud/api/user/agent2/google-oauth/start?email=${encodeURIComponent(cleanEmail)}`,
+          error:
+            "본인 구글 드라이브에 시트를 생성하려면 Google 권한 동의가 필요합니다. 앱에서 [Google 계정 연동]을 진행해 주세요.",
+        },
+        { status: 403 }
+      );
+    }
+
     const typeKey = (sheetType || "").toUpperCase();
     let def = SHEET_DEFINITIONS[typeKey];
 
@@ -620,6 +635,18 @@ export async function POST(req: NextRequest) {
     return res;
   } catch (error: any) {
     console.error("[ProvisionSheet] Unexpected error:", error);
+    const errMsg = String(error?.message || "");
+    if (errMsg.includes("GOOGLE_OAUTH_REQUIRED") || errMsg.includes("no visitor session is available")) {
+      return NextResponse.json(
+        {
+          success: false,
+          errorCode: "GOOGLE_OAUTH_REQUIRED",
+          oauthUrl: "https://sheetbot.cloud/api/user/agent2/google-oauth/start",
+          error: "본인 구글 드라이브에 시트를 생성하려면 Google 권한 동의가 필요합니다. 앱에서 [Google 계정 연동]을 진행해 주세요.",
+        },
+        { status: 403 }
+      );
+    }
     return NextResponse.json(
       { success: false, error: error.message || "Internal server error" },
       { status: 500 }

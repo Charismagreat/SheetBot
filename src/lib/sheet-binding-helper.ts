@@ -11,7 +11,41 @@ import {
   WorkspaceVisitorCallOptions,
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
-import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
+import { getWorkspaceCallOptionsForEmail, HOST_WORKSPACE_OWNER_EMAIL } from "@/lib/auth";
+
+/**
+ * 호스트 소유자(chachogreat@gmail.com) 개인 드라이브의 스프레드시트/폴더 ID 목록
+ * - 타 회원 계정에서 이 ID들이 바인딩되어 있거나 참조될 경우 즉시 차단 및 무효화합니다.
+ */
+export const HOST_KNOWN_SHEET_IDS = new Set<string>([
+  "1L4fvWI_xx79DP_SUygJD203uTV6Vhr16JXYSpMR8IY8", // RECEIPT
+  "10Rq89Hfb-7V_ETG9rzYtvZUb4JX2k5xjx-1d4-Ctomk", // LINK_BOOKMARK
+  "1uI2fLTtEILvJpYn0UJzN9pPLiyWJ2oADeM4kSfQCBEc", // FILE_UPLOAD
+  "1ow6qMJ3b73RSR1azhIbTSAKdwFmKTe43N2kbB-VwLOg", // RECEIPT (alt)
+  "196xly_ZhwS2PILpZYBBsjW9VD3_F6PQddBnLkDwfBaY", // CALL_ENDED_CARD
+  "1XCQMxao3uIhbXGh5kYlnXE5g9vH5mFBQ0cohJGyMl1U", // QUOTE
+  "1M2lKmdAM8BvcOMrNJYH_ev5ob7ie78cHDWEmqt1ozv0", // PAYMENT_PUSH
+  "1EV0kjAUFhzk1B0FMMsRfCkZaAVAoZlYs9CINglirFGw", // BUSINESS_CARD
+  "1bHtvSdmqfHJ-1WkgPv9hMlaUjqbMxEBnkHQpk1kIiOQ", // RECORDING
+  "1aZ2kFDa-Cs8ypi15hJbntOLb7PScSOwYuUwWMFwt-0s", // SMS
+  "1PZLzNoyPtt8wWIzuDKdgg5SjCLBjVoBWjxZC2Zg-jIE", // MISSED_CALL
+  "1INh4k7BgtgR8rkl1Pluwguq2y-0XKCn7m6ajfS04k6A", // KAKAO
+  "1QPJglgZhhsxVFtOgrRv06aDNfmjtxWc9qgIbpdJHh3k", // WEBSITE_MONITOR
+  "1Tnwn722JJYb2jlXbZnLfN4UszYTg9TIa2j0GC2vpVe8", // CONTACTS
+  "1SJrrqwmrNUk_5oiBMRyA-6rhD2KrnP98CY6JdBAKyMI", // DISPATCH_LOG
+  "1vbJvJZtWGW4lik-Tn0i6QpJXmB3ovj0uy9SXCpQfalQ", // RECEIPT_SMS (shared fallback)
+  "18Zj-txo8wSLz-aRRU_BYlA9FJdu3ZoW_fgtOnBals50", // KAKAO (shared fallback)
+  "11Hua4qg4fX-J9CRmh1fLNJFcTGLXV8zpD0PX2vTdiNw", // ESTIMATE (shared fallback)
+  "1HDffS1wt8f9lVHNQ64GOX7SJFQ8FZFAzZCpdr2jNgTQ", // MOBILE_SITE (shared fallback)
+]);
+
+export const HOST_KNOWN_FOLDER_IDS = new Set<string>([
+  "16wL2XZI_oggTKJlK9Yztkg8iCUq3Ixqa",
+  "11ClndqwCR-ajOcBYlkCU_pFC4Nwf47AL",
+  "1wWgrOLN58BrwOQpQhqrxshJNs0_8ajaM",
+  "14TuBcWsooWB7_yPqyn6L0imjshpVxFVX",
+  "1Of-WsCAIYyxx7w0SgxeOLS5rMl0L4QkX",
+]);
 
 export type SheetBindingType =
   | "SMS"
@@ -86,6 +120,7 @@ export async function invalidateUserSheetBinding(
       updates: {
         spreadsheet_id: null,
         spreadsheet_url: null,
+        folder_id: null,
         updated_at: new Date().toISOString().replace("T", " ").slice(0, 19),
       },
     });
@@ -109,7 +144,14 @@ export async function resolveUserSpreadsheet(
   if (!options.forceRefresh) {
     const memoryCached = resolvedBindingCache.get(bindingKey);
     if (memoryCached && Date.now() - memoryCached.timestamp < BINDING_CACHE_TTL_MS) {
-      return memoryCached.result;
+      if (
+        cleanEmail !== HOST_WORKSPACE_OWNER_EMAIL &&
+        HOST_KNOWN_SHEET_IDS.has(memoryCached.result.spreadsheetId)
+      ) {
+        resolvedBindingCache.delete(bindingKey);
+      } else {
+        return memoryCached.result;
+      }
     }
   }
 
@@ -168,11 +210,12 @@ async function doResolveUserSpreadsheet(
     sheetType,
     defaultTitle,
     requestedTitle,
-    folderId,
+    folderId: rawFolderId,
     preferOAuth = true,
   } = options;
 
   const cleanEmail = userEmail.trim().toLowerCase();
+  const isHostOwner = cleanEmail === HOST_WORKSPACE_OWNER_EMAIL;
   const normalizedType = (sheetType || "").toUpperCase() as SheetBindingType;
   const bindingId = `${cleanEmail}_${normalizedType}`;
   const targetTitle =
@@ -181,17 +224,23 @@ async function doResolveUserSpreadsheet(
     DEFAULT_SHEET_TITLES[normalizedType] ||
     `[SheetBot] ${normalizedType} 대장`;
 
+  const folderId =
+    !isHostOwner && rawFolderId && HOST_KNOWN_FOLDER_IDS.has(rawFolderId)
+      ? null
+      : rawFolderId;
+
   // 1. My DB에서 기존 영구 바인딩된 고유 spreadsheetId 확인 (지연 초기화 적용)
   let boundRecord: any = null;
   try {
     const queryRes = await queryTable("sheetbot_user_sheet_bindings", {
       filters: { user_email: cleanEmail, sheet_type: normalizedType },
-      limit: 1,
+      limit: 5,
       orderBy: "id",
       orderDirection: "DESC",
     });
-    if (queryRes?.rows && queryRes.rows.length > 0) {
-      boundRecord = queryRes.rows[0];
+    const activeRows = (queryRes?.rows || []).filter((r: any) => !r.deleted_at);
+    if (activeRows.length > 0) {
+      boundRecord = activeRows[0];
     }
   } catch (err: any) {
     if (String(err?.message || "").includes("not found")) {
@@ -202,8 +251,31 @@ async function doResolveUserSpreadsheet(
     }
   }
 
+  // [멀티테넌트 격리 가드] 일반 회원인데 호스트 소유자(chachogreat)의 시트/폴더가 오염 바인딩되어 있으면 즉시 파기
+  if (
+    !isHostOwner &&
+    boundRecord &&
+    ((boundRecord.spreadsheet_id && HOST_KNOWN_SHEET_IDS.has(String(boundRecord.spreadsheet_id))) ||
+      (boundRecord.folder_id && HOST_KNOWN_FOLDER_IDS.has(String(boundRecord.folder_id))))
+  ) {
+    console.warn(
+      `[SheetBinding] 🛡️ Cross-tenant polluted binding detected for ${cleanEmail} (${normalizedType}: ${boundRecord.spreadsheet_id}). Invalidating immediately!`
+    );
+    await invalidateUserSheetBinding(cleanEmail, normalizedType);
+    boundRecord.spreadsheet_id = null;
+    boundRecord.spreadsheet_url = null;
+    boundRecord.folder_id = null;
+  }
+
   // 1-1. 사용자별 구글 OAuth/Visitor 세션 옵션 확정 (멀티테넌시 완벽 격리)
   const callOptions = options.callOptions || (await getWorkspaceCallOptionsForEmail(cleanEmail));
+
+  // [멀티테넌트 격리 가드] 일반 회원이 유효한 방문자 Google OAuth 세션(visitorSessionId)이 없으면 호스트 드라이브 접근 원천 차단
+  if (!isHostOwner && (!callOptions?.asVisitor || !callOptions?.visitorSessionId?.trim())) {
+    throw new Error(
+      `[GOOGLE_OAUTH_REQUIRED] 본인 구글 드라이브에 시트를 생성하거나 접근하려면 Google 권한 동의가 필요합니다. 앱 또는 웹에서 [Google 계정 연동]을 완료해 주세요. (${cleanEmail})`
+    );
+  }
 
   let targetSpreadsheetId: string | null = null;
   let isNew = false;

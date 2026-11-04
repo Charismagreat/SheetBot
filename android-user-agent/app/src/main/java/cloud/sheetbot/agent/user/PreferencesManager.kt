@@ -726,28 +726,53 @@ class PreferencesManager(context: Context) {
         }
     }
 
+    private fun isPollutedHostValue(value: String?): Boolean {
+        if (value.isNullOrBlank()) return false
+        val currentEmail = userEmail?.trim()?.lowercase() ?: ""
+        if (currentEmail == "chachogreat@gmail.com") return false
+        return HOST_POLLUTED_IDS.any { value.contains(it) }
+    }
+
     fun setSheetUrl(sheetType: String, url: String) {
+        if (isPollutedHostValue(url)) return
         prefs.edit().putString("sheet_url_${sheetType.uppercase()}", url).apply()
     }
 
     fun getSheetUrl(sheetType: String): String? {
-        return prefs.getString("sheet_url_${sheetType.uppercase()}", null)
+        val raw = prefs.getString("sheet_url_${sheetType.uppercase()}", null)
+        if (isPollutedHostValue(raw)) {
+            prefs.edit().remove("sheet_url_${sheetType.uppercase()}").apply()
+            return null
+        }
+        return raw
     }
 
     fun setFolderUrl(sheetType: String, url: String) {
+        if (isPollutedHostValue(url)) return
         prefs.edit().putString("folder_url_${sheetType.uppercase()}", url).apply()
     }
 
     fun getFolderUrl(sheetType: String): String? {
-        return prefs.getString("folder_url_${sheetType.uppercase()}", null)
+        val raw = prefs.getString("folder_url_${sheetType.uppercase()}", null)
+        if (isPollutedHostValue(raw)) {
+            prefs.edit().remove("folder_url_${sheetType.uppercase()}").apply()
+            return null
+        }
+        return raw
     }
 
     fun setSheetId(sheetType: String, id: String) {
+        if (isPollutedHostValue(id)) return
         prefs.edit().putString("sheet_id_${sheetType.uppercase()}", id).apply()
     }
 
     fun getSheetId(sheetType: String): String? {
-        return prefs.getString("sheet_id_${sheetType.uppercase()}", null)
+        val raw = prefs.getString("sheet_id_${sheetType.uppercase()}", null)
+        if (isPollutedHostValue(raw)) {
+            prefs.edit().remove("sheet_id_${sheetType.uppercase()}").apply()
+            return null
+        }
+        return raw
     }
 
     /**
@@ -931,6 +956,33 @@ class PreferencesManager(context: Context) {
         const val DESTINATION_GOOGLE_SHEETS = "GOOGLE_SHEETS"
         const val DESTINATION_FILE_TO_SHEET = "FILE_TO_SHEET"
         const val DESTINATION_BOTH = "BOTH"
+
+        val HOST_POLLUTED_IDS = setOf(
+            "1L4fvWI_xx79DP_SUygJD203uTV6Vhr16JXYSpMR8IY8",
+            "10Rq89Hfb-7V_ETG9rzYtvZUb4JX2k5xjx-1d4-Ctomk",
+            "1uI2fLTtEILvJpYn0UJzN9pPLiyWJ2oADeM4kSfQCBEc",
+            "1ow6qMJ3b73RSR1azhIbTSAKdwFmKTe43N2kbB-VwLOg",
+            "196xly_ZhwS2PILpZYBBsjW9VD3_F6PQddBnLkDwfBaY",
+            "1XCQMxao3uIhbXGh5kYlnXE5g9vH5mFBQ0cohJGyMl1U",
+            "1M2lKmdAM8BvcOMrNJYH_ev5ob7ie78cHDWEmqt1ozv0",
+            "1EV0kjAUFhzk1B0FMMsRfCkZaAVAoZlYs9CINglirFGw",
+            "1bHtvSdmqfHJ-1WkgPv9hMlaUjqbMxEBnkHQpk1kIiOQ",
+            "1aZ2kFDa-Cs8ypi15hJbntOLb7PScSOwYuUwWMFwt-0s",
+            "1PZLzNoyPtt8wWIzuDKdgg5SjCLBjVoBWjxZC2Zg-jIE",
+            "1INh4k7BgtgR8rkl1Pluwguq2y-0XKCn7m6ajfS04k6A",
+            "1QPJglgZhhsxVFtOgrRv06aDNfmjtxWc9qgIbpdJHh3k",
+            "1Tnwn722JJYb2jlXbZnLfN4UszYTg9TIa2j0GC2vpVe8",
+            "1SJrrqwmrNUk_5oiBMRyA-6rhD2KrnP98CY6JdBAKyMI",
+            "1vbJvJZtWGW4lik-Tn0i6QpJXmB3ovj0uy9SXCpQfalQ",
+            "18Zj-txo8wSLz-aRRU_BYlA9FJdu3ZoW_fgtOnBals50",
+            "11Hua4qg4fX-J9CRmh1fLNJFcTGLXV8zpD0PX2vTdiNw",
+            "1HDffS1wt8f9lVHNQ64GOX7SJFQ8FZFAzZCpdr2jNgTQ",
+            "16wL2XZI_oggTKJlK9Yztkg8iCUq3Ixqa",
+            "11ClndqwCR-ajOcBYlkCU_pFC4Nwf47AL",
+            "1wWgrOLN58BrwOQpQhqrxshJNs0_8ajaM",
+            "14TuBcWsooWB7_yPqyn6L0imjshpVxFVX",
+            "1Of-WsCAIYyxx7w0SgxeOLS5rMl0L4QkX"
+        )
 
         val DEFAULT_HIDDEN_CARDS = setOf(
             // 7대 시스템 & 관제 카드 (토큰 지갑 포함 전원 보관함 기본 보관)

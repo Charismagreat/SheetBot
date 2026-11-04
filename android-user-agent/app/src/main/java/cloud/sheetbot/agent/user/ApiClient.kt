@@ -135,6 +135,8 @@ object ApiClient {
                         userEmail = resJson.optString("userEmail", userEmail),
                         deviceToken = resJson.optString("deviceId", resJson.optString("deviceToken", "")),
                         visitorSessionId = resolvedSid,
+                        requiresWorkspaceOAuth = resJson.optBoolean("requiresWorkspaceOAuth", false),
+                        oauthStartUrl = resJson.optString("oauthStartUrl", "").takeIf { it.isNotBlank() },
                         webhookUrl = resJson.optString("webhookUrl", "$PRIMARY_HOST/api/user/agent2/inbound-sms"),
                         fallbackWebhookUrl = resJson.optString("fallbackWebhookUrl", "$FALLBACK_HOST/api/user/agent2/inbound-sms"),
                         heartbeatUrl = resJson.optString("heartbeatUrl", "$PRIMARY_HOST/api/user/agent2/heartbeat"),
@@ -210,6 +212,8 @@ object ApiClient {
                         userEmail = finalEmail,
                         deviceToken = resJson.optString("deviceId", resJson.optString("deviceToken", resJson.optString("token", ""))),
                         visitorSessionId = resolvedSid,
+                        requiresWorkspaceOAuth = resJson.optBoolean("requiresWorkspaceOAuth", false),
+                        oauthStartUrl = resJson.optString("oauthStartUrl", "").takeIf { it.isNotBlank() },
                         webhookUrl = resJson.optString("webhookUrl", "$PRIMARY_HOST/api/user/agent2/inbound-sms"),
                         fallbackWebhookUrl = resJson.optString("fallbackWebhookUrl", "$FALLBACK_HOST/api/user/agent2/inbound-sms"),
                         heartbeatUrl = resJson.optString("heartbeatUrl", "$PRIMARY_HOST/api/user/agent2/heartbeat"),
@@ -2522,7 +2526,17 @@ object ApiClient {
                         message = resJson.optString("message", "구글 스프레드시트 대장이 준비되었습니다.")
                     )
                 } else {
+                    val errCode = resJson.optString("errorCode", "").takeIf { it.isNotBlank() }
+                    val oauthUrl = resJson.optString("oauthUrl", "").takeIf { it.isNotBlank() }
                     lastError = resJson.optString("error", "HTTP ${response.code}")
+                    if (errCode == "GOOGLE_OAUTH_REQUIRED" || response.code == 403) {
+                        return@withContext ProvisionSheetResult(
+                            success = false,
+                            error = lastError,
+                            errorCode = errCode ?: "GOOGLE_OAUTH_REQUIRED",
+                            oauthUrl = oauthUrl
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 lastError = "[$host] ${e.localizedMessage ?: "통신 오류"}"
@@ -3471,6 +3485,8 @@ data class PairResult(
     val userEmail: String? = null,
     val deviceToken: String? = null,
     val visitorSessionId: String? = null,
+    val requiresWorkspaceOAuth: Boolean = false,
+    val oauthStartUrl: String? = null,
     val webhookUrl: String? = null,
     val fallbackWebhookUrl: String? = null,
     val heartbeatUrl: String? = null,
@@ -3670,7 +3686,9 @@ data class ProvisionSheetResult(
     val folderName: String? = null,
     val title: String? = null,
     val message: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val errorCode: String? = null,
+    val oauthUrl: String? = null
 )
 
 data class WebsiteCheckResult(

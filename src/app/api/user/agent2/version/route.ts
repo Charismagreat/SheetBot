@@ -34,7 +34,7 @@ function parseVersionToCode(versionName: string): number {
       return 97 + (patch - 76);
     }
   }
-  return 20426;
+  return 20428;
 }
 
 /**
@@ -51,11 +51,11 @@ export async function GET() {
     );
   }
 
-  let latestName = "2.4.26";
-  let latestCode = 20426;
+  let latestName = "2.4.28";
+  let latestCode = 20428;
   let apkUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";
   let releaseNotes =
-    "⚡ 무중단 OTA 동적 카드 엔진 & AI 나만의 맞춤 카드 제작 탑재 (v2.4.26): 이제 앱 업데이트 없이 시트봇 스토어 신규 카드 및 안티그라비티 맞춤 카드를 즉시 다운로드·생성하여 사용할 수 있습니다.";
+    "🔐 내 구글 드라이브 & 시트 격리 연동 강화 (v2.4.28): 모든 계정이 본인의 구글 드라이브와 시트에만 데이터를 안전하게 저장하도록 원클릭 구글 드라이브 권한 연결 및 다중 계정 격리가 적용되었습니다.";
 
   try {
     const ghRes = await fetch("https://api.github.com/repos/Charismagreat/SheetBot/releases/latest", {

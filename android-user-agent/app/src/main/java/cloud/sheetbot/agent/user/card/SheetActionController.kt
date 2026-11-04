@@ -394,6 +394,17 @@ class SheetActionController(
                     }
                 }
             )
+        } else if (prefs.visitorSessionId.isNullOrBlank() && !prefs.userEmail.equals("chachogreat@gmail.com", ignoreCase = true)) {
+            sbSectorCard.addView(
+                createLoginActionButton(
+                    text = "🔐 내 구글 드라이브 시트 생성 권한 연결하기",
+                    bgColor = "#059669"
+                ) {
+                    dialogRef?.dismiss()
+                    val oauthUrl = "https://sheetbot.cloud/api/user/agent2/google-oauth/start?email=${Uri.encode(prefs.userEmail ?: "")}"
+                    openExternalUrl(oauthUrl)
+                }
+            )
         }
         rootLayout.addView(sbSectorCard)
 
@@ -860,11 +871,27 @@ class SheetActionController(
                         }
                     } else {
                         val errMsg = result.error ?: result.message ?: "구글 시트 대장을 연결할 수 없습니다."
-                        AlertDialog.Builder(activity)
-                            .setTitle("⚠️ 대장 시트 연결 실패")
-                            .setMessage("구글 스프레드시트를 준비하는 중 오류가 발생했습니다.\n\n원인: $errMsg\n\n구글 계정 연동 상태를 확인해 주세요.")
-                            .setPositiveButton("확인", null)
-                            .show()
+                        val isOAuthRequired = result.errorCode == "GOOGLE_OAUTH_REQUIRED" ||
+                            errMsg.contains("GOOGLE_OAUTH_REQUIRED") ||
+                            errMsg.contains("권한 동의")
+                        if (isOAuthRequired) {
+                            val oauthUrl = result.oauthUrl?.takeIf { it.isNotBlank() }
+                                ?: "https://sheetbot.cloud/api/user/agent2/google-oauth/start?email=${Uri.encode(userEmail)}"
+                            AlertDialog.Builder(activity)
+                                .setTitle("🔐 Google 드라이브 시트 권한 필요")
+                                .setMessage("본인($userEmail)의 구글 드라이브에 전용 시트를 생성하려면 Google 드라이브/시트 접근 권한 동의(1회)가 필요합니다.\n\n아래 버튼을 눌러 권한 동의를 완료하면 자동으로 앱으로 돌아옵니다.")
+                                .setPositiveButton("🔑 Google 권한 동의하기") { _, _ ->
+                                    openExternalUrl(oauthUrl)
+                                }
+                                .setNegativeButton("닫기", null)
+                                .show()
+                        } else {
+                            AlertDialog.Builder(activity)
+                                .setTitle("⚠️ 대장 시트 연결 실패")
+                                .setMessage("구글 스프레드시트를 준비하는 중 오류가 발생했습니다.\n\n원인: $errMsg\n\n구글 계정 연동 상태를 확인해 주세요.")
+                                .setPositiveButton("확인", null)
+                                .show()
+                        }
                     }
                 }
             } catch (e: Exception) {

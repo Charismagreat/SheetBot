@@ -4,7 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { queryTable, insertRows, updateRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { getOrCreateUserWallet, processReferralReward } from "@/lib/token-wallet";
-import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
+import { getWorkspaceCallOptionsForEmail, HOST_WORKSPACE_OWNER_EMAIL } from "@/lib/auth";
+import { syncVisitorSessionToUser } from "@/lib/api-keys";
 import crypto from "crypto";
 
 /**
@@ -25,7 +26,6 @@ export async function POST(req: NextRequest) {
       referralCode,
       visitorSessionId: clientVisitorSid,
     } = body;
-
 
     let verifiedEmail = "";
     let googleName = "";
@@ -66,9 +66,56 @@ export async function POST(req: NextRequest) {
 
     const cleanEmail = verifiedEmail;
     const cleanModel = String(deviceModel || "안드로이드 스마트폰").trim();
-    const cleanVersion = String(appVersion || "2.3.0").trim();
+    const cleanVersion = String(appVersion || "2.4.28").trim();
     const cleanPhone = String(phoneNumber || "").trim();
     const generatedDeviceId = `agent2_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}_${Date.now()}`;
+    const nowIso = new Date().toISOString();
+
+    // 2-1. sheetbot_users 테이블에도 회원 레코드 보장 (모바일 단독 가입 시 누락 방지)
+    const userId = `google_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
+    const trimmedClientSid =
+      clientVisitorSid && typeof clientVisitorSid === "string" ? clientVisitorSid.trim() : "";
+
+    try {
+      const existingUserRes = await queryTable("sheetbot_users", {
+        filters: { email: cleanEmail },
+        limit: 1,
+      }).catch(() => ({ rows: [] }));
+      const existingUser = (existingUserRes.rows || []).find((r: any) => !r.deleted_at);
+
+      if (existingUser) {
+        await updateRows(
+          "sheetbot_users",
+          {
+            last_login_at: nowIso,
+            updated_at: nowIso,
+            ...(googleName ? { name: googleName } : {}),
+            ...(trimmedClientSid ? { visitor_session_id: trimmedClientSid } : {}),
+          },
+          { filters: { id: String(existingUser.id) } }
+        ).catch(() => {});
+      } else {
+        await insertRows("sheetbot_users", [
+          {
+            id: userId,
+            uuid: crypto.randomUUID(),
+            email: cleanEmail,
+            name: googleName || cleanEmail.split("@")[0],
+            role: "USER",
+            status: "ACTIVE",
+            tier: "FREE",
+            created_at: nowIso,
+            last_login_at: nowIso,
+            updated_at: nowIso,
+            visitor_session_id: trimmedClientSid || null,
+          },
+        ]).catch(() => {});
+      }
+
+      if (trimmedClientSid) {
+        await syncVisitorSessionToUser(cleanEmail, trimmedClientSid).catch(() => {});
+      }
+    } catch {}
 
     // 3. 기기 고유 토큰 및 핀코드 생성
     const secretKey = process.env.NEXTAUTH_SECRET || "sheetbot-agent2-secret-key-2026";
@@ -87,7 +134,6 @@ export async function POST(req: NextRequest) {
       orderDirection: "DESC",
     }).catch(() => ({ rows: [] }));
 
-    const nowIso = new Date().toISOString();
     let finalDeviceId = generatedDeviceId;
     const existingList = existDevRes.rows || [];
 
@@ -181,9 +227,13 @@ export async function POST(req: NextRequest) {
 
     const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req).catch(() => ({} as any));
     const resolvedVisitorSessionId =
-      callOptions?.visitorSessionId ||
-      (clientVisitorSid && typeof clientVisitorSid === "string" ? clientVisitorSid.trim() : null) ||
+      (callOptions?.visitorSessionId && callOptions.visitorSessionId.trim()) ||
+      trimmedClientSid ||
       null;
+
+    const requiresWorkspaceOAuth =
+      cleanEmail !== HOST_WORKSPACE_OWNER_EMAIL && !resolvedVisitorSessionId;
+    const oauthStartUrl = `https://sheetbot.cloud/api/user/agent2/google-oauth/start?email=${encodeURIComponent(cleanEmail)}`;
 
     const res = NextResponse.json({
       success: true,
@@ -192,6 +242,8 @@ export async function POST(req: NextRequest) {
       googleName,
       token,
       visitorSessionId: resolvedVisitorSessionId,
+      requiresWorkspaceOAuth,
+      oauthStartUrl,
       deviceId: finalDeviceId,
       deviceToken: finalDeviceId,
       status: "CONNECTED",
@@ -209,5 +261,4 @@ export async function POST(req: NextRequest) {
     console.error("[PairGoogle] Error:", err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
-
 }
