@@ -16,7 +16,7 @@ interface CachedVersion {
 }
 
 let versionCache: CachedVersion | null = null;
-const CACHE_TTL_MS = 5 * 1000; // 5초 캐시 (실시간 릴리즈 즉시 반영)
+const CACHE_TTL_MS = 15 * 1000;
 
 function getLocalPropertiesVersion(): { name: string; code: number } {
   try {
@@ -32,7 +32,7 @@ function getLocalPropertiesVersion(): { name: string; code: number } {
       }
     }
   } catch (_) {}
-  return { name: "2.3.6", code: 20306 };
+  return { name: "2.4.28", code: 20428 };
 }
 
 function parseVersionToCode(versionName: string): number {
@@ -41,7 +41,7 @@ function parseVersionToCode(versionName: string): number {
   if (parts.length >= 3) {
     return parts[0] * 10000 + parts[1] * 100 + parts[2];
   }
-  return 20306;
+  return 20428;
 }
 
 /**
@@ -61,49 +61,35 @@ export async function GET() {
   let latestName = local.name;
   let latestCode = local.code;
   let apkUrl = `https://github.com/Charismagreat/SheetBot/releases/download/v${latestName}/sheetbot-deposit-agent.apk`;
-  let releaseNotes = "시트봇 에이전트 M v2.3.6 (입금 감지 + FileToSheet 인증번호 SMS 릴레이 일체형 통합)";
+  let releaseNotes = `시트봇 에이전트 M v${latestName} (입금 감지 + FileToSheet 인증번호 SMS 릴레이 일체형 통합)`;
 
   try {
-    const ghRes = await fetch("https://api.github.com/repos/Charismagreat/SheetBot/releases/latest", {
-      headers: {
-        Accept: "application/vnd.github.v3+json",
-        "User-Agent": "SheetBot-Version-Checker",
-      },
+    const webRes = await fetch("https://github.com/Charismagreat/SheetBot/releases/latest", {
+      redirect: "manual",
+      headers: { "User-Agent": "SheetBot-Version-Checker" },
       cache: "no-store",
     });
-
-    if (ghRes.ok) {
-      const ghJson = await ghRes.json();
-      const rawTag = (ghJson.tag_name || "").trim();
+    const loc = webRes.headers.get("location") || "";
+    const tagMatch = loc.match(/\/releases\/tag\/([^/?#]+)/i);
+    if (tagMatch?.[1]) {
+      const rawTag = decodeURIComponent(tagMatch[1]).trim();
       const cleanVer = rawTag.replace(/^v?/i, "").trim();
-      if (cleanVer) {
+      const ghCode = parseVersionToCode(cleanVer);
+      if (cleanVer && ghCode >= latestCode) {
         latestName = cleanVer;
-        latestCode = parseVersionToCode(cleanVer);
-      }
-      if (ghJson.body) {
-        releaseNotes = ghJson.body.trim();
-      }
-
-      const assets = ghJson.assets || [];
-      const apkAsset = assets.find((a: any) =>
-        (a.name || "").toLowerCase().includes("deposit-agent") && (a.name || "").endsWith(".apk")
-      ) || assets.find((a: any) => (a.name || "").endsWith(".apk"));
-
-      if (apkAsset?.browser_download_url) {
-        apkUrl = apkAsset.browser_download_url;
-      } else if (rawTag) {
+        latestCode = ghCode;
         apkUrl = `https://github.com/Charismagreat/SheetBot/releases/download/${rawTag}/sheetbot-deposit-agent.apk`;
       }
     }
   } catch (err: any) {
-    console.warn("[VersionCheck] GitHub release fetch error:", err.message);
+    console.warn("[VersionCheck] GitHub release redirect check warning:", err.message);
   }
 
   const resultData = {
     latestVersionCode: latestCode,
     latestVersionName: latestName,
     apkUrl,
-    fallbackApkUrl: "https://sheetbot.cloud/downloads/sheetbot-deposit-agent.apk",
+    fallbackApkUrl: "https://github.com/Charismagreat/SheetBot/releases/latest/download/sheetbot-deposit-agent.apk",
     releaseNotes,
   };
 

@@ -1,6 +1,8 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
 
 interface CachedVersion {
   timestamp: number;
@@ -14,7 +16,7 @@ interface CachedVersion {
 }
 
 let versionCache: CachedVersion | null = null;
-const CACHE_TTL_MS = 5 * 1000; // 5초 캐시 (실시간 릴리즈 즉시 반영)
+const CACHE_TTL_MS = 15 * 1000; // 15초 캐시 (GitHub API Rate Limit 보호 및 실시간 반영)
 
 function parseVersionToCode(versionName: string): number {
   const clean = versionName.replace(/^(user-|manager-)?v?/i, "").trim();
@@ -23,12 +25,11 @@ function parseVersionToCode(versionName: string): number {
     const major = parts[0];
     const minor = parts[1];
     const patch = parts[2];
-    // 공통 버전 체계 (android-version.properties): 모든 앱 동일 versionCode
     if (major > 2 || (major === 2 && minor >= 3)) {
       return major * 10000 + minor * 100 + patch;
     }
     if (major === 2 && minor >= 2) {
-      return 121 + (minor - 2) * 100 + patch; // 2.2.0 = 121, 2.2.1 = 122
+      return 121 + (minor - 2) * 100 + patch;
     }
     if (major === 2 && minor === 1) {
       return 97 + (patch - 76);
@@ -37,10 +38,23 @@ function parseVersionToCode(versionName: string): number {
   return 20428;
 }
 
+function readLocalPropertiesVersion(): string {
+  try {
+    const propPath = path.join(process.cwd(), "android-version.properties");
+    if (fs.existsSync(propPath)) {
+      const text = fs.readFileSync(propPath, "utf8");
+      const m = text.match(/VERSION_NAME\s*=\s*([^\r\n#]+)/);
+      if (m?.[1]?.trim()) return m[1].trim();
+    }
+  } catch {}
+  return "2.4.28";
+}
+
 /**
  * GET /api/user/agent2/version
  *
- * GitHub Releases API를 실시간 조회하여 가장 최신 버전 정보와 APK 직통 다운로드 링크를 자동 제공합니다.
+ * 1순위: GitHub Releases Web 302 Location 헤더 조회 (API Rate Limit 무제한, 0.1초 응답)
+ * 2순위: 로컬 android-version.properties 버전 폴백
  */
 export async function GET() {
   const now = Date.now();
@@ -51,59 +65,41 @@ export async function GET() {
     );
   }
 
-  let latestName = "2.4.28";
-  let latestCode = 20428;
-  let apkUrl = "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk";
+  const localVer = readLocalPropertiesVersion();
+  let latestName = localVer;
+  let latestCode = parseVersionToCode(localVer);
+  let apkUrl = `https://github.com/Charismagreat/SheetBot/releases/download/v${localVer}/SheetBotAgent.apk`;
   let releaseNotes =
     "🔐 내 구글 드라이브 & 시트 격리 연동 강화 (v2.4.28): 모든 계정이 본인의 구글 드라이브와 시트에만 데이터를 안전하게 저장하도록 원클릭 구글 드라이브 권한 연결 및 다중 계정 격리가 적용되었습니다.";
 
   try {
-    const ghRes = await fetch("https://api.github.com/repos/Charismagreat/SheetBot/releases/latest", {
-      headers: {
-        Accept: "application/vnd.github.v3+json",
-        "User-Agent": "SheetBot-Version-Checker",
-      },
+    // Rate-limit이 없는 GitHub Web 302 리다이렉트로 최신 릴리즈 태그 즉시 확인
+    const webRes = await fetch("https://github.com/Charismagreat/SheetBot/releases/latest", {
+      redirect: "manual",
+      headers: { "User-Agent": "SheetBot-Version-Checker" },
       cache: "no-store",
     });
-
-    if (ghRes.ok) {
-      const ghJson = await ghRes.json();
-      const rawTag = (ghJson.tag_name || "").trim();
+    const loc = webRes.headers.get("location") || "";
+    const tagMatch = loc.match(/\/releases\/tag\/([^/?#]+)/i);
+    if (tagMatch?.[1]) {
+      const rawTag = decodeURIComponent(tagMatch[1]).trim();
       const cleanVer = rawTag.replace(/^(user-)?v?/i, "").trim();
-
-      if (cleanVer) {
+      const ghCode = parseVersionToCode(cleanVer);
+      if (cleanVer && ghCode >= latestCode) {
         latestName = cleanVer;
-        latestCode = parseVersionToCode(cleanVer);
-      }
-
-      const body = (ghJson.body || "").trim();
-      if (body) {
-        releaseNotes = body;
-      }
-
-      // assets에서 SheetBotAgent.apk 직통 URL 탐색
-      const assets = ghJson.assets || [];
-      const apkAsset =
-        assets.find(
-          (a: any) =>
-            (a.name || "").toLowerCase().includes("sheetbotagent") && (a.name || "").endsWith(".apk")
-        ) || assets.find((a: any) => (a.name || "").endsWith(".apk"));
-
-      if (apkAsset?.browser_download_url) {
-        apkUrl = apkAsset.browser_download_url;
-      } else if (rawTag) {
+        latestCode = ghCode;
         apkUrl = `https://github.com/Charismagreat/SheetBot/releases/download/${rawTag}/SheetBotAgent.apk`;
       }
     }
   } catch (err: any) {
-    console.warn("[VersionCheck] GitHub release fetch error:", err.message);
+    console.warn("[VersionCheck] GitHub release redirect check warning:", err.message);
   }
 
   const resultData = {
     latestVersionCode: latestCode,
     latestVersionName: latestName,
     apkUrl,
-    fallbackApkUrl: "https://sheetbot.cloud/downloads/SheetBotAgent.apk",
+    fallbackApkUrl: "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk",
     releaseNotes,
   };
 
