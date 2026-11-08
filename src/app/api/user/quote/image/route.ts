@@ -16,8 +16,8 @@ function getUploadDirectories() {
   const userHome = process.env.USERPROFILE || process.env.HOME || "";
   const sub = ["public", "uploads", "quote-images"].join(path.sep);
   const dirs = [
-    path.resolve(process.cwd(), sub),
-    ...(userHome ? [path.resolve(userHome, ".egdesk", "uploads", "quote-images")] : []),
+    path.resolve(/*turbopackIgnore: true*/ process.cwd(), sub),
+    ...(userHome ? [path.resolve(/*turbopackIgnore: true*/ userHome, ".egdesk", "uploads", "quote-images")] : []),
   ];
   for (const d of dirs) {
     try {
@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
       }
 
       if (foundPath) {
-        const buffer = fs.readFileSync(foundPath);
+        const buffer = fs.readFileSync(/*turbopackIgnore: true*/ foundPath);
         const ext = path.extname(sanitizedFile).toLowerCase().replace(".", "");
         let mime = "image/jpeg";
         if (ext === "png") mime = "image/png";

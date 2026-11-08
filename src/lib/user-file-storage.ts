@@ -204,8 +204,8 @@ export function getStoredUserFile(
   if (!foundPath) return null;
 
   try {
-    const stat = fs.statSync(foundPath);
-    const buffer = fs.readFileSync(foundPath);
+    const stat = fs.statSync(/*turbopackIgnore: true*/ foundPath);
+    const buffer = fs.readFileSync(/*turbopackIgnore: true*/ foundPath);
     const ext = path.extname(sanitized).toLowerCase().replace(".", "");
 
     let mimeType = "application/octet-stream";

@@ -26,8 +26,12 @@
       "@/egdesk-visitor-google": [
         "./egdesk-visitor-google.ts"
       ],
+      "@/egdesk-helpers": [
+        "./egdesk-helpers.ts"
+      ],
       "@/*": [
-        "./src/*"
+        "./src/*",
+        "./*"
       ]
     }
   },
