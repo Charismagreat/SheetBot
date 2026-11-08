@@ -265,15 +265,13 @@ object SmsSenderUtil {
 
             if (isSent) {
                 sentCount++
-                LocalLogManager.addLog(
-                    context,
+                LocalLogManager.getInstance(context).addLog(
                     "🔐 SaaS OTP 발송 [${item.brandName}]",
                     "수신: ${item.recipientPhone} (${item.purpose} / ${item.maskedCode})",
                     true
                 )
             } else {
-                LocalLogManager.addLog(
-                    context,
+                LocalLogManager.getInstance(context).addLog(
                     "⚠️ SaaS OTP 발송 실패 [${item.brandName}]",
                     "수신: ${item.recipientPhone} (SMS 권한/번호 확인 필요)",
                     false
