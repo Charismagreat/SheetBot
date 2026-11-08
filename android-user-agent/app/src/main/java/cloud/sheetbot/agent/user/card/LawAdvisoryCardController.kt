@@ -151,9 +151,11 @@ class LawAdvisoryCardController(
             return
         }
 
-        val userEmail = prefs.userEmail ?: ""
-        if (!prefs.isPaired || userEmail.isBlank()) {
-            Toast.makeText(activity, "시트봇 계정 연동 후 자문이 가능합니다.", Toast.LENGTH_SHORT).show()
+        val isFtsReady = prefs.isDestinationFileToSheet && (prefs.isFtsPaired || !prefs.ftsPhoneNumber.isNullOrBlank())
+        val userEmail = prefs.userEmail?.takeIf { it.isNotBlank() }
+            ?: if (isFtsReady) "${prefs.ftsPhoneNumber ?: "guest"}@filetosheet.cloud" else ""
+        if ((!prefs.isPaired && !isFtsReady) || userEmail.isBlank()) {
+            Toast.makeText(activity, "시트봇 계정 또는 파일투시트 연동 후 자문이 가능합니다.", Toast.LENGTH_SHORT).show()
             return
         }
 

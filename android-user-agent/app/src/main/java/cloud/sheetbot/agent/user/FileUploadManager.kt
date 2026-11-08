@@ -137,7 +137,8 @@ object FileUploadManager {
                     mimeType = meta.mimeType,
                     memo = memo,
                     ocrType = effectiveOcrType,
-                    deviceId = "${Build.MANUFACTURER} ${Build.MODEL}"
+                    deviceId = "${Build.MANUFACTURER} ${Build.MODEL}",
+                    customFileName = meta.fileName
                 )
                 if (!attempt.success && !prefs.ftsPhoneNumber.isNullOrBlank()) {
                     val refreshed = resolveOrEnsureFtsSheet(prefs, effectiveOcrType, forceRefresh = true)
@@ -150,7 +151,8 @@ object FileUploadManager {
                         mimeType = meta.mimeType,
                         memo = memo,
                         ocrType = effectiveOcrType,
-                        deviceId = "${Build.MANUFACTURER} ${Build.MODEL}"
+                        deviceId = "${Build.MANUFACTURER} ${Build.MODEL}",
+                        customFileName = meta.fileName
                     )
                 }
                 ftsResult = attempt
@@ -506,7 +508,8 @@ object FileUploadManager {
                     mimeType = meta.mimeType,
                     memo = "스마트폰 카메라 명함 촬영 건",
                     ocrType = "BUSINESS_CARD",
-                    deviceId = "${Build.MANUFACTURER} ${Build.MODEL}"
+                    deviceId = "${Build.MANUFACTURER} ${Build.MODEL}",
+                    customFileName = meta.fileName
                 )
                 if (!attempt.success && !prefs.ftsPhoneNumber.isNullOrBlank()) {
                     val refreshed = resolveOrEnsureFtsSheet(prefs, "business_card", forceRefresh = true)
@@ -518,7 +521,8 @@ object FileUploadManager {
                         mimeType = meta.mimeType,
                         memo = "스마트폰 카메라 명함 촬영 건",
                         ocrType = "BUSINESS_CARD",
-                        deviceId = "${Build.MANUFACTURER} ${Build.MODEL}"
+                        deviceId = "${Build.MANUFACTURER} ${Build.MODEL}",
+                        customFileName = meta.fileName
                     )
                 }
                 attempt

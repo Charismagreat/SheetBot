@@ -86,6 +86,12 @@ data class FtsUploadResult(
     val projectId: String? = null,
     val token: String? = null,
     val data: JSONObject? = null,
+    val rowsCount: Int = 0,
+    val chatRoomName: String? = null,
+    val totalCount: Int = 0,
+    val insertedCount: Int = 0,
+    val startDate: String? = null,
+    val endDate: String? = null,
     val error: String? = null
 )
 
@@ -423,10 +429,11 @@ object FileToSheetClient {
         deviceId: String? = null,
         customFileName: String? = null,
         contactName: String? = null,
-        callTime: String? = null
+        callTime: String? = null,
+        rowData: JSONObject? = null
     ): FtsUploadResult = withContext(Dispatchers.IO) {
         val devId = deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL}"
-        val primaryResult = doUploadFile(endpoint, file, mimeType, memo, ocrType, devId, customFileName, contactName, callTime)
+        val primaryResult = doUploadFile(endpoint, file, mimeType, memo, ocrType, devId, customFileName, contactName, callTime, rowData)
         if (primaryResult.success) {
             return@withContext primaryResult
         }
@@ -436,7 +443,7 @@ object FileToSheetClient {
             val fallbackUrl = getTunnelFallbackEndpoint(endpoint)
             if (fallbackUrl.isNotBlank() && fallbackUrl != endpoint) {
                 Log.w(TAG, "🔄 [FTS 파일 전송 터널 폴백 시도] $endpoint -> $fallbackUrl")
-                return@withContext doUploadFile(fallbackUrl, file, mimeType, memo, ocrType, devId, customFileName, contactName, callTime)
+                return@withContext doUploadFile(fallbackUrl, file, mimeType, memo, ocrType, devId, customFileName, contactName, callTime, rowData)
             }
         }
         return@withContext primaryResult
@@ -451,7 +458,8 @@ object FileToSheetClient {
         devId: String,
         customFileName: String? = null,
         contactName: String? = null,
-        callTime: String? = null
+        callTime: String? = null,
+        rowData: JSONObject? = null
     ): FtsUploadResult {
         try {
             val effectiveFileName = customFileName?.takeIf { it.isNotBlank() } ?: file.name
@@ -463,6 +471,7 @@ object FileToSheetClient {
                     effectiveFileName,
                     file.asRequestBody(mimeType.toMediaTypeOrNull())
                 )
+                .addFormDataPart("fileName", effectiveFileName)
 
             if (!memo.isNullOrBlank()) {
                 multipartBuilder.addFormDataPart("memo", memo)
@@ -475,6 +484,9 @@ object FileToSheetClient {
             }
             if (!callTime.isNullOrBlank()) {
                 multipartBuilder.addFormDataPart("callTime", callTime)
+            }
+            if (rowData != null) {
+                multipartBuilder.addFormDataPart("rowData", rowData.toString())
             }
             multipartBuilder.addFormDataPart("deviceId", devId)
 
@@ -493,6 +505,12 @@ object FileToSheetClient {
                 val projectId = json.optString("projectId", "")
                 val token = json.optString("token", "")
                 val data = json.optJSONObject("data")
+                val rowsCount = json.optInt("rowsCount", 1)
+                val chatRoomName = json.optString("chatRoomName", "").takeIf { it.isNotBlank() }
+                val totalCount = json.optInt("totalCount", rowsCount)
+                val insertedCount = json.optInt("insertedCount", rowsCount)
+                val startDate = json.optString("startDate", "").takeIf { it.isNotBlank() }
+                val endDate = json.optString("endDate", "").takeIf { it.isNotBlank() }
                 Log.i(TAG, "🎉 [FTS 파일 전송 완료] $message (targetSheet: $targetSheet)")
                 return FtsUploadResult(
                     success = true,
@@ -500,7 +518,13 @@ object FileToSheetClient {
                     targetSheet = targetSheet,
                     projectId = projectId,
                     token = token,
-                    data = data
+                    data = data,
+                    rowsCount = rowsCount,
+                    chatRoomName = chatRoomName,
+                    totalCount = totalCount,
+                    insertedCount = insertedCount,
+                    startDate = startDate,
+                    endDate = endDate
                 )
             } else {
                 val errMsg = json.optString("error", "HTTP ${response.code}")
@@ -658,7 +682,8 @@ object FileToSheetClient {
         ocrType: String? = null,
         customFileName: String? = null,
         contactName: String? = null,
-        callTime: String? = null
+        callTime: String? = null,
+        rowData: JSONObject? = null
     ): FtsUploadResult = withContext(Dispatchers.IO) {
         try {
             val prefs = PreferencesManager(SheetBotApp.appContext)
@@ -680,7 +705,8 @@ object FileToSheetClient {
                 deviceId = "${Build.MANUFACTURER} ${Build.MODEL}",
                 customFileName = customFileName,
                 contactName = contactName,
-                callTime = callTime
+                callTime = callTime,
+                rowData = rowData
             )
             if (!attempt.success && !prefs.ftsPhoneNumber.isNullOrBlank()) {
                 val refreshed = FileUploadManager.resolveOrEnsureFtsSheet(prefs, cardIdOrType, forceRefresh = true)
@@ -694,7 +720,8 @@ object FileToSheetClient {
                         deviceId = "${Build.MANUFACTURER} ${Build.MODEL}",
                         customFileName = customFileName,
                         contactName = contactName,
-                        callTime = callTime
+                        callTime = callTime,
+                        rowData = rowData
                     )
                 }
             }

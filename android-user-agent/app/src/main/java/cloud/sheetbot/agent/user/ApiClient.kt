@@ -1137,8 +1137,15 @@ object ApiClient {
         fileName: String? = null,
         mimeType: String = "image/jpeg"
     ): LawAdvisoryResult = withContext(Dispatchers.IO) {
+        val prefs = try { PreferencesManager(SheetBotApp.appContext) } catch (_: Exception) { null }
+        val isFts = prefs?.isDestinationFileToSheet == true
+        val isGoogle = prefs?.isDestinationGoogleSheet == true && prefs.hasGoogleAccount
+        val effectiveFileName = fileName?.takeIf { it.isNotBlank() } ?: file?.name ?: "법률자문질의"
+
+        // 1. 시트봇 서버(/api/user/law-advisory) 법제처 법령 & 대법원 판례 분석 시도
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         var lastErr = "법률 자문 요청 실패"
+        var serverResult: LawAdvisoryResult? = null
 
         for (host in hosts) {
             val endpoint = "$host/api/user/law-advisory"
@@ -1150,7 +1157,7 @@ object ApiClient {
                         .setType(MultipartBody.FORM)
                         .addFormDataPart("userEmail", userEmail)
                         .addFormDataPart("query", query)
-                        .addFormDataPart("file", fileName ?: file.name, fileBody)
+                        .addFormDataPart("file", effectiveFileName, fileBody)
                         .build()
 
                     Request.Builder()
@@ -1173,7 +1180,7 @@ object ApiClient {
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
 
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
-                    return@withContext LawAdvisoryResult(
+                    serverResult = LawAdvisoryResult(
                         success = true,
                         advisoryId = resJson.optString("advisoryId", ""),
                         executiveSummary = resJson.optString("executiveSummary", ""),
@@ -1186,6 +1193,7 @@ object ApiClient {
                         fileDriveUrl = resJson.optString("fileDriveUrl", ""),
                         documentSummary = resJson.optString("documentSummary", "")
                     )
+                    break
                 } else {
                     val msg = resJson.optString("error", "HTTP ${response.code}")
                     lastErr = "$host: $msg"
@@ -1194,7 +1202,69 @@ object ApiClient {
                 lastErr = "$host: ${e.message}"
             }
         }
-        LawAdvisoryResult(success = false, error = lastErr)
+
+        // 2. 파일투시트(FileToSheet) 연동 시 원본 서류 파일 및 법률 검토 결과 동시 업로드
+        if (isFts) {
+            val prebuiltRow = serverResult?.let { sr ->
+                JSONObject().apply {
+                    put("검토일시", nowKstStr())
+                    put("문서/질의제목", query.ifBlank { effectiveFileName })
+                    put("법률검토요약", sr.executiveSummary.ifBlank { sr.documentSummary })
+                    put("리스크수준", if (sr.lawTitle.isNotBlank()) "법령: ${sr.lawTitle}" else "주의 🟡")
+                    put("권고사항", sr.rulingSummary.ifBlank { "판례: ${sr.caseNumber}" })
+                }
+            }
+
+            val ftsRes = if (file != null && file.exists()) {
+                FileToSheetClient.syncCardFileToFts(
+                    cardIdOrType = "law_advisory",
+                    file = file,
+                    mimeType = mimeType,
+                    memo = query.ifBlank { effectiveFileName },
+                    ocrType = "LAW_ADVISORY",
+                    customFileName = effectiveFileName,
+                    rowData = prebuiltRow
+                )
+            } else {
+                val fallbackRow = prebuiltRow ?: JSONObject().apply {
+                    put("검토일시", nowKstStr())
+                    put("문서/질의제목", query)
+                    put("법률검토요약", query)
+                    put("리스크수준", "검토요청")
+                    put("권고사항", "모바일 법률 질의 접수")
+                }
+                FileToSheetClient.syncCardRowToFts(
+                    cardIdOrType = "law_advisory",
+                    rowData = fallbackRow,
+                    memo = query
+                )
+            }
+
+            if (serverResult != null) {
+                return@withContext serverResult
+            }
+            if (ftsRes.success) {
+                val dataObj = ftsRes.data
+                val summaryStr = dataObj?.optString("법률검토요약")?.takeIf { it.isNotBlank() }
+                    ?: "첨부 서류 및 법률 질의가 파일투시트 [법률계약검토대장]에 적재되었습니다."
+                val riskStr = dataObj?.optString("리스크수준")?.takeIf { it.isNotBlank() } ?: "AI 계약 검토"
+                val recStr = dataObj?.optString("권고사항")?.takeIf { it.isNotBlank() } ?: "파일투시트 시트 참조"
+                return@withContext LawAdvisoryResult(
+                    success = true,
+                    executiveSummary = "$summaryStr\n\n[권고사항] $recStr",
+                    lawTitle = riskStr,
+                    caseNumber = effectiveFileName,
+                    rulingSummary = recStr
+                )
+            } else if (!isGoogle) {
+                return@withContext LawAdvisoryResult(
+                    success = false,
+                    error = ftsRes.error ?: lastErr
+                )
+            }
+        }
+
+        serverResult ?: LawAdvisoryResult(success = false, error = lastErr)
     }
 
     /**
@@ -2169,6 +2239,56 @@ object ApiClient {
         fileName: String = "KakaoTalkChats.txt",
         sheetTitle: String = "[SheetBot] 카카오톡 메시지 대장"
     ): KakaoImportResult = withContext(Dispatchers.IO) {
+        val prefs = try { PreferencesManager(SheetBotApp.appContext) } catch (_: Exception) { null }
+        val isFts = prefs?.isDestinationFileToSheet == true
+        val isGoogle = prefs?.isDestinationGoogleSheet == true && prefs.hasGoogleAccount
+        var ftsImportResult: KakaoImportResult? = null
+
+        // 🌟 파일투시트(FileToSheet) 연동 시 원본 .txt 파일 및 파싱된 대화 내역 일괄 업로드
+        if (isFts) {
+            val cleanName = fileName.replace(Regex("[\\\\/:*?\"<>|]"), "_").ifBlank { "KakaoTalkChats.txt" }
+            val tempTxtFile = File(SheetBotApp.appContext.cacheDir, cleanName)
+            try {
+                tempTxtFile.writeText(textContent, Charsets.UTF_8)
+                val ftsRes = FileToSheetClient.syncCardFileToFts(
+                    cardIdOrType = "kakao_sync",
+                    file = tempTxtFile,
+                    mimeType = "text/plain",
+                    memo = "카카오톡 대화 파일 가져오기 ($cleanName)",
+                    ocrType = "KAKAO_CHAT",
+                    customFileName = cleanName
+                )
+                if (ftsRes.success) {
+                    val count = if (ftsRes.insertedCount > 0) ftsRes.insertedCount else ftsRes.rowsCount
+                    ftsImportResult = KakaoImportResult(
+                        success = true,
+                        chatRoomName = ftsRes.chatRoomName ?: cleanName.removeSuffix(".txt"),
+                        totalCount = if (ftsRes.totalCount > 0) ftsRes.totalCount else count,
+                        insertedCount = count,
+                        startDate = ftsRes.startDate,
+                        endDate = ftsRes.endDate,
+                        message = ftsRes.message ?: "파일투시트 카카오톡대화대장 적재 완료"
+                    )
+                } else {
+                    ftsImportResult = KakaoImportResult(
+                        success = false,
+                        error = ftsRes.error ?: "파일투시트 카카오톡 대화 파일 업로드 실패"
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "파일투시트 카톡 대화 파일 업로드 예외: ${e.message}")
+                ftsImportResult = KakaoImportResult(success = false, error = e.localizedMessage)
+            } finally {
+                try {
+                    if (tempTxtFile.exists()) tempTxtFile.delete()
+                } catch (_: Exception) {}
+            }
+
+            if (!isGoogle && ftsImportResult != null) {
+                return@withContext ftsImportResult
+            }
+        }
+
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
@@ -2202,6 +2322,8 @@ object ApiClient {
                             sheetUrl = resJson.optString("sheetUrl", ""),
                             message = resJson.optString("message", "")
                         )
+                    } else if (ftsImportResult?.success == true) {
+                        return@withContext ftsImportResult
                     } else {
                         return@withContext KakaoImportResult(
                             success = false,
@@ -2209,6 +2331,7 @@ object ApiClient {
                         )
                     }
                 } else if (!response.isSuccessful && resBody.isNotBlank()) {
+                    if (ftsImportResult?.success == true) return@withContext ftsImportResult
                     val errJson = JSONObject(resBody)
                     return@withContext KakaoImportResult(
                         success = false,
@@ -2219,7 +2342,7 @@ object ApiClient {
                 Log.w(TAG, "카카오톡 대화 가져오기 예외 ($host): ${e.message}")
             }
         }
-        KakaoImportResult(success = false, error = "서버와의 통신에 실패했습니다. 네트워크를 확인해 주세요.")
+        ftsImportResult ?: KakaoImportResult(success = false, error = "서버와의 통신에 실패했습니다. 네트워크를 확인해 주세요.")
     }
 
     /**

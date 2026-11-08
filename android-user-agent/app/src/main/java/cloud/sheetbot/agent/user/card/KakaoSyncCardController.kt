@@ -77,8 +77,9 @@ class KakaoSyncCardController(
         }
 
         binding.btnImportKakaoChat.setOnClickListener {
-            if (!prefs.isPaired) {
-                Toast.makeText(activity, "먼저 시트봇 워크스페이스와 연동해 주세요.", Toast.LENGTH_SHORT).show()
+            val isFtsReady = prefs.isDestinationFileToSheet && (prefs.isFtsPaired || !prefs.ftsPhoneNumber.isNullOrBlank())
+            if (!prefs.isPaired && !isFtsReady) {
+                Toast.makeText(activity, "먼저 시트봇 또는 파일투시트와 연동해 주세요.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             onPickChatFile()
@@ -90,17 +91,19 @@ class KakaoSyncCardController(
     }
 
     /**
-     * 카카오톡 대화 내용 내보내기(.txt) 파일을 읽어 구글 시트 대장에 구간 덮어쓰기 (v2.1.11)
+     * 카카오톡 대화 내용 내보내기(.txt) 파일을 읽어 구글 시트 또는 파일투시트 대장에 동기화 (v2.4.30)
      */
     fun handleFileSelected(uri: Uri) {
-        val email = prefs.userEmail
-        if (!prefs.isPaired || email.isNullOrBlank()) {
-            Toast.makeText(activity, "⚠️ 시트봇 계정 연동 후 이용할 수 있습니다.", Toast.LENGTH_SHORT).show()
+        val isFtsReady = prefs.isDestinationFileToSheet && (prefs.isFtsPaired || !prefs.ftsPhoneNumber.isNullOrBlank())
+        val email = prefs.userEmail?.takeIf { it.isNotBlank() }
+            ?: if (isFtsReady) "${prefs.ftsPhoneNumber ?: "guest"}@filetosheet.cloud" else ""
+        if ((!prefs.isPaired && !isFtsReady) || email.isBlank()) {
+            Toast.makeText(activity, "⚠️ 시트봇 또는 파일투시트 계정 연동 후 이용할 수 있습니다.", Toast.LENGTH_SHORT).show()
             return
         }
 
         binding.progressBar.visibility = View.VISIBLE
-        Toast.makeText(activity, "💬 카톡 대화 파일을 분석 중입니다...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(activity, "💬 카톡 대화 파일을 분석 및 업로드 중입니다...", Toast.LENGTH_SHORT).show()
 
         activity.lifecycleScope.launch {
             try {
@@ -146,12 +149,18 @@ class KakaoSyncCardController(
                     val roomMsg = if (!result.chatRoomName.isNullOrBlank()) {
                         "• 채팅방: ${result.chatRoomName}\n"
                     } else ""
+                    val destDesc = if (isFtsReady && !prefs.isDestinationGoogleSheet) {
+                        val ftsSheet = prefs.getFtsSheetNameFor("kakao_sync") ?: "카카오톡대화대장"
+                        "파일투시트 [$ftsSheet]에 원본 파일($fileName) 및 대화 내역이 적재되었습니다."
+                    } else {
+                        "구글 시트 [${prefs.kakaoDriveSheetTitle}]에 구간 덮어쓰기되었습니다."
+                    }
 
                     onAddLogItem("💬 카톡 가져오기", "${result.chatRoomName ?: "채팅방"} ${countFormatted}건 시트 동기화 완료", true)
 
                     AlertDialog.Builder(activity)
                         .setTitle("🎉 카톡 대화 파일 가져오기 완료!")
-                        .setMessage("${roomMsg}• 동기화 대화: 총 ${countFormatted}건${periodMsg}\n\n구글 시트 [${prefs.kakaoDriveSheetTitle}]에 구간 덮어쓰기되었습니다.")
+                        .setMessage("${roomMsg}• 동기화 대화: 총 ${countFormatted}건${periodMsg}\n\n$destDesc")
                         .setPositiveButton("시트") { _, _ ->
                             onOpenSheetChooser("KAKAO", prefs.kakaoDriveSheetTitle)
                         }
