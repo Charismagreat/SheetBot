@@ -48,8 +48,11 @@ object CallRecordingManager {
     suspend fun scanAndUploadNewRecordings(context: Context, forceReupload: Boolean = false): RecordingSyncResult = withContext(Dispatchers.IO) {
         val prefs = PreferencesManager(context)
 
-        // 1. 기능 활성화 및 페어링 확인
-        if (!prefs.isPaired || !prefs.isCallRecordingSyncEnabled) {
+        // 1. 기능 활성화 및 페어링 확인 (구글 시트봇 계정 또는 파일투시트 번호 연동 중 하나라도 활성화된 경우 허용)
+        val isFtsReady = prefs.isDestinationFileToSheet && (prefs.isFtsPaired || !prefs.ftsPhoneNumber.isNullOrBlank())
+        val isGoogleReady = prefs.isPaired && !prefs.userEmail.isNullOrBlank() && !prefs.userEmail!!.endsWith("@filetosheet.cloud")
+
+        if (!prefs.isCallRecordingSyncEnabled) {
             return@withContext RecordingSyncResult(
                 uploadedCount = 0,
                 totalFound = 0,
@@ -58,15 +61,18 @@ object CallRecordingManager {
             )
         }
 
-        val userEmail = prefs.userEmail
-        if (userEmail.isNullOrBlank()) {
+        if (!isGoogleReady && !isFtsReady) {
             return@withContext RecordingSyncResult(
                 uploadedCount = 0,
                 totalFound = 0,
                 alreadySyncedCount = 0,
-                message = "계정이 연동되지 않았습니다."
+                message = "계정이 연동되지 않았습니다. 먼저 파일투시트 번호 인증 또는 시트봇 Google 계정을 연동해 주세요."
             )
         }
+
+        val userEmail = prefs.userEmail?.takeIf { it.isNotBlank() }
+            ?: prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() }?.let { "${it.replace(Regex("[^0-9]"), "")}@filetosheet.cloud" }
+            ?: ""
 
         // 2. 단말기 내 통화 녹음 폴더 목록 확인 (삼성 기본, SKT 에이닷(A.), T전화, 후후, Cube ACR 등 모든 녹음 앱 통합 지원)
         val customFolder = prefs.callRecordingCustomFolder.trim()
@@ -206,7 +212,11 @@ object CallRecordingManager {
         recordingFiles.sortByDescending { it.lastModified() }
 
         val filterText = prefs.callRecordingTargetFilter.trim()
-        val targetFolder = prefs.callRecordingDriveFolder.takeIf { it.isNotBlank() } ?: "[SheetBot] 통화 녹음"
+        val targetFolder = if (isFtsReady && !isGoogleReady) {
+            "파일투시트 [통화녹음대장]"
+        } else {
+            prefs.callRecordingDriveFolder.takeIf { it.isNotBlank() } ?: "[SheetBot] 통화 녹음"
+        }
         val autoRecordSheet = prefs.isCallRecordingSheetEnabled
 
         var uploadedCount = 0
@@ -334,26 +344,27 @@ object CallRecordingManager {
         uris: List<android.net.Uri>
     ): RecordingSyncResult = withContext(Dispatchers.IO) {
         val prefs = PreferencesManager(context)
-        if (!prefs.isPaired) {
+        val isFtsReady = prefs.isDestinationFileToSheet && (prefs.isFtsPaired || !prefs.ftsPhoneNumber.isNullOrBlank())
+        val isGoogleReady = prefs.isPaired && !prefs.userEmail.isNullOrBlank() && !prefs.userEmail!!.endsWith("@filetosheet.cloud")
+
+        if (!isGoogleReady && !isFtsReady) {
             return@withContext RecordingSyncResult(
                 uploadedCount = 0,
                 totalFound = uris.size,
                 alreadySyncedCount = 0,
-                message = "시트봇 계정이 연동되어 있지 않습니다. 먼저 계정을 연동해 주세요."
+                message = "계정이 연동되어 있지 않습니다. 먼저 파일투시트 번호 인증 또는 시트봇 계정을 연동해 주세요."
             )
         }
 
-        val userEmail = prefs.userEmail
-        if (userEmail.isNullOrBlank()) {
-            return@withContext RecordingSyncResult(
-                uploadedCount = 0,
-                totalFound = uris.size,
-                alreadySyncedCount = 0,
-                message = "연동된 사용자 계정 이메일이 없습니다."
-            )
-        }
+        val userEmail = prefs.userEmail?.takeIf { it.isNotBlank() }
+            ?: prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() }?.let { "${it.replace(Regex("[^0-9]"), "")}@filetosheet.cloud" }
+            ?: ""
 
-        val targetFolder = prefs.callRecordingDriveFolder.takeIf { it.isNotBlank() } ?: "[SheetBot] 통화 녹음"
+        val targetFolder = if (isFtsReady && !isGoogleReady) {
+            "파일투시트 [통화녹음대장]"
+        } else {
+            prefs.callRecordingDriveFolder.takeIf { it.isNotBlank() } ?: "[SheetBot] 통화 녹음"
+        }
         val autoRecordSheet = prefs.isCallRecordingSheetEnabled
 
         var uploadedCount = 0

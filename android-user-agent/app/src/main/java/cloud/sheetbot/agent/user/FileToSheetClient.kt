@@ -420,10 +420,13 @@ object FileToSheetClient {
         mimeType: String = "image/jpeg",
         memo: String? = null,
         ocrType: String? = null,
-        deviceId: String? = null
+        deviceId: String? = null,
+        customFileName: String? = null,
+        contactName: String? = null,
+        callTime: String? = null
     ): FtsUploadResult = withContext(Dispatchers.IO) {
         val devId = deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL}"
-        val primaryResult = doUploadFile(endpoint, file, mimeType, memo, ocrType, devId)
+        val primaryResult = doUploadFile(endpoint, file, mimeType, memo, ocrType, devId, customFileName, contactName, callTime)
         if (primaryResult.success) {
             return@withContext primaryResult
         }
@@ -433,7 +436,7 @@ object FileToSheetClient {
             val fallbackUrl = getTunnelFallbackEndpoint(endpoint)
             if (fallbackUrl.isNotBlank() && fallbackUrl != endpoint) {
                 Log.w(TAG, "🔄 [FTS 파일 전송 터널 폴백 시도] $endpoint -> $fallbackUrl")
-                return@withContext doUploadFile(fallbackUrl, file, mimeType, memo, ocrType, devId)
+                return@withContext doUploadFile(fallbackUrl, file, mimeType, memo, ocrType, devId, customFileName, contactName, callTime)
             }
         }
         return@withContext primaryResult
@@ -445,15 +448,19 @@ object FileToSheetClient {
         mimeType: String,
         memo: String?,
         ocrType: String?,
-        devId: String
+        devId: String,
+        customFileName: String? = null,
+        contactName: String? = null,
+        callTime: String? = null
     ): FtsUploadResult {
         try {
-            Log.i(TAG, "🚀 [FTS 파일 전송] ${file.name} (${file.length() / 1024} KB) -> $endpoint (ocrType: $ocrType)")
+            val effectiveFileName = customFileName?.takeIf { it.isNotBlank() } ?: file.name
+            Log.i(TAG, "🚀 [FTS 파일 전송] $effectiveFileName (${file.length() / 1024} KB) -> $endpoint (ocrType: $ocrType)")
             val multipartBuilder = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart(
                     "file",
-                    file.name,
+                    effectiveFileName,
                     file.asRequestBody(mimeType.toMediaTypeOrNull())
                 )
 
@@ -462,6 +469,12 @@ object FileToSheetClient {
             }
             if (!ocrType.isNullOrBlank()) {
                 multipartBuilder.addFormDataPart("ocrType", ocrType)
+            }
+            if (!contactName.isNullOrBlank()) {
+                multipartBuilder.addFormDataPart("contactName", contactName)
+            }
+            if (!callTime.isNullOrBlank()) {
+                multipartBuilder.addFormDataPart("callTime", callTime)
             }
             multipartBuilder.addFormDataPart("deviceId", devId)
 
@@ -642,7 +655,10 @@ object FileToSheetClient {
         file: File,
         mimeType: String = "audio/mp4",
         memo: String? = null,
-        ocrType: String? = null
+        ocrType: String? = null,
+        customFileName: String? = null,
+        contactName: String? = null,
+        callTime: String? = null
     ): FtsUploadResult = withContext(Dispatchers.IO) {
         try {
             val prefs = PreferencesManager(SheetBotApp.appContext)
@@ -661,7 +677,10 @@ object FileToSheetClient {
                 mimeType = mimeType,
                 memo = memo,
                 ocrType = ocrType,
-                deviceId = "${Build.MANUFACTURER} ${Build.MODEL}"
+                deviceId = "${Build.MANUFACTURER} ${Build.MODEL}",
+                customFileName = customFileName,
+                contactName = contactName,
+                callTime = callTime
             )
             if (!attempt.success && !prefs.ftsPhoneNumber.isNullOrBlank()) {
                 val refreshed = FileUploadManager.resolveOrEnsureFtsSheet(prefs, cardIdOrType, forceRefresh = true)
@@ -672,7 +691,10 @@ object FileToSheetClient {
                         mimeType = mimeType,
                         memo = memo,
                         ocrType = ocrType,
-                        deviceId = "${Build.MANUFACTURER} ${Build.MODEL}"
+                        deviceId = "${Build.MANUFACTURER} ${Build.MODEL}",
+                        customFileName = customFileName,
+                        contactName = contactName,
+                        callTime = callTime
                     )
                 }
             }

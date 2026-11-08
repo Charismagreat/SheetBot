@@ -352,11 +352,15 @@ class PhoneCallReceiver : BroadcastReceiver() {
                 val wasRingingNotAnswered = (lastState == TelephonyManager.EXTRA_STATE_RINGING && !isIncomingAnswered)
                 val wasOffhook = (lastState == TelephonyManager.EXTRA_STATE_OFFHOOK)
                 val candidatePhone = phoneNumber ?: savedIncomingNumber
+                val isFtsReady = prefs.isDestinationFileToSheet && (prefs.isFtsPaired || !prefs.ftsPhoneNumber.isNullOrBlank())
+                val effectiveEmail = userEmail?.takeIf { it.isNotBlank() }
+                    ?: prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() }?.let { "${it.replace(Regex("[^0-9]"), "")}@filetosheet.cloud" }
+                    ?: ""
 
                 if (wasRingingNotAnswered) {
                     // ★ 부재중 전화(Missed Call) 1차 감지! (벨 울림 -> 받지 않고 끊김)
-                    if (prefs.isPaired && !userEmail.isNullOrBlank()) {
-                        triggerMissedCallHandling(context, prefs, userEmail, candidatePhone)
+                    if ((prefs.isPaired && !userEmail.isNullOrBlank()) || isFtsReady) {
+                        triggerMissedCallHandling(context, prefs, effectiveEmail, candidatePhone)
                     }
                 } else if (wasOffhook) {
                     // ★ 통화 정상 종료 (Call Ended) 감지! (수신/발신 통화 모두 지원)
@@ -366,14 +370,14 @@ class PhoneCallReceiver : BroadcastReceiver() {
                     }
 
                     // ★ 통화 종료 즉시 녹음 자동 업로드 트리거 (3.5초 스마트 I/O 딜레이 후 실행)
-                    if (prefs.isCallRecordingSyncEnabled && prefs.isCallEndedAutoUploadEnabled && prefs.isPaired) {
+                    if (prefs.isCallRecordingSyncEnabled && prefs.isCallEndedAutoUploadEnabled && (prefs.isPaired || isFtsReady)) {
                         triggerAutoRecordingUpload(context, prefs)
                     }
-                } else if (!isIncomingAnswered && prefs.isPaired && !userEmail.isNullOrBlank()) {
+                } else if (!isIncomingAnswered && ((prefs.isPaired && !userEmail.isNullOrBlank()) || isFtsReady)) {
                     // 벨이 울렸으나 상태 순서가 누락되어 IDLE로 곧바로 진입한 경우를 위한 안전망 (최근 60초 이내 링 시작 이력 확인)
                     val now = System.currentTimeMillis()
                     if (callStartTime > 0 && (now - callStartTime < 60_000)) {
-                        triggerMissedCallHandling(context, prefs, userEmail, candidatePhone)
+                        triggerMissedCallHandling(context, prefs, effectiveEmail, candidatePhone)
                     }
                 }
 

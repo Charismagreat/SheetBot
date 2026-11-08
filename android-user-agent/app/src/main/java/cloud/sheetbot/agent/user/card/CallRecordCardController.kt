@@ -129,6 +129,28 @@ class CallRecordCardController(
             // 다른 폰/외부에서 전송받은 통화 녹음 파일(.m4a, .mp3 등) 직접 선택
             launchExternalRecordingPicker()
         }
+        binding.btnSyncRecordingsNow.setOnLongClickListener {
+            // 길게(롱클릭) 누르면 단말기 내 녹음 폴더를 즉시 강제 스캔하여 업로드 수행
+            scope.launch(Dispatchers.IO) {
+                withContext(Dispatchers.Main) {
+                    binding.btnSyncRecordingsNow.isEnabled = false
+                    binding.btnSyncRecordingsNow.text = "⏳ 녹음 폴더 강제 동기화 중..."
+                    Toast.makeText(activity, "⚡ 스마트폰 내 통화 녹음 파일을 즉시 스캔하여 동기화합니다...", Toast.LENGTH_SHORT).show()
+                }
+                val result = CallRecordingManager.scanAndUploadNewRecordings(activity, forceReupload = true)
+                withContext(Dispatchers.Main) {
+                    binding.btnSyncRecordingsNow.isEnabled = true
+                    binding.btnSyncRecordingsNow.text = "📁 녹음 파일 직접 업로드"
+                    val dialogTitle = if (result.uploadedCount > 0) "🎉 녹음 파일 동기화 완료" else "ℹ️ 녹음 파일 동기화 안내"
+                    AlertDialog.Builder(activity)
+                        .setTitle(dialogTitle)
+                        .setMessage(result.message)
+                        .setPositiveButton("확인", null)
+                        .show()
+                }
+            }
+            true
+        }
 
         // 🎙️ 화자 분리용 내 목소리(성문) 등록 UI 바인딩
         setupVoiceProfileUI()
@@ -245,14 +267,16 @@ class CallRecordCardController(
      * 📁 다른 폰/외부 녹음 파일(.m4a, .mp3 등) 직접 선택 업로드 처리
      */
     fun uploadExternalRecordings(uris: List<Uri>) {
-        if (!prefs.isPaired) {
-            Toast.makeText(activity, "⚠️ 시트봇 계정 연동 후 업로드할 수 있습니다.", Toast.LENGTH_LONG).show()
+        val isFtsReady = prefs.isDestinationFileToSheet && (prefs.isFtsPaired || !prefs.ftsPhoneNumber.isNullOrBlank())
+        if (!prefs.isPaired && !isFtsReady) {
+            Toast.makeText(activity, "⚠️ 파일투시트 번호 인증 또는 시트봇 계정 연동 후 업로드할 수 있습니다.", Toast.LENGTH_LONG).show()
             return
         }
 
         binding.btnSyncRecordingsNow.isEnabled = false
         binding.btnSyncRecordingsNow.text = "⏳ 녹음 파일 업로드 중..."
-        Toast.makeText(activity, "📁 ${uris.size}개의 녹음 파일을 구글 드라이브로 업로드합니다...", Toast.LENGTH_SHORT).show()
+        val destLabel = if (isFtsReady && !prefs.isPaired) "파일투시트 [통화녹음대장]" else "구글 드라이브 및 시트 대장"
+        Toast.makeText(activity, "📁 ${uris.size}개의 녹음 파일을 ${destLabel}으로 업로드합니다...", Toast.LENGTH_SHORT).show()
 
         scope.launch(Dispatchers.IO) {
             try {

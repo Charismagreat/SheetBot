@@ -878,7 +878,10 @@ object ApiClient {
                 file = file,
                 mimeType = "audio/mp4",
                 memo = "$contactName ($callTime)",
-                ocrType = "CALL_RECORDING"
+                ocrType = "CALL_RECORDING",
+                customFileName = fileName,
+                contactName = contactName,
+                callTime = callTime
             )
             if (!prefs.isDestinationGoogleSheet || !prefs.hasGoogleAccount) {
                 return@withContext UploadRecordingResult(
@@ -987,6 +990,26 @@ object ApiClient {
         userEmail: String,
         folderName: String = "[SheetBot] 회의 녹음"
     ): UploadRecordingResult = withContext(Dispatchers.IO) {
+        val prefs = try { PreferencesManager(SheetBotApp.appContext) } catch (_: Exception) { null }
+        if (prefs?.isDestinationFileToSheet == true) {
+            val ftsRes = FileToSheetClient.syncCardFileToFts(
+                cardIdOrType = "meeting_recording",
+                file = file,
+                mimeType = "audio/mp4",
+                memo = "$topic ($meetingTime)",
+                ocrType = "MEETING_RECORDING",
+                customFileName = fileName,
+                contactName = topic,
+                callTime = meetingTime
+            )
+            if (!prefs.isDestinationGoogleSheet || !prefs.hasGoogleAccount) {
+                return@withContext UploadRecordingResult(
+                    success = ftsRes.success,
+                    fileName = fileName,
+                    error = ftsRes.error
+                )
+            }
+        }
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val fileBytes = file.readBytes()
         val base64Str = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)

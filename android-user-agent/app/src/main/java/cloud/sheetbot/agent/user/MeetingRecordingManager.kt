@@ -31,8 +31,11 @@ object MeetingRecordingManager {
     suspend fun scanAndUploadNewMeetingRecordings(context: Context, forceReupload: Boolean = false): RecordingSyncResult = withContext(Dispatchers.IO) {
         val prefs = PreferencesManager(context)
 
-        // 1. 기능 활성화 및 페어링 확인
-        if (!prefs.isPaired || !prefs.isMeetingRecordingSyncEnabled) {
+        // 1. 기능 활성화 및 페어링 확인 (구글 시트봇 계정 또는 파일투시트 번호 연동 중 하나라도 활성화된 경우 허용)
+        val isFtsReady = prefs.isDestinationFileToSheet && (prefs.isFtsPaired || !prefs.ftsPhoneNumber.isNullOrBlank())
+        val isGoogleReady = prefs.isPaired && !prefs.userEmail.isNullOrBlank() && !prefs.userEmail!!.endsWith("@filetosheet.cloud")
+
+        if (!prefs.isMeetingRecordingSyncEnabled) {
             return@withContext RecordingSyncResult(
                 uploadedCount = 0,
                 totalFound = 0,
@@ -41,15 +44,18 @@ object MeetingRecordingManager {
             )
         }
 
-        val userEmail = prefs.userEmail
-        if (userEmail.isNullOrBlank()) {
+        if (!isGoogleReady && !isFtsReady) {
             return@withContext RecordingSyncResult(
                 uploadedCount = 0,
                 totalFound = 0,
                 alreadySyncedCount = 0,
-                message = "계정이 연동되지 않았습니다."
+                message = "계정이 연동되지 않았습니다. 먼저 파일투시트 번호 인증 또는 시트봇 Google 계정을 연동해 주세요."
             )
         }
+
+        val userEmail = prefs.userEmail?.takeIf { it.isNotBlank() }
+            ?: prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() }?.let { "${it.replace(Regex("[^0-9]"), "")}@filetosheet.cloud" }
+            ?: ""
 
         // 2. Wi-Fi 전용 업로드 옵션 체크
         if (prefs.isRecordingUploadOnlyOnWifi) {
