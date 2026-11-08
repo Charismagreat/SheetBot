@@ -60,6 +60,7 @@ class CardSetupCoordinator(
     lateinit var receiptCardController: ReceiptSyncCardController
     lateinit var businessCardController: BusinessCardSyncCardController
     lateinit var sheetSmsCheckboxCardController: SheetSmsCheckboxCardController
+    lateinit var saasOtpRelayCardController: SaasOtpRelayCardController
     lateinit var smsSyncCardController: SmsSyncCardController
     lateinit var kakaoCardController: KakaoSyncCardController
     lateinit var quoteCardController: QuoteSyncCardController
@@ -90,6 +91,7 @@ class CardSetupCoordinator(
     val isBusinessCardInitialized get() = ::businessCardController.isInitialized
     val isCallEndedInitialized get() = ::callEndedCardController.isInitialized
     val isSheetSmsCheckboxInitialized get() = ::sheetSmsCheckboxCardController.isInitialized
+    val isSaasOtpRelayInitialized get() = ::saasOtpRelayCardController.isInitialized
     val isSmsSyncInitialized get() = ::smsSyncCardController.isInitialized
     val isKakaoInitialized get() = ::kakaoCardController.isInitialized
     val isQuoteInitialized get() = ::quoteCardController.isInitialized
@@ -156,6 +158,9 @@ class CardSetupCoordinator(
 
         // ☑️ 시트 체크박스 문자 자동 발송 카드 초기화
         try { setupSheetSmsCheckboxCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupSheetSmsCheckboxCard 실패 방어", e) }
+
+        // 🔐 내 SaaS 휴대폰 인증(OTP) 0원 중계기 카드 초기화
+        try { setupSaasOtpRelayCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupSaasOtpRelayCard 실패 방어", e) }
 
         // 🎯 문자(SMS/LMS) 송수신 구글 시트 동기화 카드 초기화 (v2.1.99 리팩토링 모듈화)
         try { setupSmsCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupSmsCard 실패 방어", e) }
@@ -506,6 +511,18 @@ class CardSetupCoordinator(
             onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle, null) }
         )
         sheetSmsCheckboxCardController.setup()
+    }
+
+    private fun setupSaasOtpRelayCard() {
+        saasOtpRelayCardController = SaasOtpRelayCardController(
+            activity = activity,
+            prefs = prefs,
+            scope = scope,
+            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
+            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle, null) },
+            addLogItem = { title, detail, success -> addLogItem(title, detail, success) }
+        )
+        saasOtpRelayCardController.setup()
     }
 
     private fun setupSmsCard() {

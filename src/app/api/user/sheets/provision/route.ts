@@ -98,6 +98,11 @@ export const SHEET_DEFINITIONS: Record<string, SheetDefinition> = {
     headers: ["ID", "이름", "휴대전화", "추가 번호", "이메일", "회사/상호", "직함/부서", "메모", "주소", "동기화 기기", "최종 갱신일시"],
     range: "A1:K1",
   },
+  SAAS_OTP_RELAY: {
+    defaultTitle: "[SheetBot] SaaS 인증발송 대장",
+    headers: ["요청 일시", "서비스명", "수신 번호", "인증 목적", "인증번호(마스킹)", "발송 상태", "소요시간(ms)", "인증완료 여부", "발송 기기"],
+    range: "A1:I1",
+  },
 };
 
 const userFolderCache = new Map<string, string>();

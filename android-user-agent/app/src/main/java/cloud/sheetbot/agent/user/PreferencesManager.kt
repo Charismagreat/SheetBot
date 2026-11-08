@@ -922,6 +922,45 @@ class PreferencesManager(context: Context) {
     fun setDynamicCardCollapsed(cardKey: String, collapsed: Boolean) =
         prefs.edit().putBoolean("dyn_card_collapsed_$cardKey", collapsed).apply()
 
+    // =========================================================================
+    // 🔐 내 SaaS 휴대폰 로그인 인증(OTP) 0원 중계기 카드 설정
+    // =========================================================================
+    var isSaasOtpRelayEnabled: Boolean
+        get() = prefs.getBoolean("is_saas_otp_relay_enabled", false)
+        set(value) = prefs.edit().putBoolean("is_saas_otp_relay_enabled", value).apply()
+
+    var isSaasOtpRelayDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_saas_otp_relay_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_saas_otp_relay_details_hidden", value).apply()
+
+    var saasOtpBrandName: String
+        get() = prefs.getString("saas_otp_brand_name", "내SaaS") ?: "내SaaS"
+        set(value) = prefs.edit().putString("saas_otp_brand_name", value.trim().ifBlank { "내SaaS" }).apply()
+
+    var saasOtpDailyLimit: Int
+        get() = prefs.getInt("saas_otp_daily_limit", 150).coerceIn(10, 400)
+        set(value) = prefs.edit().putInt("saas_otp_daily_limit", value.coerceIn(10, 400)).apply()
+
+    var saasOtpApiKey: String
+        get() {
+            val saved = prefs.getString("saas_otp_api_key", null)
+            if (!saved.isNullOrBlank() && saved.startsWith("sbk_otp_")) return saved
+            return regenerateSaasOtpApiKey()
+        }
+        set(value) = prefs.edit().putString("saas_otp_api_key", value).apply()
+
+    fun regenerateSaasOtpApiKey(): String {
+        val chars = "abcdefghjkmnpqrstuvwxyz23456789"
+        val sb = StringBuilder("sbk_otp_")
+        val rnd = java.security.SecureRandom()
+        for (i in 0 until 16) {
+            sb.append(chars[rnd.nextInt(chars.length)])
+        }
+        val newKey = sb.toString()
+        prefs.edit().putString("saas_otp_api_key", newKey).apply()
+        return newKey
+    }
+
     /**
      * 🔄 v2.3.8+ 신규 스토어 체계 및 v2.4.14 초기 전체 보관 마이그레이션:
      * 최초 설치 시 모든 기능/시스템 카드(매장결제, 연락처백업 포함 25종 전원)가
@@ -1012,6 +1051,7 @@ class PreferencesManager(context: Context) {
             // 메시지 & 업무
             "cardSmsSync",
             "cardSheetSmsCheckbox",
+            "cardSaasOtpRelay",
             "cardKakaoSync",
             "cardLinkScrap",
 

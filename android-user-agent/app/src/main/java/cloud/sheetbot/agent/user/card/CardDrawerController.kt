@@ -75,6 +75,7 @@ class CardDrawerController(
 
         // [4] 메시지 & 대화
         CardInfo("cardSheetSmsCheckbox", "시트 체크박스 문자 자동 발송", "☑️", "메시지 & 대화", R.id.cardSheetSmsCheckbox, R.id.layoutSheetSmsCheckboxHeader),
+        CardInfo("cardSaasOtpRelay", "내 SaaS 휴대폰 인증(OTP) 0원 중계기", "🔐", "메시지 & 대화", R.id.cardSaasOtpRelay, R.id.layoutSaasOtpRelayHeader),
         CardInfo("cardSmsSync", "스마트폰 문자 시트 동기화", "💬", "메시지 & 대화", R.id.cardSmsSync, R.id.layoutSmsSyncHeader),
         CardInfo("cardKakaoSync", "카카오톡 대화 자동 기록", "🟡", "메시지 & 대화", R.id.cardKakaoSync, R.id.layoutKakaoSyncHeader),
         CardInfo("cardLinkScrap", "웹 링크 & 유튜브 요약 스크랩", "🔗", "메시지 & 대화", R.id.cardLinkScrap, R.id.layoutLinkScrapHeader),

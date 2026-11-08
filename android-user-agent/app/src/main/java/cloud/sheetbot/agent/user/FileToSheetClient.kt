@@ -224,6 +224,11 @@ object FileToSheetClient {
             cardId = "mobile_site",
             sheetName = "모바일홈페이지대장",
             headers = listOf("일련번호", "생성일시", "사이트명", "도메인/URL", "주요메뉴", "상태")
+        ),
+        "saas_otp_relay" to FtsCardSheetSpec(
+            cardId = "saas_otp_relay",
+            sheetName = "SaaS인증발송대장",
+            headers = listOf("일련번호", "요청일시", "서비스명", "수신번호", "인증목적", "인증번호(마스킹)", "발송상태", "소요시간(ms)", "인증완료여부", "발송기기")
         )
     )
 
@@ -256,6 +261,7 @@ object FileToSheetClient {
             "naver_blog", "cardblog" -> "naver_blog"
             "instagram", "cardinsta" -> "instagram"
             "mobile_site", "cardsite" -> "mobile_site"
+            "saas_otp_relay", "cardsaasotprelay", "saas_otp" -> "saas_otp_relay"
             else -> raw.lowercase()
         }
     }
@@ -984,5 +990,244 @@ object FileToSheetClient {
         }
 
         return@withContext Pair(false, emptyList<JSONObject>())
+    }
+
+    // =========================================================================
+    // 🔐 내 SaaS 휴대폰 로그인 인증(OTP) 0원 중계기 전용 API 메서드
+    // =========================================================================
+    data class SaasOtpPendingItem(
+        val requestId: String,
+        val recipientPhone: String,
+        val brandName: String,
+        val purpose: String,
+        val maskedCode: String,
+        val message: String,
+        val createdAtKst: String
+    )
+
+    data class SaasOtpSendTestResult(
+        val success: Boolean,
+        val requestId: String? = null,
+        val status: String? = null,
+        val recipient: String? = null,
+        val maskedCode: String? = null,
+        val message: String? = null,
+        val error: String? = null
+    )
+
+    data class SaasOtpVerifyTestResult(
+        val success: Boolean,
+        val verified: Boolean = false,
+        val verifiedAt: String? = null,
+        val message: String? = null,
+        val error: String? = null
+    )
+
+    fun getSaasOtpBaseHosts(prefs: PreferencesManager? = null): List<String> {
+        val list = mutableListOf<String>()
+        val customEp = prefs?.ftsEndpoint
+        if (!customEp.isNullOrBlank()) {
+            val idx = customEp.indexOf("/api/inbox")
+            if (idx > 0) {
+                list.add(customEp.substring(0, idx))
+            }
+        }
+        if (!list.contains(FTS_OFFICIAL_DOMAIN)) list.add(FTS_OFFICIAL_DOMAIN)
+        if (!list.contains(FTS_TUNNEL_BASE)) list.add(FTS_TUNNEL_BASE)
+        if (!list.contains(FTS_TUNNEL_BASE_LEGACY)) list.add(FTS_TUNNEL_BASE_LEGACY)
+        return list
+    }
+
+    suspend fun fetchPendingSaasOtps(prefs: PreferencesManager): List<SaasOtpPendingItem> = withContext(Dispatchers.IO) {
+        val apiKey = prefs.saasOtpApiKey
+        if (apiKey.isBlank()) return@withContext emptyList()
+
+        val deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}"
+        val ownerPhone = prefs.ftsPhoneNumber ?: ""
+        val projectId = prefs.ftsProjectId ?: ""
+        val brandName = prefs.saasOtpBrandName
+        val dailyLimit = prefs.saasOtpDailyLimit
+        val userEmail = prefs.userEmail ?: ""
+
+        val query = buildString {
+            append("apiKey=").append(java.net.URLEncoder.encode(apiKey, "UTF-8"))
+            if (ownerPhone.isNotBlank()) append("&ownerPhone=").append(java.net.URLEncoder.encode(ownerPhone, "UTF-8"))
+            if (projectId.isNotBlank()) append("&projectId=").append(java.net.URLEncoder.encode(projectId, "UTF-8"))
+            if (brandName.isNotBlank()) append("&brandName=").append(java.net.URLEncoder.encode(brandName, "UTF-8"))
+            append("&dailyLimit=").append(dailyLimit)
+            append("&deviceModel=").append(java.net.URLEncoder.encode(deviceModel, "UTF-8"))
+            if (userEmail.isNotBlank()) append("&userEmail=").append(java.net.URLEncoder.encode(userEmail, "UTF-8"))
+        }
+
+        for (base in getSaasOtpBaseHosts(prefs)) {
+            val url = "$base/api/saas/otp/pending?$query"
+            try {
+                val req = Request.Builder()
+                    .url(url)
+                    .header("Accept", "application/json")
+                    .header("x-saas-otp-key", apiKey)
+                    .get()
+                    .build()
+                client.newCall(req).execute().use { res ->
+                    val bodyStr = res.body?.string() ?: ""
+                    val json = try { JSONObject(bodyStr) } catch (_: Exception) { JSONObject() }
+                    if (res.isSuccessful && json.optBoolean("success", false)) {
+                        val arr = json.optJSONArray("pending") ?: return@withContext emptyList()
+                        val items = mutableListOf<SaasOtpPendingItem>()
+                        for (i in 0 until arr.length()) {
+                            val obj = arr.optJSONObject(i) ?: continue
+                            val rId = obj.optString("requestId", "")
+                            val phone = obj.optString("recipientPhone", "")
+                            val msg = obj.optString("message", "")
+                            if (rId.isNotBlank() && phone.isNotBlank() && msg.isNotBlank()) {
+                                items.add(
+                                    SaasOtpPendingItem(
+                                        requestId = rId,
+                                        recipientPhone = phone,
+                                        brandName = obj.optString("brandName", brandName),
+                                        purpose = obj.optString("purpose", "로그인"),
+                                        maskedCode = obj.optString("maskedCode", "••••••"),
+                                        message = msg,
+                                        createdAtKst = obj.optString("createdAtKst", "")
+                                    )
+                                )
+                            }
+                        }
+                        return@withContext items
+                    }
+                }
+            } catch (e: Exception) {
+                Log.d(TAG, "fetchPendingSaasOtps 참고 ($base): ${e.message}")
+            }
+        }
+        emptyList()
+    }
+
+    suspend fun ackSaasOtpDispatch(
+        prefs: PreferencesManager,
+        requestId: String,
+        success: Boolean,
+        errorMessage: String? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        val apiKey = prefs.saasOtpApiKey
+        val payload = JSONObject().apply {
+            put("apiKey", apiKey)
+            put("requestId", requestId)
+            put("success", success)
+            put("deviceModel", "${Build.MANUFACTURER} ${Build.MODEL}")
+            prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() }?.let { put("ownerPhone", it) }
+            prefs.ftsProjectId?.takeIf { it.isNotBlank() }?.let { put("projectId", it) }
+            if (!errorMessage.isNullOrBlank()) put("errorMessage", errorMessage)
+        }
+        val body = payload.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (base in getSaasOtpBaseHosts(prefs)) {
+            val url = "$base/api/saas/otp/ack"
+            try {
+                val req = Request.Builder()
+                    .url(url)
+                    .header("x-saas-otp-key", apiKey)
+                    .post(body)
+                    .build()
+                client.newCall(req).execute().use { res ->
+                    if (res.isSuccessful) return@withContext true
+                }
+            } catch (_: Exception) {}
+        }
+        false
+    }
+
+    suspend fun requestSaasOtpTestSend(
+        prefs: PreferencesManager,
+        recipientPhone: String,
+        brandName: String = prefs.saasOtpBrandName,
+        purpose: String = "로그인"
+    ): SaasOtpSendTestResult = withContext(Dispatchers.IO) {
+        val apiKey = prefs.saasOtpApiKey
+        val payload = JSONObject().apply {
+            put("apiKey", apiKey)
+            put("phoneNumber", recipientPhone)
+            put("brandName", brandName)
+            put("purpose", purpose)
+            put("waitMs", 600)
+            put("isTest", true)
+            prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() }?.let { put("ownerPhone", it) }
+            prefs.ftsProjectId?.takeIf { it.isNotBlank() }?.let { put("projectId", it) }
+        }
+        val body = payload.toString().toRequestBody(JSON_MEDIA_TYPE)
+        var lastErr = "서버 연결 실패"
+
+        for (base in getSaasOtpBaseHosts(prefs)) {
+            val url = "$base/api/saas/otp/send"
+            try {
+                val req = Request.Builder()
+                    .url(url)
+                    .header("x-saas-otp-key", apiKey)
+                    .post(body)
+                    .build()
+                client.newCall(req).execute().use { res ->
+                    val resStr = res.body?.string() ?: ""
+                    val json = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                    if (res.isSuccessful && json.optBoolean("success", false)) {
+                        return@withContext SaasOtpSendTestResult(
+                            success = true,
+                            requestId = json.optString("requestId", null),
+                            status = json.optString("status", "QUEUED"),
+                            recipient = json.optString("recipient", recipientPhone),
+                            maskedCode = json.optString("maskedCode", "••••••"),
+                            message = json.optString("message", "발송 요청 완료")
+                        )
+                    } else {
+                        lastErr = json.optString("error", "HTTP ${res.code}")
+                    }
+                }
+            } catch (e: Exception) {
+                lastErr = e.localizedMessage ?: "통신 오류"
+            }
+        }
+        SaasOtpSendTestResult(success = false, error = lastErr)
+    }
+
+    suspend fun verifySaasOtpTestCode(
+        prefs: PreferencesManager,
+        recipientPhone: String,
+        code: String
+    ): SaasOtpVerifyTestResult = withContext(Dispatchers.IO) {
+        val apiKey = prefs.saasOtpApiKey
+        val payload = JSONObject().apply {
+            put("apiKey", apiKey)
+            put("phoneNumber", recipientPhone)
+            put("code", code.trim())
+        }
+        val body = payload.toString().toRequestBody(JSON_MEDIA_TYPE)
+        var lastErr = "검증 요청 실패"
+
+        for (base in getSaasOtpBaseHosts(prefs)) {
+            val url = "$base/api/saas/otp/verify"
+            try {
+                val req = Request.Builder()
+                    .url(url)
+                    .header("x-saas-otp-key", apiKey)
+                    .post(body)
+                    .build()
+                client.newCall(req).execute().use { res ->
+                    val resStr = res.body?.string() ?: ""
+                    val json = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                    if (res.isSuccessful && json.optBoolean("verified", false)) {
+                        return@withContext SaasOtpVerifyTestResult(
+                            success = true,
+                            verified = true,
+                            verifiedAt = json.optString("verifiedAt", null),
+                            message = json.optString("message", "인증 성공")
+                        )
+                    } else {
+                        lastErr = json.optString("error", "인증번호가 일치하지 않습니다.")
+                    }
+                }
+            } catch (e: Exception) {
+                lastErr = e.localizedMessage ?: "통신 오류"
+            }
+        }
+        SaasOtpVerifyTestResult(success = false, verified = false, error = lastErr)
     }
 }

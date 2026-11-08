@@ -25,6 +25,7 @@ class KeepAliveService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Default + Job())
     private var heartbeatJob: Job? = null
     private var receiptQueueJob: Job? = null
+    private var saasOtpRelayJob: Job? = null
     private var dispatchSseJob: Job? = null
     private var recordingSyncJob: Job? = null
     private var websiteMonitorJob: Job? = null
@@ -60,6 +61,7 @@ class KeepAliveService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification("🟢 24시간 실시간 고객 알림 문자 발송 대기 중 (${prefs.userEmail ?: "미연동"})"))
         startHeartbeatLoop()
         startReceiptQueueLoop()
+        startSaasOtpRelayLoop()
         startDispatchSseLoop()
         startRecordingSyncLoop()
         startWebsiteMonitorLoop()
@@ -77,6 +79,7 @@ class KeepAliveService : Service() {
         super.onDestroy()
         heartbeatJob?.cancel()
         receiptQueueJob?.cancel()
+        saasOtpRelayJob?.cancel()
         dispatchSseJob?.cancel()
         recordingSyncJob?.cancel()
         websiteMonitorJob?.cancel()
@@ -325,6 +328,30 @@ class KeepAliveService : Service() {
                 }
                 // 실시간 반응성을 위해 20초마다 대기열 체크 (기존 3분에서 20초로 단축)
                 delay(60 * 1000L)
+            }
+        }
+    }
+
+    private fun startSaasOtpRelayLoop() {
+        saasOtpRelayJob?.cancel()
+        saasOtpRelayJob = serviceScope.launch {
+            delay(2000L)
+            while (isActive) {
+                try {
+                    if (prefs.isSaasOtpRelayEnabled) {
+                        val count = SmsSenderUtil.processPendingSaasOtps(this@KeepAliveService)
+                        if (count > 0) {
+                            Log.i(TAG, "🔐 [SaaS OTP 중계기] 인증번호 문자 ${count}건 0원 자동 발송 및 대장 기록 완료")
+                        }
+                        // 로그인 인증번호는 1~2초 내 즉각 도착해야 하므로 활성화 시 2.5초 주기로 고속 폴링
+                        delay(2500L)
+                    } else {
+                        delay(10000L)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "SaaS OTP 중계 루프 오류: ${e.message}")
+                    delay(5000L)
+                }
             }
         }
     }

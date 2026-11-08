@@ -252,6 +252,15 @@ object CardSearchRegistry {
             chosung = "ㅁㅊㄱㄴㅈㅈㅇㄹ",
             keywords = listOf("의뢰", "기능의뢰", "개발의뢰", "제작의뢰", "아이디어", "제안", "세금계산서", "재고", "출퇴근", "리뷰답글", "커스텀"),
             cardResId = R.id.cardFeatureRequest
+        ),
+        SearchableCard(
+            index = 29,
+            key = "cardSaasOtpRelay",
+            title = "내 SaaS 휴대폰 인증(OTP) 0원 중계기",
+            icon = "🔐",
+            chosung = "ㄴㅅㅅㅎㄷㅍㅇㅈㅇㅌㅍㅈㄱㄱ",
+            keywords = listOf("otp", "인증번호", "로그인", "휴대폰인증", "문자인증", "본인인증", "saas", "바이브코딩", "인증대장", "0원문자"),
+            cardResId = R.id.cardSaasOtpRelay
         )
     )
 

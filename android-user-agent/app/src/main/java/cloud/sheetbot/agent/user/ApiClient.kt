@@ -3533,6 +3533,50 @@ object ApiClient {
         }
         DynamicCardExecuteResult(success = false, error = lastError)
     }
+
+    /**
+     * 🔐 SaaS 휴대폰 인증번호(OTP) 발송 이력을 사용자의 구글 스프레드시트([SheetBot] SaaS 인증발송 대장)에 자동 기록
+     */
+    suspend fun logSaasOtpToGoogleSheet(
+        userEmail: String,
+        brandName: String,
+        recipientPhone: String,
+        purpose: String,
+        maskedCode: String,
+        status: String,
+        elapsedMs: Long = 0L,
+        verifiedStatus: String = "⏳ 미인증 (대기중)"
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (userEmail.isBlank() || userEmail.endsWith("@filetosheet.cloud")) return@withContext false
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val payload = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("brandName", brandName)
+            put("recipientPhone", recipientPhone)
+            put("purpose", purpose)
+            put("maskedCode", maskedCode)
+            put("status", status)
+            put("elapsedMs", elapsedMs)
+            put("verifiedStatus", verifiedStatus)
+            put("deviceModel", "${Build.MANUFACTURER} ${Build.MODEL}")
+        }
+        val body = payload.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/saas-otp/log"
+            try {
+                val req = Request.Builder()
+                    .url(endpoint)
+                    .post(body)
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .build()
+                client.newCall(req).execute().use { res ->
+                    if (res.isSuccessful) return@withContext true
+                }
+            } catch (_: Exception) {}
+        }
+        false
+    }
 }
 
 data class FeatureRequestResult(

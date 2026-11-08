@@ -71,7 +71,8 @@ export type SheetBindingType =
   | "QUOTE"
   | "ESTIMATE"
   | "CONTACTS"
-  | "SHEET_SMS_CHECKBOX";
+  | "SHEET_SMS_CHECKBOX"
+  | "SAAS_OTP_RELAY";
 
 export interface ResolveSheetOptions {
   userEmail: string;

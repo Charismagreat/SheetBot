@@ -217,4 +217,70 @@ object SmsSenderUtil {
 
         sentCount
     }
+
+    /**
+     * 🔐 내 SaaS 휴대폰 로그인 인증(OTP) 0원 중계기 대기열을 조회하여 즉시 SMS 발송 및 대장 기록
+     * @return 발송 성공한 OTP 건수
+     */
+    suspend fun processPendingSaasOtps(context: Context): Int = withContext(Dispatchers.IO) {
+        val prefs = PreferencesManager(context)
+        if (!prefs.isSaasOtpRelayEnabled) {
+            return@withContext 0
+        }
+
+        val pendingItems = FileToSheetClient.fetchPendingSaasOtps(prefs)
+        if (pendingItems.isEmpty()) {
+            return@withContext 0
+        }
+
+        Log.i(TAG, "🔐 [SaaS OTP 중계기] 대기 중인 인증번호 ${pendingItems.size}건 감지! 즉시 발송 개시")
+        var sentCount = 0
+
+        for (item in pendingItems) {
+            val startMs = System.currentTimeMillis()
+            val (isSent, _) = sendSmsDetailed(context, item.recipientPhone, item.message)
+            val elapsedMs = (System.currentTimeMillis() - startMs).coerceAtLeast(1L)
+
+            // 1. 파일투시트 서버에 발송 완료 ACK 보고 (SaaS인증발송대장 상태 업데이트 및 API 대기 즉시 해제)
+            FileToSheetClient.ackSaasOtpDispatch(
+                prefs = prefs,
+                requestId = item.requestId,
+                success = isSent,
+                errorMessage = if (isSent) null else "단말기 SMS 발송 실패"
+            )
+
+            // 2. 구글 시트 목적지가 함께 활성화된 경우 구글 시트 [SheetBot] SaaS 인증발송 대장에도 기록
+            val email = prefs.userEmail
+            if (prefs.isDestinationGoogleSheet && prefs.hasGoogleAccount && !email.isNullOrBlank()) {
+                ApiClient.logSaasOtpToGoogleSheet(
+                    userEmail = email,
+                    brandName = item.brandName,
+                    recipientPhone = item.recipientPhone,
+                    purpose = item.purpose,
+                    maskedCode = item.maskedCode,
+                    status = if (isSent) "✅ 발송성공" else "❌ 발송실패",
+                    elapsedMs = elapsedMs
+                )
+            }
+
+            if (isSent) {
+                sentCount++
+                LocalLogManager.addLog(
+                    context,
+                    "🔐 SaaS OTP 발송 [${item.brandName}]",
+                    "수신: ${item.recipientPhone} (${item.purpose} / ${item.maskedCode})",
+                    true
+                )
+            } else {
+                LocalLogManager.addLog(
+                    context,
+                    "⚠️ SaaS OTP 발송 실패 [${item.brandName}]",
+                    "수신: ${item.recipientPhone} (SMS 권한/번호 확인 필요)",
+                    false
+                )
+            }
+        }
+
+        sentCount
+    }
 }

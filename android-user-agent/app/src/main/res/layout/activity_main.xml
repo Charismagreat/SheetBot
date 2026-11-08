@@ -2024,6 +2024,9 @@
         <!-- ☑️ 시트 체크박스 문자 자동 발송 카드 -->
         <include layout="@layout/card_sheet_sms_checkbox" />
 
+        <!-- 🔐 내 SaaS 휴대폰 로그인 인증(OTP) 0원 중계기 카드 -->
+        <include layout="@layout/card_saas_otp_relay" />
+
         <!-- 독립 카드: kakao -->
         <LinearLayout
             android:id="@+id/cardKakaoSync"

@@ -29,6 +29,20 @@ export interface MarketplaceCardItem {
 const DEFAULT_CATALOG: MarketplaceCardItem[] = [
   // 1. 매장 · 정산 카테고리
   {
+    key: 'cardSaasOtpRelay',
+    title: '내 SaaS 휴대폰 인증(OTP) 0원 중계기',
+    icon: '🔐',
+    category: 'ai',
+    categoryName: 'AI · 자동화',
+    description: '내가 개발 중인 SaaS 서비스에 휴대폰 번호 로그인 기능을 1분 만에 연동하고, 내 폰에서 0원으로 인증번호를 발송하며 SaaS인증발송대장에 자동 기록합니다.',
+    badge: 'NEW',
+    author: '시트봇 공식',
+    isExclusive: false,
+    isInstalledByDefault: true,
+    version: '1.0.0',
+    updatedAt: '2026-11-08',
+  },
+  {
     key: 'cardTaxInvoice',
     title: '전자세금계산서 원클릭 발행',
     icon: '🧾',

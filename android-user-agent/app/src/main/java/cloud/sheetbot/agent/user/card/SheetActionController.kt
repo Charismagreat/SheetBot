@@ -162,6 +162,9 @@ class SheetActionController(
                     if (prefs.isWebsiteMonitorEnabled && (force || prefs.getSheetUrl("WEBSITE_MONITOR").isNullOrBlank())) {
                         targets.add(Triple("WEBSITE_MONITOR", "[SheetBot] 웹사이트 모니터링 & 장애 대장", null))
                     }
+                    if (prefs.isSaasOtpRelayEnabled && (force || prefs.getSheetUrl("SAAS_OTP_RELAY").isNullOrBlank())) {
+                        targets.add(Triple("SAAS_OTP_RELAY", "[SheetBot] SaaS 인증발송 대장", null))
+                    }
                     val quoteUrl = prefs.getSheetUrl("QUOTE")
                     if (prefs.isQuoteSheetSyncEnabled && (force || quoteUrl.isNullOrBlank() || quoteUrl.contains("1feIe5"))) {
                         targets.add(Triple("QUOTE", prefs.quoteDriveSheetTitle, null))
