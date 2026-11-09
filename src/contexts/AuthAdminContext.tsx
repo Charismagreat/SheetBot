@@ -40,12 +40,13 @@ const AuthAdminContext = createContext<AuthAdminContextValue>({
 export function AuthAdminProvider({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
 
-  // ⚡ 1. 브라우저 캐시에서 즉시 복원하여 화면 깜빡임 0ms 차단
+  // ⚡ 1. 브라우저 캐시에서 즉시 복원 (단, 유효한 방문자 세션 키나 쿠키가 남아있는 경우에만 복원하여 로그아웃 후 유령 세션 부활 차단)
   const [user, setUser] = useState<AuthAdminUser | null>(() => {
     if (typeof window === "undefined") return null;
     try {
       const email = localStorage.getItem("sheetbot_user_email");
-      if (email && email.includes("@")) {
+      const hasVisitorSid = Boolean(localStorage.getItem("egdesk_visitor_session")?.trim());
+      if (email && email.includes("@") && hasVisitorSid) {
         const name = localStorage.getItem("sheetbot_user_name") || email.split("@")[0];
         const image =
           localStorage.getItem("sheetbot_user_image") ||
@@ -166,87 +167,78 @@ export function AuthAdminProvider({ children }: { children: React.ReactNode }) {
       }
       setIsLoading(false);
     } else {
-      // NextAuth 세션이 아직 동기화되지 않았더라도 로컬스토리지에 유효한 회원 정보가 있으면 안전하게 유지
-      let fallbackEmail: string | null = null;
+      // 방문자 세션(egdesk_visitor_session)이 존재하는지 확인하여 즉시 자동 연동
+      const visitorSession =
+        typeof window !== "undefined"
+          ? localStorage.getItem("egdesk_visitor_session")?.trim() || null
+          : null;
+
+      if (visitorSession) {
+        (async () => {
+          try {
+            const statusRes = await getVisitorGoogleStatus();
+            if (statusRes?.connected && statusRes?.email) {
+              const email = statusRes.email.toLowerCase().trim();
+              const name = (statusRes as any).name || email.split("@")[0];
+              const image =
+                (statusRes as any).picture ||
+                "https://lh3.googleusercontent.com/a/default-user=s96-c";
+
+              setUser({ email, name, image });
+              if (typeof window !== "undefined") {
+                try {
+                  localStorage.setItem("sheetbot_user_email", email);
+                  localStorage.setItem("sheetbot_user_name", name);
+                  localStorage.setItem("sheetbot_user_image", image);
+                  const isSecure = window.location.protocol === "https:";
+                  document.cookie = `egdesk_visitor_session=${encodeURIComponent(
+                    visitorSession,
+                  )}; path=/; max-age=2592000; SameSite=Lax${isSecure ? "; Secure" : ""}`;
+                } catch {}
+              }
+
+              // NextAuth 세션 쿠키 발급
+              await apiFetch("/api/auth/google/session", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, name, image, visitorSessionId: visitorSession }),
+              }).catch(() => {});
+
+              if (KNOWN_ADMINS.includes(email)) {
+                setIsAdmin(true);
+              }
+              setIsLoading(false);
+              return;
+            } else if (statusRes && statusRes.connected === false) {
+              // 방문자 세션이 만료/무효화된 경우 스테일 캐시 즉시 정리
+              try {
+                localStorage.removeItem("sheetbot_user_email");
+                localStorage.removeItem("sheetbot_user_name");
+                localStorage.removeItem("sheetbot_user_image");
+                localStorage.removeItem("egdesk_visitor_session");
+              } catch {}
+            }
+          } catch (vErr) {
+            console.warn("Visitor session auto-resolution note:", vErr);
+          }
+          setUser(null);
+          setIsAdmin(false);
+          setIsLoading(false);
+        })();
+        return;
+      }
+
+      // NextAuth 세션도 없고 egdesk_visitor_session도 없는 비로그인 상태면 잔존 localStorage 정리 후 null 처리
       if (typeof window !== "undefined") {
         try {
-          fallbackEmail = localStorage.getItem("sheetbot_user_email");
+          localStorage.removeItem("sheetbot_user_email");
+          localStorage.removeItem("sheetbot_user_name");
+          localStorage.removeItem("sheetbot_user_image");
         } catch {}
       }
-
-      if (fallbackEmail && fallbackEmail.includes("@")) {
-        const email = fallbackEmail.toLowerCase().trim();
-        const name =
-          (typeof window !== "undefined" && localStorage.getItem("sheetbot_user_name")) ||
-          email.split("@")[0];
-        const image =
-          (typeof window !== "undefined" && localStorage.getItem("sheetbot_user_image")) ||
-          "https://lh3.googleusercontent.com/a/default-user=s96-c";
-
-        setUser({ email, name, image });
-        if (KNOWN_ADMINS.includes(email)) {
-          setIsAdmin(true);
-        }
-        setIsLoading(false);
-      } else {
-        // 방문자 세션(egdesk_visitor_session)이 존재하는지 확인하여 즉시 자동 연동
-        const visitorSession =
-          typeof window !== "undefined"
-            ? localStorage.getItem("egdesk_visitor_session")
-            : null;
-
-        if (visitorSession) {
-          (async () => {
-            try {
-              const statusRes = await getVisitorGoogleStatus();
-              if (statusRes?.connected && statusRes?.email) {
-                const email = statusRes.email.toLowerCase().trim();
-                const name = (statusRes as any).name || email.split("@")[0];
-                const image =
-                  (statusRes as any).picture ||
-                  "https://lh3.googleusercontent.com/a/default-user=s96-c";
-
-                setUser({ email, name, image });
-                if (typeof window !== "undefined") {
-                  try {
-                    localStorage.setItem("sheetbot_user_email", email);
-                    localStorage.setItem("sheetbot_user_name", name);
-                    localStorage.setItem("sheetbot_user_image", image);
-                    const isSecure = window.location.protocol === "https:";
-                    document.cookie = `egdesk_visitor_session=${encodeURIComponent(
-                      visitorSession,
-                    )}; path=/; max-age=2592000; SameSite=Lax${isSecure ? "; Secure" : ""}`;
-                  } catch {}
-                }
-
-                // NextAuth 세션 쿠키 발급
-                await apiFetch("/api/auth/google/session", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ email, name, image, visitorSessionId: visitorSession }),
-                }).catch(() => {});
-
-                if (KNOWN_ADMINS.includes(email)) {
-                  setIsAdmin(true);
-                }
-                setIsLoading(false);
-                return;
-              }
-            } catch (vErr) {
-              console.warn("Visitor session auto-resolution note:", vErr);
-            }
-            setUser(null);
-            setIsAdmin(false);
-            setIsLoading(false);
-          })();
-          return;
-        }
-
-        // 실제 비로그인 게스트인 경우에만 null 처리
-        setUser(null);
-        setIsAdmin(false);
-        setIsLoading(false);
-      }
+      setUser(null);
+      setIsAdmin(false);
+      setIsLoading(false);
     }
   }, [session, status, refreshAdminStatus]);
 

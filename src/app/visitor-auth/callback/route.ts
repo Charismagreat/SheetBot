@@ -10,19 +10,44 @@ function resolveEgdeskMcpInternalUrl(): string {
   return 'http://localhost:8080';
 }
 
+function resolvePublicOrigin(request: NextRequest, fallbackOrigin: string): string {
+  const fromHeader = request.headers.get('origin')?.trim();
+  if (fromHeader && !fromHeader.includes('localhost') && !fromHeader.includes('127.0.0.1')) {
+    return fromHeader;
+  }
+  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
+  if (forwardedHost) {
+    if (forwardedHost.includes('sheetbot.cloud') || forwardedHost.includes('onrender.com')) {
+      return 'https://sheetbot.cloud';
+    }
+    const proto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim() || 'https';
+    return `${proto}://${forwardedHost}`;
+  }
+  if (fallbackOrigin.includes('localhost') || fallbackOrigin.includes('127.0.0.1')) {
+    return 'https://sheetbot.cloud';
+  }
+  return fallbackOrigin;
+}
+
 export async function GET(request: NextRequest) {
   const internal = resolveEgdeskMcpInternalUrl();
   const incoming = new URL(request.url);
   const target = new URL(`${internal}/visitor-auth/callback`);
   target.search = incoming.search;
-  const origin = request.headers.get('origin') || incoming.origin;
+  const origin = resolvePublicOrigin(request, incoming.origin);
+  const headers: Record<string, string> = {
+    Origin: origin,
+    'X-Visitor-Origin': origin,
+  };
+  const xff = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip')?.trim();
+  if (xff) {
+    headers['X-EGDesk-Visitor-Client-Ip'] = xff;
+    headers['X-Forwarded-For'] = xff;
+  }
   const response = await fetch(target.toString(), {
     method: 'GET',
     redirect: 'manual',
-    headers: {
-      Origin: origin,
-      'X-Visitor-Origin': origin,
-    },
+    headers,
     cache: 'no-store',
   });
   const location = response.headers.get('location');

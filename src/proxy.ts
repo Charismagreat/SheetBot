@@ -80,13 +80,24 @@ function resolveBrowserClientIpForMcp(request: NextRequest): string | undefined 
 /** Forward this site's origin so EGDesk can bind visitor sessions to this site only. */
 function visitorForwardHeaders(request: NextRequest): Record<string, string> {
   const headers = buildEgdeskHeaders();
-  const origin = request.headers.get('origin') || request.nextUrl.origin;
+  let origin = request.headers.get('x-visitor-origin') || request.headers.get('origin') || '';
+  if (!origin || origin.includes('localhost') || origin.includes('127.0.0.1')) {
+    const fHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim() || '';
+    if (fHost.includes('sheetbot.cloud') || fHost.includes('onrender.com')) {
+      origin = 'https://sheetbot.cloud';
+    } else if (!origin) {
+      origin = request.nextUrl.origin;
+    }
+  }
   headers['Origin'] = origin;
   headers['X-Visitor-Origin'] = origin;
   const clientIp = resolveBrowserClientIpForMcp(request);
   if (clientIp) headers['X-EGDesk-Visitor-Client-Ip'] = clientIp;
   return headers;
 }
+
+const visitorAuthExchangeCache = new Map<string, { result: any; status: number; ts: number }>();
+const visitorAuthExchangeInFlight = new Map<string, Promise<{ result: any; status: number }>>();
 
 /** Forward opt-in visitor session headers to Workspace MCP tool calls. */
 function originFromEnvValue(value?: string | null): string | null {
@@ -978,7 +989,64 @@ export async function proxy(request: NextRequest) {
   if (pathname.includes('__visitor_auth_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = resolveVisitorAuthMcpApiUrlForTool(visitorAuthToolFromProxyBody(body));
+      const tool = visitorAuthToolFromProxyBody(body);
+      const apiUrl = resolveVisitorAuthMcpApiUrlForTool(tool);
+
+      if (tool === 'exchange') {
+        let code = '';
+        try {
+          const parsed = JSON.parse(body);
+          code = String(parsed?.arguments?.code || parsed?.code || '').trim();
+        } catch {}
+
+        if (code) {
+          const cached = visitorAuthExchangeCache.get(code);
+          if (cached && Date.now() - cached.ts < 120_000) {
+            return NextResponse.json(cached.result, { status: cached.status });
+          }
+          const inFlight = visitorAuthExchangeInFlight.get(code);
+          if (inFlight) {
+            const shared = await inFlight;
+            return NextResponse.json(shared.result, { status: shared.status });
+          }
+
+          const exchangeTask = (async () => {
+            const fwdHeaders = visitorForwardHeaders(request);
+            let res = await fetch(`${apiUrl}/visitor-auth/tools/call`, {
+              method: 'POST',
+              headers: fwdHeaders,
+              body,
+            });
+            let data = await res.json().catch(() => ({}));
+            if ((!res.ok || data?.success === false) && fwdHeaders['X-EGDesk-Visitor-Client-Ip']) {
+              const noIpHeaders = { ...fwdHeaders };
+              delete noIpHeaders['X-EGDesk-Visitor-Client-Ip'];
+              const retryRes = await fetch(`${apiUrl}/visitor-auth/tools/call`, {
+                method: 'POST',
+                headers: noIpHeaders,
+                body,
+              });
+              const retryData = await retryRes.json().catch(() => ({}));
+              if (retryRes.ok && retryData?.sessionId) {
+                res = retryRes;
+                data = retryData;
+              }
+            }
+            if (res.ok && data?.sessionId) {
+              visitorAuthExchangeCache.set(code, { result: data, status: res.status, ts: Date.now() });
+            }
+            return { result: data, status: res.status };
+          })();
+
+          visitorAuthExchangeInFlight.set(code, exchangeTask);
+          try {
+            const out = await exchangeTask;
+            return NextResponse.json(out.result, { status: out.status });
+          } finally {
+            visitorAuthExchangeInFlight.delete(code);
+          }
+        }
+      }
 
       const response = await fetch(`${apiUrl}/visitor-auth/tools/call`, {
         method: 'POST',

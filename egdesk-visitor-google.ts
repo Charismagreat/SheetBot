@@ -72,8 +72,18 @@ function getVisitorSessionId(): string | null {
 
 function setVisitorSessionId(sessionId: string | null): void {
   if (typeof window === 'undefined') return;
-  if (sessionId) window.localStorage.setItem(VISITOR_SESSION_KEY, sessionId);
-  else window.localStorage.removeItem(VISITOR_SESSION_KEY);
+  if (sessionId) {
+    window.localStorage.setItem(VISITOR_SESSION_KEY, sessionId);
+    try {
+      const isSecure = window.location.protocol === 'https:';
+      document.cookie = `${VISITOR_SESSION_KEY}=${encodeURIComponent(sessionId)}; path=/; max-age=2592000; SameSite=Lax${isSecure ? '; Secure' : ''}`;
+    } catch {}
+  } else {
+    window.localStorage.removeItem(VISITOR_SESSION_KEY);
+    try {
+      document.cookie = `${VISITOR_SESSION_KEY}=; path=/; max-age=0; SameSite=Lax`;
+    } catch {}
+  }
 }
 
 async function parseEgdeskJson(response: Response): Promise<any> {
@@ -305,6 +315,9 @@ export function resolveEgdeskPublicUrl(): string {
   // Custom domains (sheetbot.cloud) bounce at {origin}/visitor-auth/callback/{id} — no /t/ prefix.
   if (onTunnelPath && onKnownGateway) {
     return window.location.origin + '/t/' + parts[1];
+  }
+  if (!onKnownGateway && !isDevSiteHostname(hostname)) {
+    return window.location.origin;
   }
 
   if (isDevSiteHostname(hostname)) {

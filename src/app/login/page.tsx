@@ -140,73 +140,71 @@ export default function LoginPage() {
   }, []);
 
   // 2) 저장된 GCP 핸들이 있는 경우 서버 유효성 점검 (없으면 서버 DB에 등록된 공용/회원 BYO 핸들 자동 조회)
-  const refreshGcpStatus = useCallback(
-    async (targetHandle?: string) => {
-      setIsGcpChecking(true);
-      try {
-        let handleToQuery = targetHandle || gcpHandle || getStoredVisitorGcpHandle();
+  // ⚠️ gcpHandle을 의존성에서 제거하여 null <-> handle 무한 재호출 루프를 원천 차단
+  const refreshGcpStatus = useCallback(async (targetHandle?: string) => {
+    setIsGcpChecking(true);
+    try {
+      const handleToQuery = targetHandle || getStoredVisitorGcpHandle();
 
-        if (!handleToQuery) {
-          // 모바일 브라우저 등 localStorage가 비어있는 경우 서버 DB에서 등록된 BYO 핸들 자동 동기화
-          const serverRes = await apiFetch("/api/auth/gcp-handle").catch(() => null);
-          const serverData = serverRes ? await serverRes.json().catch(() => null) : null;
-          if (serverData?.registered && serverData?.handle) {
-            const h = String(serverData.handle);
-            setGcpStatus({
-              connected: true,
-              registered: true,
-              clientIdMasked: serverData.clientIdMasked,
-              projectId: serverData.projectId,
-              redirectUriToRegister: serverData.redirectUriToRegister,
-            });
-            setGcpHandle(h);
-            setStoredVisitorGcpHandle(h);
-            setStoredGcpHandleHint(h);
-            return;
-          }
-          setGcpStatus(null);
-          return;
-        }
-
-        const statusRes = await getVisitorGcpStatus(handleToQuery);
-        if (statusRes?.registered || statusRes?.connected) {
+      if (!handleToQuery) {
+        // 모바일 브라우저 등 localStorage가 비어있는 경우 서버 DB에서 등록된 BYO 핸들 자동 동기화
+        const serverRes = await apiFetch("/api/auth/gcp-handle").catch(() => null);
+        const serverData = serverRes ? await serverRes.json().catch(() => null) : null;
+        if (serverData?.registered && serverData?.handle) {
+          const h = String(serverData.handle);
           setGcpStatus({
             connected: true,
             registered: true,
+            clientIdMasked: serverData.clientIdMasked,
+            projectId: serverData.projectId,
+            redirectUriToRegister: serverData.redirectUriToRegister,
+          });
+          setGcpHandle(h);
+          setStoredVisitorGcpHandle(h);
+          setStoredGcpHandleHint(h);
+          return;
+        }
+        setGcpStatus(null);
+        return;
+      }
+
+      const statusRes = await getVisitorGcpStatus(handleToQuery);
+      if (statusRes?.registered || statusRes?.connected) {
+        setGcpStatus({
+          connected: true,
+          registered: true,
+          clientIdMasked: statusRes.clientIdMasked,
+          projectId: statusRes.projectId,
+          redirectUriToRegister: statusRes.redirectUriToRegister,
+        });
+        setGcpHandle(handleToQuery);
+        setStoredVisitorGcpHandle(handleToQuery);
+        setStoredGcpHandleHint(handleToQuery);
+        // PC 브라우저에 있던 핸들을 서버 DB에도 백그라운드 동기화하여 모바일에서도 즉시 사용 가능하게 보장
+        void apiFetch("/api/auth/gcp-handle", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            handle: handleToQuery,
             clientIdMasked: statusRes.clientIdMasked,
             projectId: statusRes.projectId,
-            redirectUriToRegister: statusRes.redirectUriToRegister,
-          });
-          setGcpHandle(handleToQuery);
-          setStoredVisitorGcpHandle(handleToQuery);
-          setStoredGcpHandleHint(handleToQuery);
-          // PC 브라우저에 있던 핸들을 서버 DB에도 백그라운드 동기화하여 모바일에서도 즉시 사용 가능하게 보장
-          void apiFetch("/api/auth/gcp-handle", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              handle: handleToQuery,
-              clientIdMasked: statusRes.clientIdMasked,
-              projectId: statusRes.projectId,
-            }),
-          }).catch(() => {});
-        } else {
-          setGcpStatus(null);
-          setGcpHandle(null);
-          setStoredVisitorGcpHandle(null);
-          setStoredGcpHandleHint(null);
-        }
-      } catch (err) {
-        console.warn("GCP status check error:", err);
+          }),
+        }).catch(() => {});
+      } else {
         setGcpStatus(null);
-        const stale = getStoredVisitorGcpHandle();
-        if (stale) setStoredGcpHandleHint(stale);
-      } finally {
-        setIsGcpChecking(false);
+        setGcpHandle(null);
+        setStoredVisitorGcpHandle(null);
+        setStoredGcpHandleHint(null);
       }
-    },
-    [gcpHandle]
-  );
+    } catch (err) {
+      console.warn("GCP status check error:", err);
+      setGcpStatus(null);
+      const stale = getStoredVisitorGcpHandle();
+      if (stale) setStoredGcpHandleHint(stale);
+    } finally {
+      setIsGcpChecking(false);
+    }
+  }, []);
 
   useEffect(() => {
     void refreshGcpStatus();
@@ -568,7 +566,7 @@ export default function LoginPage() {
                         d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
                       />
                     </svg>
-                    <span>내 Google 계정으로 시트봇 로그인</span>
+                    <span>Google 계정으로 1초 간편 로그인</span>
                   </>
                 )}
               </button>
@@ -609,7 +607,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={handleInstantGoogleLogin}
-                  disabled={isLoading || isGcpChecking}
+                  disabled={isLoading}
                   className="w-full py-3.5 px-5 bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:opacity-95 text-white font-extrabold text-sm rounded-2xl flex items-center justify-center gap-2.5 transition-all shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50"
                 >
                   {isLoading ? (

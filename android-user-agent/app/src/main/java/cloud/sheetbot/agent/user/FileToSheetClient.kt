@@ -104,11 +104,51 @@ object FileToSheetClient {
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
     private val client = OkHttpClient.Builder()
+        .connectionPool(okhttp3.ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
         .connectTimeout(6, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
+
+    /**
+     * 파일투시트 서버 실시간 생존 상태(Ping) 및 지연 시간(ms) 확인
+     */
+    suspend fun pingFtsServer(endpointHint: String? = null): PingResult = withContext(Dispatchers.IO) {
+        val candidates = mutableListOf<String>()
+        val cleanHint = endpointHint?.trim().orEmpty()
+        if (cleanHint.isNotBlank() && !cleanHint.contains("0.0.0.0") && !cleanHint.contains("localhost") && !cleanHint.contains("127.0.0.1")) {
+            val base = if (cleanHint.contains("/api/")) cleanHint.substringBefore("/api/").trimEnd('/') else cleanHint.trimEnd('/')
+            if (base.isNotBlank()) candidates.add(base)
+        }
+        if (!candidates.contains(FTS_OFFICIAL_DOMAIN)) candidates.add(FTS_OFFICIAL_DOMAIN)
+        if (!candidates.contains(FTS_TUNNEL_BASE)) candidates.add(FTS_TUNNEL_BASE)
+
+        for (host in candidates) {
+            try {
+                val req = Request.Builder()
+                    .url(host)
+                    .header("Cache-Control", "no-cache")
+                    .header("Connection", "close")
+                    .get()
+                    .build()
+                val startTime = System.currentTimeMillis()
+                client.newCall(req).execute().use { res ->
+                    val elapsed = System.currentTimeMillis() - startTime
+                    if (res.code in 200..499 && res.code != 400 && res.code != 404) {
+                        return@withContext PingResult(
+                            isOnline = true,
+                            latencyMs = elapsed,
+                            connectedHost = host
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "FTS 서버 핑 확인 실패 ($host): ${e.message}")
+            }
+        }
+        PingResult(isOnline = false, error = "파일투시트 서버 응답 없음")
+    }
 
     /**
      * 📋 모바일 카드별 파일투시트(FileToSheet) 표준 시트 스키마 레지스트리

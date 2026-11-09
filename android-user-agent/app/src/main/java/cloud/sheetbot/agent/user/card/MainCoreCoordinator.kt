@@ -286,12 +286,26 @@ class MainCoreCoordinator(
             }
 
             val isFts = prefs.isDestinationFileToSheet && prefs.isFtsPaired
+            val hasGoogle = prefs.hasGoogleAccount
+            val hasFts = prefs.isFtsPaired
             if (isPaired) {
                 binding.layoutUnlinkZone.visibility = View.VISIBLE
                 val isWalletHidden = prefs.hiddenCardKeys.contains("cardWallet")
                 binding.layoutWalletCard.visibility = if (isWalletHidden || isFts) View.GONE else View.VISIBLE
-                binding.layoutUnpairedControls.visibility = View.GONE
-                if (!email.isNullOrBlank()) {
+
+                // 🌟 휴대폰 번호(FileToSheet)만 연동되어 있고 Google 계정이 아직 미연동된 경우,
+                // 사용자가 언제든 Google 로그인 버튼을 보고 추가로 연결할 수 있도록 Google 연동 컨트롤만 노출 유지
+                if (!hasGoogle) {
+                    binding.layoutUnpairedControls.visibility = View.VISIBLE
+                    binding.btnPhoneSignIn.visibility = if (hasFts) View.GONE else View.VISIBLE
+                    binding.layoutLegacyPairingControls.visibility = View.VISIBLE
+                } else {
+                    binding.layoutUnpairedControls.visibility = View.GONE
+                    binding.btnPhoneSignIn.visibility = View.VISIBLE
+                    binding.layoutLegacyPairingControls.visibility = View.VISIBLE
+                }
+
+                if (!email.isNullOrBlank() && hasGoogle) {
                     if (card.isTokenWalletInitialized) {
                         card.tokenWalletCardController.loadWalletBalance(email)
                     }
@@ -303,6 +317,8 @@ class MainCoreCoordinator(
                 binding.layoutUnlinkZone.visibility = View.GONE
                 binding.layoutWalletCard.visibility = View.GONE
                 binding.layoutUnpairedControls.visibility = View.VISIBLE
+                binding.btnPhoneSignIn.visibility = View.VISIBLE
+                binding.layoutLegacyPairingControls.visibility = View.VISIBLE
             }
         }
 

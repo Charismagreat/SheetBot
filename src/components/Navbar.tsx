@@ -254,9 +254,7 @@ export default function Navbar() {
 
         {/* 우측 네비게이션 제어 영역 */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 whitespace-nowrap">
-          {!mounted || isLoading ? (
-            <div className="w-20 h-8 bg-slate-100 animate-pulse rounded-xl" />
-          ) : isLoggedIn && user ? (
+          {mounted && isLoggedIn && user ? (
             <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 whitespace-nowrap">
               {/* 내 워크스페이스 바로가기 */}
               <Link
@@ -562,7 +560,7 @@ export default function Navbar() {
             </Link>
           </div>
 
-          {mounted && isLoggedIn && user && (
+          {mounted && isLoggedIn && user ? (
             <div className="space-y-2 border-t border-slate-100 pt-3">
               <div className="flex items-center justify-between px-2">
                 <div className="text-xs font-bold text-slate-800 truncate">
@@ -614,6 +612,18 @@ export default function Navbar() {
                   <span>계정 삭제</span>
                 </button>
               </div>
+            </div>
+          ) : (
+            <div className="border-t border-slate-100 pt-3">
+              <Link
+                href="/login"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-500/20"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                <span>Google 계정으로 1초 로그인</span>
+                <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+              </Link>
             </div>
           )}
         </div>

@@ -65,7 +65,9 @@ object ApiClient {
     }
 
     // 빠른 2단계 폴백을 위한 타임아웃 최적화 (1차 서버 장애 시 3.5초 내 2차로 즉시 전환)
+    // ★ [Zero-Stale Connection] 터널 프록시의 유휴 커넥션 풀 재사용으로 인한 간헐적 HTTP 400 (0B) 오탐 원천 차단
     private val client = OkHttpClient.Builder()
+        .connectionPool(okhttp3.ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
         .addInterceptor(sessionInterceptor)
         .connectTimeout(3500, TimeUnit.MILLISECONDS)
         .readTimeout(6000, TimeUnit.MILLISECONDS)
@@ -345,16 +347,22 @@ object ApiClient {
         for (host in hosts) {
             val endpoint = "$host/api/wallet/agent/version"
             try {
-                val request = Request.Builder().url(endpoint).get().build()
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .header("Cache-Control", "no-cache")
+                    .header("Connection", "close")
+                    .get()
+                    .build()
                 val startTime = System.currentTimeMillis()
-                val response = client.newCall(request).execute()
-                val elapsed = System.currentTimeMillis() - startTime
-                if (response.isSuccessful) {
-                    return@withContext PingResult(
-                        isOnline = true,
-                        latencyMs = elapsed,
-                        connectedHost = host
-                    )
+                healthCheckClient.newCall(request).execute().use { response ->
+                    val elapsed = System.currentTimeMillis() - startTime
+                    if (response.isSuccessful) {
+                        return@withContext PingResult(
+                            isOnline = true,
+                            latencyMs = elapsed,
+                            connectedHost = host
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "서버 핑 확인 실패 ($host): ${e.message}")
