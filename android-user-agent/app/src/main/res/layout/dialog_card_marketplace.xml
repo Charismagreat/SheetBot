@@ -179,8 +179,8 @@
         android:layout_marginVertical="24dp"
         android:visibility="gone" />
 
-    <!-- 카드 목록 스크롤뷰 -->
-    <ScrollView
+    <!-- 카드 목록 스크롤뷰 (NestedScrollView 중첩 스크롤 지원) -->
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
@@ -194,7 +194,7 @@
 
             <!-- 동적으로 생성되는 카드 목록 아이템들 -->
         </LinearLayout>
-    </ScrollView>
+    </androidx.core.widget.NestedScrollView>
 
     <!-- 하단 기능 의뢰 안내 배너 -->
     <LinearLayout

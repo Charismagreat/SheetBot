@@ -66,6 +66,14 @@ class CardSearchBottomSheetDialog(
             CardMarketplaceController(activity, prefs, cardDrawerController).openMarketplace()
         }
 
+        dialog.behavior.apply {
+            state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+            skipCollapsed = true
+        }
+        dialog.setOnShowListener {
+            dialog.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+            dialog.behavior.skipCollapsed = true
+        }
         dialog.show()
     }
 

@@ -14,7 +14,9 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.widget.NestedScrollView
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import cloud.sheetbot.agent.user.FileToSheetClient
 import cloud.sheetbot.agent.user.PreferencesManager
@@ -379,18 +381,25 @@ class CardDrawerController(
         val density = activity.resources.displayMetrics.density
         val dp = { value: Int -> (value * density).toInt() }
 
-        // 루트 스크롤뷰
-        val scrollView = ScrollView(activity).apply {
-            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        // 최외곽 컨테이너 (상단 헤더 고정 + 하단 NestedScrollView 중첩 스크롤 구조)
+        val outerLayout = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
             setBackgroundColor(Color.parseColor("#0F172A"))
         }
 
-        val rootLayout = LinearLayout(activity).apply {
+        // 상단 고정 영역 (핸들 바 + 타이틀 헤더) - 스크롤 시에도 말려 올라가지 않고 항상 상단 고정
+        val fixedHeaderContainer = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(16), dp(20), dp(32))
-            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            setPadding(dp(20), dp(16), dp(20), dp(8))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
         }
-        scrollView.addView(rootLayout)
 
         // 상단 핸들 바
         val handleBar = View(activity).apply {
@@ -401,17 +410,20 @@ class CardDrawerController(
             background = gd
             layoutParams = LinearLayout.LayoutParams(dp(40), dp(5)).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
-                bottomMargin = dp(16)
+                bottomMargin = dp(14)
             }
         }
-        rootLayout.addView(handleBar)
+        fixedHeaderContainer.addView(handleBar)
 
         // 다이얼로그 헤더 (제목 + 닫기)
         val headerLayout = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = dp(16)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dp(4)
             }
         }
         val titleTv = TextView(activity).apply {
@@ -431,11 +443,34 @@ class CardDrawerController(
         }
         headerLayout.addView(titleTv)
         headerLayout.addView(closeBtn)
-        rootLayout.addView(headerLayout)
+        fixedHeaderContainer.addView(headerLayout)
+        outerLayout.addView(fixedHeaderContainer)
+
+        // 중첩 스크롤을 지원하는 NestedScrollView (CoordinatorLayout / BottomSheetBehavior와 스크롤 위치 정상 동기화)
+        val scrollView = NestedScrollView(activity).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+            isFillViewport = true
+            isNestedScrollingEnabled = true
+        }
+
+        val rootLayout = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(32))
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+        scrollView.addView(rootLayout)
+        outerLayout.addView(scrollView)
 
         // 내용 동적 구성 함수 (순서 변경/보관 시 즉시 갱신)
         fun renderContent() {
-            rootLayout.removeViews(2, rootLayout.childCount - 2)
+            rootLayout.removeAllViews()
 
             val hiddenKeys = prefs.hiddenCardKeys
             val activeKeys = prefs.activeCardOrder.filter { it != "cardStore" && !hiddenKeys.contains(it) }
@@ -758,7 +793,15 @@ class CardDrawerController(
         }
 
         renderContent()
-        dialog.setContentView(scrollView)
+        dialog.setContentView(outerLayout)
+        dialog.behavior.apply {
+            state = BottomSheetBehavior.STATE_EXPANDED
+            skipCollapsed = true
+        }
+        dialog.setOnShowListener {
+            dialog.behavior.state = BottomSheetBehavior.STATE_EXPANDED
+            dialog.behavior.skipCollapsed = true
+        }
         dialog.show()
     }
 }

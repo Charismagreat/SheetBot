@@ -237,6 +237,14 @@ class CardMarketplaceController(
 
         // 1. 0초 즉시 렌더링 (기본 카탈로그 + 로컬 설치된 동적/커스텀 카드)
         renderCards()
+        dialog.behavior.apply {
+            state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+            skipCollapsed = true
+        }
+        dialog.setOnShowListener {
+            dialog.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+            dialog.behavior.skipCollapsed = true
+        }
         dialog.show()
 
         // 2. 서버 CMS 동적 카탈로그 실시간 비동기 동기화
