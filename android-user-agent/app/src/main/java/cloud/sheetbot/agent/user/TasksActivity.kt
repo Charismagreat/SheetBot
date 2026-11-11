@@ -6,6 +6,7 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -15,6 +16,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -29,8 +31,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * 📋 스마트 통합 할 일 허브(Task Hub) 모바일 전용 액티비티
@@ -45,6 +50,37 @@ class TasksActivity : AppCompatActivity() {
     private var currentFilter = "PENDING" // PENDING, DONE, ALL
     private var userEmail: String = ""
     private var loadTasksJob: Job? = null
+    private var activeMediaPlayer: MediaPlayer? = null
+    private var audioProgressJob: Job? = null
+    private val aiReplyCache = mutableMapOf<String, List<String>>()
+
+    override fun onDestroy() {
+        stopAndReleaseAudioPlayer()
+        super.onDestroy()
+    }
+
+    private fun stopAndReleaseAudioPlayer() {
+        audioProgressJob?.cancel()
+        audioProgressJob = null
+        try {
+            activeMediaPlayer?.let { mp ->
+                if (mp.isPlaying) {
+                    mp.stop()
+                }
+                mp.release()
+            }
+        } catch (_: Exception) {
+        } finally {
+            activeMediaPlayer = null
+        }
+    }
+
+    private fun formatDurationMs(ms: Int): String {
+        val totalSec = (ms.coerceAtLeast(0)) / 1000
+        val min = totalSec / 60
+        val sec = totalSec % 60
+        return String.format("%02d:%02d", min, sec)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -186,17 +222,28 @@ class TasksActivity : AppCompatActivity() {
         val scrollDesc = view.findViewById<View>(R.id.scrollSheetDescription)
         val tvDesc = view.findViewById<TextView>(R.id.tvSheetTaskDescription)
 
+        val layoutAudioPlayerBox = view.findViewById<View>(R.id.layoutAudioPlayerBox)
+        val tvAudioFileName = view.findViewById<TextView>(R.id.tvAudioFileName)
+        val tvAudioTimeStatus = view.findViewById<TextView>(R.id.tvAudioTimeStatus)
+        val btnPlayPauseAudio = view.findViewById<Button>(R.id.btnPlayPauseAudio)
+        val seekBarAudio = view.findViewById<SeekBar>(R.id.seekBarAudio)
+
         val btnCallNow = view.findViewById<Button>(R.id.btnActionCallNow)
         val btnOpenSms = view.findViewById<Button>(R.id.btnActionOpenSmsApp)
         val btnOpenKakao = view.findViewById<Button>(R.id.btnActionOpenKakao)
 
         val layoutQuickReplyBox = view.findViewById<View>(R.id.layoutQuickReplyBox)
         val tvQuickReplyHeader = view.findViewById<TextView>(R.id.tvQuickReplyHeader)
+        val btnAiSuggestReply = view.findViewById<TextView>(R.id.btnAiSuggestReply)
         val layoutTemplates = view.findViewById<LinearLayout>(R.id.layoutQuickReplyTemplates)
         val etReply = view.findViewById<EditText>(R.id.etQuickReplyMessage)
         val btnSendReply = view.findViewById<Button>(R.id.btnSendQuickReplyNow)
         val btnToggleDone = view.findViewById<Button>(R.id.btnActionToggleTaskDone)
 
+        stopAndReleaseAudioPlayer()
+        dialog.setOnDismissListener {
+            stopAndReleaseAudioPlayer()
+        }
         btnClose.setOnClickListener { dialog.dismiss() }
 
         // 1. 전화번호 및 고객명 정밀 보강 (주소록 역조회 포함)
@@ -286,6 +333,168 @@ class TasksActivity : AppCompatActivity() {
             scrollDesc.visibility = View.GONE
         }
 
+        // 2-1. 🎙️ 통화 녹음 / 회의 녹음인 경우 인앱 미니 오디오 플레이어 설정
+        if (task.sourceType == "CALL_RECORDING" || task.sourceType == "MEETING_RECORDING") {
+            layoutAudioPlayerBox.visibility = View.VISIBLE
+            tvAudioFileName.text = "🎧 통화 녹음 파일 탐색 중..."
+            tvAudioTimeStatus.text = "스마트폰 내 녹음 폴더를 확인하고 있습니다..."
+            btnPlayPauseAudio.isEnabled = false
+            btnPlayPauseAudio.text = "탐색중"
+            seekBarAudio.visibility = View.GONE
+
+            val searchName = targetName
+            val searchPhone = targetPhone
+            val searchCreatedAt = task.createdAt
+
+            lifecycleScope.launch {
+                val matchedFile: File? = withContext(Dispatchers.IO) {
+                    CallRecordingManager.findMatchingRecordingFile(
+                        context = this@TasksActivity,
+                        contactName = searchName,
+                        contactPhone = searchPhone,
+                        createdAt = searchCreatedAt
+                    )
+                }
+
+                if (!dialog.isShowing) return@launch
+
+                if (matchedFile != null && matchedFile.exists()) {
+                    tvAudioFileName.text = "🎧 ${matchedFile.name}"
+                    tvAudioTimeStatus.text = "내 스마트폰 녹음 파일 준비됨 • 재생 버튼을 누르세요"
+                    btnPlayPauseAudio.isEnabled = true
+                    btnPlayPauseAudio.text = "▶️ 듣기"
+                    btnPlayPauseAudio.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#059669"))
+                    seekBarAudio.visibility = View.VISIBLE
+                    seekBarAudio.progress = 0
+
+                    var isUserSeeking = false
+                    seekBarAudio.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                        override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                            if (fromUser) {
+                                val mp = activeMediaPlayer
+                                val dur = try { mp?.duration ?: 0 } catch (_: Exception) { 0 }
+                                if (dur > 0) {
+                                    tvAudioTimeStatus.text = "${formatDurationMs(progress)} / ${formatDurationMs(dur)}"
+                                }
+                            }
+                        }
+
+                        override fun onStartTrackingTouch(sb: SeekBar?) {
+                            isUserSeeking = true
+                        }
+
+                        override fun onStopTrackingTouch(sb: SeekBar?) {
+                            val mp = activeMediaPlayer
+                            if (mp != null && sb != null) {
+                                try {
+                                    mp.seekTo(sb.progress)
+                                } catch (_: Exception) {
+                                }
+                            }
+                            isUserSeeking = false
+                        }
+                    })
+
+                    btnPlayPauseAudio.setOnClickListener {
+                        try {
+                            val currentMp = activeMediaPlayer
+                            if (currentMp != null) {
+                                if (currentMp.isPlaying) {
+                                    currentMp.pause()
+                                    btnPlayPauseAudio.text = "▶️ 계속"
+                                    btnPlayPauseAudio.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#059669"))
+                                    tvAudioTimeStatus.text = "일시정지됨 (${formatDurationMs(currentMp.currentPosition)} / ${formatDurationMs(currentMp.duration)})"
+                                } else {
+                                    currentMp.start()
+                                    btnPlayPauseAudio.text = "⏸ 일시정지"
+                                    btnPlayPauseAudio.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#D97706"))
+                                }
+                            } else {
+                                stopAndReleaseAudioPlayer()
+                                val mp = MediaPlayer().apply {
+                                    setDataSource(matchedFile.absolutePath)
+                                    prepare()
+                                    start()
+                                }
+                                activeMediaPlayer = mp
+                                val totalDur = mp.duration.coerceAtLeast(1)
+                                seekBarAudio.max = totalDur
+                                btnPlayPauseAudio.text = "⏸ 일시정지"
+                                btnPlayPauseAudio.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#D97706"))
+
+                                mp.setOnCompletionListener {
+                                    audioProgressJob?.cancel()
+                                    seekBarAudio.progress = 0
+                                    btnPlayPauseAudio.text = "▶️ 다시 듣기"
+                                    btnPlayPauseAudio.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#059669"))
+                                    tvAudioTimeStatus.text = "재생 완료 (${formatDurationMs(totalDur)})"
+                                }
+
+                                audioProgressJob = lifecycleScope.launch {
+                                    while (isActive && dialog.isShowing) {
+                                        val player = activeMediaPlayer ?: break
+                                        try {
+                                            if (player.isPlaying && !isUserSeeking) {
+                                                val pos = player.currentPosition
+                                                val dur = player.duration.coerceAtLeast(1)
+                                                seekBarAudio.max = dur
+                                                seekBarAudio.progress = pos
+                                                tvAudioTimeStatus.text = "재생 중 ${formatDurationMs(pos)} / ${formatDurationMs(dur)}"
+                                            }
+                                        } catch (_: Exception) {
+                                            break
+                                        }
+                                        delay(250)
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(this@TasksActivity, "녹음 파일을 재생할 수 없습니다: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } else {
+                    // 로컬 파일이 없는 경우 클라우드 링크 또는 웹 장부 열기 폴백 제공
+                    val cloudUrl = task.deepLink?.takeIf { it.startsWith("http") }
+                        ?: Regex("(https?://[^\\s)]+)").find(task.description.orEmpty())?.value
+                    if (cloudUrl != null) {
+                        tvAudioFileName.text = "☁️ 클라우드 보관 통화 녹음"
+                        tvAudioTimeStatus.text = "스마트폰 로컬 파일 대신 클라우드 원본 링크로 열 수 있습니다"
+                        btnPlayPauseAudio.isEnabled = true
+                        btnPlayPauseAudio.text = "☁️ 열기"
+                        btnPlayPauseAudio.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#0284C7"))
+                        btnPlayPauseAudio.setOnClickListener {
+                            dialog.dismiss()
+                            try {
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(cloudUrl)))
+                            } catch (_: Exception) {
+                                Toast.makeText(this@TasksActivity, "링크를 열 수 없습니다.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } else {
+                        tvAudioFileName.text = "🎙️ 스마트폰 내 일치하는 통화 녹음 파일 없음"
+                        tvAudioTimeStatus.text = "다른 기기에서 녹음되었거나 파일이 이동되었습니다 (웹 장부에서 확인 가능)"
+                        btnPlayPauseAudio.isEnabled = true
+                        btnPlayPauseAudio.text = "🌐 장부 열기"
+                        btnPlayPauseAudio.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#475569"))
+                        btnPlayPauseAudio.setOnClickListener {
+                            dialog.dismiss()
+                            val webUrl = if (prefs.isDestinationFileToSheet && prefs.isFtsPaired) {
+                                "https://file2sheet.cloud"
+                            } else {
+                                "https://sheetbot.cloud/tasks"
+                            }
+                            try {
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(webUrl)))
+                            } catch (_: Exception) {
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            layoutAudioPlayerBox.visibility = View.GONE
+        }
+
         // 3. 카카오톡 세션 확인
         val kakaoSession = KakaoReplySessionCache.findSession(targetName, task.title)
         val isKakaoTask = task.sourceType == "KAKAO"
@@ -326,63 +535,126 @@ class TasksActivity : AppCompatActivity() {
             btnOpenKakao.visibility = View.GONE
         }
 
-        // 5. 앱 내 빠른 답장 섹션 (SMS 즉시 발송 또는 카카오톡 RemoteInput 답장)
+        // 5. 앱 내 빠른 답장 섹션 (SMS 즉시 발송 또는 카카오톡 RemoteInput 답장 + ✨ AI 추천 문구 자동 작성)
         val canReplyViaKakao = isKakaoTask && kakaoSession?.canDirectReply == true
         val canReplyViaSms = targetPhone != null && ContactHelper.isMobilePhoneNumber(targetPhone)
 
         if (canReplyViaKakao || canReplyViaSms) {
             layoutQuickReplyBox.visibility = View.VISIBLE
             if (canReplyViaKakao) {
-                tvQuickReplyHeader.text = "💛 카카오톡 바로 답장 보내기 (${kakaoSession?.chatRoomName ?: targetName ?: "채팅방"})"
+                tvQuickReplyHeader.text = "💛 카카오톡 바로 답장 (${kakaoSession?.chatRoomName ?: targetName ?: "채팅방"})"
                 etReply.hint = "카카오톡 답장 내용을 입력하세요..."
                 btnSendReply.text = "카톡 전송"
             } else {
-                tvQuickReplyHeader.text = "⚡ 문자(SMS) 바로 답장 보내기 ($targetPhone)"
+                tvQuickReplyHeader.text = "⚡ 문자(SMS) 바로 답장 ($targetPhone)"
                 etReply.hint = "답장 문자 내용을 입력하세요..."
                 btnSendReply.text = "문자 전송"
             }
 
-            // 상황별 원터치 상용구 칩 생성
-            val templates = when (task.sourceType) {
-                "MISSED_CALL", "CALL_RECORDING" -> listOf(
-                    "안녕하세요, 확인 후 곧 다시 연락드리겠습니다.",
-                    "방금 통화 감사드립니다. 말씀하신 내용 확인 후 회신드리겠습니다.",
-                    "현재 회의 중이라 잠시 후 전화드리겠습니다."
-                )
-                "ORDER_DELAY", "ORDER" -> listOf(
-                    "주문해주셔서 감사합니다. 확인 후 빠르게 처리해 드리겠습니다.",
-                    "요청하신 건 접수 완료되었습니다. 출고 시 안내드리겠습니다.",
-                    "견적 및 재고 확인 후 곧 연락드리겠습니다."
-                )
-                else -> listOf(
-                    "네, 확인했습니다. 감사합니다!",
-                    "말씀하신 내용 확인 후 연락드리겠습니다.",
-                    "잠시 후 확인하여 답변드리겠습니다."
-                )
+            val cacheKey = "${task.id ?: task.uuid ?: task.title}_${targetName.orEmpty()}"
+            var lastAutoFilledText: String? = null
+
+            fun renderSuggestionChips(suggestions: List<String>, isAiGenerated: Boolean) {
+                layoutTemplates.removeAllViews()
+                for ((idx, tpl) in suggestions.withIndex()) {
+                    val chip = TextView(this).apply {
+                        text = if (isAiGenerated) "✨ $tpl" else tpl
+                        setTextColor(Color.parseColor(if (isAiGenerated) "#E0E7FF" else "#E2E8F0"))
+                        textSize = 11f
+                        setBackgroundResource(R.drawable.bg_badge_version)
+                        backgroundTintList = ColorStateList.valueOf(
+                            Color.parseColor(if (isAiGenerated && idx == 0) "#3730A3" else "#334155")
+                        )
+                        setPadding(26, 14, 26, 14)
+                        val lp = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                        ).apply {
+                            marginEnd = 16
+                        }
+                        layoutParams = lp
+                        setOnClickListener {
+                            etReply.setText(tpl)
+                            etReply.setSelection(tpl.length)
+                            lastAutoFilledText = tpl
+                        }
+                    }
+                    layoutTemplates.addView(chip)
+                }
+
+                // 사용자가 아직 직접 수정하지 않았다면 1순위 추천 문구를 입력창에 자동 세팅
+                val currentInput = etReply.text?.toString()?.trim().orEmpty()
+                if (suggestions.isNotEmpty() && (currentInput.isEmpty() || currentInput == lastAutoFilledText)) {
+                    val first = suggestions.first()
+                    etReply.setText(first)
+                    etReply.setSelection(first.length)
+                    lastAutoFilledText = first
+                }
             }
 
-            layoutTemplates.removeAllViews()
-            for (tpl in templates) {
-                val chip = TextView(this).apply {
-                    text = tpl
-                    setTextColor(Color.parseColor("#E2E8F0"))
-                    textSize = 11f
-                    setBackgroundResource(R.drawable.bg_badge_version)
-                    backgroundTintList = ColorStateList.valueOf(Color.parseColor("#334155"))
-                    setPadding(24, 12, 24, 12)
-                    val lp = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    ).apply {
-                        marginEnd = 16
+            fun requestAiReplySuggestions(forceRefresh: Boolean) {
+                if (!forceRefresh) {
+                    val cached = aiReplyCache[cacheKey]
+                    if (!cached.isNullOrEmpty()) {
+                        renderSuggestionChips(cached, isAiGenerated = true)
+                        btnAiSuggestReply.text = "✨ AI 맞춤 문구 재생성"
+                        btnAiSuggestReply.isEnabled = true
+                        return
                     }
-                    layoutParams = lp
-                    setOnClickListener {
-                        etReply.setText(tpl)
-                        etReply.setSelection(tpl.length)
+                } else {
+                    aiReplyCache.remove(cacheKey)
+                }
+
+                btnAiSuggestReply.isEnabled = false
+                btnAiSuggestReply.text = "⏳ AI 문구 작성 중..."
+
+                val reqTitle = if (forceRefresh) {
+                    "${task.title} (이전과 다른 새로운 표현으로 추천)"
+                } else {
+                    task.title
+                }
+                val reqDesc = task.description
+                val reqContact = targetName
+                val reqSource = task.sourceType
+                val reqPhone = prefs.ftsPhoneNumber
+
+                lifecycleScope.launch {
+                    val aiList = ApiClient.suggestTaskReplies(
+                        title = reqTitle,
+                        description = reqDesc,
+                        contactName = reqContact,
+                        sourceType = reqSource,
+                        phoneNumber = reqPhone
+                    )
+                    if (!dialog.isShowing) return@launch
+                    btnAiSuggestReply.isEnabled = true
+                    btnAiSuggestReply.text = "✨ AI 맞춤 문구 재생성"
+                    if (aiList.isNotEmpty()) {
+                        aiReplyCache[cacheKey] = aiList
+                        renderSuggestionChips(aiList, isAiGenerated = true)
+                        if (forceRefresh) {
+                            val top = aiList.first()
+                            etReply.setText(top)
+                            etReply.setSelection(top.length)
+                            lastAutoFilledText = top
+                            Toast.makeText(this@TasksActivity, "✨ AI가 할 일 맥락에 맞는 답장 문구를 작성했습니다.", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
-                layoutTemplates.addView(chip)
+            }
+
+            // 1차로 즉시 스마트 로컬 추천 문구 표시 후, 백그라운드로 AI 맞춤 문구 자동 요청
+            val cachedInitial = aiReplyCache[cacheKey]
+            if (!cachedInitial.isNullOrEmpty()) {
+                renderSuggestionChips(cachedInitial, isAiGenerated = true)
+            } else {
+                val initialSmartList = ApiClient.buildSmartLocalSuggestions(task.title, targetName, task.sourceType)
+                renderSuggestionChips(initialSmartList, isAiGenerated = false)
+                requestAiReplySuggestions(forceRefresh = false)
+            }
+
+            btnAiSuggestReply.setOnClickListener {
+                requestAiReplySuggestions(forceRefresh = true)
             }
 
             btnSendReply.setOnClickListener {

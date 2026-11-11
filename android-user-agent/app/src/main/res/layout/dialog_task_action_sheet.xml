@@ -117,15 +117,84 @@
             android:textStyle="bold" />
     </LinearLayout>
 
+    <!-- 🎧 통화 녹음 인앱 미니 오디오 플레이어 (sourceType == CALL_RECORDING 전용) -->
+    <LinearLayout
+        android:id="@+id/layoutAudioPlayerBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#064E3B"
+        android:padding="12dp"
+        android:layout_marginBottom="10dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
+
+            <TextView
+                android:id="@+id/tvAudioFileName"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="🎧 통화 녹음 원본 듣기"
+                android:textColor="#A7F3D0"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                android:singleLine="true"
+                android:ellipsize="middle" />
+
+            <TextView
+                android:id="@+id/tvAudioTimeStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="00:00 / 00:00"
+                android:textColor="#E2E8F0"
+                android:textSize="11sp"
+                android:layout_marginStart="8dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <Button
+                android:id="@+id/btnPlayPauseAudio"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:minWidth="74dp"
+                android:paddingHorizontal="10dp"
+                android:text="▶ 듣기"
+                android:textColor="#064E3B"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                android:backgroundTint="#34D399" />
+
+            <SeekBar
+                android:id="@+id/seekBarAudio"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:progressTint="#34D399"
+                android:thumbTint="#34D399"
+                android:layout_marginStart="6dp" />
+        </LinearLayout>
+    </LinearLayout>
+
     <!-- 상세 내용 / 원문 메시지 / 통화 요약 스크롤 영역 -->
     <androidx.core.widget.NestedScrollView
         android:id="@+id/scrollSheetDescription"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:maxHeight="150dp"
+        android:maxHeight="140dp"
         android:background="#1E293B"
         android:padding="12dp"
-        android:layout_marginBottom="14dp">
+        android:layout_marginBottom="12dp">
 
         <TextView
             android:id="@+id/tvSheetTaskDescription"
@@ -191,17 +260,38 @@
         android:padding="12dp"
         android:layout_marginBottom="12dp">
 
-        <TextView
-            android:id="@+id/tvQuickReplyHeader"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="⚡ 앱에서 바로 답장 보내기 (발송 시 자동 완료 처리)"
-            android:textColor="#38BDF8"
-            android:textSize="11.5sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="8dp" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
 
-        <!-- 빠른 상용구 칩 버튼 -->
+            <TextView
+                android:id="@+id/tvQuickReplyHeader"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="⚡ 문자(SMS) 바로 답장 보내기"
+                android:textColor="#38BDF8"
+                android:textSize="11.5sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/btnAiSuggestReply"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="✨ AI 맞춤 문구 재생성"
+                android:textColor="#FDE047"
+                android:textSize="10.5sp"
+                android:textStyle="bold"
+                android:background="@drawable/bg_badge_version"
+                android:backgroundTint="#312E81"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="3dp" />
+        </LinearLayout>
+
+        <!-- AI 추천 문구 칩 버튼 -->
         <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -227,12 +317,12 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:minHeight="42dp"
-                android:maxLines="3"
+                android:maxLines="4"
                 android:layout_weight="1"
                 android:background="#0F172A"
                 android:paddingHorizontal="12dp"
                 android:paddingVertical="8dp"
-                android:hint="답장할 내용을 입력하세요..."
+                android:hint="답장 문자 내용을 입력하세요..."
                 android:textColor="#FFFFFF"
                 android:textColorHint="#64748B"
                 android:textSize="12.5sp"
@@ -242,7 +332,7 @@
                 android:id="@+id/btnSendQuickReplyNow"
                 android:layout_width="wrap_content"
                 android:layout_height="42dp"
-                android:text="전송"
+                android:text="문자 전송"
                 android:textColor="#FFFFFF"
                 android:textSize="12.5sp"
                 android:textStyle="bold"

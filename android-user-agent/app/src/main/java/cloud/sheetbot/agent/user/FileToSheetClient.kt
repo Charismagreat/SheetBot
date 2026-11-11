@@ -1353,7 +1353,8 @@ object FileToSheetClient {
                                         status = obj.optCleanNullable("status") ?: "PENDING",
                                         badgeText = obj.optCleanNullable("badge_text"),
                                         sourceType = obj.optCleanNullable("source_type") ?: "SMS",
-                                        createdAt = obj.optCleanNullable("created_at") ?: ""
+                                        createdAt = obj.optCleanNullable("created_at") ?: "",
+                                        deepLink = obj.optCleanNullable("deep_link")
                                     )
                                 )
                             }

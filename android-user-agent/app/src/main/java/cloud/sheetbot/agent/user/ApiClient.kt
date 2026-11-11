@@ -3093,7 +3093,8 @@ object ApiClient {
                                     status = obj.optCleanNullable("status") ?: "PENDING",
                                     badgeText = obj.optCleanNullable("badge_text"),
                                     sourceType = obj.optCleanNullable("source_type") ?: "SMS",
-                                    createdAt = obj.optCleanNullable("created_at") ?: ""
+                                    createdAt = obj.optCleanNullable("created_at") ?: "",
+                                    deepLink = obj.optCleanNullable("deep_link")
                                 )
                             )
                         }
@@ -3208,6 +3209,142 @@ object ApiClient {
             } catch (_: Exception) {}
         }
         false
+    }
+
+    /**
+     * 🤖 할 일(과업) 맥락에 맞춘 AI 추천 답장 문구 3종 생성 (POST /api/user/tasks/suggest-reply)
+     */
+    suspend fun suggestTaskReplies(
+        userEmail: String,
+        title: String,
+        description: String? = null,
+        contactName: String? = null,
+        sourceType: String = "SMS",
+        phoneNumber: String? = null
+    ): List<String> = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val cleanPhone = phoneNumber?.replace("[^0-9]".toRegex(), "").orEmpty()
+        val payload = JSONObject().apply {
+            put("title", title)
+            if (!description.isNullOrBlank()) put("description", description)
+            if (!contactName.isNullOrBlank()) put("contactName", contactName)
+            put("sourceType", sourceType)
+            if (cleanPhone.isNotBlank()) put("phoneNumber", cleanPhone)
+        }
+        val body = payload.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/tasks/suggest-reply"
+            try {
+                val reqBuilder = Request.Builder()
+                    .url(endpoint)
+                    .post(body)
+                if (userEmail.isNotBlank()) reqBuilder.addHeader("x-sheetbot-user-email", userEmail)
+                if (cleanPhone.isNotBlank()) reqBuilder.addHeader("x-user-phone", cleanPhone)
+
+                client.newCall(reqBuilder.build()).execute().use { res ->
+                    val resStr = res.body?.string() ?: ""
+                    val json = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                    if (res.isSuccessful && json.optBoolean("success", false)) {
+                        val arr = json.optJSONArray("suggestions")
+                        if (arr != null && arr.length() > 0) {
+                            val list = mutableListOf<String>()
+                            for (i in 0 until arr.length()) {
+                                val s = arr.optString(i, "").trim()
+                                if (s.isNotBlank()) list.add(s)
+                            }
+                            if (list.isNotEmpty()) return@withContext list
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        // 시트봇 서버 실패 시 파투 서버(/api/inbox/tasks/suggest-reply) 폴백
+        for (ftsHost in listOf(FileToSheetClient.FTS_OFFICIAL_DOMAIN, FileToSheetClient.FTS_TUNNEL_BASE)) {
+            try {
+                val reqBuilder = Request.Builder()
+                    .url("$ftsHost/api/inbox/tasks/suggest-reply")
+                    .post(body)
+                if (cleanPhone.isNotBlank()) reqBuilder.addHeader("x-user-phone", cleanPhone)
+                client.newCall(reqBuilder.build()).execute().use { res ->
+                    val resStr = res.body?.string() ?: ""
+                    val json = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                    if (res.isSuccessful && json.optBoolean("success", false)) {
+                        val arr = json.optJSONArray("suggestions")
+                        if (arr != null && arr.length() > 0) {
+                            val list = mutableListOf<String>()
+                            for (i in 0 until arr.length()) {
+                                val s = arr.optString(i, "").trim()
+                                if (s.isNotBlank()) list.add(s)
+                            }
+                            if (list.isNotEmpty()) return@withContext list
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        // 최종 로컬 지능형 생성 폴백 (네트워크 단절 시에도 즉시 과업 맞춤형 문구 생성)
+        buildSmartLocalSuggestions(title, contactName, sourceType)
+    }
+
+    fun buildSmartLocalSuggestions(
+        title: String,
+        contactName: String?,
+        sourceType: String
+    ): List<String> {
+        val cleanName = contactName
+            ?.substringBefore("(")
+            ?.replace(Regex("^(고객|상대방)\\s*:\\s*"), "")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() && it != "미등록 연락처" && it != "미지정 연락처" }
+        val namePrefix = if (cleanName != null) "${cleanName}님, " else ""
+
+        // 제목에서 [고객명 (번호)] 및 "본인:", "상대방:" 접두어 제거 후 핵심 키워드 추출
+        val strippedTitle = title
+            .replace(Regex("^\\[[^\\]]+\\]\\s*"), "")
+            .replace(Regex("^(본인|상대방)\\s*:\\s*"), "")
+            .replace(Regex("^(상대방으로부터|상대방에게)\\s*"), "")
+            .trim()
+
+        return when {
+            strippedTitle.contains("API") || strippedTitle.contains("키") -> listOf(
+                "안녕하세요 ${namePrefix}말씀하신 API 키 전달해 주시면 확인 후 시스템에 바로 적용하겠습니다.",
+                "${namePrefix}API 키 확인 및 적용 완료되는 대로 다시 안내드리겠습니다.",
+                "API 키 보내주시면 확인 후 즉시 반영하겠습니다. 감사합니다."
+            )
+            strippedTitle.contains("견적") || strippedTitle.contains("발주") || strippedTitle.contains("주문") -> listOf(
+                "안녕하세요 ${namePrefix}요청하신 주문/견적 내역 확인하여 빠르게 처리해 드리겠습니다.",
+                "${namePrefix}말씀해주신 품목 확인 중입니다. 준비되는 대로 바로 안내드리겠습니다.",
+                "요청하신 건 접수 완료되었습니다. 확인 후 곧 연락드리겠습니다."
+            )
+            strippedTitle.contains("결제") || strippedTitle.contains("입금") || strippedTitle.contains("계산서") || strippedTitle.contains("충전") -> listOf(
+                "안녕하세요 ${namePrefix}결제/정산 관련 내용 확인 후 안내드리겠습니다.",
+                "${namePrefix}말씀하신 결제 건 확인 중입니다. 처리 완료 후 말씀드리겠습니다.",
+                "네, 결제 관련 사항 확인 후 바로 연락드리겠습니다."
+            )
+            strippedTitle.contains("출발") || strippedTitle.contains("도착") || strippedTitle.contains("방문") || strippedTitle.contains("미팅") -> listOf(
+                "안녕하세요 ${namePrefix}말씀해주신 시간에 맞춰 미리 준비하고 있겠습니다. 조심히 오세요!",
+                "${namePrefix}도착하실 때쯤 연락 주시면 바로 안내해 드리겠습니다.",
+                "네, 확인했습니다. 뵙고 자세히 말씀 나누겠습니다!"
+            )
+            sourceType == "MISSED_CALL" -> listOf(
+                "안녕하세요 ${namePrefix}전화를 받지 못해 죄송합니다. 확인 후 곧 연락드리겠습니다.",
+                "${namePrefix}현재 통화가 어려워 문자 먼저 드립니다. 용건 남겨주시면 확인 후 전화드리겠습니다.",
+                "잠시 후 바로 전화드리겠습니다. 감사합니다."
+            )
+            sourceType == "CALL_RECORDING" -> listOf(
+                "안녕하세요 ${namePrefix}방금 통화 감사드립니다. 말씀 나눈 내용 확인하여 진행 후 연락드리겠습니다.",
+                "${namePrefix}통화 중 말씀해주신 사항 꼼꼼히 챙겨서 회신드리겠습니다.",
+                "말씀해주신 내용 확인 후 빠르게 처리해 드리겠습니다. 감사합니다."
+            )
+            else -> listOf(
+                "안녕하세요 ${namePrefix}말씀해주신 내용 확인했습니다. 빠르게 처리 후 안내드리겠습니다.",
+                "${namePrefix}요청하신 사항 확인 중입니다. 정리되는 대로 곧 회신드리겠습니다.",
+                "네, 확인 감사합니다. 곧 다시 연락드리겠습니다."
+            )
+        }
     }
 
     /**
@@ -3645,7 +3782,8 @@ data class TaskItemDto(
     val status: String = "PENDING",
     val badgeText: String? = null,
     val sourceType: String = "SMS",
-    val createdAt: String = ""
+    val createdAt: String = "",
+    val deepLink: String? = null
 )
 
 data class TaskListResult(

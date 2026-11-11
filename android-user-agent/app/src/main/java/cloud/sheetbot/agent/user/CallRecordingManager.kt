@@ -336,6 +336,188 @@ object CallRecordingManager {
     }
 
     /**
+     * 스마트 통합 할 일 허브(TasksActivity)에서 '통화 녹음' 과업 선택 시
+     * 고객명 / 전화번호 / 통화일시를 기준으로 단말기 내 원본 통화 녹음 파일을 탐색합니다.
+     */
+    fun findMatchingRecordingFile(
+        context: Context,
+        contactName: String?,
+        contactPhone: String?,
+        createdAt: String?
+    ): File? {
+        val prefs = PreferencesManager(context)
+        val customFolder = prefs.callRecordingCustomFolder.trim()
+        val candidateFolders = mutableListOf<File>()
+
+        if (customFolder.isNotBlank()) {
+            val userDir = File(customFolder)
+            candidateFolders.add(userDir)
+            if (userDir.exists() && userDir.isDirectory) {
+                userDir.listFiles()?.filter { it.isDirectory }?.let { candidateFolders.addAll(it) }
+            }
+        }
+
+        val standardBaseDirs = listOfNotNull(
+            Environment.getExternalStorageDirectory(),
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RECORDINGS),
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
+        )
+
+        for (base in standardBaseDirs) {
+            candidateFolders.addAll(
+                listOf(
+                    File(base, "Recordings/TPhoneCallRecords"),
+                    File(base, "TPhoneCallRecords"),
+                    File(base, "Recordings/TPhone"),
+                    File(base, "TPhone"),
+                    File(base, "Recordings/Call"),
+                    File(base, "Recordings/Calls"),
+                    File(base, "Call"),
+                    File(base, "Calls"),
+                    File(base, "Recordings"),
+                    File(base, "Recordings/A_dot"),
+                    File(base, "Recordings/Adot"),
+                    File(base, "A_dot"),
+                    File(base, "Adot"),
+                    File(base, "Music/TPhoneCallRecords"),
+                    File(base, "Music/Recordings"),
+                    File(base, "Download")
+                )
+            )
+        }
+
+        val supportedExtensions = setOf("m4a", "mp3", "amr", "wav", "aac", "3gp", "ogg", "flac", "wma")
+        val recordingFiles = mutableListOf<File>()
+
+        for (folder in candidateFolders) {
+            if (folder.exists() && folder.isDirectory) {
+                val files = folder.listFiles()?.filter { f ->
+                    f.isFile &&
+                    !f.name.startsWith(".") &&
+                    !f.name.contains("pending", ignoreCase = true) &&
+                    f.extension.lowercase() in supportedExtensions
+                }
+                if (!files.isNullOrEmpty()) {
+                    for (f in files) {
+                        if (!recordingFiles.any { it.absolutePath == f.absolutePath }) {
+                            recordingFiles.add(f)
+                        }
+                    }
+                }
+            }
+        }
+
+        try {
+            val projection = arrayOf(
+                MediaStore.Audio.Media.DATA,
+                MediaStore.Audio.Media.DISPLAY_NAME
+            )
+            context.contentResolver.query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                null,
+                null,
+                "${MediaStore.Audio.Media.DATE_MODIFIED} DESC"
+            )?.use { c ->
+                val dataCol = c.getColumnIndex(MediaStore.Audio.Media.DATA)
+                val nameCol = c.getColumnIndex(MediaStore.Audio.Media.DISPLAY_NAME)
+                var count = 0
+                while (c.moveToNext() && count < 150) {
+                    val path = if (dataCol != -1) c.getString(dataCol) else null
+                    val name = if (nameCol != -1) c.getString(nameCol) else null
+                    val lowerPath = path?.lowercase().orEmpty()
+                    val lowerName = name?.lowercase().orEmpty()
+                    val isCallRelated = lowerPath.contains("recording") || lowerPath.contains("tphone") ||
+                        lowerPath.contains("a_dot") || lowerPath.contains("call") ||
+                        lowerName.contains("통화") || lowerName.contains("녹음") || lowerName.contains("call")
+                    if (isCallRelated && !path.isNullOrBlank()) {
+                        val f = File(path)
+                        if (f.exists() && f.isFile && f.extension.lowercase() in supportedExtensions) {
+                            if (!recordingFiles.any { it.absolutePath == f.absolutePath }) {
+                                recordingFiles.add(f)
+                            }
+                        }
+                    }
+                    count++
+                }
+            }
+        } catch (_: Exception) {}
+
+        if (recordingFiles.isEmpty()) return null
+
+        val cleanName = contactName
+            ?.substringBefore("(")
+            ?.replace("[^가-힣a-zA-Z0-9]".toRegex(), "")
+            ?.lowercase()
+            ?.takeIf { it.length >= 2 && it != "미등록연락처" && it != "미지정연락처" }
+
+        val cleanPhoneDigits = contactPhone
+            ?.replace("[^0-9]".toRegex(), "")
+            ?.takeIf { it.length >= 7 }
+
+        val targetTimeMs: Long? = createdAt?.trim()?.takeIf { it.length >= 10 }?.let { raw ->
+            val formats = listOf("yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd")
+            var parsedMs: Long? = null
+            for (fmt in formats) {
+                try {
+                    val d = SimpleDateFormat(fmt, Locale.KOREA).parse(raw)
+                    if (d != null) {
+                        parsedMs = d.time
+                        break
+                    }
+                } catch (_: Exception) {}
+            }
+            parsedMs
+        }
+
+        // 최신 파일 우선 정렬
+        recordingFiles.sortByDescending { it.lastModified() }
+
+        var bestFile: File? = null
+        var bestScore = -1
+
+        for (file in recordingFiles) {
+            val fileNameNorm = file.nameWithoutExtension.replace("[^가-힣a-zA-Z0-9]".toRegex(), "").lowercase()
+            val fileDigits = file.nameWithoutExtension.replace("[^0-9]".toRegex(), "")
+
+            val nameMatched = cleanName != null && fileNameNorm.contains(cleanName)
+            val phoneMatched = cleanPhoneDigits != null && (
+                fileDigits.contains(cleanPhoneDigits) ||
+                (cleanPhoneDigits.length >= 8 && fileDigits.contains(cleanPhoneDigits.takeLast(8)))
+            )
+
+            if (!nameMatched && !phoneMatched) continue
+
+            var score = 0
+            if (phoneMatched) score += 60
+            if (nameMatched) score += 50
+
+            if (targetTimeMs != null) {
+                val parsedInfo = parseRecordingFileInfo(file)
+                val fileTimeMs = try {
+                    SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA).parse(parsedInfo.callTime)?.time
+                } catch (_: Exception) {
+                    null
+                } ?: file.lastModified()
+
+                val diffMinutes = kotlin.math.abs(fileTimeMs - targetTimeMs) / (1000L * 60L)
+                when {
+                    diffMinutes <= 15 -> score += 100
+                    diffMinutes <= 120 -> score += 60
+                    diffMinutes <= 1440 -> score += 30 // 같은 날
+                }
+            }
+
+            if (score > bestScore) {
+                bestScore = score
+                bestFile = file
+            }
+        }
+
+        return bestFile
+    }
+
+    /**
      * 다른 폰에서 녹음되어 카카오톡/메일/다운로드 등으로 전달받은 녹음 파일(복수 URI)을 직접 선택하여
      * 구글 드라이브 지정 폴더에 업로드하고 시트 대장에 AI 전사/요약 등록
      */
