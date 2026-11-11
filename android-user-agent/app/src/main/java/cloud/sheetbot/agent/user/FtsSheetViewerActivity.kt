@@ -1511,7 +1511,7 @@ class FtsSheetViewerActivity : AppCompatActivity() {
 
     private fun uploadDirectAudioFileToCurrentSheet(
         audioFile: File,
-        parsedInfo: CallRecordingManager.ParsedRecordingInfo
+        parsedInfo: RecordingFileInfo
     ) {
         val ext = audioFile.extension.lowercase()
         val mime = when (ext) {

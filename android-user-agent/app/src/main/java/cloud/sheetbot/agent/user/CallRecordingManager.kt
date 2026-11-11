@@ -745,7 +745,7 @@ object CallRecordingManager {
     /**
      * 파일명에서 상대방(이름/번호) 및 통화 일시 추출 및 오디오 채널 수 감지
      */
-    private fun parseRecordingFileInfo(file: File, originalFileName: String? = null): RecordingFileInfo {
+    fun parseRecordingFileInfo(file: File, originalFileName: String? = null): RecordingFileInfo {
         val rawName = (originalFileName ?: file.name).trim()
         val fileName = rawName.replace(Regex("""^ext_rec_\d+_"""), "").replace(Regex("""^\[SheetBot\]\s*"""), "")
         val nameWithoutExt = fileName.substringBeforeLast(".")
