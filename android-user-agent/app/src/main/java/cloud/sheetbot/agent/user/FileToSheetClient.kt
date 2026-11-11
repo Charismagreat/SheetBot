@@ -1321,11 +1321,12 @@ object FileToSheetClient {
                         val returnedToken = resJson.optString("token", "")
                         val returnedWebhook = resJson.optString("webhookUrl", "")
                         if (returnedToken.isNotBlank() && returnedWebhook.isNotBlank()) {
-                            prefs.saveCardToken("tasks_hub", returnedToken)
-                            prefs.saveCardSheetBinding(
-                                "tasks_hub",
-                                normalizeEndpoint(returnedWebhook, returnedToken),
-                                resJson.optString("sheetName", "통합할일대장")
+                            prefs.saveFtsSheetBinding(
+                                cardIdOrType = "tasks_hub",
+                                token = returnedToken,
+                                sheetName = resJson.optString("sheetName", "통합할일대장"),
+                                webhookUrl = normalizeEndpoint(returnedWebhook, returnedToken),
+                                projectId = resJson.optString("projectId", "").takeIf { it.isNotBlank() } ?: prefs.ftsProjectId
                             )
                         }
 

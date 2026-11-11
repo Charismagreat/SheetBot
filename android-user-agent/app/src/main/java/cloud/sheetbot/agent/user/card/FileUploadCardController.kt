@@ -212,14 +212,14 @@ class FileUploadCardController(
         CardInlineLoadingHelper.show(
             container = binding.layoutFileUploadDetails,
             message = "🚀 ${uris.size}건의 파일을 ${targetDesc}로 전송하고 있습니다...",
-            triggerButton = binding.btnPickFile,
+            triggerButton = binding.btnPickAndUploadFile,
             loadingButtonText = "⏳ 파일 전송 중..."
         )
 
         scope.launch {
             try {
                 val results = FileUploadManager.uploadMultipleUris(activity, uris, memo)
-                CardInlineLoadingHelper.hide(binding.layoutFileUploadDetails, binding.btnPickFile)
+                CardInlineLoadingHelper.hide(binding.layoutFileUploadDetails, binding.btnPickAndUploadFile)
                 val successCount = results.count { it.success }
 
                 if (successCount > 0) {
@@ -254,7 +254,7 @@ class FileUploadCardController(
                     addLogItem("파일 업로드 실패", firstErr, false)
                 }
             } catch (e: Exception) {
-                CardInlineLoadingHelper.hide(binding.layoutFileUploadDetails, binding.btnPickFile)
+                CardInlineLoadingHelper.hide(binding.layoutFileUploadDetails, binding.btnPickAndUploadFile)
                 Toast.makeText(activity, "업로드 처리 중 예외 발생: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
