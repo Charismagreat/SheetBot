@@ -47,7 +47,8 @@ class TasksActivity : AppCompatActivity() {
     private lateinit var adapter: TaskAdapter
     private lateinit var prefs: PreferencesManager
     private var allTasks = listOf<TaskItemDto>()
-    private var currentFilter = "PENDING" // PENDING, DONE, ALL
+    private var currentFilter = "PENDING" // PENDING, URGENT, DONE, ALL
+    private var currentSortMode = "LATEST" // LATEST (최신순), PRIORITY (긴급도순), CUSTOMER (고객명순)
     private var userEmail: String = ""
     private var loadTasksJob: Job? = null
     private var activeMediaPlayer: MediaPlayer? = null
@@ -89,6 +90,9 @@ class TasksActivity : AppCompatActivity() {
 
         prefs = PreferencesManager(this)
         userEmail = prefs.userEmail ?: ""
+        currentSortMode = getSharedPreferences("task_hub_ui_prefs", MODE_PRIVATE)
+            .getString("sort_mode", "LATEST") ?: "LATEST"
+        BankNotificationListener.refreshKakaoSessionCacheNow()
         val hasFtsConnection = prefs.isFtsPaired || !prefs.ftsPhoneNumber.isNullOrBlank() || !prefs.ftsProjectId.isNullOrBlank()
 
         setupToolbar()
@@ -184,8 +188,12 @@ class TasksActivity : AppCompatActivity() {
         }
     }
 
-    private fun openKakaoTalkAppOrRoom(session: KakaoReplySessionCache.ReplySession?) {
-        KakaoReplySessionCache.launchKakaoTalkOrRoom(this, session)
+    private fun openKakaoTalkAppOrRoom(
+        session: KakaoReplySessionCache.ReplySession?,
+        targetName: String? = null,
+        taskTitle: String? = null
+    ) {
+        KakaoReplySessionCache.launchKakaoTalkOrRoom(this, session, targetName, taskTitle)
     }
 
     private fun showTaskActionBottomSheet(
@@ -518,10 +526,14 @@ class TasksActivity : AppCompatActivity() {
 
         if (isKakaoTask || kakaoSession != null) {
             btnOpenKakao.visibility = View.VISIBLE
-            btnOpenKakao.text = if (kakaoSession?.canOpenChatRoom == true) "💛 해당 카톡방 열기" else "💛 카카오톡 열기"
+            btnOpenKakao.text = if (kakaoSession?.canOpenChatRoom == true) {
+                "💛 해당 카톡방 바로 열기"
+            } else {
+                "💛 카톡 열기 (이름 자동복사)"
+            }
             btnOpenKakao.setOnClickListener {
                 dialog.dismiss()
-                openKakaoTalkAppOrRoom(kakaoSession)
+                openKakaoTalkAppOrRoom(kakaoSession, targetName, task.title)
             }
         } else {
             btnOpenKakao.visibility = View.GONE
@@ -666,9 +678,8 @@ class TasksActivity : AppCompatActivity() {
                         }
                         dialog.dismiss()
                     } else {
-                        Toast.makeText(this, "카카오톡 알림 세션이 만료되어 카카오톡 앱을 엽니다.", Toast.LENGTH_SHORT).show()
                         dialog.dismiss()
-                        openKakaoTalkAppOrRoom(kakaoSession)
+                        openKakaoTalkAppOrRoom(kakaoSession, targetName, task.title)
                     }
                 } else if (targetPhone != null) {
                     val (sent, _) = SmsSenderUtil.sendSmsDetailed(this, targetPhone, msgText)
@@ -753,6 +764,62 @@ class TasksActivity : AppCompatActivity() {
             currentFilter = "DONE"
             applyFilter()
         }
+
+        binding.btnSortTasks.setOnClickListener {
+            currentSortMode = when (currentSortMode) {
+                "LATEST" -> "PRIORITY"
+                "PRIORITY" -> "CUSTOMER"
+                else -> "LATEST"
+            }
+            saveSortModeAndApply(showToast = true)
+        }
+
+        binding.btnSortTasks.setOnLongClickListener {
+            showSortModeSelectDialog()
+            true
+        }
+    }
+
+    private fun saveSortModeAndApply(showToast: Boolean) {
+        getSharedPreferences("task_hub_ui_prefs", MODE_PRIVATE)
+            .edit()
+            .putString("sort_mode", currentSortMode)
+            .apply()
+        applyFilter()
+        if (showToast) {
+            val label = when (currentSortMode) {
+                "PRIORITY" -> "🔥 긴급도 + 최신 발생순으로 정렬되었습니다."
+                "CUSTOMER" -> "👤 고객명 가나다 + 최신 발생순으로 정렬되었습니다."
+                else -> "🕒 실제 업무 발생일시(최신순)로 정렬되었습니다."
+            }
+            Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showSortModeSelectDialog() {
+        val options = arrayOf(
+            "🕒 최신순 (실제 업무 발생일시 최신순)",
+            "🔥 긴급도순 (긴급 🔴 → 높음 🟡 → 일반 ⚪ + 최신순)",
+            "👤 고객명순 (고객명 가나다순 + 최신순)"
+        )
+        val checkedIdx = when (currentSortMode) {
+            "PRIORITY" -> 1
+            "CUSTOMER" -> 2
+            else -> 0
+        }
+        AlertDialog.Builder(this)
+            .setTitle("정렬 기준 선택")
+            .setSingleChoiceItems(options, checkedIdx) { dialog, which ->
+                currentSortMode = when (which) {
+                    1 -> "PRIORITY"
+                    2 -> "CUSTOMER"
+                    else -> "LATEST"
+                }
+                saveSortModeAndApply(showToast = true)
+                dialog.dismiss()
+            }
+            .setNegativeButton("닫기", null)
+            .show()
     }
 
     private fun styleFilterTab(tab: TextView, isSelected: Boolean, activeColorHex: String = "#059669") {
@@ -775,6 +842,22 @@ class TasksActivity : AppCompatActivity() {
         binding.cardFilterPending.alpha = if (currentFilter == "PENDING" || currentFilter == "ALL") 1.0f else 0.55f
         binding.cardFilterUrgent.alpha = if (currentFilter == "URGENT" || currentFilter == "ALL") 1.0f else 0.55f
         binding.cardFilterDone.alpha = if (currentFilter == "DONE" || currentFilter == "ALL") 1.0f else 0.55f
+
+        // 우측 정렬 전환 버튼 텍스트 및 색상 동기화
+        when (currentSortMode) {
+            "PRIORITY" -> {
+                binding.btnSortTasks.text = "🔥 긴급도순"
+                binding.btnSortTasks.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#9F1239"))
+            }
+            "CUSTOMER" -> {
+                binding.btnSortTasks.text = "👤 고객명순"
+                binding.btnSortTasks.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#0369A1"))
+            }
+            else -> {
+                binding.btnSortTasks.text = "⇅ 최신순"
+                binding.btnSortTasks.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#334155"))
+            }
+        }
     }
 
     private fun updateTaskCountsUi() {
@@ -916,10 +999,89 @@ class TasksActivity : AppCompatActivity() {
                 if (merged.contactName.isNullOrBlank() && !sanitizedItem.contactName.isNullOrBlank()) {
                     merged = merged.copy(contactName = sanitizedItem.contactName)
                 }
+                if (normalizeCreatedAtKey(sanitizedItem.createdAt) > normalizeCreatedAtKey(merged.createdAt)) {
+                    merged = merged.copy(createdAt = sanitizedItem.createdAt)
+                }
                 dedupMap[normKey] = merged
             }
         }
         return dedupMap.values.toList()
+    }
+
+    /**
+     * 긴급도 가중치 계산:
+     * 0: URGENT / 긴급 🔴 (또는 기한에 '즉시', '지연', '오늘' 포함)
+     * 1: HIGH / 높음 🟡
+     * 2: NORMAL / 보통 ⚪
+     */
+    private fun priorityWeight(task: TaskItemDto): Int {
+        val p = task.priority.uppercase()
+        val d = task.dueDate.orEmpty()
+        return when {
+            p.contains("URGENT") || p.contains("긴급") || d.contains("즉시") || d.contains("지연") -> 0
+            p.contains("HIGH") || p.contains("높음") || d.contains("오늘") -> 1
+            else -> 2
+        }
+    }
+
+    /**
+     * 다양한 날짜 문자열("2026-11-11 15:46:36", "2026. 11. 11. 15:46")을
+     * 14자리 숫자 문자열("20261111154636")로 정규화하여 정확한 최신순 비교 보장
+     */
+    private fun normalizeCreatedAtKey(raw: String?): String {
+        if (raw.isNullOrBlank()) return "00000000000000"
+        val m = Regex("(\\d{4})[-./\\s]+(\\d{1,2})[-./\\s]+(\\d{1,2})(?:[T\\s]+(\\d{1,2}):(\\d{1,2})(?::(\\d{1,2}))?)?")
+            .find(raw.trim())
+        if (m != null) {
+            val yyyy = m.groupValues[1]
+            val mm = m.groupValues[2].padStart(2, '0')
+            val dd = m.groupValues[3].padStart(2, '0')
+            val hh = m.groupValues[4].ifEmpty { "00" }.padStart(2, '0')
+            val min = m.groupValues[5].ifEmpty { "00" }.padStart(2, '0')
+            val ss = m.groupValues[6].ifEmpty { "00" }.padStart(2, '0')
+            return "$yyyy$mm$dd$hh$min$ss"
+        }
+        val digits = raw.replace(Regex("[^0-9]"), "")
+        return if (digits.length >= 8) digits.take(14).padEnd(14, '0') else "00000000000000"
+    }
+
+    private fun sortTasksList(tasks: List<TaskItemDto>): List<TaskItemDto> {
+        val effectiveSort = if (currentFilter == "URGENT" && currentSortMode == "LATEST") {
+            "PRIORITY"
+        } else {
+            currentSortMode
+        }
+
+        return when (effectiveSort) {
+            "PRIORITY" -> {
+                // 긴급도(긴급 🔴 → 높음 🟡 → 일반 ⚪) + 실제 업무 발생일시(createdAt 최신순) 복합 정렬
+                tasks.sortedWith(
+                    compareBy<TaskItemDto> { it.status == "DONE" }
+                        .thenBy { priorityWeight(it) }
+                        .thenByDescending { normalizeCreatedAtKey(it.createdAt) }
+                        .thenByDescending { it.id }
+                )
+            }
+            "CUSTOMER" -> {
+                // 고객명 가나다순 (고객명 있는 항목 우선) + 동일 고객 내 실제 업무 발생일시 최신순 정렬
+                tasks.sortedWith(
+                    compareBy<TaskItemDto> { it.status == "DONE" }
+                        .thenBy { cleanCustomerDisplayName(it.contactName).isNullOrEmpty() }
+                        .thenBy { cleanCustomerDisplayName(it.contactName)?.lowercase().orEmpty() }
+                        .thenByDescending { normalizeCreatedAtKey(it.createdAt) }
+                        .thenBy { priorityWeight(it) }
+                )
+            }
+            else -> {
+                // 기본(LATEST): 실제 업무 발생일시(createdAt 최신순) 최우선 + 동일 시각 내 긴급도순 정렬
+                tasks.sortedWith(
+                    compareBy<TaskItemDto> { it.status == "DONE" }
+                        .thenByDescending { normalizeCreatedAtKey(it.createdAt) }
+                        .thenBy { priorityWeight(it) }
+                        .thenByDescending { it.id }
+                )
+            }
+        }
     }
 
     private fun loadTasks() {
@@ -993,8 +1155,9 @@ class TasksActivity : AppCompatActivity() {
             "DONE" -> allTasks.filter { it.status == "DONE" }
             else -> allTasks
         }
-        adapter.submitList(filtered)
-        binding.llEmptyTasks.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
+        val sorted = sortTasksList(filtered)
+        adapter.submitList(sorted)
+        binding.llEmptyTasks.visibility = if (sorted.isEmpty()) View.VISIBLE else View.GONE
     }
 
     private fun toggleTask(task: TaskItemDto, nextStatus: String) {
@@ -1260,9 +1423,18 @@ class TaskAdapter(
                 tvStateBadge.visibility = View.GONE
             }
 
-            // 기한
-            if (cleanDueDate != null) {
-                tvDueDate.text = cleanDueDate
+            // 발생일시(MM/dd HH:mm) 및 기한 표시
+            val shortTime = Regex("\\d{4}-(\\d{2})-(\\d{2})\\s+(\\d{2}:\\d{2})")
+                .find(item.createdAt.trim())
+                ?.let { "${it.groupValues[1]}/${it.groupValues[2]} ${it.groupValues[3]}" }
+            val dueDisplay = when {
+                shortTime != null && cleanDueDate != null && cleanDueDate != "기한 미정" -> "$shortTime · $cleanDueDate"
+                shortTime != null -> shortTime
+                cleanDueDate != null -> cleanDueDate
+                else -> null
+            }
+            if (dueDisplay != null) {
+                tvDueDate.text = dueDisplay
                 tvDueDate.visibility = View.VISIBLE
             } else {
                 tvDueDate.visibility = View.GONE

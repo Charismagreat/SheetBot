@@ -148,12 +148,12 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- 필터 탭 (진행 중 / 완료 / 전체) -->
+    <!-- 필터 탭 (진행 중 / 완료 / 전체) 및 우측 정렬 전환 + 추가 버튼 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
+        android:paddingHorizontal="12dp"
         android:paddingVertical="8dp"
         android:gravity="center_vertical">
 
@@ -163,13 +163,13 @@
             android:layout_height="wrap_content"
             android:text="미완료"
             android:textColor="#FFFFFF"
-            android:textSize="12sp"
+            android:textSize="11.5sp"
             android:textStyle="bold"
             android:background="@drawable/bg_badge_version"
             android:backgroundTint="#059669"
-            android:paddingHorizontal="12dp"
+            android:paddingHorizontal="9dp"
             android:paddingVertical="6dp"
-            android:layout_marginEnd="8dp" />
+            android:layout_marginEnd="6dp" />
 
         <TextView
             android:id="@+id/tabDone"
@@ -177,12 +177,12 @@
             android:layout_height="wrap_content"
             android:text="완료됨"
             android:textColor="#94A3B8"
-            android:textSize="12sp"
+            android:textSize="11.5sp"
             android:background="@drawable/bg_badge_version"
             android:backgroundTint="#1E293B"
-            android:paddingHorizontal="12dp"
+            android:paddingHorizontal="9dp"
             android:paddingVertical="6dp"
-            android:layout_marginEnd="8dp" />
+            android:layout_marginEnd="6dp" />
 
         <TextView
             android:id="@+id/tabAll"
@@ -190,24 +190,42 @@
             android:layout_height="wrap_content"
             android:text="전체"
             android:textColor="#94A3B8"
-            android:textSize="12sp"
+            android:textSize="11.5sp"
             android:background="@drawable/bg_badge_version"
             android:backgroundTint="#1E293B"
-            android:paddingHorizontal="12dp"
+            android:paddingHorizontal="9dp"
             android:paddingVertical="6dp" />
 
         <View android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
 
+        <TextView
+            android:id="@+id/btnSortTasks"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⇅ 최신순"
+            android:textColor="#E2E8F0"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_badge_version"
+            android:backgroundTint="#334155"
+            android:paddingHorizontal="9dp"
+            android:paddingVertical="6dp"
+            android:layout_marginEnd="6dp" />
+
         <Button
             android:id="@+id/btnAddNewTask"
             android:layout_width="wrap_content"
-            android:layout_height="36dp"
+            android:layout_height="34dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
             android:text="＋ 추가"
-            android:textSize="11.5sp"
+            android:textSize="11sp"
             android:textStyle="bold"
             android:textColor="#FFFFFF"
             android:backgroundTint="#0284C7"
-            android:paddingHorizontal="12dp" />
+            android:paddingHorizontal="10dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp" />
     </LinearLayout>
 
     <!-- 상단 인라인 실행/동기화 상태 배너 영역 (목록 뒤가 아닌 상단에 깔끔하게 표시) -->

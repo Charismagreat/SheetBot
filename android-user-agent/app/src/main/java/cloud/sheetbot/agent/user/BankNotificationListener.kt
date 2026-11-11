@@ -41,6 +41,9 @@ class BankNotificationListener : NotificationListenerService() {
             }
         )
 
+        @Volatile
+        private var activeInstance: BankNotificationListener? = null
+
         /**
          * 🔄 앱 업데이트(MY_PACKAGE_REPLACED), 재부팅, 프로세스 재시작 시 삼성 One UI 등에서
          * NotificationListenerService 바인딩이 해제되는 현상을 즉시 복구합니다.
@@ -60,6 +63,24 @@ class BankNotificationListener : NotificationListenerService() {
                 Log.w(TAG, "ensureListenerBound 재바인딩 요청 예외: ${e.message}")
             }
         }
+
+        /**
+         * 💬 할 일 허브 / 워크스페이스에서 '카카오톡 열기' 클릭 직전 상단 알림바의 현재 활성 카카오톡 알림을
+         * 즉시 스캔하여 KakaoReplySessionCache에 최신 대화방 PendingIntent를 보강합니다.
+         */
+        fun refreshKakaoSessionCacheNow() {
+            try {
+                val listener = activeInstance ?: return
+                val activeList = listener.activeNotifications ?: return
+                for (sbn in activeList) {
+                    if (sbn.packageName == "com.kakao.talk") {
+                        listener.captureKakaoSessionOnly(sbn)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "refreshKakaoSessionCacheNow 예외: ${e.message}")
+            }
+        }
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.IO)
@@ -67,12 +88,21 @@ class BankNotificationListener : NotificationListenerService() {
 
     override fun onCreate() {
         super.onCreate()
+        activeInstance = this
         prefs = PreferencesManager(this)
         Log.i(TAG, "BankNotificationListener 서비스가 초기화되었습니다.")
     }
 
+    override fun onDestroy() {
+        if (activeInstance === this) {
+            activeInstance = null
+        }
+        super.onDestroy()
+    }
+
     override fun onListenerConnected() {
         super.onListenerConnected()
+        activeInstance = this
         isListenerConnected = true
         Log.i(TAG, "✅ BankNotificationListener 바인딩 연결 완료 -> 상단바 미처리 알림 스캔 시작")
         sweepActiveNotifications()
@@ -83,6 +113,37 @@ class BankNotificationListener : NotificationListenerService() {
         isListenerConnected = false
         Log.w(TAG, "⚠️ BankNotificationListener 연결 해제 감지 -> 즉시 requestRebind 호출")
         ensureListenerBound(this)
+    }
+
+    /**
+     * 시트 중복 전송 없이 상단바 카카오톡 알림에서 대화방 바로가기(PendingIntent) 세션만 즉시 추출·캐싱합니다.
+     */
+    internal fun captureKakaoSessionOnly(sbn: StatusBarNotification) {
+        try {
+            val notification = sbn.notification ?: return
+            val extras = notification.extras ?: return
+            val rawTitle = extras.getString(Notification.EXTRA_TITLE)
+                ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+            val rawSubText = extras.getString(Notification.EXTRA_SUB_TEXT)
+                ?: extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString() ?: ""
+            val conversationTitle = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()?.trim()
+            val isGroupConversationExtra = extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)
+                || extras.getBoolean("android.isGroupConversation", false)
+
+            var chatRoomName = rawTitle.trim()
+            var sender = rawTitle.trim()
+            if (!conversationTitle.isNullOrBlank()) {
+                chatRoomName = conversationTitle
+                sender = rawTitle.trim()
+            } else if (isGroupConversationExtra && rawSubText.isNotBlank()) {
+                chatRoomName = rawSubText.trim()
+                sender = rawTitle.trim()
+            } else if (rawSubText.isNotBlank() && !rawSubText.contains("알림톡") && !rawSubText.contains("메시지")) {
+                chatRoomName = rawSubText.trim()
+                sender = rawTitle.trim()
+            }
+            KakaoReplySessionCache.captureFromNotification(sbn, chatRoomName, sender)
+        } catch (_: Exception) {}
     }
 
     /**

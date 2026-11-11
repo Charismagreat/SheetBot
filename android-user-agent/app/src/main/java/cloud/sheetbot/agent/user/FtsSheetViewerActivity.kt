@@ -2257,10 +2257,19 @@ class FtsSheetViewerActivity : AppCompatActivity() {
         val kakaoSession = KakaoReplySessionCache.findSession(targetName, summary.primaryTitle)
         if (isKakaoSheet || kakaoSession != null) {
             btnOpenKakao.visibility = View.VISIBLE
-            btnOpenKakao.text = if (kakaoSession?.canOpenChatRoom == true) "💛 해당 카톡방 열기" else "💛 카카오톡 열기"
+            btnOpenKakao.text = if (kakaoSession?.canOpenChatRoom == true) {
+                "💛 해당 카톡방 바로 열기"
+            } else {
+                "💛 카톡 열기 (이름 자동복사)"
+            }
             btnOpenKakao.setOnClickListener {
                 dialog.dismiss()
-                KakaoReplySessionCache.launchKakaoTalkOrRoom(this, kakaoSession)
+                KakaoReplySessionCache.launchKakaoTalkOrRoom(
+                    this,
+                    kakaoSession,
+                    targetName,
+                    summary.primaryTitle
+                )
             }
         } else {
             btnOpenKakao.visibility = View.GONE
@@ -2380,7 +2389,12 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                         dialog.dismiss()
                     } else {
                         dialog.dismiss()
-                        KakaoReplySessionCache.launchKakaoTalkOrRoom(this, kakaoSession)
+                        KakaoReplySessionCache.launchKakaoTalkOrRoom(
+                            this,
+                            kakaoSession,
+                            targetName,
+                            summary.primaryTitle
+                        )
                     }
                 } else if (targetPhone != null) {
                     val (sent, _) = SmsSenderUtil.sendSmsDetailed(this, targetPhone, msgText)

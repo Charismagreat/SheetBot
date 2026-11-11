@@ -218,7 +218,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const allDedupedTasks = Array.from(dedupMap.values());
+    const allDedupedTasks = Array.from(dedupMap.values()).sort((a: any, b: any) => {
+      const aDone = a.status === "DONE" ? 1 : 0;
+      const bDone = b.status === "DONE" ? 1 : 0;
+      if (aDone !== bDone) return aDone - bDone;
+      const aTime = String(a.created_at || "");
+      const bTime = String(b.created_at || "");
+      if (aTime !== bTime) return bTime.localeCompare(aTime);
+      return Number(b.id || 0) - Number(a.id || 0);
+    });
     const pendingCount = allDedupedTasks.filter((t: any) => t.status === "PENDING").length;
     const doneCount = allDedupedTasks.filter((t: any) => t.status === "DONE").length;
     const urgentCount = allDedupedTasks.filter(
