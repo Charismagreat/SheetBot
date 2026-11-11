@@ -2134,8 +2134,7 @@ object FileToSheetClient {
             endpoint = endpoint,
             file = file,
             mimeType = mimeType,
-            memo = memo,
-            token = token
+            memo = memo
         )
     }
 
@@ -2152,10 +2151,9 @@ object FileToSheetClient {
         val token = ensureProjectSheetToken(projectId, projectName, sheetName, phoneNumber)
             ?: return@withContext FtsUploadResult(success = false, error = "대상 시트($sheetName)의 적재 토큰을 생성할 수 없습니다.")
         val endpoint = "$FTS_OFFICIAL_DOMAIN/api/inbox/$token"
-        uploadRowData(
+        uploadJson(
             endpoint = endpoint,
-            rowData = rowData,
-            token = token
+            rowData = rowData
         )
     }
 }

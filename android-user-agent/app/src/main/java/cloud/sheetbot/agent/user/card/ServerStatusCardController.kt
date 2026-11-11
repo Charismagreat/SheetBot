@@ -255,7 +255,7 @@ class ServerStatusCardController(
 
                 val projCount = res.projects.size
                 val sheetCount = res.projects.sumOf { it.sheets.size }
-                val totalRows = res.projects.sumOf { it.totalRowCount }
+                val totalRows = res.projects.sumOf { it.totalRows }
                 val pendingApprovals = res.projects.sumOf { p -> p.sheets.sumOf { s -> s.pendingCount } }
 
                 withContext(Dispatchers.Main) {
