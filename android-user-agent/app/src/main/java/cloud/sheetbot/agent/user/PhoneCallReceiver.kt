@@ -320,10 +320,18 @@ class PhoneCallReceiver : BroadcastReceiver() {
     }
 
     private fun handlePhoneStateChange(context: Context, stateStr: String, phoneNumber: String?) {
-        if (stateStr == lastState) return
-
         val prefs = PreferencesManager(context)
         val userEmail = prefs.userEmail
+
+        if (stateStr == lastState) {
+            // 안드로이드 9+에서는 1차 RINGING 브로드캐스트의 번호가 null이고, 직후 2차 RINGING 브로드캐스트에 실제 번호가 담겨 전달됨
+            if ((stateStr == TelephonyManager.EXTRA_STATE_RINGING || stateStr == TelephonyManager.EXTRA_STATE_OFFHOOK) &&
+                !phoneNumber.isNullOrBlank() && prefs.isInCallSummaryEnabled
+            ) {
+                InCallOverlayManager.show(context, phoneNumber)
+            }
+            return
+        }
 
         when (stateStr) {
             TelephonyManager.EXTRA_STATE_RINGING -> {
@@ -332,17 +340,43 @@ class PhoneCallReceiver : BroadcastReceiver() {
                 callStartTime = System.currentTimeMillis()
                 Log.d(TAG, "📞 [전화 수신 링 인입] 번호: $phoneNumber")
 
-                // 🔔 [수신 전화 시 '고객 시트 요약' 인콜 플로팅 팝업 표출]
+                // 🔔 [수신 전화 시 '고객 시트·파투 요약' 인콜 플로팅 팝업 표출]
                 val ringingPhone = phoneNumber ?: savedIncomingNumber
-                if (!ringingPhone.isNullOrBlank() && prefs.isInCallSummaryEnabled) {
-                    InCallOverlayManager.show(context, ringingPhone)
+                if (prefs.isInCallSummaryEnabled) {
+                    if (!ringingPhone.isNullOrBlank()) {
+                        InCallOverlayManager.show(context, ringingPhone)
+                    } else {
+                        // 번호가 1차 인텐트에서 지연된 경우 500ms 후 재확인
+                        CoroutineScope(Dispatchers.IO).launch {
+                            delay(500)
+                            val delayedPhone = savedIncomingNumber ?: getLatestCallFromLog(context)?.first
+                            if (!delayedPhone.isNullOrBlank() && lastState != TelephonyManager.EXTRA_STATE_IDLE) {
+                                InCallOverlayManager.show(context, delayedPhone)
+                            }
+                        }
+                    }
                 }
             }
 
             TelephonyManager.EXTRA_STATE_OFFHOOK -> {
-                // 통화 연결됨 (전화 받음)
+                // 통화 연결됨 (전화 받음 또는 발신 통화 시작)
                 isIncomingAnswered = true
                 Log.d(TAG, "🗣️ [통화 연결 시작] 번호: $phoneNumber")
+
+                if (prefs.isInCallSummaryEnabled && !InCallOverlayManager.isShowing()) {
+                    val activePhone = phoneNumber ?: savedIncomingNumber
+                    if (!activePhone.isNullOrBlank()) {
+                        InCallOverlayManager.show(context, activePhone)
+                    } else {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            delay(600)
+                            val delayedPhone = savedIncomingNumber ?: getLatestCallFromLog(context)?.first
+                            if (!delayedPhone.isNullOrBlank() && lastState == TelephonyManager.EXTRA_STATE_OFFHOOK) {
+                                InCallOverlayManager.show(context, delayedPhone)
+                            }
+                        }
+                    }
+                }
             }
 
             TelephonyManager.EXTRA_STATE_IDLE -> {

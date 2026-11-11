@@ -56,13 +56,24 @@ class InCallSummaryCardController(
                 Toast.makeText(activity, "먼저 '다른 앱 위에 표시' 권한을 허용해 주세요.", Toast.LENGTH_SHORT).show()
                 requestOverlayPermission()
             } else {
-                Toast.makeText(activity, "🔍 인콜 플로팅 팝업 미리보기를 실행합니다.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(activity, "🔍 파투 최근 통화 실데이터 기반으로 인콜 브리핑 미리보기를 실행합니다.", Toast.LENGTH_SHORT).show()
                 InCallOverlayManager.show(activity, "010-1234-5678", previewMode = true)
             }
         }
 
         binding.btnOpenInCallSummarySheet.setOnClickListener {
-            onOpenSheetChooser("RECORDING", "[SheetBot] 통화 녹음 및 고객 메모 대장")
+            val ftsPhone = prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() } ?: prefs.devicePhoneNumber ?: ""
+            if (prefs.isDestinationFileToSheet && (ftsPhone.isNotBlank() || !prefs.ftsProjectId.isNullOrBlank())) {
+                val intent = Intent(activity, cloud.sheetbot.agent.user.FtsSheetViewerActivity::class.java).apply {
+                    putExtra(cloud.sheetbot.agent.user.FtsSheetViewerActivity.EXTRA_PHONE, ftsPhone)
+                    putExtra(cloud.sheetbot.agent.user.FtsSheetViewerActivity.EXTRA_PROJECT_ID, prefs.ftsProjectId ?: "")
+                    putExtra(cloud.sheetbot.agent.user.FtsSheetViewerActivity.EXTRA_SHEET_NAME, "통화녹음대장")
+                    putExtra(cloud.sheetbot.agent.user.FtsSheetViewerActivity.EXTRA_SHEET_TYPE, "RECORDING")
+                }
+                activity.startActivity(intent)
+            } else {
+                onOpenSheetChooser("RECORDING", "[SheetBot] 통화 녹음 및 고객 메모 대장")
+            }
         }
 
         updateOverlayPermissionStatus()

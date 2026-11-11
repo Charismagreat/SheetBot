@@ -58,10 +58,10 @@ object CardSearchRegistry {
         SearchableCard(
             index = 2,
             key = "cardInCallSummary",
-            title = "수신 통화 시 고객 요약 팝업",
+            title = "수신·발신 전화 인콜 파투 브리핑",
             icon = "📞",
-            chosung = "ㅅㅅㅌㅎㅅㄱㄱㅇㅇㅍㅇ",
-            keywords = listOf("인콜", "수신", "팝업", "고객정보", "플로팅", "전화올때", "고객시트", "미리보기"),
+            chosung = "ㅅㅅㅂㅅㅈㅎㅇㅋㅍㅌㅂㄹㅍ",
+            keywords = listOf("인콜", "수신", "팝업", "고객정보", "플로팅", "전화올때", "고객시트", "미리보기", "파투브리핑", "통화브리핑"),
             cardResId = R.id.cardInCallSummary
         ),
         SearchableCard(

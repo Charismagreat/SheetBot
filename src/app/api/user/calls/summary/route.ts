@@ -4,6 +4,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { callSheetsTool, queryTable } from "@/lib/egdesk-helpers";
+import { resolveUserFtsPhoneNumber } from "@/lib/task-hub-helper";
+
+const FTS_INTERNAL_ENDPOINTS = [
+  process.env.FILETOSHEET_INTERNAL_URL,
+  "https://file2sheet.cloud",
+  "https://tunneling-service.onrender.com/t/mcp-server-fxkud1-i01o2oa/p/FileToSheet",
+  "http://127.0.0.1:4007",
+  "http://127.0.0.1:3005",
+].filter(Boolean) as string[];
 
 interface CallSummaryCacheEntry {
   timestamp: number;
@@ -108,6 +117,122 @@ async function handleCallSummary(req: NextRequest) {
     let actionItems = "";
     let lastMissedCallTime = "";
     let isFoundInSheet = false;
+
+    // 0. [FILE_TO_SHEET] 파투(user_projects) 전 시트 통합 스캔 (통화녹음대장, 통합할일대장, 명함관리, 문자/카톡/이메일 등)
+    try {
+      const ftsOwnerPhone = await resolveUserFtsPhoneNumber(resolvedEmail).catch(() => null);
+      if (ftsOwnerPhone) {
+        const cleanOwner = ftsOwnerPhone.replace(/\D/g, "");
+        for (const baseUrl of FTS_INTERNAL_ENDPOINTS) {
+          try {
+            const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/__user_data_proxy`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                tool: "user_data_query",
+                args: {
+                  tableName: "user_projects",
+                  filters: { owner_phone_number: cleanOwner },
+                  limit: 30,
+                },
+              }),
+              signal: AbortSignal.timeout(4500),
+            });
+            if (!res.ok) continue;
+            const rawText = await res.text();
+            const outer = JSON.parse(rawText);
+            const contentArr = outer?.result?.content;
+            const parsed = Array.isArray(contentArr) && contentArr[0]?.text
+              ? JSON.parse(contentArr[0].text)
+              : (outer?.result || outer);
+            const projectRows: any[] = parsed?.rows || [];
+            if (projectRows.length === 0) continue;
+
+            const recentActivities: string[] = [];
+            const ftsPendingTasks: string[] = [];
+
+            for (const pRow of projectRows) {
+              if (pRow.deleted_at) continue;
+              let sheets: any[] = [];
+              try {
+                sheets = typeof pRow.sheets_json === "string" ? JSON.parse(pRow.sheets_json) : (pRow.sheets_json || []);
+              } catch {
+                sheets = [];
+              }
+              for (const sheet of sheets) {
+                const sName = String(sheet?.name || "");
+                const sRows: any[] = Array.isArray(sheet?.rows) ? sheet.rows : [];
+                for (let idx = sRows.length - 1; idx >= 0; idx--) {
+                  const r = sRows[idx];
+                  if (!r || typeof r !== "object") continue;
+                  const vals = Object.entries(r)
+                    .filter(([k]) => !k.startsWith("_"))
+                    .map(([k, v]) => ({ k, v: String(v ?? "").trim() }));
+                  const matchedPhone = vals.some(({ v }) => isPhoneMatch(v, cleanPhone, last8));
+                  const matchedName = Boolean(
+                    customerName && customerName.length >= 2 && vals.some(({ v }) => v.includes(customerName))
+                  );
+                  if (!matchedPhone && !matchedName) continue;
+
+                  isFoundInSheet = true;
+                  const findVal = (kws: string[]) => {
+                    for (const kw of kws) {
+                      const hit = vals.find(({ k, v }) => k.includes(kw) && v && v !== "-");
+                      if (hit) return hit.v;
+                    }
+                    return "";
+                  };
+
+                  if (sName.includes("명함") || sName.includes("연락처")) {
+                    if (!customerName) customerName = findVal(["성함", "이름", "담당자", "고객명"]);
+                    if (!companyName) companyName = findVal(["회사", "상호", "소속", "거래처"]);
+                    if (!positionName) positionName = findVal(["직함", "직책", "부서"]);
+                  } else if (sName.includes("통화녹음")) {
+                    const callerField = findVal(["상대방", "발신자", "고객"]);
+                    if (!customerName && callerField) {
+                      customerName = callerField.replace(/\([^)]*\)/g, "").trim();
+                    }
+                    if (!lastCallSummary) {
+                      lastCallTime = findVal(["통화 일시", "일시", "날짜"]);
+                      lastCallSummary = findVal(["요약", "핵심 요약", "내용"]);
+                      const act = findVal(["후속 할 일", "후속조치"]);
+                      if (act && !actionItems) actionItems = act;
+                    }
+                  } else if (sName.includes("할일")) {
+                    const done = findVal(["완료"]).toUpperCase();
+                    if (done !== "TRUE" && done !== "완료" && done !== "DONE" && ftsPendingTasks.length < 3) {
+                      const taskTitle = findVal(["할 일 내용", "할일", "내용", "제목"]);
+                      const due = findVal(["마감 기한", "기한"]);
+                      if (taskTitle) {
+                        ftsPendingTasks.push(`📌 ${taskTitle}${due ? ` (${due})` : ""}`);
+                      }
+                    }
+                  } else if (recentActivities.length < 3) {
+                    const msg = findVal(["내용", "요약", "제목", "품목"]);
+                    const dt = findVal(["일시", "날짜", "일자"]).slice(5, 16);
+                    if (msg) {
+                      recentActivities.push(`• [${sName}${dt ? ` ${dt}` : ""}] ${msg.slice(0, 65)}`);
+                    }
+                  }
+                }
+              }
+            }
+
+            if (ftsPendingTasks.length > 0) {
+              actionItems = ftsPendingTasks.join("\n");
+            }
+            if (recentActivities.length > 0 && !customerMemo) {
+              customerMemo = recentActivities.join("\n");
+            }
+            break;
+          } catch {
+            // 다음 엔드포인트 폴백
+          }
+        }
+      }
+    } catch (ftsErr: any) {
+      console.warn("[CallSummary] FTS lookup warning:", ftsErr?.message);
+    }
 
     // 1. [CONTACTS] 스마트폰 연락처 대장 시트 조회
     try {

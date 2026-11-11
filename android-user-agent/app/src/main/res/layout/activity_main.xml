@@ -1488,7 +1488,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="📞 수신 전화 인콜 팝업"
+                    android:text="📞 수신·발신 전화 인콜 파투 브리핑"
                     android:textColor="#38BDF8"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -1526,7 +1526,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="전화가 걸려올 때, 구글 시트에 기록된 '직전 통화 핵심 3줄 요약'과 '특이사항 메모'를 수신 화면 위에 플로팅 카드로 0.05초 만에 띄워줍니다."
+                    android:text="전화가 걸려오거나 연결될 때, 파투(FileToSheet) 내 모든 프로젝트·시트에 기록된 '직전 통화 요약', '미완료 할 일(후속조치)', '최근 문자·카톡·메일 및 시트 내역'을 통화 화면 위에 플로팅 카드로 즉시 띄워줍니다."
                     android:textColor="#94A3B8"
                     android:textSize="11sp"
                     android:lineSpacingExtra="2dp"
@@ -1568,19 +1568,19 @@
                     android:layout_width="match_parent"
                     android:layout_height="38dp"
                     android:backgroundTint="#0284C7"
-                    android:text="🔍 인콜 플로팅 팝업 미리보기 테스트"
+                    android:text="🔍 인콜 파투 브리핑 팝업 미리보기 (최근 통화 실데이터)"
                     android:textColor="#FFFFFF"
                     android:textSize="11.5sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="8dp" />
 
-                <!-- 상시 노출 구글 시트 대장 열기 버튼 -->
+                <!-- 상시 노출 파투/시트 대장 열기 버튼 -->
                 <Button
                     android:id="@+id/btnOpenInCallSummarySheet"
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:backgroundTint="#1E293B"
-                    android:text="📊 통화 기록 및 고객 메모 시트 ↗"
+                    android:text="📊 파투 통화·고객 통합 대장 열기 ↗"
                     android:textColor="#38BDF8"
                     android:textSize="11.5sp"
                     android:textStyle="bold" />

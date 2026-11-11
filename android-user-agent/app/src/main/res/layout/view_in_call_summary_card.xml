@@ -28,7 +28,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="SheetBot 인콜 브리핑"
+            android:text="SheetBot 인콜 파투·시트 브리핑"
             android:textColor="#38BDF8"
             android:textSize="12.5sp"
             android:textStyle="bold" />
@@ -195,7 +195,7 @@
                 android:visibility="gone" />
         </LinearLayout>
 
-        <!-- 📝 특이사항 및 메모 카드 -->
+        <!-- 📝 특이사항 및 최근 문자·카톡·시트 내역 카드 -->
         <LinearLayout
             android:id="@+id/llCustomerMemoBox"
             android:layout_width="match_parent"
@@ -207,20 +207,36 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="📝 특이사항 &amp; 시트 메모"
+                android:text="📝 최근 문자 · 카톡 · 파투 시트 내역"
                 android:textColor="#34D399"
                 android:textSize="11.5sp"
                 android:textStyle="bold"
-                android:layout_marginBottom="2dp" />
+                android:layout_marginBottom="3dp" />
 
             <TextView
                 android:id="@+id/tvCustomerMemo"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="등록된 특이사항 메모가 없습니다."
+                android:text="등록된 특이사항 및 소통 내역이 없습니다."
                 android:textColor="#E2E8F0"
-                android:textSize="11.5sp" />
+                android:textSize="11.5sp"
+                android:lineSpacingExtra="2dp" />
         </LinearLayout>
+
+        <!-- 📊 파투 시트 전체 내역 바로 열기 액션 버튼 -->
+        <TextView
+            android:id="@+id/btnOpenFtsFromOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="#0F172A"
+            android:gravity="center"
+            android:paddingVertical="7dp"
+            android:paddingHorizontal="10dp"
+            android:text="📊 파투에서 이 번호 전체 내역 열기 ↗"
+            android:textColor="#38BDF8"
+            android:textSize="11.5sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
 </LinearLayout>

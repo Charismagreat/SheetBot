@@ -2529,4 +2529,383 @@ object FileToSheetClient {
             spokenText = summary
         )
     }
+
+    /**
+     * 전화번호 정규화 (숫자만 추출, +82 -> 0 변환, 끝 7~8자리 추출)
+     */
+    private fun normalizePhoneDigits(raw: String): String {
+        var digits = raw.replace(Regex("[^0-9]"), "")
+        if (digits.startsWith("82") && digits.length >= 10) {
+            digits = "0" + digits.substring(2)
+        }
+        return digits
+    }
+
+    private fun isCallerPhoneMatchedInText(
+        cellOrRowText: String,
+        cleanTarget: String,
+        tail7: String,
+        tail8: String
+    ): Boolean {
+        if (cellOrRowText.isBlank() || cleanTarget.length < 7) return false
+        val digitsInText = cellOrRowText.replace(Regex("[^0-9]"), "")
+        if (digitsInText.isEmpty()) return false
+        if (digitsInText.contains(cleanTarget)) return true
+        if (tail8.length == 8 && digitsInText.contains(tail8)) return true
+        if (cleanTarget.length == 8 && tail7.length >= 7 && digitsInText.endsWith(cleanTarget)) return true
+        // 대표번호/지역번호 내선 대역 (예: 02-2186-4160 vs 02-2186-4164 앞 8자리 일치 시 보조 참고용이 아닌 정확 매칭 우선)
+        return false
+    }
+
+    /**
+     * 🔍 인콜 미리보기 테스트 시 사용자의 실제 파투 시트(통화녹음대장 등)에 기록된 가장 최근 발신/수신 전화번호를 찾습니다.
+     */
+    suspend fun findMostRecentCallerPhoneInWorkspace(
+        ownerPhone: String,
+        projectIdHint: String? = null
+    ): String? = withContext(Dispatchers.IO) {
+        val cleanOwner = ownerPhone.replace("[^0-9]".toRegex(), "")
+        val reqProjectId = projectIdHint?.trim().orEmpty()
+        if (cleanOwner.isBlank() && reqProjectId.isBlank()) return@withContext null
+
+        if (cachedWorkspaceRowsRaw.isNullOrBlank()) {
+            fetchAllWorkspaceProjects(phoneNumber = cleanOwner, targetProjectId = reqProjectId)
+        }
+        val rawStr = cachedWorkspaceRowsRaw ?: return@withContext null
+        val rowsArr = try { JSONArray(rawStr) } catch (_: Exception) { return@withContext null }
+
+        val phoneRegex = Regex("(01[016789][-\\s]?\\d{3,4}[-\\s]?\\d{4}|0\\d{1,2}[-\\s]?\\d{3,4}[-\\s]?\\d{4}|1[568]\\d{2}[-\\s]?\\d{4})")
+
+        for (i in 0 until rowsArr.length()) {
+            val pObj = rowsArr.optJSONObject(i) ?: continue
+            if (pObj.optString("category", "") == "trash_project") continue
+            val rowPhone = pObj.optString("phone_number", "").replace("[^0-9]".toRegex(), "")
+            val rowId = pObj.opt("id")?.toString()?.trim().orEmpty()
+            if ((cleanOwner.isNotBlank() && rowPhone == cleanOwner) || (reqProjectId.isNotBlank() && rowId == reqProjectId)) {
+                val sheetsArr = try { JSONArray(pObj.optString("sheets_data", "[]")) } catch (_: Exception) { continue }
+                // 통화녹음대장 우선 확인
+                for (sIdx in 0 until sheetsArr.length()) {
+                    val sObj = sheetsArr.optJSONObject(sIdx) ?: continue
+                    val sName = sObj.optString("name", "")
+                    if (!sName.contains("통화녹음") && !sName.contains("할일") && !sName.contains("문자")) continue
+                    val rArr = sObj.optJSONArray("rows") ?: continue
+                    for (rIdx in rArr.length() - 1 downTo 0) {
+                        val rObj = rArr.optJSONObject(rIdx) ?: continue
+                        val joined = rObj.toString()
+                        val m = phoneRegex.find(joined)
+                        if (m != null) return@withContext m.value
+                    }
+                }
+            }
+        }
+        null
+    }
+
+    /**
+     * 📞 수신/발신 전화 시 파투(FileToSheet) 내 모든 프로젝트와 시트(통화녹음대장, 통합할일대장, 명함관리, 연락처대장,
+     * 문자송수신대장, 카카오톡대화대장, 이메일수신대장 및 일반 프로젝트 시트)를 통합 스캔하여
+     * 0.2초 만에 인콜 플로팅 브리핑 데이터를 조합합니다.
+     */
+    suspend fun fetchInCallBriefingFromWorkspace(
+        ownerPhone: String,
+        callerPhone: String,
+        projectIdHint: String? = null,
+        deviceContactName: String? = null
+    ): CallSummaryResult = withContext(Dispatchers.IO) {
+        val cleanOwner = ownerPhone.replace("[^0-9]".toRegex(), "")
+        val reqProjectId = projectIdHint?.trim().orEmpty()
+        val cleanCaller = normalizePhoneDigits(callerPhone)
+        val tail8 = if (cleanCaller.length >= 8) cleanCaller.takeLast(8) else cleanCaller
+        val tail7 = if (cleanCaller.length >= 7) cleanCaller.takeLast(7) else cleanCaller
+
+        if ((cleanOwner.isBlank() && reqProjectId.isBlank()) || cleanCaller.length < 7) {
+            return@withContext CallSummaryResult(
+                success = false,
+                phone = callerPhone,
+                cleanPhone = cleanCaller,
+                error = "파투 연동 정보 또는 발신 번호가 유효하지 않습니다."
+            )
+        }
+
+        if (cachedWorkspaceRowsRaw.isNullOrBlank()) {
+            fetchAllWorkspaceProjects(phoneNumber = cleanOwner, targetProjectId = reqProjectId)
+        }
+        val rawStr = cachedWorkspaceRowsRaw ?: return@withContext CallSummaryResult(
+            success = false,
+            phone = callerPhone,
+            cleanPhone = cleanCaller
+        )
+        val rowsArr = try { JSONArray(rawStr) } catch (_: Exception) {
+            return@withContext CallSummaryResult(success = false, phone = callerPhone, cleanPhone = cleanCaller)
+        }
+
+        val matchedProjectObjs = mutableListOf<JSONObject>()
+        for (i in 0 until rowsArr.length()) {
+            val pObj = rowsArr.optJSONObject(i) ?: continue
+            if (pObj.optString("category", "").trim() == "trash_project") continue
+            val rowPhone = pObj.optString("phone_number", "").replace("[^0-9]".toRegex(), "")
+            val rowId = pObj.opt("id")?.toString()?.trim().orEmpty()
+            if ((cleanOwner.isNotBlank() && rowPhone == cleanOwner) ||
+                (reqProjectId.isNotBlank() && rowId == reqProjectId)
+            ) {
+                matchedProjectObjs.add(pObj)
+            }
+        }
+
+        var resolvedName = deviceContactName?.trim().orEmpty()
+        var resolvedCompany = ""
+        var resolvedPosition = ""
+        var lastCallTime = ""
+        var lastCallSummary = ""
+        var lastMissedTime = ""
+        val pendingTaskLines = mutableListOf<String>()
+        val recentActivityLines = mutableListOf<String>()
+        var isFound = false
+
+        // "이항식 (032디자인 / 010-3201-8032)" 또는 "국민건강보험공단 강남서부지사 (02-2186-4164)" 파싱 헬퍼
+        fun parseCompositeCallerLabel(rawLabel: String) {
+            val cleaned = rawLabel.replace(Regex("^\\[|\\]$"), "").trim()
+            if (cleaned.isBlank() || cleaned == "미등록 연락처" || cleaned == "알수없음") return
+            val parenIdx = cleaned.indexOf('(')
+            if (parenIdx > 0) {
+                val mainPart = cleaned.substring(0, parenIdx).trim()
+                val insideParen = cleaned.substring(parenIdx + 1).substringBefore(')').trim()
+                if (resolvedName.isBlank() && mainPart.isNotBlank() && !mainPart.all { it.isDigit() || it == '-' }) {
+                    resolvedName = mainPart
+                }
+                if (resolvedCompany.isBlank() && insideParen.contains("/")) {
+                    val compCandidate = insideParen.substringBefore("/").trim()
+                    if (compCandidate.isNotBlank() && !compCandidate.all { it.isDigit() || it == '-' }) {
+                        resolvedCompany = compCandidate
+                    }
+                }
+            } else if (resolvedName.isBlank() && !cleaned.all { it.isDigit() || it == '-' }) {
+                resolvedName = cleaned
+            }
+        }
+
+        // 1차 패스: 전화번호 기준 전체 프로젝트·시트 스캔 (명함/연락처/통화녹음에서 이름과 회사 먼저 확보)
+        for (pObj in matchedProjectObjs) {
+            val sheetsArr = try { JSONArray(pObj.optString("sheets_data", "[]")) } catch (_: Exception) { continue }
+            for (sIdx in 0 until sheetsArr.length()) {
+                val sObj = sheetsArr.optJSONObject(sIdx) ?: continue
+                val sName = sObj.optString("name", "").trim()
+                val rArr = sObj.optJSONArray("rows") ?: continue
+
+                for (rIdx in rArr.length() - 1 downTo 0) {
+                    val rObj = rArr.optJSONObject(rIdx) ?: continue
+                    val rowStr = rObj.toString()
+                    if (!isCallerPhoneMatchedInText(rowStr, cleanCaller, tail7, tail8)) continue
+
+                    isFound = true
+                    val cName = optCleanVal(rObj, "성함")
+                        .ifBlank { optCleanVal(rObj, "이름") }
+                        .ifBlank { optCleanVal(rObj, "고객명") }
+                        .ifBlank { optCleanVal(rObj, "상대방이름") }
+                        .ifBlank { optCleanVal(rObj, "연락처이름") }
+                    val cComp = optCleanVal(rObj, "회사명")
+                        .ifBlank { optCleanVal(rObj, "회사/상호") }
+                        .ifBlank { optCleanVal(rObj, "상호") }
+                        .ifBlank { optCleanVal(rObj, "기업명") }
+                    val cPos = optCleanVal(rObj, "직함")
+                        .ifBlank { optCleanVal(rObj, "직함/부서") }
+
+                    if (resolvedName.isBlank() && cName.isNotBlank() && cName != "미등록 연락처") {
+                        resolvedName = cName
+                    }
+                    if (resolvedCompany.isBlank() && cComp.isNotBlank()) {
+                        resolvedCompany = cComp
+                    }
+                    if (resolvedPosition.isBlank() && cPos.isNotBlank()) {
+                        resolvedPosition = cPos
+                    }
+                    val callerField = optCleanVal(rObj, "상대방").ifBlank { optCleanVal(rObj, "채팅방/발신자") }
+                    if (callerField.isNotBlank()) {
+                        parseCompositeCallerLabel(callerField)
+                    }
+                }
+            }
+        }
+
+        // 이름/기관명 매칭용 키워드 (예: "국민건강보험공단", "이항식", "032디자인")
+        val identityKeywords = buildList {
+            if (resolvedName.length >= 2 && resolvedName != "미등록 연락처" && resolvedName != "고객") {
+                add(resolvedName)
+                // 공백 앞 첫 단어도 기관명일 경우 추가 (예: "국민건강보험공단 강남서부지사" -> "국민건강보험공단")
+                val firstToken = resolvedName.split(" ").firstOrNull()?.trim().orEmpty()
+                if (firstToken.length >= 3 && firstToken != resolvedName) add(firstToken)
+            }
+            if (resolvedCompany.length >= 2) add(resolvedCompany)
+        }.distinct()
+
+        fun isRowMatchedByPhoneOrIdentity(rObj: JSONObject): Boolean {
+            val rowStr = rObj.toString()
+            if (isCallerPhoneMatchedInText(rowStr, cleanCaller, tail7, tail8)) return true
+            if (identityKeywords.isNotEmpty()) {
+                for (kw in identityKeywords) {
+                    if (rowStr.contains(kw, ignoreCase = true)) return true
+                }
+            }
+            return false
+        }
+
+        // 2차 패스: 최신 통화녹음 요약, 미완료 할일, 최근 문자/카톡/이메일/일반시트 내역 수집
+        for (pObj in matchedProjectObjs) {
+            val pName = pObj.optString("project_name", "프로젝트").trim()
+            val sheetsArr = try { JSONArray(pObj.optString("sheets_data", "[]")) } catch (_: Exception) { continue }
+
+            for (sIdx in 0 until sheetsArr.length()) {
+                val sObj = sheetsArr.optJSONObject(sIdx) ?: continue
+                val sName = sObj.optString("name", "").trim()
+                val rArr = sObj.optJSONArray("rows") ?: continue
+
+                for (rIdx in rArr.length() - 1 downTo 0) {
+                    val rObj = rArr.optJSONObject(rIdx) ?: continue
+                    if (!isRowMatchedByPhoneOrIdentity(rObj)) continue
+                    isFound = true
+
+                    when {
+                        sName.contains("통화녹음") || sName.contains("회의록") -> {
+                            if (lastCallSummary.isBlank()) {
+                                val sum = optCleanVal(rObj, "요약내용").ifBlank { optCleanVal(rObj, "AI요약") }
+                                val tm = optCleanVal(rObj, "통화일시").ifBlank { optCleanVal(rObj, "회의일시") }
+                                val note = optCleanVal(rObj, "비고").ifBlank { optCleanVal(rObj, "주요결정사항") }
+                                if (sum.isNotBlank()) {
+                                    lastCallSummary = sum
+                                    lastCallTime = tm
+                                    if (note.isNotBlank() && pendingTaskLines.size < 3) {
+                                        pendingTaskLines.add("📌 [통화 후속] $note")
+                                    }
+                                }
+                            }
+                        }
+                        sName.contains("할일") -> {
+                            val st = optCleanVal(rObj, "상태").uppercase()
+                            val isDone = st == "DONE" || st.contains("완료")
+                            if (!isDone && pendingTaskLines.size < 3) {
+                                val tTitle = optCleanVal(rObj, "할일제목").ifBlank { optCleanVal(rObj, "내용") }
+                                val tDue = optCleanVal(rObj, "기한").ifBlank { optCleanVal(rObj, "마감기한") }
+                                val tBadge = optCleanVal(rObj, "뱃지").ifBlank { optCleanVal(rObj, "출처") }
+                                if (tTitle.isNotBlank()) {
+                                    val prefix = buildString {
+                                        append("📋 ")
+                                        if (tBadge.isNotBlank()) append("[$tBadge] ")
+                                    }
+                                    val suffix = if (tDue.isNotBlank()) " ($tDue)" else ""
+                                    val line = "$prefix$tTitle$suffix"
+                                    if (line !in pendingTaskLines) {
+                                        pendingTaskLines.add(line)
+                                    }
+                                }
+                            }
+                        }
+                        sName.contains("부재중") -> {
+                            if (lastMissedTime.isBlank()) {
+                                lastMissedTime = optCleanVal(rObj, "부재중일시")
+                            }
+                        }
+                        sName.contains("문자") -> {
+                            if (recentActivityLines.none { it.startsWith("💬 [문자") } && recentActivityLines.size < 4) {
+                                val msg = optCleanVal(rObj, "메시지내용").ifBlank { optCleanVal(rObj, "발송할문자내용") }
+                                val tm = optCleanVal(rObj, "일시").takeLast(11).trim()
+                                if (msg.isNotBlank()) {
+                                    val shortMsg = if (msg.length > 65) msg.take(63) + "…" else msg
+                                    recentActivityLines.add("💬 [문자 ${tm.ifBlank { "최근" }}] $shortMsg")
+                                }
+                            }
+                        }
+                        sName.contains("카카오톡") || sName.contains("카톡") -> {
+                            if (recentActivityLines.none { it.startsWith("🟡 [카톡") } && recentActivityLines.size < 4) {
+                                val msg = optCleanVal(rObj, "메시지내용")
+                                val tm = optCleanVal(rObj, "수신일시").takeLast(11).trim()
+                                if (msg.isNotBlank()) {
+                                    val shortMsg = if (msg.length > 65) msg.take(63) + "…" else msg
+                                    recentActivityLines.add("🟡 [카톡 ${tm.ifBlank { "최근" }}] $shortMsg")
+                                }
+                            }
+                        }
+                        sName.contains("이메일") -> {
+                            if (recentActivityLines.none { it.startsWith("📧 [메일") } && recentActivityLines.size < 4) {
+                                val subj = optCleanVal(rObj, "메일제목")
+                                val sum = optCleanVal(rObj, "본문요약")
+                                val text = if (subj.isNotBlank() && sum.isNotBlank()) "$subj - $sum" else subj.ifBlank { sum }
+                                if (text.isNotBlank()) {
+                                    val shortTxt = if (text.length > 65) text.take(63) + "…" else text
+                                    recentActivityLines.add("📧 [메일] $shortTxt")
+                                }
+                            }
+                        }
+                        sName.contains("명함") || sName.contains("연락처") -> {
+                            val detail = optCleanVal(rObj, "상세정보").ifBlank { optCleanVal(rObj, "메모") }
+                            if (detail.isNotBlank() && recentActivityLines.size < 4) {
+                                val shortDetail = if (detail.length > 65) detail.take(63) + "…" else detail
+                                recentActivityLines.add("🪪 [$sName] $shortDetail")
+                            }
+                        }
+                        else -> {
+                            // 기타 시트(결제입금, 영수증, 주문, 견적, 일반 파투 프로젝트 시트)
+                            if (recentActivityLines.size < 4) {
+                                val summaryParts = mutableListOf<String>()
+                                val itKeys = rObj.keys()
+                                while (itKeys.hasNext()) {
+                                    val k = itKeys.next()
+                                    if (k.startsWith("_") || k == "일련번호") continue
+                                    val v = optCleanVal(rObj, k)
+                                    if (v.isNotEmpty() && v != resolvedName && v != callerPhone) {
+                                        summaryParts.add("$k: $v")
+                                    }
+                                    if (summaryParts.size >= 3) break
+                                }
+                                if (summaryParts.isNotEmpty()) {
+                                    val tag = if (pName != "시트봇 연동 장부") "$pName▸$sName" else sName
+                                    val joined = summaryParts.joinToString(" · ")
+                                    val shortJoined = if (joined.length > 65) joined.take(63) + "…" else joined
+                                    recentActivityLines.add("📊 [$tag] $shortJoined")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        val finalName = resolvedName.ifBlank {
+            if (isFound) "파투 등록 고객" else "신규 연락처"
+        }
+        val finalMemo = if (recentActivityLines.isNotEmpty()) {
+            recentActivityLines.joinToString("\n")
+        } else if (lastMissedTime.isNotBlank()) {
+            "📞 최근 부재중 이력: $lastMissedTime"
+        } else {
+            ""
+        }
+        val finalActions = pendingTaskLines.joinToString("\n")
+
+        val rawCacheJson = JSONObject().apply {
+            put("found", isFound)
+            put("name", finalName)
+            put("company", resolvedCompany)
+            put("position", resolvedPosition)
+            put("lastCallTime", lastCallTime)
+            put("lastCallSummary", lastCallSummary)
+            put("actionItems", finalActions)
+            put("memo", finalMemo)
+        }.toString()
+
+        CallSummaryResult(
+            success = true,
+            found = isFound,
+            phone = callerPhone,
+            cleanPhone = cleanCaller,
+            name = finalName,
+            company = resolvedCompany,
+            position = resolvedPosition,
+            memo = finalMemo,
+            lastCallTime = lastCallTime,
+            lastCallSummary = lastCallSummary,
+            actionItems = finalActions,
+            lastMissedCallTime = lastMissedTime,
+            rawJson = rawCacheJson
+        )
+    }
 }

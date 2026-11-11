@@ -2,6 +2,7 @@ package cloud.sheetbot.agent.user
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Handler
@@ -23,10 +24,11 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 /**
- * 수신 전화 시 화면 최상단에 구글 시트 고객 요약 카드를 플로팅 위젯으로 표출하는 매니저
+ * 수신/발신 전화 시 화면 최상단에 파투(FileToSheet) 전 시트 & 구글 시트 고객 요약 카드를 플로팅 위젯으로 표출하는 매니저
  * - 다른 앱 위에 표시 (SYSTEM_ALERT_WINDOW) 활용
- * - 로컬 캐시 0.01초 즉각 표출 + 비동기 시트 실시간 업데이트
- * - 터치 드래그 위치 이동 및 접기/펼치기 지원
+ * - 단말기 주소록 + 로컬 캐시 0.01초 즉각 표출
+ * - 파투(FileToSheet) 내 모든 프로젝트·시트(통화녹음대장, 통합할일대장, 명함관리, 문자/카톡/이메일/일반시트) 실시간 통합 브리핑
+ * - 터치 드래그 위치 이동, 접기/펼치기, 파투 시트 내역 원터치 열기 지원
  */
 object InCallOverlayManager {
     private const val TAG = "InCallOverlayManager"
@@ -51,6 +53,11 @@ object InCallOverlayManager {
     }
 
     /**
+     * 현재 인콜 오버레이가 표시 중인지 확인
+     */
+    fun isShowing(): Boolean = overlayView != null
+
+    /**
      * 인콜 플로팅 요약 카드 표출
      */
     @SuppressLint("ClickableViewAccessibility")
@@ -71,8 +78,8 @@ object InCallOverlayManager {
 
         mainHandler.post {
             try {
-                // 이미 동일 번호로 띄워져 있다면 유지
-                if (overlayView != null && currentPhone == cleanPhone) {
+                // 이미 동일 번호로 띄워져 있다면 유지 (단, 미리보기 모드는 재실행 허용)
+                if (!previewMode && overlayView != null && currentPhone == cleanPhone) {
                     return@post
                 }
 
@@ -108,7 +115,7 @@ object InCallOverlayManager {
                 ).apply {
                     gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
                     x = 0
-                    y = (110 * displayMetrics.density).toInt() // 상단 110dp 위치
+                    y = (105 * displayMetrics.density).toInt() // 상단 105dp 위치
                 }
 
                 val inflater = LayoutInflater.from(context)
@@ -117,6 +124,7 @@ object InCallOverlayManager {
 
                 // 뷰 컴포넌트 바인딩
                 val llHeaderBar = view.findViewById<View>(R.id.llHeaderBar)
+                val tvHeaderTitle = view.findViewById<TextView>(R.id.tvHeaderTitle)
                 val tvCustomerName = view.findViewById<TextView>(R.id.tvCustomerName)
                 val tvCustomerBadge = view.findViewById<TextView>(R.id.tvCustomerBadge)
                 val tvCustomerCompany = view.findViewById<TextView>(R.id.tvCustomerCompany)
@@ -129,8 +137,20 @@ object InCallOverlayManager {
                 val tvLastCallSummary = view.findViewById<TextView>(R.id.tvLastCallSummary)
                 val tvActionItems = view.findViewById<TextView>(R.id.tvActionItems)
                 val tvCustomerMemo = view.findViewById<TextView>(R.id.tvCustomerMemo)
+                val btnOpenFtsFromOverlay = view.findViewById<TextView>(R.id.btnOpenFtsFromOverlay)
 
-                tvCallerPhone.text = phoneNumber
+                val formattedPhone = ContactHelper.formatPhoneNumber(phoneNumber)
+                tvCallerPhone.text = formattedPhone
+
+                // 단말기 연락처 이름 0ms 즉시 조회
+                val deviceContactName = if (!previewMode) {
+                    ContactHelper.getContactName(context, cleanPhone)
+                } else null
+
+                if (!deviceContactName.isNullOrBlank()) {
+                    tvCustomerName.text = deviceContactName
+                    tvCustomerCompany.text = "파투·시트 대장 통합 스캔 중..."
+                }
 
                 // 1. 접기/펼치기 초기 상태 적용
                 var isExpanded = prefs.isInCallSummaryExpanded
@@ -149,6 +169,24 @@ object InCallOverlayManager {
                 // 2. 닫기 버튼
                 btnCloseFloating.setOnClickListener {
                     dismiss(context)
+                }
+
+                // 2-B. 파투 시트 전체 내역 열기 버튼
+                btnOpenFtsFromOverlay?.setOnClickListener {
+                    val targetQuery = currentPhone?.let { ContactHelper.formatPhoneNumber(it) } ?: formattedPhone
+                    val ftsPhone = prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() } ?: prefs.devicePhoneNumber ?: ""
+                    val intent = Intent(context, FtsSheetViewerActivity::class.java).apply {
+                        putExtra(FtsSheetViewerActivity.EXTRA_PHONE, ftsPhone)
+                        putExtra(FtsSheetViewerActivity.EXTRA_PROJECT_ID, prefs.ftsProjectId ?: "")
+                        putExtra(FtsSheetViewerActivity.EXTRA_INITIAL_SEARCH_QUERY, targetQuery)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    }
+                    try {
+                        context.startActivity(intent)
+                        dismiss(context)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "인콜 오버레이에서 파투 뷰어 실행 실패", e)
+                    }
                 }
 
                 // 3. 헤더 터치 드래그 위치 이동
@@ -179,7 +217,7 @@ object InCallOverlayManager {
                 }
 
                 // 4. 로컬 캐시 확인 및 0.01초 즉시 렌더링
-                val cachedJsonStr = prefs.getCallSummaryCache(cleanPhone)
+                val cachedJsonStr = if (!previewMode) prefs.getCallSummaryCache(cleanPhone) else null
                 if (!cachedJsonStr.isNullOrBlank()) {
                     try {
                         val json = JSONObject(cachedJsonStr)
@@ -195,62 +233,147 @@ object InCallOverlayManager {
                         )
                     } catch (_: Exception) {}
                 } else if (previewMode) {
-                    // 미리보기 모드용 더미 데이터
+                    // 미리보기 기본 샘플 표시 (연동된 파투 데이터가 있으면 즉시 실제 최근 발신자 데이터로 갱신)
+                    tvHeaderTitle.text = "SheetBot 인콜 파투 브리핑 (미리보기)"
                     tvCustomerName.text = "홍길동 대표님"
+                    tvCustomerBadge.text = "파투·시트 고객"
                     tvCustomerBadge.visibility = View.VISIBLE
-                    tvCustomerCompany.text = "(주)성진기업 | 대표이사"
-                    tvLastCallTime.text = "2026-10-03 16:59"
-                    tvLastCallSummary.text = "1. 부품 납품 단가 협의 진행\n2. 다음 주 수요일 자재 일정 확인 희망\n3. 견적서 이메일 발송 완료"
+                    tvCustomerCompany.text = "(주)성진기업 | 대표이사 · 파투 통합연동"
+                    tvLastCallTime.text = "최근 통화"
+                    tvLastCallSummary.text = "1. 부품 납품 단가 협의 및 분납 일정 조율\n2. 다음 주 수요일 자재 일정 확인 희망\n3. 전자고지 및 견적서 발송 안내 완료"
                     tvActionItems.visibility = View.VISIBLE
-                    tvActionItems.text = "후속 조치: 수요일 오전 견적 재검토 후 연락"
-                    tvCustomerMemo.text = "결제일 매월 25일 준수 요청 / VIP 우수 고객"
+                    tvActionItems.text = "📌 [통화 후속조치] 수요일 오전 견적서 재검토 후 연락 (내일까지)"
+                    tvCustomerMemo.text = "• [문자 11/11] 분할납부 신청 안내 완료\n• [카톡 11/11] 가상계좌 발송 및 확인 완료\n• [명함] 결제일 매월 25일 준수 요청"
                     pbLoading.visibility = View.GONE
                 }
 
                 // 5. 윈도우에 뷰 등록
                 wm.addView(view, params)
-                Log.i(TAG, "🎉 [인콜 플로팅 카드 표출 완료] 대상 번호: $cleanPhone")
+                Log.i(TAG, "🎉 [인콜 플로팅 카드 표출 완료] 대상 번호: $cleanPhone (preview=$previewMode)")
 
-                // 6. 비동기로 시트봇 서버에서 최신 고객 정보 실시간 fetch (미리보기 모드 제외)
+                val ftsOwnerPhone = prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() }
+                    ?: prefs.devicePhoneNumber?.takeIf { it.isNotBlank() }
+                    ?: ""
+                val hasFts = ftsOwnerPhone.isNotBlank() || !prefs.ftsProjectId.isNullOrBlank()
+
+                // 6-A. 미리보기 모드일 때도 파투가 연동되어 있다면 실제 최근 통화 고객 데이터를 찾아 생생하게 표출
+                if (previewMode && hasFts) {
+                    pbLoading.visibility = View.VISIBLE
+                    fetchJob = CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            val recentPhone = FileToSheetClient.findMostRecentCallerPhoneInWorkspace(
+                                ownerPhone = ftsOwnerPhone,
+                                projectIdHint = prefs.ftsProjectId
+                            )
+                            if (!recentPhone.isNullOrBlank()) {
+                                val contactName = ContactHelper.getContactName(context, recentPhone)
+                                val realBriefing = FileToSheetClient.fetchInCallBriefingFromWorkspace(
+                                    ownerPhone = ftsOwnerPhone,
+                                    callerPhone = recentPhone,
+                                    projectIdHint = prefs.ftsProjectId,
+                                    deviceContactName = contactName
+                                )
+                                withContext(Dispatchers.Main) {
+                                    if (overlayView == view) {
+                                        pbLoading.visibility = View.GONE
+                                        if (realBriefing.found) {
+                                            currentPhone = recentPhone
+                                            tvHeaderTitle.text = "SheetBot 인콜 파투 브리핑 (실데이터)"
+                                            tvCallerPhone.text = ContactHelper.formatPhoneNumber(recentPhone)
+                                            applyResultToViews(
+                                                result = realBriefing,
+                                                isParuSource = true,
+                                                tvCustomerName = tvCustomerName,
+                                                tvCustomerBadge = tvCustomerBadge,
+                                                tvCustomerCompany = tvCustomerCompany,
+                                                tvLastCallTime = tvLastCallTime,
+                                                tvLastCallSummary = tvLastCallSummary,
+                                                tvActionItems = tvActionItems,
+                                                tvCustomerMemo = tvCustomerMemo
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                withContext(Dispatchers.Main) {
+                                    if (overlayView == view) pbLoading.visibility = View.GONE
+                                }
+                            }
+                        } catch (e: Exception) {
+                            withContext(Dispatchers.Main) {
+                                if (overlayView == view) pbLoading.visibility = View.GONE
+                            }
+                        }
+                    }
+                    return@post
+                }
+
+                // 6-B. 실제 수신/발신 통화 시: 파투 전 프로젝트·시트 우선 스캔 + 시트봇 서버 병합 조회
                 if (!previewMode) {
                     val userEmail = prefs.userEmail
-                    if (!userEmail.isNullOrBlank()) {
+                    if (hasFts || !userEmail.isNullOrBlank()) {
                         pbLoading.visibility = View.VISIBLE
                         fetchJob = CoroutineScope(Dispatchers.IO).launch {
-                            val result = ApiClient.fetchCallSummary(userEmail, cleanPhone)
+                            var finalResult: CallSummaryResult? = null
+                            var isFromParu = false
+
+                            // 1순위: 파투(FileToSheet) 내 모든 프로젝트 & 시트 통합 스캔
+                            if (hasFts) {
+                                try {
+                                    val ftsResult = FileToSheetClient.fetchInCallBriefingFromWorkspace(
+                                        ownerPhone = ftsOwnerPhone,
+                                        callerPhone = cleanPhone,
+                                        projectIdHint = prefs.ftsProjectId,
+                                        deviceContactName = deviceContactName
+                                    )
+                                    if (ftsResult.found) {
+                                        finalResult = ftsResult
+                                        isFromParu = true
+                                    } else {
+                                        finalResult = ftsResult
+                                    }
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "파투 인콜 브리핑 스캔 중 예외: ${e.message}")
+                                }
+                            }
+
+                            // 2순위: 파투에서 못 찾았거나 보강이 필요한 경우 시트봇 서버 API 호출
+                            if ((finalResult == null || !finalResult.found) && !userEmail.isNullOrBlank()) {
+                                try {
+                                    val apiResult = ApiClient.fetchCallSummary(userEmail, cleanPhone)
+                                    if (apiResult.success && apiResult.found) {
+                                        finalResult = apiResult
+                                        isFromParu = false
+                                    } else if (finalResult == null) {
+                                        finalResult = apiResult
+                                    }
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "서버 인콜 요약 API 호출 중 예외: ${e.message}")
+                                }
+                            }
+
                             withContext(Dispatchers.Main) {
                                 if (overlayView == view) {
                                     pbLoading.visibility = View.GONE
-                                    if (result.success) {
-                                        tvCustomerName.text = result.name.ifBlank { "고객" }
-                                        tvCustomerBadge.visibility = if (result.found) View.VISIBLE else View.GONE
-                                        val companyText = listOf(result.company, result.position).filter { it.isNotBlank() }.joinToString(" | ")
-                                        tvCustomerCompany.text = companyText.ifBlank { if (result.found) "시트 등록 고객" else "미등록 신규 연락처" }
-
-                                        if (result.lastCallSummary.isNotBlank()) {
-                                            tvLastCallTime.text = result.lastCallTime.ifBlank { "최근 통화" }
-                                            tvLastCallSummary.text = result.lastCallSummary
-                                        } else {
-                                            tvLastCallTime.text = "통화 기록 없음"
-                                            tvLastCallSummary.text = "등록된 직전 통화 요약이 없습니다."
-                                        }
-
-                                        if (result.actionItems.isNotBlank()) {
-                                            tvActionItems.text = "후속 조치: ${result.actionItems}"
-                                            tvActionItems.visibility = View.VISIBLE
-                                        } else {
-                                            tvActionItems.visibility = View.GONE
-                                        }
-
-                                        tvCustomerMemo.text = result.memo.ifBlank { "등록된 특이사항 메모가 없습니다." }
-
-                                        if (!result.rawJson.isNullOrBlank()) {
-                                            prefs.saveCallSummaryCache(cleanPhone, result.rawJson)
+                                    if (finalResult != null && finalResult.success) {
+                                        applyResultToViews(
+                                            result = finalResult,
+                                            isParuSource = isFromParu,
+                                            tvCustomerName = tvCustomerName,
+                                            tvCustomerBadge = tvCustomerBadge,
+                                            tvCustomerCompany = tvCustomerCompany,
+                                            tvLastCallTime = tvLastCallTime,
+                                            tvLastCallSummary = tvLastCallSummary,
+                                            tvActionItems = tvActionItems,
+                                            tvCustomerMemo = tvCustomerMemo
+                                        )
+                                        if (!finalResult.rawJson.isNullOrBlank() && finalResult.found) {
+                                            prefs.saveCallSummaryCache(cleanPhone, finalResult.rawJson)
                                         }
                                     } else {
                                         if (tvCustomerName.text.toString() == "고객 정보 확인 중...") {
-                                            tvCustomerName.text = "신규 연락처"
-                                            tvCustomerCompany.text = "시트 조회 실패"
+                                            tvCustomerName.text = deviceContactName ?: "신규 연락처"
+                                            tvCustomerCompany.text = "파투·시트 등록 이력 없음"
                                         }
                                     }
                                 }
@@ -258,12 +381,57 @@ object InCallOverlayManager {
                         }
                     } else {
                         pbLoading.visibility = View.GONE
+                        tvCustomerName.text = deviceContactName ?: "신규 연락처"
+                        tvCustomerCompany.text = "파투 또는 시트 연동 후 브리핑이 제공됩니다."
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "인콜 플로팅 카드 표출 실패", e)
             }
         }
+    }
+
+    private fun applyResultToViews(
+        result: CallSummaryResult,
+        isParuSource: Boolean,
+        tvCustomerName: TextView,
+        tvCustomerBadge: TextView,
+        tvCustomerCompany: TextView,
+        tvLastCallTime: TextView,
+        tvLastCallSummary: TextView,
+        tvActionItems: TextView,
+        tvCustomerMemo: TextView
+    ) {
+        tvCustomerName.text = result.name.ifBlank { "고객" }
+        if (result.found) {
+            tvCustomerBadge.text = if (isParuSource) "파투 고객" else "시트 고객"
+            tvCustomerBadge.visibility = View.VISIBLE
+        } else {
+            tvCustomerBadge.visibility = View.GONE
+        }
+
+        val companyText = listOf(result.company, result.position).filter { it.isNotBlank() }.joinToString(" | ")
+        tvCustomerCompany.text = companyText.ifBlank {
+            if (result.found) "파투·시트 등록 고객" else "파투·시트 이력 없음 (신규 통화)"
+        }
+
+        if (result.lastCallSummary.isNotBlank()) {
+            tvLastCallTime.text = result.lastCallTime.ifBlank { "최근 통화" }
+            tvLastCallSummary.text = result.lastCallSummary
+        } else {
+            tvLastCallTime.text = "이전 통화 요약 없음"
+            tvLastCallSummary.text = "등록된 직전 통화 녹음 요약이 없습니다."
+        }
+
+        if (result.actionItems.isNotBlank()) {
+            val prefix = if (result.actionItems.startsWith("📌")) "" else "후속 조치: "
+            tvActionItems.text = "$prefix${result.actionItems}"
+            tvActionItems.visibility = View.VISIBLE
+        } else {
+            tvActionItems.visibility = View.GONE
+        }
+
+        tvCustomerMemo.text = result.memo.ifBlank { "등록된 최근 문자·카톡·파투 시트 내역이 없습니다." }
     }
 
     private fun renderSummaryData(
@@ -288,7 +456,7 @@ object InCallOverlayManager {
         tvCustomerName.text = name.ifBlank { "고객" }
         tvCustomerBadge.visibility = if (found) View.VISIBLE else View.GONE
         val companyText = listOf(company, position).filter { it.isNotBlank() }.joinToString(" | ")
-        tvCustomerCompany.text = companyText.ifBlank { if (found) "시트 등록 고객" else "미등록 신규 연락처" }
+        tvCustomerCompany.text = companyText.ifBlank { if (found) "파투·시트 등록 고객" else "미등록 신규 연락처" }
 
         if (lastCallSummary.isNotBlank()) {
             tvLastCallTime.text = lastCallTime.ifBlank { "최근 통화" }
@@ -299,13 +467,14 @@ object InCallOverlayManager {
         }
 
         if (actionItems.isNotBlank()) {
-            tvActionItems.text = "후속 조치: $actionItems"
+            val prefix = if (actionItems.startsWith("📌")) "" else "후속 조치: "
+            tvActionItems.text = "$prefix$actionItems"
             tvActionItems.visibility = View.VISIBLE
         } else {
             tvActionItems.visibility = View.GONE
         }
 
-        tvCustomerMemo.text = memo.ifBlank { "등록된 특이사항 메모가 없습니다." }
+        tvCustomerMemo.text = memo.ifBlank { "등록된 최근 문자·카톡·파투 시트 내역이 없습니다." }
     }
 
     /**
