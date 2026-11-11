@@ -87,11 +87,11 @@ class ServerStatusCardController(
             }
             activity.startActivity(intent)
         }
-        binding.layoutFtsWorkspaceHeader.setOnClickListener { openFtsWorkspace(false, null) }
+        binding.cardFtsWorkspace.findViewWithTag<View>("layoutFtsWorkspaceHeader")?.setOnClickListener { openFtsWorkspace(false, null) }
         binding.cardFtsWorkspace.setOnClickListener { openFtsWorkspace(false, null) }
-        binding.btnOpenFtsWorkspaceAll.setOnClickListener { openFtsWorkspace(false, "ALL") }
-        binding.btnOpenFtsWorkspacePending.setOnClickListener { openFtsWorkspace(false, "PENDING") }
-        binding.btnOpenFtsWorkspaceIngest.setOnClickListener { openFtsWorkspace(true, null) }
+        binding.cardFtsWorkspace.findViewWithTag<View>("btnOpenFtsWorkspaceAll")?.setOnClickListener { openFtsWorkspace(false, "ALL") }
+        binding.cardFtsWorkspace.findViewWithTag<View>("btnOpenFtsWorkspacePending")?.setOnClickListener { openFtsWorkspace(false, "PENDING") }
+        binding.cardFtsWorkspace.findViewWithTag<View>("btnOpenFtsWorkspaceIngest")?.setOnClickListener { openFtsWorkspace(true, null) }
     }
 
     fun startServerMonitorLoop() {
@@ -260,9 +260,10 @@ class ServerStatusCardController(
 
                 withContext(Dispatchers.Main) {
                     if (!activity.isFinishing && !activity.isDestroyed) {
-                        binding.tvFtsWorkspaceSubtitle.text =
+                        binding.cardFtsWorkspace.findViewWithTag<android.widget.TextView>("tvFtsWorkspaceSubtitle")?.text =
                             "전체 프로젝트 ${projCount}개 · 시트 ${sheetCount}개 (총 ${totalRows}건) · 결재 대기 ${pendingApprovals}건"
-                        binding.tvFtsWorkspaceBadge.text = "프로젝트 ${projCount}개 ›"
+                        binding.cardFtsWorkspace.findViewWithTag<android.widget.TextView>("tvFtsWorkspaceBadge")?.text =
+                            "프로젝트 ${projCount}개 ›"
                     }
                 }
             } catch (_: Exception) {

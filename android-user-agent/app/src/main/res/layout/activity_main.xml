@@ -535,7 +535,7 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ⚡ 파일투시트(FileToSheet) 통합 워크스페이스 & 결재/파일적재 센터 독립 카드 -->
+        <!-- ⚡ 파일투시트(FileToSheet) 통합 워크스페이스 & 결재/파일적재 센터 독립 카드 (Tag 기반 바인딩 파라미터 한계 보호) -->
         <LinearLayout
             android:id="@+id/cardFtsWorkspace"
             android:layout_width="match_parent"
@@ -546,7 +546,7 @@
             android:layout_marginBottom="12dp">
 
             <LinearLayout
-                android:id="@+id/layoutFtsWorkspaceHeader"
+                android:tag="layoutFtsWorkspaceHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
@@ -576,7 +576,7 @@
                         android:textStyle="bold" />
 
                     <TextView
-                        android:id="@+id/tvFtsWorkspaceSubtitle"
+                        android:tag="tvFtsWorkspaceSubtitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="모든 프로젝트·시트 조회 · 승인/보류/반려 결재 · 파일 AI 적재"
@@ -586,7 +586,7 @@
                 </LinearLayout>
 
                 <TextView
-                    android:id="@+id/tvFtsWorkspaceBadge"
+                    android:tag="tvFtsWorkspaceBadge"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_badge_version"
@@ -607,7 +607,7 @@
                 android:layout_marginTop="10dp">
 
                 <Button
-                    android:id="@+id/btnOpenFtsWorkspaceAll"
+                    android:tag="btnOpenFtsWorkspaceAll"
                     android:layout_width="0dp"
                     android:layout_height="38dp"
                     android:layout_weight="1.15"
@@ -622,7 +622,7 @@
                     android:layout_marginEnd="5dp" />
 
                 <Button
-                    android:id="@+id/btnOpenFtsWorkspacePending"
+                    android:tag="btnOpenFtsWorkspacePending"
                     android:layout_width="0dp"
                     android:layout_height="38dp"
                     android:layout_weight="0.95"
@@ -637,7 +637,7 @@
                     android:layout_marginEnd="5dp" />
 
                 <Button
-                    android:id="@+id/btnOpenFtsWorkspaceIngest"
+                    android:tag="btnOpenFtsWorkspaceIngest"
                     android:layout_width="0dp"
                     android:layout_height="38dp"
                     android:layout_weight="1"
