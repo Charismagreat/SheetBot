@@ -1816,17 +1816,24 @@ object ApiClient {
     }
 
     /**
-     * 스마트폰 자연어(음성/텍스트) 명령으로 구글 시트 Apps Script 원격 구동 (v1.7)
+     * 스마트폰 자연어(음성/텍스트) 명령으로 파투(FileToSheet) 시트 및 구글 시트 제어/질의/문자발송 구동 (v2.4.34)
      */
     suspend fun executeAiCommand(
         userEmail: String,
         command: String,
         spreadsheetId: String? = null,
-        deviceId: String? = null
+        deviceId: String? = null,
+        phoneNumber: String? = null,
+        projectId: String? = null,
+        token: String? = null
     ): AiCommandResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val cleanPhone = phoneNumber?.replace(Regex("[^0-9]"), "") ?: ""
         val json = JSONObject().apply {
-            put("userEmail", userEmail)
+            if (userEmail.isNotBlank()) put("userEmail", userEmail)
+            if (cleanPhone.isNotBlank()) put("phoneNumber", cleanPhone)
+            if (!projectId.isNullOrBlank()) put("projectId", projectId)
+            if (!token.isNullOrBlank()) put("token", token)
             put("command", command)
             if (!spreadsheetId.isNullOrBlank()) put("spreadsheetId", spreadsheetId)
             put("deviceId", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL} (SheetBot Agent)")
@@ -1836,7 +1843,11 @@ object ApiClient {
         for (host in hosts) {
             val endpoint = "$host/api/user/commands/execute"
             try {
-                val request = Request.Builder().url(endpoint).post(body).build()
+                val reqBuilder = Request.Builder().url(endpoint).post(body)
+                if (userEmail.isNotBlank()) reqBuilder.addHeader("x-sheetbot-user-email", userEmail)
+                if (cleanPhone.isNotBlank()) reqBuilder.addHeader("x-user-phone", cleanPhone)
+                if (!projectId.isNullOrBlank()) reqBuilder.addHeader("x-fts-project-id", projectId)
+                val request = reqBuilder.build()
                 val response = longTimeoutClient.newCall(request).execute()
                 val resStr = response.body?.string() ?: ""
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
@@ -3030,21 +3041,31 @@ object ApiClient {
     suspend fun fetchTasks(
         userEmail: String,
         status: String = "ALL",
-        source: String = "ALL"
+        source: String = "ALL",
+        phoneNumber: String? = null,
+        projectId: String? = null
     ): TaskListResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         var lastError = "할 일 목록 조회 실패"
+        val cleanPhone = phoneNumber?.replace("[^0-9]".toRegex(), "").orEmpty()
 
         for (host in hosts) {
-            val endpoint = "$host/api/user/tasks?status=$status&source=$source"
+            val query = buildString {
+                append("status=").append(status)
+                append("&source=").append(source)
+                if (cleanPhone.isNotBlank()) append("&phoneNumber=").append(cleanPhone)
+                if (!projectId.isNullOrBlank()) append("&projectId=").append(java.net.URLEncoder.encode(projectId, "UTF-8"))
+            }
+            val endpoint = "$host/api/user/tasks?$query"
             try {
-                val request = Request.Builder()
+                val reqBuilder = Request.Builder()
                     .url(endpoint)
                     .get()
-                    .addHeader("x-sheetbot-user-email", userEmail)
-                    .build()
+                if (userEmail.isNotBlank()) reqBuilder.addHeader("x-sheetbot-user-email", userEmail)
+                if (cleanPhone.isNotBlank()) reqBuilder.addHeader("x-user-phone", cleanPhone)
+                if (!projectId.isNullOrBlank()) reqBuilder.addHeader("x-fts-project-id", projectId)
 
-                val response = client.newCall(request).execute()
+                val response = client.newCall(reqBuilder.build()).execute()
                 val resStr = response.body?.string() ?: ""
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
 
@@ -3099,24 +3120,32 @@ object ApiClient {
     suspend fun toggleTaskStatus(
         userEmail: String,
         taskId: Long,
-        nextStatus: String
+        nextStatus: String,
+        title: String? = null,
+        phoneNumber: String? = null,
+        projectId: String? = null
     ): Boolean = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val cleanPhone = phoneNumber?.replace("[^0-9]".toRegex(), "").orEmpty()
         for (host in hosts) {
             val endpoint = "$host/api/user/tasks"
             try {
                 val json = JSONObject().apply {
                     put("taskId", taskId)
                     put("status", nextStatus)
+                    if (!title.isNullOrBlank()) put("title", title)
+                    if (cleanPhone.isNotBlank()) put("phoneNumber", cleanPhone)
+                    if (!projectId.isNullOrBlank()) put("projectId", projectId)
                 }
                 val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
-                val request = Request.Builder()
+                val reqBuilder = Request.Builder()
                     .url(endpoint)
                     .patch(body)
-                    .addHeader("x-sheetbot-user-email", userEmail)
-                    .build()
+                if (userEmail.isNotBlank()) reqBuilder.addHeader("x-sheetbot-user-email", userEmail)
+                if (cleanPhone.isNotBlank()) reqBuilder.addHeader("x-user-phone", cleanPhone)
+                if (!projectId.isNullOrBlank()) reqBuilder.addHeader("x-fts-project-id", projectId)
 
-                val response = client.newCall(request).execute()
+                val response = client.newCall(reqBuilder.build()).execute()
                 val resStr = response.body?.string() ?: ""
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
@@ -3137,9 +3166,12 @@ object ApiClient {
         contactPhone: String? = null,
         dueDate: String? = null,
         priority: String = "HIGH 🟡",
-        badgeText: String = "모바일 등록"
+        badgeText: String = "모바일 등록",
+        phoneNumber: String? = null,
+        projectId: String? = null
     ): Boolean = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val cleanPhone = phoneNumber?.replace("[^0-9]".toRegex(), "").orEmpty()
         for (host in hosts) {
             val endpoint = "$host/api/user/tasks"
             try {
@@ -3150,15 +3182,18 @@ object ApiClient {
                     if (!dueDate.isNullOrBlank()) put("dueDate", dueDate)
                     put("priority", priority)
                     put("badgeText", badgeText)
+                    if (cleanPhone.isNotBlank()) put("phoneNumber", cleanPhone)
+                    if (!projectId.isNullOrBlank()) put("projectId", projectId)
                 }
                 val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
-                val request = Request.Builder()
+                val reqBuilder = Request.Builder()
                     .url(endpoint)
                     .post(body)
-                    .addHeader("x-sheetbot-user-email", userEmail)
-                    .build()
+                if (userEmail.isNotBlank()) reqBuilder.addHeader("x-sheetbot-user-email", userEmail)
+                if (cleanPhone.isNotBlank()) reqBuilder.addHeader("x-user-phone", cleanPhone)
+                if (!projectId.isNullOrBlank()) reqBuilder.addHeader("x-fts-project-id", projectId)
 
-                val response = client.newCall(request).execute()
+                val response = client.newCall(reqBuilder.build()).execute()
                 val resStr = response.body?.string() ?: ""
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {

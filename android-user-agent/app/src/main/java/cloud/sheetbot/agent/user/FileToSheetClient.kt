@@ -269,6 +269,11 @@ object FileToSheetClient {
             cardId = "saas_otp_relay",
             sheetName = "SaaS인증발송대장",
             headers = listOf("일련번호", "요청일시", "서비스명", "수신번호", "인증목적", "인증번호(마스킹)", "발송상태", "소요시간(ms)", "인증완료여부", "발송기기")
+        ),
+        "tasks_hub" to FtsCardSheetSpec(
+            cardId = "tasks_hub",
+            sheetName = "통합할일대장",
+            headers = listOf("일련번호", "등록일시", "상태", "중요도", "할일제목", "고객명", "연락처", "기한", "출처", "뱃지", "완료일시", "비고")
         )
     )
 
@@ -302,6 +307,7 @@ object FileToSheetClient {
             "instagram", "cardinsta" -> "instagram"
             "mobile_site", "cardsite" -> "mobile_site"
             "saas_otp_relay", "cardsaasotprelay", "saas_otp" -> "saas_otp_relay"
+            "tasks_hub", "cardtaskshub", "tasks", "task" -> "tasks_hub"
             else -> raw.lowercase()
         }
     }
@@ -1269,5 +1275,197 @@ object FileToSheetClient {
             }
         }
         SaasOtpVerifyTestResult(success = false, verified = false, error = lastErr)
+    }
+
+    // =========================================================================
+    // 📋 파일투시트(FileToSheet / 파투) 통합할일대장 및 기존 시트 할 일 연동 API
+    // =========================================================================
+
+    /**
+     * 파투 서버(/api/inbox/tasks)에서 통합할일대장 목록 + 파투 내 다른 시트(통화녹음, 회의록, 부재중, 문자, 카톡, 주문/견적)에서
+     * 자동 추출된 할 일 목록을 통합 조회합니다.
+     */
+    suspend fun fetchFtsTasks(
+        prefs: PreferencesManager,
+        status: String = "ALL"
+    ): TaskListResult = withContext(Dispatchers.IO) {
+        val phone = prefs.ftsPhoneNumber?.replace("[^0-9]".toRegex(), "").orEmpty()
+        val projectId = prefs.ftsProjectId.orEmpty()
+        val token = prefs.ftsToken.orEmpty()
+
+        if (phone.isBlank() && projectId.isBlank() && token.isBlank()) {
+            return@withContext TaskListResult(success = false, error = "파투 연동 정보가 없습니다.")
+        }
+
+        val query = buildString {
+            append("status=").append(java.net.URLEncoder.encode(status, "UTF-8"))
+            if (phone.isNotBlank()) append("&phoneNumber=").append(java.net.URLEncoder.encode(phone, "UTF-8"))
+            if (projectId.isNotBlank()) append("&projectId=").append(java.net.URLEncoder.encode(projectId, "UTF-8"))
+            if (token.isNotBlank()) append("&token=").append(java.net.URLEncoder.encode(token, "UTF-8"))
+        }
+
+        var lastError = "파투 할 일 조회 실패"
+        for (base in getSaasOtpBaseHosts(prefs)) {
+            val url = "$base/api/inbox/tasks?$query"
+            try {
+                val reqBuilder = Request.Builder()
+                    .url(url)
+                    .header("Accept", "application/json")
+                    .get()
+                if (phone.isNotBlank()) reqBuilder.header("x-user-phone", phone)
+
+                client.newCall(reqBuilder.build()).execute().use { res ->
+                    val resStr = res.body?.string() ?: ""
+                    val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                    if (res.isSuccessful && resJson.optBoolean("success", false)) {
+                        val returnedToken = resJson.optString("token", "")
+                        val returnedWebhook = resJson.optString("webhookUrl", "")
+                        if (returnedToken.isNotBlank() && returnedWebhook.isNotBlank()) {
+                            prefs.saveCardToken("tasks_hub", returnedToken)
+                            prefs.saveCardSheetBinding(
+                                "tasks_hub",
+                                normalizeEndpoint(returnedWebhook, returnedToken),
+                                resJson.optString("sheetName", "통합할일대장")
+                            )
+                        }
+
+                        val taskList = mutableListOf<TaskItemDto>()
+                        val tasksArr = resJson.optJSONArray("tasks")
+                        if (tasksArr != null) {
+                            for (i in 0 until tasksArr.length()) {
+                                val obj = tasksArr.optJSONObject(i) ?: continue
+                                taskList.add(
+                                    TaskItemDto(
+                                        id = obj.optLong("id", 900000L + i),
+                                        title = obj.optString("title", ""),
+                                        description = obj.optString("description", null),
+                                        contactName = obj.optString("contact_name", null),
+                                        contactPhone = obj.optString("contact_phone", null),
+                                        dueDate = obj.optString("due_date", null),
+                                        priority = obj.optString("priority", "HIGH 🟡"),
+                                        status = obj.optString("status", "PENDING"),
+                                        badgeText = obj.optString("badge_text", null),
+                                        sourceType = obj.optString("source_type", "SMS"),
+                                        createdAt = obj.optString("created_at", "")
+                                    )
+                                )
+                            }
+                        }
+
+                        val computedPending = taskList.count { it.status == "PENDING" }
+                        val computedDone = taskList.count { it.status == "DONE" }
+                        return@withContext TaskListResult(
+                            success = true,
+                            tasks = taskList,
+                            totalCount = resJson.optInt("totalCount", taskList.size),
+                            pendingCount = resJson.optInt("pendingCount", computedPending),
+                            doneCount = resJson.optInt("doneCount", computedDone),
+                            spreadsheetUrl = "$FTS_OFFICIAL_DOMAIN"
+                        )
+                    } else {
+                        lastError = resJson.optString("error", "HTTP ${res.code}")
+                    }
+                }
+            } catch (e: Exception) {
+                lastError = e.localizedMessage ?: "통신 오류"
+            }
+        }
+
+        TaskListResult(success = false, error = lastError)
+    }
+
+    /**
+     * 파투 '통합할일대장' 시트에 신규 할 일을 직접 기록합니다.
+     */
+    suspend fun createFtsTask(
+        prefs: PreferencesManager,
+        title: String,
+        contactName: String? = null,
+        contactPhone: String? = null,
+        dueDate: String? = null,
+        priority: String = "HIGH 🟡",
+        badgeText: String = "모바일 등록"
+    ): Boolean = withContext(Dispatchers.IO) {
+        val phone = prefs.ftsPhoneNumber?.replace("[^0-9]".toRegex(), "").orEmpty()
+        val projectId = prefs.ftsProjectId.orEmpty()
+        val token = prefs.ftsToken.orEmpty()
+        if (phone.isBlank() && projectId.isBlank() && token.isBlank()) return@withContext false
+
+        val payload = JSONObject().apply {
+            if (phone.isNotBlank()) put("phoneNumber", phone)
+            if (projectId.isNotBlank()) put("projectId", projectId)
+            if (token.isNotBlank()) put("token", token)
+            put("title", title)
+            if (!contactName.isNullOrBlank()) put("contactName", contactName)
+            if (!contactPhone.isNullOrBlank()) put("contactPhone", contactPhone)
+            if (!dueDate.isNullOrBlank()) put("dueDate", dueDate)
+            put("priority", priority)
+            put("badgeText", badgeText)
+            put("sourceType", "SMS")
+        }
+        val body = payload.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (base in getSaasOtpBaseHosts(prefs)) {
+            val url = "$base/api/inbox/tasks"
+            try {
+                val reqBuilder = Request.Builder()
+                    .url(url)
+                    .post(body)
+                if (phone.isNotBlank()) reqBuilder.header("x-user-phone", phone)
+
+                client.newCall(reqBuilder.build()).execute().use { res ->
+                    val resStr = res.body?.string() ?: ""
+                    val json = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                    if (res.isSuccessful && json.optBoolean("success", false)) {
+                        return@withContext true
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        false
+    }
+
+    /**
+     * 파투 '통합할일대장' 시트 내 할 일의 완료/미완료 상태를 변경합니다.
+     */
+    suspend fun toggleFtsTaskStatus(
+        prefs: PreferencesManager,
+        taskId: Long,
+        title: String,
+        nextStatus: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        val phone = prefs.ftsPhoneNumber?.replace("[^0-9]".toRegex(), "").orEmpty()
+        val projectId = prefs.ftsProjectId.orEmpty()
+        val token = prefs.ftsToken.orEmpty()
+        if (phone.isBlank() && projectId.isBlank() && token.isBlank()) return@withContext false
+
+        val payload = JSONObject().apply {
+            if (phone.isNotBlank()) put("phoneNumber", phone)
+            if (projectId.isNotBlank()) put("projectId", projectId)
+            if (token.isNotBlank()) put("token", token)
+            put("taskId", taskId)
+            put("title", title)
+            put("status", nextStatus)
+        }
+        val body = payload.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (base in getSaasOtpBaseHosts(prefs)) {
+            val url = "$base/api/inbox/tasks"
+            try {
+                val reqBuilder = Request.Builder()
+                    .url(url)
+                    .patch(body)
+                if (phone.isNotBlank()) reqBuilder.header("x-user-phone", phone)
+
+                client.newCall(reqBuilder.build()).execute().use { res ->
+                    val resStr = res.body?.string() ?: ""
+                    val json = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                    if (res.isSuccessful && json.optBoolean("success", false)) {
+                        return@withContext true
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        false
     }
 }

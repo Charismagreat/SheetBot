@@ -12,6 +12,7 @@ import { realtimeHub } from "@/lib/realtime-hub";
 import { maskRecipient, formatZeroRetentionContent } from "@/lib/privacy";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { getKoreanTimeString } from "@/lib/date-utils";
+import { extractAndCreateTasksFromMessage } from "@/lib/task-hub-helper";
 
 // 15초 이내 동일 카카오톡 메시지 중복 기록 방어 캐시 (키: userEmail:roomName:senderName:message, 값: timestamp)
 const recentKakaoDedupeCache = new Map<string, number>();
@@ -180,6 +181,17 @@ export async function POST(req: NextRequest) {
         created_at: new Date().toISOString(),
       },
     ]).catch((err) => console.warn("[KakaoSync] DB log insert warning:", err.message));
+
+    // 2-1. 수신된 카카오톡 메시지에서 비즈니스 할 일(Action Item) 실시간 자동 추출 및 할 일 허브 등록 (Zero-Block 백그라운드)
+    void extractAndCreateTasksFromMessage({
+      userEmail: cleanEmail,
+      sourceType: "KAKAO",
+      message,
+      contactName: senderName,
+      chatRoomName: roomName,
+      timestamp: nowStr,
+      deepLink: spreadsheetUrl || undefined,
+    }).catch((err) => console.warn("[KakaoSync] Task extraction warning:", err?.message));
 
     // 3. 실시간 SSE 브로드캐스트
     try {

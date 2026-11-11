@@ -40,21 +40,43 @@ class CardActionActivity : AppCompatActivity() {
         const val EXTRA_DETAILS = "extra_details"
         const val NOTIFICATION_ID = 3001
 
-        fun start(context: Context, cardJson: JSONObject) {
-            val intent = Intent(context, CardActionActivity::class.java).apply {
+        fun optFirstNonBlank(json: JSONObject, vararg keys: String): String {
+            for (k in keys) {
+                val v = json.optString(k, "").trim()
+                if (v.isNotEmpty() && v != "null" && v != "-") return v
+            }
+            return ""
+        }
+
+        fun buildIntent(context: Context, cardJson: JSONObject): Intent {
+            val name = optFirstNonBlank(cardJson, "name", "성명", "이름", "성함", "대표자")
+            val dept = optFirstNonBlank(cardJson, "department", "부서")
+            val rawTitle = optFirstNonBlank(cardJson, "title", "position", "직급", "직함", "직책", "부서직책", "부서/직급")
+            val title = if (dept.isNotBlank() && !rawTitle.contains(dept)) "$dept $rawTitle".trim() else rawTitle
+            val company = optFirstNonBlank(cardJson, "company", "회사명", "상호", "회사", "직장명")
+            val mobile = optFirstNonBlank(cardJson, "mobile", "cellphone", "phone", "휴대폰", "휴대전화", "휴대폰번호", "핸드폰", "모바일", "연락처")
+            val email = optFirstNonBlank(cardJson, "email", "e-mail", "이메일", "메일")
+            val tel = optFirstNonBlank(cardJson, "tel", "전화번호", "유선전화", "대표번호")
+            val address = optFirstNonBlank(cardJson, "address", "주소", "회사주소", "소재지", "사업장주소")
+            val details = optFirstNonBlank(cardJson, "details", "memo", "메모", "비고", "상세정보")
+
+            return Intent(context, CardActionActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                         Intent.FLAG_ACTIVITY_CLEAR_TOP or
                         Intent.FLAG_ACTIVITY_SINGLE_TOP
-                putExtra(EXTRA_NAME, cardJson.optString("name", ""))
-                putExtra(EXTRA_TITLE, cardJson.optString("title", ""))
-                putExtra(EXTRA_COMPANY, cardJson.optString("company", ""))
-                putExtra(EXTRA_MOBILE, cardJson.optString("mobile", ""))
-                putExtra(EXTRA_EMAIL, cardJson.optString("email", ""))
-                putExtra(EXTRA_TEL, cardJson.optString("tel", ""))
-                putExtra(EXTRA_ADDRESS, cardJson.optString("address", ""))
-                putExtra(EXTRA_DETAILS, cardJson.optString("details", ""))
+                putExtra(EXTRA_NAME, name)
+                putExtra(EXTRA_TITLE, title)
+                putExtra(EXTRA_COMPANY, company)
+                putExtra(EXTRA_MOBILE, mobile)
+                putExtra(EXTRA_EMAIL, email)
+                putExtra(EXTRA_TEL, tel)
+                putExtra(EXTRA_ADDRESS, address)
+                putExtra(EXTRA_DETAILS, details)
             }
-            context.startActivity(intent)
+        }
+
+        fun start(context: Context, cardJson: JSONObject) {
+            context.startActivity(buildIntent(context, cardJson))
         }
     }
 
@@ -210,7 +232,7 @@ class CardActionActivity : AppCompatActivity() {
                     if (shouldSendMyCard) {
                         doSendMyBusinessCard()
                     } else {
-                        Toast.makeText(context, "명함이 구글 시트에 안전하게 보관되었습니다.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "명함이 시트 대장에 안전하게 보관되었습니다.", Toast.LENGTH_SHORT).show()
                     }
                     finish()
                 }

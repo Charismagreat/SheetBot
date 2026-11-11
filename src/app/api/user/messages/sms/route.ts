@@ -15,6 +15,7 @@ import { parseBankDepositSms } from "@/lib/bank-sms-parser";
 import { recordPaymentToGoogleSheet } from "@/lib/payment-sheet-sync";
 import { findMatchingSmartOrder, generateReceiptSmsText } from "@/lib/smart-order-match";
 import { getKoreanTimeString } from "@/lib/date-utils";
+import { extractAndCreateTasksFromMessage } from "@/lib/task-hub-helper";
 
 // 15초 이내 동일 SMS 송수신 중복 기록 방어 캐시 (키: userEmail:direction:phoneNumber:message, 값: timestamp)
 const recentSmsDedupeCache = new Map<string, number>();
@@ -295,6 +296,18 @@ export async function POST(req: NextRequest) {
         memoOrRawText: message.slice(0, 200),
         deviceId: deviceId || "SheetBot Agent",
       }).catch((err) => console.warn("[SmsSync] Payment sheet sync background error:", err));
+    }
+
+    // 1-3. 수신 문자(INBOUND)에서 비즈니스 할 일(Action Item) 실시간 자동 추출 및 할 일 허브 등록 (Zero-Block 백그라운드)
+    if (!isOutbound && (!parsedBank || !parsedBank.amountKrw)) {
+      void extractAndCreateTasksFromMessage({
+        userEmail: cleanEmail,
+        sourceType: "SMS",
+        message,
+        contactName: displayName !== "미등록 연락처" ? displayName : undefined,
+        contactPhone: phoneNumber !== "-" ? phoneNumber : undefined,
+        timestamp: nowStr,
+      }).catch((err) => console.warn("[SmsSync] Task extraction warning:", err?.message));
     }
 
     // 2. 발송/수신 감사 대장 DB 적재 (Zero-Retention: 고객 전화번호 마스킹 및 본문 서버 미보관 정책 준수)

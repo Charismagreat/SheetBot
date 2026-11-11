@@ -207,15 +207,19 @@ class FileUploadCardController(
             return
         }
 
-        binding.progressBar.visibility = View.VISIBLE
         val ftsTargetName = prefs.getFtsSheetNameFor("file_upload") ?: prefs.ftsSheetName ?: "파일투시트"
         val targetDesc = if (isFts) "파일투시트 [$ftsTargetName]" else "구글 드라이브"
-        Toast.makeText(activity, "🚀 ${uris.size}건의 파일을 ${targetDesc}로 전송합니다...", Toast.LENGTH_SHORT).show()
+        CardInlineLoadingHelper.show(
+            container = binding.layoutFileUploadDetails,
+            message = "🚀 ${uris.size}건의 파일을 ${targetDesc}로 전송하고 있습니다...",
+            triggerButton = binding.btnPickFile,
+            loadingButtonText = "⏳ 파일 전송 중..."
+        )
 
         scope.launch {
             try {
                 val results = FileUploadManager.uploadMultipleUris(activity, uris, memo)
-                binding.progressBar.visibility = View.GONE
+                CardInlineLoadingHelper.hide(binding.layoutFileUploadDetails, binding.btnPickFile)
                 val successCount = results.count { it.success }
 
                 if (successCount > 0) {
@@ -250,7 +254,7 @@ class FileUploadCardController(
                     addLogItem("파일 업로드 실패", firstErr, false)
                 }
             } catch (e: Exception) {
-                binding.progressBar.visibility = View.GONE
+                CardInlineLoadingHelper.hide(binding.layoutFileUploadDetails, binding.btnPickFile)
                 Toast.makeText(activity, "업로드 처리 중 예외 발생: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }

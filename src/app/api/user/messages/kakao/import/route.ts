@@ -5,6 +5,7 @@ import { getCurrentUserEmail } from "@/lib/auth";
 import { setupDatabase } from "@/lib/setup-db";
 import { parseKakaoChatText } from "@/lib/kakao-chat-parser";
 import { syncKakaoChatToSheet } from "@/lib/kakao-sheet-sync";
+import { extractAndCreateTasksFromMessage } from "@/lib/task-hub-helper";
 
 /**
  * POST /api/user/messages/kakao/import
@@ -100,6 +101,28 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+
+    // 3. 내보내기 대화 내 최근 수신(INBOUND) 메시지에서 할 일(Action Item) 비동기 자동 추출 (최근 15건 대상)
+    void (async () => {
+      try {
+        const recentInbound = (parseResult.messages || [])
+          .filter((m: any) => m.direction === "수신")
+          .slice(-15);
+        for (const msg of recentInbound) {
+          await extractAndCreateTasksFromMessage({
+            userEmail,
+            sourceType: "KAKAO",
+            message: msg.message,
+            contactName: msg.sender,
+            chatRoomName: parseResult.chatRoomName,
+            timestamp: msg.timestamp,
+            deepLink: syncResult.spreadsheetUrl || undefined,
+          });
+        }
+      } catch (e: any) {
+        console.warn("[KakaoImportRoute] Background task extraction warning:", e?.message);
+      }
+    })();
 
     return NextResponse.json({
       success: true,

@@ -673,11 +673,13 @@
                     </LinearLayout>
                 </LinearLayout>
 
-                <!-- 💡 실행 가능한 추천 명령 칩 가이드 바 (v2.2.6, Tag 기반 바인딩 초과 방지) -->
+                <!-- 💡 실행 가능한 추천 명령 칩 가이드 바 (v2.2.6, Tag 기반 바인딩 초과 방지 / 추후 고도화 후 노출 예정으로 현재 숨김 처리) -->
                 <LinearLayout
+                    android:tag="copilotChipsSection"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
+                    android:visibility="gone"
                     android:layout_marginBottom="8dp">
 
                     <TextView
@@ -828,13 +830,12 @@
             android:textStyle="bold"
             android:visibility="gone" />
 
-        <!-- 로딩 프로그레스바 -->
+        <!-- 레거시 공용 프로그레스바 (카드 내부 인라인 로딩 헬퍼 CardInlineLoadingHelper로 전면 대체되어 상단 허공 노출 완전 차단) -->
         <ProgressBar
             android:id="@+id/progressBar"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:layout_margin="8dp"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_margin="0dp"
             android:visibility="gone" />
 
         <!-- 미연동 시 컨트롤 (파일투시트 & 시트봇 양쪽 옵션 모두 표시) -->

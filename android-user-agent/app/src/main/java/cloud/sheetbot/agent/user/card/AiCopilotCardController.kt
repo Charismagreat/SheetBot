@@ -41,6 +41,11 @@ class AiCopilotCardController(
     private val updateCardCollapseState: (layout: View, button: View, isHidden: Boolean) -> Unit
 ) {
 
+    companion object {
+        // 추후 추천 명령 칩 고도화 완료 시 true로 전환하여 즉시 재노출 가능
+        private const val SHOW_SUGGESTION_CHIPS = false
+    }
+
     // 기본 선제 렌더링 추천 명령 칩 (Zero-Wait Fallback)
     private val defaultSuggestions = listOf(
         CommandSuggestionItem("def_closing", "APPS_SCRIPT", "⚡ 이번 달 정산 마감", "정산 대장 이번 달 정산 마감 실행해줘"),
@@ -51,11 +56,17 @@ class AiCopilotCardController(
     )
 
     fun setup() {
-        // 1. 기본 추천 명령 칩 선제 렌더링 (0초 즉시 체감)
-        renderSuggestionChips(defaultSuggestions)
-
-        // 2. 서버에서 사용자의 실제 연동 대장 및 스크립트 함수 기반 최신 칩 목록 비동기 동기화
-        loadCapabilitiesFromServer()
+        val chipsSection = binding.root.findViewWithTag<View>("copilotChipsSection")
+        if (SHOW_SUGGESTION_CHIPS) {
+            chipsSection?.visibility = View.VISIBLE
+            // 1. 기본 추천 명령 칩 선제 렌더링 (0초 즉시 체감)
+            renderSuggestionChips(defaultSuggestions)
+            // 2. 서버에서 사용자의 실제 연동 대장 및 스크립트 함수 기반 최신 칩 목록 비동기 동기화
+            loadCapabilitiesFromServer()
+        } else {
+            chipsSection?.visibility = View.GONE
+            (binding.root.findViewWithTag<View>("copilotChipsContainer")?.parent?.parent as? View)?.visibility = View.GONE
+        }
 
         // 3. 음성 및 텍스트 실행 버튼 리스너
         binding.btnVoiceCommand.setOnClickListener {
@@ -84,6 +95,7 @@ class AiCopilotCardController(
      * 서버에서 실제 등록된 대장 및 스크립트 함수 기반 추천 명령 칩 동기화
      */
     private fun loadCapabilitiesFromServer() {
+        if (!SHOW_SUGGESTION_CHIPS) return
         val userEmail = prefs.userEmail ?: return
         if (!prefs.isPaired) return
 
@@ -171,13 +183,16 @@ class AiCopilotCardController(
     }
 
     /**
-     * 구글 음성 인식 다이얼로그 호출 (v1.7)
+     * 구글 음성 인식 다이얼로그 호출 (v2.4.34)
      */
     fun startVoiceRecognition() {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "구글 시트에 내릴 명령을 말씀해 주세요...\n(예: 홍길동 매출 집계해줘, 이번 달 정산 마감해줘)")
+            putExtra(
+                RecognizerIntent.EXTRA_PROMPT,
+                "시트에 내릴 명령을 말씀해 주세요...\n(예: 이번 달 영수증 지출 합계 알려줘, 내일 3시 미팅 할일 추가해줘)"
+            )
         }
         try {
             launchSpeechRecognizer(intent)
@@ -187,35 +202,46 @@ class AiCopilotCardController(
     }
 
     /**
-     * 자연어 명령을 시트봇 서버로 전송하여 구글 시트 Apps Script 또는 시트 질의(SHEET_QUERY) 실행 (v2.2.6)
+     * 자연어 명령을 시트봇 서버로 전송하여 파투(FileToSheet) 시트 또는 구글 시트 조회/기록/문자발송/스크립트 실행 (v2.4.34)
      */
     fun executeAiCommand(command: String) {
-        val userEmail = prefs.userEmail
-        if (userEmail.isNullOrBlank()) {
-            Toast.makeText(activity, "⚠️ 연동된 계정 이메일이 없습니다.", Toast.LENGTH_LONG).show()
+        val userEmail = prefs.userEmail ?: ""
+        val ftsPhone = prefs.ftsPhoneNumber ?: ""
+        val ftsProjectId = prefs.ftsProjectId ?: ""
+        val ftsToken = prefs.ftsToken ?: ""
+
+        if (userEmail.isBlank() && ftsPhone.isBlank() && ftsProjectId.isBlank() && ftsToken.isBlank()) {
+            Toast.makeText(activity, "⚠️ 연동된 계정(파투 휴대폰 번호 또는 구글 이메일)이 없습니다.", Toast.LENGTH_LONG).show()
             return
         }
 
-        binding.progressBar.visibility = View.VISIBLE
         binding.layoutAiCommandResult.visibility = View.GONE
-        Toast.makeText(activity, "🤖 AI가 시트 명령을 분석하고 원격 실행합니다...", Toast.LENGTH_SHORT).show()
+        CardInlineLoadingHelper.show(
+            container = binding.layoutCopilotDetails,
+            message = "🤖 AI가 시트 명령을 분석하고 실행하고 있습니다...",
+            triggerButton = binding.btnExecuteCommand,
+            loadingButtonText = "⏳ 실행 중..."
+        )
 
         scope.launch {
             try {
                 val res = ApiClient.executeAiCommand(
                     userEmail = userEmail,
-                    command = command
+                    command = command,
+                    phoneNumber = ftsPhone.takeIf { it.isNotBlank() },
+                    projectId = ftsProjectId.takeIf { it.isNotBlank() },
+                    token = ftsToken.takeIf { it.isNotBlank() }
                 )
-                binding.progressBar.visibility = View.GONE
+                CardInlineLoadingHelper.hide(binding.layoutCopilotDetails, binding.btnExecuteCommand)
 
                 if (res.success) {
                     binding.layoutAiCommandResult.visibility = View.VISIBLE
                     binding.tvAiCommandExplanation.text = "✅ ${res.explanation}"
                     binding.tvAiCommandSpoken.text = "🗣️ ${res.spokenResult}"
 
-                    // 💾 1회성 작업을 구글 시트 상단 메뉴로 영구 저장(승격) 버튼 제어 (v2.2.7)
+                    // 💾 1회성 작업을 구글 시트 상단 메뉴로 영구 저장(승격) 버튼 제어 (구글 시트가 연동된 경우에만 노출)
                     val btnPromote = binding.root.findViewWithTag<android.widget.Button>("btnPromoteCommand")
-                    if (res.canPromote) {
+                    if (res.canPromote && !res.spreadsheetId.isNullOrBlank() && userEmail.isNotBlank()) {
                         btnPromote?.visibility = View.VISIBLE
                         btnPromote?.isEnabled = true
                         val title = res.suggestedFunctionTitle ?: "이 기능"
@@ -244,7 +270,7 @@ class AiCopilotCardController(
                     addLogItem("시트실행 실패", err, false)
                 }
             } catch (e: Exception) {
-                binding.progressBar.visibility = View.GONE
+                CardInlineLoadingHelper.hide(binding.layoutCopilotDetails, binding.btnExecuteCommand)
                 Toast.makeText(activity, "명령 실행 예외: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }

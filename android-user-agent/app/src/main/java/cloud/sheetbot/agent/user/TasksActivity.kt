@@ -32,6 +32,7 @@ class TasksActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityTasksBinding
     private lateinit var adapter: TaskAdapter
+    private lateinit var prefs: PreferencesManager
     private var allTasks = listOf<TaskItemDto>()
     private var currentFilter = "PENDING" // PENDING, DONE, ALL
     private var userEmail: String = ""
@@ -41,15 +42,16 @@ class TasksActivity : AppCompatActivity() {
         binding = ActivityTasksBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        val prefs = PreferencesManager(this)
+        prefs = PreferencesManager(this)
         userEmail = prefs.userEmail ?: ""
+        val hasFtsConnection = prefs.isFtsPaired || !prefs.ftsPhoneNumber.isNullOrBlank() || !prefs.ftsProjectId.isNullOrBlank()
 
         setupToolbar()
         setupRecyclerView()
         setupFilters()
 
-        if (userEmail.isBlank()) {
-            Toast.makeText(this, "시트봇 계정 연동(로그인)이 필요합니다.", Toast.LENGTH_SHORT).show()
+        if (userEmail.isBlank() && !hasFtsConnection) {
+            Toast.makeText(this, "시트봇 또는 파일투시트 계정 연동이 필요합니다.", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -65,7 +67,12 @@ class TasksActivity : AppCompatActivity() {
         }
 
         binding.btnOpenWebTasks.setOnClickListener {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://sheetbot.cloud/tasks"))
+            val targetUrl = if (prefs.isDestinationFileToSheet && prefs.isFtsPaired) {
+                "https://file2sheet.cloud"
+            } else {
+                "https://sheetbot.cloud/tasks"
+            }
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
             startActivity(intent)
         }
 
@@ -78,7 +85,7 @@ class TasksActivity : AppCompatActivity() {
         adapter = TaskAdapter(
             onToggleStatus = { task ->
                 val nextStatus = if (task.status == "DONE") "PENDING" else "DONE"
-                toggleTask(task.id, nextStatus)
+                toggleTask(task, nextStatus)
             },
             onCallClick = { phone ->
                 val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
@@ -172,15 +179,51 @@ class TasksActivity : AppCompatActivity() {
         binding.llEmptyTasks.visibility = View.GONE
 
         CoroutineScope(Dispatchers.IO).launch {
-            val result = ApiClient.fetchTasks(userEmail, "ALL")
+            val ftsPhone = prefs.ftsPhoneNumber
+            val ftsProjectId = prefs.ftsProjectId
+            val hasFts = prefs.isFtsPaired || !ftsPhone.isNullOrBlank() || !ftsProjectId.isNullOrBlank()
+
+            val sbResult = if (userEmail.isNotBlank() || !ftsPhone.isNullOrBlank()) {
+                ApiClient.fetchTasks(
+                    userEmail = userEmail,
+                    status = "ALL",
+                    phoneNumber = ftsPhone,
+                    projectId = ftsProjectId
+                )
+            } else {
+                null
+            }
+
+            val ftsResult = if (hasFts) {
+                FileToSheetClient.fetchFtsTasks(prefs, "ALL")
+            } else {
+                null
+            }
+
+            val anySuccess = (sbResult?.success == true) || (ftsResult?.success == true)
+            val dedupMap = linkedMapOf<String, TaskItemDto>()
+
+            for (t in (sbResult?.tasks ?: emptyList()) + (ftsResult?.tasks ?: emptyList())) {
+                val key = t.title.trim()
+                if (key.isEmpty()) continue
+                val existing = dedupMap[key]
+                if (existing == null) {
+                    dedupMap[key] = t
+                } else if (t.status == "DONE" && existing.status != "DONE") {
+                    dedupMap[key] = existing.copy(status = "DONE")
+                }
+            }
+
+            val combinedTasks = dedupMap.values.toList()
 
             withContext(Dispatchers.Main) {
                 binding.pbLoadingTasks.visibility = View.GONE
-                if (result.success) {
-                    allTasks = result.tasks
+                if (anySuccess) {
+                    allTasks = combinedTasks
                     applyFilter()
                 } else {
-                    Toast.makeText(this@TasksActivity, result.error ?: "할 일 목록을 불러오지 못했습니다.", Toast.LENGTH_SHORT).show()
+                    val errMsg = sbResult?.error ?: ftsResult?.error ?: "할 일 목록을 불러오지 못했습니다."
+                    Toast.makeText(this@TasksActivity, errMsg, Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -200,16 +243,35 @@ class TasksActivity : AppCompatActivity() {
         binding.llEmptyTasks.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
     }
 
-    private fun toggleTask(taskId: Long, nextStatus: String) {
+    private fun toggleTask(task: TaskItemDto, nextStatus: String) {
+        val taskId = task.id
         // 낙관적 UI 업데이트 (통계 숫자 + 탭 건수 + 필터링 목록 동시 즉시 반영)
         allTasks = allTasks.map {
-            if (it.id == taskId) it.copy(status = nextStatus) else it
+            if (it.id == taskId || it.title.trim() == task.title.trim()) it.copy(status = nextStatus) else it
         }
         applyFilter()
 
         CoroutineScope(Dispatchers.IO).launch {
-            val ok = ApiClient.toggleTaskStatus(userEmail, taskId, nextStatus)
-            if (!ok) {
+            val ftsPhone = prefs.ftsPhoneNumber
+            val ftsProjectId = prefs.ftsProjectId
+            val hasFts = prefs.isFtsPaired || !ftsPhone.isNullOrBlank() || !ftsProjectId.isNullOrBlank()
+
+            val sbOk = if (userEmail.isNotBlank() || !ftsPhone.isNullOrBlank()) {
+                ApiClient.toggleTaskStatus(
+                    userEmail = userEmail,
+                    taskId = taskId,
+                    nextStatus = nextStatus,
+                    title = task.title,
+                    phoneNumber = ftsPhone,
+                    projectId = ftsProjectId
+                )
+            } else false
+
+            val ftsOk = if (hasFts) {
+                FileToSheetClient.toggleFtsTaskStatus(prefs, taskId, task.title, nextStatus)
+            } else false
+
+            if (!sbOk && !ftsOk) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(this@TasksActivity, "상태 변경 저장에 실패하여 다시 불러옵니다.", Toast.LENGTH_SHORT).show()
                     loadTasks()
@@ -222,7 +284,6 @@ class TasksActivity : AppCompatActivity() {
         val builder = AlertDialog.Builder(this)
         builder.setTitle("새로운 할 일 등록")
 
-        val view = LayoutInflater.from(this).inflate(android.R.layout.simple_list_item_1, null)
         val input = EditText(this)
         input.hint = "할 일 내용을 입력하세요 (예: 견적서 수정본 송부)"
         input.setPadding(32, 24, 32, 24)
@@ -233,9 +294,30 @@ class TasksActivity : AppCompatActivity() {
             if (text.isNotBlank()) {
                 binding.pbLoadingTasks.visibility = View.VISIBLE
                 CoroutineScope(Dispatchers.IO).launch {
-                    val ok = ApiClient.createTask(userEmail, text, badgeText = "모바일 등록")
+                    val ftsPhone = prefs.ftsPhoneNumber
+                    val ftsProjectId = prefs.ftsProjectId
+                    val hasFts = prefs.isFtsPaired || !ftsPhone.isNullOrBlank() || !ftsProjectId.isNullOrBlank()
+
+                    val sbOk = if (userEmail.isNotBlank() || !ftsPhone.isNullOrBlank()) {
+                        ApiClient.createTask(
+                            userEmail = userEmail,
+                            title = text,
+                            badgeText = "모바일 등록",
+                            phoneNumber = ftsPhone,
+                            projectId = ftsProjectId
+                        )
+                    } else false
+
+                    val ftsOk = if (hasFts) {
+                        FileToSheetClient.createFtsTask(
+                            prefs = prefs,
+                            title = text,
+                            badgeText = "모바일 등록"
+                        )
+                    } else false
+
                     withContext(Dispatchers.Main) {
-                        if (ok) {
+                        if (sbOk || ftsOk) {
                             Toast.makeText(this@TasksActivity, "할 일이 등록되었습니다.", Toast.LENGTH_SHORT).show()
                             loadTasks()
                         } else {
@@ -308,6 +390,10 @@ class TaskAdapter(
                     tvSourceBadge.text = "🎙️ 통화 녹음"
                     tvSourceBadge.setBackgroundColor(Color.parseColor("#064E3B"))
                 }
+                "MEETING_RECORDING" -> {
+                    tvSourceBadge.text = "🎙️ 회의 녹음"
+                    tvSourceBadge.setBackgroundColor(Color.parseColor("#115E59"))
+                }
                 "MISSED_CALL" -> {
                     tvSourceBadge.text = "📞 부재중 전화"
                     tvSourceBadge.setBackgroundColor(Color.parseColor("#78350F"))
@@ -319,6 +405,15 @@ class TaskAdapter(
                 "KAKAO" -> {
                     tvSourceBadge.text = "💬 카카오톡"
                     tvSourceBadge.setBackgroundColor(Color.parseColor("#713F12"))
+                }
+                "SMS" -> {
+                    if (item.badgeText == "수동 등록" || item.badgeText == "모바일 등록") {
+                        tvSourceBadge.text = "📋 직접 등록"
+                        tvSourceBadge.setBackgroundColor(Color.parseColor("#334155"))
+                    } else {
+                        tvSourceBadge.text = "📱 문자 메시지"
+                        tvSourceBadge.setBackgroundColor(Color.parseColor("#312E81"))
+                    }
                 }
                 else -> {
                     tvSourceBadge.text = "📋 일반 업무"

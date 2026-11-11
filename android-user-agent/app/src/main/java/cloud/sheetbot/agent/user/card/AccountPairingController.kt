@@ -50,6 +50,72 @@ class AccountPairingController(
     private val onUnlinkSuccess: () -> Unit,
     private val addLogItem: (title: String, detail: String, success: Boolean) -> Unit
 ) {
+    private var activeAuthDialog: AlertDialog? = null
+    private var activeCodeInput: EditText? = null
+
+    private fun dismissActiveAuthDialog() {
+        try {
+            activeAuthDialog?.takeIf { it.isShowing }?.dismiss()
+        } catch (_: Throwable) {}
+        activeAuthDialog = null
+        activeCodeInput = null
+    }
+
+    /**
+     * 🔄 다른 앱(문자 메시지, 이메일, 브라우저 등)으로 화면을 전환했다가 돌아왔을 때
+     * 닫혔거나 재생성된 인증번호/핀코드 모달창을 입력값 그대로 즉시 복원하고 클립보드 6자리 인증번호를 자동 감지
+     */
+    fun onResume() {
+        try {
+            val modalType = prefs.pendingAuthModalType
+            val savedTs = prefs.pendingAuthTimestamp
+            val now = System.currentTimeMillis()
+
+            // 10분(600초) 이내에 진행 중이던 인증 모달이 있으면 자동 복원
+            if (!modalType.isNullOrBlank() && (now - savedTs) in 0..600_000L) {
+                val isShowing = activeAuthDialog?.isShowing == true
+                if (!isShowing) {
+                    val savedTarget = prefs.pendingAuthPhoneOrEmail ?: ""
+                    val savedCode = prefs.pendingAuthCode ?: ""
+                    when (modalType) {
+                        "PHONE_VERIFY" -> {
+                            if (savedTarget.isNotBlank()) {
+                                showVerifyCodeDialog(savedTarget, savedCode)
+                            } else {
+                                showPhoneAuthDialog()
+                            }
+                        }
+                        "PHONE_REQUEST" -> showPhoneAuthDialog(savedTarget)
+                        "MANUAL_PIN" -> showManualPinDialog(savedTarget, savedCode)
+                    }
+                }
+                // 클립보드에 복사해 온 6자리 숫자가 있고 입력창이 비어있으면 자동 채움
+                tryAutoFillCodeFromClipboard()
+            } else if (!modalType.isNullOrBlank()) {
+                prefs.clearPendingAuthModal()
+            }
+        } catch (e: Throwable) {
+            android.util.Log.w("AccountPairing", "onResume auth modal restore guard: ${e.message}")
+        }
+    }
+
+    private fun tryAutoFillCodeFromClipboard() {
+        try {
+            val targetInput = activeCodeInput ?: return
+            if (targetInput.text?.toString()?.trim()?.length == 6) return
+            val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+            val clip = clipboard.primaryClip ?: return
+            if (clip.itemCount <= 0) return
+            val clipText = clip.getItemAt(0).text?.toString()?.trim() ?: return
+            val match = Regex("\\b(\\d{6})\\b").find(clipText)
+            if (match != null) {
+                val code = match.groupValues[1]
+                targetInput.setText(code)
+                targetInput.setSelection(code.length)
+                prefs.pendingAuthCode = code
+            }
+        } catch (_: Throwable) {}
+    }
 
     fun setup() {
         // 📱 휴대폰 번호로 1초 시작 (SMS 인증문자)
@@ -235,13 +301,15 @@ class AccountPairingController(
             return
         }
 
-        binding.progressBar.visibility = View.VISIBLE
-        Toast.makeText(activity, "⚡ 파일투시트 연결 상태를 검증하고 있습니다...", Toast.LENGTH_SHORT).show()
+        CardInlineLoadingHelper.show(
+            container = binding.layoutUnpairedControls,
+            message = "⚡ 파일투시트 연결 상태를 검증하고 있습니다..."
+        )
 
         scope.launch {
             val result = FileToSheetClient.verifyPairing(endpoint)
             withContext(Dispatchers.Main) {
-                binding.progressBar.visibility = View.GONE
+                CardInlineLoadingHelper.hide(binding.layoutUnpairedControls)
                 if (result.success && result.valid) {
                     val sName = result.sheetName.ifBlank { sheetName }
                     val pName = result.projectName.ifBlank { projectName }
@@ -331,34 +399,81 @@ class AccountPairingController(
         return null
     }
 
-    fun showManualPinDialog() {
+    fun showManualPinDialog(initialEmail: String = "", initialPin: String = "") {
+        dismissActiveAuthDialog()
         val dialogView = activity.layoutInflater.inflate(R.layout.dialog_manual_pin, null)
         val etEmail = dialogView.findViewById<EditText>(R.id.etDialogEmail)
         val etPin = dialogView.findViewById<EditText>(R.id.etDialogPin)
 
-        AlertDialog.Builder(activity)
+        val prefillEmail = initialEmail.ifBlank { prefs.pendingAuthPhoneOrEmail ?: (prefs.userEmail ?: "") }
+        val prefillPin = initialPin.ifBlank { prefs.pendingAuthCode ?: "" }
+        etEmail.setText(prefillEmail)
+        etPin.setText(prefillPin)
+
+        prefs.savePendingAuthModal("MANUAL_PIN", prefillEmail, prefillPin)
+
+        val watcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                prefs.savePendingAuthModal(
+                    "MANUAL_PIN",
+                    etEmail.text?.toString()?.trim() ?: "",
+                    etPin.text?.toString()?.trim() ?: ""
+                )
+            }
+        }
+        etEmail.addTextChangedListener(watcher)
+        etPin.addTextChangedListener(watcher)
+
+        val dialog = AlertDialog.Builder(activity)
             .setTitle("6자리 핀코드로 연동")
             .setView(dialogView)
-            .setPositiveButton("연동하기") { _, _ ->
-                val email = etEmail.text.toString().trim()
-                val pin = etPin.text.toString().trim()
-                if (email.isBlank() || pin.isBlank()) {
-                    Toast.makeText(activity, "이메일과 핀코드를 모두 입력해 주세요.", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                performPairing(email, pinCode = pin)
+            .setCancelable(false)
+            .setPositiveButton("연동하기", null)
+            .setNegativeButton("취소") { d, _ ->
+                prefs.clearPendingAuthModal()
+                activeAuthDialog = null
+                activeCodeInput = null
+                d.dismiss()
             }
-            .setNegativeButton("취소", null)
-            .show()
+            .create()
+
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.show()
+        activeAuthDialog = dialog
+        activeCodeInput = etPin
+
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val email = etEmail.text.toString().trim()
+            val pin = etPin.text.toString().trim()
+            if (email.isBlank() || pin.isBlank()) {
+                Toast.makeText(activity, "이메일과 6자리 핀코드를 모두 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            prefs.savePendingAuthModal("MANUAL_PIN", email, pin)
+            performPairing(email, pinCode = pin, onResultDialogClose = {
+                prefs.clearPendingAuthModal()
+                dismissActiveAuthDialog()
+            })
+        }
     }
 
-    fun performPairing(email: String, token: String? = null, pinCode: String? = null) {
-        binding.progressBar.visibility = View.VISIBLE
+    fun performPairing(
+        email: String,
+        token: String? = null,
+        pinCode: String? = null,
+        onResultDialogClose: (() -> Unit)? = null
+    ) {
+        CardInlineLoadingHelper.show(
+            container = binding.layoutUnpairedControls,
+            message = "🔐 시트봇 계정 페어링을 진행하고 있습니다..."
+        )
         scope.launch {
             val result = withTimeoutOrNull(8000L) {
                 ApiClient.pairDevice(email, token, pinCode)
             }
-            binding.progressBar.visibility = View.GONE
+            CardInlineLoadingHelper.hide(binding.layoutUnpairedControls)
 
             if (result == null) {
                 AlertDialog.Builder(activity)
@@ -370,6 +485,8 @@ class AccountPairingController(
             }
 
             if (result.success) {
+                onResultDialogClose?.invoke()
+                prefs.clearPendingAuthModal()
                 if (prefs.userEmail != email) {
                     prefs.clearSheetBindingsCache()
                 }
@@ -405,8 +522,12 @@ class AccountPairingController(
      * Google 원클릭 로그인 완료 시 시트봇 서버와 0초 자동 페어링 처리 (v1.8.0)
      */
     fun handleGoogleSignInSuccess(idToken: String?, email: String) {
-        binding.progressBar.visibility = View.VISIBLE
-        Toast.makeText(activity, "구글 계정($email)으로 시트봇 연동 중...", Toast.LENGTH_SHORT).show()
+        CardInlineLoadingHelper.show(
+            container = binding.layoutUnpairedControls,
+            message = "🔐 구글 계정($email)으로 시트봇 연동 중입니다...",
+            triggerButton = binding.btnGoogleSignIn,
+            loadingButtonText = "⏳ 구글 계정 연동 중..."
+        )
 
         var detectedRefCode: String? = null
         try {
@@ -426,7 +547,7 @@ class AccountPairingController(
             val result = withTimeoutOrNull(10000L) {
                 ApiClient.pairWithGoogle(idToken, email, referralCode = detectedRefCode)
             }
-            binding.progressBar.visibility = View.GONE
+            CardInlineLoadingHelper.hide(binding.layoutUnpairedControls, binding.btnGoogleSignIn)
 
             if (result == null) {
                 AlertDialog.Builder(activity)
@@ -542,128 +663,209 @@ class AccountPairingController(
 
     /**
      * 📱 휴대폰 번호로 1초 시작: SMS 인증번호 요청 및 검증 다이얼로그
+     * - 다른 앱(문자 앱 등) 전환 후 복귀 시에도 절대 닫히지 않도록 영속 상태 보존 및 바깥 터치 닫힘 차단
      */
-    fun showPhoneAuthDialog() {
+    fun showPhoneAuthDialog(initialPhone: String? = null) {
+        dismissActiveAuthDialog()
+        val startPhone = initialPhone?.takeIf { it.isNotBlank() }
+            ?: prefs.pendingAuthPhoneOrEmail?.takeIf { it.isNotBlank() }
+            ?: (prefs.ftsPhoneNumber ?: "")
+
         val input = EditText(activity).apply {
             hint = "010-0000-0000"
             inputType = android.text.InputType.TYPE_CLASS_PHONE
             setPadding(40, 30, 40, 30)
-            setText(prefs.ftsPhoneNumber ?: "")
+            setText(startPhone)
+            setSelection(text.length)
         }
 
-        AlertDialog.Builder(activity)
+        prefs.savePendingAuthModal("PHONE_REQUEST", startPhone, "")
+        input.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                if (prefs.pendingAuthModalType == "PHONE_REQUEST") {
+                    prefs.savePendingAuthModal("PHONE_REQUEST", s?.toString()?.trim() ?: "", "")
+                }
+            }
+        })
+
+        val dialog = AlertDialog.Builder(activity)
             .setTitle("📱 휴대폰 번호로 1초 시작")
             .setMessage("휴대폰 번호를 입력하시면 인증번호 문자가 발송되며, [File to Sheet]에 회원 가입 및 2대 핵심 시트(영수증대장, 명함관리)가 0.1초 만에 자동 생성됩니다.")
             .setView(input)
-            .setPositiveButton("인증문자 받기") { _, _ ->
-                val phone = input.text.toString().trim()
-                val cleanPhone = phone.replace("[^0-9]".toRegex(), "")
-                if (cleanPhone.length < 10 || !cleanPhone.startsWith("010")) {
-                    Toast.makeText(activity, "올바른 010 휴대폰 번호를 입력해 주세요.", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
+            .setCancelable(false)
+            .setPositiveButton("인증문자 받기", null)
+            .setNegativeButton("취소") { d, _ ->
+                prefs.clearPendingAuthModal()
+                activeAuthDialog = null
+                activeCodeInput = null
+                d.dismiss()
+            }
+            .create()
 
-                binding.progressBar.visibility = View.VISIBLE
-                Toast.makeText(activity, "인증문자를 발송하고 있습니다...", Toast.LENGTH_SHORT).show()
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.show()
+        activeAuthDialog = dialog
+        activeCodeInput = null
 
-                scope.launch {
-                    val (success, msg) = FileToSheetClient.requestPhoneSmsCode(cleanPhone)
-                    withContext(Dispatchers.Main) {
-                        binding.progressBar.visibility = View.GONE
-                        if (success) {
-                            Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
-                            showVerifyCodeDialog(cleanPhone)
-                        } else {
-                            AlertDialog.Builder(activity)
-                                .setTitle("인증문자 발송 실패")
-                                .setMessage(msg)
-                                .setPositiveButton("확인", null)
-                                .show()
-                        }
+        val btnPositive = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+        btnPositive.setOnClickListener {
+            val phone = input.text.toString().trim()
+            val cleanPhone = phone.replace("[^0-9]".toRegex(), "")
+            if (cleanPhone.length < 10 || !cleanPhone.startsWith("010")) {
+                Toast.makeText(activity, "올바른 010 휴대폰 번호를 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            // 🚀 발송 요청 즉시 '6자리 인증번호 입력(PHONE_VERIFY)' 대기 상태로 선제 저장하여,
+            // 사용자가 즉시 문자 앱으로 화면을 전환하더라도 복귀 시 6자리 입력창이 100% 유지되도록 보장
+            prefs.savePendingAuthModal("PHONE_VERIFY", cleanPhone, "")
+            btnPositive.isEnabled = false
+            btnPositive.text = "발송 중..."
+            CardInlineLoadingHelper.show(
+                container = binding.layoutUnpairedControls,
+                message = "📱 [$cleanPhone] 번호로 인증문자를 발송하고 있습니다..."
+            )
+
+            scope.launch {
+                val (success, msg) = FileToSheetClient.requestPhoneSmsCode(cleanPhone)
+                withContext(Dispatchers.Main) {
+                    CardInlineLoadingHelper.hide(binding.layoutUnpairedControls)
+                    if (success) {
+                        Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
+                        showVerifyCodeDialog(cleanPhone)
+                    } else {
+                        // 발송 실패 시 다시 번호 입력 상태 유지 (모달이 닫히지 않도록 보호)
+                        prefs.savePendingAuthModal("PHONE_REQUEST", cleanPhone, "")
+                        btnPositive.isEnabled = true
+                        btnPositive.text = "인증문자 받기"
+                        AlertDialog.Builder(activity)
+                            .setTitle("인증문자 발송 실패")
+                            .setMessage(msg)
+                            .setPositiveButton("확인", null)
+                            .show()
                     }
                 }
             }
-            .setNegativeButton("취소", null)
-            .show()
+        }
     }
 
     /**
      * 💬 6자리 인증번호 입력 및 2대 시트(영수증, 명함) 자동 바인딩 다이얼로그
+     * - 문자 메시지 앱으로 전환 후 돌아와도 절대 사라지지 않고 입력값과 함께 그대로 유지
      */
-    private fun showVerifyCodeDialog(phoneNumber: String) {
+    fun showVerifyCodeDialog(phoneNumber: String, initialCode: String = "") {
+        dismissActiveAuthDialog()
+        val startCode = initialCode.ifBlank { prefs.pendingAuthCode ?: "" }
+
         val input = EditText(activity).apply {
             hint = "인증번호 6자리"
             inputType = android.text.InputType.TYPE_CLASS_NUMBER
             setPadding(40, 30, 40, 30)
+            setText(startCode)
+            setSelection(text.length)
         }
 
-        AlertDialog.Builder(activity)
-            .setTitle("💬 인증번호 6자리 입력")
-            .setMessage("[$phoneNumber]로 발송된 6자리 인증문자를 5분 이내에 입력해 주세요.")
-            .setView(input)
-            .setPositiveButton("인증 완료 및 시작") { _, _ ->
-                val code = input.text.toString().trim()
-                if (code.length != 6) {
-                    Toast.makeText(activity, "6자리 인증번호를 정확히 입력해 주세요.", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
+        prefs.savePendingAuthModal("PHONE_VERIFY", phoneNumber, startCode)
+        input.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                if (prefs.pendingAuthModalType == "PHONE_VERIFY") {
+                    prefs.savePendingAuthModal("PHONE_VERIFY", phoneNumber, s?.toString()?.trim() ?: "")
                 }
+            }
+        })
 
-                binding.progressBar.visibility = View.VISIBLE
-                Toast.makeText(activity, "인증 및 2대 핵심 시트를 생성하고 있습니다...", Toast.LENGTH_SHORT).show()
+        val dialog = AlertDialog.Builder(activity)
+            .setTitle("💬 인증번호 6자리 입력")
+            .setMessage("[$phoneNumber]로 발송된 6자리 인증문자를 입력해 주세요.\n(문자 앱에서 번호를 확인하고 돌아와도 이 창은 닫히지 않고 그대로 유지됩니다)")
+            .setView(input)
+            .setCancelable(false)
+            .setPositiveButton("인증 완료 및 시작", null)
+            .setNeutralButton("번호 변경/재발송", null)
+            .setNegativeButton("취소") { d, _ ->
+                prefs.clearPendingAuthModal()
+                activeAuthDialog = null
+                activeCodeInput = null
+                d.dismiss()
+            }
+            .create()
 
-                scope.launch {
-                    val result = FileToSheetClient.verifyPhoneSmsCode(phoneNumber, code)
-                    withContext(Dispatchers.Main) {
-                        binding.progressBar.visibility = View.GONE
-                        if (result.success) {
-                            prefs.ftsPhoneNumber = phoneNumber
-                            prefs.ftsProjectId = result.projectId
-                            prefs.ftsProjectName = result.projectName ?: "내 비즈니스 장부"
-                            prefs.ftsEndpoint = FileToSheetClient.FTS_OFFICIAL_DOMAIN
-                            prefs.uploadDestination = AppPreferences.DESTINATION_FILE_TO_SHEET
-                            prefs.isPaired = true
-                            if (prefs.userEmail.isNullOrBlank()) {
-                                prefs.userEmail = "fts_${phoneNumber.takeLast(4)}@filetosheet.cloud"
-                            }
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.show()
+        activeAuthDialog = dialog
+        activeCodeInput = input
 
-                            // 2대 기본 시트 토큰 자동 바인딩
-                            for (sheet in result.defaultSheets) {
-                                prefs.saveFtsSheetBinding(
-                                    cardIdOrType = sheet.type,
-                                    token = sheet.token,
-                                    sheetName = sheet.sheetName,
-                                    webhookUrl = sheet.webhookUrl,
-                                    projectId = result.projectId
-                                )
-                            }
+        // 번호 변경 / 재발송 버튼
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+            showPhoneAuthDialog(phoneNumber)
+        }
 
-                            // 🌟 순수 온디맨드 1:1 바인딩 원칙:
-                            // 번호 인증 성공 시 영수증/명함 시트를 일괄 강제 생성하지 않고, 사용자가 해당 카드를 직접 사용할 때 1개씩 생성합니다.
-                            AlertDialog.Builder(activity)
-                                .setTitle("🎉 [File to Sheet] 연결 성공")
-                                .setMessage("환영합니다!\n\n• 연결 프로젝트: [${prefs.ftsProjectName}]\n\n각 기능 카드의 [시트 열기] 또는 데이터 전송 시 필요한 시트가 1:1 온디맨드로 깔끔하게 자동 생성됩니다.")
-                                .setPositiveButton("시작하기") { _, _ ->
-                                    onPairingSuccess(prefs.ftsProjectName ?: "File to Sheet")
-                                }
-                                .show()
+        val btnPositive = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+        btnPositive.setOnClickListener {
+            val code = input.text.toString().trim()
+            if (code.length != 6) {
+                Toast.makeText(activity, "6자리 인증번호를 정확히 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
 
-                            addLogItem("⚡ FTS 인증", "2대 핵심 시트 생성 및 연결 완료", true)
-                        } else {
-                            val errMsg = result.error ?: "인증번호가 일치하지 않습니다."
-                            AlertDialog.Builder(activity)
-                                .setTitle("인증 실패")
-                                .setMessage(errMsg)
-                                .setPositiveButton("다시 시도") { _, _ ->
-                                    showVerifyCodeDialog(phoneNumber)
-                                }
-                                .setNegativeButton("취소", null)
-                                .show()
+            btnPositive.isEnabled = false
+            btnPositive.text = "인증 확인 중..."
+            CardInlineLoadingHelper.show(
+                container = binding.layoutUnpairedControls,
+                message = "⚡ 인증번호를 확인하고 핵심 시트를 준비하고 있습니다..."
+            )
+
+            scope.launch {
+                val result = FileToSheetClient.verifyPhoneSmsCode(phoneNumber, code)
+                withContext(Dispatchers.Main) {
+                    CardInlineLoadingHelper.hide(binding.layoutUnpairedControls)
+                    if (result.success) {
+                        prefs.clearPendingAuthModal()
+                        dismissActiveAuthDialog()
+
+                        prefs.ftsPhoneNumber = phoneNumber
+                        prefs.ftsProjectId = result.projectId
+                        prefs.ftsProjectName = result.projectName ?: "내 비즈니스 장부"
+                        prefs.ftsEndpoint = FileToSheetClient.FTS_OFFICIAL_DOMAIN
+                        prefs.uploadDestination = AppPreferences.DESTINATION_FILE_TO_SHEET
+                        prefs.isPaired = true
+                        if (prefs.userEmail.isNullOrBlank()) {
+                            prefs.userEmail = "fts_${phoneNumber.takeLast(4)}@filetosheet.cloud"
                         }
+
+                        // 2대 기본 시트 토큰 자동 바인딩
+                        for (sheet in result.defaultSheets) {
+                            prefs.saveFtsSheetBinding(
+                                cardIdOrType = sheet.type,
+                                token = sheet.token,
+                                sheetName = sheet.sheetName,
+                                webhookUrl = sheet.webhookUrl,
+                                projectId = result.projectId
+                            )
+                        }
+
+                        AlertDialog.Builder(activity)
+                            .setTitle("🎉 [File to Sheet] 연결 성공")
+                            .setMessage("환영합니다!\n\n• 연결 프로젝트: [${prefs.ftsProjectName}]\n\n각 기능 카드의 [시트 열기] 또는 데이터 전송 시 필요한 시트가 1:1 온디맨드로 깔끔하게 자동 생성됩니다.")
+                            .setPositiveButton("시작하기") { _, _ ->
+                                onPairingSuccess(prefs.ftsProjectName ?: "File to Sheet")
+                            }
+                            .show()
+
+                        addLogItem("⚡ FTS 인증", "2대 핵심 시트 생성 및 연결 완료", true)
+                    } else {
+                        // 인증번호 오타/불일치 시에도 모달창이 닫히지 않고 즉시 다시 입력할 수 있도록 유지
+                        btnPositive.isEnabled = true
+                        btnPositive.text = "인증 완료 및 시작"
+                        val errMsg = result.error ?: "인증번호가 일치하지 않습니다. 다시 확인해 주세요."
+                        Toast.makeText(activity, errMsg, Toast.LENGTH_LONG).show()
                     }
                 }
             }
-            .setNegativeButton("취소", null)
-            .show()
+        }
     }
 
 }

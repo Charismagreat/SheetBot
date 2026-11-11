@@ -440,9 +440,9 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_business_card_details_hidden", false)
         set(value) = prefs.edit().putBoolean("is_business_card_details_hidden", value).apply()
 
-    // 스마트폰 연락처 자동 동기화 옵션 (명함 분석 시 내 폰 연락처에도 자동 저장)
+    // 스마트폰 연락처 자동 동기화 옵션 (명함 분석 시 내 폰 연락처에도 자동 저장 - 기본값: true)
     var isBusinessCardAutoAddContactsEnabled: Boolean
-        get() = prefs.getBoolean("is_biz_card_auto_add_contacts", false)
+        get() = prefs.getBoolean("is_biz_card_auto_add_contacts", true)
         set(value) = prefs.edit().putBoolean("is_biz_card_auto_add_contacts", value).apply()
 
     var fileUploadDriveFolder: String
@@ -962,29 +962,93 @@ class PreferencesManager(context: Context) {
     }
 
     /**
-     * 🔄 v2.3.8+ 신규 스토어 체계 및 v2.4.14 초기 전체 보관 마이그레이션:
-     * 최초 설치 시 모든 기능/시스템 카드(매장결제, 연락처백업 포함 25종 전원)가
-     * 시트봇 보관함에 기본 보관된 상태(홈 화면 활성 카드 0개)로 시작하도록 보장
+     * 🔄 v2.3.8+ 신규 스토어 체계 및 v2.4.34 전체 카드 기본 보관 & 신규 배포 카드 자동 보관함 귀속:
+     * 1) 최초 설치 시 모든 기능/시스템 카드(영수증, 명함 포함 30종 전원)가 시트봇 보관함에 기본 보관된 상태(홈 화면 활성 카드 0개)로 시작
+     * 2) 향후 앱 업데이트나 OTA로 새로운 카드가 추가 배포될 때에도 홈 화면에 갑자기 튀어나오지 않고 자동으로 시트봇 보관함에 들어가도록 보장
      */
     var isSystemCardsV238Migrated: Boolean
         get() = prefs.getBoolean("is_system_cards_v238_migrated", false)
         set(value) = prefs.edit().putBoolean("is_system_cards_v238_migrated", value).apply()
 
-    fun migrateSystemCardsToStoreIfNeeded() {
+    var knownDrawerCardKeys: Set<String>
+        get() = prefs.getStringSet("known_drawer_card_keys_v1", null) ?: emptySet()
+        set(value) = prefs.edit().putStringSet("known_drawer_card_keys_v1", value).apply()
+
+    fun migrateSystemCardsToStoreIfNeeded(allAvailableCardKeys: Set<String> = DEFAULT_HIDDEN_CARDS) {
+        val allTargetKeys = (DEFAULT_HIDDEN_CARDS + allAvailableCardKeys) - "cardStore"
+
         if (!isSystemCardsV238Migrated) {
-            val currentHidden = (prefs.getStringSet("hidden_card_keys", null) ?: DEFAULT_HIDDEN_CARDS).toMutableSet()
-            // 7대 시스템 카드 및 기본 숨김 카드 전원 보관함 등록
-            currentHidden.addAll(DEFAULT_HIDDEN_CARDS)
-            hiddenCardKeys = currentHidden
-
-            // 활성 순서 정리 (보관함 대상 카드 제외)
-            val curOrder = activeCardOrder.toMutableList()
-            curOrder.removeAll(DEFAULT_HIDDEN_CARDS)
-            curOrder.remove("cardStore")
-            activeCardOrder = curOrder
-
+            // 최초 설치: 모든 카드를 100% 보관함에 넣고 홈 화면 활성 카드는 0개로 시작
+            hiddenCardKeys = allTargetKeys
+            activeCardOrder = emptyList()
+            knownDrawerCardKeys = allTargetKeys
             isSystemCardsV238Migrated = true
+            return
         }
+
+        val currentKnown = knownDrawerCardKeys.toMutableSet()
+        val currentHidden = hiddenCardKeys.toMutableSet()
+        val currentActive = activeCardOrder.toMutableList()
+
+        if (currentKnown.isEmpty()) {
+            // 이전 버전(v2.4.33 이하)에서 업데이트된 경우:
+            // 기존에 DEFAULT_HIDDEN_CARDS에서 누락되었던 cardReceiptScanner, cardBusinessCard를 포함해 미등록 카드를 보관함으로 편입
+            val prevDefaultHidden = DEFAULT_HIDDEN_CARDS - setOf("cardReceiptScanner", "cardBusinessCard")
+            currentKnown.addAll(prevDefaultHidden)
+            currentKnown.addAll(currentHidden)
+        }
+
+        // 새로 만들어져 배포된 카드(currentKnown에 없던 카드)는 자동으로 보관함(currentHidden)에 추가
+        var modified = false
+        for (key in allTargetKeys) {
+            if (!currentKnown.contains(key)) {
+                currentKnown.add(key)
+                currentHidden.add(key)
+                currentActive.remove(key)
+                modified = true
+            }
+        }
+
+        if (modified || knownDrawerCardKeys.size != currentKnown.size) {
+            hiddenCardKeys = currentHidden
+            activeCardOrder = currentActive
+            knownDrawerCardKeys = currentKnown
+        }
+    }
+
+    // 🔐 앱 화면 전환(문자·이메일 확인 등) 시에도 인증번호/핀코드 입력 모달창을 무손실 유지·복원하기 위한 영속 상태
+    var pendingAuthModalType: String?
+        get() = prefs.getString("pending_auth_modal_type", null)
+        set(value) = prefs.edit().putString("pending_auth_modal_type", value).apply()
+
+    var pendingAuthPhoneOrEmail: String?
+        get() = prefs.getString("pending_auth_phone_or_email", null)
+        set(value) = prefs.edit().putString("pending_auth_phone_or_email", value).apply()
+
+    var pendingAuthCode: String?
+        get() = prefs.getString("pending_auth_code", null)
+        set(value) = prefs.edit().putString("pending_auth_code", value).apply()
+
+    var pendingAuthTimestamp: Long
+        get() = prefs.getLong("pending_auth_timestamp", 0L)
+        set(value) = prefs.edit().putLong("pending_auth_timestamp", value).apply()
+
+    fun savePendingAuthModal(type: String, phoneOrEmail: String = "", code: String = "") {
+        prefs.edit()
+            .putString("pending_auth_modal_type", type)
+            .putString("pending_auth_phone_or_email", phoneOrEmail)
+            .putString("pending_auth_code", code)
+            .putLong("pending_auth_timestamp", System.currentTimeMillis())
+            .apply()
+    }
+
+    fun clearPendingAuthModal() {
+        prefs.edit()
+            .remove("pending_auth_modal_type")
+            .remove("pending_auth_phone_or_email")
+            .remove("pending_auth_code")
+            .remove("pending_auth_timestamp")
+            .apply()
     }
 
     fun clear() {
@@ -1038,6 +1102,8 @@ class PreferencesManager(context: Context) {
             "cardQuoteSync",
             "cardEstimateSync",
             "cardFileUpload",
+            "cardReceiptScanner",
+            "cardBusinessCard",
             "cardContactsBackup",
             "cardDepositMonitor",
 

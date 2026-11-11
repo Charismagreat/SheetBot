@@ -70,7 +70,7 @@ export async function GET() {
   let latestCode = parseVersionToCode(localVer);
   let apkUrl = `https://github.com/Charismagreat/SheetBot/releases/download/v${localVer}/SheetBotAgent.apk`;
   let releaseNotes =
-    "🔐 내 구글 드라이브 & 시트 격리 연동 강화 (v2.4.28): 모든 계정이 본인의 구글 드라이브와 시트에만 데이터를 안전하게 저장하도록 원클릭 구글 드라이브 권한 연결 및 다중 계정 격리가 적용되었습니다.";
+    "✨ 시트봇 에이전트 v2.4.34 업데이트: (1) 최초 설치 및 신규 카드 배포 시 전체 카드 보관함 자동 보관 (2) 카드 내부 인라인 실행 상태 표시 (3) 파투(FileToSheet) AI 비서·할 일 허브·명함 주소록 자동 저장 완벽 연동 (4) 앱 전환 시 인증 모달 무손실 유지";
 
   try {
     // Rate-limit이 없는 GitHub Web 302 리다이렉트로 최신 릴리즈 태그 즉시 확인

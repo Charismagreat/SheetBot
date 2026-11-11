@@ -211,10 +211,14 @@ class BusinessCardSyncCardController(
             return
         }
 
-        binding.progressBar.visibility = View.VISIBLE
         val bizSheetName = prefs.getFtsSheetNameFor("business_card") ?: "명함관리"
         val targetDesc = if (isFts) "파일투시트 [$bizSheetName]" else "구글 시트"
-        Toast.makeText(activity, "🪪 명함을 ${targetDesc}로 전송했습니다.", Toast.LENGTH_SHORT).show()
+        CardInlineLoadingHelper.show(
+            container = binding.layoutBusinessCardDetails,
+            message = "🪪 명함 이미지를 AI로 분석하여 ${targetDesc}에 기록 중입니다...",
+            triggerButton = binding.btnPickBusinessCard,
+            loadingButtonText = "⏳ 명함 AI 분석 중..."
+        )
 
         val appContext = activity.applicationContext
         // 이제 로컬 파일이 캐시에 보관되어 있으므로 창 전환해도 100% 무중단 실행!
@@ -222,7 +226,7 @@ class BusinessCardSyncCardController(
             try {
                 val result = FileUploadManager.uploadPreparedBusinessCard(appContext, tempFile, meta)
                 withContext(Dispatchers.Main) {
-                    binding.progressBar.visibility = View.GONE
+                    CardInlineLoadingHelper.hide(binding.layoutBusinessCardDetails, binding.btnPickBusinessCard)
                 }
 
                 if (result.success) {
@@ -231,6 +235,12 @@ class BusinessCardSyncCardController(
                         saveContactFromOcrData(appContext, result.ocrData)
                     }
 
+                    val ocr = result.ocrData
+                    val parsed = if (ocr != null) parseContactFromRow(ocr) else null
+                    val name = parsed?.name?.takeIf { it.isNotBlank() } ?: ocr?.optString("name", "명함") ?: "명함"
+                    val rawComp = parsed?.company ?: ocr?.optString("company")
+                    val comp = if (!rawComp.isNullOrBlank()) "($rawComp)" else ""
+
                     if (isFts) {
                         val sName = result.folderName?.takeIf { it.isNotBlank() }
                             ?: prefs.getFtsSheetNameFor("business_card")
@@ -238,17 +248,21 @@ class BusinessCardSyncCardController(
                         withContext(Dispatchers.Main) {
                             Toast.makeText(
                                 appContext,
-                                "✅ [$sName] 시트에 1건이 전송되었습니다!",
+                                "🎉 [명함 등록 완료] $name $comp\n파투 [$sName] 시트에 자동 기록되었습니다!",
                                 Toast.LENGTH_LONG
                             ).show()
-                            onAddLogItem("⚡ FTS 명함", "[$sName] 시트 직결 적재 완료", true)
+                            onAddLogItem("⚡ FTS 명함", "$name $comp -> [$sName] 시트 적재 완료", true)
+
+                            // ★ 파일투시트 단독 연결 상태에서도 연락처 저장 & 내 모바일 명함 발송 팝업창 표시
+                            if (ocr != null) {
+                                try {
+                                    CardActionActivity.start(activity, ocr)
+                                } catch (dialogErr: Exception) {
+                                    android.util.Log.w("BusinessCardController", "CardActionActivity 다이얼로그 팝업 실패: ${dialogErr.message}")
+                                }
+                            }
                         }
                     } else {
-                        val ocr = result.ocrData
-                        val name = ocr?.optString("name", "명함") ?: "명함"
-                        val rawComp = ocr?.optString("company")
-                        val comp = if (!rawComp.isNullOrBlank()) "($rawComp)" else ""
-
                         withContext(Dispatchers.Main) {
                             Toast.makeText(
                                 appContext,
@@ -273,7 +287,7 @@ class BusinessCardSyncCardController(
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    binding.progressBar.visibility = View.GONE
+                    CardInlineLoadingHelper.hide(binding.layoutBusinessCardDetails, binding.btnPickBusinessCard)
                     Toast.makeText(appContext, "명함 처리 예외: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -407,8 +421,12 @@ class BusinessCardSyncCardController(
             return
         }
 
-        binding.progressBar.visibility = View.VISIBLE
-        Toast.makeText(activity, "📲 파일투시트 명함 데이터를 조회 중입니다...", Toast.LENGTH_SHORT).show()
+        CardInlineLoadingHelper.show(
+            container = binding.layoutBusinessCardDetails,
+            message = "📲 파일투시트 명함 데이터를 조회하여 연락처와 동기화 중입니다...",
+            triggerButton = binding.btnSyncContactsFromFileToSheet,
+            loadingButtonText = "⏳ 주소록 동기화 중..."
+        )
 
         val appContext = activity.applicationContext
         CoroutineScope(Dispatchers.IO).launch {
@@ -420,7 +438,7 @@ class BusinessCardSyncCardController(
 
                 if (!fetchSuccess || rows.isEmpty()) {
                     withContext(Dispatchers.Main) {
-                        binding.progressBar.visibility = View.GONE
+                        CardInlineLoadingHelper.hide(binding.layoutBusinessCardDetails, binding.btnSyncContactsFromFileToSheet)
                         val msg = if (!fetchSuccess) "파일투시트 시트 데이터를 불러오지 못했습니다." else "[$sheetName] 시트에 등록된 명함 데이터가 없습니다."
                         Toast.makeText(appContext, "⚠️ $msg", Toast.LENGTH_LONG).show()
                     }
@@ -457,14 +475,14 @@ class BusinessCardSyncCardController(
                 }
 
                 withContext(Dispatchers.Main) {
-                    binding.progressBar.visibility = View.GONE
+                    CardInlineLoadingHelper.hide(binding.layoutBusinessCardDetails, binding.btnSyncContactsFromFileToSheet)
                     val summary = "🎉 동기화 완료: 총 ${rows.size}건 중 신규 추가 ${addedCount}건, 기존 보유 ${skippedCount}건"
                     Toast.makeText(appContext, summary, Toast.LENGTH_LONG).show()
                     onAddLogItem("📲 연락처 일괄 동기화", "신규 $addedCount / 기존 $skippedCount / 총 ${rows.size}건", true)
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    binding.progressBar.visibility = View.GONE
+                    CardInlineLoadingHelper.hide(binding.layoutBusinessCardDetails, binding.btnSyncContactsFromFileToSheet)
                     Toast.makeText(appContext, "연락처 일괄 동기화 오류: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }

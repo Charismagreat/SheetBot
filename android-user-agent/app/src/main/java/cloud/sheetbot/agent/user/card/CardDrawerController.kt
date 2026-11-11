@@ -134,7 +134,10 @@ class CardDrawerController(
     fun setup() {
         findViews()
         setupListeners()
-        prefs.migrateSystemCardsToStoreIfNeeded()
+        // 현재 앱에 등록된 모든 빌트인·동적 카드 키를 전달하여 최초 설치 시 전체 보관함행,
+        // 향후 신규 카드 배포/추가 시에도 자동으로 시트봇 보관함에 들어가도록 보장
+        val allAvailableKeys = allCards.filter { it.key != "cardStore" }.map { it.key }.toSet()
+        prefs.migrateSystemCardsToStoreIfNeeded(allAvailableKeys)
         syncDefaultOrderIfEmpty()
         applyCardVisibilityAndOrder()
         refreshDrawerList()
@@ -230,6 +233,7 @@ class CardDrawerController(
         val currentHidden = prefs.hiddenCardKeys.toMutableSet()
         currentHidden.add(key)
         prefs.hiddenCardKeys = currentHidden
+        prefs.knownDrawerCardKeys = prefs.knownDrawerCardKeys + key
 
         // 활성 순서에서도 제거
         val currentOrder = prefs.activeCardOrder.toMutableList()
@@ -247,6 +251,7 @@ class CardDrawerController(
         val currentHidden = prefs.hiddenCardKeys.toMutableSet()
         currentHidden.remove(key)
         prefs.hiddenCardKeys = currentHidden
+        prefs.knownDrawerCardKeys = prefs.knownDrawerCardKeys + key
 
         val currentOrder = prefs.activeCardOrder.toMutableList()
         if (!currentOrder.contains(key)) {

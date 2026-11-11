@@ -232,12 +232,18 @@ export default function TasksPage() {
   }, [tasks, statusFilter, sourceFilter, searchQuery]);
 
   // 출처별 아이콘 & 라벨 헬퍼
-  const getSourceBadge = (source: string) => {
+  const getSourceBadge = (source: string, badgeText?: string | null) => {
     switch (source) {
       case "CALL_RECORDING":
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
             <PhoneCall className="w-3 h-3 text-emerald-600" /> 통화 녹음
+          </span>
+        );
+      case "MEETING_RECORDING":
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+            <Sparkles className="w-3 h-3 text-teal-600" /> 회의 녹음
           </span>
         );
       case "MISSED_CALL":
@@ -257,6 +263,19 @@ export default function TasksPage() {
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-yellow-50 text-yellow-800 border border-yellow-200">
             <MessageSquare className="w-3 h-3 text-yellow-600" /> 카카오톡
+          </span>
+        );
+      case "SMS":
+        if (badgeText === "수동 등록" || badgeText === "모바일 등록") {
+          return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+              <FileText className="w-3 h-3 text-slate-500" /> 직접 등록
+            </span>
+          );
+        }
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+            <MessageSquare className="w-3 h-3 text-indigo-600" /> 문자 메시지
           </span>
         );
       default:
@@ -327,7 +346,7 @@ export default function TasksPage() {
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-slate-500 mt-1">
-                통화 녹음, 부재중 전화, 간편 주문 지연에서 AI가 실시간 추출한 모든 비즈니스 후속 과업을 한곳에서 관리합니다.
+                통화·회의 녹음, 문자(SMS), 카카오톡, 부재중 전화, 간편 주문 지연에서 AI가 실시간 추출한 모든 비즈니스 후속 과업을 한곳에서 관리합니다.
               </p>
             </div>
 
@@ -471,6 +490,9 @@ export default function TasksPage() {
             {[
               { id: "ALL", label: "전체 출처" },
               { id: "CALL_RECORDING", label: "🎙️ 통화 녹음" },
+              { id: "MEETING_RECORDING", label: "🎙️ 회의 녹음" },
+              { id: "SMS", label: "📱 문자 메시지" },
+              { id: "KAKAO", label: "💬 카카오톡" },
               { id: "MISSED_CALL", label: "📞 부재중 전화" },
               { id: "ORDER_DELAY", label: "📦 주문 지연" },
             ].map((chip) => (
@@ -557,7 +579,7 @@ export default function TasksPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5 mb-1">
                       {/* 출처 뱃지 */}
-                      {getSourceBadge(task.source_type)}
+                      {getSourceBadge(task.source_type, task.badge_text)}
 
                       {/* 상태/안내 뱃지 (안내문자 발송됨 등) */}
                       {renderBadge(task.badge_text)}

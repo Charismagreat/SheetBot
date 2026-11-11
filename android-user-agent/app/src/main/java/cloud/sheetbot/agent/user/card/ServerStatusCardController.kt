@@ -79,7 +79,8 @@ class ServerStatusCardController(
         serverMonitorJob?.cancel()
 
         val email = prefs.userEmail ?: ""
-        if (prefs.isPaired && email.isNotBlank() && !(prefs.isDestinationFileToSheet && prefs.isFtsPaired)) {
+        val isFts = prefs.isDestinationFileToSheet && prefs.isFtsPaired
+        if ((prefs.isPaired && email.isNotBlank()) || isFts || !prefs.ftsPhoneNumber.isNullOrBlank()) {
             refreshTasksBadge(email)
         }
 
@@ -169,14 +170,37 @@ class ServerStatusCardController(
     }
 
     /**
-     * 📋 스마트 통합 할 일 허브 실시간 미완료 과업 뱃지 갱신 (옵션 B)
+     * 📋 스마트 통합 할 일 허브 실시간 미완료 과업 뱃지 갱신 (시트봇 + 파일투시트 통합)
      */
     fun refreshTasksBadge(userEmail: String) {
         scope.launch(Dispatchers.IO) {
-            val result = ApiClient.fetchTasks(userEmail, "PENDING")
+            val ftsPhone = prefs.ftsPhoneNumber
+            val ftsProjectId = prefs.ftsProjectId
+            val sbResult = if (userEmail.isNotBlank() || !ftsPhone.isNullOrBlank()) {
+                ApiClient.fetchTasks(userEmail, "PENDING", phoneNumber = ftsPhone, projectId = ftsProjectId)
+            } else {
+                null
+            }
+            val ftsResult = if (prefs.isFtsPaired || !ftsPhone.isNullOrBlank() || !ftsProjectId.isNullOrBlank()) {
+                FileToSheetClient.fetchFtsTasks(prefs, "PENDING")
+            } else {
+                null
+            }
+
+            val anySuccess = (sbResult?.success == true) || (ftsResult?.success == true)
+            val mergedTitles = mutableSetOf<String>()
+            sbResult?.tasks?.filter { it.status == "PENDING" }?.forEach {
+                if (it.title.isNotBlank()) mergedTitles.add(it.title.trim())
+            }
+            ftsResult?.tasks?.filter { it.status == "PENDING" }?.forEach {
+                if (it.title.isNotBlank()) mergedTitles.add(it.title.trim())
+            }
+
+            val fallbackCount = maxOf(sbResult?.pendingCount ?: 0, ftsResult?.pendingCount ?: 0)
+            val count = if (mergedTitles.isNotEmpty()) mergedTitles.size else fallbackCount
+
             withContext(Dispatchers.Main) {
-                if (!activity.isFinishing && !activity.isDestroyed && result.success) {
-                    val count = if (result.pendingCount > 0 || result.tasks.isEmpty()) result.pendingCount else result.tasks.size
+                if (!activity.isFinishing && !activity.isDestroyed && anySuccess) {
                     if (count > 0) {
                         binding.tvTasksHubBadge.text = "대기 ${count}건 ›"
                         binding.tvTasksHubBadge.backgroundTintList =
@@ -209,8 +233,9 @@ class ServerStatusCardController(
             binding.tvServerStatus.text = "🌐 서버 통신: 🟡 확인 중 (file2sheet.cloud)"
             binding.btnRefreshServerStatus.visibility = View.VISIBLE
             binding.btnToggleStatusDetails.visibility = View.VISIBLE
-            binding.cardTasksHub.visibility = View.GONE
+            binding.cardTasksHub.visibility = if (prefs.hiddenCardKeys.contains("cardTasksHub")) View.GONE else View.VISIBLE
             checkServerAndQueueStatus(showToast = false)
+            refreshTasksBadge(email ?: "")
         } else if (isPaired && !email.isNullOrBlank()) {
             binding.tvStatusTitle.text = "🟡 시트봇 서버 연결 확인 중..."
             binding.tvConnectedAccount.text = "연결된 계정: $email"

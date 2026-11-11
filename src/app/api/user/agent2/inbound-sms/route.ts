@@ -11,6 +11,7 @@ import { recordReceiptSmsToGoogleSheet } from "@/lib/receipt-sms-sync";
 import { findMatchingSmartOrder, generateReceiptSmsText } from "@/lib/smart-order-match";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import { recordDispatchToGoogleSheet } from "@/lib/dispatch-sheet-sync";
+import { extractAndCreateTasksFromMessage } from "@/lib/task-hub-helper";
 
 /**
  * POST /api/user/agent2/inbound-sms
@@ -127,6 +128,17 @@ export async function POST(req: NextRequest) {
           console.warn("[InboundSms] findMatchingSmartOrder error:", orderErr);
         }
       }
+    }
+
+    // 1-2. 일반 수신 문자(SMS)에서 비즈니스 할 일(Action Item) 실시간 자동 추출 및 할 일 허브 등록 (Zero-Block 백그라운드)
+    if (!isPushNotification && (!parsedBank || !parsedBank.amountKrw)) {
+      void extractAndCreateTasksFromMessage({
+        userEmail: cleanEmail,
+        sourceType: "SMS",
+        message,
+        contactPhone: sender !== "알 수 없음" ? sender : undefined,
+        timestamp: kstNow,
+      }).catch((err) => console.warn("[InboundSms] Task extraction warning:", err?.message));
     }
 
     // 2. 실시간 SSE 알림 브로드캐스트 (대시보드 실시간 반영)

@@ -237,9 +237,13 @@ object FileUploadManager {
                         TtsManager.speak(context, "$targetSheet 시트에 영수증이 전송되었습니다.")
                     }
                 } else if (ocrType.equals("BUSINESS_CARD", ignoreCase = true)) {
-                    showUploadSuccessNotification(context, "🪪 [파일투시트 명함 직결 전송 완료]", "[$targetSheet] 시트에 1건이 성공적으로 적재되었습니다.")
+                    val ocrData = ftsResult.data ?: org.json.JSONObject()
+                    val cName = CardActionActivity.optFirstNonBlank(ocrData, "name", "성명", "이름", "성함", "대표자").ifBlank { "명함 고객" }
+                    val rawComp = CardActionActivity.optFirstNonBlank(ocrData, "company", "회사명", "상호", "회사", "직장명")
+                    val comp = if (rawComp.isNotBlank()) "($rawComp)" else ""
+                    showBusinessCardActionNotification(context, cName, comp, ocrData)
                     if (prefs.isTtsEnabled) {
-                        TtsManager.speak(context, "$targetSheet 시트에 명함이 전송되었습니다.")
+                        TtsManager.speak(context, "${cName}님의 명함이 분석되어 $targetSheet 시트에 등록되었습니다.")
                     }
                 } else {
                     showUploadSuccessNotification(context, "⚡ [파일투시트 파일 직결 전송 완료]", "[$targetSheet] 시트에 파일이 안전하게 적재되었습니다.")
@@ -534,9 +538,15 @@ object FileUploadManager {
 
             if (ftsResult.success) {
                 val targetSheet = ftsResult.targetSheet?.takeIf { it.isNotBlank() } ?: sheetName
-                showUploadSuccessNotification(context, "🪪 [파일투시트 명함 직결 전송 완료]", "[$targetSheet] 시트에 1건이 성공적으로 적재되었습니다.")
+                val ocrData = ftsResult.data ?: org.json.JSONObject()
+                val cName = CardActionActivity.optFirstNonBlank(ocrData, "name", "성명", "이름", "성함", "대표자").ifBlank { "명함 고객" }
+                val rawComp = CardActionActivity.optFirstNonBlank(ocrData, "company", "회사명", "상호", "회사", "직장명")
+                val comp = if (rawComp.isNotBlank()) "($rawComp)" else ""
+
+                // 파일투시트 단독 연결 상태에서도 상단 헤드업 알림 및 CardActionActivity 팝업 연동 보장
+                showBusinessCardActionNotification(context, cName, comp, ocrData)
                 if (prefs.isTtsEnabled) {
-                    TtsManager.speak(context, "$targetSheet 시트에 명함이 전송되었습니다.")
+                    TtsManager.speak(context, "${cName}님의 명함이 분석되어 $targetSheet 시트에 등록되었습니다.")
                 }
                 return@withContext UploadGenericFileResult(
                     success = true,
@@ -702,17 +712,7 @@ object FileUploadManager {
             manager.createNotificationChannel(channel)
         }
 
-        val intent = Intent(context, CardActionActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(CardActionActivity.EXTRA_NAME, cardJson.optString("name", ""))
-            putExtra(CardActionActivity.EXTRA_TITLE, cardJson.optString("title", ""))
-            putExtra(CardActionActivity.EXTRA_COMPANY, cardJson.optString("company", ""))
-            putExtra(CardActionActivity.EXTRA_MOBILE, cardJson.optString("mobile", ""))
-            putExtra(CardActionActivity.EXTRA_EMAIL, cardJson.optString("email", ""))
-            putExtra(CardActionActivity.EXTRA_TEL, cardJson.optString("tel", ""))
-            putExtra(CardActionActivity.EXTRA_ADDRESS, cardJson.optString("address", ""))
-            putExtra(CardActionActivity.EXTRA_DETAILS, cardJson.optString("details", ""))
-        }
+        val intent = CardActionActivity.buildIntent(context, cardJson)
         val pendingIntent = PendingIntent.getActivity(
             context,
             CardActionActivity.NOTIFICATION_ID,

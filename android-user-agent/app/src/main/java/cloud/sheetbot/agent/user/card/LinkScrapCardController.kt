@@ -83,8 +83,10 @@ class LinkScrapCardController(
         val isYouTube = url.contains("youtube.com", ignoreCase = true) || url.contains("youtu.be", ignoreCase = true)
         val tagMsg = if (isYouTube) "🔴 유튜브 영상" else "🌐 웹 링크"
 
-        binding.progressBar.visibility = View.VISIBLE
-        Toast.makeText(activity, "🚀 $tagMsg 정보를 분석하여 구글 시트에 스크랩합니다...", Toast.LENGTH_SHORT).show()
+        CardInlineLoadingHelper.show(
+            container = binding.layoutLinkScrapSettings,
+            message = "🚀 $tagMsg 정보를 AI로 3줄 요약하여 시트에 스크랩 중입니다..."
+        )
 
         activity.lifecycleScope.launch {
             try {
@@ -94,7 +96,7 @@ class LinkScrapCardController(
                     rawText = rawText,
                     memo = "스마트폰 공유하기(Share) 스크랩"
                 )
-                binding.progressBar.visibility = View.GONE
+                CardInlineLoadingHelper.hide(binding.layoutLinkScrapSettings)
 
                 if (result.success) {
                     val title = result.title ?: url
@@ -117,7 +119,7 @@ class LinkScrapCardController(
                     onAddLogItem("스크랩 실패", err, false)
                 }
             } catch (e: Exception) {
-                binding.progressBar.visibility = View.GONE
+                CardInlineLoadingHelper.hide(binding.layoutLinkScrapSettings)
                 Toast.makeText(activity, "링크 스크랩 예외: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }

@@ -89,15 +89,19 @@ class ReceiptSyncCardController(
             return
         }
 
-        binding.progressBar.visibility = View.VISIBLE
         val receiptSheetName = prefs.getFtsSheetNameFor("receipt_scanner") ?: "영수증대장"
         val targetName = if (isFts) "파일투시트 [$receiptSheetName]" else "구글 시트"
-        Toast.makeText(activity, "🧾 영수증을 $targetName 시트로 전송합니다...", Toast.LENGTH_SHORT).show()
+        CardInlineLoadingHelper.show(
+            container = binding.layoutReceiptScannerDetails,
+            message = "🧾 영수증을 AI로 분석하여 $targetName 시트에 기록 중입니다...",
+            triggerButton = binding.btnPickReceipt,
+            loadingButtonText = "⏳ 영수증 AI 분석 중..."
+        )
 
         activity.lifecycleScope.launch {
             try {
                 val result = FileUploadManager.uploadOcrReceipt(activity, uri)
-                binding.progressBar.visibility = View.GONE
+                CardInlineLoadingHelper.hide(binding.layoutReceiptScannerDetails, binding.btnPickReceipt)
 
                 if (result.success) {
                     if (isFts) {
@@ -128,7 +132,7 @@ class ReceiptSyncCardController(
                     onAddLogItem("영수증 오류", err, false)
                 }
             } catch (e: Exception) {
-                binding.progressBar.visibility = View.GONE
+                CardInlineLoadingHelper.hide(binding.layoutReceiptScannerDetails, binding.btnPickReceipt)
                 Toast.makeText(activity, "영수증 처리 예외: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }

@@ -204,6 +204,13 @@ class CardSetupCoordinator(
      */
     fun onResume() {
         try {
+            if (::accountPairingController.isInitialized) {
+                accountPairingController.onResume()
+            }
+        } catch (e: Throwable) {
+            android.util.Log.w("CardSetupCoordinator", "accountPairingController onResume 방어: ${e.message}")
+        }
+        try {
             if (::serverStatusCardController.isInitialized) {
                 serverStatusCardController.startServerMonitorLoop()
             }

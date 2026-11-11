@@ -102,8 +102,12 @@ class KakaoSyncCardController(
             return
         }
 
-        binding.progressBar.visibility = View.VISIBLE
-        Toast.makeText(activity, "💬 카톡 대화 파일을 분석 및 업로드 중입니다...", Toast.LENGTH_SHORT).show()
+        CardInlineLoadingHelper.show(
+            container = binding.layoutKakaoSyncSettings,
+            message = "💬 카톡 대화 파일을 분석 및 시트에 업로드하고 있습니다...",
+            triggerButton = binding.btnImportKakaoChat,
+            loadingButtonText = "⏳ 대화 파일 분석 중..."
+        )
 
         activity.lifecycleScope.launch {
             try {
@@ -127,7 +131,7 @@ class KakaoSyncCardController(
                 }
 
                 if (textContent.isBlank()) {
-                    binding.progressBar.visibility = View.GONE
+                    CardInlineLoadingHelper.hide(binding.layoutKakaoSyncSettings, binding.btnImportKakaoChat)
                     Toast.makeText(activity, "파일 내용이 비어있거나 읽을 수 없습니다.", Toast.LENGTH_LONG).show()
                     return@launch
                 }
@@ -139,7 +143,7 @@ class KakaoSyncCardController(
                     sheetTitle = prefs.kakaoDriveSheetTitle
                 )
 
-                binding.progressBar.visibility = View.GONE
+                CardInlineLoadingHelper.hide(binding.layoutKakaoSyncSettings, binding.btnImportKakaoChat)
 
                 if (result.success) {
                     val countFormatted = NumberFormat.getNumberInstance(Locale.KOREA).format(result.insertedCount)
@@ -174,7 +178,7 @@ class KakaoSyncCardController(
                         .show()
                 }
             } catch (e: Exception) {
-                binding.progressBar.visibility = View.GONE
+                CardInlineLoadingHelper.hide(binding.layoutKakaoSyncSettings, binding.btnImportKakaoChat)
                 android.util.Log.e("KakaoSyncCtrl", "카톡 대화 파일 가져오기 실패: ${e.message}", e)
                 Toast.makeText(activity, "파일 처리 중 오류: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
             }

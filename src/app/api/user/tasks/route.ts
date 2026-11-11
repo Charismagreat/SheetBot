@@ -10,16 +10,28 @@ import {
   createTaskItem,
   checkOrderDelayTasks,
   resolveUserTaskSpreadsheet,
+  fetchAndSyncTasksFromFileToSheet,
+  syncTaskStatusToFileToSheet,
 } from "@/lib/task-hub-helper";
 
 /**
  * GET /api/user/tasks
- * 로그인 사용자의 스마트 통합 할 일 목록 조회 + 간편 주문 지연 자동 감지 동기화
+ * 로그인 사용자의 스마트 통합 할 일 목록 조회 + 간편 주문 지연 자동 감지 동기화 + 파일투시트(파투) 시트 양방향 연동
  */
 export async function GET(req: NextRequest) {
   try {
     await setupDatabase();
-    const userEmail = await getCurrentUserEmail(req).catch(() => null);
+    const { searchParams } = new URL(req.url);
+    const phoneParam =
+      searchParams.get("phoneNumber") ||
+      searchParams.get("phone") ||
+      req.headers.get("x-user-phone") ||
+      "";
+    const projectIdParam = searchParams.get("projectId") || req.headers.get("x-fts-project-id") || "";
+
+    const rawEmail = await getCurrentUserEmail(req).catch(() => null);
+    const cleanPhoneOnly = phoneParam.replace(/[^0-9]/g, "");
+    const userEmail = rawEmail || (cleanPhoneOnly.length >= 10 ? `${cleanPhoneOnly}@fts.local` : null);
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }
@@ -32,7 +44,6 @@ export async function GET(req: NextRequest) {
     );
 
     // 2. 쿼리 파라미터 파싱
-    const { searchParams } = new URL(req.url);
     const statusFilter = (searchParams.get("status") || "ALL").toUpperCase(); // PENDING, DONE, URGENT, ALL
     const sourceFilter = (searchParams.get("source") || "ALL").toUpperCase(); // CALL_RECORDING, MISSED_CALL, ORDER_DELAY 등
 
@@ -50,7 +61,7 @@ export async function GET(req: NextRequest) {
       orderDirection: "DESC",
     }).catch(() => ({ rows: [] }));
 
-    // 3. 소프트 삭제 필터링, 더미 항목 제거 및 (source_type + source_id + title) 기준 중복 제거
+    // 3. 소프트 삭제 필터링, 더미 항목 제거
     const activeRows = (res.rows || []).filter((r: any) => {
       if (r.deleted_at) return false;
       const t = String(r.title || "").trim();
@@ -58,9 +69,30 @@ export async function GET(req: NextRequest) {
       return true;
     });
 
+    // 4. 파일투시트(파투) '통합할일대장' 및 기존 시트(통화녹음/회의록/부재중/문자/카톡/주문/견적)에서 할 일 조회·동기화
+    const ftsTasks = await fetchAndSyncTasksFromFileToSheet(cleanEmail, {
+      phoneNumber: phoneParam,
+      projectId: projectIdParam,
+      existingSheetBotTasks: activeRows,
+    }).catch((e: any) => {
+      console.warn("[TaskHub API] fetchAndSyncTasksFromFileToSheet warning:", e?.message);
+      return [];
+    });
+
+    const filteredFtsTasks = ftsTasks.filter((ft: any) => {
+      if (sourceFilter && sourceFilter !== "ALL") {
+        return String(ft.source_type || "").toUpperCase() === sourceFilter;
+      }
+      return true;
+    });
+
+    const combinedRows = [...activeRows, ...filteredFtsTasks];
+
     const dedupMap = new Map<string, any>();
-    for (const row of activeRows) {
-      const key = `${row.source_type || ""}::${row.source_id || row.id}::${String(row.title || "").trim()}`;
+    for (const row of combinedRows) {
+      const cleanTitle = String(row.title || "").trim();
+      if (!cleanTitle) continue;
+      const key = `${row.source_type || "SMS"}::${cleanTitle}`;
       const existing = dedupMap.get(key);
       if (!existing) {
         dedupMap.set(key, row);
@@ -125,13 +157,22 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     await setupDatabase();
-    const userEmail = await getCurrentUserEmail(req).catch(() => null);
+    const body = await req.json().catch(() => ({}));
+    const phoneParam =
+      body.phoneNumber ||
+      body.phone ||
+      req.headers.get("x-user-phone") ||
+      "";
+    const projectIdParam = body.projectId || req.headers.get("x-fts-project-id") || "";
+    const cleanPhoneOnly = String(phoneParam).replace(/[^0-9]/g, "");
+
+    const rawEmail = await getCurrentUserEmail(req).catch(() => null);
+    const userEmail = rawEmail || (cleanPhoneOnly.length >= 10 ? `${cleanPhoneOnly}@fts.local` : null);
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }
 
     const cleanEmail = userEmail.toLowerCase().trim();
-    const body = await req.json().catch(() => ({}));
     const { title, description, contactName, contactPhone, dueDate, priority, badgeText } = body;
 
     if (!title || !title.trim()) {
@@ -140,6 +181,8 @@ export async function POST(req: NextRequest) {
 
     const result = await createTaskItem({
       userEmail: cleanEmail,
+      userPhone: cleanPhoneOnly || undefined,
+      ftsProjectId: projectIdParam || undefined,
       title: title.trim(),
       description: description?.trim() || undefined,
       sourceType: "SMS", // 수동 등록은 일반 업무
@@ -168,16 +211,25 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     await setupDatabase();
-    const userEmail = await getCurrentUserEmail(req).catch(() => null);
+    const body = await req.json().catch(() => ({}));
+    const phoneParam =
+      body.phoneNumber ||
+      body.phone ||
+      req.headers.get("x-user-phone") ||
+      "";
+    const projectIdParam = body.projectId || req.headers.get("x-fts-project-id") || "";
+    const cleanPhoneOnly = String(phoneParam).replace(/[^0-9]/g, "");
+
+    const rawEmail = await getCurrentUserEmail(req).catch(() => null);
+    const userEmail = rawEmail || (cleanPhoneOnly.length >= 10 ? `${cleanPhoneOnly}@fts.local` : null);
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }
 
     const cleanEmail = userEmail.toLowerCase().trim();
-    const body = await req.json().catch(() => ({}));
-    const { taskId, status } = body;
+    const { taskId, status, title } = body;
 
-    if (!taskId) {
+    if (!taskId && !title) {
       return NextResponse.json({ success: false, error: "taskId가 필요합니다." }, { status: 400 });
     }
 
@@ -193,28 +245,39 @@ export async function PATCH(req: NextRequest) {
 
     // 대상 할 일 조회 후 id(문자열/숫자 호환) 및 동일 (source_id, title) 중복 건 일괄 동기화
     const targetRes = await queryTable("sheetbot_tasks", {
-      filters: { id: String(taskId), user_email: cleanEmail },
+      filters: taskId ? { id: String(taskId), user_email: cleanEmail } : { title: String(title), user_email: cleanEmail },
       limit: 5,
     }).catch(() => ({ rows: [] }));
 
-    await callUserDataTool("user_data_update_rows", {
-      tableName: "sheetbot_tasks",
-      filters: { id: String(taskId), user_email: cleanEmail },
-      updates: updatesPayload,
-    });
+    if (taskId) {
+      await callUserDataTool("user_data_update_rows", {
+        tableName: "sheetbot_tasks",
+        filters: { id: String(taskId), user_email: cleanEmail },
+        updates: updatesPayload,
+      }).catch(() => {});
+    }
 
     const targetRow = targetRes.rows?.[0];
-    if (targetRow?.source_id && targetRow?.title) {
+    const resolvedTitle = targetRow?.title || title;
+    if (resolvedTitle) {
       await callUserDataTool("user_data_update_rows", {
         tableName: "sheetbot_tasks",
         filters: {
           user_email: cleanEmail,
-          source_id: String(targetRow.source_id),
-          title: String(targetRow.title),
+          title: String(resolvedTitle),
         },
         updates: updatesPayload,
       }).catch(() => {});
     }
+
+    // 파일투시트(파투) '통합할일대장' 상태 동시 업데이트
+    void syncTaskStatusToFileToSheet(cleanEmail, {
+      taskId: Number(taskId || 0),
+      title: resolvedTitle ? String(resolvedTitle) : undefined,
+      status: nextStatus,
+      phoneNumber: cleanPhoneOnly || undefined,
+      projectId: projectIdParam || undefined,
+    }).catch(() => {});
 
     realtimeHub.notifyTableChanged("sheetbot_tasks");
 
