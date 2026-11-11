@@ -2150,7 +2150,7 @@ object FileToSheetClient {
     }
 
     /**
-     * 📤 선택한 프로젝트(projectId)의 시트(sheetName)에 파일/사진을 업로드하여 AI OCR 자동 분석 적재를 수행합니다.
+     * 📤 선택한 프로젝트(projectId)의 시트(sheetName)에 파일/사진/음성을 업로드하여 AI OCR/STT 자동 분석 적재를 수행합니다.
      */
     suspend fun uploadFileToWorkspaceSheet(
         phoneNumber: String,
@@ -2159,7 +2159,10 @@ object FileToSheetClient {
         sheetName: String,
         file: File,
         mimeType: String,
-        memo: String = ""
+        memo: String = "",
+        ocrType: String? = null,
+        contactName: String? = null,
+        callTime: String? = null
     ): FtsUploadResult = withContext(Dispatchers.IO) {
         val token = ensureProjectSheetToken(projectId, projectName, sheetName, phoneNumber)
             ?: return@withContext FtsUploadResult(success = false, error = "대상 시트($sheetName)의 업로드 토큰을 생성할 수 없습니다.")
@@ -2168,7 +2171,10 @@ object FileToSheetClient {
             endpoint = endpoint,
             file = file,
             mimeType = mimeType,
-            memo = memo
+            memo = memo,
+            ocrType = ocrType,
+            contactName = contactName,
+            callTime = callTime
         )
         if (res.success) invalidateWorkspaceCache()
         res

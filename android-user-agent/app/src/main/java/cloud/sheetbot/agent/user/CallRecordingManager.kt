@@ -336,6 +336,112 @@ object CallRecordingManager {
     }
 
     /**
+     * 🎧 단말기 내 최근 통화/회의 녹음 파일 목록을 최신순으로 조회합니다.
+     */
+    fun listRecentRecordingFiles(context: Context, limit: Int = 30): List<File> {
+        val prefs = PreferencesManager(context)
+        val customFolder = prefs.callRecordingCustomFolder.trim()
+        val candidateFolders = mutableListOf<File>()
+
+        if (customFolder.isNotBlank()) {
+            val userDir = File(customFolder)
+            candidateFolders.add(userDir)
+            if (userDir.exists() && userDir.isDirectory) {
+                userDir.listFiles()?.filter { it.isDirectory }?.let { candidateFolders.addAll(it) }
+            }
+        }
+
+        val standardBaseDirs = listOfNotNull(
+            Environment.getExternalStorageDirectory(),
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RECORDINGS),
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
+        )
+
+        for (base in standardBaseDirs) {
+            candidateFolders.addAll(
+                listOf(
+                    File(base, "Recordings/TPhoneCallRecords"),
+                    File(base, "TPhoneCallRecords"),
+                    File(base, "Recordings/TPhone"),
+                    File(base, "TPhone"),
+                    File(base, "Recordings/Call"),
+                    File(base, "Recordings/Calls"),
+                    File(base, "Call"),
+                    File(base, "Calls"),
+                    File(base, "Recordings"),
+                    File(base, "Recordings/A_dot"),
+                    File(base, "Recordings/Adot"),
+                    File(base, "A_dot"),
+                    File(base, "Adot"),
+                    File(base, "Music/TPhoneCallRecords"),
+                    File(base, "Music/Recordings"),
+                    File(base, "Download")
+                )
+            )
+        }
+
+        val supportedExtensions = setOf("m4a", "mp3", "amr", "wav", "aac", "3gp", "ogg", "flac", "wma")
+        val recordingFiles = mutableListOf<File>()
+
+        for (folder in candidateFolders) {
+            if (folder.exists() && folder.isDirectory) {
+                val files = folder.listFiles()?.filter { f ->
+                    f.isFile &&
+                    !f.name.startsWith(".") &&
+                    !f.name.contains("pending", ignoreCase = true) &&
+                    f.extension.lowercase() in supportedExtensions
+                }
+                if (!files.isNullOrEmpty()) {
+                    for (f in files) {
+                        if (!recordingFiles.any { it.absolutePath == f.absolutePath }) {
+                            recordingFiles.add(f)
+                        }
+                    }
+                }
+            }
+        }
+
+        try {
+            val projection = arrayOf(
+                MediaStore.Audio.Media.DATA,
+                MediaStore.Audio.Media.DISPLAY_NAME
+            )
+            context.contentResolver.query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                null,
+                null,
+                "${MediaStore.Audio.Media.DATE_MODIFIED} DESC"
+            )?.use { c ->
+                val dataCol = c.getColumnIndex(MediaStore.Audio.Media.DATA)
+                val nameCol = c.getColumnIndex(MediaStore.Audio.Media.DISPLAY_NAME)
+                var count = 0
+                while (c.moveToNext() && count < 150) {
+                    val path = if (dataCol != -1) c.getString(dataCol) else null
+                    val name = if (nameCol != -1) c.getString(nameCol) else null
+                    val lowerPath = path?.lowercase().orEmpty()
+                    val lowerName = name?.lowercase().orEmpty()
+                    val isCallRelated = lowerPath.contains("recording") || lowerPath.contains("tphone") ||
+                        lowerPath.contains("a_dot") || lowerPath.contains("call") ||
+                        lowerName.contains("통화") || lowerName.contains("녹음") || lowerName.contains("call")
+                    if (isCallRelated && !path.isNullOrBlank()) {
+                        val f = File(path)
+                        if (f.exists() && f.isFile && f.extension.lowercase() in supportedExtensions) {
+                            if (!recordingFiles.any { it.absolutePath == f.absolutePath }) {
+                                recordingFiles.add(f)
+                            }
+                        }
+                    }
+                    count++
+                }
+            }
+        } catch (_: Exception) {}
+
+        recordingFiles.sortByDescending { it.lastModified() }
+        return if (limit > 0) recordingFiles.take(limit) else recordingFiles
+    }
+
+    /**
      * 스마트 통합 할 일 허브(TasksActivity)에서 '통화 녹음' 과업 선택 시
      * 고객명 / 전화번호 / 통화일시를 기준으로 단말기 내 원본 통화 녹음 파일을 탐색합니다.
      */

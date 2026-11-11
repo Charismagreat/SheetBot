@@ -116,6 +116,7 @@ class FtsSheetViewerActivity : AppCompatActivity() {
     private var currentApprovalFilter: String = "ALL" // ALL, PENDING, APPROVED, HELD, REJECTED
     private var isTableMode: Boolean = false
     private var autoOpenIngestPending: Boolean = false
+    private var pendingUploadOcrType: String? = null
     private var loadJob: Job? = null
 
     private var activeMediaPlayer: MediaPlayer? = null
@@ -231,6 +232,25 @@ class FtsSheetViewerActivity : AppCompatActivity() {
         if (currentSheetName.isNotBlank()) {
             tvViewerTitle.text = "📊 $currentSheetName"
         }
+        updateIngestButtonForCurrentSheet()
+    }
+
+    /**
+     * 🎯 현재 선택된 시트의 성격에 맞춰 우측 상단 적재 버튼(btnUploadToCurrentSheet)의 문구와 색상을 동적으로 전환합니다.
+     */
+    private fun updateIngestButtonForCurrentSheet() {
+        val sheet = currentSheetName.trim()
+        val (btnLabel, tintHex) = when {
+            sheet.contains("통화녹음") || sheet.contains("회의록") -> "🎙️ 녹음 적재" to "#059669"
+            sheet.contains("명함관리") || (sheet.contains("명함") && !sheet.contains("발송")) -> "🪪 명함 등록" to "#4F46E5"
+            sheet.contains("영수증") -> "🧾 영수증 등록" to "#0284C7"
+            sheet.contains("카카오톡") -> "💬 대화 적재" to "#D97706"
+            sheet.contains("문자송수신") || sheet.contains("부재중") || sheet.contains("명함발송") || sheet.contains("결제입금") ->
+                "➕ 내역 추가" to "#475569"
+            else -> "📤 파일 적재" to "#2563EB"
+        }
+        btnUploadToCurrentSheet.text = btnLabel
+        btnUploadToCurrentSheet.backgroundTintList = ColorStateList.valueOf(Color.parseColor(tintHex))
     }
 
     private fun setupRecyclerView() {
@@ -404,6 +424,7 @@ class FtsSheetViewerActivity : AppCompatActivity() {
 
                     tvViewerTitle.text = "📊 ${currentSheetName.ifBlank { currentProjectName }}"
                     tvViewerSubtitle.text = "📁 $currentProjectName • 총 ${allRows.size}건 (프로젝트 ${allProjects.size}개)"
+                    updateIngestButtonForCurrentSheet()
 
                     renderProjectTabs()
                     renderSheetTabs()
@@ -462,10 +483,12 @@ class FtsSheetViewerActivity : AppCompatActivity() {
             }.reversed()
             tvViewerTitle.text = "📊 $currentSheetName"
             tvViewerSubtitle.text = "📁 $currentProjectName • 총 ${allRows.size}건"
+            updateIngestButtonForCurrentSheet()
             updateApprovalFilterChipStyles()
             applyFilters()
         } else {
             allRows = emptyList()
+            updateIngestButtonForCurrentSheet()
             updateApprovalFilterChipStyles()
             applyFilters()
         }
@@ -503,9 +526,10 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                         currentProjectName = proj.name
                         val firstSheet = proj.sheets.firstOrNull()?.name.orEmpty()
                         currentSheetName = firstSheet
-                        // 터치 즉시 탭 선택 하이라이트 및 상단 타이틀 갱신
+                        // 터치 즉시 탭 선택 하이라이트 및 상단 타이틀/적재버튼 갱신
                         tvViewerTitle.text = "📊 ${firstSheet.ifBlank { proj.name }}"
                         tvViewerSubtitle.text = "⏳ [${proj.name}] 시트 데이터를 불러오는 중..."
+                        updateIngestButtonForCurrentSheet()
                         renderProjectTabs()
                         renderSheetTabs()
                         loadWorkspaceData(targetProjectId = proj.id, targetSheetName = firstSheet, forceRefresh = false)
@@ -547,9 +571,10 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                 setOnClickListener {
                     if (currentSheetName != sheet.name) {
                         currentSheetName = sheet.name
-                        // 터치 즉시 시트 탭 하이라이트 및 상단 타이틀 갱신
+                        // 터치 즉시 시트 탭 하이라이트 및 상단 타이틀/적재버튼 갱신
                         tvViewerTitle.text = "📊 ${sheet.name}"
                         tvViewerSubtitle.text = "⏳ [$currentProjectName > ${sheet.name}] 데이터를 불러오는 중..."
+                        updateIngestButtonForCurrentSheet()
                         renderSheetTabs()
                         loadWorkspaceData(targetProjectId = currentProjectId, targetSheetName = sheet.name, forceRefresh = false)
                     }
@@ -858,44 +883,689 @@ class FtsSheetViewerActivity : AppCompatActivity() {
     }
 
     // =========================================================================
-    // 📤 현재 시트에 파일/사진 등록(AI OCR 자동 적재) 및 수동 행 입력
+    // 📤 시트 성격별 지능형 맞춤 적재 시스템 (Context-Aware Sheet Ingest System)
     // =========================================================================
 
+    private enum class SheetIngestCategory {
+        AUDIO_RECORDING,
+        BUSINESS_CARD,
+        RECEIPT,
+        KAKAO_CHAT,
+        AUTO_LOG_SHEET,
+        GENERAL_FTS_SHEET
+    }
+
+    private fun resolveCurrentSheetCategory(): SheetIngestCategory {
+        val s = currentSheetName.trim()
+        return when {
+            s.contains("통화녹음") || s.contains("회의록") -> SheetIngestCategory.AUDIO_RECORDING
+            s.contains("명함관리") || (s.contains("명함") && !s.contains("발송")) -> SheetIngestCategory.BUSINESS_CARD
+            s.contains("영수증") -> SheetIngestCategory.RECEIPT
+            s.contains("카카오톡") -> SheetIngestCategory.KAKAO_CHAT
+            s.contains("문자송수신") || s.contains("부재중") || s.contains("명함발송") || s.contains("결제입금") ->
+                SheetIngestCategory.AUTO_LOG_SHEET
+            else -> SheetIngestCategory.GENERAL_FTS_SHEET
+        }
+    }
+
     private fun showIngestActionDialog() {
-        val targetInfo = "[$currentProjectName > $currentSheetName]"
-        val options = arrayOf(
-            "📸 카메라로 증빙/문서 촬영하여 AI 적재",
-            "📎 갤러리 사진 또는 문서 파일(PDF·엑셀) AI 적재",
-            "✏️ 수동으로 행(Row) 직접 입력하여 추가"
-        )
-        AlertDialog.Builder(this)
-            .setTitle("📤 $targetInfo 데이터 적재")
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> {
-                        try {
-                            takePictureLauncher.launch(null)
-                        } catch (e: Exception) {
-                            Toast.makeText(this, "카메라를 실행할 수 없습니다: ${e.message}", Toast.LENGTH_SHORT).show()
-                        }
+        val category = resolveCurrentSheetCategory()
+        val sheetLabel = currentSheetName.ifBlank { "현재 시트" }
+        val projLabel = currentProjectName.ifBlank { "파일투시트" }
+
+        val dialog = BottomSheetDialog(this)
+        val rootScroll = ScrollView(this).apply {
+            isFillViewport = true
+            setBackgroundColor(Color.parseColor("#0F172A"))
+        }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(16), dp(20), dp(24))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#0F172A"))
+            }
+        }
+        rootScroll.addView(root)
+
+        // 상단 드래그 핸들
+        val handle = View(this).apply {
+            background = GradientDrawable().apply {
+                cornerRadius = dp(99).toFloat()
+                setColor(Color.parseColor("#475569"))
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(42), dp(4)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(14)
+            }
+        }
+        root.addView(handle)
+
+        // 상단 프로젝트 › 시트 뱃지 + 닫기 버튼
+        val topHeaderRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val pathBadge = TextView(this).apply {
+            text = "📁 $projLabel › $sheetLabel"
+            setTextColor(Color.parseColor("#38BDF8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(10), dp(5), dp(10), dp(5))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(99).toFloat()
+                setColor(Color.parseColor("#1E293B"))
+                setStroke(dp(1), Color.parseColor("#334155"))
+            }
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val closeBtn = TextView(this).apply {
+            text = "✕"
+            setTextColor(Color.parseColor("#94A3B8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setPadding(dp(10), dp(4), dp(4), dp(4))
+            setOnClickListener { dialog.dismiss() }
+        }
+        topHeaderRow.addView(pathBadge)
+        topHeaderRow.addView(closeBtn)
+        root.addView(topHeaderRow)
+
+        val (modalTitle, modalDesc) = when (category) {
+            SheetIngestCategory.AUDIO_RECORDING ->
+                "🎙️ [$sheetLabel] 음성·녹음 맞춤 적재" to
+                    "스마트폰의 최근 통화/회의 녹음이나 오디오 파일을 선택하면 AI가 화자·통화내용·핵심요약을 자동 분석해 시트에 적재합니다."
+            SheetIngestCategory.BUSINESS_CARD ->
+                "🪪 [$sheetLabel] 명함 OCR 맞춤 등록" to
+                    "종이 명함을 촬영하거나 이미지를 선택하면 AI가 성명·직함·회사명·연락처를 추출해 명함관리 대장에 즉시 등록합니다."
+            SheetIngestCategory.RECEIPT ->
+                "🧾 [$sheetLabel] 영수증·전표 맞춤 적재" to
+                    "영수증/세금계산서를 촬영하거나 PDF·사진을 올리면 AI가 가맹점·승인금액·지출성격을 자동 분류해 적재합니다."
+            SheetIngestCategory.KAKAO_CHAT ->
+                "💬 [$sheetLabel] 대화 내역 맞춤 적재" to
+                    "카카오톡 대화 내보내기(.txt) 파일을 업로드하거나 중요 상담 내역을 직접 입력해 대장에 기록합니다."
+            SheetIngestCategory.AUTO_LOG_SHEET ->
+                "⚡ [$sheetLabel] 자동 감지 대장 안내 및 수동 추가" to
+                    "이 시트는 스마트폰 이벤트 감지기가 실시간 자동 기록하는 시트입니다. 누락분 수동 입력이나 엑셀 일괄 적재도 가능합니다."
+            SheetIngestCategory.GENERAL_FTS_SHEET ->
+                "📤 [$sheetLabel] 시트 컬럼 맞춤 AI 적재" to
+                    "증빙 사진 촬영, 문서(PDF·엑셀·이미지) 업로드 또는 직접 행 입력을 통해 아래 시트 컬럼에 맞춰 데이터를 적재합니다."
+        }
+
+        val titleTv = TextView(this).apply {
+            text = modalTitle
+            setTextColor(Color.parseColor("#F8FAFC"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16.5f)
+            setTypeface(typeface, Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(12) }
+        }
+        root.addView(titleTv)
+
+        val descTv = TextView(this).apply {
+            text = modalDesc
+            setTextColor(Color.parseColor("#94A3B8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+            setLineSpacing(dp(2).toFloat(), 1.0f)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(6) }
+        }
+        root.addView(descTv)
+
+        // 📋 적재 대상 시트 컬럼 미리보기 칩 바
+        val previewCols = currentHeaders.filter { !it.startsWith("_") }.ifEmpty {
+            FileToSheetClient.CARD_SHEET_SPECS[resolveCardIdBySheetName(sheetLabel)]?.headers
+                ?: listOf("일련번호", "등록일시", "내용", "비고")
+        }
+        val colPreviewBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(Color.parseColor("#1E293B"))
+                setStroke(dp(1), Color.parseColor("#334155"))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(12)
+                bottomMargin = dp(12)
+            }
+        }
+        val colTitleTv = TextView(this).apply {
+            text = "📋 적재 대상 시트 컬럼 (${previewCols.size}개 항목 자동 매핑)"
+            setTextColor(Color.parseColor("#CBD5E1"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            setTypeface(typeface, Typeface.BOLD)
+        }
+        colPreviewBox.addView(colTitleTv)
+
+        val colScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(8) }
+        }
+        val colRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        for (colName in previewCols) {
+            val chip = TextView(this).apply {
+                text = colName
+                setTextColor(Color.parseColor("#38BDF8"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                setTypeface(typeface, Typeface.BOLD)
+                setPadding(dp(9), dp(4), dp(9), dp(4))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(99).toFloat()
+                    setColor(Color.parseColor("#0F172A"))
+                    setStroke(dp(1), Color.parseColor("#0284C7"))
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { marginEnd = dp(6) }
+            }
+            colRow.addView(chip)
+        }
+        colScroll.addView(colRow)
+        colPreviewBox.addView(colScroll)
+        root.addView(colPreviewBox)
+
+        // 액션 카드 생성 헬퍼
+        fun addActionCard(
+            iconEmoji: String,
+            title: String,
+            subtitle: String,
+            accentColorHex: String,
+            badgeText: String? = null,
+            onClick: () -> Unit
+        ) {
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(13), dp(14), dp(13))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(12).toFloat()
+                    setColor(Color.parseColor("#1E293B"))
+                    setStroke(dp(1), Color.parseColor(accentColorHex))
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(8) }
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    dialog.dismiss()
+                    onClick()
+                }
+            }
+
+            val iconTv = TextView(this).apply {
+                text = iconEmoji
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+                gravity = Gravity.CENTER
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(10).toFloat()
+                    setColor(Color.parseColor("#0F172A"))
+                }
+                layoutParams = LinearLayout.LayoutParams(dp(42), dp(42)).apply {
+                    marginEnd = dp(12)
+                }
+            }
+            card.addView(iconTv)
+
+            val textCol = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+
+            val titleLine = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val tTv = TextView(this).apply {
+                text = title
+                setTextColor(Color.parseColor("#F8FAFC"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+                setTypeface(typeface, Typeface.BOLD)
+            }
+            titleLine.addView(tTv)
+
+            if (!badgeText.isNullOrBlank()) {
+                val bTv = TextView(this).apply {
+                    text = badgeText
+                    setTextColor(Color.parseColor("#FFFFFF"))
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+                    setTypeface(typeface, Typeface.BOLD)
+                    setPadding(dp(6), dp(2), dp(6), dp(2))
+                    background = GradientDrawable().apply {
+                        cornerRadius = dp(99).toFloat()
+                        setColor(Color.parseColor(accentColorHex))
                     }
-                    1 -> {
-                        try {
-                            pickFileLauncher.launch("*/*")
-                        } catch (e: Exception) {
-                            Toast.makeText(this, "파일 선택기를 열 수 없습니다: ${e.message}", Toast.LENGTH_SHORT).show()
-                        }
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { marginStart = dp(6) }
+                }
+                titleLine.addView(bTv)
+            }
+            textCol.addView(titleLine)
+
+            val sTv = TextView(this).apply {
+                text = subtitle
+                setTextColor(Color.parseColor("#94A3B8"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(3) }
+            }
+            textCol.addView(sTv)
+            card.addView(textCol)
+
+            val arrowTv = TextView(this).apply {
+                text = "›"
+                setTextColor(Color.parseColor("#64748B"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+                setTypeface(typeface, Typeface.BOLD)
+                setPadding(dp(8), 0, 0, 0)
+            }
+            card.addView(arrowTv)
+
+            root.addView(card)
+        }
+
+        when (category) {
+            SheetIngestCategory.AUDIO_RECORDING -> {
+                addActionCard(
+                    iconEmoji = "🎧",
+                    title = "스마트폰 최근 통화·회의 녹음에서 선택",
+                    subtitle = "단말기 녹음 폴더의 최근 오디오 목록에서 터치 1번으로 AI 요약 적재",
+                    accentColorHex = "#059669",
+                    badgeText = "추천"
+                ) {
+                    showRecentRecordingPickerDialog()
+                }
+                addActionCard(
+                    iconEmoji = "🎵",
+                    title = "내 파일함에서 오디오 파일 선택 (m4a·mp3·wav)",
+                    subtitle = "외부 녹음기나 전달받은 음성 파일을 선택하여 AI 전사 및 요약 적재",
+                    accentColorHex = "#0284C7"
+                ) {
+                    pendingUploadOcrType = "call_recording"
+                    try {
+                        pickFileLauncher.launch("audio/*")
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "오디오 선택기를 열 수 없습니다: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
-                    2 -> {
-                        showManualRowAddDialog()
+                }
+                addActionCard(
+                    iconEmoji = "✏️",
+                    title = "통화/회의 요약 내역 직접 입력 추가",
+                    subtitle = "시트 컬럼(${previewCols.take(3).joinToString("·")} 등)에 맞춰 수동 행 추가",
+                    accentColorHex = "#475569"
+                ) {
+                    showManualRowAddDialog()
+                }
+            }
+
+            SheetIngestCategory.BUSINESS_CARD -> {
+                addActionCard(
+                    iconEmoji = "📸",
+                    title = "카메라로 종이 명함 촬영",
+                    subtitle = "성명·직함·회사명·휴대폰·이메일·주소를 AI가 추출해 즉시 등록",
+                    accentColorHex = "#4F46E5",
+                    badgeText = "AI 명함인식"
+                ) {
+                    pendingUploadOcrType = "business_card"
+                    try {
+                        takePictureLauncher.launch(null)
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "카메라를 실행할 수 없습니다: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                addActionCard(
+                    iconEmoji = "🖼️",
+                    title = "갤러리에서 명함 이미지 선택",
+                    subtitle = "촬영해 둔 명함 사진이나 받은 명함 이미지를 선택하여 AI 자동 등록",
+                    accentColorHex = "#2563EB"
+                ) {
+                    pendingUploadOcrType = "business_card"
+                    try {
+                        pickFileLauncher.launch("image/*")
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "갤러리를 열 수 없습니다: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                addActionCard(
+                    iconEmoji = "✏️",
+                    title = "명함 연락처 직접 입력하여 추가",
+                    subtitle = "성명, 회사명, 휴대폰번호 등을 직접 입력하여 행 추가",
+                    accentColorHex = "#475569"
+                ) {
+                    showManualRowAddDialog()
+                }
+            }
+
+            SheetIngestCategory.RECEIPT -> {
+                addActionCard(
+                    iconEmoji = "📸",
+                    title = "카메라로 영수증·전표 촬영",
+                    subtitle = "가맹점명·승인금액·부가세·결제일시를 AI가 자동 인식해 장부 적재",
+                    accentColorHex = "#0284C7",
+                    badgeText = "AI 영수증OCR"
+                ) {
+                    pendingUploadOcrType = "receipt"
+                    try {
+                        takePictureLauncher.launch(null)
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "카메라를 실행할 수 없습니다: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                addActionCard(
+                    iconEmoji = "📎",
+                    title = "갤러리 영수증 사진 또는 전자영수증(PDF) 선택",
+                    subtitle = "캡처한 모바일 영수증, 카드전표, 세금계산서 파일 업로드 적재",
+                    accentColorHex = "#2563EB"
+                ) {
+                    pendingUploadOcrType = "receipt"
+                    try {
+                        pickFileLauncher.launch("*/*")
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "파일 선택기를 열 수 없습니다: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                addActionCard(
+                    iconEmoji = "✏️",
+                    title = "지출/영수증 내역 직접 입력하여 추가",
+                    subtitle = "가맹점, 총결제금액, 지출목적 등을 직접 입력하여 행 추가",
+                    accentColorHex = "#475569"
+                ) {
+                    showManualRowAddDialog()
+                }
+            }
+
+            SheetIngestCategory.KAKAO_CHAT -> {
+                addActionCard(
+                    iconEmoji = "💬",
+                    title = "카카오톡 대화 내보내기(.txt) 파일 업로드",
+                    subtitle = "대화방에서 내보낸 텍스트 파일을 분석하여 상담 대장에 적재",
+                    accentColorHex = "#D97706",
+                    badgeText = "대화 파일"
+                ) {
+                    pendingUploadOcrType = "kakao_export"
+                    try {
+                        pickFileLauncher.launch("text/*")
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "파일 선택기를 열 수 없습니다: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                addActionCard(
+                    iconEmoji = "✏️",
+                    title = "카카오톡 상담/대화 내역 직접 입력 추가",
+                    subtitle = "대화방명, 발신자, 대화내용, 핵심요약을 직접 입력하여 행 추가",
+                    accentColorHex = "#475569"
+                ) {
+                    showManualRowAddDialog()
+                }
+            }
+
+            SheetIngestCategory.AUTO_LOG_SHEET -> {
+                addActionCard(
+                    iconEmoji = "✏️",
+                    title = "신규 내역(행) 직접 입력하여 수동 추가",
+                    subtitle = "자동 감지 외에 별도로 기록할 [$sheetLabel] 내역을 수동으로 입력합니다",
+                    accentColorHex = "#2563EB",
+                    badgeText = "수동 입력"
+                ) {
+                    showManualRowAddDialog()
+                }
+                addActionCard(
+                    iconEmoji = "📊",
+                    title = "엑셀 / CSV / 문서 파일에서 데이터 적재",
+                    subtitle = "외부 내역 파일이나 캡처 이미지를 업로드하여 시트 컬럼에 맞춰 적재",
+                    accentColorHex = "#475569"
+                ) {
+                    pendingUploadOcrType = null
+                    try {
+                        pickFileLauncher.launch("*/*")
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "파일 선택기를 열 수 없습니다: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
-            .setNegativeButton("취소", null)
-            .show()
+
+            SheetIngestCategory.GENERAL_FTS_SHEET -> {
+                addActionCard(
+                    iconEmoji = "📸",
+                    title = "카메라로 증빙·계약서·장부 촬영 AI 적재",
+                    subtitle = "촬영된 문서에서 [${previewCols.take(4).joinToString("·")}] 항목을 AI가 자동 추출",
+                    accentColorHex = "#2563EB",
+                    badgeText = "컬럼 맞춤 AI"
+                ) {
+                    pendingUploadOcrType = null
+                    try {
+                        takePictureLauncher.launch(null)
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "카메라를 실행할 수 없습니다: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                addActionCard(
+                    iconEmoji = "📎",
+                    title = "사진 / PDF / 엑셀 / 문서 파일 업로드 AI 적재",
+                    subtitle = "스마트폰에 저장된 이미지나 문서를 [$sheetLabel] 컬럼 구조에 맞춰 자동 적재",
+                    accentColorHex = "#0284C7"
+                ) {
+                    pendingUploadOcrType = null
+                    try {
+                        pickFileLauncher.launch("*/*")
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "파일 선택기를 열 수 없습니다: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                addActionCard(
+                    iconEmoji = "✏️",
+                    title = "시트 컬럼에 맞춰 직접 행(Row) 입력 추가",
+                    subtitle = "[${previewCols.take(4).joinToString(", ")}] 각 항목을 직접 입력하여 즉시 추가",
+                    accentColorHex = "#475569"
+                ) {
+                    showManualRowAddDialog()
+                }
+            }
+        }
+
+        dialog.setContentView(rootScroll)
+        dialog.setOnShowListener {
+            val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            if (bottomSheet != null) {
+                bottomSheet.setBackgroundColor(Color.TRANSPARENT)
+                BottomSheetBehavior.from(bottomSheet).state = BottomSheetBehavior.STATE_EXPANDED
+            }
+        }
+        dialog.show()
+    }
+
+    /**
+     * 🎧 [통화녹음대장 / 회의록대장] 전용: 단말기 내 최근 녹음 파일 목록을 보여주고 원탭으로 업로드 적재합니다.
+     */
+    private fun showRecentRecordingPickerDialog() {
+        val recentFiles = CallRecordingManager.listRecentRecordingFiles(this, limit = 30)
+        if (recentFiles.isEmpty()) {
+            Toast.makeText(
+                this,
+                "최근 통화 녹음 파일을 찾지 못해 오디오 파일 선택기를 엽니다.",
+                Toast.LENGTH_SHORT
+            ).show()
+            pendingUploadOcrType = "call_recording"
+            try {
+                pickFileLauncher.launch("audio/*")
+            } catch (_: Exception) {}
+            return
+        }
+
+        val dialog = BottomSheetDialog(this)
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            setBackgroundColor(Color.parseColor("#0F172A"))
+        }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(16), dp(20), dp(24))
+        }
+        scroll.addView(container)
+
+        val titleTv = TextView(this).apply {
+            text = "🎧 스마트폰 최근 녹음 파일 선택 (${recentFiles.size}건)"
+            setTextColor(Color.parseColor("#F8FAFC"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setTypeface(typeface, Typeface.BOLD)
+        }
+        container.addView(titleTv)
+
+        val subTv = TextView(this).apply {
+            text = "적재할 녹음 파일을 터치하면 AI가 통화 내용을 분석해 [$currentSheetName]에 자동 등록합니다."
+            setTextColor(Color.parseColor("#94A3B8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(4)
+                bottomMargin = dp(10)
+            }
+        }
+        container.addView(subTv)
+
+        for (file in recentFiles) {
+            val info = CallRecordingManager.parseRecordingFileInfo(file)
+            val sizeKb = (file.length() / 1024L).coerceAtLeast(1L)
+            val itemCard = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(14), dp(11), dp(14), dp(11))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(10).toFloat()
+                    setColor(Color.parseColor("#1E293B"))
+                    setStroke(dp(1), Color.parseColor("#334155"))
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(7) }
+                setOnClickListener {
+                    dialog.dismiss()
+                    uploadDirectAudioFileToCurrentSheet(file, info)
+                }
+            }
+
+            val topRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val contactTv = TextView(this).apply {
+                text = "🎙️ ${info.contactName}"
+                setTextColor(Color.parseColor("#34D399"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+                setTypeface(typeface, Typeface.BOLD)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            val timeTv = TextView(this).apply {
+                text = info.callTime
+                setTextColor(Color.parseColor("#94A3B8"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            }
+            topRow.addView(contactTv)
+            topRow.addView(timeTv)
+            itemCard.addView(topRow)
+
+            val fileNameTv = TextView(this).apply {
+                text = "${file.name} (${sizeKb}KB)"
+                setTextColor(Color.parseColor("#CBD5E1"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.MIDDLE
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(3) }
+            }
+            itemCard.addView(fileNameTv)
+            container.addView(itemCard)
+        }
+
+        dialog.setContentView(scroll)
+        dialog.setOnShowListener {
+            val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            if (bottomSheet != null) {
+                bottomSheet.setBackgroundColor(Color.TRANSPARENT)
+                BottomSheetBehavior.from(bottomSheet).state = BottomSheetBehavior.STATE_EXPANDED
+            }
+        }
+        dialog.show()
+    }
+
+    private fun uploadDirectAudioFileToCurrentSheet(
+        audioFile: File,
+        parsedInfo: CallRecordingManager.ParsedRecordingInfo
+    ) {
+        val ext = audioFile.extension.lowercase()
+        val mime = when (ext) {
+            "mp3" -> "audio/mpeg"
+            "wav" -> "audio/wav"
+            "amr" -> "audio/amr"
+            "ogg" -> "audio/ogg"
+            "aac" -> "audio/aac"
+            else -> "audio/mp4"
+        }
+        CardInlineLoadingHelper.show(
+            container = layoutViewerInlineLoading,
+            message = "🎙️ [${audioFile.name}] 녹음 파일을 [$currentSheetName]에 AI 전사·요약 적재 중..."
+        )
+        lifecycleScope.launch {
+            try {
+                val res = FileToSheetClient.uploadFileToWorkspaceSheet(
+                    phoneNumber = currentPhoneNumber,
+                    projectId = currentProjectId,
+                    projectName = currentProjectName,
+                    sheetName = currentSheetName,
+                    file = audioFile,
+                    mimeType = mime,
+                    memo = "모바일 워크스페이스 통화녹음 선택 적재 (${parsedInfo.contactName})",
+                    ocrType = "call_recording",
+                    contactName = parsedInfo.contactName,
+                    callTime = parsedInfo.callTime
+                )
+                CardInlineLoadingHelper.hide(layoutViewerInlineLoading)
+                if (res.success) {
+                    Toast.makeText(
+                        this@FtsSheetViewerActivity,
+                        "✅ [${parsedInfo.contactName}] 녹음 파일이 [$currentSheetName]에 적재되었습니다!",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    loadWorkspaceData(currentProjectId, currentSheetName, forceRefresh = true)
+                } else {
+                    Toast.makeText(
+                        this@FtsSheetViewerActivity,
+                        "녹음 적재 실패: ${res.error ?: "오류"}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            } catch (e: Exception) {
+                CardInlineLoadingHelper.hide(layoutViewerInlineLoading)
+                Toast.makeText(this@FtsSheetViewerActivity, "녹음 업로드 오류: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun handleCapturedBitmapUpload(bitmap: Bitmap) {
+        val ocrTypeToUse = pendingUploadOcrType
+        pendingUploadOcrType = null
+
         CardInlineLoadingHelper.show(
             container = layoutViewerInlineLoading,
             message = "🤖 촬영된 사진을 1600px 최적화 압축 후 [$currentSheetName] 시트에 AI 분석 적재 중..."
@@ -918,7 +1588,8 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                     sheetName = currentSheetName,
                     file = tempFile,
                     mimeType = "image/jpeg",
-                    memo = "모바일 워크스페이스 카메라 촬영 적재"
+                    memo = "모바일 워크스페이스 카메라 촬영 적재 ($currentSheetName)",
+                    ocrType = ocrTypeToUse
                 )
                 try { tempFile.delete() } catch (_: Exception) {}
                 CardInlineLoadingHelper.hide(layoutViewerInlineLoading)
@@ -945,6 +1616,9 @@ class FtsSheetViewerActivity : AppCompatActivity() {
     }
 
     private fun handlePickedFileUpload(uri: Uri) {
+        val ocrTypeHint = pendingUploadOcrType
+        pendingUploadOcrType = null
+
         CardInlineLoadingHelper.show(
             container = layoutViewerInlineLoading,
             message = "🤖 선택된 파일을 [$currentSheetName] 시트 컬럼에 맞춰 AI 분석 적재 중..."
@@ -986,6 +1660,11 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                     Pair(outFile, detectedMime)
                 }
 
+                val isAudio = mimeType.startsWith("audio/") ||
+                    tempFile.extension.lowercase() in setOf("m4a", "mp3", "wav", "amr", "ogg", "aac", "3gp", "flac")
+                val parsedAudio = if (isAudio) CallRecordingManager.parseRecordingFileInfo(tempFile) else null
+                val effectiveOcrType = ocrTypeHint ?: if (isAudio) "call_recording" else null
+
                 val res = FileToSheetClient.uploadFileToWorkspaceSheet(
                     phoneNumber = currentPhoneNumber,
                     projectId = currentProjectId,
@@ -993,7 +1672,10 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                     sheetName = currentSheetName,
                     file = tempFile,
                     mimeType = mimeType,
-                    memo = "모바일 워크스페이스 파일 등록 적재"
+                    memo = "모바일 워크스페이스 파일 등록 적재 ($currentSheetName)",
+                    ocrType = effectiveOcrType,
+                    contactName = parsedAudio?.contactName,
+                    callTime = parsedAudio?.callTime
                 )
                 try { tempFile.delete() } catch (_: Exception) {}
                 CardInlineLoadingHelper.hide(layoutViewerInlineLoading)
@@ -1031,16 +1713,58 @@ class FtsSheetViewerActivity : AppCompatActivity() {
     }
 
     private fun showManualRowAddDialog() {
-        val editableHeaders = currentHeaders.filter {
+        val fallbackCols = FileToSheetClient.CARD_SHEET_SPECS[resolveCardIdBySheetName(currentSheetName)]?.headers
+            ?: listOf("내용", "금액", "비고")
+        val editableHeaders = currentHeaders.ifEmpty { fallbackCols }.filter {
             it != "일련번호" && it != "번호" && it != "등록일시" && !it.startsWith("_")
         }.ifEmpty { listOf("내용", "금액", "비고") }
 
-        val scroll = ScrollView(this)
+        val dialog = BottomSheetDialog(this)
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            setBackgroundColor(Color.parseColor("#0F172A"))
+        }
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(12), dp(20), dp(8))
+            setPadding(dp(20), dp(16), dp(20), dp(24))
         }
         scroll.addView(container)
+
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val titleTv = TextView(this).apply {
+            text = "✏️ [$currentSheetName] 새 행 직접 추가"
+            setTextColor(Color.parseColor("#F8FAFC"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setTypeface(typeface, Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val closeTv = TextView(this).apply {
+            text = "✕"
+            setTextColor(Color.parseColor("#94A3B8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setPadding(dp(8), dp(4), dp(4), dp(4))
+            setOnClickListener { dialog.dismiss() }
+        }
+        headerRow.addView(titleTv)
+        headerRow.addView(closeTv)
+        container.addView(headerRow)
+
+        val subTv = TextView(this).apply {
+            text = "📁 $currentProjectName › $currentSheetName 시트의 컬럼에 맞춰 새 행을 추가합니다."
+            setTextColor(Color.parseColor("#94A3B8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(4)
+                bottomMargin = dp(10)
+            }
+        }
+        container.addView(subTv)
 
         val fieldMap = mutableMapOf<String, EditText>()
         for (h in editableHeaders) {
@@ -1048,26 +1772,66 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                 text = h
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
                 setTypeface(typeface, Typeface.BOLD)
-                setTextColor(Color.parseColor("#334155"))
+                setTextColor(Color.parseColor("#38BDF8"))
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { topMargin = dp(8) }
+                ).apply { topMargin = dp(10) }
             }
             val et = EditText(this).apply {
                 hint = "$h 입력..."
+                setHintTextColor(Color.parseColor("#64748B"))
+                setTextColor(Color.parseColor("#F8FAFC"))
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
                 setSingleLine(true)
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(8).toFloat()
+                    setColor(Color.parseColor("#1E293B"))
+                    setStroke(dp(1), Color.parseColor("#334155"))
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(4) }
             }
             container.addView(labelTv)
             container.addView(et)
             fieldMap[h] = et
         }
 
-        AlertDialog.Builder(this)
-            .setTitle("✏️ [$currentSheetName] 새 행 직접 추가")
-            .setView(scroll)
-            .setPositiveButton("행 적재") { _, _ ->
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(18) }
+        }
+        val cancelBtn = TextView(this).apply {
+            text = "취소"
+            setTextColor(Color.parseColor("#CBD5E1"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(Color.parseColor("#334155"))
+            }
+            layoutParams = LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(8) }
+            setOnClickListener { dialog.dismiss() }
+        }
+        val submitBtn = TextView(this).apply {
+            text = "✅ 시트에 행 추가"
+            setTextColor(Color.parseColor("#FFFFFF"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(Color.parseColor("#2563EB"))
+            }
+            layoutParams = LinearLayout.LayoutParams(0, dp(42), 1.4f)
+            setOnClickListener {
                 val rowData = JSONObject()
                 var hasAny = false
                 for ((col, et) in fieldMap) {
@@ -1076,9 +1840,10 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                     rowData.put(col, v)
                 }
                 if (!hasAny) {
-                    Toast.makeText(this, "최소 1개 이상의 항목을 입력해 주세요.", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
+                    Toast.makeText(this@FtsSheetViewerActivity, "최소 1개 이상의 항목을 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
                 }
+                dialog.dismiss()
 
                 CardInlineLoadingHelper.show(
                     container = layoutViewerInlineLoading,
@@ -1101,8 +1866,20 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                     }
                 }
             }
-            .setNegativeButton("취소", null)
-            .show()
+        }
+        btnRow.addView(cancelBtn)
+        btnRow.addView(submitBtn)
+        container.addView(btnRow)
+
+        dialog.setContentView(scroll)
+        dialog.setOnShowListener {
+            val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            if (bottomSheet != null) {
+                bottomSheet.setBackgroundColor(Color.TRANSPARENT)
+                BottomSheetBehavior.from(bottomSheet).state = BottomSheetBehavior.STATE_EXPANDED
+            }
+        }
+        dialog.show()
     }
 
     private fun openCurrentSheetInWeb() {
