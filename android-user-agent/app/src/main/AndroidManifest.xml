@@ -128,6 +128,13 @@
             android:theme="@style/Theme.SheetBotDepositAgent"
             android:launchMode="singleTop" />
 
+        <!-- 파일투시트 모바일 스마트 대장 뷰어 액티비티 -->
+        <activity
+            android:name=".FtsSheetViewerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.SheetBotDepositAgent"
+            android:launchMode="singleTop" />
+
         <!-- 포그라운드 킵얼라이브 서비스 -->
         <service
             android:name=".KeepAliveService"

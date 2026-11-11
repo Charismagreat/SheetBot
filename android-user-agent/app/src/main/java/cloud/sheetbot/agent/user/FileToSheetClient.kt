@@ -1038,6 +1038,147 @@ object FileToSheetClient {
         return@withContext Pair(false, emptyList<JSONObject>())
     }
 
+    data class FtsSiblingSheetInfo(
+        val id: String,
+        val name: String,
+        val rowCount: Int
+    )
+
+    data class FtsSheetDataDetail(
+        val success: Boolean,
+        val token: String = "",
+        val sheetName: String = "",
+        val projectName: String = "시트봇 연동 장부",
+        val projectId: String? = null,
+        val googleSheetUrl: String? = null,
+        val headers: List<String> = emptyList(),
+        val rows: List<JSONObject> = emptyList(),
+        val projectSheets: List<FtsSiblingSheetInfo> = emptyList(),
+        val error: String? = null
+    )
+
+    /**
+     * 📱 모바일 인앱 스마트 대장 뷰어용 파일투시트 시트 상세 데이터(headers, rows, projectSheets) 조회
+     * GET /api/inbox/{token}?includeRows=true
+     */
+    suspend fun fetchSheetDataDetail(
+        token: String,
+        overrideSheetName: String? = null
+    ): FtsSheetDataDetail = withContext(Dispatchers.IO) {
+        val cleanToken = token.trim()
+        if (cleanToken.isBlank()) {
+            return@withContext FtsSheetDataDetail(success = false, error = "유효한 시트 토큰이 없습니다.")
+        }
+
+        val querySuffix = buildString {
+            append("?includeRows=true")
+            if (!overrideSheetName.isNullOrBlank()) {
+                append("&sheetName=").append(java.net.URLEncoder.encode(overrideSheetName, "UTF-8"))
+            }
+        }
+
+        val endpointsToTry = listOf(
+            "$FTS_OFFICIAL_DOMAIN/api/inbox/$cleanToken$querySuffix",
+            "$FTS_TUNNEL_BASE/api/inbox/$cleanToken$querySuffix",
+            "$FTS_TUNNEL_BASE_LEGACY/api/inbox/$cleanToken$querySuffix"
+        )
+
+        var lastErr: String? = null
+        for (targetUrl in endpointsToTry) {
+            try {
+                val request = Request.Builder()
+                    .url(targetUrl)
+                    .header("Accept", "application/json")
+                    .get()
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    val bodyString = response.body?.string() ?: ""
+                    val json = try { JSONObject(bodyString) } catch (_: Exception) { JSONObject() }
+
+                    if (response.isSuccessful && json.optBoolean("success", false)) {
+                        val sName = json.optString("sheetName", "").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                            ?: json.optString("targetSheet", "").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                            ?: (overrideSheetName ?: "파일투시트 대장")
+                        val pName = json.optString("projectName", "").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                            ?: "시트봇 연동 장부"
+                        val pId = json.optString("projectId", "").takeIf { it.isNotBlank() && !it.equals("null", true) }
+                        val gUrl = json.optString("googleSheetUrl", "").takeIf { it.isNotBlank() && !it.equals("null", true) }
+
+                        val headersList = mutableListOf<String>()
+                        val headersArr = json.optJSONArray("headers")
+                        if (headersArr != null) {
+                            for (i in 0 until headersArr.length()) {
+                                val h = headersArr.optString(i, "").trim()
+                                if (h.isNotBlank() && !h.equals("null", true) && !h.startsWith("_")) {
+                                    headersList.add(h)
+                                }
+                            }
+                        }
+
+                        val rowsList = mutableListOf<JSONObject>()
+                        val rowsArr = json.optJSONArray("rows")
+                        if (rowsArr != null) {
+                            for (i in 0 until rowsArr.length()) {
+                                val rowObj = rowsArr.optJSONObject(i)
+                                if (rowObj != null) {
+                                    rowsList.add(rowObj)
+                                }
+                            }
+                        }
+
+                        // 만약 headers가 비어있고 rows가 있다면 첫 행의 키들로부터 자동 추론
+                        if (headersList.isEmpty() && rowsList.isNotEmpty()) {
+                            val firstRow = rowsList.first()
+                            val keys = firstRow.keys()
+                            while (keys.hasNext()) {
+                                val k = keys.next().trim()
+                                if (k.isNotBlank() && !k.startsWith("_")) {
+                                    headersList.add(k)
+                                }
+                            }
+                        }
+
+                        val siblingList = mutableListOf<FtsSiblingSheetInfo>()
+                        val pSheetsArr = json.optJSONArray("projectSheets")
+                        if (pSheetsArr != null) {
+                            for (i in 0 until pSheetsArr.length()) {
+                                val item = pSheetsArr.optJSONObject(i) ?: continue
+                                val id = item.optString("id", "").trim()
+                                val name = item.optString("name", "").trim()
+                                val count = item.optInt("rowCount", 0)
+                                if (name.isNotBlank()) {
+                                    siblingList.add(FtsSiblingSheetInfo(id = id.ifBlank { name }, name = name, rowCount = count))
+                                }
+                            }
+                        }
+
+                        return@withContext FtsSheetDataDetail(
+                            success = true,
+                            token = cleanToken,
+                            sheetName = sName,
+                            projectName = pName,
+                            projectId = pId,
+                            googleSheetUrl = gUrl,
+                            headers = headersList,
+                            rows = rowsList,
+                            projectSheets = siblingList
+                        )
+                    } else {
+                        lastErr = json.optString("error", "").takeIf { it.isNotBlank() } ?: "HTTP ${response.code}"
+                    }
+                }
+            } catch (e: Exception) {
+                lastErr = e.message
+            }
+        }
+
+        return@withContext FtsSheetDataDetail(
+            success = false,
+            error = lastErr ?: "파일투시트 서버에서 대장 데이터를 불러오지 못했습니다."
+        )
+    }
+
     // =========================================================================
     // 🔐 내 SaaS 휴대폰 로그인 인증(OTP) 0원 중계기 전용 API 메서드
     // =========================================================================

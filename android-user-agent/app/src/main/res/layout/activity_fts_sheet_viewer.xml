@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#0F172A">
+
+    <!-- 1. 상단 툴바 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="12dp"
+        android:background="#1E293B">
+
+        <TextView
+            android:id="@+id/btnBack"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:gravity="center"
+            android:text="⬅️"
+            android:textSize="18sp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvViewerTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📊 파일투시트 대장"
+                android:textColor="#F8FAFC"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:singleLine="true"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/tvViewerSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="시트봇 연동 장부 • 실시간 모바일 뷰어"
+                android:textColor="#94A3B8"
+                android:textSize="11sp"
+                android:singleLine="true"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <!-- 카드형 <-> 표 보기 전환 토글 -->
+        <TextView
+            android:id="@+id/btnToggleViewMode"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:gravity="center"
+            android:paddingHorizontal="10dp"
+            android:text="📊 표 보기"
+            android:textColor="#E2E8F0"
+            android:textSize="11.5sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_badge_version"
+            android:backgroundTint="#334155"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <!-- 새로고침 -->
+        <TextView
+            android:id="@+id/btnRefreshSheet"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="6dp"
+            android:gravity="center"
+            android:text="🔄"
+            android:textSize="16sp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <!-- 파투 웹 열기 보조 버튼 -->
+        <TextView
+            android:id="@+id/btnOpenFtsWeb"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_marginStart="4dp"
+            android:gravity="center"
+            android:paddingHorizontal="9dp"
+            android:text="🌐 웹"
+            android:textColor="#93C5FD"
+            android:textSize="11.5sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_badge_version"
+            android:backgroundTint="#1E3A8A"
+            android:clickable="true"
+            android:focusable="true" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#334155" />
+
+    <!-- 2. 상단 대장(시트) 빠른 전환 탭 바 -->
+    <HorizontalScrollView
+        android:id="@+id/scrollSheetTabs"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#162032"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/layoutSheetTabs"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical" />
+    </HorizontalScrollView>
+
+    <!-- 3. 검색바 및 건수 요약 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="8dp"
+        android:background="#0F172A">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="38dp"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="12dp"
+            android:background="@drawable/bg_input_dark">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔍"
+                android:textSize="13sp"
+                android:layout_marginEnd="8dp" />
+
+            <EditText
+                android:id="@+id/etSearchRows"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@null"
+                android:hint="이름, 상호, 전화번호, 내용 검색..."
+                android:textColor="#F8FAFC"
+                android:textColorHint="#64748B"
+                android:textSize="13sp"
+                android:singleLine="true"
+                android:imeOptions="actionSearch" />
+
+            <TextView
+                android:id="@+id/btnClearSearch"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:gravity="center"
+                android:text="✕"
+                android:textColor="#94A3B8"
+                android:textSize="13sp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvRowCountBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_marginStart="8dp"
+            android:gravity="center"
+            android:paddingHorizontal="10dp"
+            android:text="0건"
+            android:textColor="#38BDF8"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_badge_version"
+            android:backgroundTint="#0C4A6E" />
+    </LinearLayout>
+
+    <!-- 4. 카드 인라인 로딩 영역 (화면 뒤 스피너 없이 상단 카드형 로딩) -->
+    <LinearLayout
+        android:id="@+id/layoutViewerInlineLoading"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="14dp"
+        android:visibility="gone" />
+
+    <!-- 5. 메인 컨텐츠 영역 (모바일 카드 리스트 뷰 / 표 보기 뷰 / 빈 상태 뷰) -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- (A) 기본 모바일 카드형 리스트 -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvSheetCards"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingHorizontal="14dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="24dp" />
+
+        <!-- (B) 표(Table) 보기 모드 -->
+        <ScrollView
+            android:id="@+id/scrollTableVertical"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:visibility="gone">
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fillViewport="true">
+
+                <TableLayout
+                    android:id="@+id/tableSheetData"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:padding="12dp" />
+            </HorizontalScrollView>
+        </ScrollView>
+
+        <!-- (C) 데이터 없음 / 검색 결과 없음 안내 -->
+        <LinearLayout
+            android:id="@+id/layoutEmptyState"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="32dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📭"
+                android:textSize="40sp" />
+
+            <TextView
+                android:id="@+id/tvEmptyTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="적재된 데이터가 없습니다."
+                android:textColor="#E2E8F0"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvEmptySubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
+                android:text="모바일에서 명함, 영수증, 통화녹음, 문자/카톡 등이 수집되면 이곳에 실시간으로 표시됩니다."
+                android:textColor="#94A3B8"
+                android:textSize="12.5sp" />
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>

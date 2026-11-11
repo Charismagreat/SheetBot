@@ -17,6 +17,7 @@ import androidx.appcompat.app.AppCompatActivity
 import cloud.sheetbot.agent.user.ApiClient
 import cloud.sheetbot.agent.user.AppPreferences
 import cloud.sheetbot.agent.user.FileToSheetClient
+import cloud.sheetbot.agent.user.FtsSheetViewerActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -265,11 +266,11 @@ class SheetActionController(
         }
         ftsSectorCard.addView(ftsGoogleStatusSubtitle)
 
-        // (1-1) 파일투시트 웹 대장 열기
+        // (1-1) 파일투시트 모바일 스마트 대장 열기 (앱 내 네이티브 뷰어)
         val btnFtsWeb = createOptionItemView(
-            icon = "⚡",
-            title = "파일투시트 웹 대장 열기",
-            subtitle = "File to Sheet [$ftsSheetDisplayName] 웹 화면 열기",
+            icon = "📱",
+            title = "파일투시트 모바일 대장 열기",
+            subtitle = "[$ftsSheetDisplayName] 데이터를 앱 내 모바일 카드/표 화면으로 즉시 보기",
             enabled = isFtsLoggedIn,
             accentColor = "#2563EB"
         ) {
@@ -675,6 +676,21 @@ class SheetActionController(
         val targetCardId = spec?.cardId ?: FileToSheetClient.resolveCanonicalCardId(sheetType)
         val targetSheetName = spec?.sheetName ?: cleanDefaultName
         val targetHeaders = spec?.headers
+
+        // 📱 기본 파일투시트 대장 열기(FTS_WEB)는 외부 브라우저로 이동하지 않고 앱 내 모바일 스마트 뷰어로 0초 즉시 오픈
+        if (targetMode == FtsOpenMode.FTS_WEB) {
+            val cachedToken = prefs.getFtsTokenFor(targetCardId).orEmpty()
+            addLogItem("📱 FTS 모바일 대장", "[$targetSheetName] 인앱 뷰어 열기", true)
+            val viewerIntent = Intent(activity, FtsSheetViewerActivity::class.java).apply {
+                putExtra(FtsSheetViewerActivity.EXTRA_SHEET_TYPE, sheetType)
+                putExtra(FtsSheetViewerActivity.EXTRA_SHEET_NAME, targetSheetName)
+                putExtra(FtsSheetViewerActivity.EXTRA_TOKEN, cachedToken)
+                putExtra(FtsSheetViewerActivity.EXTRA_PROJECT_ID, prefs.ftsProjectId.orEmpty())
+                putExtra(FtsSheetViewerActivity.EXTRA_PHONE_NUMBER, phoneNumber)
+            }
+            activity.startActivity(viewerIntent)
+            return
+        }
 
         val progressDialog = AlertDialog.Builder(activity)
             .setTitle("⚡ 파일투시트 대장 준비 중")

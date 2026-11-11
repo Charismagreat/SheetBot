@@ -472,20 +472,26 @@ class TasksActivity : AppCompatActivity() {
                         }
                     } else {
                         tvAudioFileName.text = "🎙️ 스마트폰 내 일치하는 통화 녹음 파일 없음"
-                        tvAudioTimeStatus.text = "다른 기기에서 녹음되었거나 파일이 이동되었습니다 (웹 장부에서 확인 가능)"
+                        tvAudioTimeStatus.text = "다른 기기에서 녹음되었거나 파일이 이동되었습니다 (대장에서 확인 가능)"
                         btnPlayPauseAudio.isEnabled = true
-                        btnPlayPauseAudio.text = "🌐 장부 열기"
+                        btnPlayPauseAudio.text = "📊 대장 열기"
                         btnPlayPauseAudio.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#475569"))
                         btnPlayPauseAudio.setOnClickListener {
                             dialog.dismiss()
-                            val webUrl = if (prefs.isDestinationFileToSheet && prefs.isFtsPaired) {
-                                "https://file2sheet.cloud"
+                            if (prefs.isFtsPaired || !prefs.ftsPhoneNumber.isNullOrBlank()) {
+                                val viewerIntent = Intent(this@TasksActivity, FtsSheetViewerActivity::class.java).apply {
+                                    putExtra(FtsSheetViewerActivity.EXTRA_SHEET_TYPE, "RECORDING")
+                                    putExtra(FtsSheetViewerActivity.EXTRA_SHEET_NAME, "통화녹음대장")
+                                    putExtra(FtsSheetViewerActivity.EXTRA_TOKEN, prefs.getFtsTokenFor("call_recording").orEmpty())
+                                    putExtra(FtsSheetViewerActivity.EXTRA_PROJECT_ID, prefs.ftsProjectId.orEmpty())
+                                    putExtra(FtsSheetViewerActivity.EXTRA_PHONE_NUMBER, prefs.ftsPhoneNumber.orEmpty())
+                                }
+                                startActivity(viewerIntent)
                             } else {
-                                "https://sheetbot.cloud/tasks"
-                            }
-                            try {
-                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(webUrl)))
-                            } catch (_: Exception) {
+                                try {
+                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://sheetbot.cloud/tasks")))
+                                } catch (_: Exception) {
+                                }
                             }
                         }
                     }
