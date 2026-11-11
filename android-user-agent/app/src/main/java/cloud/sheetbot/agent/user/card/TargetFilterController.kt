@@ -189,16 +189,21 @@ class TargetFilterController(
 
         // 이메일 대상
         try {
-            val emailList = binding.etEmailTargetFilter.text.toString().split(",", ";")
-                .map { it.trim() }.filter { it.isNotBlank() }
-            if (emailList.isEmpty()) {
-                binding.tvEmailTargetCountBadge.text = "전체 기록"
-                binding.tvEmailTargetCountBadge.setTextColor(Color.parseColor("#38BDF8"))
-                binding.btnManageEmailTargets.text = "📋 등록 대상 확인 / 제외"
-            } else {
-                binding.tvEmailTargetCountBadge.text = "${emailList.size}건 지정"
-                binding.tvEmailTargetCountBadge.setTextColor(Color.parseColor("#34D399"))
-                binding.btnManageEmailTargets.text = "📋 등록 대상 확인 / 제외 (${emailList.size}건)"
+            val etEmail = activity.findViewById<EditText>(cloud.sheetbot.agent.user.R.id.etEmailTargetFilter)
+            val tvBadge = activity.findViewById<TextView>(cloud.sheetbot.agent.user.R.id.tvEmailTargetCountBadge)
+            val btnManage = activity.findViewById<Button>(cloud.sheetbot.agent.user.R.id.btnManageEmailTargets)
+            if (etEmail != null && tvBadge != null && btnManage != null) {
+                val emailList = etEmail.text.toString().split(",", ";")
+                    .map { it.trim() }.filter { it.isNotBlank() }
+                if (emailList.isEmpty()) {
+                    tvBadge.text = "전체 기록"
+                    tvBadge.setTextColor(Color.parseColor("#38BDF8"))
+                    btnManage.text = "📋 등록 대상 확인 / 제외"
+                } else {
+                    tvBadge.text = "${emailList.size}건 지정"
+                    tvBadge.setTextColor(Color.parseColor("#34D399"))
+                    btnManage.text = "📋 등록 대상 확인 / 제외 (${emailList.size}건)"
+                }
             }
         } catch (_: Throwable) {}
     }

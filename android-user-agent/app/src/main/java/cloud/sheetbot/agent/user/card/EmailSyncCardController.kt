@@ -1,12 +1,17 @@
 package cloud.sheetbot.agent.user.card
 
 import android.content.Intent
+import android.view.View
+import android.widget.Button
 import android.widget.EditText
+import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.widget.SwitchCompat
 import androidx.core.widget.doAfterTextChanged
 import cloud.sheetbot.agent.user.BankNotificationListener
 import cloud.sheetbot.agent.user.MainActivity
 import cloud.sheetbot.agent.user.PreferencesManager
+import cloud.sheetbot.agent.user.R
 import cloud.sheetbot.agent.user.TasksActivity
 import cloud.sheetbot.agent.user.databinding.ActivityMainBinding
 
@@ -24,23 +29,39 @@ class EmailSyncCardController(
     private val onShowTargetManageDialog: (title: String, editText: EditText, targetType: String) -> Unit,
     private val onUpdateTargetBadges: () -> Unit
 ) {
+    private var headerView: View? = null
+    private var switchSync: SwitchCompat? = null
+    private var btnToggleDetails: TextView? = null
+    private var layoutSettings: View? = null
+    private var switchBlockSpam: SwitchCompat? = null
+    private var btnManageTargets: Button? = null
+    private var etTargetFilter: EditText? = null
+    private var btnOpenSheet: Button? = null
+    private var btnOpenTasksHub: Button? = null
+
     fun setup() {
-        binding.switchEmailSync.isChecked = prefs.isEmailSheetSyncEnabled
-        binding.switchEmailBlockSpam.isChecked = prefs.isEmailSpamFilterEnabled
-        binding.etEmailTargetFilter.setText(prefs.emailTargetFilter)
+        headerView = activity.findViewById(R.id.layoutEmailSyncHeader)
+        switchSync = activity.findViewById(R.id.switchEmailSync)
+        btnToggleDetails = activity.findViewById(R.id.btnToggleEmailSyncDetails)
+        layoutSettings = activity.findViewById(R.id.layoutEmailSyncSettings)
+        switchBlockSpam = activity.findViewById(R.id.switchEmailBlockSpam)
+        btnManageTargets = activity.findViewById(R.id.btnManageEmailTargets)
+        etTargetFilter = activity.findViewById(R.id.etEmailTargetFilter)
+        btnOpenSheet = activity.findViewById(R.id.btnOpenEmailSheet)
+        btnOpenTasksHub = activity.findViewById(R.id.btnOpenEmailTasksHub)
 
-        val toggleEmailSync = {
+        switchSync?.isChecked = prefs.isEmailSheetSyncEnabled
+        switchBlockSpam?.isChecked = prefs.isEmailSpamFilterEnabled
+        etTargetFilter?.setText(prefs.emailTargetFilter)
+
+        val toggleEmailSync = View.OnClickListener {
             prefs.isEmailSyncDetailsHidden = !prefs.isEmailSyncDetailsHidden
-            activity.updateCardCollapseState(
-                binding.layoutEmailSyncSettings,
-                binding.btnToggleEmailSyncDetails,
-                prefs.isEmailSyncDetailsHidden
-            )
+            refreshCollapseState()
         }
-        binding.layoutEmailSyncHeader.setOnClickListener { toggleEmailSync() }
-        binding.btnToggleEmailSyncDetails.setOnClickListener { toggleEmailSync() }
+        headerView?.setOnClickListener(toggleEmailSync)
+        btnToggleDetails?.setOnClickListener(toggleEmailSync)
 
-        binding.switchEmailSync.setOnCheckedChangeListener { _, isChecked ->
+        switchSync?.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked && !isNotificationListenerEnabled()) {
                 Toast.makeText(
                     activity,
@@ -51,11 +72,7 @@ class EmailSyncCardController(
             }
             prefs.isEmailSheetSyncEnabled = isChecked
             prefs.isEmailSyncDetailsHidden = !isChecked
-            activity.updateCardCollapseState(
-                binding.layoutEmailSyncSettings,
-                binding.btnToggleEmailSyncDetails,
-                !isChecked
-            )
+            refreshCollapseState()
             val msg = if (isChecked) {
                 BankNotificationListener.ensureListenerBound(activity)
                 "📧 수신 이메일 시트 자동 기록 & AI 할 일 추출이 켜졌습니다."
@@ -68,7 +85,7 @@ class EmailSyncCardController(
             }
         }
 
-        binding.switchEmailBlockSpam.setOnCheckedChangeListener { _, isChecked ->
+        switchBlockSpam?.setOnCheckedChangeListener { _, isChecked ->
             prefs.isEmailSpamFilterEnabled = isChecked
             val msg = if (isChecked) {
                 "광고·뉴스레터·인증번호 메일 자동 제외가 켜졌습니다."
@@ -78,28 +95,31 @@ class EmailSyncCardController(
             Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
         }
 
-        binding.btnManageEmailTargets.setOnClickListener {
-            onShowTargetManageDialog("📧 이메일 기록 대상 관리", binding.etEmailTargetFilter, "EMAIL")
+        btnManageTargets?.setOnClickListener {
+            val targetEt = etTargetFilter ?: return@setOnClickListener
+            onShowTargetManageDialog("📧 이메일 기록 대상 관리", targetEt, "EMAIL")
         }
 
-        binding.etEmailTargetFilter.doAfterTextChanged {
+        etTargetFilter?.doAfterTextChanged {
             prefs.emailTargetFilter = it?.toString()?.trim() ?: ""
             onUpdateTargetBadges()
         }
 
-        binding.btnOpenEmailSheet.setOnClickListener {
+        btnOpenSheet?.setOnClickListener {
             onOpenSheetChooser("EMAIL", prefs.emailDriveSheetTitle)
         }
 
-        binding.btnOpenEmailTasksHub.setOnClickListener {
+        btnOpenTasksHub?.setOnClickListener {
             activity.startActivity(Intent(activity, TasksActivity::class.java))
         }
     }
 
     fun refreshCollapseState() {
+        val settings = layoutSettings ?: activity.findViewById<View>(R.id.layoutEmailSyncSettings) ?: return
+        val toggle = btnToggleDetails ?: activity.findViewById<TextView>(R.id.btnToggleEmailSyncDetails) ?: return
         activity.updateCardCollapseState(
-            binding.layoutEmailSyncSettings,
-            binding.btnToggleEmailSyncDetails,
+            settings,
+            toggle,
             prefs.isEmailSyncDetailsHidden
         )
     }
