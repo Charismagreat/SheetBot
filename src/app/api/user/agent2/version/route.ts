@@ -70,7 +70,7 @@ export async function GET() {
   let latestCode = parseVersionToCode(localVer);
   let apkUrl = `https://github.com/Charismagreat/SheetBot/releases/download/v${localVer}/SheetBotAgent.apk`;
   let releaseNotes =
-    "✨ 시트봇 에이전트 v2.4.34 업데이트: (1) 최초 설치 및 신규 카드 배포 시 전체 카드 보관함 자동 보관 (2) 카드 내부 인라인 실행 상태 표시 (3) 파투(FileToSheet) AI 비서·할 일 허브·명함 주소록 자동 저장 완벽 연동 (4) 앱 전환 시 인증 모달 무손실 유지";
+    "✨ 시트봇 에이전트 v2.4.35 업데이트: (1) 스마트 통합 할 일 허브 배경 로딩 스피너 제거 및 상단 인라인 동기화 바 적용 (2) 할 일 카드 내 'null' 표시 제거 및 고객 연락처 자동 추출·중복 뱃지 정리";
 
   try {
     // Rate-limit이 없는 GitHub Web 302 리다이렉트로 최신 릴리즈 태그 즉시 확인

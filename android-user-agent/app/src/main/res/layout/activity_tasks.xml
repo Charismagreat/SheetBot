@@ -210,17 +210,25 @@
             android:paddingHorizontal="12dp" />
     </LinearLayout>
 
+    <!-- 상단 인라인 실행/동기화 상태 배너 영역 (목록 뒤가 아닌 상단에 깔끔하게 표시) -->
+    <LinearLayout
+        android:id="@+id/layoutTasksInlineLoading"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="12dp" />
+
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <!-- 로딩 바 -->
+        <!-- 레거시 로딩 바 (목록 뒤 비침 방지를 위해 0dp + gone 고정) -->
         <ProgressBar
             android:id="@+id/pbLoadingTasks"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone"
             android:indeterminateTint="#10B981" />
 
         <!-- 할 일 목록 리사이클러뷰 -->

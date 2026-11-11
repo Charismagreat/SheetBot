@@ -16,11 +16,15 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import cloud.sheetbot.agent.user.card.CardInlineLoadingHelper
 import cloud.sheetbot.agent.user.databinding.ActivityTasksBinding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -36,6 +40,7 @@ class TasksActivity : AppCompatActivity() {
     private var allTasks = listOf<TaskItemDto>()
     private var currentFilter = "PENDING" // PENDING, DONE, ALL
     private var userEmail: String = ""
+    private var loadTasksJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -174,50 +179,67 @@ class TasksActivity : AppCompatActivity() {
         binding.tabAll.text = "전체 ($totalCount)"
     }
 
+    private fun mergeTasksList(lists: List<TaskItemDto>): List<TaskItemDto> {
+        val dedupMap = linkedMapOf<String, TaskItemDto>()
+        for (t in lists) {
+            val key = t.title.trim()
+            if (key.isEmpty() || key.equals("null", ignoreCase = true)) continue
+            val existing = dedupMap[key]
+            if (existing == null) {
+                dedupMap[key] = t
+            } else if (t.status == "DONE" && existing.status != "DONE") {
+                dedupMap[key] = existing.copy(status = "DONE")
+            }
+        }
+        return dedupMap.values.toList()
+    }
+
     private fun loadTasks() {
-        binding.pbLoadingTasks.visibility = View.VISIBLE
+        loadTasksJob?.cancel()
+        binding.pbLoadingTasks.visibility = View.GONE
         binding.llEmptyTasks.visibility = View.GONE
+        CardInlineLoadingHelper.show(
+            container = binding.layoutTasksInlineLoading,
+            message = "⏳ 할 일 목록을 동기화하고 있습니다..."
+        )
 
-        CoroutineScope(Dispatchers.IO).launch {
-            val ftsPhone = prefs.ftsPhoneNumber
-            val ftsProjectId = prefs.ftsProjectId
-            val hasFts = prefs.isFtsPaired || !ftsPhone.isNullOrBlank() || !ftsProjectId.isNullOrBlank()
+        loadTasksJob = lifecycleScope.launch {
+            try {
+                val ftsPhone = prefs.ftsPhoneNumber
+                val ftsProjectId = prefs.ftsProjectId
+                val hasFts = prefs.isFtsPaired || !ftsPhone.isNullOrBlank() || !ftsProjectId.isNullOrBlank()
 
-            val sbResult = if (userEmail.isNotBlank() || !ftsPhone.isNullOrBlank()) {
-                ApiClient.fetchTasks(
-                    userEmail = userEmail,
-                    status = "ALL",
-                    phoneNumber = ftsPhone,
-                    projectId = ftsProjectId
-                )
-            } else {
-                null
-            }
+                val sbDeferred = if (userEmail.isNotBlank() || !ftsPhone.isNullOrBlank()) {
+                    async(Dispatchers.IO) {
+                        ApiClient.fetchTasks(
+                            userEmail = userEmail,
+                            status = "ALL",
+                            phoneNumber = ftsPhone,
+                            projectId = ftsProjectId
+                        )
+                    }
+                } else null
 
-            val ftsResult = if (hasFts) {
-                FileToSheetClient.fetchFtsTasks(prefs, "ALL")
-            } else {
-                null
-            }
+                val ftsDeferred = if (hasFts) {
+                    async(Dispatchers.IO) {
+                        FileToSheetClient.fetchFtsTasks(prefs, "ALL")
+                    }
+                } else null
 
-            val anySuccess = (sbResult?.success == true) || (ftsResult?.success == true)
-            val dedupMap = linkedMapOf<String, TaskItemDto>()
-
-            for (t in (sbResult?.tasks ?: emptyList()) + (ftsResult?.tasks ?: emptyList())) {
-                val key = t.title.trim()
-                if (key.isEmpty()) continue
-                val existing = dedupMap[key]
-                if (existing == null) {
-                    dedupMap[key] = t
-                } else if (t.status == "DONE" && existing.status != "DONE") {
-                    dedupMap[key] = existing.copy(status = "DONE")
+                // 1차 응답이 먼저 도착하면 화면에 즉시 표시하여 대기 체감 시간을 0초로 단축
+                val sbResult = sbDeferred?.await()
+                if (sbResult?.success == true && sbResult.tasks.isNotEmpty() && ftsDeferred?.isCompleted == false) {
+                    allTasks = mergeTasksList(sbResult.tasks)
+                    applyFilter()
                 }
-            }
 
-            val combinedTasks = dedupMap.values.toList()
+                val ftsResult = ftsDeferred?.await()
+                val anySuccess = (sbResult?.success == true) || (ftsResult?.success == true)
+                val combinedTasks = mergeTasksList(
+                    (sbResult?.tasks ?: emptyList()) + (ftsResult?.tasks ?: emptyList())
+                )
 
-            withContext(Dispatchers.Main) {
-                binding.pbLoadingTasks.visibility = View.GONE
+                CardInlineLoadingHelper.hide(binding.layoutTasksInlineLoading)
                 if (anySuccess) {
                     allTasks = combinedTasks
                     applyFilter()
@@ -225,6 +247,10 @@ class TasksActivity : AppCompatActivity() {
                     val errMsg = sbResult?.error ?: ftsResult?.error ?: "할 일 목록을 불러오지 못했습니다."
                     Toast.makeText(this@TasksActivity, errMsg, Toast.LENGTH_SHORT).show()
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                CardInlineLoadingHelper.hide(binding.layoutTasksInlineLoading)
             }
         }
     }
@@ -292,8 +318,13 @@ class TasksActivity : AppCompatActivity() {
         builder.setPositiveButton("등록") { _, _ ->
             val text = input.text.toString().trim()
             if (text.isNotBlank()) {
-                binding.pbLoadingTasks.visibility = View.VISIBLE
-                CoroutineScope(Dispatchers.IO).launch {
+                CardInlineLoadingHelper.show(
+                    container = binding.layoutTasksInlineLoading,
+                    message = "⏳ 새로운 할 일을 등록하고 있습니다...",
+                    triggerButton = binding.btnAddNewTask,
+                    loadingButtonText = "⏳ 등록 중"
+                )
+                lifecycleScope.launch(Dispatchers.IO) {
                     val ftsPhone = prefs.ftsPhoneNumber
                     val ftsProjectId = prefs.ftsProjectId
                     val hasFts = prefs.isFtsPaired || !ftsPhone.isNullOrBlank() || !ftsProjectId.isNullOrBlank()
@@ -317,11 +348,11 @@ class TasksActivity : AppCompatActivity() {
                     } else false
 
                     withContext(Dispatchers.Main) {
+                        CardInlineLoadingHelper.hide(binding.layoutTasksInlineLoading, binding.btnAddNewTask)
                         if (sbOk || ftsOk) {
                             Toast.makeText(this@TasksActivity, "할 일이 등록되었습니다.", Toast.LENGTH_SHORT).show()
                             loadTasks()
                         } else {
-                            binding.pbLoadingTasks.visibility = View.GONE
                             Toast.makeText(this@TasksActivity, "할 일 등록에 실패했습니다.", Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -368,8 +399,46 @@ class TaskAdapter(
         private val tvCustomer: TextView = itemView.findViewById(R.id.tvTaskCustomer)
         private val btnCall: TextView = itemView.findViewById(R.id.btnCallCustomer)
 
+        private fun cleanNullableText(raw: String?): String? {
+            val v = raw?.trim() ?: return null
+            return if (v.isEmpty() || v.equals("null", ignoreCase = true) || v.equals("undefined", ignoreCase = true)) null else v
+        }
+
+        private fun formatKoreanPhone(digits: String): String {
+            return when {
+                digits.length == 11 && digits.startsWith("01") ->
+                    "${digits.substring(0, 3)}-${digits.substring(3, 7)}-${digits.substring(7)}"
+                digits.length == 10 && digits.startsWith("02") ->
+                    "${digits.substring(0, 2)}-${digits.substring(2, 6)}-${digits.substring(6)}"
+                digits.length == 10 ->
+                    "${digits.substring(0, 3)}-${digits.substring(3, 6)}-${digits.substring(6)}"
+                digits.length == 9 && digits.startsWith("02") ->
+                    "${digits.substring(0, 2)}-${digits.substring(2, 5)}-${digits.substring(5)}"
+                else -> digits
+            }
+        }
+
         fun bind(item: TaskItemDto) {
             val isDone = item.status == "DONE"
+            val cleanBadge = cleanNullableText(item.badgeText)
+            val cleanDueDate = cleanNullableText(item.dueDate)
+            var cleanCustomerName = cleanNullableText(item.contactName)
+            var cleanCustomerPhone = cleanNullableText(item.contactPhone)
+
+            // 고객명 안에 '(01012345678)' 형태로 전화번호가 포함되어 있고 contactPhone이 비어있으면 자동 분리 추출
+            if (cleanCustomerPhone == null && cleanCustomerName != null) {
+                val phoneMatch = Regex("\\(([0-9\\-]{9,13})\\)").find(cleanCustomerName)
+                if (phoneMatch != null) {
+                    val rawDigits = phoneMatch.groupValues[1].replace("[^0-9]".toRegex(), "")
+                    if (rawDigits.length in 9..11) {
+                        cleanCustomerPhone = formatKoreanPhone(rawDigits)
+                        val strippedName = cleanCustomerName.replace(phoneMatch.value, "").trim()
+                        if (strippedName.isNotEmpty()) {
+                            cleanCustomerName = strippedName
+                        }
+                    }
+                }
+            }
 
             tvTitle.text = item.title
             if (isDone) {
@@ -385,49 +454,63 @@ class TaskAdapter(
             btnCheck.setOnClickListener { onToggleStatus(item) }
 
             // 출처 뱃지
+            val sourceLabel: String
             when (item.sourceType) {
                 "CALL_RECORDING" -> {
+                    sourceLabel = "통화 녹음"
                     tvSourceBadge.text = "🎙️ 통화 녹음"
                     tvSourceBadge.setBackgroundColor(Color.parseColor("#064E3B"))
                 }
                 "MEETING_RECORDING" -> {
+                    sourceLabel = "회의 녹음"
                     tvSourceBadge.text = "🎙️ 회의 녹음"
                     tvSourceBadge.setBackgroundColor(Color.parseColor("#115E59"))
                 }
                 "MISSED_CALL" -> {
+                    sourceLabel = "부재중 전화"
                     tvSourceBadge.text = "📞 부재중 전화"
                     tvSourceBadge.setBackgroundColor(Color.parseColor("#78350F"))
                 }
                 "ORDER_DELAY", "ORDER" -> {
+                    sourceLabel = "주문 지연"
                     tvSourceBadge.text = "📦 주문 지연"
                     tvSourceBadge.setBackgroundColor(Color.parseColor("#1E3A8A"))
                 }
                 "KAKAO" -> {
+                    sourceLabel = "카카오톡"
                     tvSourceBadge.text = "💬 카카오톡"
                     tvSourceBadge.setBackgroundColor(Color.parseColor("#713F12"))
                 }
                 "SMS" -> {
-                    if (item.badgeText == "수동 등록" || item.badgeText == "모바일 등록") {
+                    if (cleanBadge == "수동 등록" || cleanBadge == "모바일 등록") {
+                        sourceLabel = "직접 등록"
                         tvSourceBadge.text = "📋 직접 등록"
                         tvSourceBadge.setBackgroundColor(Color.parseColor("#334155"))
                     } else {
+                        sourceLabel = "문자 메시지"
                         tvSourceBadge.text = "📱 문자 메시지"
                         tvSourceBadge.setBackgroundColor(Color.parseColor("#312E81"))
                     }
                 }
                 else -> {
+                    sourceLabel = "일반 업무"
                     tvSourceBadge.text = "📋 일반 업무"
                     tvSourceBadge.setBackgroundColor(Color.parseColor("#334155"))
                 }
             }
 
-            // 상태 뱃지
-            if (!item.badgeText.isNullOrBlank()) {
-                tvStateBadge.text = item.badgeText
+            // 상태 뱃지 (출처 뱃지와 동일한 중복 텍스트는 숨김 처리)
+            val isDuplicateBadge = cleanBadge != null && (
+                cleanBadge == sourceLabel ||
+                cleanBadge == tvSourceBadge.text.toString() ||
+                (sourceLabel == "직접 등록" && (cleanBadge == "수동 등록" || cleanBadge == "모바일 등록"))
+            )
+            if (cleanBadge != null && !isDuplicateBadge) {
+                tvStateBadge.text = cleanBadge
                 tvStateBadge.visibility = View.VISIBLE
-                if (item.badgeText.contains("출고지연")) {
+                if (cleanBadge.contains("출고지연")) {
                     tvStateBadge.setBackgroundColor(Color.parseColor("#881337"))
-                } else if (item.badgeText.contains("안내요망")) {
+                } else if (cleanBadge.contains("안내요망")) {
                     tvStateBadge.setBackgroundColor(Color.parseColor("#7C2D12"))
                 } else {
                     tvStateBadge.setBackgroundColor(Color.parseColor("#0284C7"))
@@ -437,26 +520,26 @@ class TaskAdapter(
             }
 
             // 기한
-            if (!item.dueDate.isNullOrBlank()) {
-                tvDueDate.text = item.dueDate
+            if (cleanDueDate != null) {
+                tvDueDate.text = cleanDueDate
                 tvDueDate.visibility = View.VISIBLE
             } else {
                 tvDueDate.visibility = View.GONE
             }
 
             // 고객명
-            if (!item.contactName.isNullOrBlank()) {
-                tvCustomer.text = "고객: ${item.contactName}"
+            if (cleanCustomerName != null) {
+                tvCustomer.text = "고객: $cleanCustomerName"
                 tvCustomer.visibility = View.VISIBLE
             } else {
                 tvCustomer.visibility = View.GONE
             }
 
             // 전화번호
-            if (!item.contactPhone.isNullOrBlank()) {
-                btnCall.text = "📞 ${item.contactPhone}"
+            if (cleanCustomerPhone != null) {
+                btnCall.text = "📞 $cleanCustomerPhone"
                 btnCall.visibility = View.VISIBLE
-                btnCall.setOnClickListener { onCallClick(item.contactPhone) }
+                btnCall.setOnClickListener { onCallClick(cleanCustomerPhone) }
             } else {
                 btnCall.visibility = View.GONE
             }

@@ -70,14 +70,20 @@ export async function GET(req: NextRequest) {
     });
 
     // 4. 파일투시트(파투) '통합할일대장' 및 기존 시트(통화녹음/회의록/부재중/문자/카톡/주문/견적)에서 할 일 조회·동기화
-    const ftsTasks = await fetchAndSyncTasksFromFileToSheet(cleanEmail, {
+    // (초기 응답 지연을 방지하기 위해 최대 2.5초 Fast-Check 적용 후 초과 시 백그라운드로 완료)
+    const ftsSyncPromise = fetchAndSyncTasksFromFileToSheet(cleanEmail, {
       phoneNumber: phoneParam,
       projectId: projectIdParam,
       existingSheetBotTasks: activeRows,
     }).catch((e: any) => {
       console.warn("[TaskHub API] fetchAndSyncTasksFromFileToSheet warning:", e?.message);
-      return [];
+      return [] as any[];
     });
+
+    const ftsTasks = await Promise.race([
+      ftsSyncPromise,
+      new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 2500)),
+    ]);
 
     const filteredFtsTasks = ftsTasks.filter((ft: any) => {
       if (sourceFilter && sourceFilter !== "ALL") {

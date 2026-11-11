@@ -3073,21 +3073,27 @@ object ApiClient {
                     val taskList = mutableListOf<TaskItemDto>()
                     val tasksArr = resJson.optJSONArray("tasks")
                     if (tasksArr != null) {
+                        fun JSONObject.optCleanNullable(key: String): String? {
+                            if (isNull(key)) return null
+                            val v = optString(key, "").trim()
+                            return if (v.isEmpty() || v.equals("null", ignoreCase = true) || v.equals("undefined", ignoreCase = true)) null else v
+                        }
                         for (i in 0 until tasksArr.length()) {
                             val obj = tasksArr.optJSONObject(i) ?: continue
+                            val cleanTitle = obj.optCleanNullable("title") ?: continue
                             taskList.add(
                                 TaskItemDto(
                                     id = obj.optLong("id", 0L),
-                                    title = obj.optString("title", ""),
-                                    description = obj.optString("description", null),
-                                    contactName = obj.optString("contact_name", null),
-                                    contactPhone = obj.optString("contact_phone", null),
-                                    dueDate = obj.optString("due_date", null),
-                                    priority = obj.optString("priority", "NORMAL ⚪"),
-                                    status = obj.optString("status", "PENDING"),
-                                    badgeText = obj.optString("badge_text", null),
-                                    sourceType = obj.optString("source_type", "SMS"),
-                                    createdAt = obj.optString("created_at", "")
+                                    title = cleanTitle,
+                                    description = obj.optCleanNullable("description"),
+                                    contactName = obj.optCleanNullable("contact_name"),
+                                    contactPhone = obj.optCleanNullable("contact_phone"),
+                                    dueDate = obj.optCleanNullable("due_date"),
+                                    priority = obj.optCleanNullable("priority") ?: "NORMAL ⚪",
+                                    status = obj.optCleanNullable("status") ?: "PENDING",
+                                    badgeText = obj.optCleanNullable("badge_text"),
+                                    sourceType = obj.optCleanNullable("source_type") ?: "SMS",
+                                    createdAt = obj.optCleanNullable("created_at") ?: ""
                                 )
                             )
                         }
