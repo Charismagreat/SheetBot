@@ -585,7 +585,9 @@ class CardSetupCoordinator(
             onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
             onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle, null) },
             onShowTargetManageDialog = { title, editText, targetType -> showTargetManageDialog(title, editText, targetType) },
-            onUpdateTargetBadges = { updateTargetBadges() }
+            onUpdateTargetBadges = { updateTargetBadges() },
+            isNotificationListenerEnabled = { isNotificationListenerEnabled() },
+            requestNotificationListenerPermission = { requestNotificationListenerPermission() }
         )
         emailCardController.setup()
     }
