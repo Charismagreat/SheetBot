@@ -901,6 +901,78 @@
                             android:layout_marginStart="4dp" />
                     </LinearLayout>
                 </LinearLayout>
+
+                <!-- 🕒 최근 검색어 & ⭐ 고정 즐겨찾기 히스토리 바 (Tag 기반 바인딩) -->
+                <LinearLayout
+                    android:tag="copilotRecentHistorySection"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#0F172A"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="8dp"
+                    android:layout_marginBottom="4dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="6dp">
+
+                        <TextView
+                            android:tag="tvCopilotHistoryHeader"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="🕒 최근 검색 &amp; ⭐ 고정 질문 (☆ 터치 시 상시 고정)"
+                            android:textColor="#94A3B8"
+                            android:textSize="10.5sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:tag="btnPinCurrentQuery"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_badge_version"
+                            android:backgroundTint="#1E293B"
+                            android:paddingHorizontal="7dp"
+                            android:paddingVertical="2.5dp"
+                            android:text="⭐ 입력어 고정"
+                            android:textColor="#FACC15"
+                            android:textSize="9.5sp"
+                            android:textStyle="bold"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:layout_marginEnd="6dp" />
+
+                        <TextView
+                            android:tag="btnClearRecentHistory"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_badge_version"
+                            android:backgroundTint="#1E293B"
+                            android:paddingHorizontal="7dp"
+                            android:paddingVertical="2.5dp"
+                            android:text="최근 지우기"
+                            android:textColor="#94A3B8"
+                            android:textSize="9.5sp"
+                            android:clickable="true"
+                            android:focusable="true" />
+                    </LinearLayout>
+
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:scrollbars="none">
+
+                        <LinearLayout
+                            android:tag="copilotRecentHistoryContainer"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal" />
+                    </HorizontalScrollView>
+                </LinearLayout>
             </LinearLayout>
 
             <!-- 실행 결과 피드백 브리핑 & 파투 통합 검색 카드 리스트 -->

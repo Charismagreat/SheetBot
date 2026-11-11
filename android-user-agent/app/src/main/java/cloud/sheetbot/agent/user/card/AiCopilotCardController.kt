@@ -114,6 +114,174 @@ class AiCopilotCardController(
             }
             executeAiCommand(cmd)
         }
+
+        // 🕒 최근 검색어 & ⭐ 고정 즐겨찾기 히스토리 바 초기화
+        setupRecentSearchHistoryBar()
+    }
+
+    /**
+     * 최근 검색어 및 즐겨찾기(⭐ 고정) 버튼 이벤트 바인딩 및 초기 렌더링
+     */
+    private fun setupRecentSearchHistoryBar() {
+        val btnPinCurrent = binding.root.findViewWithTag<TextView>("btnPinCurrentQuery")
+        val btnClearRecent = binding.root.findViewWithTag<TextView>("btnClearRecentHistory")
+
+        btnPinCurrent?.setOnClickListener {
+            val currentInput = binding.etAiCommand.text?.toString()?.trim() ?: ""
+            if (currentInput.isBlank()) {
+                Toast.makeText(
+                    activity,
+                    "💡 먼저 입력창에 자주 쓰는 거래처명이나 검색어를 입력하거나, 아래 최근 검색 칩의 [☆] 아이콘을 터치해 고정해 보세요.",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@setOnClickListener
+            }
+            val isNowPinned = prefs.togglePinCopilotSearchHistory(currentInput)
+            renderRecentSearchHistory()
+            val msg = if (isNowPinned) {
+                "⭐ [$currentInput] 검색어가 즐겨찾기에 고정되었습니다!"
+            } else {
+                "[$currentInput] 즐겨찾기 고정이 해제되었습니다."
+            }
+            Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
+        }
+
+        btnClearRecent?.setOnClickListener {
+            prefs.clearUnpinnedCopilotSearchHistory()
+            renderRecentSearchHistory()
+            Toast.makeText(activity, "🕒 고정된(⭐) 항목을 제외한 최근 검색 기록을 정리했습니다.", Toast.LENGTH_SHORT).show()
+        }
+
+        renderRecentSearchHistory()
+    }
+
+    /**
+     * 최근 검색어(🕒) 및 즐겨찾기 고정(⭐) 칩 리스트 렌더링
+     * - [⭐/☆] 터치: 고정/해제 토글
+     * - 검색어 텍스트 터치: 1초 즉시 재검색 실행
+     * - [✕] 터치: 개별 항목 삭제
+     */
+    fun renderRecentSearchHistory() {
+        val container = binding.root.findViewWithTag<LinearLayout>("copilotRecentHistoryContainer") ?: return
+        val tvHeader = binding.root.findViewWithTag<TextView>("tvCopilotHistoryHeader")
+        val btnClearRecent = binding.root.findViewWithTag<TextView>("btnClearRecentHistory")
+
+        container.removeAllViews()
+        val items = prefs.getCopilotSearchHistory()
+        val pinnedCount = items.count { it.isPinned }
+        val unpinnedCount = items.count { !it.isPinned }
+
+        if (items.isEmpty()) {
+            tvHeader?.text = "🕒 최근 검색 & ⭐ 고정 질문"
+            btnClearRecent?.visibility = View.GONE
+
+            val emptyTv = TextView(activity).apply {
+                text = "💡 검색한 거래처명이나 질문이 자동 기록되며, [☆]를 누르면 상단에 고정됩니다."
+                setTextColor(Color.parseColor("#64748B"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
+                setPadding(dpToPx(4), dpToPx(2), dpToPx(4), dpToPx(2))
+            }
+            container.addView(emptyTv)
+            return
+        }
+
+        tvHeader?.text = if (pinnedCount > 0) {
+            "⭐ 고정 ${pinnedCount} · 🕒 최근 ${unpinnedCount} (터치 시 1초 재검색)"
+        } else {
+            "🕒 최근 검색 (${unpinnedCount}건 · ☆ 터치 시 상단 고정)"
+        }
+        btnClearRecent?.visibility = if (unpinnedCount > 0) View.VISIBLE else View.GONE
+
+        for (item in items) {
+            val isPinned = item.isPinned
+            val bgColor = if (isPinned) Color.parseColor("#1E1B4B") else Color.parseColor("#1E293B")
+            val strokeColor = if (isPinned) Color.parseColor("#F59E0B") else Color.parseColor("#334155")
+
+            val chipLayout = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dpToPx(8), dpToPx(4), dpToPx(6), dpToPx(4))
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpToPx(14).toFloat()
+                    setColor(bgColor)
+                    setStroke(dpToPx(1), strokeColor)
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    marginEnd = dpToPx(6)
+                }
+            }
+
+            // 1. [⭐ / ☆] 고정 토글 버튼
+            val btnPinToggle = TextView(activity).apply {
+                text = if (isPinned) "⭐" else "🕒 ☆"
+                setTextColor(if (isPinned) Color.parseColor("#FACC15") else Color.parseColor("#94A3B8"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(dpToPx(2), dpToPx(2), dpToPx(6), dpToPx(2))
+                setOnClickListener {
+                    val nowPinned = prefs.togglePinCopilotSearchHistory(item.query)
+                    renderRecentSearchHistory()
+                    val toastMsg = if (nowPinned) {
+                        "⭐ [${item.query}] 자주 쓰는 검색어로 고정되었습니다!"
+                    } else {
+                        "[${item.query}] 고정이 해제되었습니다."
+                    }
+                    Toast.makeText(activity, toastMsg, Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            // 2. 검색어 텍스트 (터치 시 즉시 검색 실행, 길게 누르면 고정 토글)
+            val tvQuery = TextView(activity).apply {
+                val displayQuery = if (item.query.length > 22) "${item.query.take(22)}…" else item.query
+                text = displayQuery
+                setTextColor(if (isPinned) Color.parseColor("#FEF08A") else Color.parseColor("#F1F5F9"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                typeface = if (isPinned) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                setPadding(0, dpToPx(2), dpToPx(6), dpToPx(2))
+                setOnClickListener {
+                    binding.etAiCommand.setText(item.query)
+                    binding.etAiCommand.setSelection(item.query.length)
+                    if (!prefs.isPaired) {
+                        Toast.makeText(activity, "먼저 파투(휴대폰 번호) 또는 구글 계정을 연동해 주세요.", Toast.LENGTH_SHORT).show()
+                        return@setOnClickListener
+                    }
+                    executeAiCommand(item.query)
+                }
+                setOnLongClickListener {
+                    val nowPinned = prefs.togglePinCopilotSearchHistory(item.query)
+                    renderRecentSearchHistory()
+                    val toastMsg = if (nowPinned) {
+                        "⭐ [${item.query}] 자주 쓰는 검색어로 고정되었습니다!"
+                    } else {
+                        "[${item.query}] 고정이 해제되었습니다."
+                    }
+                    Toast.makeText(activity, toastMsg, Toast.LENGTH_SHORT).show()
+                    true
+                }
+            }
+
+            // 3. [✕] 개별 삭제 버튼
+            val btnDelete = TextView(activity).apply {
+                text = "✕"
+                setTextColor(Color.parseColor("#64748B"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(dpToPx(4), dpToPx(2), dpToPx(2), dpToPx(2))
+                setOnClickListener {
+                    prefs.removeCopilotSearchHistory(item.query)
+                    renderRecentSearchHistory()
+                }
+            }
+
+            chipLayout.addView(btnPinToggle)
+            chipLayout.addView(tvQuery)
+            chipLayout.addView(btnDelete)
+            container.addView(chipLayout)
+        }
     }
 
     /**
@@ -244,6 +412,10 @@ class AiCopilotCardController(
             Toast.makeText(activity, "⚠️ 연동된 계정(파투 휴대폰 번호 또는 구글 이메일)이 없습니다.", Toast.LENGTH_LONG).show()
             return
         }
+
+        // 최근 검색어 히스토리에 즉시 보존 및 칩 바 갱신
+        prefs.addCopilotSearchHistory(command)
+        renderRecentSearchHistory()
 
         binding.layoutAiCommandResult.visibility = View.GONE
         val searchContainer = binding.root.findViewWithTag<LinearLayout>("layoutAiSearchResultsContainer")

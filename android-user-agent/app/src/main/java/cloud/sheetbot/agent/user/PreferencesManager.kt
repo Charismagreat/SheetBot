@@ -2,8 +2,16 @@ package cloud.sheetbot.agent.user
 
 import android.content.Context
 import android.content.SharedPreferences
+import org.json.JSONArray
+import org.json.JSONObject
 
 typealias AppPreferences = PreferencesManager
+
+data class CopilotSearchHistoryItem(
+    val query: String,
+    val isPinned: Boolean,
+    val timestamp: Long
+)
 
 class PreferencesManager(context: Context) {
     private val prefs: SharedPreferences =
@@ -1079,6 +1087,127 @@ class PreferencesManager(context: Context) {
             .remove("pending_auth_code")
             .remove("pending_auth_timestamp")
             .apply()
+    }
+
+    // =========================================================================
+    // 🎙️ AI 비서 & 파투 통합 검색: 최근 검색어 및 ⭐ 고정 즐겨찾기 히스토리 관리
+    // =========================================================================
+
+    fun getCopilotSearchHistory(): List<CopilotSearchHistoryItem> {
+        val raw = prefs.getString("copilot_search_history_json", null)
+        if (raw.isNullOrBlank()) return emptyList()
+        val list = mutableListOf<CopilotSearchHistoryItem>()
+        try {
+            val arr = JSONArray(raw)
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val q = obj.optString("query", "").trim()
+                if (q.isNotBlank()) {
+                    list.add(
+                        CopilotSearchHistoryItem(
+                            query = q,
+                            isPinned = obj.optBoolean("isPinned", false),
+                            timestamp = obj.optLong("timestamp", 0L)
+                        )
+                    )
+                }
+            }
+        } catch (_: Exception) {}
+
+        // ⭐ 고정(isPinned=true) 항목을 최상단(최신순)으로, 그 뒤에 일반 최근 검색어(최신순) 정렬
+        return list.sortedWith(
+            compareByDescending<CopilotSearchHistoryItem> { it.isPinned }
+                .thenByDescending { it.timestamp }
+        )
+    }
+
+    private fun saveCopilotSearchHistoryList(items: List<CopilotSearchHistoryItem>) {
+        val arr = JSONArray()
+        for (item in items) {
+            val obj = JSONObject().apply {
+                put("query", item.query)
+                put("isPinned", item.isPinned)
+                put("timestamp", item.timestamp)
+            }
+            arr.put(obj)
+        }
+        prefs.edit().putString("copilot_search_history_json", arr.toString()).apply()
+    }
+
+    fun addCopilotSearchHistory(rawQuery: String) {
+        val clean = rawQuery.trim()
+        if (clean.isBlank()) return
+
+        val current = getCopilotSearchHistory().toMutableList()
+        val existingIdx = current.indexOfFirst { it.query.equals(clean, ignoreCase = true) }
+        val wasPinned = if (existingIdx >= 0) current[existingIdx].isPinned else false
+        if (existingIdx >= 0) {
+            current.removeAt(existingIdx)
+        }
+
+        current.add(
+            0,
+            CopilotSearchHistoryItem(
+                query = clean,
+                isPinned = wasPinned,
+                timestamp = System.currentTimeMillis()
+            )
+        )
+
+        // 고정된 항목은 최대 10개까지 보존하고, 일반 최근 검색어는 최대 8개까지 유지 (총 최대 15개 이내)
+        val pinned = current.filter { it.isPinned }.sortedByDescending { it.timestamp }.take(10)
+        val unpinned = current.filter { !it.isPinned }.sortedByDescending { it.timestamp }.take(8)
+        saveCopilotSearchHistoryList(pinned + unpinned)
+    }
+
+    /**
+     * 특정 검색어의 [⭐ 고정] 상태를 토글하고 변경 후 고정 여부(Boolean)를 반환
+     */
+    fun togglePinCopilotSearchHistory(rawQuery: String): Boolean {
+        val clean = rawQuery.trim()
+        if (clean.isBlank()) return false
+
+        val current = getCopilotSearchHistory().toMutableList()
+        val existingIdx = current.indexOfFirst { it.query.equals(clean, ignoreCase = true) }
+        val nextPinned: Boolean
+        if (existingIdx >= 0) {
+            val prev = current[existingIdx]
+            nextPinned = !prev.isPinned
+            current[existingIdx] = prev.copy(
+                isPinned = nextPinned,
+                timestamp = System.currentTimeMillis()
+            )
+        } else {
+            nextPinned = true
+            current.add(
+                0,
+                CopilotSearchHistoryItem(
+                    query = clean,
+                    isPinned = true,
+                    timestamp = System.currentTimeMillis()
+                )
+            )
+        }
+
+        val pinned = current.filter { it.isPinned }.sortedByDescending { it.timestamp }.take(10)
+        val unpinned = current.filter { !it.isPinned }.sortedByDescending { it.timestamp }.take(8)
+        saveCopilotSearchHistoryList(pinned + unpinned)
+        return nextPinned
+    }
+
+    fun removeCopilotSearchHistory(rawQuery: String) {
+        val clean = rawQuery.trim()
+        if (clean.isBlank()) return
+        val filtered = getCopilotSearchHistory().filterNot { it.query.equals(clean, ignoreCase = true) }
+        saveCopilotSearchHistoryList(filtered)
+    }
+
+    /**
+     * 고정(⭐)된 항목은 그대로 유지하고 일반 최근 검색 기록만 일괄 정리
+     */
+    fun clearUnpinnedCopilotSearchHistory() {
+        val pinnedOnly = getCopilotSearchHistory().filter { it.isPinned }
+        saveCopilotSearchHistoryList(pinnedOnly)
     }
 
     fun clear() {
