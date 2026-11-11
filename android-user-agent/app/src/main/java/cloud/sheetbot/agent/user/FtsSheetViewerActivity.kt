@@ -88,6 +88,9 @@ class FtsSheetViewerActivity : AppCompatActivity() {
     private lateinit var chipFilterRejected: TextView
     private lateinit var tvRowCountBadge: TextView
     private lateinit var layoutViewerInlineLoading: LinearLayout
+    private lateinit var layoutCenterLoadingOverlay: LinearLayout
+    private lateinit var tvCenterLoadingTitle: TextView
+    private lateinit var tvCenterLoadingSubtitle: TextView
     private lateinit var rvSheetCards: RecyclerView
     private lateinit var scrollTableVertical: ScrollView
     private lateinit var tableSheetData: TableLayout
@@ -215,6 +218,9 @@ class FtsSheetViewerActivity : AppCompatActivity() {
         chipFilterRejected = findViewById(R.id.chipFilterRejected)
         tvRowCountBadge = findViewById(R.id.tvRowCountBadge)
         layoutViewerInlineLoading = findViewById(R.id.layoutViewerInlineLoading)
+        layoutCenterLoadingOverlay = findViewById(R.id.layoutCenterLoadingOverlay)
+        tvCenterLoadingTitle = findViewById(R.id.tvCenterLoadingTitle)
+        tvCenterLoadingSubtitle = findViewById(R.id.tvCenterLoadingSubtitle)
         rvSheetCards = findViewById(R.id.rvSheetCards)
         scrollTableVertical = findViewById(R.id.scrollTableVertical)
         tableSheetData = findViewById(R.id.tableSheetData)
@@ -265,7 +271,8 @@ class FtsSheetViewerActivity : AppCompatActivity() {
         btnRefreshSheet.setOnClickListener {
             loadWorkspaceData(
                 targetProjectId = currentProjectId.takeIf { it.isNotBlank() },
-                targetSheetName = currentSheetName.takeIf { it.isNotBlank() }
+                targetSheetName = currentSheetName.takeIf { it.isNotBlank() },
+                forceRefresh = true
             )
         }
 
@@ -339,29 +346,51 @@ class FtsSheetViewerActivity : AppCompatActivity() {
         styleChip(chipFilterRejected, currentApprovalFilter == "REJECTED", "#E11D48")
     }
 
+    private fun showCenterLoading(title: String, subtitle: String) {
+        tvCenterLoadingTitle.text = title
+        tvCenterLoadingSubtitle.text = subtitle
+        layoutCenterLoadingOverlay.visibility = View.VISIBLE
+    }
+
+    private fun hideCenterLoading() {
+        layoutCenterLoadingOverlay.visibility = View.GONE
+    }
+
     /**
      * 📂 전체 프로젝트 목록 및 선택된 프로젝트/시트 데이터 로드
      */
     private fun loadWorkspaceData(
         targetProjectId: String?,
-        targetSheetName: String?
+        targetSheetName: String?,
+        forceRefresh: Boolean = false
     ) {
         loadJob?.cancel()
-        loadJob = lifecycleScope.launch {
-            CardInlineLoadingHelper.show(
-                container = layoutViewerInlineLoading,
-                message = "⚡ 파일투시트 프로젝트 및 시트 데이터를 불러오는 중..."
-            )
+        val displayProj = currentProjectName.ifBlank { "파일투시트" }
+        val displaySheet = (targetSheetName ?: currentSheetName).ifBlank { "시트" }
+        showCenterLoading(
+            title = "⏳ [$displaySheet] 데이터를 불러오는 중...",
+            subtitle = "프로젝트: $displayProj • 최신 내역을 동기화하고 있습니다."
+        )
+        CardInlineLoadingHelper.show(
+            container = layoutViewerInlineLoading,
+            message = "⚡ [$displayProj > $displaySheet] 데이터를 불러오는 중..."
+        )
 
+        loadJob = lifecycleScope.launch {
             try {
+                // 탭 전환 시 로딩 오버레이가 최소 1프레임 이상 명확히 인지되도록 보장
+                delay(40L)
+
                 val wsRes = FileToSheetClient.fetchAllWorkspaceProjects(
                     phoneNumber = currentPhoneNumber,
                     targetProjectId = targetProjectId,
-                    targetSheetName = targetSheetName
+                    targetSheetName = targetSheetName,
+                    forceRefresh = forceRefresh
                 )
 
                 if (wsRes.success && wsRes.projects.isNotEmpty()) {
                     CardInlineLoadingHelper.hide(layoutViewerInlineLoading)
+                    hideCenterLoading()
 
                     allProjects = wsRes.projects
                     currentProjectId = wsRes.activeProjectId
@@ -380,6 +409,7 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                     renderSheetTabs()
                     updateApprovalFilterChipStyles()
                     applyFilters()
+                    rvSheetCards.scrollToPosition(0)
 
                     if (autoOpenIngestPending) {
                         autoOpenIngestPending = false
@@ -391,6 +421,7 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 CardInlineLoadingHelper.hide(layoutViewerInlineLoading)
+                hideCenterLoading()
                 Toast.makeText(this@FtsSheetViewerActivity, "데이터 조회 오류: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
@@ -417,6 +448,7 @@ class FtsSheetViewerActivity : AppCompatActivity() {
 
         val detail = FileToSheetClient.fetchSheetDataDetail(token = tokenToUse, overrideSheetName = cleanName)
         CardInlineLoadingHelper.hide(layoutViewerInlineLoading)
+        hideCenterLoading()
 
         if (detail.success) {
             currentSheetName = detail.sheetName.ifBlank { cleanName }
@@ -450,6 +482,11 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
                 setTypeface(typeface, if (isSelected) Typeface.BOLD else Typeface.NORMAL)
                 setTextColor(Color.parseColor(if (isSelected) "#FFFFFF" else "#CBD5E1"))
+                gravity = Gravity.CENTER
+                includeFontPadding = false
+                setSingleLine(true)
+                maxLines = 1
+                minHeight = dp(32)
                 setPadding(dp(12), dp(6), dp(12), dp(6))
                 background = GradientDrawable().apply {
                     cornerRadius = dp(99).toFloat()
@@ -466,7 +503,12 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                         currentProjectName = proj.name
                         val firstSheet = proj.sheets.firstOrNull()?.name.orEmpty()
                         currentSheetName = firstSheet
-                        loadWorkspaceData(targetProjectId = proj.id, targetSheetName = firstSheet)
+                        // 터치 즉시 탭 선택 하이라이트 및 상단 타이틀 갱신
+                        tvViewerTitle.text = "📊 ${firstSheet.ifBlank { proj.name }}"
+                        tvViewerSubtitle.text = "⏳ [${proj.name}] 시트 데이터를 불러오는 중..."
+                        renderProjectTabs()
+                        renderSheetTabs()
+                        loadWorkspaceData(targetProjectId = proj.id, targetSheetName = firstSheet, forceRefresh = false)
                     }
                 }
             }
@@ -487,6 +529,11 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
                 setTypeface(typeface, if (isSelected) Typeface.BOLD else Typeface.NORMAL)
                 setTextColor(Color.parseColor(if (isSelected) "#FFFFFF" else "#94A3B8"))
+                gravity = Gravity.CENTER
+                includeFontPadding = false
+                setSingleLine(true)
+                maxLines = 1
+                minHeight = dp(32)
                 setPadding(dp(12), dp(6), dp(12), dp(6))
                 background = GradientDrawable().apply {
                     cornerRadius = dp(99).toFloat()
@@ -500,7 +547,11 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                 setOnClickListener {
                     if (currentSheetName != sheet.name) {
                         currentSheetName = sheet.name
-                        loadWorkspaceData(targetProjectId = currentProjectId, targetSheetName = sheet.name)
+                        // 터치 즉시 시트 탭 하이라이트 및 상단 타이틀 갱신
+                        tvViewerTitle.text = "📊 ${sheet.name}"
+                        tvViewerSubtitle.text = "⏳ [$currentProjectName > ${sheet.name}] 데이터를 불러오는 중..."
+                        renderSheetTabs()
+                        loadWorkspaceData(targetProjectId = currentProjectId, targetSheetName = sheet.name, forceRefresh = false)
                     }
                 }
             }
@@ -878,7 +929,7 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                         "✅ [$currentSheetName] 시트에 AI 분석 적재가 완료되었습니다!",
                         Toast.LENGTH_SHORT
                     ).show()
-                    loadWorkspaceData(currentProjectId, currentSheetName)
+                    loadWorkspaceData(currentProjectId, currentSheetName, forceRefresh = true)
                 } else {
                     Toast.makeText(
                         this@FtsSheetViewerActivity,
@@ -953,7 +1004,7 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                         "✅ [${tempFile.name}] 파일이 [$currentSheetName] 시트에 적재되었습니다!",
                         Toast.LENGTH_SHORT
                     ).show()
-                    loadWorkspaceData(currentProjectId, currentSheetName)
+                    loadWorkspaceData(currentProjectId, currentSheetName, forceRefresh = true)
                 } else {
                     Toast.makeText(
                         this@FtsSheetViewerActivity,
@@ -1044,7 +1095,7 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                     CardInlineLoadingHelper.hide(layoutViewerInlineLoading)
                     if (res.success) {
                         Toast.makeText(this@FtsSheetViewerActivity, "✅ 신규 행이 추가되었습니다.", Toast.LENGTH_SHORT).show()
-                        loadWorkspaceData(currentProjectId, currentSheetName)
+                        loadWorkspaceData(currentProjectId, currentSheetName, forceRefresh = true)
                     } else {
                         Toast.makeText(this@FtsSheetViewerActivity, "추가 실패: ${res.error ?: "오류"}", Toast.LENGTH_SHORT).show()
                     }
@@ -2009,9 +2060,14 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                 return TextView(root.context).apply {
                     text = label
                     setTextColor(Color.parseColor(textHex))
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
                     setTypeface(typeface, Typeface.BOLD)
-                    setPadding(dp(9), dp(5), dp(9), dp(5))
+                    gravity = Gravity.CENTER
+                    includeFontPadding = false
+                    setSingleLine(true)
+                    maxLines = 1
+                    minHeight = dp(30)
+                    setPadding(dp(10), dp(5), dp(10), dp(5))
                     background = GradientDrawable().apply {
                         cornerRadius = dp(99).toFloat()
                         setColor(Color.parseColor(bgHex))

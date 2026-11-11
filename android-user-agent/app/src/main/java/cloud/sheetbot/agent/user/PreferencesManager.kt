@@ -999,22 +999,23 @@ class PreferencesManager(context: Context) {
         }
 
         // 새로 만들어져 배포된 카드(currentKnown에 없던 카드)는 자동으로 보관함(currentHidden)에 추가
-        // 단, cardFtsWorkspace는 파투 연동 사용자에게 즉시 홈 화면 상단에 노출되도록 기본 활성화
         var modified = false
         for (key in allTargetKeys) {
             if (!currentKnown.contains(key)) {
                 currentKnown.add(key)
-                if (key == "cardFtsWorkspace") {
-                    currentHidden.remove(key)
-                    if (!currentActive.contains(key)) {
-                        currentActive.add(0, key)
-                    }
-                } else {
-                    currentHidden.add(key)
-                    currentActive.remove(key)
-                }
+                currentHidden.add(key)
+                currentActive.remove(key)
                 modified = true
             }
+        }
+
+        // v2.4.40: 이전 v2.4.39에서 홈 화면에 기본 노출되었던 cardFtsWorkspace를 시트봇 보관함으로 기본 이동
+        if (!prefs.getBoolean("is_fts_workspace_moved_to_store_v2440", false)) {
+            currentKnown.add("cardFtsWorkspace")
+            currentHidden.add("cardFtsWorkspace")
+            currentActive.remove("cardFtsWorkspace")
+            prefs.edit().putBoolean("is_fts_workspace_moved_to_store_v2440", true).apply()
+            modified = true
         }
 
         if (modified || knownDrawerCardKeys.size != currentKnown.size) {
@@ -1106,6 +1107,7 @@ class PreferencesManager(context: Context) {
             "cardFeatureRequest",
 
             // 핵심 업무 & 장부 (전원 보관함 기본 보관 - 최초 설치 시 홈 화면 0개 시작)
+            "cardFtsWorkspace",
             "cardPaymentReceipt",
             "cardQuoteSync",
             "cardEstimateSync",

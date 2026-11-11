@@ -1682,13 +1682,25 @@ object FileToSheetClient {
         }
     }
 
+    @Volatile
+    private var cachedWorkspaceRowsRaw: String? = null
+    @Volatile
+    private var cachedWorkspaceRowsTimestamp: Long = 0L
+    private const val WORKSPACE_CACHE_TTL_MS = 45_000L
+
+    fun invalidateWorkspaceCache() {
+        cachedWorkspaceRowsRaw = null
+        cachedWorkspaceRowsTimestamp = 0L
+    }
+
     /**
      * 📂 사용자의 전체 파투 프로젝트 목록 및 선택된 프로젝트/시트의 데이터(행, 헤더, 결재 통계, 원본 증빙)를 조회합니다.
      */
     suspend fun fetchAllWorkspaceProjects(
         phoneNumber: String,
         targetProjectId: String? = null,
-        targetSheetName: String? = null
+        targetSheetName: String? = null,
+        forceRefresh: Boolean = false
     ): FtsWorkspaceResponse = withContext(Dispatchers.IO) {
         val cleanPhone = phoneNumber.replace("[^0-9]".toRegex(), "")
         val reqProjectId = targetProjectId?.trim().orEmpty()
@@ -1697,34 +1709,56 @@ object FileToSheetClient {
         val hosts = listOf(FTS_OFFICIAL_DOMAIN, FTS_TUNNEL_BASE, FTS_TUNNEL_BASE_LEGACY)
         var lastError: String? = null
 
-        for (host in hosts) {
-            try {
-                val queryArgs = JSONObject().apply {
-                    put("tableName", "user_projects")
-                    put("limit", 100)
-                }
-                val mcpReq = JSONObject().apply {
-                    put("tool", "user_data_query")
-                    put("arguments", queryArgs)
-                }
-                val req = Request.Builder()
-                    .url("$host/__user_data_proxy")
-                    .header("Content-Type", "application/json")
-                    .post(mcpReq.toString().toRequestBody(JSON_MEDIA_TYPE))
-                    .build()
+        var rowsArrToUse: org.json.JSONArray? = null
+        val nowMs = System.currentTimeMillis()
+        val cachedRaw = cachedWorkspaceRowsRaw
+        if (!forceRefresh && !cachedRaw.isNullOrBlank() && (nowMs - cachedWorkspaceRowsTimestamp) < WORKSPACE_CACHE_TTL_MS) {
+            rowsArrToUse = try { org.json.JSONArray(cachedRaw) } catch (_: Exception) { null }
+        }
 
-                client.newCall(req).execute().use { res ->
-                    val rawStr = res.body?.string().orEmpty()
-                    if (!res.isSuccessful) {
-                        lastError = "HTTP ${res.code}"
-                        return@use
+        if (rowsArrToUse == null) {
+            for (host in hosts) {
+                try {
+                    val queryArgs = JSONObject().apply {
+                        put("tableName", "user_projects")
+                        put("limit", 100)
                     }
-                    val dataJson = parseMcpToolResultJson(rawStr)
-                    val rowsArr = dataJson?.optJSONArray("rows")
-                    if (rowsArr == null) {
-                        lastError = "프로젝트 목록 응답 파싱 실패"
-                        return@use
+                    val mcpReq = JSONObject().apply {
+                        put("tool", "user_data_query")
+                        put("arguments", queryArgs)
                     }
+                    val req = Request.Builder()
+                        .url("$host/__user_data_proxy")
+                        .header("Content-Type", "application/json")
+                        .post(mcpReq.toString().toRequestBody(JSON_MEDIA_TYPE))
+                        .build()
+
+                    client.newCall(req).execute().use { res ->
+                        val rawStr = res.body?.string().orEmpty()
+                        if (!res.isSuccessful) {
+                            lastError = "HTTP ${res.code}"
+                            return@use
+                        }
+                        val dataJson = parseMcpToolResultJson(rawStr)
+                        val rowsArr = dataJson?.optJSONArray("rows")
+                        if (rowsArr == null) {
+                            lastError = "프로젝트 목록 응답 파싱 실패"
+                            return@use
+                        }
+                        rowsArrToUse = rowsArr
+                        cachedWorkspaceRowsRaw = rowsArr.toString()
+                        cachedWorkspaceRowsTimestamp = System.currentTimeMillis()
+                    }
+                    if (rowsArrToUse != null) break
+                } catch (e: Exception) {
+                    lastError = e.localizedMessage ?: "네트워크 연결 오류"
+                }
+            }
+        }
+
+        val rowsArr = rowsArrToUse
+        if (rowsArr != null) {
+            try {
 
                     val matchedProjectObjs = mutableListOf<JSONObject>()
                     for (i in 0 until rowsArr.length()) {
@@ -1926,7 +1960,6 @@ object FileToSheetClient {
                         rows = rowsList,
                         originalFiles = origFilesList
                     )
-                }
             } catch (e: Exception) {
                 lastError = e.localizedMessage ?: "통신 오류"
             }
@@ -2035,6 +2068,7 @@ object FileToSheetClient {
                 updRes.close()
 
                 if (updOk) {
+                    invalidateWorkspaceCache()
                     // 3. 감사 로그(data_change_logs) 기록 (베스트 에포트)
                     try {
                         val logReq = JSONObject().apply {
@@ -2130,12 +2164,14 @@ object FileToSheetClient {
         val token = ensureProjectSheetToken(projectId, projectName, sheetName, phoneNumber)
             ?: return@withContext FtsUploadResult(success = false, error = "대상 시트($sheetName)의 업로드 토큰을 생성할 수 없습니다.")
         val endpoint = "$FTS_OFFICIAL_DOMAIN/api/inbox/$token"
-        uploadFile(
+        val res = uploadFile(
             endpoint = endpoint,
             file = file,
             mimeType = mimeType,
             memo = memo
         )
+        if (res.success) invalidateWorkspaceCache()
+        res
     }
 
     /**
@@ -2151,9 +2187,11 @@ object FileToSheetClient {
         val token = ensureProjectSheetToken(projectId, projectName, sheetName, phoneNumber)
             ?: return@withContext FtsUploadResult(success = false, error = "대상 시트($sheetName)의 적재 토큰을 생성할 수 없습니다.")
         val endpoint = "$FTS_OFFICIAL_DOMAIN/api/inbox/$token"
-        uploadJson(
+        val res = uploadJson(
             endpoint = endpoint,
             rowData = rowData
         )
+        if (res.success) invalidateWorkspaceCache()
+        res
     }
 }

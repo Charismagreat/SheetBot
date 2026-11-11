@@ -591,64 +591,86 @@
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_badge_version"
                     android:backgroundTint="#4F46E5"
-                    android:paddingHorizontal="9dp"
-                    android:paddingVertical="4dp"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="5dp"
+                    android:singleLine="true"
                     android:text="워크스페이스 ›"
                     android:textColor="#EEF2FF"
                     android:textSize="11.5sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <!-- 원터치 빠른 액션 버튼 바: 전체 프로젝트 열기 / 결재 대기 / 파일·사진 적재 -->
+            <!-- 원터치 빠른 액션 버튼 바: 전체 시트 / 결재 관리 / 파일 적재 (동일 높이 38dp + 1줄 정렬) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
+                android:gravity="center_vertical"
                 android:layout_marginTop="10dp">
 
-                <Button
+                <TextView
                     android:tag="btnOpenFtsWorkspaceAll"
                     android:layout_width="0dp"
                     android:layout_height="38dp"
-                    android:layout_weight="1.15"
-                    android:backgroundTint="#312E81"
-                    android:text="📂 전체 프로젝트·시트"
-                    android:textColor="#E0E7FF"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:singleLine="true"
+                    android:maxLines="1"
+                    android:ellipsize="end"
                     android:paddingHorizontal="6dp"
-                    android:layout_marginEnd="5dp" />
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#312E81"
+                    android:text="📂 전체 시트"
+                    android:textColor="#E0E7FF"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginEnd="6dp" />
 
-                <Button
+                <TextView
                     android:tag="btnOpenFtsWorkspacePending"
                     android:layout_width="0dp"
                     android:layout_height="38dp"
-                    android:layout_weight="0.95"
-                    android:backgroundTint="#065F46"
-                    android:text="✅ 결재(승인/반려)"
-                    android:textColor="#ECFDF5"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:singleLine="true"
+                    android:maxLines="1"
+                    android:ellipsize="end"
                     android:paddingHorizontal="6dp"
-                    android:layout_marginEnd="5dp" />
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#065F46"
+                    android:text="✅ 결재 관리"
+                    android:textColor="#ECFDF5"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginEnd="6dp" />
 
-                <Button
+                <TextView
                     android:tag="btnOpenFtsWorkspaceIngest"
                     android:layout_width="0dp"
                     android:layout_height="38dp"
                     android:layout_weight="1"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:singleLine="true"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:paddingHorizontal="6dp"
+                    android:background="@drawable/bg_badge_version"
                     android:backgroundTint="#2563EB"
-                    android:text="📤 +파일·행 적재"
+                    android:text="📤 파일 적재"
                     android:textColor="#FFFFFF"
-                    android:textSize="11sp"
+                    android:textSize="12sp"
                     android:textStyle="bold"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:paddingHorizontal="6dp" />
+                    android:clickable="true"
+                    android:focusable="true" />
             </LinearLayout>
         </LinearLayout>
 

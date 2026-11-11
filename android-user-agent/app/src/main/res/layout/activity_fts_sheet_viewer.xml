@@ -60,9 +60,12 @@
         <TextView
             android:id="@+id/btnToggleViewMode"
             android:layout_width="wrap_content"
-            android:layout_height="32dp"
+            android:layout_height="34dp"
             android:gravity="center"
-            android:paddingHorizontal="10dp"
+            android:includeFontPadding="false"
+            android:singleLine="true"
+            android:maxLines="1"
+            android:paddingHorizontal="11dp"
             android:text="📊 표 보기"
             android:textColor="#E2E8F0"
             android:textSize="11.5sp"
@@ -79,6 +82,7 @@
             android:layout_height="34dp"
             android:layout_marginStart="5dp"
             android:gravity="center"
+            android:includeFontPadding="false"
             android:text="🔄"
             android:textSize="15sp"
             android:background="?attr/selectableItemBackgroundBorderless"
@@ -89,10 +93,13 @@
         <TextView
             android:id="@+id/btnOpenFtsWeb"
             android:layout_width="wrap_content"
-            android:layout_height="32dp"
+            android:layout_height="34dp"
             android:layout_marginStart="4dp"
             android:gravity="center"
-            android:paddingHorizontal="9dp"
+            android:includeFontPadding="false"
+            android:singleLine="true"
+            android:maxLines="1"
+            android:paddingHorizontal="10dp"
             android:text="🌐 웹"
             android:textColor="#93C5FD"
             android:textSize="11.5sp"
@@ -243,8 +250,11 @@
             android:layout_height="38dp"
             android:layout_marginStart="8dp"
             android:gravity="center"
-            android:paddingHorizontal="12dp"
-            android:text="📤 +파일·행 적재"
+            android:includeFontPadding="false"
+            android:singleLine="true"
+            android:maxLines="1"
+            android:paddingHorizontal="13dp"
+            android:text="📤 파일 적재"
             android:textColor="#FFFFFF"
             android:textSize="12sp"
             android:textStyle="bold"
@@ -272,9 +282,12 @@
             <TextView
                 android:id="@+id/chipFilterAll"
                 android:layout_width="wrap_content"
-                android:layout_height="28dp"
+                android:layout_height="32dp"
                 android:gravity="center"
-                android:paddingHorizontal="11dp"
+                android:includeFontPadding="false"
+                android:singleLine="true"
+                android:maxLines="1"
+                android:paddingHorizontal="12dp"
                 android:layout_marginEnd="6dp"
                 android:text="전체 (0)"
                 android:textColor="#FFFFFF"
@@ -286,9 +299,12 @@
             <TextView
                 android:id="@+id/chipFilterPending"
                 android:layout_width="wrap_content"
-                android:layout_height="28dp"
+                android:layout_height="32dp"
                 android:gravity="center"
-                android:paddingHorizontal="11dp"
+                android:includeFontPadding="false"
+                android:singleLine="true"
+                android:maxLines="1"
+                android:paddingHorizontal="12dp"
                 android:layout_marginEnd="6dp"
                 android:text="⏳ 대기 (0)"
                 android:textColor="#CBD5E1"
@@ -299,9 +315,12 @@
             <TextView
                 android:id="@+id/chipFilterApproved"
                 android:layout_width="wrap_content"
-                android:layout_height="28dp"
+                android:layout_height="32dp"
                 android:gravity="center"
-                android:paddingHorizontal="11dp"
+                android:includeFontPadding="false"
+                android:singleLine="true"
+                android:maxLines="1"
+                android:paddingHorizontal="12dp"
                 android:layout_marginEnd="6dp"
                 android:text="✅ 승인 (0)"
                 android:textColor="#CBD5E1"
@@ -312,9 +331,12 @@
             <TextView
                 android:id="@+id/chipFilterHeld"
                 android:layout_width="wrap_content"
-                android:layout_height="28dp"
+                android:layout_height="32dp"
                 android:gravity="center"
-                android:paddingHorizontal="11dp"
+                android:includeFontPadding="false"
+                android:singleLine="true"
+                android:maxLines="1"
+                android:paddingHorizontal="12dp"
                 android:layout_marginEnd="6dp"
                 android:text="🟠 보류 (0)"
                 android:textColor="#CBD5E1"
@@ -325,9 +347,12 @@
             <TextView
                 android:id="@+id/chipFilterRejected"
                 android:layout_width="wrap_content"
-                android:layout_height="28dp"
+                android:layout_height="32dp"
                 android:gravity="center"
-                android:paddingHorizontal="11dp"
+                android:includeFontPadding="false"
+                android:singleLine="true"
+                android:maxLines="1"
+                android:paddingHorizontal="12dp"
                 android:layout_marginEnd="6dp"
                 android:text="🚫 반려 (0)"
                 android:textColor="#CBD5E1"
@@ -338,9 +363,12 @@
             <TextView
                 android:id="@+id/tvRowCountBadge"
                 android:layout_width="wrap_content"
-                android:layout_height="28dp"
+                android:layout_height="32dp"
                 android:gravity="center"
-                android:paddingHorizontal="10dp"
+                android:includeFontPadding="false"
+                android:singleLine="true"
+                android:maxLines="1"
+                android:paddingHorizontal="11dp"
                 android:text="0건 표시"
                 android:textColor="#38BDF8"
                 android:textSize="11sp"
@@ -428,9 +456,59 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:gravity="center"
-                android:text="우측 상단의 [📤 +파일·행 적재] 버튼을 눌러 사진 촬영이나 문서를 등록하면 AI가 시트 컬럼에 맞춰 자동 적재합니다."
+                android:text="우측 상단의 [📤 파일 적재] 버튼을 눌러 사진 촬영이나 문서를 등록하면 AI가 시트 컬럼에 맞춰 자동 적재합니다."
                 android:textColor="#94A3B8"
                 android:textSize="12.5sp" />
+        </LinearLayout>
+
+        <!-- (D) 프로젝트 / 시트 전환 및 데이터 조회 시 즉시 표시되는 중앙 로딩 오버레이 -->
+        <LinearLayout
+            android:id="@+id/layoutCenterLoadingOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="#CC0F172A"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="@drawable/bg_card_scenario"
+                android:paddingHorizontal="28dp"
+                android:paddingVertical="22dp">
+
+                <ProgressBar
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:indeterminate="true"
+                    android:indeterminateTint="#38BDF8" />
+
+                <TextView
+                    android:id="@+id/tvCenterLoadingTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center"
+                    android:text="⏳ 데이터를 불러오는 중..."
+                    android:textColor="#F8FAFC"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvCenterLoadingSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:gravity="center"
+                    android:text="선택하신 프로젝트·시트 내역을 가져오고 있습니다."
+                    android:textColor="#94A3B8"
+                    android:textSize="11.5sp" />
+            </LinearLayout>
         </LinearLayout>
     </FrameLayout>
 </LinearLayout>
