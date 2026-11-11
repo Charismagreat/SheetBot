@@ -61,12 +61,13 @@ export async function GET(req: NextRequest) {
       orderDirection: "DESC",
     }).catch(() => ({ rows: [] }));
 
-    // 3. 소프트 삭제 필터링, 더미 항목 및 레거시 요약 절단 행 제거
+    // 3. 소프트 삭제 필터링, 더미 항목 및 레거시 요약 절단 행, 단순 택배 알림톡 제거
     const activeRows = (res.rows || []).filter((r: any) => {
       if (r.deleted_at) return false;
       const t = String(r.title || "").trim();
       if (!t || /^\[후속\s*조치\s*\d*\]$/i.test(t) || t.startsWith("(없음")) return false;
       if (t.includes("연탄맥 설정 환경 문제로 인한 개발 지연 해결 방안")) return false;
+      if (t.includes("딩동♬") || t.includes("집배송 안내") || t.includes("롯데택배로 수거")) return false;
       return true;
     });
 
@@ -87,6 +88,10 @@ export async function GET(req: NextRequest) {
     ]);
 
     const filteredFtsTasks = ftsTasks.filter((ft: any) => {
+      const ftTitle = String(ft.title || "");
+      if (ftTitle.includes("딩동♬") || ftTitle.includes("집배송 안내") || ftTitle.includes("롯데택배로 수거")) {
+        return false;
+      }
       if (sourceFilter && sourceFilter !== "ALL") {
         return String(ft.source_type || "").toUpperCase() === sourceFilter;
       }
@@ -95,7 +100,12 @@ export async function GET(req: NextRequest) {
 
     const formatKrPhone = (digits: string): string => {
       const d = String(digits || "").replace(/[^0-9]/g, "");
-      if (d.length === 11 && d.startsWith("01")) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+      if (d.length === 8 && (d.startsWith("15") || d.startsWith("16") || d.startsWith("18"))) {
+        return `${d.slice(0, 4)}-${d.slice(4)}`;
+      }
+      if (d.length === 12 && d.startsWith("050")) return `${d.slice(0, 4)}-${d.slice(4, 8)}-${d.slice(8)}`;
+      if (d.length === 11 && d.startsWith("050")) return `${d.slice(0, 4)}-${d.slice(4, 7)}-${d.slice(7)}`;
+      if (d.length === 11 && d.startsWith("0")) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
       if (d.length === 10 && d.startsWith("02")) return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}`;
       if (d.length === 10 && d.startsWith("0")) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
       if (d.length === 9 && d.startsWith("02")) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
@@ -106,7 +116,7 @@ export async function GET(req: NextRequest) {
       for (const raw of texts) {
         if (!raw) continue;
         const m = String(raw).match(
-          /(01[016789][-\s]?\d{3,4}[-\s]?\d{4}|02[-\s]?\d{3,4}[-\s]?\d{4}|0[3-6][1-5][-\s]?\d{3,4}[-\s]?\d{4})/
+          /(?<!\d)(01[016789][-\s]?\d{3,4}[-\s]?\d{4}|02[-\s]?\d{3,4}[-\s]?\d{4}|0[3-6][1-5][-\s]?\d{3,4}[-\s]?\d{4}|0[78]0[-\s]?\d{3,4}[-\s]?\d{4}|050\d[-\s]?\d{3,4}[-\s]?\d{4}|1[568]\d{2}[-\s]?\d{4})(?!\d)/
         );
         if (m) {
           const f = formatKrPhone(m[1]);

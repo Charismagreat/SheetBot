@@ -240,17 +240,15 @@ class TasksActivity : AppCompatActivity() {
         }
         btnClose.setOnClickListener { dialog.dismiss() }
 
-        // 1. 전화번호 및 고객명 정밀 보강 (주소록 역조회 포함)
+        // 1. 전화번호 및 고객명 정밀 보강 (운송장번호/계좌번호 오인 차단 + 대표번호 인식 + 주소록 역조회)
         var targetName = initialName?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", true) }
-        var targetPhone = initialPhone?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", true) }
-
-        if (targetPhone == null) {
-            val textToScan = "${task.title} ${task.description.orEmpty()} ${targetName.orEmpty()}"
-            val phoneRegexMatch = Regex("(01[016789][\\-\\s]?\\d{3,4}[\\-\\s]?\\d{4}|0\\d{1,2}[\\-\\s]?\\d{3,4}[\\-\\s]?\\d{4})").find(textToScan)
-            if (phoneRegexMatch != null) {
-                targetPhone = ContactHelper.formatPhoneNumber(phoneRegexMatch.value)
-            }
-        }
+        var targetPhone = extractKoreanPhoneFromTexts(
+            initialPhone,
+            task.contactPhone,
+            targetName,
+            task.description,
+            task.title
+        )
         if (targetPhone == null && !targetName.isNullOrBlank()) {
             val lookupName = targetName.substringBefore("(").trim()
             targetPhone = ContactHelper.getPhoneNumberByName(this, lookupName)
@@ -499,10 +497,13 @@ class TasksActivity : AppCompatActivity() {
         val kakaoSession = KakaoReplySessionCache.findSession(targetName, task.title)
         val isKakaoTask = task.sourceType == "KAKAO"
 
-        // 4. 1차 주요 액션 버튼 구성 (전화걸기 / 문자 대화창 열기 / 카톡 열기)
+        // 4. 1차 주요 액션 버튼 구성 (전화걸기 / 문자 열기 / 카톡 열기 — 한 줄 클리핑 방지 간결 라벨)
+        val showSmsButton = targetPhone != null && (ContactHelper.isMobilePhoneNumber(targetPhone) || task.sourceType == "SMS")
+        val showKakaoButton = isKakaoTask || kakaoSession != null
+
         if (targetPhone != null) {
             btnCallNow.visibility = View.VISIBLE
-            btnCallNow.text = if (task.sourceType == "CALL_RECORDING" || task.sourceType == "MISSED_CALL") {
+            btnCallNow.text = if (!showSmsButton && !showKakaoButton) {
                 "📞 바로 전화걸기"
             } else {
                 "📞 전화걸기"
@@ -511,25 +512,28 @@ class TasksActivity : AppCompatActivity() {
                 dialog.dismiss()
                 openDialer(targetPhone)
             }
+        } else {
+            btnCallNow.visibility = View.GONE
+        }
 
+        if (showSmsButton && targetPhone != null) {
             btnOpenSms.visibility = View.VISIBLE
-            btnOpenSms.text = "💬 문자 대화창 열기"
+            btnOpenSms.text = "💬 문자 열기"
             btnOpenSms.setOnClickListener {
                 val draft = etReply.text?.toString()?.trim()
                 dialog.dismiss()
                 openSmsConversation(targetPhone, draft)
             }
         } else {
-            btnCallNow.visibility = View.GONE
             btnOpenSms.visibility = View.GONE
         }
 
-        if (isKakaoTask || kakaoSession != null) {
+        if (showKakaoButton) {
             btnOpenKakao.visibility = View.VISIBLE
             btnOpenKakao.text = if (kakaoSession?.canOpenChatRoom == true) {
-                "💛 해당 카톡방 바로 열기"
+                "💛 카톡방 열기"
             } else {
-                "💛 카톡 열기 (이름 자동복사)"
+                "💛 카톡 열기"
             }
             btnOpenKakao.setOnClickListener {
                 dialog.dismiss()
@@ -882,7 +886,13 @@ class TasksActivity : AppCompatActivity() {
     private fun formatKoreanPhoneNumber(digits: String): String {
         val d = digits.replace(Regex("[^0-9]"), "")
         return when {
-            d.length == 11 && d.startsWith("01") ->
+            d.length == 8 && (d.startsWith("15") || d.startsWith("16") || d.startsWith("18")) ->
+                "${d.substring(0, 4)}-${d.substring(4)}"
+            d.length == 12 && d.startsWith("050") ->
+                "${d.substring(0, 4)}-${d.substring(4, 8)}-${d.substring(8)}"
+            d.length == 11 && d.startsWith("050") ->
+                "${d.substring(0, 4)}-${d.substring(4, 7)}-${d.substring(7)}"
+            d.length == 11 && d.startsWith("0") ->
                 "${d.substring(0, 3)}-${d.substring(3, 7)}-${d.substring(7)}"
             d.length == 10 && d.startsWith("02") ->
                 "${d.substring(0, 2)}-${d.substring(2, 6)}-${d.substring(6)}"
@@ -895,7 +905,10 @@ class TasksActivity : AppCompatActivity() {
     }
 
     private fun extractKoreanPhoneFromTexts(vararg texts: String?): String? {
-        val phoneRegex = Regex("(01[016789][-\\s]?\\d{3,4}[-\\s]?\\d{4}|02[-\\s]?\\d{3,4}[-\\s]?\\d{4}|0[3-6][1-5][-\\s]?\\d{3,4}[-\\s]?\\d{4})")
+        // 앞뒤 숫자 경계((?<!\d) / (?!\d))를 강제하여 12자리 운송장번호(460384507343)나 계좌번호 중간이 전화번호로 잘리는 오인식을 원천 차단
+        val phoneRegex = Regex(
+            "(?<!\\d)(01[016789][-\\s]?\\d{3,4}[-\\s]?\\d{4}|02[-\\s]?\\d{3,4}[-\\s]?\\d{4}|0[3-6][1-5][-\\s]?\\d{3,4}[-\\s]?\\d{4}|0[78]0[-\\s]?\\d{3,4}[-\\s]?\\d{4}|050\\d[-\\s]?\\d{3,4}[-\\s]?\\d{4}|1[568]\\d{2}[-\\s]?\\d{4})(?!\\d)"
+        )
         for (raw in texts) {
             if (raw.isNullOrBlank()) continue
             val m = phoneRegex.find(raw)
@@ -955,6 +968,8 @@ class TasksActivity : AppCompatActivity() {
             val rawTitle = t.title.trim()
             if (rawTitle.isEmpty() || rawTitle.equals("null", ignoreCase = true)) continue
             if (rawTitle.contains("연탄맥 설정 환경 문제로 인한 개발 지연 해결 방안")) continue
+            // 단순 택배 수거/집배송 안내 알림톡 및 문자 제외
+            if (rawTitle.contains("딩동♬") || rawTitle.contains("집배송 안내") || rawTitle.contains("롯데택배로 수거")) continue
 
             if (rawTitle.contains('\uFFFD')) {
                 val cleanParts = rawTitle
@@ -1298,7 +1313,13 @@ class TaskAdapter(
 
         private fun formatKoreanPhone(digits: String): String {
             return when {
-                digits.length == 11 && digits.startsWith("01") ->
+                digits.length == 8 && (digits.startsWith("15") || digits.startsWith("16") || digits.startsWith("18")) ->
+                    "${digits.substring(0, 4)}-${digits.substring(4)}"
+                digits.length == 12 && digits.startsWith("050") ->
+                    "${digits.substring(0, 4)}-${digits.substring(4, 8)}-${digits.substring(8)}"
+                digits.length == 11 && digits.startsWith("050") ->
+                    "${digits.substring(0, 4)}-${digits.substring(4, 7)}-${digits.substring(7)}"
+                digits.length == 11 && digits.startsWith("0") ->
                     "${digits.substring(0, 3)}-${digits.substring(3, 7)}-${digits.substring(7)}"
                 digits.length == 10 && digits.startsWith("02") ->
                     "${digits.substring(0, 2)}-${digits.substring(2, 6)}-${digits.substring(6)}"
@@ -1311,13 +1332,15 @@ class TaskAdapter(
         }
 
         private fun extractPurePhone(vararg candidates: String?): String? {
-            val phoneRegex = Regex("(01[016789][-\\s]?\\d{3,4}[-\\s]?\\d{4}|02[-\\s]?\\d{3,4}[-\\s]?\\d{4}|0[3-6][1-5][-\\s]?\\d{3,4}[-\\s]?\\d{4})")
+            val phoneRegex = Regex(
+                "(?<!\\d)(01[016789][-\\s]?\\d{3,4}[-\\s]?\\d{4}|02[-\\s]?\\d{3,4}[-\\s]?\\d{4}|0[3-6][1-5][-\\s]?\\d{3,4}[-\\s]?\\d{4}|0[78]0[-\\s]?\\d{3,4}[-\\s]?\\d{4}|050\\d[-\\s]?\\d{3,4}[-\\s]?\\d{4}|1[568]\\d{2}[-\\s]?\\d{4})(?!\\d)"
+            )
             for (c in candidates) {
                 if (c.isNullOrBlank()) continue
                 val m = phoneRegex.find(c)
                 if (m != null) {
                     val rawDigits = m.value.replace(Regex("[^0-9]"), "")
-                    if (rawDigits.length in 9..11) {
+                    if (rawDigits.length in 8..12) {
                         return formatKoreanPhone(rawDigits)
                     }
                 }

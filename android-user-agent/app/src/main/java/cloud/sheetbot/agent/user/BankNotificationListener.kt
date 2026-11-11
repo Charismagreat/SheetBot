@@ -349,12 +349,22 @@ class BankNotificationListener : NotificationListenerService() {
     }
 
     /**
-     * 📄 알림 Extras에서 요약문("알림톡 도착" 등)에 가려지지 않고 전체 장문(EXTRA_BIG_TEXT / EXTRA_MESSAGES)을 최우선 추출합니다.
+     * 📄 알림 Extras에서 요약문("알림톡 도착" 등)에 가려지지 않고 전체 장문(EXTRA_BIG_TEXT / EXTRA_TEXT_LINES / EXTRA_MESSAGES)을 최우선 추출합니다.
      */
     private fun extractFullNotificationText(extras: Bundle): String {
         val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim().orEmpty()
         val normalText = (extras.getString(Notification.EXTRA_TEXT)
             ?: extras.getCharSequence(Notification.EXTRA_TEXT)?.toString())?.trim().orEmpty()
+
+        // InboxStyle(EXTRA_TEXT_LINES) 전체 줄 결합
+        val textLinesJoined = try {
+            extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+                ?.mapNotNull { it?.toString()?.trim()?.takeIf { line -> line.isNotEmpty() } }
+                ?.joinToString("\n")
+                .orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
 
         // MessagingStyle 메시지 배열(EXTRA_MESSAGES)에서 가장 최신/상세 본문 추출
         var messagingText = ""
@@ -370,8 +380,8 @@ class BankNotificationListener : NotificationListenerService() {
             }
         } catch (_: Exception) {}
 
-        // EXTRA_TEXT가 "알림톡 도착" 등 짧은 플레이스홀더이거나 bigText/messagingText가 더 긴 경우 가장 상세한 본문 선택
-        val candidates = listOf(bigText, messagingText, normalText).filter { it.isNotBlank() }
+        // EXTRA_TEXT가 "알림톡 도착" 등 짧은 플레이스홀더이거나 bigText/messagingText/textLinesJoined가 더 긴 경우 가장 상세한 본문 선택
+        val candidates = listOf(bigText, textLinesJoined, messagingText, normalText).filter { it.isNotBlank() }
         if (candidates.isEmpty()) return ""
         val nonPlaceholder = candidates.filter {
             it != "알림톡 도착" && it != "메시지가 도착했습니다." && it != "새로운 메시지"

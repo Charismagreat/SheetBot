@@ -555,8 +555,18 @@ export function isActionableBusinessMessage(rawMessage: string): boolean {
     return false;
   }
 
-  // 3. 단순 택배 배송/배달 완료 시스템 알림 제외
-  if (/택배.*배송.*완료|배달이?\s*완료되었습니다|운송장\s*번호.*배송/i.test(text)) {
+  // 3. 단순 택배 수거/발송/집배송/배달 완료 시스템 알림 제외
+  if (
+    /택배.*배송.*완료|배달이?\s*완료되었습니다|집배송\s*안내|수거되어\s*발송|딩동♬|택배입니다|택배\s*배송은\s*발송일로부터/i.test(
+      text
+    )
+  ) {
+    return false;
+  }
+  if (
+    /(롯데택배|대한통운|한진택배|로젠택배|우체국택배|경동택배)/.test(text) &&
+    /(운송장\s*번호|배송\s*예정|고객센터\s*☎?\s*15\d{2})/.test(text)
+  ) {
     return false;
   }
 
@@ -769,7 +779,7 @@ export async function extractAndCreateTasksFromMessage(
       const created = await createTaskItem({
         userEmail: input.userEmail,
         title: task.title,
-        description: cleanText.slice(0, 300),
+        description: cleanText,
         sourceType: input.sourceType,
         sourceId: baseSourceId,
         contactName:
