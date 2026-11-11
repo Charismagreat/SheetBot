@@ -1163,13 +1163,13 @@ class AiCopilotCardController(
                     return@setOnClickListener
                 }
                 val cleanRecipient = item.phoneNumber.replace(Regex("[^0-9+]"), "")
-                val outcome = SmsSenderUtil.sendSmsDetailed(activity, cleanRecipient, msg)
-                if (outcome.success) {
-                    val modeLabel = if (outcome.parts > 1) "장문(MMS/LMS)" else "단문(SMS)"
+                val (ok, _) = SmsSenderUtil.sendSmsDetailed(activity, cleanRecipient, msg)
+                if (ok) {
+                    val modeLabel = if (SmsSenderUtil.getSmsByteCount(msg) > 80) "장문(MMS/LMS)" else "단문(SMS)"
                     Toast.makeText(activity, "✅ ${item.phoneNumber} 번호로 $modeLabel 발송 완료!", Toast.LENGTH_SHORT).show()
                     etSms.setText("")
                 } else {
-                    Toast.makeText(activity, "문자 발송 실패: ${outcome.errorMessage}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(activity, "문자 발송 실패: 휴대전화 번호(010 등)인지 및 SMS 권한을 확인해 주세요.", Toast.LENGTH_LONG).show()
                 }
             }
             btnRow.addView(btnCall)
