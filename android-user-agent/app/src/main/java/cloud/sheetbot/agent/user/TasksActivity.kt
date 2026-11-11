@@ -3,8 +3,10 @@ package cloud.sheetbot.agent.user
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.media.MediaPlayer
 import android.net.Uri
@@ -21,12 +23,14 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import cloud.sheetbot.agent.user.card.CardInlineLoadingHelper
 import cloud.sheetbot.agent.user.databinding.ActivityTasksBinding
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -145,6 +149,111 @@ class TasksActivity : AppCompatActivity() {
         )
         binding.rvTasksList.layoutManager = LinearLayoutManager(this)
         binding.rvTasksList.adapter = adapter
+
+        // 👉 우측 스와이프: 즉시 완료 처리(또는 미완료 복원) + 하단 [실행 취소] 스낵바
+        // 👈 좌측 스와이프: 상세 정보 및 빠른 답장 바텀시트 열기
+        val swipeCallback = object : ItemTouchHelper.SimpleCallback(
+            0,
+            ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT
+        ) {
+            private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+            private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                textSize = 13.5f * resources.displayMetrics.scaledDensity
+            }
+
+            override fun getSwipeThreshold(viewHolder: RecyclerView.ViewHolder): Float = 0.32f
+
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder
+            ): Boolean = false
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+                val pos = viewHolder.bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }
+                    ?: viewHolder.adapterPosition
+                if (pos == RecyclerView.NO_POSITION) return
+
+                val item = adapter.getItemAt(pos)
+                if (item == null) {
+                    adapter.notifyItemChanged(pos)
+                    return
+                }
+
+                if (direction == ItemTouchHelper.RIGHT) {
+                    val prevStatus = item.status
+                    val nextStatus = if (prevStatus == "DONE") "PENDING" else "DONE"
+                    toggleTask(item, nextStatus)
+
+                    val snackMsg = if (nextStatus == "DONE") {
+                        "✅ 완료 처리되었습니다."
+                    } else {
+                        "↩️ 미완료 상태로 되돌렸습니다."
+                    }
+                    Snackbar.make(binding.root, snackMsg, Snackbar.LENGTH_LONG)
+                        .setAction("실행 취소") {
+                            toggleTask(item.copy(status = nextStatus), prevStatus)
+                        }
+                        .setActionTextColor(Color.parseColor("#38BDF8"))
+                        .show()
+                } else if (direction == ItemTouchHelper.LEFT) {
+                    // 카드를 원래 위치로 복귀시킨 뒤 상세/빠른 답장 시트 오픈
+                    adapter.notifyItemChanged(pos)
+                    (viewHolder as? TaskAdapter.ViewHolder)?.openDetailSheet()
+                }
+            }
+
+            override fun onChildDraw(
+                c: Canvas,
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                dX: Float,
+                dY: Float,
+                actionState: Int,
+                isCurrentlyActive: Boolean
+            ) {
+                if (actionState == ItemTouchHelper.ACTION_STATE_SWIPE && dX != 0f) {
+                    val itemView = viewHolder.itemView
+                    val pos = viewHolder.bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }
+                        ?: viewHolder.adapterPosition
+                    val task = if (pos != RecyclerView.NO_POSITION) adapter.getItemAt(pos) else null
+                    val isDone = task?.status == "DONE"
+                    val cornerRadius = 12f * resources.displayMetrics.density
+                    val horizontalPad = 18f * resources.displayMetrics.density
+
+                    val rect = RectF(
+                        itemView.left.toFloat(),
+                        itemView.top.toFloat(),
+                        itemView.right.toFloat(),
+                        itemView.bottom.toFloat()
+                    )
+
+                    if (dX > 0f) {
+                        // 우측 스와이프: 완료 처리(초록) / 미완료 복원(앰버)
+                        bgPaint.color = if (isDone) Color.parseColor("#D97706") else Color.parseColor("#059669")
+                        c.drawRoundRect(rect, cornerRadius, cornerRadius, bgPaint)
+
+                        val label = if (isDone) "↩️ 미완료 복원 ➔" else "✅ 완료 처리 ➔"
+                        textPaint.textAlign = Paint.Align.LEFT
+                        val textY = rect.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f
+                        c.drawText(label, rect.left + horizontalPad, textY, textPaint)
+                    } else {
+                        // 좌측 스와이프: 상세 · 빠른 답장 열기(블루)
+                        bgPaint.color = Color.parseColor("#2563EB")
+                        c.drawRoundRect(rect, cornerRadius, cornerRadius, bgPaint)
+
+                        val label = "⬅ 💬 상세 · 빠른 답장"
+                        textPaint.textAlign = Paint.Align.RIGHT
+                        val textY = rect.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f
+                        c.drawText(label, rect.right - horizontalPad, textY, textPaint)
+                    }
+                }
+                super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive)
+            }
+        }
+        ItemTouchHelper(swipeCallback).attachToRecyclerView(binding.rvTasksList)
     }
 
     private fun openDialer(phone: String) {
@@ -1396,6 +1505,8 @@ class TaskAdapter(
         notifyDataSetChanged()
     }
 
+    fun getItemAt(position: Int): TaskItemDto? = items.getOrNull(position)
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_task_row, parent, false)
         return ViewHolder(view)
@@ -1415,6 +1526,15 @@ class TaskAdapter(
         private val tvDueDate: TextView = itemView.findViewById(R.id.tvTaskDueDate)
         private val tvCustomer: TextView = itemView.findViewById(R.id.tvTaskCustomer)
         private val btnCall: TextView = itemView.findViewById(R.id.btnCallCustomer)
+
+        private var boundItem: TaskItemDto? = null
+        private var boundCustomerName: String? = null
+        private var boundCustomerPhone: String? = null
+
+        fun openDetailSheet() {
+            val currentItem = boundItem ?: return
+            onItemClick(currentItem, boundCustomerName, boundCustomerPhone)
+        }
 
         private fun cleanNullableText(raw: String?): String? {
             val v = raw?.replace("\uFFFD", "")?.trim() ?: return null
@@ -1477,18 +1597,19 @@ class TaskAdapter(
             val cleanCustomerName = normalizeDisplayCustomerName(item.contactName)
             val cleanCustomerPhone = extractPurePhone(item.contactPhone, item.contactName, item.description, item.title)
 
+            boundItem = item
+            boundCustomerName = cleanCustomerName
+            boundCustomerPhone = cleanCustomerPhone
+            btnCheck.visibility = View.GONE
+
             tvTitle.text = item.title.replace("\uFFFD", "").trim()
             if (isDone) {
                 tvTitle.paintFlags = tvTitle.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
                 tvTitle.setTextColor(Color.GRAY)
-                btnCheck.setImageResource(android.R.drawable.checkbox_on_background)
             } else {
                 tvTitle.paintFlags = tvTitle.paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
                 tvTitle.setTextColor(Color.parseColor("#F8FAFC"))
-                btnCheck.setImageResource(android.R.drawable.checkbox_off_background)
             }
-
-            btnCheck.setOnClickListener { onToggleStatus(item) }
 
             // 출처 뱃지
             val sourceLabel: String

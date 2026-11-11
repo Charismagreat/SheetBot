@@ -8,7 +8,7 @@
     android:layout_marginVertical="4dp"
     android:gravity="top">
 
-    <!-- 완료 토글 버튼 -->
+    <!-- 완료 토글 버튼 (스와이프 완료 처리 방식으로 전환되어 숨김 처리) -->
     <ImageView
         android:id="@+id/btnTaskCheck"
         android:layout_width="28dp"
@@ -17,6 +17,7 @@
         android:contentDescription="완료 여부"
         android:layout_marginEnd="10dp"
         android:layout_marginTop="2dp"
+        android:visibility="gone"
         android:background="?android:attr/selectableItemBackgroundBorderless" />
 
     <!-- 본문 내용 -->
