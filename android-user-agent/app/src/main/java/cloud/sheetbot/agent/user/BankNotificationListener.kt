@@ -233,9 +233,6 @@ class BankNotificationListener : NotificationListenerService() {
      * 카카오톡 수신 알림 정밀 파싱 및 구글 시트 동기화
      */
     private fun handleKakaoNotification(sbn: StatusBarNotification) {
-        if (!prefs.isPaired) return
-        val userEmail = prefs.userEmail ?: return
-
         try {
             val notification = sbn.notification ?: return
             val extras = notification.extras ?: return
@@ -293,6 +290,12 @@ class BankNotificationListener : NotificationListenerService() {
                     isGroupChat = true
                 }
             }
+
+            // 💬 스마트 통합 할 일 허브에서 즉시 카톡 채팅방 열기 & 직접 답장(RemoteInput)이 가능하도록 세션 캐싱
+            KakaoReplySessionCache.captureFromNotification(sbn, chatRoomName, sender)
+
+            if (!prefs.isPaired && !prefs.isFtsPaired) return
+            val userEmail = prefs.userEmail ?: ""
 
             // ========================================================
             // [A] 최우선 금융 알림톡 감지 (카카오페이 / 카카오뱅크 송금·입금·결제 알림)
@@ -453,9 +456,6 @@ class BankNotificationListener : NotificationListenerService() {
      * 구글 메시지(Google Messages) 및 삼성 메시지 알림 정밀 감지 (RCS 및 SMS 완벽 지원)
      */
     private fun handleMessageNotification(sbn: StatusBarNotification) {
-        if (!prefs.isPaired || !prefs.isSmsSheetSyncEnabled) return
-        val userEmail = prefs.userEmail ?: return
-
         try {
             val extras = sbn.notification.extras ?: return
             val rawTitle = extras.getString(Notification.EXTRA_TITLE)
@@ -468,6 +468,12 @@ class BankNotificationListener : NotificationListenerService() {
 
             val rawSender = rawTitle.trim()
             val message = rawText.trim()
+
+            // 💬 메시지 알림 세션도 캐싱하여 바로 열기/답장 지원
+            KakaoReplySessionCache.captureFromNotification(sbn, rawSender, rawSender)
+
+            if ((!prefs.isPaired && !prefs.isFtsPaired) || !prefs.isSmsSheetSyncEnabled) return
+            val userEmail = prefs.userEmail ?: ""
 
             // 1. 발신자 식별 (전화번호 vs 연락처 이름 분기)
             val isPhone = ContactHelper.isValidPhoneNumber(rawSender)

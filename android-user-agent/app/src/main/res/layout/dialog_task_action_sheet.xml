@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#0F172A"
+    android:padding="20dp">
+
+    <!-- 상단 핸들 바 -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:background="#334155"
+        android:layout_marginBottom="16dp" />
+
+    <!-- 상단 출처 뱃지 + 기한 + 닫기 버튼 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="10dp">
+
+        <TextView
+            android:id="@+id/tvSheetSourceBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🎙️ 통화 녹음"
+            android:textColor="#34D399"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_badge_version"
+            android:backgroundTint="#064E3B"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="3dp"
+            android:layout_marginEnd="6dp" />
+
+        <TextView
+            android:id="@+id/tvSheetStateBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="회신요망"
+            android:textColor="#E0F2FE"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_badge_version"
+            android:backgroundTint="#0284C7"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="3dp"
+            android:visibility="gone"
+            android:layout_marginEnd="6dp" />
+
+        <TextView
+            android:id="@+id/tvSheetDueDate"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="오늘/내일 중"
+            android:textColor="#94A3B8"
+            android:textSize="11.5sp"
+            android:gravity="end"
+            android:layout_marginEnd="8dp" />
+
+        <TextView
+            android:id="@+id/btnCloseTaskSheet"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="✕"
+            android:textColor="#94A3B8"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:padding="4dp" />
+    </LinearLayout>
+
+    <!-- 할 일 제목 -->
+    <TextView
+        android:id="@+id/tvSheetTaskTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="할 일 제목"
+        android:textColor="#F8FAFC"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:lineSpacingExtra="3dp"
+        android:layout_marginBottom="10dp" />
+
+    <!-- 고객 및 연락처 정보 박스 -->
+    <LinearLayout
+        android:id="@+id/layoutSheetContactBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="#1E293B"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="10dp"
+        android:layout_marginBottom="10dp">
+
+        <TextView
+            android:id="@+id/tvSheetContactName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="👤 고객: 홍길동"
+            android:textColor="#E2E8F0"
+            android:textSize="12.5sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvSheetContactPhone"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📞 010-1234-5678"
+            android:textColor="#38BDF8"
+            android:textSize="12.5sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- 상세 내용 / 원문 메시지 / 통화 요약 스크롤 영역 -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/scrollSheetDescription"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxHeight="150dp"
+        android:background="#1E293B"
+        android:padding="12dp"
+        android:layout_marginBottom="14dp">
+
+        <TextView
+            android:id="@+id/tvSheetTaskDescription"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="상세 내용"
+            android:textColor="#CBD5E1"
+            android:textSize="12.5sp"
+            android:lineSpacingExtra="3dp" />
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- 1차 주요 액션 버튼 그리드 (전화걸기 / 문자 대화창 열기 / 카톡 채팅방 열기) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="10dp">
+
+        <Button
+            android:id="@+id/btnActionCallNow"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:text="📞 전화걸기"
+            android:textColor="#FFFFFF"
+            android:textSize="12.5sp"
+            android:textStyle="bold"
+            android:backgroundTint="#0284C7"
+            android:layout_marginEnd="6dp" />
+
+        <Button
+            android:id="@+id/btnActionOpenSmsApp"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:text="💬 메시지창 열기"
+            android:textColor="#FFFFFF"
+            android:textSize="12.5sp"
+            android:textStyle="bold"
+            android:backgroundTint="#4F46E5" />
+
+        <Button
+            android:id="@+id/btnActionOpenKakao"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:text="💛 카톡 열기"
+            android:textColor="#1E293B"
+            android:textSize="12.5sp"
+            android:textStyle="bold"
+            android:backgroundTint="#FACC15"
+            android:layout_marginStart="6dp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- 앱 내 빠른 답장 섹션 -->
+    <LinearLayout
+        android:id="@+id/layoutQuickReplyBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#1E293B"
+        android:padding="12dp"
+        android:layout_marginBottom="12dp">
+
+        <TextView
+            android:id="@+id/tvQuickReplyHeader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⚡ 앱에서 바로 답장 보내기 (발송 시 자동 완료 처리)"
+            android:textColor="#38BDF8"
+            android:textSize="11.5sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <!-- 빠른 상용구 칩 버튼 -->
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:layout_marginBottom="8dp">
+
+            <LinearLayout
+                android:id="@+id/layoutQuickReplyTemplates"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
+        <!-- 답장 입력창 + 즉시 전송 버튼 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <EditText
+                android:id="@+id/etQuickReplyMessage"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:minHeight="42dp"
+                android:maxLines="3"
+                android:layout_weight="1"
+                android:background="#0F172A"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="8dp"
+                android:hint="답장할 내용을 입력하세요..."
+                android:textColor="#FFFFFF"
+                android:textColorHint="#64748B"
+                android:textSize="12.5sp"
+                android:layout_marginEnd="8dp" />
+
+            <Button
+                android:id="@+id/btnSendQuickReplyNow"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:text="전송"
+                android:textColor="#FFFFFF"
+                android:textSize="12.5sp"
+                android:textStyle="bold"
+                android:backgroundTint="#059669" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 하단 완료/미완료 상태 전환 버튼 -->
+    <Button
+        android:id="@+id/btnActionToggleTaskDone"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:text="✅ 이 할 일 완료 처리하기"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:backgroundTint="#10B981" />
+
+</LinearLayout>

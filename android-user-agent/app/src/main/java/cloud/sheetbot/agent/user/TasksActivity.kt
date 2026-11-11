@@ -11,8 +11,10 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -21,6 +23,8 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import cloud.sheetbot.agent.user.card.CardInlineLoadingHelper
 import cloud.sheetbot.agent.user.databinding.ActivityTasksBinding
+import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -93,12 +97,360 @@ class TasksActivity : AppCompatActivity() {
                 toggleTask(task, nextStatus)
             },
             onCallClick = { phone ->
-                val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
-                startActivity(dialIntent)
+                openDialer(phone)
+            },
+            onItemClick = { task, resolvedName, resolvedPhone ->
+                showTaskActionBottomSheet(task, resolvedName, resolvedPhone)
             }
         )
         binding.rvTasksList.layoutManager = LinearLayoutManager(this)
         binding.rvTasksList.adapter = adapter
+    }
+
+    private fun openDialer(phone: String) {
+        val clean = phone.trim()
+        if (clean.isBlank()) {
+            Toast.makeText(this, "연결된 전화번호가 없습니다.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$clean"))
+            startActivity(dialIntent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "전화 앱을 열 수 없습니다.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun openSmsConversation(phone: String, prefillBody: String? = null) {
+        val clean = phone.trim()
+        if (clean.isBlank()) {
+            Toast.makeText(this, "문자 대화창을 열 전화번호가 없습니다.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            val smsIntent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$clean")).apply {
+                if (!prefillBody.isNullOrBlank()) {
+                    putExtra("sms_body", prefillBody)
+                }
+            }
+            startActivity(smsIntent)
+        } catch (e: Exception) {
+            try {
+                val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse("sms:$clean")).apply {
+                    if (!prefillBody.isNullOrBlank()) {
+                        putExtra("sms_body", prefillBody)
+                    }
+                }
+                startActivity(viewIntent)
+            } catch (_: Exception) {
+                Toast.makeText(this, "메시지 앱을 열 수 없습니다.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun openKakaoTalkAppOrRoom(session: KakaoReplySessionCache.ReplySession?) {
+        if (session != null && session.canOpenChatRoom) {
+            if (KakaoReplySessionCache.openChatRoom(session)) {
+                return
+            }
+        }
+        try {
+            val launchIntent = packageManager.getLaunchIntentForPackage("com.kakao.talk")
+            if (launchIntent != null) {
+                startActivity(launchIntent)
+            } else {
+                Toast.makeText(this, "카카오톡 앱이 설치되어 있지 않습니다.", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "카카오톡을 실행할 수 없습니다.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showTaskActionBottomSheet(
+        task: TaskItemDto,
+        initialName: String?,
+        initialPhone: String?
+    ) {
+        val dialog = BottomSheetDialog(this)
+        val view = LayoutInflater.from(this).inflate(R.layout.dialog_task_action_sheet, null)
+        dialog.setContentView(view)
+
+        val tvSourceBadge = view.findViewById<TextView>(R.id.tvSheetSourceBadge)
+        val tvStateBadge = view.findViewById<TextView>(R.id.tvSheetStateBadge)
+        val tvDueDate = view.findViewById<TextView>(R.id.tvSheetDueDate)
+        val btnClose = view.findViewById<View>(R.id.btnCloseTaskSheet)
+        val tvTitle = view.findViewById<TextView>(R.id.tvSheetTaskTitle)
+        val layoutContactBox = view.findViewById<View>(R.id.layoutSheetContactBox)
+        val tvContactName = view.findViewById<TextView>(R.id.tvSheetContactName)
+        val tvContactPhone = view.findViewById<TextView>(R.id.tvSheetContactPhone)
+        val scrollDesc = view.findViewById<View>(R.id.scrollSheetDescription)
+        val tvDesc = view.findViewById<TextView>(R.id.tvSheetTaskDescription)
+
+        val btnCallNow = view.findViewById<Button>(R.id.btnActionCallNow)
+        val btnOpenSms = view.findViewById<Button>(R.id.btnActionOpenSmsApp)
+        val btnOpenKakao = view.findViewById<Button>(R.id.btnActionOpenKakao)
+
+        val layoutQuickReplyBox = view.findViewById<View>(R.id.layoutQuickReplyBox)
+        val tvQuickReplyHeader = view.findViewById<TextView>(R.id.tvQuickReplyHeader)
+        val layoutTemplates = view.findViewById<LinearLayout>(R.id.layoutQuickReplyTemplates)
+        val etReply = view.findViewById<EditText>(R.id.etQuickReplyMessage)
+        val btnSendReply = view.findViewById<Button>(R.id.btnSendQuickReplyNow)
+        val btnToggleDone = view.findViewById<Button>(R.id.btnActionToggleTaskDone)
+
+        btnClose.setOnClickListener { dialog.dismiss() }
+
+        // 1. 전화번호 및 고객명 정밀 보강 (주소록 역조회 포함)
+        var targetName = initialName?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", true) }
+        var targetPhone = initialPhone?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", true) }
+
+        if (targetPhone == null) {
+            val textToScan = "${task.title} ${task.description.orEmpty()} ${targetName.orEmpty()}"
+            val phoneRegexMatch = Regex("(01[016789][\\-\\s]?\\d{3,4}[\\-\\s]?\\d{4}|0\\d{1,2}[\\-\\s]?\\d{3,4}[\\-\\s]?\\d{4})").find(textToScan)
+            if (phoneRegexMatch != null) {
+                targetPhone = ContactHelper.formatPhoneNumber(phoneRegexMatch.value)
+            }
+        }
+        if (targetPhone == null && !targetName.isNullOrBlank()) {
+            val lookupName = targetName.substringBefore("(").trim()
+            targetPhone = ContactHelper.getPhoneNumberByName(this, lookupName)
+        }
+        if (targetName == null && !targetPhone.isNullOrBlank()) {
+            targetName = ContactHelper.getContactName(this, targetPhone)
+        }
+
+        // 2. 상단 뱃지 및 제목/상세 내용 바인딩
+        when (task.sourceType) {
+            "CALL_RECORDING" -> {
+                tvSourceBadge.text = "🎙️ 통화 녹음"
+                tvSourceBadge.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#064E3B"))
+            }
+            "MEETING_RECORDING" -> {
+                tvSourceBadge.text = "🎙️ 회의 녹음"
+                tvSourceBadge.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#115E59"))
+            }
+            "MISSED_CALL" -> {
+                tvSourceBadge.text = "📞 부재중 전화"
+                tvSourceBadge.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#78350F"))
+            }
+            "ORDER_DELAY", "ORDER" -> {
+                tvSourceBadge.text = "📦 주문/견적"
+                tvSourceBadge.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#1E3A8A"))
+            }
+            "KAKAO" -> {
+                tvSourceBadge.text = "💬 카카오톡"
+                tvSourceBadge.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#713F12"))
+            }
+            "SMS" -> {
+                tvSourceBadge.text = "📱 문자 메시지"
+                tvSourceBadge.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#312E81"))
+            }
+            else -> {
+                tvSourceBadge.text = "📋 일반 업무"
+                tvSourceBadge.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#334155"))
+            }
+        }
+
+        val cleanBadge = task.badgeText?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", true) }
+        if (cleanBadge != null && !tvSourceBadge.text.toString().contains(cleanBadge)) {
+            tvStateBadge.text = cleanBadge
+            tvStateBadge.visibility = View.VISIBLE
+        } else {
+            tvStateBadge.visibility = View.GONE
+        }
+
+        tvDueDate.text = task.dueDate?.takeIf { it.isNotBlank() && !it.equals("null", true) } ?: ""
+        tvTitle.text = task.title
+
+        if (targetName != null || targetPhone != null) {
+            layoutContactBox.visibility = View.VISIBLE
+            tvContactName.text = "👤 고객: ${targetName ?: "미등록 연락처"}"
+            if (targetPhone != null) {
+                tvContactPhone.text = "📞 $targetPhone"
+                tvContactPhone.visibility = View.VISIBLE
+                tvContactPhone.setOnClickListener {
+                    dialog.dismiss()
+                    openDialer(targetPhone)
+                }
+            } else {
+                tvContactPhone.visibility = View.GONE
+            }
+        } else {
+            layoutContactBox.visibility = View.GONE
+        }
+
+        val cleanDesc = task.description?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", true) }
+        if (cleanDesc != null && cleanDesc != task.title.trim()) {
+            scrollDesc.visibility = View.VISIBLE
+            tvDesc.text = cleanDesc
+        } else {
+            scrollDesc.visibility = View.GONE
+        }
+
+        // 3. 카카오톡 세션 확인
+        val kakaoSession = KakaoReplySessionCache.findSession(targetName, task.title)
+        val isKakaoTask = task.sourceType == "KAKAO"
+
+        // 4. 1차 주요 액션 버튼 구성 (전화걸기 / 문자 대화창 열기 / 카톡 열기)
+        if (targetPhone != null) {
+            btnCallNow.visibility = View.VISIBLE
+            btnCallNow.text = if (task.sourceType == "CALL_RECORDING" || task.sourceType == "MISSED_CALL") {
+                "📞 바로 전화걸기"
+            } else {
+                "📞 전화걸기"
+            }
+            btnCallNow.setOnClickListener {
+                dialog.dismiss()
+                openDialer(targetPhone)
+            }
+
+            btnOpenSms.visibility = View.VISIBLE
+            btnOpenSms.text = "💬 문자 대화창 열기"
+            btnOpenSms.setOnClickListener {
+                val draft = etReply.text?.toString()?.trim()
+                dialog.dismiss()
+                openSmsConversation(targetPhone, draft)
+            }
+        } else {
+            btnCallNow.visibility = View.GONE
+            btnOpenSms.visibility = View.GONE
+        }
+
+        if (isKakaoTask || kakaoSession != null) {
+            btnOpenKakao.visibility = View.VISIBLE
+            btnOpenKakao.text = if (kakaoSession?.canOpenChatRoom == true) "💛 해당 카톡방 열기" else "💛 카카오톡 열기"
+            btnOpenKakao.setOnClickListener {
+                dialog.dismiss()
+                openKakaoTalkAppOrRoom(kakaoSession)
+            }
+        } else {
+            btnOpenKakao.visibility = View.GONE
+        }
+
+        // 5. 앱 내 빠른 답장 섹션 (SMS 즉시 발송 또는 카카오톡 RemoteInput 답장)
+        val canReplyViaKakao = isKakaoTask && kakaoSession?.canDirectReply == true
+        val canReplyViaSms = targetPhone != null && ContactHelper.isMobilePhoneNumber(targetPhone)
+
+        if (canReplyViaKakao || canReplyViaSms) {
+            layoutQuickReplyBox.visibility = View.VISIBLE
+            if (canReplyViaKakao) {
+                tvQuickReplyHeader.text = "💛 카카오톡 바로 답장 보내기 (${kakaoSession?.chatRoomName ?: targetName ?: "채팅방"})"
+                etReply.hint = "카카오톡 답장 내용을 입력하세요..."
+                btnSendReply.text = "카톡 전송"
+            } else {
+                tvQuickReplyHeader.text = "⚡ 문자(SMS) 바로 답장 보내기 ($targetPhone)"
+                etReply.hint = "답장 문자 내용을 입력하세요..."
+                btnSendReply.text = "문자 전송"
+            }
+
+            // 상황별 원터치 상용구 칩 생성
+            val templates = when (task.sourceType) {
+                "MISSED_CALL", "CALL_RECORDING" -> listOf(
+                    "안녕하세요, 확인 후 곧 다시 연락드리겠습니다.",
+                    "방금 통화 감사드립니다. 말씀하신 내용 확인 후 회신드리겠습니다.",
+                    "현재 회의 중이라 잠시 후 전화드리겠습니다."
+                )
+                "ORDER_DELAY", "ORDER" -> listOf(
+                    "주문해주셔서 감사합니다. 확인 후 빠르게 처리해 드리겠습니다.",
+                    "요청하신 건 접수 완료되었습니다. 출고 시 안내드리겠습니다.",
+                    "견적 및 재고 확인 후 곧 연락드리겠습니다."
+                )
+                else -> listOf(
+                    "네, 확인했습니다. 감사합니다!",
+                    "말씀하신 내용 확인 후 연락드리겠습니다.",
+                    "잠시 후 확인하여 답변드리겠습니다."
+                )
+            }
+
+            layoutTemplates.removeAllViews()
+            for (tpl in templates) {
+                val chip = TextView(this).apply {
+                    text = tpl
+                    setTextColor(Color.parseColor("#E2E8F0"))
+                    textSize = 11f
+                    setBackgroundResource(R.drawable.bg_badge_version)
+                    backgroundTintList = ColorStateList.valueOf(Color.parseColor("#334155"))
+                    setPadding(24, 12, 24, 12)
+                    val lp = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        marginEnd = 16
+                    }
+                    layoutParams = lp
+                    setOnClickListener {
+                        etReply.setText(tpl)
+                        etReply.setSelection(tpl.length)
+                    }
+                }
+                layoutTemplates.addView(chip)
+            }
+
+            btnSendReply.setOnClickListener {
+                val msgText = etReply.text?.toString()?.trim().orEmpty()
+                if (msgText.isBlank()) {
+                    Toast.makeText(this, "답장할 내용을 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+
+                if (canReplyViaKakao && kakaoSession != null) {
+                    val sent = KakaoReplySessionCache.sendDirectReply(this, kakaoSession, msgText)
+                    if (sent) {
+                        Toast.makeText(this, "💛 카카오톡 답장을 전송하고 할 일을 완료 처리했습니다.", Toast.LENGTH_SHORT).show()
+                        if (task.status != "DONE") {
+                            toggleTask(task, "DONE")
+                        }
+                        dialog.dismiss()
+                    } else {
+                        Toast.makeText(this, "카카오톡 알림 세션이 만료되어 카카오톡 앱을 엽니다.", Toast.LENGTH_SHORT).show()
+                        dialog.dismiss()
+                        openKakaoTalkAppOrRoom(kakaoSession)
+                    }
+                } else if (targetPhone != null) {
+                    val (sent, _) = SmsSenderUtil.sendSmsDetailed(this, targetPhone, msgText)
+                    if (sent) {
+                        Toast.makeText(this, "📲 답장 문자를 발송하고 할 일을 완료 처리했습니다.", Toast.LENGTH_SHORT).show()
+                        if (task.status != "DONE") {
+                            toggleTask(task, "DONE")
+                        }
+                        dialog.dismiss()
+                    } else {
+                        // 권한 미허용 등으로 직접 발송 실패 시 기본 메시지 대화창으로 안전 폴백
+                        dialog.dismiss()
+                        openSmsConversation(targetPhone, msgText)
+                    }
+                }
+            }
+        } else if (targetPhone != null) {
+            // 유선전화(02, 031 등)인 경우 문자 답장 박스 숨김
+            layoutQuickReplyBox.visibility = View.GONE
+        } else {
+            layoutQuickReplyBox.visibility = View.GONE
+        }
+
+        // 6. 완료/미완료 토글 버튼
+        val isDone = task.status == "DONE"
+        if (isDone) {
+            btnToggleDone.text = "↩️ 미완료 상태로 되돌리기"
+            btnToggleDone.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#475569"))
+        } else {
+            btnToggleDone.text = "✅ 이 할 일 완료 처리하기"
+            btnToggleDone.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#10B981"))
+        }
+        btnToggleDone.setOnClickListener {
+            val nextStatus = if (isDone) "PENDING" else "DONE"
+            toggleTask(task, nextStatus)
+            dialog.dismiss()
+        }
+
+        dialog.behavior.apply {
+            state = BottomSheetBehavior.STATE_EXPANDED
+            skipCollapsed = true
+        }
+        dialog.setOnShowListener {
+            dialog.behavior.state = BottomSheetBehavior.STATE_EXPANDED
+            dialog.behavior.skipCollapsed = true
+        }
+        dialog.show()
     }
 
     private fun isUrgentTask(task: TaskItemDto): Boolean {
@@ -369,7 +721,8 @@ class TasksActivity : AppCompatActivity() {
  */
 class TaskAdapter(
     private val onToggleStatus: (TaskItemDto) -> Unit,
-    private val onCallClick: (String) -> Unit
+    private val onCallClick: (String) -> Unit,
+    private val onItemClick: (TaskItemDto, String?, String?) -> Unit
 ) : RecyclerView.Adapter<TaskAdapter.ViewHolder>() {
 
     private var items = listOf<TaskItemDto>()
@@ -542,6 +895,11 @@ class TaskAdapter(
                 btnCall.setOnClickListener { onCallClick(cleanCustomerPhone) }
             } else {
                 btnCall.visibility = View.GONE
+            }
+
+            // 카드 전체 클릭 시 통합 액션 바텀시트(방식 A) 오픈
+            itemView.setOnClickListener {
+                onItemClick(item, cleanCustomerName, cleanCustomerPhone)
             }
         }
     }
