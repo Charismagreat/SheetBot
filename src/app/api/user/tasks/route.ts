@@ -61,11 +61,12 @@ export async function GET(req: NextRequest) {
       orderDirection: "DESC",
     }).catch(() => ({ rows: [] }));
 
-    // 3. 소프트 삭제 필터링, 더미 항목 제거
+    // 3. 소프트 삭제 필터링, 더미 항목 및 레거시 요약 절단 행 제거
     const activeRows = (res.rows || []).filter((r: any) => {
       if (r.deleted_at) return false;
       const t = String(r.title || "").trim();
       if (!t || /^\[후속\s*조치\s*\d*\]$/i.test(t) || t.startsWith("(없음")) return false;
+      if (t.includes("연탄맥 설정 환경 문제로 인한 개발 지연 해결 방안")) return false;
       return true;
     });
 
@@ -92,19 +93,128 @@ export async function GET(req: NextRequest) {
       return true;
     });
 
+    const formatKrPhone = (digits: string): string => {
+      const d = String(digits || "").replace(/[^0-9]/g, "");
+      if (d.length === 11 && d.startsWith("01")) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+      if (d.length === 10 && d.startsWith("02")) return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}`;
+      if (d.length === 10 && d.startsWith("0")) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+      if (d.length === 9 && d.startsWith("02")) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
+      return "";
+    };
+
+    const extractPhone = (...texts: Array<string | null | undefined>): string => {
+      for (const raw of texts) {
+        if (!raw) continue;
+        const m = String(raw).match(
+          /(01[016789][-\s]?\d{3,4}[-\s]?\d{4}|02[-\s]?\d{3,4}[-\s]?\d{4}|0[3-6][1-5][-\s]?\d{3,4}[-\s]?\d{4})/
+        );
+        if (m) {
+          const f = formatKrPhone(m[1]);
+          if (f) return f;
+        }
+      }
+      return "";
+    };
+
+    const cleanCustomerName = (raw: string | null | undefined): string => {
+      if (!raw) return "";
+      let s = String(raw).replace(/\uFFFD+/g, "").trim();
+      s = s.replace(/\(\d{4}-\d{2}-\d{2}[^)]*\)/g, "").trim();
+      s = s.replace(/\(\s*(01[016789][-\s]?\d{3,4}[-\s]?\d{4}|0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4})\s*\)/g, "").trim();
+      s = s
+        .replace(
+          /\(([^()]*?)[,\/]\s*(01[016789][-\s]?\d{3,4}[-\s]?\d{4}|0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4})\s*\)/g,
+          "($1)"
+        )
+        .trim();
+      s = s.replace(/\(\s*\)/g, "").replace(/\s+/g, " ").trim();
+      return s;
+    };
+
+    const normalizeCustomerKey = (name: string): string =>
+      cleanCustomerName(name)
+        .replace(/[^가-힣a-zA-Z0-9]/g, "")
+        .toLowerCase();
+
+    const normalizeTitleKey = (title: string): string =>
+      String(title || "")
+        .replace(/\uFFFD+/g, "")
+        .replace(/^\[[^\]]+\]\s*/, "")
+        .replace(/[^가-힣a-zA-Z0-9]/g, "")
+        .toLowerCase();
+
     const combinedRows = [...activeRows, ...filteredFtsTasks];
 
-    const dedupMap = new Map<string, any>();
+    // 고객명 -> 전화번호 매핑 테이블 구축 (동일 고객 다른 카드에서 번호 자동 보강)
+    const customerPhoneMap = new Map<string, string>();
     for (const row of combinedRows) {
-      const cleanTitle = String(row.title || "").trim();
-      if (!cleanTitle) continue;
-      const key = `${row.source_type || "SMS"}::${cleanTitle}`;
-      const existing = dedupMap.get(key);
+      const p = extractPhone(row.contact_phone, row.contact_name, row.description, row.title);
+      const k = normalizeCustomerKey(row.contact_name || "");
+      if (p && k.length >= 2) {
+        customerPhoneMap.set(k, p);
+      }
+    }
+
+    // 깨진 문자(\uFFFD)가 없는 정상 행을 먼저 배치하여 중복 제거 시 정상 본문이 우선 채택되도록 정렬
+    const sortedCombined = [...combinedRows].sort((a, b) => {
+      const aCorrupt = String(a.title || "").includes("\uFFFD") ? 1 : 0;
+      const bCorrupt = String(b.title || "").includes("\uFFFD") ? 1 : 0;
+      if (aCorrupt !== bCorrupt) return aCorrupt - bCorrupt;
+      const aDone = a.status === "DONE" ? 0 : 1;
+      const bDone = b.status === "DONE" ? 0 : 1;
+      return aDone - bDone;
+    });
+
+    const dedupMap = new Map<string, any>();
+    for (const row of sortedCombined) {
+      const rawTitle = String(row.title || "").trim();
+      if (!rawTitle || rawTitle.includes("연탄맥 설정 환경 문제로 인한 개발 지연 해결 방안")) continue;
+
+      if (rawTitle.includes("\uFFFD")) {
+        const cleanParts = rawTitle
+          .replace(/^\[[^\]]+\]\s*/, "")
+          .split(/\uFFFD+/)
+          .map((s) => s.trim())
+          .filter((s) => s.length >= 4);
+        const alreadyExists = Array.from(dedupMap.values()).some((existing) => {
+          const et = String(existing.title || "");
+          return cleanParts.length > 0 && cleanParts.every((part) => et.includes(part));
+        });
+        if (alreadyExists) continue;
+      }
+
+      const cleanTitle = rawTitle.replace(/\uFFFD+/g, "").replace(/\s+/g, " ").trim();
+      const normKey = normalizeTitleKey(cleanTitle);
+      if (!normKey) continue;
+
+      const cleanName = cleanCustomerName(row.contact_name);
+      let cleanPhone = extractPhone(row.contact_phone, row.contact_name, row.description, cleanTitle);
+      if (!cleanPhone && cleanName) {
+        cleanPhone = customerPhoneMap.get(normalizeCustomerKey(cleanName)) || "";
+      }
+
+      const normalizedRow = {
+        ...row,
+        title: cleanTitle,
+        description: row.description ? String(row.description).replace(/\uFFFD+/g, "").trim() : null,
+        contact_name: cleanName || null,
+        contact_phone: cleanPhone || null,
+      };
+
+      const existing = dedupMap.get(normKey);
       if (!existing) {
-        dedupMap.set(key, row);
-      } else if (row.status === "DONE" && existing.status !== "DONE") {
-        // 동일 과업 중복 레코드 중 하나라도 완료 처리되었다면 DONE 상태를 우선 보존
-        dedupMap.set(key, row);
+        dedupMap.set(normKey, normalizedRow);
+      } else {
+        if (normalizedRow.status === "DONE" && existing.status !== "DONE") {
+          existing.status = "DONE";
+          existing.completed_at = normalizedRow.completed_at || existing.completed_at;
+        }
+        if (!existing.contact_phone && normalizedRow.contact_phone) {
+          existing.contact_phone = normalizedRow.contact_phone;
+        }
+        if (!existing.contact_name && normalizedRow.contact_name) {
+          existing.contact_name = normalizedRow.contact_name;
+        }
       }
     }
 
@@ -319,12 +429,9 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ success: false, error: "taskId가 필요합니다." }, { status: 400 });
     }
 
-    const taskId = Number(taskIdStr);
-    const nowStr = getKoreanTimeString();
-
     await callUserDataTool("user_data_update_rows", {
       tableName: "sheetbot_tasks",
-      filters: { id: taskId, user_email: cleanEmail },
+      filters: { id: String(taskIdStr), user_email: cleanEmail },
       updates: {
         deleted_at: nowStr,
         deleted_by: cleanEmail,

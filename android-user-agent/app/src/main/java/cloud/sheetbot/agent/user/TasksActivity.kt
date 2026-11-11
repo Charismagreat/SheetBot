@@ -796,16 +796,127 @@ class TasksActivity : AppCompatActivity() {
         binding.tabAll.text = "전체 ($totalCount)"
     }
 
+    private fun formatKoreanPhoneNumber(digits: String): String {
+        val d = digits.replace(Regex("[^0-9]"), "")
+        return when {
+            d.length == 11 && d.startsWith("01") ->
+                "${d.substring(0, 3)}-${d.substring(3, 7)}-${d.substring(7)}"
+            d.length == 10 && d.startsWith("02") ->
+                "${d.substring(0, 2)}-${d.substring(2, 6)}-${d.substring(6)}"
+            d.length == 10 && d.startsWith("0") ->
+                "${d.substring(0, 3)}-${d.substring(3, 6)}-${d.substring(6)}"
+            d.length == 9 && d.startsWith("02") ->
+                "${d.substring(0, 2)}-${d.substring(2, 5)}-${d.substring(5)}"
+            else -> ""
+        }
+    }
+
+    private fun extractKoreanPhoneFromTexts(vararg texts: String?): String? {
+        val phoneRegex = Regex("(01[016789][-\\s]?\\d{3,4}[-\\s]?\\d{4}|02[-\\s]?\\d{3,4}[-\\s]?\\d{4}|0[3-6][1-5][-\\s]?\\d{3,4}[-\\s]?\\d{4})")
+        for (raw in texts) {
+            if (raw.isNullOrBlank()) continue
+            val m = phoneRegex.find(raw)
+            if (m != null) {
+                val formatted = formatKoreanPhoneNumber(m.value)
+                if (formatted.isNotEmpty()) return formatted
+            }
+        }
+        return null
+    }
+
+    private fun cleanCustomerDisplayName(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        var s = raw.replace("\uFFFD", "").trim()
+        if (s.isEmpty() || s.equals("null", ignoreCase = true) || s.equals("undefined", ignoreCase = true)) return null
+        s = s.replace(Regex("\\(\\d{4}-\\d{2}-\\d{2}[^)]*\\)"), "").trim()
+        s = s.replace(Regex("\\(\\s*(01[016789][-\\s]?\\d{3,4}[-\\s]?\\d{4}|0\\d{1,2}[-\\s]?\\d{3,4}[-\\s]?\\d{4})\\s*\\)"), "").trim()
+        s = s.replace(
+            Regex("\\(([^()]*?)[,/]\\s*(01[016789][-\\s]?\\d{3,4}[-\\s]?\\d{4}|0\\d{1,2}[-\\s]?\\d{3,4}[-\\s]?\\d{4})\\s*\\)"),
+            "($1)"
+        ).trim()
+        s = s.replace(Regex("\\(\\s*\\)"), "").replace(Regex("\\s+"), " ").trim()
+        return s.ifEmpty { null }
+    }
+
+    private fun normalizeCustomerLookupKey(name: String?): String {
+        val cleaned = cleanCustomerDisplayName(name) ?: return ""
+        return cleaned.replace(Regex("[^가-힣a-zA-Z0-9]"), "").lowercase()
+    }
+
+    private fun normalizeTitleDedupeKey(title: String): String {
+        return title
+            .replace("\uFFFD", "")
+            .replace(Regex("^\\[[^\\]]+\\]\\s*"), "")
+            .replace(Regex("[^가-힣a-zA-Z0-9]"), "")
+            .lowercase()
+    }
+
     private fun mergeTasksList(lists: List<TaskItemDto>): List<TaskItemDto> {
-        val dedupMap = linkedMapOf<String, TaskItemDto>()
+        val customerPhoneMap = mutableMapOf<String, String>()
         for (t in lists) {
-            val key = t.title.trim()
-            if (key.isEmpty() || key.equals("null", ignoreCase = true)) continue
-            val existing = dedupMap[key]
+            val phone = extractKoreanPhoneFromTexts(t.contactPhone, t.contactName, t.description, t.title)
+            val custKey = normalizeCustomerLookupKey(t.contactName)
+            if (!phone.isNullOrEmpty() && custKey.length >= 2) {
+                customerPhoneMap[custKey] = phone
+            }
+        }
+
+        // 깨진 문자(\uFFFD)가 없는 정상 행 및 완료(DONE) 행을 우선 정렬하여 중복 병합 시 정상 텍스트 보존
+        val sortedLists = lists.sortedWith(
+            compareBy<TaskItemDto> { it.title.contains('\uFFFD') }
+                .thenBy { it.status != "DONE" }
+        )
+
+        val dedupMap = linkedMapOf<String, TaskItemDto>()
+        for (t in sortedLists) {
+            val rawTitle = t.title.trim()
+            if (rawTitle.isEmpty() || rawTitle.equals("null", ignoreCase = true)) continue
+            if (rawTitle.contains("연탄맥 설정 환경 문제로 인한 개발 지연 해결 방안")) continue
+
+            if (rawTitle.contains('\uFFFD')) {
+                val cleanParts = rawTitle
+                    .replace(Regex("^\\[[^\\]]+\\]\\s*"), "")
+                    .split(Regex("\\uFFFD+"))
+                    .map { it.trim() }
+                    .filter { it.length >= 4 }
+                val dupExists = dedupMap.values.any { existing ->
+                    cleanParts.isNotEmpty() && cleanParts.all { part -> existing.title.contains(part) }
+                }
+                if (dupExists) continue
+            }
+
+            val cleanTitle = rawTitle.replace(Regex("\\uFFFD+"), "").replace(Regex("\\s+"), " ").trim()
+            val normKey = normalizeTitleDedupeKey(cleanTitle)
+            if (normKey.isEmpty()) continue
+
+            val cleanName = cleanCustomerDisplayName(t.contactName)
+            var cleanPhone = extractKoreanPhoneFromTexts(t.contactPhone, t.contactName, t.description, cleanTitle)
+            if (cleanPhone.isNullOrEmpty() && !cleanName.isNullOrEmpty()) {
+                cleanPhone = customerPhoneMap[normalizeCustomerLookupKey(cleanName)]
+            }
+
+            val sanitizedItem = t.copy(
+                title = cleanTitle,
+                description = t.description?.replace(Regex("\\uFFFD+"), "")?.trim(),
+                contactName = cleanName ?: t.contactName,
+                contactPhone = cleanPhone ?: t.contactPhone
+            )
+
+            val existing = dedupMap[normKey]
             if (existing == null) {
-                dedupMap[key] = t
-            } else if (t.status == "DONE" && existing.status != "DONE") {
-                dedupMap[key] = existing.copy(status = "DONE")
+                dedupMap[normKey] = sanitizedItem
+            } else {
+                var merged = existing
+                if (sanitizedItem.status == "DONE" && merged.status != "DONE") {
+                    merged = merged.copy(status = "DONE")
+                }
+                if (merged.contactPhone.isNullOrBlank() && !sanitizedItem.contactPhone.isNullOrBlank()) {
+                    merged = merged.copy(contactPhone = sanitizedItem.contactPhone)
+                }
+                if (merged.contactName.isNullOrBlank() && !sanitizedItem.contactName.isNullOrBlank()) {
+                    merged = merged.copy(contactName = sanitizedItem.contactName)
+                }
+                dedupMap[normKey] = merged
             }
         }
         return dedupMap.values.toList()
@@ -1018,7 +1129,7 @@ class TaskAdapter(
         private val btnCall: TextView = itemView.findViewById(R.id.btnCallCustomer)
 
         private fun cleanNullableText(raw: String?): String? {
-            val v = raw?.trim() ?: return null
+            val v = raw?.replace("\uFFFD", "")?.trim() ?: return null
             return if (v.isEmpty() || v.equals("null", ignoreCase = true) || v.equals("undefined", ignoreCase = true)) null else v
         }
 
@@ -1036,29 +1147,41 @@ class TaskAdapter(
             }
         }
 
+        private fun extractPurePhone(vararg candidates: String?): String? {
+            val phoneRegex = Regex("(01[016789][-\\s]?\\d{3,4}[-\\s]?\\d{4}|02[-\\s]?\\d{3,4}[-\\s]?\\d{4}|0[3-6][1-5][-\\s]?\\d{3,4}[-\\s]?\\d{4})")
+            for (c in candidates) {
+                if (c.isNullOrBlank()) continue
+                val m = phoneRegex.find(c)
+                if (m != null) {
+                    val rawDigits = m.value.replace(Regex("[^0-9]"), "")
+                    if (rawDigits.length in 9..11) {
+                        return formatKoreanPhone(rawDigits)
+                    }
+                }
+            }
+            return null
+        }
+
+        private fun normalizeDisplayCustomerName(raw: String?): String? {
+            var s = cleanNullableText(raw) ?: return null
+            s = s.replace(Regex("\\(\\d{4}-\\d{2}-\\d{2}[^)]*\\)"), "").trim()
+            s = s.replace(Regex("\\(\\s*(01[016789][-\\s]?\\d{3,4}[-\\s]?\\d{4}|0\\d{1,2}[-\\s]?\\d{3,4}[-\\s]?\\d{4})\\s*\\)"), "").trim()
+            s = s.replace(
+                Regex("\\(([^()]*?)[,/]\\s*(01[016789][-\\s]?\\d{3,4}[-\\s]?\\d{4}|0\\d{1,2}[-\\s]?\\d{3,4}[-\\s]?\\d{4})\\s*\\)"),
+                "($1)"
+            ).trim()
+            s = s.replace(Regex("\\(\\s*\\)"), "").replace(Regex("\\s+"), " ").trim()
+            return s.ifEmpty { null }
+        }
+
         fun bind(item: TaskItemDto) {
             val isDone = item.status == "DONE"
             val cleanBadge = cleanNullableText(item.badgeText)
             val cleanDueDate = cleanNullableText(item.dueDate)
-            var cleanCustomerName = cleanNullableText(item.contactName)
-            var cleanCustomerPhone = cleanNullableText(item.contactPhone)
+            val cleanCustomerName = normalizeDisplayCustomerName(item.contactName)
+            val cleanCustomerPhone = extractPurePhone(item.contactPhone, item.contactName, item.description, item.title)
 
-            // 고객명 안에 '(01012345678)' 형태로 전화번호가 포함되어 있고 contactPhone이 비어있으면 자동 분리 추출
-            if (cleanCustomerPhone == null && cleanCustomerName != null) {
-                val phoneMatch = Regex("\\(([0-9\\-]{9,13})\\)").find(cleanCustomerName)
-                if (phoneMatch != null) {
-                    val rawDigits = phoneMatch.groupValues[1].replace("[^0-9]".toRegex(), "")
-                    if (rawDigits.length in 9..11) {
-                        cleanCustomerPhone = formatKoreanPhone(rawDigits)
-                        val strippedName = cleanCustomerName.replace(phoneMatch.value, "").trim()
-                        if (strippedName.isNotEmpty()) {
-                            cleanCustomerName = strippedName
-                        }
-                    }
-                }
-            }
-
-            tvTitle.text = item.title
+            tvTitle.text = item.title.replace("\uFFFD", "").trim()
             if (isDone) {
                 tvTitle.paintFlags = tvTitle.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
                 tvTitle.setTextColor(Color.GRAY)

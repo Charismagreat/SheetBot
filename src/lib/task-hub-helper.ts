@@ -880,6 +880,23 @@ export async function resolveUserFtsPhoneNumber(
 }
 
 /**
+ * 다중 바이트 한글 UTF-8 문자열이 터널 청크 경계에서 쪼개져 \uFFFD()로 손상되는 현상을 원천 방지하는 직렬화 헬퍼
+ */
+function asciiSafeJsonStringify(obj: any): string {
+  return JSON.stringify(obj).replace(/[\u007f-\uffff]/g, (c) => {
+    return "\\u" + ("0000" + c.charCodeAt(0).toString(16)).slice(-4);
+  });
+}
+
+function normalizeTaskTitleKey(title: string): string {
+  return String(title || "")
+    .replace(/\uFFFD+/g, "")
+    .replace(/^\[[^\]]+\]\s*/, "")
+    .replace(/[^가-힣a-zA-Z0-9]/g, "")
+    .toLowerCase();
+}
+
+/**
  * 시트봇에서 생성된 할 일(단건 또는 다건)을 파일투시트 '통합할일대장' 시트에 자동 기록
  */
 export async function syncTaskItemToFileToSheet(
@@ -891,10 +908,17 @@ export async function syncTaskItemToFileToSheet(
   const projectId = options?.projectId || "";
   if (!phone && !projectId) return false;
 
-  const tasks = Array.isArray(taskPayload) ? taskPayload : [taskPayload];
+  const rawTasks = Array.isArray(taskPayload) ? taskPayload : [taskPayload];
+  const tasks = rawTasks
+    .filter((t) => t && t.title && !String(t.title).includes("\uFFFD"))
+    .map((t) => ({
+      ...t,
+      title: String(t.title || "").replace(/\uFFFD+/g, "").trim(),
+      description: t.description ? String(t.description).replace(/\uFFFD+/g, "").trim() : t.description,
+    }));
   if (tasks.length === 0) return false;
 
-  const bodyStr = JSON.stringify({
+  const bodyStr = asciiSafeJsonStringify({
     phoneNumber: phone || undefined,
     projectId: projectId || undefined,
     tasks,
@@ -942,11 +966,11 @@ export async function syncTaskStatusToFileToSheet(
   const projectId = params.projectId || "";
   if (!phone && !projectId) return false;
 
-  const bodyStr = JSON.stringify({
+  const bodyStr = asciiSafeJsonStringify({
     phoneNumber: phone || undefined,
     projectId: projectId || undefined,
     taskId: params.taskId,
-    title: params.title,
+    title: params.title ? String(params.title).replace(/\uFFFD+/g, "").trim() : undefined,
     status: params.status,
   });
 
@@ -1023,12 +1047,20 @@ export async function fetchAndSyncTasksFromFileToSheet(
   }
 
   // 1. 시트봇에는 있으나 파투 통합할일대장에 아직 없는 과업을 파투로 백그라운드 푸시
+  // (단, 파투에서 넘어온 과업(filetosheet_sync / fts_*)이나 인코딩 손상(\uFFFD) 항목은 역방향 재전송에서 제외하여 핑퐁 증식 원천 차단)
   const existingSbTasks = options?.existingSheetBotTasks || [];
-  if (existingSbTasks.length > 0) {
-    const ftsTitleSet = new Set(ftsTasks.map((t: any) => String(t.title || "").trim()));
+  if (existingSbTasks.length > 0 && ftsTasks.length > 0) {
+    const ftsNormSet = new Set(ftsTasks.map((t: any) => normalizeTaskTitleKey(t.title || "")));
     const missingInFts = existingSbTasks
-      .filter((t: any) => !t.deleted_at && t.title && !ftsTitleSet.has(String(t.title).trim()))
-      .slice(0, 30)
+      .filter((t: any) => {
+        if (t.deleted_at || !t.title) return false;
+        const titleStr = String(t.title).trim();
+        if (titleStr.includes("\uFFFD")) return false;
+        if (t.updated_by === "filetosheet_sync" || String(t.source_id || "").startsWith("fts_")) return false;
+        const norm = normalizeTaskTitleKey(titleStr);
+        return norm.length > 0 && !ftsNormSet.has(norm);
+      })
+      .slice(0, 20)
       .map((t: any) => ({
         title: t.title,
         description: t.description,
@@ -1051,23 +1083,25 @@ export async function fetchAndSyncTasksFromFileToSheet(
 
   // 2. 파투 시트에서 추출/조회된 할 일 중 시트봇 DB에 없는 항목은 시트봇 DB(sheetbot_tasks)에도 적재
   if (cleanEmail && ftsTasks.length > 0) {
-    const sbTitleSet = new Set(existingSbTasks.map((t: any) => String(t.title || "").trim()));
+    const sbNormSet = new Set(existingSbTasks.map((t: any) => normalizeTaskTitleKey(t.title || "")));
     const nowStr = getKoreanTimeString();
     const rowsToInsert: any[] = [];
 
     for (const ft of ftsTasks) {
-      const fTitle = String(ft.title || "").trim();
-      if (!fTitle || sbTitleSet.has(fTitle)) continue;
-      sbTitleSet.add(fTitle);
+      const fTitle = String(ft.title || "").replace(/\uFFFD+/g, "").trim();
+      const norm = normalizeTaskTitleKey(fTitle);
+      if (!fTitle || !norm || sbNormSet.has(norm)) continue;
+      if (fTitle.includes("연탄맥 설정 환경 문제로 인한 개발 지연 해결 방안")) continue;
+      sbNormSet.add(norm);
 
       rowsToInsert.push({
         id: Date.now() + Math.floor(Math.random() * 10000),
         user_email: cleanEmail,
         title: fTitle,
-        description: ft.description || null,
+        description: ft.description ? String(ft.description).replace(/\uFFFD+/g, "").trim() : null,
         source_type: ft.source_type || "SMS",
         source_id: ft.source_id || `fts_${Date.now()}`,
-        contact_name: ft.contact_name || null,
+        contact_name: ft.contact_name ? String(ft.contact_name).replace(/\uFFFD+/g, "").trim() : null,
         contact_phone: ft.contact_phone || null,
         due_date: ft.due_date || null,
         priority: ft.priority || "HIGH 🟡",
