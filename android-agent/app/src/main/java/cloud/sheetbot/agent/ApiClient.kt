@@ -173,7 +173,7 @@ object ApiClient {
                 val startTime = System.currentTimeMillis()
                 client.newCall(request).execute().use { response ->
                     val elapsed = System.currentTimeMillis() - startTime
-                    if (response.isSuccessful) {
+                    if (response.isSuccessful || response.code == 429) {
                         return@withContext PingResult(
                             isOnline = true,
                             latencyMs = elapsed,
@@ -224,9 +224,10 @@ object ApiClient {
                     .post(body)
                     .build()
 
-                val response = client.newCall(request).execute()
-                if (response.isSuccessful) {
-                    return@withContext true
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful || response.code == 429) {
+                        return@withContext true
+                    }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Heartbeat 실패 ($targetUrl): ${e.message}")

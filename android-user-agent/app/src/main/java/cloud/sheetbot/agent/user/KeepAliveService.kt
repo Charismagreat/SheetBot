@@ -364,7 +364,7 @@ class KeepAliveService : Service() {
     // ==========================================
     private val sseStreamClient: okhttp3.OkHttpClient by lazy {
         okhttp3.OkHttpClient.Builder()
-            .readTimeout(45, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(55, java.util.concurrent.TimeUnit.SECONDS)
             .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build()
@@ -433,6 +433,10 @@ class KeepAliveService : Service() {
                                     if (receivedDispatchEvent || elapsedMs >= 15000L) {
                                         connectedAndHealthy = true
                                     }
+                                } else if (response.code == 429) {
+                                    // 터널 인바운드 레이트리밋(429) 시 2차 호스트(동일 터널) 중복 호출을 피하고 백오프 대기
+                                    Log.w(TAG, "⚡ [SSE] 터널 레이트리밋 감지 (HTTP 429, $host) - 백오프 대기")
+                                    break
                                 } else {
                                     Log.w(TAG, "⚡ [SSE] 비정상 응답 (HTTP ${response.code}, $host)")
                                 }

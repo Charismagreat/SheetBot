@@ -98,8 +98,8 @@ data class FtsUploadResult(
 object FileToSheetClient {
     private const val TAG = "FileToSheetClient"
     const val FTS_OFFICIAL_DOMAIN = "https://file2sheet.cloud"
-    const val FTS_TUNNEL_BASE = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1-i01o2oa/p/FileToSheet"
-    const val FTS_TUNNEL_BASE_LEGACY = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/FileToSheet"
+    const val FTS_TUNNEL_BASE = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/FileToSheet"
+    const val FTS_TUNNEL_BASE_LEGACY = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1-i01o2oa/p/FileToSheet"
 
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
@@ -123,6 +123,7 @@ object FileToSheetClient {
         }
         if (!candidates.contains(FTS_OFFICIAL_DOMAIN)) candidates.add(FTS_OFFICIAL_DOMAIN)
         if (!candidates.contains(FTS_TUNNEL_BASE)) candidates.add(FTS_TUNNEL_BASE)
+        if (!candidates.contains(FTS_TUNNEL_BASE_LEGACY)) candidates.add(FTS_TUNNEL_BASE_LEGACY)
 
         for (host in candidates) {
             try {
@@ -797,7 +798,8 @@ object FileToSheetClient {
         val cleanPhone = phoneNumber.replace("[^0-9]".toRegex(), "")
         val endpoints = listOf(
             "$FTS_OFFICIAL_DOMAIN/api/auth/phone/send-code",
-            "$FTS_TUNNEL_BASE/api/auth/phone/send-code"
+            "$FTS_TUNNEL_BASE/api/auth/phone/send-code",
+            "$FTS_TUNNEL_BASE_LEGACY/api/auth/phone/send-code"
         )
         for (ep in endpoints) {
             try {
@@ -828,7 +830,8 @@ object FileToSheetClient {
         val cleanCode = code.trim()
         val endpoints = listOf(
             "$FTS_OFFICIAL_DOMAIN/api/auth/phone/verify-code",
-            "$FTS_TUNNEL_BASE/api/auth/phone/verify-code"
+            "$FTS_TUNNEL_BASE/api/auth/phone/verify-code",
+            "$FTS_TUNNEL_BASE_LEGACY/api/auth/phone/verify-code"
         )
         for (ep in endpoints) {
             try {
@@ -909,7 +912,8 @@ object FileToSheetClient {
 
         val endpoints = listOf(
             "$FTS_OFFICIAL_DOMAIN/api/inbox/ensure-sheet",
-            "$FTS_TUNNEL_BASE/api/inbox/ensure-sheet"
+            "$FTS_TUNNEL_BASE/api/inbox/ensure-sheet",
+            "$FTS_TUNNEL_BASE_LEGACY/api/inbox/ensure-sheet"
         )
         var lastError: String? = null
         for (ep in endpoints) {

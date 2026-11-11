@@ -341,6 +341,7 @@ object ApiClient {
 
     /**
      * 서버 생존 상태(Ping) 및 지연 시간(ms) 실시간 확인
+     * - 터널 인바운드 레이트리밋(HTTP 429)은 서버 및 터널이 정상 가동 중임을 의미하므로 온라인으로 판정
      */
     suspend fun pingServer(): PingResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
@@ -356,13 +357,15 @@ object ApiClient {
                 val startTime = System.currentTimeMillis()
                 healthCheckClient.newCall(request).execute().use { response ->
                     val elapsed = System.currentTimeMillis() - startTime
-                    if (response.isSuccessful) {
+                    if (response.isSuccessful || response.code == 429) {
                         return@withContext PingResult(
                             isOnline = true,
                             latencyMs = elapsed,
                             connectedHost = host
                         )
                     }
+                    // 동일 터널 레이트리밋(429)이 아닌데 1차 실패한 경우에만 다음 호스트 폴백
+                    Log.w(TAG, "서버 핑 비정상 응답 HTTP ${response.code} ($endpoint)")
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "서버 핑 확인 실패 ($host): ${e.message}")
@@ -421,8 +424,8 @@ object ApiClient {
                 statusCode = 0
             }
 
-            // HEAD가 실패하거나 2xx/3xx가 아닌 경우(HTTP 400, 403, 404, 405 등 프록시/터널의 HEAD 거부 포함) 즉시 GET으로 재검증
-            if (statusCode !in 200..399) {
+            // HEAD가 실패하거나 2xx/3xx/429가 아닌 경우(HTTP 400, 403, 404, 405 등 프록시/터널의 HEAD 거부 포함) 즉시 GET으로 재검증
+            if (statusCode !in 200..399 && statusCode != 429) {
                 val getRequest = Request.Builder()
                     .url(normalizedUrl)
                     .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) SheetBotSentinel/1.0")
@@ -437,7 +440,7 @@ object ApiClient {
             }
 
             // sheetbot.cloud 도메인 감시 중 일시적 프록시 지연/400 발생 시 공식 핑 엔드포인트로 한 번 더 교차 검증
-            if (statusCode !in 200..399 && normalizedUrl.contains("sheetbot.cloud", ignoreCase = true)) {
+            if (statusCode !in 200..399 && statusCode != 429 && normalizedUrl.contains("sheetbot.cloud", ignoreCase = true)) {
                 val pingRes = pingServer()
                 if (pingRes.isOnline) {
                     statusCode = 200
@@ -446,7 +449,7 @@ object ApiClient {
             }
 
             val elapsed = System.currentTimeMillis() - startTime
-            val isOk = statusCode in 200..399
+            val isOk = statusCode in 200..399 || statusCode == 429
 
             WebsiteCheckResult(
                 isOnline = isOk,
@@ -537,9 +540,10 @@ object ApiClient {
                 }
                 val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
                 val request = Request.Builder().url(endpoint).post(body).build()
-                val response = client.newCall(request).execute()
-                if (response.isSuccessful) {
-                    return@withContext true
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful || response.code == 429) {
+                        return@withContext true
+                    }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "웹사이트 모니터링 시트 로깅 실패 ($host): ${e.message}")
@@ -583,9 +587,10 @@ object ApiClient {
                     .post(body)
                     .build()
 
-                val response = client.newCall(request).execute()
-                if (response.isSuccessful) {
-                    return@withContext true
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful || response.code == 429) {
+                        return@withContext true
+                    }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Heartbeat 실패 ($targetUrl): ${e.message}")

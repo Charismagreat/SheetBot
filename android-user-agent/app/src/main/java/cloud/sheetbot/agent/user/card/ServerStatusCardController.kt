@@ -37,6 +37,7 @@ class ServerStatusCardController(
     private val scope: CoroutineScope
 ) {
     private var serverMonitorJob: Job? = null
+    private var consecutivePingFailures = 0
 
     fun setup() {
         // 1. 관제 상세 정보 접기/펼치기 토글
@@ -126,10 +127,15 @@ class ServerStatusCardController(
             val pName = prefs.ftsProjectName ?: "File to Sheet"
             val sName = prefs.ftsSheetName ?: "기본 시트"
             scope.launch {
-                val ping = withContext(Dispatchers.IO) { FileToSheetClient.pingFtsServer(prefs.ftsEndpoint) }
+                var ping = withContext(Dispatchers.IO) { FileToSheetClient.pingFtsServer(prefs.ftsEndpoint) }
+                if (!ping.isOnline && !showToast) {
+                    delay(1500L)
+                    ping = withContext(Dispatchers.IO) { FileToSheetClient.pingFtsServer(prefs.ftsEndpoint) }
+                }
                 if (activity.isFinishing || activity.isDestroyed) return@launch
 
                 if (ping.isOnline) {
+                    consecutivePingFailures = 0
                     binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
                     binding.tvStatusTitle.text = "🟢 [File to Sheet] 정상 작동 중"
                     binding.tvConnectedAccount.text = "연결 대상: [$pName - $sName]"
@@ -138,10 +144,13 @@ class ServerStatusCardController(
                         Toast.makeText(activity, "✅ file2sheet.cloud 연결 정상 (${ping.latencyMs}ms)", Toast.LENGTH_SHORT).show()
                     }
                 } else {
-                    binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
-                    binding.tvStatusTitle.text = "🔴 [File to Sheet] 서버 응답 없음"
-                    binding.tvConnectedAccount.text = "연결 대상: [$pName - $sName]"
-                    binding.tvServerStatus.text = "🌐 서버 통신: 🔴 연결 실패 (서버 응답 없음)"
+                    consecutivePingFailures++
+                    if (consecutivePingFailures >= 2 || showToast) {
+                        binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
+                        binding.tvStatusTitle.text = "🔴 [File to Sheet] 서버 응답 없음"
+                        binding.tvConnectedAccount.text = "연결 대상: [$pName - $sName]"
+                        binding.tvServerStatus.text = "🌐 서버 통신: 🔴 연결 실패 (서버 응답 없음)"
+                    }
                     if (showToast) {
                         Toast.makeText(activity, "❌ file2sheet.cloud 서버 응답이 없습니다.", Toast.LENGTH_SHORT).show()
                     }
@@ -151,12 +160,17 @@ class ServerStatusCardController(
         }
 
         scope.launch {
-            val ping = withContext(Dispatchers.IO) { ApiClient.pingServer() }
+            var ping = withContext(Dispatchers.IO) { ApiClient.pingServer() }
+            if (!ping.isOnline && !showToast) {
+                delay(1500L)
+                ping = withContext(Dispatchers.IO) { ApiClient.pingServer() }
+            }
             if (activity.isFinishing || activity.isDestroyed) return@launch
             val email = prefs.userEmail ?: ""
             val paired = prefs.isPaired && email.isNotBlank()
 
             if (ping.isOnline) {
+                consecutivePingFailures = 0
                 if (paired) {
                     binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
                     binding.tvStatusTitle.text = "🟢 시트봇 정상 작동 중"
@@ -172,10 +186,13 @@ class ServerStatusCardController(
                     Toast.makeText(activity, "✅ sheetbot.cloud 서버 통신 정상 (${ping.latencyMs}ms)", Toast.LENGTH_SHORT).show()
                 }
             } else {
-                binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
-                binding.tvStatusTitle.text = "🔴 시트봇 서버 응답 없음 (연결 끊김)"
-                binding.tvConnectedAccount.text = if (paired) "연결된 계정: $email" else "연결된 계정: 미연동"
-                binding.tvServerStatus.text = "🌐 서버 통신: 🔴 연결 실패 (서버 응답 없음 · 자동 재시도)"
+                consecutivePingFailures++
+                if (consecutivePingFailures >= 2 || showToast) {
+                    binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
+                    binding.tvStatusTitle.text = "🔴 시트봇 서버 응답 없음 (연결 끊김)"
+                    binding.tvConnectedAccount.text = if (paired) "연결된 계정: $email" else "연결된 계정: 미연동"
+                    binding.tvServerStatus.text = "🌐 서버 통신: 🔴 연결 실패 (서버 응답 없음 · 자동 재시도)"
+                }
 
                 if (showToast) {
                     Toast.makeText(activity, "❌ sheetbot.cloud 서버 응답이 없습니다.", Toast.LENGTH_SHORT).show()
