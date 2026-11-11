@@ -805,12 +805,12 @@ export async function extractAndCreateTasksFromMessage(
 
 const userFtsPhoneCache = new Map<string, string>();
 const FTS_INTERNAL_ENDPOINTS = [
+  "https://file2sheet.cloud",
+  "https://tunneling-service.onrender.com/t/mcp-server-fxkud1-i01o2oa/p/FileToSheet",
   "http://127.0.0.1:4007",
   "http://127.0.0.1:3005",
   "http://localhost:4007",
   "http://localhost:3005",
-  "https://file2sheet.cloud",
-  "https://tunneling-service.onrender.com/t/mcp-server-fxkud1-i01o2oa/p/FileToSheet",
 ];
 
 /**
