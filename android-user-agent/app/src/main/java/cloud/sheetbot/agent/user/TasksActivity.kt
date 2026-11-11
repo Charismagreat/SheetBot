@@ -172,8 +172,7 @@ class TasksActivity : AppCompatActivity() {
             ): Boolean = false
 
             override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
-                val pos = viewHolder.bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }
-                    ?: viewHolder.adapterPosition
+                val pos = viewHolder.adapterPosition
                 if (pos == RecyclerView.NO_POSITION) return
 
                 val item = adapter.getItemAt(pos)
@@ -216,8 +215,7 @@ class TasksActivity : AppCompatActivity() {
             ) {
                 if (actionState == ItemTouchHelper.ACTION_STATE_SWIPE && dX != 0f) {
                     val itemView = viewHolder.itemView
-                    val pos = viewHolder.bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }
-                        ?: viewHolder.adapterPosition
+                    val pos = viewHolder.adapterPosition
                     val task = if (pos != RecyclerView.NO_POSITION) adapter.getItemAt(pos) else null
                     val isDone = task?.status == "DONE"
                     val cornerRadius = 12f * resources.displayMetrics.density
