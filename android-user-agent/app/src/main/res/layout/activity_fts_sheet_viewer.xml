@@ -12,7 +12,7 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:paddingHorizontal="14dp"
-        android:paddingVertical="12dp"
+        android:paddingVertical="11dp"
         android:background="#1E293B">
 
         <TextView
@@ -37,9 +37,9 @@
                 android:id="@+id/tvViewerTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="📊 파일투시트 대장"
+                android:text="⚡ 파일투시트 통합 워크스페이스"
                 android:textColor="#F8FAFC"
-                android:textSize="16sp"
+                android:textSize="15.5sp"
                 android:textStyle="bold"
                 android:singleLine="true"
                 android:ellipsize="end" />
@@ -49,7 +49,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:text="시트봇 연동 장부 • 실시간 모바일 뷰어"
+                android:text="전체 프로젝트 · 시트 열람 · 결재 · 파일 AI 적재"
                 android:textColor="#94A3B8"
                 android:textSize="11sp"
                 android:singleLine="true"
@@ -75,12 +75,12 @@
         <!-- 새로고침 -->
         <TextView
             android:id="@+id/btnRefreshSheet"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:layout_marginStart="6dp"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="5dp"
             android:gravity="center"
             android:text="🔄"
-            android:textSize="16sp"
+            android:textSize="15sp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true" />
@@ -108,32 +108,92 @@
         android:layout_height="1dp"
         android:background="#334155" />
 
-    <!-- 2. 상단 대장(시트) 빠른 전환 탭 바 -->
-    <HorizontalScrollView
-        android:id="@+id/scrollSheetTabs"
+    <!-- 2-A. 1단: 전체 프로젝트 선택 바 -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#162032"
-        android:paddingHorizontal="12dp"
-        android:paddingVertical="8dp"
-        android:scrollbars="none">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="#111827"
+        android:paddingStart="12dp"
+        android:paddingEnd="8dp"
+        android:paddingVertical="7dp">
 
-        <LinearLayout
-            android:id="@+id/layoutSheetTabs"
+        <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical" />
-    </HorizontalScrollView>
+            android:text="프로젝트:"
+            android:textColor="#94A3B8"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:layout_marginEnd="8dp" />
 
-    <!-- 3. 검색바 및 건수 요약 -->
+        <HorizontalScrollView
+            android:id="@+id/scrollProjectTabs"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/layoutProjectTabs"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical" />
+        </HorizontalScrollView>
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#1E293B" />
+
+    <!-- 2-B. 2단: 선택된 프로젝트의 하위 시트(대장) 탭 바 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="#162032"
+        android:paddingStart="12dp"
+        android:paddingEnd="8dp"
+        android:paddingVertical="7dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="시트:"
+            android:textColor="#94A3B8"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:layout_marginEnd="8dp" />
+
+        <HorizontalScrollView
+            android:id="@+id/scrollSheetTabs"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/layoutSheetTabs"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical" />
+        </HorizontalScrollView>
+    </LinearLayout>
+
+    <!-- 3. 검색바 + 파일/사진 적재 버튼 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:paddingHorizontal="14dp"
-        android:paddingVertical="8dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="6dp"
         android:background="#0F172A">
 
         <LinearLayout
@@ -176,22 +236,121 @@
                 android:visibility="gone" />
         </LinearLayout>
 
+        <!-- 📤 현재 시트에 사진/파일 등록 AI 적재 버튼 -->
         <TextView
-            android:id="@+id/tvRowCountBadge"
+            android:id="@+id/btnUploadToCurrentSheet"
             android:layout_width="wrap_content"
-            android:layout_height="32dp"
+            android:layout_height="38dp"
             android:layout_marginStart="8dp"
             android:gravity="center"
-            android:paddingHorizontal="10dp"
-            android:text="0건"
-            android:textColor="#38BDF8"
+            android:paddingHorizontal="12dp"
+            android:text="📤 +파일·행 적재"
+            android:textColor="#FFFFFF"
             android:textSize="12sp"
             android:textStyle="bold"
             android:background="@drawable/bg_badge_version"
-            android:backgroundTint="#0C4A6E" />
+            android:backgroundTint="#2563EB"
+            android:clickable="true"
+            android:focusable="true" />
     </LinearLayout>
 
-    <!-- 4. 카드 인라인 로딩 영역 (화면 뒤 스피너 없이 상단 카드형 로딩) -->
+    <!-- 4. 결재 상태 필터 바 (전체 / 대기 / 승인 / 보류 / 반려) -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="14dp"
+        android:paddingBottom="8dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/layoutApprovalFilters"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/chipFilterAll"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:gravity="center"
+                android:paddingHorizontal="11dp"
+                android:layout_marginEnd="6dp"
+                android:text="전체 (0)"
+                android:textColor="#FFFFFF"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                android:background="@drawable/bg_badge_version"
+                android:backgroundTint="#2563EB" />
+
+            <TextView
+                android:id="@+id/chipFilterPending"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:gravity="center"
+                android:paddingHorizontal="11dp"
+                android:layout_marginEnd="6dp"
+                android:text="⏳ 대기 (0)"
+                android:textColor="#CBD5E1"
+                android:textSize="11.5sp"
+                android:background="@drawable/bg_badge_version"
+                android:backgroundTint="#1E293B" />
+
+            <TextView
+                android:id="@+id/chipFilterApproved"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:gravity="center"
+                android:paddingHorizontal="11dp"
+                android:layout_marginEnd="6dp"
+                android:text="✅ 승인 (0)"
+                android:textColor="#CBD5E1"
+                android:textSize="11.5sp"
+                android:background="@drawable/bg_badge_version"
+                android:backgroundTint="#1E293B" />
+
+            <TextView
+                android:id="@+id/chipFilterHeld"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:gravity="center"
+                android:paddingHorizontal="11dp"
+                android:layout_marginEnd="6dp"
+                android:text="🟠 보류 (0)"
+                android:textColor="#CBD5E1"
+                android:textSize="11.5sp"
+                android:background="@drawable/bg_badge_version"
+                android:backgroundTint="#1E293B" />
+
+            <TextView
+                android:id="@+id/chipFilterRejected"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:gravity="center"
+                android:paddingHorizontal="11dp"
+                android:layout_marginEnd="6dp"
+                android:text="🚫 반려 (0)"
+                android:textColor="#CBD5E1"
+                android:textSize="11.5sp"
+                android:background="@drawable/bg_badge_version"
+                android:backgroundTint="#1E293B" />
+
+            <TextView
+                android:id="@+id/tvRowCountBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:gravity="center"
+                android:paddingHorizontal="10dp"
+                android:text="0건 표시"
+                android:textColor="#38BDF8"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:background="@drawable/bg_badge_version"
+                android:backgroundTint="#0C4A6E" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <!-- 5. 카드 인라인 로딩 영역 (화면 뒤 스피너 없이 상단 카드형 로딩) -->
     <LinearLayout
         android:id="@+id/layoutViewerInlineLoading"
         android:layout_width="match_parent"
@@ -200,7 +359,7 @@
         android:paddingHorizontal="14dp"
         android:visibility="gone" />
 
-    <!-- 5. 메인 컨텐츠 영역 (모바일 카드 리스트 뷰 / 표 보기 뷰 / 빈 상태 뷰) -->
+    <!-- 6. 메인 컨텐츠 영역 (모바일 카드 리스트 뷰 / 표 보기 뷰 / 빈 상태 뷰) -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -269,7 +428,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:gravity="center"
-                android:text="모바일에서 명함, 영수증, 통화녹음, 문자/카톡 등이 수집되면 이곳에 실시간으로 표시됩니다."
+                android:text="우측 상단의 [📤 +파일·행 적재] 버튼을 눌러 사진 촬영이나 문서를 등록하면 AI가 시트 컬럼에 맞춰 자동 적재합니다."
                 android:textColor="#94A3B8"
                 android:textSize="12.5sp" />
         </LinearLayout>

@@ -999,12 +999,20 @@ class PreferencesManager(context: Context) {
         }
 
         // 새로 만들어져 배포된 카드(currentKnown에 없던 카드)는 자동으로 보관함(currentHidden)에 추가
+        // 단, cardFtsWorkspace는 파투 연동 사용자에게 즉시 홈 화면 상단에 노출되도록 기본 활성화
         var modified = false
         for (key in allTargetKeys) {
             if (!currentKnown.contains(key)) {
                 currentKnown.add(key)
-                currentHidden.add(key)
-                currentActive.remove(key)
+                if (key == "cardFtsWorkspace") {
+                    currentHidden.remove(key)
+                    if (!currentActive.contains(key)) {
+                        currentActive.add(0, key)
+                    }
+                } else {
+                    currentHidden.add(key)
+                    currentActive.remove(key)
+                }
                 modified = true
             }
         }

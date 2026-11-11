@@ -29,6 +29,20 @@ export interface MarketplaceCardItem {
 const DEFAULT_CATALOG: MarketplaceCardItem[] = [
   // 1. 매장 · 정산 카테고리
   {
+    key: 'cardFtsWorkspace',
+    title: '파일투시트 통합 워크스페이스 (결재·적재)',
+    icon: '⚡',
+    category: 'store',
+    categoryName: '매장 · 정산',
+    description: '파일투시트의 모든 프로젝트와 하위 시트를 앱 안에서 한눈에 조회하고, 승인/보류/반려 결재 및 카메라·파일 AI 자동 적재를 원스톱으로 수행합니다.',
+    badge: 'NEW',
+    author: '시트봇 공식',
+    isExclusive: false,
+    isInstalledByDefault: true,
+    version: '2.4.39',
+    updatedAt: '2026-11-11',
+  },
+  {
     key: 'cardSaasOtpRelay',
     title: '내 SaaS 휴대폰 인증(OTP) 0원 중계기',
     icon: '🔐',

@@ -535,6 +535,123 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- ⚡ 파일투시트(FileToSheet) 통합 워크스페이스 & 결재/파일적재 센터 독립 카드 -->
+        <LinearLayout
+            android:id="@+id/cardFtsWorkspace"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_scenario"
+            android:padding="13dp"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:id="@+id/layoutFtsWorkspaceHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⚡"
+                    android:textSize="20sp"
+                    android:layout_marginEnd="10dp" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="파일투시트 통합 워크스페이스"
+                        android:textColor="#A78BFA"
+                        android:textSize="13.5sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvFtsWorkspaceSubtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="모든 프로젝트·시트 조회 · 승인/보류/반려 결재 · 파일 AI 적재"
+                        android:textColor="#94A3B8"
+                        android:textSize="10.5sp"
+                        android:layout_marginTop="2dp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvFtsWorkspaceBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#4F46E5"
+                    android:paddingHorizontal="9dp"
+                    android:paddingVertical="4dp"
+                    android:text="워크스페이스 ›"
+                    android:textColor="#EEF2FF"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- 원터치 빠른 액션 버튼 바: 전체 프로젝트 열기 / 결재 대기 / 파일·사진 적재 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="10dp">
+
+                <Button
+                    android:id="@+id/btnOpenFtsWorkspaceAll"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1.15"
+                    android:backgroundTint="#312E81"
+                    android:text="📂 전체 프로젝트·시트"
+                    android:textColor="#E0E7FF"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:paddingHorizontal="6dp"
+                    android:layout_marginEnd="5dp" />
+
+                <Button
+                    android:id="@+id/btnOpenFtsWorkspacePending"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="0.95"
+                    android:backgroundTint="#065F46"
+                    android:text="✅ 결재(승인/반려)"
+                    android:textColor="#ECFDF5"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:paddingHorizontal="6dp"
+                    android:layout_marginEnd="5dp" />
+
+                <Button
+                    android:id="@+id/btnOpenFtsWorkspaceIngest"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1"
+                    android:backgroundTint="#2563EB"
+                    android:text="📤 +파일·행 적재"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:paddingHorizontal="6dp" />
+            </LinearLayout>
+        </LinearLayout>
+
         <!-- 자연어 AI 시트 코파일럿 제어 센터 -->
         <LinearLayout
             android:id="@+id/cardCopilot"

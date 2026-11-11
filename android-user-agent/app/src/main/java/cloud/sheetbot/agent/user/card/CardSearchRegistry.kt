@@ -137,6 +137,15 @@ object CardSearchRegistry {
             cardResId = R.id.cardFileUpload
         ),
         SearchableCard(
+            index = 31,
+            key = "cardFtsWorkspace",
+            title = "파일투시트 통합 워크스페이스 (결재·적재)",
+            icon = "⚡",
+            chosung = "ㅍㅇㅌㅅㅌㅌㅎㅇㅋㅅㅍㅇㅅㄱㅈㅈㅈ",
+            keywords = listOf("파일투시트", "파투", "워크스페이스", "전체프로젝트", "시트", "결재", "승인", "보류", "반려", "파일적재", "대장"),
+            cardResId = R.id.cardFtsWorkspace
+        ),
+        SearchableCard(
             index = 27,
             key = "cardReceiptScanner",
             title = "스마트 경비 영수증 관리",

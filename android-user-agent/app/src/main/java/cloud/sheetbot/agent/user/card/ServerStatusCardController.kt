@@ -9,6 +9,7 @@ import androidx.appcompat.app.AppCompatActivity
 import cloud.sheetbot.agent.user.ApiClient
 import cloud.sheetbot.agent.user.AppPreferences
 import cloud.sheetbot.agent.user.FileToSheetClient
+import cloud.sheetbot.agent.user.FtsSheetViewerActivity
 import cloud.sheetbot.agent.user.R
 import cloud.sheetbot.agent.user.TasksActivity
 import cloud.sheetbot.agent.user.databinding.ActivityMainBinding
@@ -73,6 +74,24 @@ class ServerStatusCardController(
         }
         binding.btnOpenTasksHub.setOnClickListener { openTasksHub() }
         binding.cardTasksHub.setOnClickListener { openTasksHub() }
+
+        // 5. ⚡ 파일투시트(FileToSheet) 통합 워크스페이스 카드 (전체 프로젝트 · 결재 · 파일 적재)
+        val openFtsWorkspace: (Boolean, String?) -> Unit = { autoOpenIngest, initialFilter ->
+            val intent = Intent(activity, FtsSheetViewerActivity::class.java).apply {
+                putExtra(FtsSheetViewerActivity.EXTRA_PROJECT_ID, prefs.ftsProjectId ?: "")
+                putExtra(FtsSheetViewerActivity.EXTRA_PHONE_NUMBER, prefs.ftsPhoneNumber ?: "")
+                putExtra(FtsSheetViewerActivity.EXTRA_AUTO_OPEN_INGEST, autoOpenIngest)
+                if (!initialFilter.isNullOrBlank()) {
+                    putExtra(FtsSheetViewerActivity.EXTRA_INITIAL_APPROVAL_FILTER, initialFilter)
+                }
+            }
+            activity.startActivity(intent)
+        }
+        binding.layoutFtsWorkspaceHeader.setOnClickListener { openFtsWorkspace(false, null) }
+        binding.cardFtsWorkspace.setOnClickListener { openFtsWorkspace(false, null) }
+        binding.btnOpenFtsWorkspaceAll.setOnClickListener { openFtsWorkspace(false, "ALL") }
+        binding.btnOpenFtsWorkspacePending.setOnClickListener { openFtsWorkspace(false, "PENDING") }
+        binding.btnOpenFtsWorkspaceIngest.setOnClickListener { openFtsWorkspace(true, null) }
     }
 
     fun startServerMonitorLoop() {
@@ -82,6 +101,7 @@ class ServerStatusCardController(
         val isFts = prefs.isDestinationFileToSheet && prefs.isFtsPaired
         if ((prefs.isPaired && email.isNotBlank()) || isFts || !prefs.ftsPhoneNumber.isNullOrBlank()) {
             refreshTasksBadge(email)
+            refreshFtsWorkspaceSummary()
         }
 
         serverMonitorJob = scope.launch {
@@ -218,6 +238,39 @@ class ServerStatusCardController(
     }
 
     /**
+     * ⚡ 파일투시트 통합 워크스페이스 카드 실시간 요약 뱃지 갱신 (전체 프로젝트 · 시트 · 결재 대기 수)
+     */
+    fun refreshFtsWorkspaceSummary() {
+        val phone = prefs.ftsPhoneNumber?.replace("[^0-9]".toRegex(), "").orEmpty()
+        if (phone.length < 10 && !prefs.isFtsPaired) return
+
+        scope.launch(Dispatchers.IO) {
+            try {
+                val res = FileToSheetClient.fetchAllWorkspaceProjects(
+                    phoneNumber = phone,
+                    targetProjectId = prefs.ftsProjectId,
+                    targetSheetName = null
+                )
+                if (!res.success || res.projects.isEmpty()) return@launch
+
+                val projCount = res.projects.size
+                val sheetCount = res.projects.sumOf { it.sheets.size }
+                val totalRows = res.projects.sumOf { it.totalRowCount }
+                val pendingApprovals = res.projects.sumOf { p -> p.sheets.sumOf { s -> s.pendingCount } }
+
+                withContext(Dispatchers.Main) {
+                    if (!activity.isFinishing && !activity.isDestroyed) {
+                        binding.tvFtsWorkspaceSubtitle.text =
+                            "전체 프로젝트 ${projCount}개 · 시트 ${sheetCount}개 (총 ${totalRows}건) · 결재 대기 ${pendingApprovals}건"
+                        binding.tvFtsWorkspaceBadge.text = "프로젝트 ${projCount}개 ›"
+                    }
+                }
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    /**
      * 연동/미연동 상태에 따른 상태 카드 및 관련 뷰 가시성/스타일 갱신
      */
     fun updateCardStatus(isPaired: Boolean, email: String?) {
@@ -234,8 +287,10 @@ class ServerStatusCardController(
             binding.btnRefreshServerStatus.visibility = View.VISIBLE
             binding.btnToggleStatusDetails.visibility = View.VISIBLE
             binding.cardTasksHub.visibility = if (prefs.hiddenCardKeys.contains("cardTasksHub")) View.GONE else View.VISIBLE
+            binding.cardFtsWorkspace.visibility = if (prefs.hiddenCardKeys.contains("cardFtsWorkspace")) View.GONE else View.VISIBLE
             checkServerAndQueueStatus(showToast = false)
             refreshTasksBadge(email ?: "")
+            refreshFtsWorkspaceSummary()
         } else if (isPaired && !email.isNullOrBlank()) {
             binding.tvStatusTitle.text = "🟡 시트봇 서버 연결 확인 중..."
             binding.tvConnectedAccount.text = "연결된 계정: $email"
@@ -243,8 +298,10 @@ class ServerStatusCardController(
             binding.btnRefreshServerStatus.visibility = View.VISIBLE
             binding.btnToggleStatusDetails.visibility = View.VISIBLE
             binding.cardTasksHub.visibility = if (prefs.hiddenCardKeys.contains("cardTasksHub")) View.GONE else View.VISIBLE
+            binding.cardFtsWorkspace.visibility = if (prefs.hiddenCardKeys.contains("cardFtsWorkspace")) View.GONE else View.VISIBLE
             checkServerAndQueueStatus(showToast = false)
             refreshTasksBadge(email)
+            refreshFtsWorkspaceSummary()
         } else {
             binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
             binding.tvStatusTitle.text = "⚠️ 미연동 상태"
@@ -253,6 +310,7 @@ class ServerStatusCardController(
             binding.btnRefreshServerStatus.visibility = View.VISIBLE
             binding.btnToggleStatusDetails.visibility = View.VISIBLE
             binding.cardTasksHub.visibility = View.GONE
+            binding.cardFtsWorkspace.visibility = if (prefs.hiddenCardKeys.contains("cardFtsWorkspace")) View.GONE else View.VISIBLE
             checkServerAndQueueStatus(showToast = false)
         }
 

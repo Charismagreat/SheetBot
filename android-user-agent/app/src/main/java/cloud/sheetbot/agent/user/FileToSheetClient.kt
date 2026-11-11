@@ -1617,4 +1617,545 @@ object FileToSheetClient {
         }
         false
     }
+
+    // =========================================================================
+    // ⚡ 파일투시트(FileToSheet) 통합 워크스페이스 (전체 프로젝트 · 시트 · 승인/보류/반려 결재 · 파일 AI 적재)
+    // =========================================================================
+
+    data class FtsWorkspaceSheetInfo(
+        val id: String,
+        val name: String,
+        val rowCount: Int,
+        val pendingCount: Int = 0,
+        val approvedCount: Int = 0,
+        val heldCount: Int = 0,
+        val rejectedCount: Int = 0
+    )
+
+    data class FtsWorkspaceProjectInfo(
+        val id: String,
+        val name: String,
+        val category: String,
+        val totalRows: Int,
+        val pendingCount: Int,
+        val approvedCount: Int,
+        val heldCount: Int,
+        val rejectedCount: Int,
+        val sheets: List<FtsWorkspaceSheetInfo>
+    )
+
+    data class FtsOriginalFileInfo(
+        val name: String,
+        val url: String,
+        val uploadedAt: String = ""
+    )
+
+    data class FtsWorkspaceResponse(
+        val success: Boolean,
+        val projects: List<FtsWorkspaceProjectInfo> = emptyList(),
+        val activeProjectId: String = "",
+        val activeProjectName: String = "",
+        val activeSheetName: String = "",
+        val headers: List<String> = emptyList(),
+        val rows: List<JSONObject> = emptyList(),
+        val originalFiles: List<FtsOriginalFileInfo> = emptyList(),
+        val error: String? = null
+    )
+
+    private fun parseMcpToolResultJson(rawBody: String): JSONObject? {
+        return try {
+            val outer = JSONObject(rawBody)
+            val resultObj = outer.optJSONObject("result") ?: outer
+            val contentArr = resultObj.optJSONArray("content")
+            if (contentArr != null && contentArr.length() > 0) {
+                val firstText = contentArr.optJSONObject(0)?.optString("text", "").orEmpty()
+                if (firstText.isNotBlank()) {
+                    return JSONObject(firstText)
+                }
+            }
+            if (resultObj.has("rows") || resultObj.has("updated") || resultObj.has("inserted")) {
+                return resultObj
+            }
+            outer
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * 📂 사용자의 전체 파투 프로젝트 목록 및 선택된 프로젝트/시트의 데이터(행, 헤더, 결재 통계, 원본 증빙)를 조회합니다.
+     */
+    suspend fun fetchAllWorkspaceProjects(
+        phoneNumber: String,
+        targetProjectId: String? = null,
+        targetSheetName: String? = null
+    ): FtsWorkspaceResponse = withContext(Dispatchers.IO) {
+        val cleanPhone = phoneNumber.replace("[^0-9]".toRegex(), "")
+        val reqProjectId = targetProjectId?.trim().orEmpty()
+        val reqSheetName = targetSheetName?.trim().orEmpty()
+
+        val hosts = listOf(FTS_OFFICIAL_DOMAIN, FTS_TUNNEL_BASE, FTS_TUNNEL_BASE_LEGACY)
+        var lastError: String? = null
+
+        for (host in hosts) {
+            try {
+                val queryArgs = JSONObject().apply {
+                    put("tableName", "user_projects")
+                    put("limit", 100)
+                }
+                val mcpReq = JSONObject().apply {
+                    put("tool", "user_data_query")
+                    put("arguments", queryArgs)
+                }
+                val req = Request.Builder()
+                    .url("$host/__user_data_proxy")
+                    .header("Content-Type", "application/json")
+                    .post(mcpReq.toString().toRequestBody(JSON_MEDIA_TYPE))
+                    .build()
+
+                client.newCall(req).execute().use { res ->
+                    val rawStr = res.body?.string().orEmpty()
+                    if (!res.isSuccessful) {
+                        lastError = "HTTP ${res.code}"
+                        return@use
+                    }
+                    val dataJson = parseMcpToolResultJson(rawStr)
+                    val rowsArr = dataJson?.optJSONArray("rows")
+                    if (rowsArr == null) {
+                        lastError = "프로젝트 목록 응답 파싱 실패"
+                        return@use
+                    }
+
+                    val matchedProjectObjs = mutableListOf<JSONObject>()
+                    for (i in 0 until rowsArr.length()) {
+                        val pObj = rowsArr.optJSONObject(i) ?: continue
+                        val cat = pObj.optString("category", "").trim()
+                        if (cat == "trash_project") continue
+                        val rowPhone = pObj.optString("phone_number", "").replace("[^0-9]".toRegex(), "")
+                        val rowId = pObj.opt("id")?.toString()?.trim().orEmpty()
+                        if ((cleanPhone.isNotBlank() && rowPhone == cleanPhone) ||
+                            (reqProjectId.isNotBlank() && rowId == reqProjectId)
+                        ) {
+                            matchedProjectObjs.add(pObj)
+                        }
+                    }
+
+                    // 시트봇 연동 장부가 맨 앞에 오도록 정렬하되 나머지는 ID 순 정렬
+                    matchedProjectObjs.sortWith(
+                        compareByDescending<JSONObject> {
+                            val c = it.optString("category", "")
+                            val n = it.optString("project_name", "")
+                            c == "sheetbot_inbox" || n == "시트봇 연동 장부"
+                        }.thenBy { it.optInt("id", 0) }
+                    )
+
+                    val projectInfoList = mutableListOf<FtsWorkspaceProjectInfo>()
+                    val parsedSheetsByProjectId = mutableMapOf<String, org.json.JSONArray>()
+
+                    for (pObj in matchedProjectObjs) {
+                        val pId = pObj.opt("id")?.toString()?.trim().orEmpty()
+                        val pName = pObj.optString("project_name", "프로젝트").trim().ifBlank { "프로젝트 #$pId" }
+                        val pCat = pObj.optString("category", "일반").trim()
+                        val sheetsRaw = pObj.optString("sheets_data", "[]")
+                        val sheetsArr = try {
+                            org.json.JSONArray(sheetsRaw)
+                        } catch (_: Exception) {
+                            org.json.JSONArray()
+                        }
+                        parsedSheetsByProjectId[pId] = sheetsArr
+
+                        var pTotalRows = 0
+                        var pPending = 0
+                        var pApproved = 0
+                        var pHeld = 0
+                        var pRejected = 0
+                        val sheetSummaries = mutableListOf<FtsWorkspaceSheetInfo>()
+
+                        for (sIdx in 0 until sheetsArr.length()) {
+                            val sObj = sheetsArr.optJSONObject(sIdx) ?: continue
+                            val sName = sObj.optString("name", "").trim()
+                            if (sName.isBlank()) continue
+                            val sId = sObj.optString("id", sName).trim().ifBlank { sName }
+                            val sRows = sObj.optJSONArray("rows")
+                            val rLen = sRows?.length() ?: 0
+
+                            var sPending = 0
+                            var sApproved = 0
+                            var sHeld = 0
+                            var sRejected = 0
+                            if (sRows != null) {
+                                for (rIdx in 0 until rLen) {
+                                    val rObj = sRows.optJSONObject(rIdx) ?: continue
+                                    when (rObj.optString("_approvalStatus", "PENDING").uppercase()) {
+                                        "APPROVED" -> sApproved++
+                                        "HELD" -> sHeld++
+                                        "REJECTED" -> sRejected++
+                                        else -> sPending++
+                                    }
+                                }
+                            }
+                            pTotalRows += rLen
+                            pPending += sPending
+                            pApproved += sApproved
+                            pHeld += sHeld
+                            pRejected += sRejected
+
+                            sheetSummaries.add(
+                                FtsWorkspaceSheetInfo(
+                                    id = sId,
+                                    name = sName,
+                                    rowCount = rLen,
+                                    pendingCount = sPending,
+                                    approvedCount = sApproved,
+                                    heldCount = sHeld,
+                                    rejectedCount = sRejected
+                                )
+                            )
+                        }
+
+                        projectInfoList.add(
+                            FtsWorkspaceProjectInfo(
+                                id = pId,
+                                name = pName,
+                                category = pCat,
+                                totalRows = pTotalRows,
+                                pendingCount = pPending,
+                                approvedCount = pApproved,
+                                heldCount = pHeld,
+                                rejectedCount = pRejected,
+                                sheets = sheetSummaries
+                            )
+                        )
+                    }
+
+                    val activeProjObj = matchedProjectObjs.firstOrNull {
+                        reqProjectId.isNotBlank() && it.opt("id")?.toString()?.trim() == reqProjectId
+                    } ?: matchedProjectObjs.firstOrNull()
+
+                    if (activeProjObj == null) {
+                        return@withContext FtsWorkspaceResponse(
+                            success = true,
+                            projects = emptyList(),
+                            error = "연동된 파일투시트 프로젝트가 없습니다."
+                        )
+                    }
+
+                    val activePId = activeProjObj.opt("id")?.toString()?.trim().orEmpty()
+                    val activePName = activeProjObj.optString("project_name", "프로젝트").trim()
+                    val activeSheetsArr = parsedSheetsByProjectId[activePId] ?: org.json.JSONArray()
+
+                    var activeSheetObj: JSONObject? = null
+                    if (reqSheetName.isNotBlank()) {
+                        for (i in 0 until activeSheetsArr.length()) {
+                            val cand = activeSheetsArr.optJSONObject(i) ?: continue
+                            if (cand.optString("name", "").trim() == reqSheetName) {
+                                activeSheetObj = cand
+                                break
+                            }
+                        }
+                    }
+                    if (activeSheetObj == null && activeSheetsArr.length() > 0) {
+                        activeSheetObj = activeSheetsArr.optJSONObject(0)
+                    }
+
+                    val finalSheetName = activeSheetObj?.optString("name", "")?.trim().orEmpty()
+                    val headersList = mutableListOf<String>()
+                    val hArr = activeSheetObj?.optJSONArray("headers")
+                    if (hArr != null) {
+                        for (i in 0 until hArr.length()) {
+                            val h = hArr.optString(i, "").trim()
+                            if (h.isNotBlank() && !h.equals("null", true) && !h.startsWith("_")) {
+                                headersList.add(h)
+                            }
+                        }
+                    }
+
+                    val rowsList = mutableListOf<JSONObject>()
+                    val rArr = activeSheetObj?.optJSONArray("rows")
+                    if (rArr != null) {
+                        for (i in 0 until rArr.length()) {
+                            val rObj = rArr.optJSONObject(i) ?: continue
+                            val copyObj = JSONObject(rObj.toString())
+                            copyObj.put("_rawRowIndex", i)
+                            rowsList.add(copyObj)
+                        }
+                    }
+
+                    if (headersList.isEmpty() && rowsList.isNotEmpty()) {
+                        val first = rowsList.first()
+                        val keys = first.keys()
+                        while (keys.hasNext()) {
+                            val k = keys.next().trim()
+                            if (k.isNotBlank() && !k.startsWith("_")) {
+                                headersList.add(k)
+                            }
+                        }
+                    }
+
+                    val origFilesList = mutableListOf<FtsOriginalFileInfo>()
+                    try {
+                        val origRaw = activeProjObj.optString("original_files", "")
+                        if (origRaw.isNotBlank()) {
+                            val origArr = if (origRaw.trim().startsWith("[")) {
+                                org.json.JSONArray(origRaw)
+                            } else {
+                                JSONObject(origRaw).optJSONArray("files")
+                            }
+                            if (origArr != null) {
+                                for (i in 0 until origArr.length()) {
+                                    val fObj = origArr.optJSONObject(i) ?: continue
+                                    val fName = fObj.optString("name", "").trim()
+                                    val fUrl = fObj.optString("url", "").trim()
+                                    val fTime = fObj.optString("uploadedAt", "").trim()
+                                    if (fName.isNotBlank() || fUrl.isNotBlank()) {
+                                        val resolvedUrl = if (fUrl.startsWith("/")) "$FTS_OFFICIAL_DOMAIN$fUrl" else fUrl
+                                        origFilesList.add(FtsOriginalFileInfo(name = fName.ifBlank { "첨부증빙 #${i + 1}" }, url = resolvedUrl, uploadedAt = fTime))
+                                    }
+                                }
+                            }
+                        }
+                    } catch (_: Exception) {}
+
+                    return@withContext FtsWorkspaceResponse(
+                        success = true,
+                        projects = projectInfoList,
+                        activeProjectId = activePId,
+                        activeProjectName = activePName,
+                        activeSheetName = finalSheetName,
+                        headers = headersList,
+                        rows = rowsList,
+                        originalFiles = origFilesList
+                    )
+                }
+            } catch (e: Exception) {
+                lastError = e.localizedMessage ?: "통신 오류"
+            }
+        }
+
+        FtsWorkspaceResponse(success = false, error = lastError ?: "파일투시트 워크스페이스 조회 실패")
+    }
+
+    /**
+     * ✅ 특정 프로젝트·시트의 행 결재 상태(APPROVED / HELD / REJECTED / PENDING) 및 사유를 업데이트합니다.
+     * - 파투 웹의 useTableEditor.handleUpdateRowApproval 규격과 100% 호환되며 data_change_logs 감사 이력도 함께 적재합니다.
+     */
+    suspend fun updateWorkspaceRowApproval(
+        projectId: String,
+        sheetName: String,
+        rowIndices: List<Int>,
+        serialNumbers: List<String>,
+        status: String,
+        reason: String? = null,
+        actorPhone: String = ""
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (projectId.isBlank() || sheetName.isBlank()) return@withContext false
+
+        val hosts = listOf(FTS_OFFICIAL_DOMAIN, FTS_TUNNEL_BASE, FTS_TUNNEL_BASE_LEGACY)
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.KOREA).apply {
+            timeZone = java.util.TimeZone.getTimeZone("Asia/Seoul")
+        }
+        val nowKst = sdf.format(java.util.Date())
+
+        for (host in hosts) {
+            try {
+                // 1. 대상 프로젝트 최신 데이터 조회
+                val queryReq = JSONObject().apply {
+                    put("tool", "user_data_query")
+                    put("arguments", JSONObject().apply {
+                        put("tableName", "user_projects")
+                        put("filters", JSONObject().apply { put("id", projectId) })
+                        put("limit", 1)
+                    })
+                }
+                val getRes = client.newCall(
+                    Request.Builder()
+                        .url("$host/__user_data_proxy")
+                        .header("Content-Type", "application/json")
+                        .post(queryReq.toString().toRequestBody(JSON_MEDIA_TYPE))
+                        .build()
+                ).execute()
+
+                val getBody = getRes.body?.string().orEmpty()
+                getRes.close()
+                val projJson = parseMcpToolResultJson(getBody)
+                val projRow = projJson?.optJSONArray("rows")?.optJSONObject(0) ?: continue
+
+                val sheetsArr = org.json.JSONArray(projRow.optString("sheets_data", "[]"))
+                var targetSheet: JSONObject? = null
+                for (i in 0 until sheetsArr.length()) {
+                    val s = sheetsArr.optJSONObject(i) ?: continue
+                    if (s.optString("name", "").trim() == sheetName.trim()) {
+                        targetSheet = s
+                        break
+                    }
+                }
+                if (targetSheet == null) continue
+
+                val rowsArr = targetSheet.optJSONArray("rows") ?: continue
+                val idxSet = rowIndices.toSet()
+                val serialSet = serialNumbers.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+                var changed = 0
+
+                for (i in 0 until rowsArr.length()) {
+                    val r = rowsArr.optJSONObject(i) ?: continue
+                    val rSerial = (r.optString("일련번호", "").ifBlank { r.optString("번호", "") }).trim()
+                    if (i in idxSet || (rSerial.isNotEmpty() && rSerial in serialSet)) {
+                        r.put("_approvalStatus", status)
+                        r.put("_approvalTimestamp", nowKst)
+                        if (actorPhone.isNotBlank()) r.put("_approvalActor", actorPhone)
+                        if (reason != null) r.put("_approvalReason", reason)
+                        changed++
+                    }
+                }
+
+                if (changed == 0) return@withContext false
+
+                // 2. user_projects 업데이트
+                val updateReq = JSONObject().apply {
+                    put("tool", "user_data_update")
+                    put("arguments", JSONObject().apply {
+                        put("tableName", "user_projects")
+                        put("updates", JSONObject().apply {
+                            put("sheets_data", sheetsArr.toString())
+                            put("updated_at", nowKst)
+                        })
+                        put("where", JSONObject().apply {
+                            put("ids", org.json.JSONArray().put(projectId.toIntOrNull() ?: projectId))
+                        })
+                    })
+                }
+                val updRes = client.newCall(
+                    Request.Builder()
+                        .url("$host/__user_data_proxy")
+                        .header("Content-Type", "application/json")
+                        .post(updateReq.toString().toRequestBody(JSON_MEDIA_TYPE))
+                        .build()
+                ).execute()
+                val updOk = updRes.isSuccessful
+                updRes.close()
+
+                if (updOk) {
+                    // 3. 감사 로그(data_change_logs) 기록 (베스트 에포트)
+                    try {
+                        val logReq = JSONObject().apply {
+                            put("tool", "user_data_insert")
+                            put("arguments", JSONObject().apply {
+                                put("tableName", "data_change_logs")
+                                put("rows", org.json.JSONArray().put(JSONObject().apply {
+                                    put("project_id", projectId)
+                                    put("sheet_name", sheetName)
+                                    put("change_type", "update_approval_status")
+                                    put("target_row", serialSet.joinToString(",").ifBlank { idxSet.joinToString(",") })
+                                    put("column_name", "_approvalStatus")
+                                    put("after_value", if (!reason.isNullOrBlank()) "$status ($reason)" else status)
+                                    put("operator", actorPhone.ifBlank { "mobile_app" })
+                                    put("created_at", nowKst)
+                                }))
+                            })
+                        }
+                        client.newCall(
+                            Request.Builder()
+                                .url("$host/__user_data_proxy")
+                                .header("Content-Type", "application/json")
+                                .post(logReq.toString().toRequestBody(JSON_MEDIA_TYPE))
+                                .build()
+                        ).execute().close()
+                    } catch (_: Exception) {}
+
+                    return@withContext true
+                }
+            } catch (_: Exception) {}
+        }
+        false
+    }
+
+    /**
+     * 🔑 임의의 프로젝트(projectId)와 시트(sheetName)에 대응하는 전용 모바일 Ingest 토큰을 조회하거나 즉시 발급합니다.
+     */
+    suspend fun ensureProjectSheetToken(
+        projectId: String,
+        projectName: String,
+        sheetName: String,
+        phoneNumber: String
+    ): String? = withContext(Dispatchers.IO) {
+        val cleanPhone = phoneNumber.replace("[^0-9]".toRegex(), "")
+        val hosts = listOf(FTS_OFFICIAL_DOMAIN, FTS_TUNNEL_BASE, FTS_TUNNEL_BASE_LEGACY)
+
+        for (host in hosts) {
+            try {
+                // 1. 기존 활성 토큰 조회
+                val getUrl = "$host/api/inbox/token?projectId=${java.net.URLEncoder.encode(projectId, "UTF-8")}&sheetName=${java.net.URLEncoder.encode(sheetName, "UTF-8")}"
+                client.newCall(Request.Builder().url(getUrl).get().build()).execute().use { res ->
+                    val str = res.body?.string().orEmpty()
+                    val json = try { JSONObject(str) } catch (_: Exception) { JSONObject() }
+                    if (res.isSuccessful && json.optBoolean("exists", false)) {
+                        val existingToken = json.optString("token", "").trim()
+                        if (existingToken.isNotBlank()) return@withContext existingToken
+                    }
+                }
+
+                // 2. 없으면 즉시 신규 발급
+                val postBody = JSONObject().apply {
+                    put("projectId", projectId)
+                    put("projectName", projectName)
+                    put("sheetName", sheetName)
+                    if (cleanPhone.isNotBlank()) put("userPhone", cleanPhone)
+                }.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+                client.newCall(Request.Builder().url("$host/api/inbox/token").post(postBody).build()).execute().use { res ->
+                    val str = res.body?.string().orEmpty()
+                    val json = try { JSONObject(str) } catch (_: Exception) { JSONObject() }
+                    if (res.isSuccessful && json.optBoolean("success", false)) {
+                        val newToken = json.optString("token", "").trim()
+                        if (newToken.isNotBlank()) return@withContext newToken
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        null
+    }
+
+    /**
+     * 📤 선택한 프로젝트(projectId)의 시트(sheetName)에 파일/사진을 업로드하여 AI OCR 자동 분석 적재를 수행합니다.
+     */
+    suspend fun uploadFileToWorkspaceSheet(
+        phoneNumber: String,
+        projectId: String,
+        projectName: String,
+        sheetName: String,
+        file: File,
+        mimeType: String,
+        memo: String = ""
+    ): FtsUploadResult = withContext(Dispatchers.IO) {
+        val token = ensureProjectSheetToken(projectId, projectName, sheetName, phoneNumber)
+            ?: return@withContext FtsUploadResult(success = false, error = "대상 시트($sheetName)의 업로드 토큰을 생성할 수 없습니다.")
+        val endpoint = "$FTS_OFFICIAL_DOMAIN/api/inbox/$token"
+        uploadFile(
+            endpoint = endpoint,
+            file = file,
+            mimeType = mimeType,
+            memo = memo,
+            token = token
+        )
+    }
+
+    /**
+     * ✏️ 선택한 프로젝트(projectId)의 시트(sheetName)에 수동 입력 행(rowData)을 직접 추가합니다.
+     */
+    suspend fun appendManualRowToWorkspaceSheet(
+        phoneNumber: String,
+        projectId: String,
+        projectName: String,
+        sheetName: String,
+        rowData: JSONObject
+    ): FtsUploadResult = withContext(Dispatchers.IO) {
+        val token = ensureProjectSheetToken(projectId, projectName, sheetName, phoneNumber)
+            ?: return@withContext FtsUploadResult(success = false, error = "대상 시트($sheetName)의 적재 토큰을 생성할 수 없습니다.")
+        val endpoint = "$FTS_OFFICIAL_DOMAIN/api/inbox/$token"
+        uploadRowData(
+            endpoint = endpoint,
+            rowData = rowData,
+            token = token
+        )
+    }
 }

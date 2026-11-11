@@ -186,6 +186,69 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- ⚡ 파일투시트 모바일 결재 박스 (승인 / 보류 / 반려 + 사유 표시) -->
+    <LinearLayout
+        android:id="@+id/layoutApprovalActionBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#1E293B"
+        android:padding="12dp"
+        android:layout_marginBottom="12dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tvApprovalReasonInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⚖️ 모바일 결재 처리 (클릭 즉시 파일투시트 웹에 동기화)"
+            android:textColor="#93C5FD"
+            android:textSize="11.5sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnApproveRow"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:text="✅ 승인"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:backgroundTint="#059669"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btnHoldRow"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:text="🟠 보류"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:backgroundTint="#D97706"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btnRejectRow"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:text="🚫 반려"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:backgroundTint="#E11D48" />
+        </LinearLayout>
+    </LinearLayout>
+
     <!-- 상세 내용 / 원문 메시지 / 통화 요약 스크롤 영역 -->
     <androidx.core.widget.NestedScrollView
         android:id="@+id/scrollSheetDescription"

@@ -448,6 +448,19 @@ class CardMarketplaceController(
     companion object {
         val DEFAULT_FALLBACK_CATALOG = listOf(
             MarketplaceCardItemDto(
+                key = "cardFtsWorkspace",
+                title = "파일투시트 통합 워크스페이스 (결재·적재)",
+                icon = "⚡",
+                category = "store",
+                categoryName = "매장 · 정산",
+                description = "파일투시트의 모든 프로젝트와 시트를 한눈에 조회하고, 승인/보류/반려 결재 및 카메라·파일 AI 자동 적재를 원스톱으로 수행합니다.",
+                badge = "NEW",
+                author = "시트봇 공식",
+                isExclusive = false,
+                isInstalledByDefault = true,
+                version = "2.4.39"
+            ),
+            MarketplaceCardItemDto(
                 key = "cardTaxInvoice",
                 title = "전자세금계산서 원클릭 발행",
                 icon = "🧾",
