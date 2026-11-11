@@ -45,6 +45,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.5'
+          cache-disabled: true
 
       - name: Accept Android SDK Licenses
         run: |
@@ -68,7 +69,7 @@ jobs:
       - name: Build Release APK
         run: |
           cd ${{ matrix.dir }}
-          gradle assembleRelease --stacktrace
+          gradle assembleRelease --stacktrace || (rm -rf ~/.gradle/caches/modules-2 && gradle assembleRelease --refresh-dependencies --stacktrace)
 
       - name: Collect APK
         run: |
