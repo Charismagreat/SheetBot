@@ -2260,11 +2260,7 @@ class FtsSheetViewerActivity : AppCompatActivity() {
             btnOpenKakao.text = if (kakaoSession?.canOpenChatRoom == true) "💛 해당 카톡방 열기" else "💛 카카오톡 열기"
             btnOpenKakao.setOnClickListener {
                 dialog.dismiss()
-                if (kakaoSession != null && kakaoSession.canOpenChatRoom && KakaoReplySessionCache.openChatRoom(kakaoSession)) {
-                    return@setOnClickListener
-                }
-                val launchIntent = packageManager.getLaunchIntentForPackage("com.kakao.talk")
-                if (launchIntent != null) startActivity(launchIntent)
+                KakaoReplySessionCache.launchKakaoTalkOrRoom(this, kakaoSession)
             }
         } else {
             btnOpenKakao.visibility = View.GONE
@@ -2384,8 +2380,7 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                         dialog.dismiss()
                     } else {
                         dialog.dismiss()
-                        val launchIntent = packageManager.getLaunchIntentForPackage("com.kakao.talk")
-                        if (launchIntent != null) startActivity(launchIntent)
+                        KakaoReplySessionCache.launchKakaoTalkOrRoom(this, kakaoSession)
                     }
                 } else if (targetPhone != null) {
                     val (sent, _) = SmsSenderUtil.sendSmsDetailed(this, targetPhone, msgText)

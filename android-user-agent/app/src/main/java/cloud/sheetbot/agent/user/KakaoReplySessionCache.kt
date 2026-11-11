@@ -1,13 +1,17 @@
 package cloud.sheetbot.agent.user
 
+import android.app.ActivityOptions
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.RemoteInput
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import android.widget.Toast
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -153,16 +157,81 @@ object KakaoReplySessionCache {
 
     /**
      * 캐싱된 알림의 contentIntent를 실행하여 해당 카카오톡 채팅방(또는 메시지 대화창)을 즉시 엽니다.
+     * Android 14+ (API 34+)에서는 PendingIntent.send()의 백그라운드 Activity 시작 차단(BAL)을 허용하는 옵션을 함께 전달합니다.
      */
     fun openChatRoom(session: ReplySession): Boolean {
         val pi = session.contentIntent ?: return false
         return try {
-            pi.send()
+            if (Build.VERSION.SDK_INT >= 34) {
+                val options = ActivityOptions.makeBasic()
+                    .setPendingIntentBackgroundActivityStartMode(
+                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                    )
+                    .toBundle()
+                pi.send(null, 0, null, null, null, null, options)
+            } else {
+                pi.send()
+            }
             true
         } catch (e: Exception) {
             Log.w(TAG, "채팅방 PendingIntent 실행 실패 (만료됨): ${e.message}")
             false
         }
+    }
+
+    /**
+     * 4단계 다중 폴백으로 카카오톡 채팅방 또는 카카오톡 앱을 안전하게 실행합니다.
+     * 1단계: 캐싱된 알림 세션(PendingIntent)으로 해당 채팅방 직접 열기
+     * 2단계: PackageManager.getLaunchIntentForPackage("com.kakao.talk") 실행 (<queries> 선언 기반)
+     * 3단계: 명시적 패키지/런처 카테고리 인텐트(ACTION_MAIN + CATEGORY_LAUNCHER) 실행
+     * 4단계: 카카오톡 커스텀 스킴(kakaotalk://launch) 실행
+     */
+    fun launchKakaoTalkOrRoom(context: Context, session: ReplySession? = null): Boolean {
+        if (session != null && session.canOpenChatRoom) {
+            if (openChatRoom(session)) {
+                return true
+            }
+        }
+
+        // 2단계: getLaunchIntentForPackage
+        try {
+            val launchIntent = context.packageManager.getLaunchIntentForPackage("com.kakao.talk")?.apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            if (launchIntent != null) {
+                context.startActivity(launchIntent)
+                return true
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "getLaunchIntentForPackage 카카오톡 실행 실패: ${e.message}")
+        }
+
+        // 3단계: ACTION_MAIN + setPackage("com.kakao.talk")
+        try {
+            val explicitMain = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+                setPackage("com.kakao.talk")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            context.startActivity(explicitMain)
+            return true
+        } catch (e: Exception) {
+            Log.w(TAG, "ACTION_MAIN 카카오톡 실행 실패: ${e.message}")
+        }
+
+        // 4단계: kakaotalk://launch URI 스킴
+        try {
+            val schemeIntent = Intent(Intent.ACTION_VIEW, Uri.parse("kakaotalk://launch")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(schemeIntent)
+            return true
+        } catch (e: Exception) {
+            Log.w(TAG, "kakaotalk:// 스킴 실행 실패: ${e.message}")
+        }
+
+        Toast.makeText(context, "카카오톡 앱을 열 수 없습니다.", Toast.LENGTH_SHORT).show()
+        return false
     }
 
     /**

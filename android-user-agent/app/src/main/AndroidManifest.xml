@@ -45,6 +45,22 @@
     <uses-permission android:name="android.permission.WRITE_CONTACTS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- Android 11+ (API 30+) 패키지 가시성(Package Visibility) 선언: 카카오톡/인스타그램/메시지 앱 실행 인텐트 조회 허용 -->
+    <queries>
+        <package android:name="com.kakao.talk" />
+        <package android:name="com.instagram.android" />
+        <package android:name="com.google.android.apps.messaging" />
+        <package android:name="com.samsung.android.messaging" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="kakaotalk" />
+        </intent>
+    </queries>
+
     <application
         android:name=".SheetBotApp"
         android:allowBackup="true"

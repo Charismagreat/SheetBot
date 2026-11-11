@@ -185,21 +185,7 @@ class TasksActivity : AppCompatActivity() {
     }
 
     private fun openKakaoTalkAppOrRoom(session: KakaoReplySessionCache.ReplySession?) {
-        if (session != null && session.canOpenChatRoom) {
-            if (KakaoReplySessionCache.openChatRoom(session)) {
-                return
-            }
-        }
-        try {
-            val launchIntent = packageManager.getLaunchIntentForPackage("com.kakao.talk")
-            if (launchIntent != null) {
-                startActivity(launchIntent)
-            } else {
-                Toast.makeText(this, "카카오톡 앱이 설치되어 있지 않습니다.", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, "카카오톡을 실행할 수 없습니다.", Toast.LENGTH_SHORT).show()
-        }
+        KakaoReplySessionCache.launchKakaoTalkOrRoom(this, session)
     }
 
     private fun showTaskActionBottomSheet(
