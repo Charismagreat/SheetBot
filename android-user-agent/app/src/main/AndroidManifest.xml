@@ -175,13 +175,15 @@
             </intent-filter>
         </receiver>
 
-        <!-- 스마트폰 재부팅 시 자동 재실행 리시버 -->
+        <!-- 스마트폰 재부팅 및 인앱 APK 덮어쓰기 업데이트 직후 서비스/알림리스너 자동 재바인딩 리시버 -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 

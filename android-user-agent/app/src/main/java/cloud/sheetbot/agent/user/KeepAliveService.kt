@@ -154,6 +154,9 @@ class KeepAliveService : Service() {
                 // 📋 데일리 모닝 브리핑 점검 (아침 9시 전후 1회 상단바 알림)
                 TaskBriefingManager.checkAndNotifyDailyBriefing(this@KeepAliveService)
 
+                // 🔔 앱 업데이트 등으로 언바인딩된 알림 리스너(카카오톡/금융푸시) 상시 재연결 보장
+                BankNotificationListener.ensureListenerBound(this@KeepAliveService)
+
                 // 1분(60초)마다 생존 신호 전송
                 delay(60 * 1000L)
             }

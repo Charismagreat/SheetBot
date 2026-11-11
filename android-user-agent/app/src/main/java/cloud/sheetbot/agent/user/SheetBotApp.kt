@@ -35,7 +35,8 @@ class SheetBotApp : Application() {
         instance = this
 
         setupGlobalCrashHandler()
-        Log.i(TAG, "SheetBotApp 초기화 완료 (글로벌 크래시 방어벽 가동)")
+        BankNotificationListener.ensureListenerBound(this)
+        Log.i(TAG, "SheetBotApp 초기화 완료 (글로벌 크래시 방어벽 및 알림 리스너 자동 바인딩 가동)")
     }
 
     /**

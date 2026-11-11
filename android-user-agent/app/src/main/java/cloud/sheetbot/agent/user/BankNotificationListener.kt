@@ -3,9 +3,12 @@ package cloud.sheetbot.agent.user
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -17,12 +20,17 @@ import java.util.Collections
 import java.util.LinkedHashMap
 
 /**
- * 은행 및 금융사 앱의 무료 푸시 알림(Notification)을 실시간 감지하여 자동 입금 처리하는 상주 서비스
+ * 은행 및 금융사 앱의 무료 푸시 알림(Notification)과 카카오톡(일반/단톡/알림톡)을 실시간 감지하여 자동 동기화하는 상주 서비스
  */
 class BankNotificationListener : NotificationListenerService() {
     companion object {
         private const val TAG = "BankNotiListener"
         const val PUSH_CHANNEL_ID = "sheetbot_push_alerts"
+        private const val KAKAO_HISTORY_PREFS = "kakao_synced_history_prefs"
+
+        @Volatile
+        var isListenerConnected: Boolean = false
+            private set
 
         // 5초 이내 동일 알림 중복 감지 방지 캐시 (최대 50개 보관)
         private val recentCache = Collections.synchronizedMap(
@@ -32,6 +40,26 @@ class BankNotificationListener : NotificationListenerService() {
                 }
             }
         )
+
+        /**
+         * 🔄 앱 업데이트(MY_PACKAGE_REPLACED), 재부팅, 프로세스 재시작 시 삼성 One UI 등에서
+         * NotificationListenerService 바인딩이 해제되는 현상을 즉시 복구합니다.
+         */
+        fun ensureListenerBound(context: Context) {
+            try {
+                val cn = ComponentName(context, BankNotificationListener::class.java)
+                context.packageManager.setComponentEnabledSetting(
+                    cn,
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    PackageManager.DONT_KILL_APP
+                )
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    requestRebind(cn)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "ensureListenerBound 재바인딩 요청 예외: ${e.message}")
+            }
+        }
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.IO)
@@ -41,6 +69,38 @@ class BankNotificationListener : NotificationListenerService() {
         super.onCreate()
         prefs = PreferencesManager(this)
         Log.i(TAG, "BankNotificationListener 서비스가 초기화되었습니다.")
+    }
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        isListenerConnected = true
+        Log.i(TAG, "✅ BankNotificationListener 바인딩 연결 완료 -> 상단바 미처리 알림 스캔 시작")
+        sweepActiveNotifications()
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        isListenerConnected = false
+        Log.w(TAG, "⚠️ BankNotificationListener 연결 해제 감지 -> 즉시 requestRebind 호출")
+        ensureListenerBound(this)
+    }
+
+    /**
+     * 🔍 앱 업데이트 직후 재연결 시 상단 알림바에 남아 있는 최근 카카오톡/알림톡을 스캔하여 누락 없이 자동 수거합니다.
+     */
+    private fun sweepActiveNotifications() {
+        try {
+            val activeList = activeNotifications ?: return
+            val now = System.currentTimeMillis()
+            // 최근 12시간 이내에 도착해 상단바에 남아 있는 카카오톡 알림만 안전하게 점검
+            for (sbn in activeList) {
+                if (sbn.packageName == "com.kakao.talk" && (now - sbn.postTime) <= 12L * 3600L * 1000L) {
+                    handleKakaoNotification(sbn, isFromActiveSweep = true)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "상단바 활성 알림 스캔 중 예외: ${e.message}")
+        }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -77,9 +137,7 @@ class BankNotificationListener : NotificationListenerService() {
             val extras = sbn.notification.extras ?: return
             val title = extras.getString(Notification.EXTRA_TITLE)
                 ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
-            val text = extras.getString(Notification.EXTRA_TEXT)
-                ?: extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
-                ?: extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
+            val text = extractFullNotificationText(extras)
 
             // 3. 입금 알림 여부 정밀 판별
             if (!BankPushParser.isDepositNotification(title, text)) {
@@ -230,17 +288,79 @@ class BankNotificationListener : NotificationListenerService() {
     }
 
     /**
-     * 카카오톡 수신 알림 정밀 파싱 및 구글 시트 동기화
+     * 📄 알림 Extras에서 요약문("알림톡 도착" 등)에 가려지지 않고 전체 장문(EXTRA_BIG_TEXT / EXTRA_MESSAGES)을 최우선 추출합니다.
      */
-    private fun handleKakaoNotification(sbn: StatusBarNotification) {
+    private fun extractFullNotificationText(extras: Bundle): String {
+        val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim().orEmpty()
+        val normalText = (extras.getString(Notification.EXTRA_TEXT)
+            ?: extras.getCharSequence(Notification.EXTRA_TEXT)?.toString())?.trim().orEmpty()
+
+        // MessagingStyle 메시지 배열(EXTRA_MESSAGES)에서 가장 최신/상세 본문 추출
+        var messagingText = ""
+        try {
+            @Suppress("DEPRECATION")
+            val msgBundles = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+            if (!msgBundles.isNullOrEmpty()) {
+                val lastBundle = msgBundles.lastOrNull() as? Bundle
+                val mText = lastBundle?.getCharSequence("text")?.toString()?.trim().orEmpty()
+                if (mText.length > messagingText.length) {
+                    messagingText = mText
+                }
+            }
+        } catch (_: Exception) {}
+
+        // EXTRA_TEXT가 "알림톡 도착" 등 짧은 플레이스홀더이거나 bigText/messagingText가 더 긴 경우 가장 상세한 본문 선택
+        val candidates = listOf(bigText, messagingText, normalText).filter { it.isNotBlank() }
+        if (candidates.isEmpty()) return ""
+        val nonPlaceholder = candidates.filter {
+            it != "알림톡 도착" && it != "메시지가 도착했습니다." && it != "새로운 메시지"
+        }
+        return (if (nonPlaceholder.isNotEmpty()) nonPlaceholder else candidates).maxByOrNull { it.length } ?: normalText
+    }
+
+    /**
+     * 구형 단톡방의 '발신자: 내용' 형식인지 정밀 판별합니다.
+     * - 알림톡 본문 내 '■ 보험구분: 건강보험', '■ 계좌정보: 카카오뱅크은행' 등의 콜론(': ')이
+     *   단톡방 발신자로 오인되어 잘리는 현상을 100% 차단합니다.
+     */
+    private fun isLikelyLegacyGroupChatPrefix(rawTitle: String, rawText: String): Pair<String, String>? {
+        if (!rawText.contains(": ")) return null
+        val trimmed = rawText.trim()
+        // 대괄호 알림톡 헤더('[국민건강보험공단의 알림]' 등)나 특수기호로 시작하는 알림톡/공지문은 제외
+        if (trimmed.startsWith("[") || trimmed.startsWith("■") || trimmed.startsWith("□") ||
+            trimmed.startsWith("-") || trimmed.startsWith("※") || trimmed.contains("알림톡")
+        ) {
+            return null
+        }
+        val firstLine = trimmed.lineSequence().firstOrNull()?.trim().orEmpty()
+        if (!firstLine.contains(": ")) return null
+
+        val parts = trimmed.split(": ", limit = 2)
+        if (parts.size != 2) return null
+        val candidateSender = parts[0].trim()
+        val candidateBody = parts[1].trim()
+        if (candidateSender.isEmpty() || candidateSender.length > 15 || candidateBody.isEmpty()) return null
+
+        val nonSenderKeywords = listOf(
+            "[", "]", "■", "□", "※", "•", "보험", "계좌", "금액", "납부", "고지", "신청",
+            "안내", "결제", "주문", "배송", "일시", "번호", "제목", "구분", "기한", "http"
+        )
+        if (nonSenderKeywords.any { candidateSender.contains(it, ignoreCase = true) }) {
+            return null
+        }
+        return candidateSender to candidateBody
+    }
+
+    /**
+     * 카카오톡 수신 알림 정밀 파싱 및 구글 시트/파일투시트 동기화
+     */
+    private fun handleKakaoNotification(sbn: StatusBarNotification, isFromActiveSweep: Boolean = false) {
         try {
             val notification = sbn.notification ?: return
             val extras = notification.extras ?: return
             val rawTitle = extras.getString(Notification.EXTRA_TITLE)
                 ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
-            val rawText = extras.getString(Notification.EXTRA_TEXT)
-                ?: extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
-                ?: extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
+            val rawText = extractFullNotificationText(extras)
             val rawSubText = extras.getString(Notification.EXTRA_SUB_TEXT)
                 ?: extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString() ?: ""
 
@@ -251,7 +371,7 @@ class BankNotificationListener : NotificationListenerService() {
             val isGroupConversationExtra = extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)
                 || extras.getBoolean("android.isGroupConversation", false)
 
-            // 2. 단체방 vs 1:1 대화 분리 파싱
+            // 2. 단체방 vs 1:1 대화(및 채널 알림톡) 분리 파싱
             var chatRoomName = rawTitle.trim()
             var sender = rawTitle.trim()
             var message = rawText.trim()
@@ -274,18 +394,18 @@ class BankNotificationListener : NotificationListenerService() {
                     sender = rawTitle.trim()
                 }
             }
-            // [우선순위 3] 서브텍스트에 대화방 이름이 실려오는 구형 방식
-            else if (rawSubText.isNotBlank()) {
+            // [우선순위 3] 서브텍스트에 대화방 이름이 실려오는 구형 방식 (단, '알림톡' 등 시스템 서브텍스트 제외)
+            else if (rawSubText.isNotBlank() && !rawSubText.contains("알림톡") && !rawSubText.contains("메시지")) {
                 chatRoomName = rawSubText.trim()
                 sender = rawTitle.trim()
                 isGroupChat = true
             }
-            // [우선순위 4] 본문에 '발신자: 내용' 형태로 들어오는 구형 단톡방 방식
-            else if (rawText.contains(": ")) {
-                val parts = rawText.split(": ", limit = 2)
-                if (parts.size == 2 && parts[0].length <= 25) {
-                    sender = parts[0].trim()
-                    message = parts[1].trim()
+            // [우선순위 4] 첫 줄에 순수 '발신자: 내용' 형태로 들어오는 구형 단톡방 방식 (알림톡 콜론 오인 원천 차단)
+            else {
+                val legacyGroup = isLikelyLegacyGroupChatPrefix(rawTitle, rawText)
+                if (legacyGroup != null) {
+                    sender = legacyGroup.first
+                    message = legacyGroup.second
                     chatRoomName = rawTitle.trim()
                     isGroupChat = true
                 }
@@ -296,6 +416,18 @@ class BankNotificationListener : NotificationListenerService() {
 
             if (!prefs.isPaired && !prefs.isFtsPaired) return
             val userEmail = prefs.userEmail ?: ""
+
+            // 영구 중복 방지 스토리지 (상단바 재스캔 및 헤즈업 알림 재호출 시 이미 동기화된 알림톡 중복 적재 차단)
+            val historyPrefs = getSharedPreferences(KAKAO_HISTORY_PREFS, Context.MODE_PRIVATE)
+            val persistentSig = "k_${chatRoomName}_${sender}_${message.hashCode()}"
+            val prevSyncedAt = historyPrefs.getLong(persistentSig, 0L)
+            val nowMs = System.currentTimeMillis()
+            if (isFromActiveSweep && prevSyncedAt > 0L) {
+                return
+            }
+            if (!isFromActiveSweep && prevSyncedAt > 0L && (nowMs - prevSyncedAt) < 60_000L) {
+                return
+            }
 
             // ========================================================
             // [A] 최우선 금융 알림톡 감지 (카카오페이 / 카카오뱅크 송금·입금·결제 알림)
@@ -413,6 +545,7 @@ class BankNotificationListener : NotificationListenerService() {
                     )
 
                     if (isSynced) {
+                        historyPrefs.edit().putLong(persistentSig, System.currentTimeMillis()).apply()
                         Log.i(TAG, "🎉 [카카오톡 시트 기록 완료] $chatRoomName ($sender)")
 
                         // UI 로그 갱신 브로드캐스트
@@ -460,9 +593,7 @@ class BankNotificationListener : NotificationListenerService() {
             val extras = sbn.notification.extras ?: return
             val rawTitle = extras.getString(Notification.EXTRA_TITLE)
                 ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
-            val rawText = extras.getString(Notification.EXTRA_TEXT)
-                ?: extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
-                ?: extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
+            val rawText = extractFullNotificationText(extras)
 
             if (rawText.isBlank()) return
 
