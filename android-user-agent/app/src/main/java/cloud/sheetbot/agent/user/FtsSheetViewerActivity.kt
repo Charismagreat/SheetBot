@@ -413,8 +413,8 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                     currentToken = detail.token.ifBlank { tokenToUse }
                     currentSheetName = detail.sheetName.ifBlank { targetSheetName }
                     currentProjectName = detail.projectName.ifBlank { "시트봇 연동 장부" }
-                    if (!detail.projectId.isNullOrBlank()) {
-                        currentProjectId = detail.projectId
+                    detail.projectId?.takeIf { it.isNotBlank() }?.let {
+                        currentProjectId = it
                     }
 
                     currentHeaders = if (detail.headers.isNotEmpty()) {
