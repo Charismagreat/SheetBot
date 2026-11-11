@@ -551,7 +551,7 @@ class TasksActivity : AppCompatActivity() {
                 btnSendReply.text = "문자 전송"
             }
 
-            val cacheKey = "${task.id ?: task.uuid ?: task.title}_${targetName.orEmpty()}"
+            val cacheKey = "${task.id}_${task.title}_${targetName.orEmpty()}"
             var lastAutoFilledText: String? = null
 
             fun renderSuggestionChips(suggestions: List<String>, isAiGenerated: Boolean) {
@@ -620,6 +620,7 @@ class TasksActivity : AppCompatActivity() {
 
                 lifecycleScope.launch {
                     val aiList = ApiClient.suggestTaskReplies(
+                        userEmail = userEmail,
                         title = reqTitle,
                         description = reqDesc,
                         contactName = reqContact,
