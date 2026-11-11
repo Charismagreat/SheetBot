@@ -76,10 +76,10 @@ object CardSearchRegistry {
         SearchableCard(
             index = 4,
             key = "cardCallEnded",
-            title = "통화 종료 후 명함 원터치 발송",
+            title = "통화 종료 후 명함 & 통화요약 발송",
             icon = "🪪",
-            chosung = "ㅌㅎㅈㄹㅎㅁㅎㅇㅌㅊㅂㅅ",
-            keywords = listOf("명함", "명함발송", "통화종료", "전화끊고", "모바일명함", "소개"),
+            chosung = "ㅌㅎㅈㄹㅎㅁㅎㅌㅎㅇㅇㅂㅅ",
+            keywords = listOf("명함", "명함발송", "통화종료", "전화끊고", "모바일명함", "소개", "통화요약발송", "후속약속", "약속문자"),
             cardResId = R.id.cardCallEnded
         ),
         SearchableCard(

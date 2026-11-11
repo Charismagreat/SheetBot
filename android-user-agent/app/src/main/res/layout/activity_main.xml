@@ -1719,7 +1719,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="💼 통화 종료후 모바일 명함 자동 발송"
+                    android:text="🪪 통화 종료 후 명함 &amp; 통화요약 발송"
                     android:textColor="#38BDF8"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -1980,11 +1980,24 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="💡 통화가 끝나면 상단 알림창에서 터치 한 번으로 고객에게 즉시 발송돼요."
+                    android:text="💡 통화가 끝나면 팝업에서 '직전/방금 통화 핵심 요약'과 '후속 약속·할 일'을 명함 문자에 원터치로 함께 붙여 발송할 수 있어요."
                     android:textColor="#94A3B8"
                     android:textSize="10.5sp"
                     android:gravity="center"
-                    android:layout_marginTop="2dp" />
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- 명함 + 통화요약 발송 팝업 미리보기 테스트 버튼 (Tag 기반 바인딩) -->
+                <Button
+                    android:tag="btnPreviewCallEndedDialog"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:backgroundTint="#0284C7"
+                    android:text="🧪 명함 + 통화요약 발송 팝업 미리보기 (최근 통화 실데이터)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="4dp" />
 
                 <!-- 하단 액션 버튼: 시트 열기 및 발송 제외 번호 관리 -->
                 <LinearLayout

@@ -73,7 +73,7 @@ class CardDrawerController(
         CardInfo("cardCallRecording", "통화 녹음 자동 분석", "🎙️", "통화 & 녹음", R.id.cardCallRecording, R.id.layoutCallRecordingHeader),
         CardInfo("cardInCallSummary", "수신·발신 전화 인콜 파투 브리핑", "📞", "통화 & 녹음", R.id.cardInCallSummary, R.id.layoutInCallSummaryHeader),
         CardInfo("cardMissedCall", "부재중 전화 자동 답장", "📞", "통화 & 녹음", R.id.cardMissedCall, R.id.layoutMissedCallHeader),
-        CardInfo("cardCallEnded", "통화 종료 후 명함 원터치 발송", "🪪", "통화 & 녹음", R.id.cardCallEnded, R.id.layoutCallEndedCardHeader),
+        CardInfo("cardCallEnded", "통화 종료 후 명함 & 통화요약 발송", "🪪", "통화 & 녹음", R.id.cardCallEnded, R.id.layoutCallEndedCardHeader),
         CardInfo("cardMeetingRecording", "회의 녹음 자동 회의록", "🎙️", "통화 & 녹음", R.id.cardMeetingRecording, R.id.layoutMeetingRecordingHeader),
 
         // [4] 메시지 & 대화

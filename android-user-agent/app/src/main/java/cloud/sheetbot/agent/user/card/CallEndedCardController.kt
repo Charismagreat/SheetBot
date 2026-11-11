@@ -92,7 +92,27 @@ class CallEndedCardController(
         }
 
         binding.btnOpenCallEndedCardSheet.setOnClickListener {
-            onOpenSheetChooser("CALL_ENDED_CARD", "[SheetBot] 모바일 명함 발송 대장")
+            val ftsPhone = prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() } ?: ""
+            if (prefs.isDestinationFileToSheet && (ftsPhone.isNotBlank() || !prefs.ftsProjectId.isNullOrBlank())) {
+                val intent = android.content.Intent(activity, cloud.sheetbot.agent.user.FtsSheetViewerActivity::class.java).apply {
+                    putExtra(cloud.sheetbot.agent.user.FtsSheetViewerActivity.EXTRA_PHONE_NUMBER, ftsPhone)
+                    putExtra(cloud.sheetbot.agent.user.FtsSheetViewerActivity.EXTRA_PROJECT_ID, prefs.ftsProjectId ?: "")
+                    putExtra(cloud.sheetbot.agent.user.FtsSheetViewerActivity.EXTRA_SHEET_NAME, "문자송수신대장")
+                    putExtra(cloud.sheetbot.agent.user.FtsSheetViewerActivity.EXTRA_SHEET_TYPE, "SMS")
+                }
+                activity.startActivity(intent)
+            } else {
+                onOpenSheetChooser("CALL_ENDED_CARD", "[SheetBot] 모바일 명함 발송 대장")
+            }
+        }
+
+        // 🧪 명함 + 통화요약 발송 팝업 미리보기 테스트 버튼
+        binding.layoutCallEndedCardSettings.findViewWithTag<View>("btnPreviewCallEndedDialog")?.setOnClickListener {
+            val previewIntent = android.content.Intent(activity, cloud.sheetbot.agent.user.CallEndedPromptActivity::class.java).apply {
+                putExtra(cloud.sheetbot.agent.user.PhoneCallReceiver.EXTRA_TARGET_PHONE, "010-1234-5678")
+                putExtra(cloud.sheetbot.agent.user.CallEndedPromptActivity.EXTRA_PREVIEW_MODE, true)
+            }
+            activity.startActivity(previewIntent)
         }
 
         setupExcludedNumbersUI()

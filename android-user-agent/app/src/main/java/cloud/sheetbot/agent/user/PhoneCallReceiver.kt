@@ -62,9 +62,15 @@ class PhoneCallReceiver : BroadcastReceiver() {
         private val recentEndedCalls = ConcurrentHashMap<String, Long>()
 
         /**
-         * 모바일 명함 문자 즉시 전송 (웹 명함 링크 모드 - 0원 무료 SMS)
+         * 모바일 명함 문자 즉시 전송 (웹 명함 링크 모드 + 통화 요약/후속 약속 결합 지원)
          */
-        fun sendBusinessCardSms(context: Context, phoneNumber: String, contactName: String?, onComplete: ((Boolean) -> Unit)? = null) {
+        fun sendBusinessCardSms(
+            context: Context,
+            phoneNumber: String,
+            contactName: String?,
+            customMessageOverride: String? = null,
+            onComplete: ((Boolean) -> Unit)? = null
+        ) {
             // 🛡️ 상대방 번호가 휴대전화가 아닌 경우(유선전화, 대표번호 등) 발송 취소
             if (!ContactHelper.isMobilePhoneNumber(phoneNumber)) {
                 Log.w(TAG, "⏭️ [모바일 명함 발송 제외] 상대방 번호가 휴대전화가 아닙니다: $phoneNumber (유선/대표번호 자동 제외)")
@@ -82,37 +88,43 @@ class PhoneCallReceiver : BroadcastReceiver() {
 
             val template = prefs.businessCardSmsTemplate.trim()
             val webLink = prefs.businessCardWebLink.trim()
-            val finalMessage = if (webLink.isNotBlank() && !template.contains(webLink)) {
+            val defaultMessage = if (webLink.isNotBlank() && !template.contains(webLink)) {
                 "$template\n▶ 모바일 명함: $webLink"
             } else {
                 template
             }
-            val userEmail = prefs.userEmail
+            val finalMessage = customMessageOverride?.trim()?.takeIf { it.isNotBlank() } ?: defaultMessage
+            val effectiveEmail = prefs.userEmail?.takeIf { it.isNotBlank() }
+                ?: prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() }?.let { "${it.replace(Regex("[^0-9]"), "")}@filetosheet.cloud" }
+                ?: ""
 
             CoroutineScope(Dispatchers.IO).launch {
-                val isSent = SmsSenderUtil.sendSms(context, phoneNumber, finalMessage)
+                val (isSent, _) = SmsSenderUtil.sendSmsDetailed(context, phoneNumber, finalMessage)
                 if (isSent) {
-                    Log.i(TAG, "🎉 [모바일 명함 발송 성공] 대상: $phoneNumber")
+                    Log.i(TAG, "🎉 [모바일 명함 + 통화요약 발송 성공] 대상: $phoneNumber")
                     if (prefs.isTtsEnabled) {
-                        TtsManager.speak(context, "상대방에게 모바일 명함이 성공적으로 발송되었습니다.")
+                        TtsManager.speak(context, "상대방에게 모바일 명함 문자가 성공적으로 발송되었습니다.")
                     }
 
-                    // [SheetBot] 모바일 명함 발송 대장에 실시간 기록
-                    if (!userEmail.isNullOrBlank()) {
+                    val hasSummaryAttached = finalMessage.contains("[통화 내용 요약]") || finalMessage.contains("[약속 및 후속 진행 사항]")
+                    val modeLabel = if (hasSummaryAttached) "명함+통화요약·약속" else "스마트 웹 명함(0원)"
+
+                    // [SheetBot / 파투] 모바일 명함 발송 대장에 실시간 기록
+                    if (effectiveEmail.isNotBlank()) {
                         ApiClient.sendBusinessCardSync(
-                            userEmail = userEmail,
+                            userEmail = effectiveEmail,
                             recipientPhone = phoneNumber,
                             contactName = contactName,
-                            sendMode = "스마트 웹 명함(0원)",
+                            sendMode = modeLabel,
                             cardContentOrUrl = finalMessage,
                             status = "전송 완료"
                         )
                     }
 
-                    // 구글 시트 일반 문자 대장에도 발신 기록 동기화
-                    if (!userEmail.isNullOrBlank() && prefs.isSmsSheetSyncEnabled) {
+                    // 구글 시트 / 파투 일반 문자 대장에도 발신 기록 동기화
+                    if (effectiveEmail.isNotBlank() && (prefs.isSmsSheetSyncEnabled || prefs.isDestinationFileToSheet)) {
                         ApiClient.sendSmsSync(
-                            userEmail = userEmail,
+                            userEmail = effectiveEmail,
                             direction = "OUTBOUND",
                             phoneNumber = phoneNumber,
                             contactName = contactName,
@@ -130,9 +142,15 @@ class PhoneCallReceiver : BroadcastReceiver() {
         }
 
         /**
-         * 모바일 명함 갤러리 사진 첨부 발송 (MMS 모드 - 구글 시트 대장 기록 및 시스템 문자 앱 자동 실행)
+         * 모바일 명함 갤러리 사진 첨부 발송 (MMS 모드 - 구글 시트/파투 대장 기록 및 시스템 문자 앱 자동 실행)
          */
-        fun sendBusinessCardMms(context: Context, phoneNumber: String, contactName: String?, onComplete: ((Boolean) -> Unit)? = null) {
+        fun sendBusinessCardMms(
+            context: Context,
+            phoneNumber: String,
+            contactName: String?,
+            customMessageOverride: String? = null,
+            onComplete: ((Boolean) -> Unit)? = null
+        ) {
             // 🛡️ 상대방 번호가 휴대전화가 아닌 경우(유선전화, 대표번호 등) 발송 취소
             if (!ContactHelper.isMobilePhoneNumber(phoneNumber)) {
                 Log.w(TAG, "⏭️ [모바일 명함 발송 제외] 상대방 번호가 휴대전화가 아닙니다: $phoneNumber (유선/대표번호 자동 제외)")
@@ -148,20 +166,22 @@ class PhoneCallReceiver : BroadcastReceiver() {
                 return
             }
 
-            val template = prefs.businessCardSmsTemplate.trim()
+            val template = customMessageOverride?.trim()?.takeIf { it.isNotBlank() } ?: prefs.businessCardSmsTemplate.trim()
             val imagePath = prefs.businessCardImagePath
             val imageFile = if (imagePath.isNotBlank()) File(imagePath) else null
-            val userEmail = prefs.userEmail
+            val effectiveEmail = prefs.userEmail?.takeIf { it.isNotBlank() }
+                ?: prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() }?.let { "${it.replace(Regex("[^0-9]"), "")}@filetosheet.cloud" }
+                ?: ""
 
             // 1. 알림 닫기
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.cancel(2001)
 
-            // 2. 구글 시트 [SheetBot] 모바일 명함 발송 대장에 실시간 기록
+            // 2. 구글 시트 / 파투 모바일 명함 발송 대장에 실시간 기록
             CoroutineScope(Dispatchers.IO).launch {
-                if (!userEmail.isNullOrBlank()) {
+                if (effectiveEmail.isNotBlank()) {
                     ApiClient.sendBusinessCardSync(
-                        userEmail = userEmail,
+                        userEmail = effectiveEmail,
                         recipientPhone = phoneNumber,
                         contactName = contactName,
                         sendMode = "사진 첨부 MMS",
@@ -169,9 +189,9 @@ class PhoneCallReceiver : BroadcastReceiver() {
                         status = "전송 완료 (MMS)"
                     )
                 }
-                if (!userEmail.isNullOrBlank() && prefs.isSmsSheetSyncEnabled) {
+                if (effectiveEmail.isNotBlank() && (prefs.isSmsSheetSyncEnabled || prefs.isDestinationFileToSheet)) {
                     ApiClient.sendSmsSync(
-                        userEmail = userEmail,
+                        userEmail = effectiveEmail,
                         direction = "OUTBOUND",
                         phoneNumber = phoneNumber,
                         contactName = contactName,
