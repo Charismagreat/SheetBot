@@ -2206,4 +2206,327 @@ object FileToSheetClient {
         if (res.success) invalidateWorkspaceCache()
         res
     }
+
+    data class FtsGlobalSearchResult(
+        val success: Boolean,
+        val matchedProjectsCount: Int = 0,
+        val matchedSheetsCount: Int = 0,
+        val totalMatchedCount: Int = 0,
+        val keywords: List<String> = emptyList(),
+        val matchedRows: List<FtsSearchMatchedRow> = emptyList(),
+        val summaryText: String = "",
+        val spokenText: String = ""
+    )
+
+    private fun optCleanVal(obj: JSONObject, key: String): String {
+        if (obj.isNull(key)) return ""
+        val v = obj.optString(key, "").trim()
+        return if (v.isEmpty() || v.equals("null", true) || v.equals("undefined", true) || v == "-") "" else v
+    }
+
+    /**
+     * 🔍 파투(FileToSheet) 내 사용자의 모든 프로젝트 및 하위 모든 시트에 대해 자연어/키워드 통합 검색을 수행합니다.
+     */
+    suspend fun searchAcrossAllWorkspaceProjects(
+        phoneNumber: String,
+        projectIdHint: String? = null,
+        rawQuery: String,
+        serverKeywordsHint: List<String> = emptyList()
+    ): FtsGlobalSearchResult = withContext(Dispatchers.IO) {
+        val cleanPhone = phoneNumber.replace("[^0-9]".toRegex(), "")
+        val reqProjectId = projectIdHint?.trim().orEmpty()
+        if (cleanPhone.isBlank() && reqProjectId.isBlank()) {
+            return@withContext FtsGlobalSearchResult(success = false)
+        }
+
+        // 캐시가 비어 있으면 먼저 fetchAllWorkspaceProjects로 채움
+        if (cachedWorkspaceRowsRaw.isNullOrBlank()) {
+            fetchAllWorkspaceProjects(phoneNumber = cleanPhone, targetProjectId = reqProjectId)
+        }
+        val rawStr = cachedWorkspaceRowsRaw ?: return@withContext FtsGlobalSearchResult(success = false)
+        val rowsArr = try { JSONArray(rawStr) } catch (_: Exception) { return@withContext FtsGlobalSearchResult(success = false) }
+
+        val matchedProjectObjs = mutableListOf<JSONObject>()
+        for (i in 0 until rowsArr.length()) {
+            val pObj = rowsArr.optJSONObject(i) ?: continue
+            val cat = pObj.optString("category", "").trim()
+            if (cat == "trash_project") continue
+            val rowPhone = pObj.optString("phone_number", "").replace("[^0-9]".toRegex(), "")
+            val rowId = pObj.opt("id")?.toString()?.trim().orEmpty()
+            if ((cleanPhone.isNotBlank() && rowPhone == cleanPhone) ||
+                (reqProjectId.isNotBlank() && rowId == reqProjectId)
+            ) {
+                matchedProjectObjs.add(pObj)
+            }
+        }
+        if (matchedProjectObjs.isEmpty()) return@withContext FtsGlobalSearchResult(success = false)
+
+        val stopWords = setOf(
+            "파투", "파일투시트", "시트", "프로젝트", "대장", "장부", "내역", "목록", "리스트",
+            "찾아줘", "보여줘", "알려줘", "검색해줘", "검색", "조회해줘", "조회", "확인해줘", "확인",
+            "전체", "모두", "다", "관련", "최근", "최신", "오늘", "어제", "이번달", "이번", "달",
+            "건수", "금액", "합계", "얼마", "몇건", "몇", "에서", "있는", "있나", "해줘", "요약"
+        )
+
+        val extractedKeywords = mutableListOf<String>()
+        for (k in serverKeywordsHint) {
+            val clean = k.trim()
+            if (clean.isNotEmpty() && clean !in stopWords && clean !in extractedKeywords) {
+                extractedKeywords.add(clean)
+            }
+        }
+        if (extractedKeywords.isEmpty()) {
+            val cleanedQuery = rawQuery
+                .replace(Regex("(찾아줘|보여줘|알려줘|검색해줘|조회해줘|확인해줘|에서|관련|내역|목록|시트|파투|파일투시트)"), " ")
+            for (token in cleanedQuery.split(Regex("[\\s,·/()]+"))) {
+                val clean = token.trim().replace(Regex("(은|는|이|가|을|를|의|에|로|으로|랑|하고|과|와)$"), "")
+                if (clean.length >= 2 && clean !in stopWords && clean !in extractedKeywords) {
+                    extractedKeywords.add(clean)
+                }
+            }
+        }
+
+        val qLower = rawQuery.lowercase()
+        val filterApproval = when {
+            qLower.contains("미결재") || qLower.contains("대기중") || qLower.contains("결재대기") -> "PENDING"
+            qLower.contains("승인된") || qLower.contains("승인완료") -> "APPROVED"
+            qLower.contains("보류") -> "HELD"
+            qLower.contains("반려") -> "REJECTED"
+            else -> ""
+        }
+
+        val nowKst = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Seoul"))
+        val yyyy = nowKst.get(java.util.Calendar.YEAR)
+        val mm = String.format("%02d", nowKst.get(java.util.Calendar.MONTH) + 1)
+        val dd = String.format("%02d", nowKst.get(java.util.Calendar.DAY_OF_MONTH))
+        val todayIso = "$yyyy-$mm-$dd"
+        val todayShort = "$mm/$dd"
+        val thisMonthIso = "$yyyy-$mm"
+
+        val isTodayFilter = qLower.contains("오늘")
+        val isThisMonthFilter = qLower.contains("이번 달") || qLower.contains("이번달")
+
+        data class ScoredCandidate(
+            val score: Int,
+            val projectId: String,
+            val projectName: String,
+            val sheetName: String,
+            val headers: List<String>,
+            val rowObj: JSONObject,
+            val rawRowIndex: Int
+        )
+
+        val candidates = mutableListOf<ScoredCandidate>()
+
+        for (pObj in matchedProjectObjs) {
+            val pId = pObj.opt("id")?.toString()?.trim().orEmpty()
+            val pName = pObj.optString("project_name", "프로젝트").trim().ifBlank { "프로젝트 #$pId" }
+            val sheetsArr = try { JSONArray(pObj.optString("sheets_data", "[]")) } catch (_: Exception) { JSONArray() }
+
+            for (sIdx in 0 until sheetsArr.length()) {
+                val sObj = sheetsArr.optJSONObject(sIdx) ?: continue
+                val sName = sObj.optString("name", "").trim()
+                if (sName.isBlank()) continue
+                val rows = sObj.optJSONArray("rows") ?: continue
+
+                val headers = mutableListOf<String>()
+                val hArr = sObj.optJSONArray("headers")
+                if (hArr != null) {
+                    for (hIdx in 0 until hArr.length()) {
+                        val h = hArr.optString(hIdx, "").trim()
+                        if (h.isNotBlank() && !h.equals("null", true) && !h.startsWith("_")) {
+                            headers.add(h)
+                        }
+                    }
+                }
+                if (headers.isEmpty() && rows.length() > 0) {
+                    val first = rows.optJSONObject(0)
+                    if (first != null) {
+                        val itKeys = first.keys()
+                        while (itKeys.hasNext()) {
+                            val k = itKeys.next().trim()
+                            if (k.isNotBlank() && !k.startsWith("_")) headers.add(k)
+                        }
+                    }
+                }
+
+                val sheetMentioned = qLower.contains(sName.lowercase().removeSuffix("대장"))
+
+                for (rIdx in 0 until rows.length()) {
+                    val rObj = rows.optJSONObject(rIdx) ?: continue
+                    val rowApproval = optCleanVal(rObj, "_approvalStatus").uppercase().ifBlank { "PENDING" }
+                    if (filterApproval.isNotEmpty() && rowApproval != filterApproval) continue
+
+                    val cellStrings = mutableListOf<String>()
+                    val keysIt = rObj.keys()
+                    while (keysIt.hasNext()) {
+                        val k = keysIt.next()
+                        if (k.startsWith("_")) continue
+                        val v = optCleanVal(rObj, k)
+                        if (v.isNotEmpty()) cellStrings.add(v)
+                    }
+                    if (cellStrings.isEmpty()) continue
+                    val joinedLower = cellStrings.joinToString(" ").lowercase()
+
+                    if (isTodayFilter && !joinedLower.contains(todayIso) && !joinedLower.contains(todayShort)) {
+                        continue
+                    }
+                    if (isThisMonthFilter && !joinedLower.contains(thisMonthIso) && !joinedLower.contains("$mm/")) {
+                        continue
+                    }
+
+                    var score = 0
+                    var kwHitCount = 0
+                    for (kw in extractedKeywords) {
+                        val kwL = kw.lowercase()
+                        if (joinedLower.contains(kwL)) {
+                            score += 8
+                            kwHitCount++
+                        } else if (sName.lowercase().contains(kwL) || pName.lowercase().contains(kwL)) {
+                            score += 3
+                        }
+                    }
+                    if (sheetMentioned) score += 4
+                    if (filterApproval.isNotEmpty() && rowApproval == filterApproval) score += 5
+                    if (isTodayFilter || isThisMonthFilter) score += 4
+
+                    if (extractedKeywords.isNotEmpty()) {
+                        if (kwHitCount == 0 && !sheetMentioned) continue
+                    } else {
+                        if (!sheetMentioned && filterApproval.isEmpty() && !isTodayFilter && !isThisMonthFilter) {
+                            score += 1
+                        }
+                    }
+
+                    if (score > 0) {
+                        candidates.add(
+                            ScoredCandidate(
+                                score = score,
+                                projectId = pId,
+                                projectName = pName,
+                                sheetName = sName,
+                                headers = headers,
+                                rowObj = rObj,
+                                rawRowIndex = rIdx
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        candidates.sortWith(compareByDescending<ScoredCandidate> { it.score }.thenByDescending { it.rawRowIndex })
+
+        val totalMatched = candidates.size
+        val projCount = candidates.map { it.projectId }.distinct().size
+        val sheetCount = candidates.map { "${it.projectId}::${it.sheetName}" }.distinct().size
+
+        val matchedDtos = candidates.take(25).map { cand ->
+            val keys = cand.headers
+            fun findByKw(kws: List<String>): String {
+                for (kw in kws) {
+                    for (k in keys) {
+                        if (k.contains(kw)) {
+                            val v = optCleanVal(cand.rowObj, k)
+                            if (v.isNotEmpty()) return v
+                        }
+                    }
+                }
+                return ""
+            }
+
+            val serial = findByKw(listOf("일련번호", "번호")).ifBlank { "${cand.rawRowIndex + 1}" }
+            val approval = optCleanVal(cand.rowObj, "_approvalStatus").uppercase().ifBlank { "PENDING" }
+            val ts = findByKw(listOf("일시", "일자", "날짜", "등록일", "수신일", "통화일", "거래일", "발행일", "주문일"))
+            val amt = findByKw(listOf("합계금액", "결제금액", "금액", "공급가액", "단가", "잔액"))
+            var phone = findByKw(listOf("전화번호", "휴대폰", "휴대전화", "연락처", "발신번호", "수신번호"))
+            if (phone.isBlank()) {
+                val phoneRegex = Regex("(01[016789][-\\s]?\\d{3,4}[-\\s]?\\d{4}|0\\d{1,2}[-\\s]?\\d{3,4}[-\\s]?\\d{4}|1[568]\\d{2}[-\\s]?\\d{4})")
+                for (k in keys) {
+                    val m = phoneRegex.find(optCleanVal(cand.rowObj, k))
+                    if (m != null) {
+                        phone = m.value
+                        break
+                    }
+                }
+            }
+            val audioFile = findByKw(listOf("파일명"))
+
+            var title = findByKw(
+                listOf(
+                    "할일제목", "메일제목", "회의제목", "포스트제목", "문서/질의제목", "제목",
+                    "상대방이름", "상대방", "채팅방/발신자", "발신자", "성함", "고객명",
+                    "고객/가맹점명", "상호", "기업명", "회사명", "이름", "품목"
+                )
+            )
+            var subtitle = findByKw(
+                listOf(
+                    "요약내용", "본문요약", "AI요약", "핵심요약", "법률검토요약", "메시지내용",
+                    "거래내용", "품목내역", "견적내용", "발송할문자내용", "발송문구",
+                    "자동회신내용", "주요결정사항", "상세정보", "품목", "메모", "비고"
+                )
+            )
+            if (title.isBlank()) {
+                for (k in keys) {
+                    if (k == "일련번호" || k.contains("일시") || k.contains("일자")) continue
+                    val v = optCleanVal(cand.rowObj, k)
+                    if (v.isNotEmpty()) {
+                        title = v
+                        break
+                    }
+                }
+            }
+            if (title.isBlank()) title = "${cand.sheetName} #${cand.rawRowIndex + 1}"
+            if (subtitle == title) subtitle = ""
+
+            val fields = mutableListOf<Pair<String, String>>()
+            for (k in keys) {
+                if (k.startsWith("_") || k == "일련번호") continue
+                val v = optCleanVal(cand.rowObj, k)
+                if (v.isEmpty() || v == title || v == subtitle || v == ts || v == amt) continue
+                fields.add(k to (if (v.length > 60) v.take(58) + "…" else v))
+                if (fields.size >= 5) break
+            }
+
+            val copyJson = JSONObject(cand.rowObj.toString()).apply {
+                put("_rawRowIndex", cand.rawRowIndex)
+            }
+
+            FtsSearchMatchedRow(
+                projectId = cand.projectId,
+                projectName = cand.projectName,
+                sheetName = cand.sheetName,
+                rowNumber = cand.rawRowIndex + 1,
+                rawRowIndex = cand.rawRowIndex,
+                serialNumber = serial,
+                approvalStatus = approval,
+                primaryTitle = if (title.length > 90) title.take(88) + "…" else title,
+                primarySubtitle = if (subtitle.length > 180) subtitle.take(178) + "…" else subtitle,
+                timestampText = ts,
+                amountText = amt,
+                phoneNumber = phone,
+                audioFileName = audioFile,
+                matchedFields = fields,
+                rowJson = copyJson,
+                headers = keys
+            )
+        }
+
+        val summary = if (totalMatched > 0) {
+            "파투 ${projCount}개 프로젝트 · ${sheetCount}개 시트에서 총 ${totalMatched}건의 일치 내역을 찾았습니다."
+        } else {
+            "파투 프로젝트 및 시트에서 일치하는 내역을 찾지 못했습니다."
+        }
+
+        FtsGlobalSearchResult(
+            success = true,
+            matchedProjectsCount = projCount,
+            matchedSheetsCount = sheetCount,
+            totalMatchedCount = totalMatched,
+            keywords = extractedKeywords,
+            matchedRows = matchedDtos,
+            summaryText = summary,
+            spokenText = summary
+        )
+    }
 }

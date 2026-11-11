@@ -68,6 +68,7 @@ class FtsSheetViewerActivity : AppCompatActivity() {
         const val EXTRA_PHONE_NUMBER = "extra_phone_number"
         const val EXTRA_AUTO_OPEN_INGEST = "extra_auto_open_ingest"
         const val EXTRA_INITIAL_APPROVAL_FILTER = "extra_initial_approval_filter"
+        const val EXTRA_INITIAL_SEARCH_QUERY = "extra_initial_search_query"
     }
 
     private lateinit var prefs: PreferencesManager
@@ -165,6 +166,12 @@ class FtsSheetViewerActivity : AppCompatActivity() {
         setupRecyclerView()
         setupSearchAndButtons()
         setupApprovalFilterChips()
+
+        intent.getStringExtra(EXTRA_INITIAL_SEARCH_QUERY)?.takeIf { it.isNotBlank() }?.let { initQ ->
+            etSearchRows.setText(initQ)
+            etSearchRows.setSelection(initQ.length)
+            btnClearSearch.visibility = View.VISIBLE
+        }
 
         loadWorkspaceData(
             targetProjectId = currentProjectId.takeIf { it.isNotBlank() },

@@ -279,6 +279,15 @@ object CardSearchRegistry {
             chosung = "ㄴㅅㅅㅎㄷㅍㅇㅈㅇㅌㅍㅈㄱㄱ",
             keywords = listOf("otp", "인증번호", "로그인", "휴대폰인증", "문자인증", "본인인증", "saas", "바이브코딩", "인증대장", "0원문자"),
             cardResId = R.id.cardSaasOtpRelay
+        ),
+        SearchableCard(
+            index = 33,
+            key = "cardCopilot",
+            title = "말 한마디로 실행하는 AI 비서 & 파투 검색",
+            icon = "🎙️",
+            chosung = "ㅁㅎㅁㄷㄹㅅㅎㅎㄴㅇㅇㅂㅅㅍㅌㄱㅅ",
+            keywords = listOf("ai", "비서", "검색", "파투검색", "자연어검색", "통합검색", "코파일럿", "음성명령", "시트검색", "찾기"),
+            cardResId = R.id.cardCopilot
         )
     )
 

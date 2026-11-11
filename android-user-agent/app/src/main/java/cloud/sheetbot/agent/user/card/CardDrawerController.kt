@@ -56,7 +56,7 @@ class CardDrawerController(
         CardInfo("cardWallet", "내 토큰 지갑", "💰", "시스템 & 관제", R.id.layoutWalletCard, R.id.layoutWalletHeader),
         CardInfo("cardTasksHub", "스마트 통합 할 일 허브", "📋", "시스템 & 관제", R.id.cardTasksHub),
         CardInfo("cardFtsWorkspace", "파일투시트 통합 워크스페이스 (결재·적재)", "⚡", "업무 & 장부", R.id.cardFtsWorkspace),
-        CardInfo("cardCopilot", "말 한마디로 실행하는 AI 비서", "🎙️", "시스템 & 관제", R.id.cardCopilot, R.id.layoutCopilotHeader),
+        CardInfo("cardCopilot", "말 한마디로 실행하는 AI 비서 & 파투 검색", "🎙️", "시스템 & 관제", R.id.cardCopilot, R.id.layoutCopilotHeader),
         CardInfo("cardLocalLogs", "실시간 감지 및 입금 로그", "📜", "시스템 & 관제", R.id.cardLocalLogs),
         CardInfo("cardFeatureRequest", "우리 가게 맞춤 기능 제작 의뢰", "💡", "시스템 & 관제", R.id.cardFeatureRequest, R.id.layoutFeatureRequestHeader),
 

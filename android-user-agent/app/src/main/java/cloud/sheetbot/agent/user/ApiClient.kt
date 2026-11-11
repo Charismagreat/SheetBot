@@ -1858,6 +1858,65 @@ object ApiClient {
                     val suggestedTitle = resJson.optString("suggestedFunctionTitle", detailsObj?.optString("suggestedFunctionTitle", "") ?: "")
                     val targetSheetId = resJson.optString("spreadsheetId", detailsObj?.optString("spreadsheetId", "") ?: "")
 
+                    val matchedRowsArr = resJson.optJSONArray("matchedRows")
+                        ?: detailsObj?.optJSONObject("result")?.optJSONArray("matchedRows")
+                        ?: detailsObj?.optJSONArray("matchedRows")
+                    val parsedMatchedRows = mutableListOf<FtsSearchMatchedRow>()
+                    if (matchedRowsArr != null) {
+                        for (i in 0 until matchedRowsArr.length()) {
+                            val mObj = matchedRowsArr.optJSONObject(i) ?: continue
+                            val fieldsArr = mObj.optJSONArray("matchedFields")
+                            val fieldsList = mutableListOf<Pair<String, String>>()
+                            if (fieldsArr != null) {
+                                for (fIdx in 0 until fieldsArr.length()) {
+                                    val fObj = fieldsArr.optJSONObject(fIdx) ?: continue
+                                    val fk = fObj.optString("key", "").trim()
+                                    val fv = fObj.optString("value", "").trim()
+                                    if (fk.isNotEmpty() && fv.isNotEmpty()) {
+                                        fieldsList.add(fk to fv)
+                                    }
+                                }
+                            }
+                            val headersArr = mObj.optJSONArray("headers")
+                            val headersList = mutableListOf<String>()
+                            if (headersArr != null) {
+                                for (hIdx in 0 until headersArr.length()) {
+                                    val h = headersArr.optString(hIdx, "").trim()
+                                    if (h.isNotEmpty()) headersList.add(h)
+                                }
+                            }
+                            parsedMatchedRows.add(
+                                FtsSearchMatchedRow(
+                                    projectId = mObj.optString("projectId", ""),
+                                    projectName = mObj.optString("projectName", "시트봇 연동 장부"),
+                                    sheetName = mObj.optString("sheetName", ""),
+                                    rowNumber = mObj.optInt("rowNumber", 1),
+                                    rawRowIndex = mObj.optInt("rawRowIndex", 0),
+                                    serialNumber = mObj.optString("serialNumber", ""),
+                                    approvalStatus = mObj.optString("approvalStatus", "PENDING"),
+                                    primaryTitle = mObj.optString("primaryTitle", ""),
+                                    primarySubtitle = mObj.optString("primarySubtitle", ""),
+                                    timestampText = mObj.optString("timestampText", ""),
+                                    amountText = mObj.optString("amountText", ""),
+                                    phoneNumber = mObj.optString("phoneNumber", ""),
+                                    audioFileName = mObj.optString("audioFileName", ""),
+                                    matchedFields = fieldsList,
+                                    rowJson = mObj.optJSONObject("rowJson") ?: JSONObject(),
+                                    headers = headersList
+                                )
+                            )
+                        }
+                    }
+
+                    val kwArr = resJson.optJSONArray("queryKeywords") ?: detailsObj?.optJSONArray("queryKeywords")
+                    val kwList = mutableListOf<String>()
+                    if (kwArr != null) {
+                        for (i in 0 until kwArr.length()) {
+                            val k = kwArr.optString(i, "").trim()
+                            if (k.isNotEmpty()) kwList.add(k)
+                        }
+                    }
+
                     return@withContext AiCommandResult(
                         success = true,
                         command = resJson.optString("command", command),
@@ -1867,6 +1926,11 @@ object ApiClient {
                         canPromote = canPromote,
                         suggestedFunctionTitle = suggestedTitle.takeIf { it.isNotBlank() },
                         spreadsheetId = targetSheetId.takeIf { it.isNotBlank() },
+                        matchedProjectsCount = resJson.optInt("matchedProjectsCount", detailsObj?.optInt("matchedProjectsCount", 0) ?: 0),
+                        matchedSheetsCount = resJson.optInt("matchedSheetsCount", detailsObj?.optInt("matchedSheetsCount", 0) ?: 0),
+                        totalMatchedCount = resJson.optInt("totalMatchedCount", detailsObj?.optInt("totalMatchedCount", parsedMatchedRows.size) ?: parsedMatchedRows.size),
+                        queryKeywords = kwList,
+                        matchedRows = parsedMatchedRows,
                         details = detailsObj
                     )
                 } else {
@@ -4057,6 +4121,25 @@ data class DepositSessionResult(
     val error: String? = null
 )
 
+data class FtsSearchMatchedRow(
+    val projectId: String,
+    val projectName: String,
+    val sheetName: String,
+    val rowNumber: Int,
+    val rawRowIndex: Int,
+    val serialNumber: String = "",
+    val approvalStatus: String = "PENDING",
+    val primaryTitle: String,
+    val primarySubtitle: String = "",
+    val timestampText: String = "",
+    val amountText: String = "",
+    val phoneNumber: String = "",
+    val audioFileName: String = "",
+    val matchedFields: List<Pair<String, String>> = emptyList(),
+    val rowJson: JSONObject = JSONObject(),
+    val headers: List<String> = emptyList()
+)
+
 data class AiCommandResult(
     val success: Boolean,
     val command: String? = null,
@@ -4066,6 +4149,11 @@ data class AiCommandResult(
     val canPromote: Boolean = false,
     val suggestedFunctionTitle: String? = null,
     val spreadsheetId: String? = null,
+    val matchedProjectsCount: Int = 0,
+    val matchedSheetsCount: Int = 0,
+    val totalMatchedCount: Int = 0,
+    val queryKeywords: List<String> = emptyList(),
+    val matchedRows: List<FtsSearchMatchedRow> = emptyList(),
     val details: JSONObject? = null,
     val error: String? = null
 )
