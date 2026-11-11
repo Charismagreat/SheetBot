@@ -2281,14 +2281,37 @@ class FtsSheetViewerActivity : AppCompatActivity() {
 
         if (canReplyViaKakao || canReplyViaSms) {
             layoutQuickReplyBox.visibility = View.VISIBLE
+
+            fun updateSmsMmsReplyUi(currentText: String) {
+                if (!canReplyViaSms || canReplyViaKakao) return
+                val byteCount = SmsSenderUtil.getSmsByteCount(currentText)
+                if (byteCount > 80) {
+                    tvQuickReplyHeader.text = "📨 장문(MMS) 자동 전환 ($targetPhone) · ${byteCount}B"
+                    tvQuickReplyHeader.setTextColor(Color.parseColor("#FBBF24"))
+                    btnSendReply.text = "MMS 전송"
+                    btnSendReply.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#2563EB"))
+                } else {
+                    tvQuickReplyHeader.text = "⚡ 문자(SMS) 바로 답장 ($targetPhone) · ${byteCount}/80B"
+                    tvQuickReplyHeader.setTextColor(Color.parseColor("#38BDF8"))
+                    btnSendReply.text = "문자 전송"
+                    btnSendReply.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#059669"))
+                }
+            }
+
             if (canReplyViaKakao) {
                 tvQuickReplyHeader.text = "💛 카카오톡 바로 답장 (${kakaoSession?.chatRoomName ?: targetName ?: "채팅방"})"
                 etReply.hint = "카카오톡 답장 내용을 입력하세요..."
                 btnSendReply.text = "카톡 전송"
             } else {
-                tvQuickReplyHeader.text = "⚡ 문자(SMS) 바로 답장 ($targetPhone)"
-                etReply.hint = "답장 문자 내용을 입력하세요..."
-                btnSendReply.text = "문자 전송"
+                etReply.hint = "답장 문자 내용을 입력하세요 (80B 초과 시 MMS 자동 전환)..."
+                updateSmsMmsReplyUi(etReply.text?.toString().orEmpty())
+                etReply.addTextChangedListener(object : android.text.TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                    override fun afterTextChanged(s: android.text.Editable?) {
+                        updateSmsMmsReplyUi(s?.toString()?.trim().orEmpty())
+                    }
+                })
             }
 
             val sourceTypeForAi = when {
@@ -2398,9 +2421,15 @@ class FtsSheetViewerActivity : AppCompatActivity() {
                         )
                     }
                 } else if (targetPhone != null) {
+                    val isMmsLength = SmsSenderUtil.getSmsByteCount(msgText) > 80
                     val (sent, _) = SmsSenderUtil.sendSmsDetailed(this, targetPhone, msgText)
                     if (sent) {
-                        Toast.makeText(this, "📲 답장 문자를 발송했습니다.", Toast.LENGTH_SHORT).show()
+                        val toastMsg = if (isMmsLength) {
+                            "📨 장문(MMS)으로 전환하여 답장 문자를 발송했습니다."
+                        } else {
+                            "📲 답장 문자(SMS)를 발송했습니다."
+                        }
+                        Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
                         dialog.dismiss()
                     } else {
                         dialog.dismiss()

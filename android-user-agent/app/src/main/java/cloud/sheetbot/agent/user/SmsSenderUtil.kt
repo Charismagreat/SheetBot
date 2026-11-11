@@ -36,6 +36,20 @@ object SmsSenderUtil {
     }
 
     /**
+     * 한국 이동통신사(SKT/KT/LGU+) 기준 문자열의 EUC-KR 바이트 수 계산
+     * - 한글/특수문자: 2바이트, 영문/숫자/공백: 1바이트
+     * - 80바이트 이하: 단문(SMS), 80바이트 초과: 장문(LMS/MMS)
+     */
+    fun getSmsByteCount(text: String): Int {
+        if (text.isEmpty()) return 0
+        return try {
+            text.toByteArray(java.nio.charset.Charset.forName("EUC-KR")).size
+        } catch (_: Exception) {
+            text.fold(0) { acc, ch -> acc + if (ch.code > 127) 2 else 1 }
+        }
+    }
+
+    /**
      * 한국 이동통신사(SKT/KT/LGU+) 단문 SMS 규격(EUC-KR 80바이트 이하) 안전 절단 함수
      * 80바이트를 초과하는 글자수는 한글 깨짐 없이 글자 단위로 깔끔하게 제거(Truncate)
      */
@@ -72,10 +86,97 @@ object SmsSenderUtil {
     }
 
     /**
-     * 지정된 휴대폰 번호로 텍스트 SMS 단문 안전 발송 (EUC-KR 80바이트 초과 글자수 자동 제거)
+     * 80바이트를 초과하는 장문 메시지를 한글 깨짐 없이 한국 통신사 규격(파트당 안전 바이트 이하)으로 분할
+     * - 안드로이드 기본 divideMessage()는 UCS-2 70자(140바이트) 기준이라 한글 41~70자(82~140바이트)를
+     *   1개 파트(단문 sendTextMessage)로 처리하여 초과 글자가 잘리거나 실패할 수 있으므로,
+     *   80바이트 초과 시 반드시 2개 이상의 파트로 분할하여 LMS/MMS(sendMultipartTextMessage) 전환을 보장합니다.
+     */
+    fun divideForKoreanMmsOrMultipart(smsManager: SmsManager, text: String, maxBytesPerPart: Int = 76): ArrayList<String> {
+        val charset = try {
+            java.nio.charset.Charset.forName("EUC-KR")
+        } catch (_: Exception) {
+            Charsets.UTF_8
+        }
+
+        val byteSplitParts = ArrayList<String>()
+        val sb = StringBuilder()
+        var currentBytes = 0
+
+        for (ch in text) {
+            val chBytes = try {
+                ch.toString().toByteArray(charset).size
+            } catch (_: Exception) {
+                if (ch.code > 127) 2 else 1
+            }
+            if (currentBytes + chBytes > maxBytesPerPart && sb.isNotEmpty()) {
+                byteSplitParts.add(sb.toString())
+                sb.clear()
+                currentBytes = 0
+            }
+            sb.append(ch)
+            currentBytes += chBytes
+        }
+        if (sb.isNotEmpty()) {
+            byteSplitParts.add(sb.toString())
+        }
+
+        val systemParts = try {
+            smsManager.divideMessage(text)
+        } catch (_: Exception) {
+            null
+        }
+
+        // 시스템 분할 결과가 2파트 이상이면서 모든 파트가 80바이트 이하인 경우 시스템 분할 사용, 그 외에는 한국형 바이트 분할 사용
+        if (systemParts != null && systemParts.size >= 2 && systemParts.all { getSmsByteCount(it) <= 80 }) {
+            return systemParts
+        }
+        return byteSplitParts
+    }
+
+    private fun resolveSmsManager(context: Context): SmsManager {
+        val subId = try {
+            android.telephony.SubscriptionManager.getDefaultSmsSubscriptionId()
+        } catch (_: Exception) {
+            android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID
+        }
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val base = context.getSystemService(SmsManager::class.java)
+            if (base != null && subId != android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                try {
+                    base.createForSubscriptionId(subId)
+                } catch (_: Exception) {
+                    base
+                }
+            } else {
+                base ?: @Suppress("DEPRECATION") SmsManager.getDefault()
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            if (subId != android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                try {
+                    SmsManager.getSmsManagerForSubscriptionId(subId)
+                } catch (_: Exception) {
+                    SmsManager.getDefault()
+                }
+            } else {
+                SmsManager.getDefault()
+            }
+        }
+    }
+
+    /**
+     * 지정된 휴대폰 번호로 문자 발송
+     * - EUC-KR 80바이트 이하: 단문(SMS) 발송
+     * - EUC-KR 80바이트 초과: 글자 잘림 없이 장문(MMS/LMS) 모드로 자동 전환하여 전문 발송
+     * @param truncateTo80Bytes true인 경우에만 80바이트 단문으로 강제 절단 (기본값 false: 초과 시 MMS/장문 전환)
      * @return Pair(성공여부, 실제발송전문)
      */
-    fun sendSmsDetailed(context: Context, phoneNumber: String, messageText: String): Pair<Boolean, String> {
+    fun sendSmsDetailed(
+        context: Context,
+        phoneNumber: String,
+        messageText: String,
+        truncateTo80Bytes: Boolean = false
+    ): Pair<Boolean, String> {
         return try {
             val cleanPhone = phoneNumber.replace(Regex("[^0-9+]"), "").trim()
             if (cleanPhone.isBlank() || messageText.isBlank()) {
@@ -85,28 +186,27 @@ object SmsSenderUtil {
 
             // 🛡️ 상대방 번호가 한국 휴대전화가 아닌 경우(유선전화, 대표번호, 인터넷전화 등) SMS 발송 원천 제외
             if (!ContactHelper.isMobilePhoneNumber(cleanPhone)) {
-                Log.w(TAG, "⏭️ [SMS 발송 제외] 한국 휴대전화 번호가 아닙니다: $cleanPhone (유선전화/대표번호 등 문자 수신 불가 번호 자동 제외)")
+                Log.w(TAG, "⏭️ [문자 발송 제외] 한국 휴대전화 번호가 아닙니다: $cleanPhone (유선전화/대표번호 등 문자 수신 불가 번호 자동 제외)")
                 return Pair(false, messageText)
             }
 
-            val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                context.getSystemService(SmsManager::class.java)
+            val smsManager = resolveSmsManager(context)
+
+            val textToSend = if (truncateTo80Bytes) {
+                trimToSmsSafeBytes(messageText, 80)
             } else {
-                @Suppress("DEPRECATION")
-                SmsManager.getDefault()
+                messageText.trim()
             }
+            val byteCount = getSmsByteCount(textToSend)
 
-            // 🛡️ 한국 통신사(SKT/KT/LGU+) 단문 SMS 규격 (EUC-KR 80바이트 이하) 보장: 초과 글자수 깔끔하게 제거
-            val textToSend = trimToSmsSafeBytes(messageText, 80)
-            val charset = java.nio.charset.Charset.forName("EUC-KR")
-            val byteCount = textToSend.toByteArray(charset).size
-
-            if (textToSend.length < messageText.length) {
-                Log.w(TAG, "✂️ [초과 글자수 제거] 원본 ${messageText.length}자 -> 단문 ${textToSend.length}자 (${byteCount}B/80B 제한 적용)")
+            if (byteCount <= 80) {
+                smsManager.sendTextMessage(cleanPhone, null, textToSend, null, null)
+                Log.i(TAG, "✅ [SMS 단문 발송 성공] 수신자: $cleanPhone / ${byteCount}B / 전문: $textToSend")
+            } else {
+                val parts = divideForKoreanMmsOrMultipart(smsManager, textToSend, 76)
+                smsManager.sendMultipartTextMessage(cleanPhone, null, parts, null, null)
+                Log.i(TAG, "✅ [장문 MMS/LMS 전환 발송 성공] 수신자: $cleanPhone / ${byteCount}B (${parts.size}파트 전환) / 전문: $textToSend")
             }
-
-            smsManager.sendTextMessage(cleanPhone, null, textToSend, null, null)
-            Log.i(TAG, "✅ [SMS 단문 발송 성공] 수신자: $cleanPhone / ${byteCount}B / 전문: $textToSend")
 
             // 📁 스마트폰 기본 문자 앱(삼성 메시지 등)의 '보낸 문자함'에 안전 저장
             try {
@@ -125,7 +225,7 @@ object SmsSenderUtil {
 
             Pair(true, textToSend)
         } catch (e: Exception) {
-            Log.e(TAG, "❌ [SMS 발송 실패] 수신자: $phoneNumber / 에러: ${e.message}", e)
+            Log.e(TAG, "❌ [문자 발송 실패] 수신자: $phoneNumber / 에러: ${e.message}", e)
             Pair(false, messageText)
         }
     }
