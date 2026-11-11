@@ -327,7 +327,7 @@ class ServerStatusCardController(
             binding.tvServerStatus.text = "🌐 서버 통신: 🟡 확인 중..."
             binding.btnRefreshServerStatus.visibility = View.VISIBLE
             binding.btnToggleStatusDetails.visibility = View.VISIBLE
-            binding.cardTasksHub.visibility = View.GONE
+            binding.cardTasksHub.visibility = if (prefs.hiddenCardKeys.contains("cardTasksHub")) View.GONE else View.VISIBLE
             binding.cardFtsWorkspace.visibility = if (prefs.hiddenCardKeys.contains("cardFtsWorkspace")) View.GONE else View.VISIBLE
             checkServerAndQueueStatus(showToast = false)
         }

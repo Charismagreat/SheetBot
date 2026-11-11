@@ -54,7 +54,7 @@ class CardDrawerController(
         CardInfo("cardStatus", "시트봇 / File to Sheet 관제 상태", "🟢", "시스템 & 관제", R.id.cardStatus, R.id.layoutIntegratedHeader),
         CardInfo("cardTtsToggle", "실시간 AI 음성 안내 (TTS)", "🔊", "시스템 & 관제", R.id.cardTtsToggle),
         CardInfo("cardWallet", "내 토큰 지갑", "💰", "시스템 & 관제", R.id.layoutWalletCard, R.id.layoutWalletHeader),
-        CardInfo("cardTasksHub", "스마트 통합 할 일 허브", "📋", "시스템 & 관제", R.id.cardTasksHub),
+        CardInfo("cardTasksHub", "스마트 통합 할 일 허브", "📋", "시스템 & 관제", R.id.cardTasksHub, R.id.btnOpenTasksHub),
         CardInfo("cardFtsWorkspace", "파일투시트 통합 워크스페이스 (결재·적재)", "⚡", "업무 & 장부", R.id.cardFtsWorkspace),
         CardInfo("cardCopilot", "말 한마디로 실행하는 AI 비서 & 파투 검색", "🎙️", "시스템 & 관제", R.id.cardCopilot, R.id.layoutCopilotHeader),
         CardInfo("cardLocalLogs", "실시간 감지 및 입금 로그", "📜", "시스템 & 관제", R.id.cardLocalLogs),
@@ -85,9 +85,9 @@ class CardDrawerController(
         CardInfo("cardLinkScrap", "웹 링크 & 유튜브 요약 스크랩", "🔗", "메시지 & 대화", R.id.cardLinkScrap, R.id.layoutLinkScrapHeader),
 
         // [5] AI & 마케팅
-        CardInfo("cardBlog", "AI 네이버 블로그 자동 포스팅", "✍️", "AI & 마케팅", R.id.cardBlog),
-        CardInfo("cardInsta", "AI 인스타그램 피드 자동 발행", "📸", "AI & 마케팅", R.id.cardInsta),
-        CardInfo("cardSite", "AI 모바일 홈페이지 제작", "🌐", "AI & 마케팅", R.id.cardSite),
+        CardInfo("cardBlog", "AI 네이버 블로그 자동 포스팅", "✍️", "AI & 마케팅", R.id.cardBlog, R.id.layoutBlogHeader),
+        CardInfo("cardInsta", "AI 인스타그램 피드 자동 발행", "📸", "AI & 마케팅", R.id.cardInsta, R.id.layoutInstaHeader),
+        CardInfo("cardSite", "AI 모바일 홈페이지 제작", "🌐", "AI & 마케팅", R.id.cardSite, R.id.layoutSiteHeader),
         CardInfo("cardCompanyResearch", "원클릭 기업 심층 리서치", "🏢", "AI & 마케팅", R.id.cardCompanyResearch, R.id.layoutCompanyResearchHeader),
         CardInfo("cardLawAdvisory", "AI 법률/계약서 팩트체크", "⚖️", "AI & 마케팅", R.id.cardLawAdvisory, R.id.layoutLawAdvisoryHeader),
         CardInfo("cardWebsiteMonitor", "웹사이트 실시간 장애 감시", "🚨", "AI & 마케팅", R.id.cardWebsiteMonitor, R.id.layoutWebsiteMonitorHeader)
@@ -190,6 +190,31 @@ class CardDrawerController(
 
             headerView?.setOnLongClickListener(longClickListener)
             cardView?.setOnLongClickListener(longClickListener)
+
+            // 내부 클릭 리스너가 터치를 가로채는 특수 카드(할 일 허브, 파일투시트 통합 워크스페이스 등) 하위 뷰에도 롱클릭 바인딩
+            when (cardInfo.key) {
+                "cardTasksHub" -> {
+                    activity.findViewById<View>(R.id.btnOpenTasksHub)?.setOnLongClickListener(longClickListener)
+                    activity.findViewById<View>(R.id.tvTasksHubSubtitle)?.setOnLongClickListener(longClickListener)
+                    activity.findViewById<View>(R.id.tvTasksHubBadge)?.setOnLongClickListener(longClickListener)
+                }
+                "cardFtsWorkspace" -> {
+                    listOf(
+                        "layoutFtsWorkspaceHeader",
+                        "tvFtsWorkspaceSubtitle",
+                        "tvFtsWorkspaceBadge",
+                        "btnOpenFtsWorkspaceAll",
+                        "btnOpenFtsWorkspacePending",
+                        "btnOpenFtsWorkspaceIngest"
+                    ).forEach { tag ->
+                        cardView?.findViewWithTag<View>(tag)?.setOnLongClickListener(longClickListener)
+                    }
+                }
+                "cardLocalLogs" -> {
+                    (cardView as? android.view.ViewGroup)?.getChildAt(0)?.setOnLongClickListener(longClickListener)
+                    activity.findViewById<View>(R.id.tvLogCount)?.setOnLongClickListener(longClickListener)
+                }
+            }
         }
     }
 
