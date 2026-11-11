@@ -62,10 +62,10 @@ class InCallSummaryCardController(
         }
 
         binding.btnOpenInCallSummarySheet.setOnClickListener {
-            val ftsPhone = prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() } ?: prefs.devicePhoneNumber ?: ""
+            val ftsPhone = prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() } ?: ""
             if (prefs.isDestinationFileToSheet && (ftsPhone.isNotBlank() || !prefs.ftsProjectId.isNullOrBlank())) {
                 val intent = Intent(activity, cloud.sheetbot.agent.user.FtsSheetViewerActivity::class.java).apply {
-                    putExtra(cloud.sheetbot.agent.user.FtsSheetViewerActivity.EXTRA_PHONE, ftsPhone)
+                    putExtra(cloud.sheetbot.agent.user.FtsSheetViewerActivity.EXTRA_PHONE_NUMBER, ftsPhone)
                     putExtra(cloud.sheetbot.agent.user.FtsSheetViewerActivity.EXTRA_PROJECT_ID, prefs.ftsProjectId ?: "")
                     putExtra(cloud.sheetbot.agent.user.FtsSheetViewerActivity.EXTRA_SHEET_NAME, "통화녹음대장")
                     putExtra(cloud.sheetbot.agent.user.FtsSheetViewerActivity.EXTRA_SHEET_TYPE, "RECORDING")

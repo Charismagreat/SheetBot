@@ -174,9 +174,9 @@ object InCallOverlayManager {
                 // 2-B. 파투 시트 전체 내역 열기 버튼
                 btnOpenFtsFromOverlay?.setOnClickListener {
                     val targetQuery = currentPhone?.let { ContactHelper.formatPhoneNumber(it) } ?: formattedPhone
-                    val ftsPhone = prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() } ?: prefs.devicePhoneNumber ?: ""
+                    val ftsPhone = prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() } ?: ""
                     val intent = Intent(context, FtsSheetViewerActivity::class.java).apply {
-                        putExtra(FtsSheetViewerActivity.EXTRA_PHONE, ftsPhone)
+                        putExtra(FtsSheetViewerActivity.EXTRA_PHONE_NUMBER, ftsPhone)
                         putExtra(FtsSheetViewerActivity.EXTRA_PROJECT_ID, prefs.ftsProjectId ?: "")
                         putExtra(FtsSheetViewerActivity.EXTRA_INITIAL_SEARCH_QUERY, targetQuery)
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -251,9 +251,7 @@ object InCallOverlayManager {
                 wm.addView(view, params)
                 Log.i(TAG, "🎉 [인콜 플로팅 카드 표출 완료] 대상 번호: $cleanPhone (preview=$previewMode)")
 
-                val ftsOwnerPhone = prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() }
-                    ?: prefs.devicePhoneNumber?.takeIf { it.isNotBlank() }
-                    ?: ""
+                val ftsOwnerPhone = prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() } ?: ""
                 val hasFts = ftsOwnerPhone.isNotBlank() || !prefs.ftsProjectId.isNullOrBlank()
 
                 // 6-A. 미리보기 모드일 때도 파투가 연동되어 있다면 실제 최근 통화 고객 데이터를 찾아 생생하게 표출
@@ -355,9 +353,10 @@ object InCallOverlayManager {
                             withContext(Dispatchers.Main) {
                                 if (overlayView == view) {
                                     pbLoading.visibility = View.GONE
-                                    if (finalResult != null && finalResult.success) {
+                                    val resolved = finalResult
+                                    if (resolved != null && resolved.success) {
                                         applyResultToViews(
-                                            result = finalResult,
+                                            result = resolved,
                                             isParuSource = isFromParu,
                                             tvCustomerName = tvCustomerName,
                                             tvCustomerBadge = tvCustomerBadge,
@@ -367,8 +366,9 @@ object InCallOverlayManager {
                                             tvActionItems = tvActionItems,
                                             tvCustomerMemo = tvCustomerMemo
                                         )
-                                        if (!finalResult.rawJson.isNullOrBlank() && finalResult.found) {
-                                            prefs.saveCallSummaryCache(cleanPhone, finalResult.rawJson)
+                                        val rawJsonStr = resolved.rawJson
+                                        if (!rawJsonStr.isNullOrBlank() && resolved.found) {
+                                            prefs.saveCallSummaryCache(cleanPhone, rawJsonStr)
                                         }
                                     } else {
                                         if (tvCustomerName.text.toString() == "고객 정보 확인 중...") {
