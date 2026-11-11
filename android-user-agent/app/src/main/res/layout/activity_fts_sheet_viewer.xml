@@ -143,7 +143,7 @@
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:paddingHorizontal="12dp"
-            android:background="@drawable/bg_input_dark">
+            android:background="@drawable/bg_input_field">
 
             <TextView
                 android:layout_width="wrap_content"
