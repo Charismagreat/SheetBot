@@ -52,6 +52,7 @@ class CardAccordionController(
             updateCardCollapseState(binding.layoutSmsSyncSettings, binding.btnToggleSmsSyncDetails, prefs.isSmsSyncDetailsHidden)
         }
         updateCardCollapseState(binding.layoutKakaoSyncSettings, binding.btnToggleKakaoSyncDetails, prefs.isKakaoSyncDetailsHidden)
+        try { updateCardCollapseState(binding.layoutEmailSyncSettings, binding.btnToggleEmailSyncDetails, prefs.isEmailSyncDetailsHidden) } catch (_: Throwable) {}
         if (isQuoteInitialized()) {
             getQuote().refreshCollapseState()
         } else {

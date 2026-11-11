@@ -196,6 +196,60 @@ class TasksActivity : AppCompatActivity() {
         KakaoReplySessionCache.launchKakaoTalkOrRoom(this, session, targetName, taskTitle)
     }
 
+    private fun openEmailAppOrCompose(
+        session: KakaoReplySessionCache.ReplySession?,
+        targetEmail: String? = null,
+        subject: String? = null,
+        prefillBody: String? = null
+    ) {
+        if (prefillBody.isNullOrBlank() && session != null && session.canOpenChatRoom) {
+            if (KakaoReplySessionCache.openChatRoom(session, this)) {
+                return
+            }
+        }
+        val cleanEmail = targetEmail?.trim()?.takeIf { it.contains("@") }
+        if (!cleanEmail.isNullOrBlank() && !prefillBody.isNullOrBlank()) {
+            try {
+                val mailIntent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$cleanEmail")).apply {
+                    if (!subject.isNullOrBlank()) {
+                        putExtra(Intent.EXTRA_SUBJECT, "Re: $subject")
+                    }
+                    putExtra(Intent.EXTRA_TEXT, prefillBody)
+                }
+                startActivity(mailIntent)
+                return
+            } catch (_: Exception) {}
+        }
+
+        // 캐싱된 메일 앱 패키지 또는 설치된 주요 메일 앱 실행
+        val candidatePackages = buildList {
+            if (!session?.packageName.isNullOrBlank() && session?.packageName != "com.kakao.talk") {
+                add(session!!.packageName)
+            }
+            addAll(BankNotificationListener.SUPPORTED_EMAIL_PACKAGES.keys)
+        }.distinct()
+
+        for (pkg in candidatePackages) {
+            try {
+                val launchIntent = packageManager.getLaunchIntentForPackage(pkg)?.apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                }
+                if (launchIntent != null) {
+                    startActivity(launchIntent)
+                    return
+                }
+            } catch (_: Exception) {}
+        }
+
+        if (!cleanEmail.isNullOrBlank()) {
+            try {
+                startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$cleanEmail")))
+                return
+            } catch (_: Exception) {}
+        }
+        Toast.makeText(this, "메일 앱을 열 수 없습니다.", Toast.LENGTH_SHORT).show()
+    }
+
     private fun showTaskActionBottomSheet(
         task: TaskItemDto,
         initialName: String?,
@@ -278,6 +332,10 @@ class TasksActivity : AppCompatActivity() {
             "KAKAO" -> {
                 tvSourceBadge.text = "💬 카카오톡"
                 tvSourceBadge.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#713F12"))
+            }
+            "EMAIL" -> {
+                tvSourceBadge.text = "📧 이메일"
+                tvSourceBadge.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#1E3A8A"))
             }
             "SMS" -> {
                 tvSourceBadge.text = "📱 문자 메시지"
@@ -493,13 +551,17 @@ class TasksActivity : AppCompatActivity() {
             layoutAudioPlayerBox.visibility = View.GONE
         }
 
-        // 3. 카카오톡 세션 확인
+        // 3. 카카오톡 / 이메일 세션 확인
         val kakaoSession = KakaoReplySessionCache.findSession(targetName, task.title)
         val isKakaoTask = task.sourceType == "KAKAO"
+        val isEmailTask = task.sourceType == "EMAIL"
+        val targetEmail = Regex("[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}")
+            .find("${targetName.orEmpty()} ${task.description.orEmpty()} ${task.title}")
+            ?.value
 
-        // 4. 1차 주요 액션 버튼 구성 (전화걸기 / 문자 열기 / 카톡 열기 — 한 줄 클리핑 방지 간결 라벨)
+        // 4. 1차 주요 액션 버튼 구성 (전화걸기 / 문자 열기 / 카톡·메일 열기 — 한 줄 클리핑 방지 간결 라벨)
         val showSmsButton = targetPhone != null && (ContactHelper.isMobilePhoneNumber(targetPhone) || task.sourceType == "SMS")
-        val showKakaoButton = isKakaoTask || kakaoSession != null
+        val showKakaoButton = isKakaoTask || isEmailTask || kakaoSession != null
 
         if (targetPhone != null) {
             btnCallNow.visibility = View.VISIBLE
@@ -528,8 +590,19 @@ class TasksActivity : AppCompatActivity() {
             btnOpenSms.visibility = View.GONE
         }
 
-        if (showKakaoButton) {
+        if (isEmailTask) {
             btnOpenKakao.visibility = View.VISIBLE
+            btnOpenKakao.text = "📧 메일 열기"
+            btnOpenKakao.setTextColor(Color.WHITE)
+            btnOpenKakao.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#1D4ED8"))
+            btnOpenKakao.setOnClickListener {
+                dialog.dismiss()
+                openEmailAppOrCompose(kakaoSession, targetEmail, task.title, null)
+            }
+        } else if (showKakaoButton) {
+            btnOpenKakao.visibility = View.VISIBLE
+            btnOpenKakao.setTextColor(Color.parseColor("#1E293B"))
+            btnOpenKakao.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#FACC15"))
             btnOpenKakao.text = if (kakaoSession?.canOpenChatRoom == true) {
                 "💛 카톡방 열기"
             } else {
@@ -543,20 +616,25 @@ class TasksActivity : AppCompatActivity() {
             btnOpenKakao.visibility = View.GONE
         }
 
-        // 5. 앱 내 빠른 답장 섹션 (SMS 즉시 발송 또는 카카오톡 RemoteInput 답장 + ✨ AI 추천 문구 자동 작성)
+        // 5. 앱 내 빠른 답장 섹션 (SMS 즉시 발송 / 카카오톡 RemoteInput 답장 / 이메일 답장 작성 + ✨ AI 추천 문구 자동 작성)
         val canReplyViaKakao = isKakaoTask && kakaoSession?.canDirectReply == true
         val canReplyViaSms = targetPhone != null && ContactHelper.isMobilePhoneNumber(targetPhone)
+        val canReplyViaEmail = isEmailTask && !targetEmail.isNullOrBlank()
 
-        if (canReplyViaKakao || canReplyViaSms) {
+        if (canReplyViaKakao || canReplyViaSms || canReplyViaEmail) {
             layoutQuickReplyBox.visibility = View.VISIBLE
             if (canReplyViaKakao) {
                 tvQuickReplyHeader.text = "💛 카카오톡 바로 답장 (${kakaoSession?.chatRoomName ?: targetName ?: "채팅방"})"
                 etReply.hint = "카카오톡 답장 내용을 입력하세요..."
                 btnSendReply.text = "카톡 전송"
-            } else {
+            } else if (canReplyViaSms) {
                 tvQuickReplyHeader.text = "⚡ 문자(SMS) 바로 답장 ($targetPhone)"
                 etReply.hint = "답장 문자 내용을 입력하세요..."
                 btnSendReply.text = "문자 전송"
+            } else {
+                tvQuickReplyHeader.text = "📧 이메일 바로 답장 ($targetEmail)"
+                etReply.hint = "답장 메일 내용을 입력하세요..."
+                btnSendReply.text = "메일 답장"
             }
 
             val cacheKey = "${task.id}_${task.title}_${targetName.orEmpty()}"
@@ -685,7 +763,7 @@ class TasksActivity : AppCompatActivity() {
                         dialog.dismiss()
                         openKakaoTalkAppOrRoom(kakaoSession, targetName, task.title)
                     }
-                } else if (targetPhone != null) {
+                } else if (canReplyViaSms && targetPhone != null) {
                     val (sent, _) = SmsSenderUtil.sendSmsDetailed(this, targetPhone, msgText)
                     if (sent) {
                         Toast.makeText(this, "📲 답장 문자를 발송하고 할 일을 완료 처리했습니다.", Toast.LENGTH_SHORT).show()
@@ -698,6 +776,9 @@ class TasksActivity : AppCompatActivity() {
                         dialog.dismiss()
                         openSmsConversation(targetPhone, msgText)
                     }
+                } else if (canReplyViaEmail && !targetEmail.isNullOrBlank()) {
+                    dialog.dismiss()
+                    openEmailAppOrCompose(kakaoSession, targetEmail, task.title, msgText)
                 }
             }
         } else if (targetPhone != null) {
@@ -1407,6 +1488,11 @@ class TaskAdapter(
                     sourceLabel = "카카오톡"
                     tvSourceBadge.text = "💬 카카오톡"
                     tvSourceBadge.setBackgroundColor(Color.parseColor("#713F12"))
+                }
+                "EMAIL" -> {
+                    sourceLabel = "이메일"
+                    tvSourceBadge.text = "📧 이메일"
+                    tvSourceBadge.setBackgroundColor(Color.parseColor("#1E3A8A"))
                 }
                 "SMS" -> {
                     if (cleanBadge == "수동 등록" || cleanBadge == "모바일 등록") {

@@ -81,6 +81,7 @@ class CardDrawerController(
         CardInfo("cardSaasOtpRelay", "내 SaaS 휴대폰 인증(OTP) 0원 중계기", "🔐", "메시지 & 대화", R.id.cardSaasOtpRelay, R.id.layoutSaasOtpRelayHeader),
         CardInfo("cardSmsSync", "스마트폰 문자 시트 동기화", "💬", "메시지 & 대화", R.id.cardSmsSync, R.id.layoutSmsSyncHeader),
         CardInfo("cardKakaoSync", "카카오톡 대화 자동 기록", "🟡", "메시지 & 대화", R.id.cardKakaoSync, R.id.layoutKakaoSyncHeader),
+        CardInfo("cardEmailSync", "수신 이메일 자동 기록 & 할 일 추출", "📧", "메시지 & 대화", R.id.cardEmailSync, R.id.layoutEmailSyncHeader),
         CardInfo("cardLinkScrap", "웹 링크 & 유튜브 요약 스크랩", "🔗", "메시지 & 대화", R.id.cardLinkScrap, R.id.layoutLinkScrapHeader),
 
         // [5] AI & 마케팅

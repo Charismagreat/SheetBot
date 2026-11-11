@@ -72,7 +72,8 @@ export type SheetBindingType =
   | "ESTIMATE"
   | "CONTACTS"
   | "SHEET_SMS_CHECKBOX"
-  | "SAAS_OTP_RELAY";
+  | "SAAS_OTP_RELAY"
+  | "EMAIL";
 
 export interface ResolveSheetOptions {
   userEmail: string;
@@ -201,6 +202,7 @@ const DEFAULT_SHEET_TITLES: Record<string, string> = {
   ESTIMATE: "[SheetBot] 스마트 간편 견적 및 단가 대장",
   CONTACTS: "[SheetBot] 스마트폰 연락처 대장",
   SHEET_SMS_CHECKBOX: "[SheetBot] 체크박스 문자 발송 대장",
+  EMAIL: "[SheetBot] 이메일 수신 대장",
 };
 
 async function doResolveUserSpreadsheet(

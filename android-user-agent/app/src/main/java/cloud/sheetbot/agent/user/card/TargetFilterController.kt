@@ -186,6 +186,21 @@ class TargetFilterController(
             binding.tvKakaoTargetCountBadge.setTextColor(Color.parseColor("#34D399"))
             binding.btnManageKakaoTargets.text = "📋 등록 대상 확인 / 제외 (${kakaoList.size}건)"
         }
+
+        // 이메일 대상
+        try {
+            val emailList = binding.etEmailTargetFilter.text.toString().split(",", ";")
+                .map { it.trim() }.filter { it.isNotBlank() }
+            if (emailList.isEmpty()) {
+                binding.tvEmailTargetCountBadge.text = "전체 기록"
+                binding.tvEmailTargetCountBadge.setTextColor(Color.parseColor("#38BDF8"))
+                binding.btnManageEmailTargets.text = "📋 등록 대상 확인 / 제외"
+            } else {
+                binding.tvEmailTargetCountBadge.text = "${emailList.size}건 지정"
+                binding.tvEmailTargetCountBadge.setTextColor(Color.parseColor("#34D399"))
+                binding.btnManageEmailTargets.text = "📋 등록 대상 확인 / 제외 (${emailList.size}건)"
+            }
+        } catch (_: Throwable) {}
     }
 
     /**
@@ -252,7 +267,7 @@ class TargetFilterController(
                         layoutParams = params
                     }
 
-                    val resolvedName = if (targetType != "KAKAO") ContactHelper.getContactName(context, item) else null
+                    val resolvedName = if (targetType != "KAKAO" && targetType != "EMAIL") ContactHelper.getContactName(context, item) else null
                     val itemLabel = if (!resolvedName.isNullOrBlank()) "👤 $resolvedName\n    ($item)" else "🎯 $item"
 
                     val tvItem = TextView(context).apply {

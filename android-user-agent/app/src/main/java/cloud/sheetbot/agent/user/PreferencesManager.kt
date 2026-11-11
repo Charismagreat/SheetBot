@@ -329,6 +329,10 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("is_kakao_sync_details_hidden", false)
         set(value) = prefs.edit().putBoolean("is_kakao_sync_details_hidden", value).apply()
 
+    var isEmailSyncDetailsHidden: Boolean
+        get() = prefs.getBoolean("is_email_sync_details_hidden", false)
+        set(value) = prefs.edit().putBoolean("is_email_sync_details_hidden", value).apply()
+
     var isQuoteSyncDetailsHidden: Boolean
         get() = prefs.getBoolean("is_quote_sync_details_hidden", false)
         set(value) = prefs.edit().putBoolean("is_quote_sync_details_hidden", value).apply()
@@ -500,6 +504,23 @@ class PreferencesManager(context: Context) {
     var kakaoDriveSheetTitle: String
         get() = prefs.getString("kakao_drive_sheet_title", "[SheetBot] 카카오톡 메시지 대장") ?: "[SheetBot] 카카오톡 메시지 대장"
         set(value) = prefs.edit().putString("kakao_drive_sheet_title", value).apply()
+
+    // 수신 이메일 자동 기록 & AI 할 일 추출 설정 (신규 설치 시 기본 꺼짐: false)
+    var isEmailSheetSyncEnabled: Boolean
+        get() = prefs.getBoolean("is_email_sheet_sync_enabled", false)
+        set(value) = prefs.edit().putBoolean("is_email_sheet_sync_enabled", value).apply()
+
+    var isEmailSpamFilterEnabled: Boolean
+        get() = prefs.getBoolean("is_email_spam_filter_enabled", true)
+        set(value) = prefs.edit().putBoolean("is_email_spam_filter_enabled", value).apply()
+
+    var emailTargetFilter: String
+        get() = prefs.getString("email_target_filter", "") ?: ""
+        set(value) = prefs.edit().putString("email_target_filter", value).apply()
+
+    var emailDriveSheetTitle: String
+        get() = prefs.getString("email_drive_sheet_title", "[SheetBot] 이메일 수신 대장") ?: "[SheetBot] 이메일 수신 대장"
+        set(value) = prefs.edit().putString("email_drive_sheet_title", value).apply()
 
     // AI 스마트 견적 및 단가표 구글 시트 연동 설정 (신규 설치 시 기본 꺼짐: false)
     var isQuoteSheetSyncEnabled: Boolean
@@ -1129,6 +1150,7 @@ class PreferencesManager(context: Context) {
             "cardSheetSmsCheckbox",
             "cardSaasOtpRelay",
             "cardKakaoSync",
+            "cardEmailSync",
             "cardLinkScrap",
 
             // AI & 마케팅

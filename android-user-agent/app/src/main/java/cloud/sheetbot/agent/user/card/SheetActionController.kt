@@ -139,6 +139,9 @@ class SheetActionController(
                     if (prefs.isKakaoSheetSyncEnabled && (force || prefs.getSheetUrl("KAKAO").isNullOrBlank())) {
                         targets.add(Triple("KAKAO", prefs.kakaoDriveSheetTitle, null))
                     }
+                    if (prefs.isEmailSheetSyncEnabled && (force || prefs.getSheetUrl("EMAIL").isNullOrBlank())) {
+                        targets.add(Triple("EMAIL", prefs.emailDriveSheetTitle, null))
+                    }
                     if (prefs.isMissedCallAutoReplyEnabled && (force || prefs.getSheetUrl("MISSED_CALL").isNullOrBlank())) {
                         targets.add(Triple("MISSED_CALL", prefs.missedCallDriveSheetTitle, null))
                     }

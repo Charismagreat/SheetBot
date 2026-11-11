@@ -63,6 +63,7 @@ class CardSetupCoordinator(
     lateinit var saasOtpRelayCardController: SaasOtpRelayCardController
     lateinit var smsSyncCardController: SmsSyncCardController
     lateinit var kakaoCardController: KakaoSyncCardController
+    lateinit var emailCardController: EmailSyncCardController
     lateinit var quoteCardController: QuoteSyncCardController
     lateinit var estimateCardController: EstimateSyncCardController
     lateinit var inCallSummaryCardController: InCallSummaryCardController
@@ -94,6 +95,7 @@ class CardSetupCoordinator(
     val isSaasOtpRelayInitialized get() = ::saasOtpRelayCardController.isInitialized
     val isSmsSyncInitialized get() = ::smsSyncCardController.isInitialized
     val isKakaoInitialized get() = ::kakaoCardController.isInitialized
+    val isEmailInitialized get() = ::emailCardController.isInitialized
     val isQuoteInitialized get() = ::quoteCardController.isInitialized
     val isEstimateInitialized get() = ::estimateCardController.isInitialized
     val isInCallSummaryInitialized get() = ::inCallSummaryCardController.isInitialized
@@ -167,6 +169,9 @@ class CardSetupCoordinator(
 
         // 💬 카카오톡 수신 메시지 구글 시트 동기화 카드 초기화 (v2.1.99 리팩토링 모듈화)
         try { setupKakaoSyncCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupKakaoSyncCard 실패 방어", e) }
+
+        // 📧 수신 이메일 자동 기록 & 할 일 추출 카드 초기화
+        try { setupEmailSyncCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupEmailSyncCard 실패 방어", e) }
 
         // 📑 AI 스마트 견적 및 단가표 대장 연동 카드 초기화 (v2.1.99 리팩토링 모듈화)
         try { setupQuoteCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupQuoteCard 실패 방어", e) }
@@ -570,6 +575,19 @@ class CardSetupCoordinator(
             onAddLogItem = { title, detail, success -> addLogItem(title, detail, success) }
         )
         kakaoCardController.setup()
+    }
+
+    private fun setupEmailSyncCard() {
+        emailCardController = EmailSyncCardController(
+            activity = activity,
+            binding = binding,
+            prefs = prefs,
+            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
+            onProvisionSheet = { sheetType, defaultTitle -> provisionSheetAsync(sheetType, defaultTitle, null) },
+            onShowTargetManageDialog = { title, editText, targetType -> showTargetManageDialog(title, editText, targetType) },
+            onUpdateTargetBadges = { updateTargetBadges() }
+        )
+        emailCardController.setup()
     }
 
     private fun setupQuoteCard() {

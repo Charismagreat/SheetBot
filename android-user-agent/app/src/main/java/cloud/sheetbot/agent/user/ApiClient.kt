@@ -2250,6 +2250,81 @@ object ApiClient {
     }
 
     /**
+     * 📧 수신 이메일(Gmail/네이버/다음/삼성/Outlook 등) 시트 기록 및 AI 할 일 자동 추출 동기화
+     */
+    suspend fun sendEmailSync(
+        userEmail: String,
+        mailApp: String,
+        sender: String,
+        senderEmail: String = "",
+        subject: String,
+        bodyPreview: String,
+        deviceId: String? = null,
+        sheetTitle: String = "[SheetBot] 이메일 수신 대장"
+    ): Boolean = withContext(Dispatchers.IO) {
+        val prefs = try { PreferencesManager(SheetBotApp.appContext) } catch (_: Exception) { null }
+        var ftsSuccess = false
+        val senderDisplay = if (senderEmail.isNotBlank() && !sender.contains(senderEmail)) {
+            "$sender <$senderEmail>"
+        } else {
+            sender.ifBlank { senderEmail.ifBlank { "발신자 미상" } }
+        }
+
+        if (prefs?.isDestinationFileToSheet == true) {
+            val nowStr = nowKstStr()
+            val rowData = JSONObject().apply {
+                put("수신일시", nowStr)
+                put("메일앱/계정", mailApp)
+                put("발신자", senderDisplay)
+                put("메일제목", subject.ifBlank { "(제목 없음)" })
+                put("본문요약", bodyPreview.ifBlank { subject })
+                put("기기명", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL}")
+            }
+            val ftsRes = FileToSheetClient.syncCardRowToFts(
+                "email_sync",
+                rowData,
+                memo = "[제목] $subject\n$bodyPreview"
+            )
+            ftsSuccess = ftsRes.success
+            if (ftsSuccess) {
+                Log.i(TAG, "✅ [FTS 이메일수신대장 기록 성공] 앱: $mailApp / 발신자: $senderDisplay")
+            }
+        }
+
+        val shouldRecordGoogleSheet = prefs?.isDestinationGoogleSheet == true && prefs.hasGoogleAccount
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("userPhone", prefs?.ftsPhoneNumber ?: "")
+            put("ftsProjectId", prefs?.ftsProjectId ?: "")
+            put("mailApp", mailApp)
+            put("sender", sender)
+            put("senderEmail", senderEmail)
+            put("subject", subject)
+            put("bodyPreview", bodyPreview)
+            put("deviceId", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL} (SheetBot Agent)")
+            put("sheetTitle", sheetTitle)
+            put("autoRecordSheet", shouldRecordGoogleSheet)
+        }
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/messages/email"
+            try {
+                val request = Request.Builder().url(endpoint).post(body).build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    Log.i(TAG, "✅ [이메일 동기화 및 AI 할 일 추출 요청 성공] 발신자: $senderDisplay, 호스트: $host")
+                    return@withContext true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "이메일 시트/할일 동기화 예외 ($host): ${e.message}")
+            }
+        }
+        ftsSuccess
+    }
+
+    /**
      * 카카오톡 대화 내용 내보내기(.txt) 파일 일괄 파싱 및 구글 시트 구간 덮어쓰기 (v2.1.11)
      */
     suspend fun importKakaoChat(

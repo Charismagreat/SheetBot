@@ -241,7 +241,13 @@ object KakaoReplySessionCache {
                 val displayRoom = session.chatRoomName
                     .takeIf { it.isNotBlank() && it != "단체 채팅방" }
                     ?: session.senderName
-                Toast.makeText(context, "💛 '$displayRoom' 카톡 대화방으로 바로 이동합니다.", Toast.LENGTH_SHORT).show()
+                val isEmailPkg = BankNotificationListener.SUPPORTED_EMAIL_PACKAGES.containsKey(session.packageName)
+                val toastMsg = if (isEmailPkg) {
+                    "📧 '$displayRoom' 메일 화면으로 바로 이동합니다."
+                } else {
+                    "💛 '$displayRoom' 카톡 대화방으로 바로 이동합니다."
+                }
+                Toast.makeText(context, toastMsg, Toast.LENGTH_SHORT).show()
             }
             true
         } catch (e: Exception) {

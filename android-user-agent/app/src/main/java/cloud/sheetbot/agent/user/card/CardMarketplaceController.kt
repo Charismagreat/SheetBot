@@ -627,6 +627,19 @@ class CardMarketplaceController(
                 version = "2.0.0"
             ),
             MarketplaceCardItemDto(
+                key = "cardEmailSync",
+                title = "수신 이메일 자동 기록 & 할 일 추출",
+                icon = "📧",
+                category = "crm",
+                categoryName = "고객 · 영업",
+                description = "Gmail, 네이버 메일, 다음 메일, 삼성 이메일, Outlook 수신 메일을 실시간 감지하여 대장에 자동 기록하고 비즈니스 할 일(견적·회신·일정)을 할 일 허브에 자동 등록합니다.",
+                badge = "NEW",
+                author = "시트봇 공식",
+                isExclusive = false,
+                isInstalledByDefault = true,
+                version = "2.4.47"
+            ),
+            MarketplaceCardItemDto(
                 key = "cardContactsBackup",
                 title = "구글 주소록 연락처 백업",
                 icon = "📇",

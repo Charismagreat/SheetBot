@@ -190,6 +190,11 @@ object FileToSheetClient {
             sheetName = "카카오톡대화대장",
             headers = listOf("일련번호", "수신일시", "채팅방/발신자", "메시지내용", "기기명", "동기화일시")
         ),
+        "email_sync" to FtsCardSheetSpec(
+            cardId = "email_sync",
+            sheetName = "이메일수신대장",
+            headers = listOf("일련번호", "수신일시", "메일앱/계정", "발신자", "메일제목", "본문요약", "기기명")
+        ),
         "file_upload" to FtsCardSheetSpec(
             cardId = "file_upload",
             sheetName = "파일보관대장",
@@ -294,6 +299,7 @@ object FileToSheetClient {
             "sms", "sms_sync", "cardsmssync" -> "sms_sync"
             "sheet_sms_checkbox", "cardsheetsmscheckbox" -> "sheet_sms_checkbox"
             "kakao", "kakao_sync", "cardkakaosync" -> "kakao_sync"
+            "email", "email_sync", "cardemailsync" -> "email_sync"
             "file_upload", "generic", "cardfileupload" -> "file_upload"
             "contacts", "contacts_backup", "cardcontactsbackup" -> "contacts_backup"
             "link_bookmark", "link_scrap", "cardlinkscrap" -> "link_scrap"

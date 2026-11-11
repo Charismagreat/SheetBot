@@ -45,12 +45,19 @@
     <uses-permission android:name="android.permission.WRITE_CONTACTS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- Android 11+ (API 30+) 패키지 가시성(Package Visibility) 선언: 카카오톡/인스타그램/메시지 앱 실행 인텐트 조회 허용 -->
+    <!-- Android 11+ (API 30+) 패키지 가시성(Package Visibility) 선언: 카카오톡/인스타그램/메시지/주요 메일 앱 실행 인텐트 조회 허용 -->
     <queries>
         <package android:name="com.kakao.talk" />
         <package android:name="com.instagram.android" />
         <package android:name="com.google.android.apps.messaging" />
         <package android:name="com.samsung.android.messaging" />
+        <package android:name="com.google.android.gm" />
+        <package android:name="com.nhn.android.mail" />
+        <package android:name="net.daum.android.mail" />
+        <package android:name="com.samsung.android.email.provider" />
+        <package android:name="com.microsoft.office.outlook" />
+        <package android:name="com.worksmobile.android" />
+        <package android:name="com.kakao.enterprise.kakaowork" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
@@ -58,6 +65,10 @@
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="kakaotalk" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
         </intent>
     </queries>
 

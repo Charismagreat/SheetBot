@@ -101,6 +101,15 @@ object CardSearchRegistry {
             cardResId = R.id.cardKakaoSync
         ),
         SearchableCard(
+            index = 32,
+            key = "cardEmailSync",
+            title = "수신 이메일 자동 기록 & 할 일 추출",
+            icon = "📧",
+            chosung = "ㅅㅅㅇㅁㅇㅈㄷㄱㄹㅎㅇㅊㅊ",
+            keywords = listOf("이메일", "메일", "gmail", "지메일", "네이버메일", "다음메일", "아웃룩", "outlook", "할일", "할일추출", "수신메일", "견적메일", "발주메일"),
+            cardResId = R.id.cardEmailSync
+        ),
+        SearchableCard(
             index = 7,
             key = "cardPaymentReceipt",
             title = "매장 결제 확인 & 영수증 문자",

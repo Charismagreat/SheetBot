@@ -28,6 +28,17 @@ class BankNotificationListener : NotificationListenerService() {
         const val PUSH_CHANNEL_ID = "sheetbot_push_alerts"
         private const val KAKAO_HISTORY_PREFS = "kakao_synced_history_prefs"
 
+        // 📧 기본 감지 대상 주요 메일 앱 패키지 맵 (Gmail, 네이버 메일, 다음 메일, 삼성 이메일, Outlook, 네이버웍스, 카카오워크)
+        val SUPPORTED_EMAIL_PACKAGES: Map<String, String> = mapOf(
+            "com.google.android.gm" to "Gmail",
+            "com.nhn.android.mail" to "네이버 메일",
+            "net.daum.android.mail" to "다음 메일",
+            "com.samsung.android.email.provider" to "삼성 이메일",
+            "com.microsoft.office.outlook" to "Outlook",
+            "com.worksmobile.android" to "네이버웍스",
+            "com.kakao.enterprise.kakaowork" to "카카오워크"
+        )
+
         @Volatile
         var isListenerConnected: Boolean = false
             private set
@@ -147,16 +158,20 @@ class BankNotificationListener : NotificationListenerService() {
     }
 
     /**
-     * 🔍 앱 업데이트 직후 재연결 시 상단 알림바에 남아 있는 최근 카카오톡/알림톡을 스캔하여 누락 없이 자동 수거합니다.
+     * 🔍 앱 업데이트 직후 재연결 시 상단 알림바에 남아 있는 최근 카카오톡/알림톡 및 이메일을 스캔하여 누락 없이 자동 수거합니다.
      */
     private fun sweepActiveNotifications() {
         try {
             val activeList = activeNotifications ?: return
             val now = System.currentTimeMillis()
-            // 최근 12시간 이내에 도착해 상단바에 남아 있는 카카오톡 알림만 안전하게 점검
+            // 최근 12시간 이내에 도착해 상단바에 남아 있는 카카오톡/이메일 알림만 안전하게 점검
             for (sbn in activeList) {
-                if (sbn.packageName == "com.kakao.talk" && (now - sbn.postTime) <= 12L * 3600L * 1000L) {
+                if ((now - sbn.postTime) > 12L * 3600L * 1000L) continue
+                val pkg = sbn.packageName ?: continue
+                if (pkg == "com.kakao.talk") {
                     handleKakaoNotification(sbn, isFromActiveSweep = true)
+                } else if (SUPPORTED_EMAIL_PACKAGES.containsKey(pkg)) {
+                    handleEmailNotification(sbn, isFromActiveSweep = true)
                 }
             }
         } catch (e: Exception) {
@@ -172,6 +187,12 @@ class BankNotificationListener : NotificationListenerService() {
         // 카카오톡 수신 메시지 감지 및 구글 시트 동기화
         if (packageName == "com.kakao.talk") {
             handleKakaoNotification(sbn)
+            return
+        }
+
+        // 📧 주요 메일 앱(Gmail, 네이버 메일, 다음 메일, 삼성 이메일, Outlook 등) 수신 알림 감지 및 시트/할일 자동 동기화
+        if (SUPPORTED_EMAIL_PACKAGES.containsKey(packageName)) {
+            handleEmailNotification(sbn)
             return
         }
 
@@ -808,6 +829,169 @@ class BankNotificationListener : NotificationListenerService() {
             }
         }
         return false
+    }
+
+    /**
+     * 📧 주요 메일 앱(Gmail, 네이버 메일, 다음 메일, 삼성 이메일, Outlook 등) 수신 푸시 알림 정밀 파싱 및
+     * 구글 시트 / 파일투시트 대장 기록 + AI 할 일(Action Item) 자동 추출
+     */
+    private fun handleEmailNotification(sbn: StatusBarNotification, isFromActiveSweep: Boolean = false) {
+        try {
+            val notification = sbn.notification ?: return
+            // 그룹 요약 알림(예: "새 메일 3통") 또는 진행 중 알림(동기화/발송 중) 제외
+            if ((notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0 || sbn.isOngoing) {
+                return
+            }
+
+            val packageName = sbn.packageName ?: return
+            val mailAppName = SUPPORTED_EMAIL_PACKAGES[packageName] ?: "이메일"
+            val extras = notification.extras ?: return
+
+            val rawTitle = (extras.getString(Notification.EXTRA_TITLE)
+                ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()).orEmpty().trim()
+            val normalText = (extras.getString(Notification.EXTRA_TEXT)
+                ?: extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()).orEmpty().trim()
+            val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim().orEmpty()
+            val rawSubText = (extras.getString(Notification.EXTRA_SUB_TEXT)
+                ?: extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
+                ?: extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT)?.toString()).orEmpty().trim()
+
+            val fullText = extractFullNotificationText(extras)
+            if (rawTitle.isBlank() && fullText.isBlank()) return
+
+            // 단순 건수 요약 또는 시스템 상태 알림 제외
+            val combinedCheck = "$rawTitle $normalText"
+            if (Regex("^\\d+\\s*(통|개의|개)\\s*(새\\s*)?(메일|메시지)|새\\s*메일\\s*\\d+\\s*통|동기화\\s*중|메일을\\s*보내는\\s*중|전송\\s*완료").containsMatchIn(combinedCheck)) {
+                return
+            }
+
+            // 발신자, 제목, 본문 요약 분리
+            val sender = rawTitle.ifBlank { mailAppName }
+            var subject = normalText
+            var bodyPreview = if (bigText.isNotBlank()) bigText else fullText
+
+            if (subject.isNotBlank() && bodyPreview.startsWith(subject)) {
+                val remainder = bodyPreview.removePrefix(subject).trim().trimStart('\n', '\r', '-', ':').trim()
+                if (remainder.isNotBlank()) {
+                    bodyPreview = remainder
+                }
+            } else if (subject.isBlank() && bodyPreview.contains("\n")) {
+                subject = bodyPreview.substringBefore("\n").trim()
+                bodyPreview = bodyPreview.substringAfter("\n").trim()
+            }
+            if (subject.isBlank()) {
+                subject = bodyPreview.take(60)
+            }
+
+            // 이메일 주소 추출 (발신자 문자열 또는 본문에 포함된 경우)
+            val emailRegex = Regex("[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}")
+            val senderEmail = emailRegex.find(rawTitle)?.value
+                ?: emailRegex.find(bodyPreview)?.value.orEmpty()
+
+            val accountLabel = if (rawSubText.contains("@")) {
+                "$mailAppName ($rawSubText)"
+            } else {
+                mailAppName
+            }
+
+            // 📧 할 일 허브에서 '메일 앱 열기' 클릭 시 해당 이메일 알림으로 즉시 점프하도록 PendingIntent 세션 캐싱
+            KakaoReplySessionCache.captureFromNotification(sbn, sender, subject.ifBlank { sender })
+
+            if ((!prefs.isPaired && !prefs.isFtsPaired) || !prefs.isEmailSheetSyncEnabled) return
+            val userEmail = prefs.userEmail ?: ""
+
+            // 1. 스팸 / 광고 / 뉴스레터 / 일회용 인증번호 자동 차단 필터 (활성화 시)
+            val allText = "$sender $subject $bodyPreview"
+            if (prefs.isEmailSpamFilterEnabled && isSpamOrSystemEmail(allText)) {
+                Log.d(TAG, "📧 [이메일 스팸/시스템 필터 제외] $sender / $subject")
+                return
+            }
+
+            // 2. 사용자 지정 발신자 / 키워드 필터 검사
+            val filter = prefs.emailTargetFilter.trim()
+            if (!matchesEmailFilter(sender, senderEmail, subject, bodyPreview, filter)) {
+                Log.d(TAG, "📧 [이메일 대상 필터 제외] $sender / $subject")
+                return
+            }
+
+            // 3. 영구 및 15초 중복 방어
+            val historyPrefs = getSharedPreferences(KAKAO_HISTORY_PREFS, Context.MODE_PRIVATE)
+            val persistentSig = "em_${packageName}_${sender}_${subject.hashCode()}_${bodyPreview.take(80).hashCode()}"
+            val prevSyncedAt = historyPrefs.getLong(persistentSig, 0L)
+            val nowMs = System.currentTimeMillis()
+            if (isFromActiveSweep && prevSyncedAt > 0L) {
+                return
+            }
+            if (!isFromActiveSweep && prevSyncedAt > 0L && (nowMs - prevSyncedAt) < 60_000L) {
+                return
+            }
+
+            val dedupeKey = "email:$packageName:$sender:$subject"
+            val lastSeen = recentCache[dedupeKey] ?: 0L
+            if (nowMs - lastSeen < 15_000L) {
+                return
+            }
+            recentCache[dedupeKey] = nowMs
+
+            Log.i(TAG, "📧 [$accountLabel 수신 감지] 발신: '$sender' / 제목: '$subject'")
+
+            serviceScope.launch {
+                try {
+                    val isSynced = ApiClient.sendEmailSync(
+                        userEmail = userEmail,
+                        mailApp = accountLabel,
+                        sender = sender,
+                        senderEmail = senderEmail,
+                        subject = subject,
+                        bodyPreview = bodyPreview,
+                        sheetTitle = prefs.emailDriveSheetTitle
+                    )
+
+                    if (isSynced) {
+                        historyPrefs.edit().putLong(persistentSig, System.currentTimeMillis()).apply()
+                        Log.i(TAG, "🎉 [이메일 시트 기록 & 할 일 분석 완료] $sender: $subject")
+
+                        val updateIntent = Intent(SmsReceiver.ACTION_SMS_RECEIVED).apply {
+                            putExtra("smsBody", "[📧 $mailAppName] $sender: $subject")
+                            putExtra("sender", sender)
+                            putExtra("success", true)
+                            setPackage(this@BankNotificationListener.packageName)
+                        }
+                        sendBroadcast(updateIntent)
+
+                        if (prefs.isTtsEnabled) {
+                            TtsManager.speak(this@BankNotificationListener, "${sender}님의 새 이메일이 시트에 기록되었습니다.")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "이메일 시트 동기화 예외", e)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "handleEmailNotification 파싱 오류", e)
+        }
+    }
+
+    private fun isSpamOrSystemEmail(text: String): Boolean {
+        val spamPattern = Regex(
+            "(\\(광고\\)|\\[광고\\]|무료수신거부|수신거부|unsubscribe|뉴스레터|newsletter|마케팅\\s*수신|인증번호|보안\\s*코드|확인\\s*코드|verification\\s*code|새로운\\s*기기에서\\s*로그인)",
+            RegexOption.IGNORE_CASE
+        )
+        return spamPattern.containsMatchIn(text)
+    }
+
+    private fun matchesEmailFilter(
+        sender: String,
+        senderEmail: String,
+        subject: String,
+        body: String,
+        filter: String
+    ): Boolean {
+        if (filter.isBlank()) return true
+        val keywords = filter.split(",", ";").map { it.trim() }.filter { it.isNotBlank() }
+        if (keywords.isEmpty()) return true
+        val combined = "$sender $senderEmail $subject $body".lowercase()
+        return keywords.any { kw -> combined.contains(kw.lowercase()) }
     }
 }
 

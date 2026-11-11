@@ -103,6 +103,11 @@ export const SHEET_DEFINITIONS: Record<string, SheetDefinition> = {
     headers: ["요청 일시", "서비스명", "수신 번호", "인증 목적", "인증번호(마스킹)", "발송 상태", "소요시간(ms)", "인증완료 여부", "발송 기기"],
     range: "A1:I1",
   },
+  EMAIL: {
+    defaultTitle: "[SheetBot] 이메일 수신 대장",
+    headers: ["수신 일시", "메일앱/수신계정", "발신자", "메일 제목", "본문 요약", "기기명"],
+    range: "A1:F1",
+  },
 };
 
 const userFolderCache = new Map<string, string>();

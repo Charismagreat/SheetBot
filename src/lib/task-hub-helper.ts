@@ -17,7 +17,7 @@ export interface TaskItemInput {
   title?: string;
   taskTitle?: string;
   description?: string;
-  sourceType: "CALL_RECORDING" | "MEETING_RECORDING" | "MISSED_CALL" | "ORDER_DELAY" | "ORDER" | "KAKAO" | "SMS";
+  sourceType: "CALL_RECORDING" | "MEETING_RECORDING" | "MISSED_CALL" | "ORDER_DELAY" | "ORDER" | "KAKAO" | "SMS" | "EMAIL";
   sourceId?: string;
   sourceRef?: string;
   contactName?: string;
@@ -481,6 +481,8 @@ function whenSourceTypeToIcon(type: string): string {
       return "💬 카카오톡";
     case "SMS":
       return "📱 문자 메시지";
+    case "EMAIL":
+      return "📧 이메일";
     default:
       return "📋 일반 과업";
   }
@@ -488,8 +490,12 @@ function whenSourceTypeToIcon(type: string): string {
 
 export interface MessageTaskExtractInput {
   userEmail: string;
-  sourceType: "SMS" | "KAKAO";
+  userPhone?: string;
+  ftsProjectId?: string;
+  sourceType: "SMS" | "KAKAO" | "EMAIL";
   message: string;
+  emailSubject?: string;
+  senderEmail?: string;
   contactName?: string;
   contactPhone?: string;
   chatRoomName?: string;
@@ -545,13 +551,21 @@ export function isActionableBusinessMessage(rawMessage: string): boolean {
   const text = rawMessage.replace(/^\[Web발신\]\s*/i, "").trim();
   if (text.length < 6) return false;
 
-  // 1. 스팸/광고성 메시지 제외
-  if (/\(광고\)|\[광고\]|무료수신거부|수신거부\s*080/i.test(text)) {
+  // 1. 스팸/광고성 메시지 및 뉴스레터/마케팅 이메일 제외
+  if (
+    /\(광고\)|\[광고\]|무료수신거부|수신거부\s*080|수신거부\s*클릭|unsubscribe|뉴스레터|newsletter|마케팅\s*수신\s*동의/i.test(
+      text
+    )
+  ) {
     return false;
   }
 
-  // 2. 일회용 인증번호(OTP) 및 보안코드 제외
-  if (/인증번호|보안코드|확인코드|본인확인.*\[\d{4,6}\]|\[\d{4,6}\].*인증/i.test(text)) {
+  // 2. 일회용 인증번호(OTP), 보안코드, 단순 로그인 알림 제외
+  if (
+    /인증번호|보안코드|확인코드|본인확인.*\[\d{4,6}\]|\[\d{4,6}\].*인증|verification\s*code|새로운\s*기기에서\s*로그인|보안\s*알림/i.test(
+      text
+    )
+  ) {
     return false;
   }
 
@@ -632,7 +646,7 @@ function inferDueDateFromText(text: string): string | undefined {
 function extractTasksFromMessageHeuristic(
   cleanText: string,
   senderLabel: string,
-  sourceType: "SMS" | "KAKAO"
+  sourceType: "SMS" | "KAKAO" | "EMAIL"
 ): Array<{ title: string; dueDate?: string; priority: string; badgeText: string }> {
   const dueDate = inferDueDateFromText(cleanText);
   const isUrgent = /긴급|급한|급히|즉시|당장|오늘까지|금일\s*중|바랍니다/.test(cleanText);
@@ -646,9 +660,11 @@ function extractTasksFromMessageHeuristic(
     summary = summary.slice(0, 56) + "...";
   }
 
-  let badgeText = sourceType === "KAKAO" ? "카톡 요청" : "문자 요청";
+  let badgeText =
+    sourceType === "KAKAO" ? "카톡 요청" : sourceType === "EMAIL" ? "이메일 요청" : "문자 요청";
   if (/견적|발주|단가/.test(cleanText)) badgeText = "견적/발주";
   else if (/세금계산서|계산서|입금|송금|결제|정산/.test(cleanText)) badgeText = "정산/계산서";
+  else if (/계약서|계약|협약|법률|서류|검토/.test(cleanText)) badgeText = "계약/서류";
   else if (/미팅|회의|방문|일정|약속|\d{1,2}시/.test(cleanText)) badgeText = "일정/약속";
   else if (/연락|전화|콜백|회신|답장/.test(cleanText)) badgeText = "회신요망";
   else if (/출고|납품|배송|발송/.test(cleanText)) badgeText = "출고/납품";
@@ -663,9 +679,24 @@ function extractTasksFromMessageHeuristic(
   ];
 }
 
+function extractPhoneFromMessageBody(text: string): string | undefined {
+  if (!text) return undefined;
+  const m = text.match(
+    /(?<!\d)(01[016789][-\s]?\d{3,4}[-\s]?\d{4}|02[-\s]?\d{3,4}[-\s]?\d{4}|0[3-6][1-5][-\s]?\d{3,4}[-\s]?\d{4}|0[78]0[-\s]?\d{3,4}[-\s]?\d{4}|1[568]\d{2}[-\s]?\d{4})(?!\d)/
+  );
+  if (!m) return undefined;
+  const d = m[1].replace(/[^0-9]/g, "");
+  if (d.length === 8) return `${d.slice(0, 4)}-${d.slice(4)}`;
+  if (d.length === 11 && d.startsWith("0")) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  if (d.length === 10 && d.startsWith("02")) return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}`;
+  if (d.length === 10 && d.startsWith("0")) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  if (d.length === 9 && d.startsWith("02")) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
+  return m[1].trim();
+}
+
 /**
- * 📱💬 수신된 문자(SMS/LMS) 및 카카오톡 메시지에서 AI가 할 일(Action Item)을 실시간 추출하여
- * 스마트 통합 할 일 허브(sheetbot_tasks + [SheetBot] 통합 할 일 대장)에 자동 등록
+ * 📱💬📧 수신된 문자(SMS/LMS), 카카오톡 메시지 및 이메일에서 AI가 할 일(Action Item)을 실시간 추출하여
+ * 스마트 통합 할 일 허브(sheetbot_tasks + [SheetBot] 통합 할 일 대장 + 파일투시트 통합할일대장)에 자동 등록
  */
 export async function extractAndCreateTasksFromMessage(
   input: MessageTaskExtractInput
@@ -673,19 +704,35 @@ export async function extractAndCreateTasksFromMessage(
   const taskIds: number[] = [];
   try {
     const rawMsg = (input.message || "").trim();
-    if (!isActionableBusinessMessage(rawMsg)) {
+    const combinedRaw = input.emailSubject
+      ? `[제목: ${input.emailSubject.trim()}]\n${rawMsg}`
+      : rawMsg;
+    if (!isActionableBusinessMessage(combinedRaw)) {
       return { extractedCount: 0, taskIds };
     }
 
-    const cleanText = rawMsg.replace(/^\[Web발신\]\s*/i, "").trim();
+    const cleanText = combinedRaw.replace(/^\[Web발신\]\s*/i, "").trim();
     const senderLabel =
       input.contactName && input.contactName !== "미등록 연락처"
         ? input.contactName.trim()
         : input.chatRoomName && input.chatRoomName !== "미지정 방"
         ? input.chatRoomName.trim()
-        : input.contactPhone || "고객";
+        : input.senderEmail || input.contactPhone || "고객";
 
-    const channelLabel = input.sourceType === "KAKAO" ? "카카오톡" : "문자 메시지(SMS)";
+    const resolvedPhone = input.contactPhone || extractPhoneFromMessageBody(cleanText);
+
+    const channelLabel =
+      input.sourceType === "KAKAO"
+        ? "카카오톡"
+        : input.sourceType === "EMAIL"
+        ? "이메일(Email)"
+        : "문자 메시지(SMS)";
+    const defaultBadge =
+      input.sourceType === "KAKAO"
+        ? "카톡 요청"
+        : input.sourceType === "EMAIL"
+        ? "이메일 요청"
+        : "문자 요청";
     const todayIso = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
     let extractedTasks: Array<{
@@ -700,17 +747,17 @@ export async function extractAndCreateTasksFromMessage(
       const prompt = [
         `오늘 날짜: ${todayIso}`,
         `수신 채널: ${channelLabel}`,
-        `발신자/대화방: ${senderLabel}${input.contactPhone ? ` (${input.contactPhone})` : ""}`,
+        `발신자/대화방: ${senderLabel}${resolvedPhone ? ` (${resolvedPhone})` : ""}${input.senderEmail ? ` <${input.senderEmail}>` : ""}`,
         `메시지 원문:`,
         `"""`,
-        cleanText.slice(0, 800),
+        cleanText.slice(0, 900),
         `"""`,
         ``,
-        `위 메시지에서 수신자(사용자)가 처리해야 할 실질적인 업무 할 일(Action Item: 견적/자료 발송, 회신/콜백, 미팅/방문 일정, 발주/출고/입금/세금계산서 처리, 확인 요청 등)만 추출하여 아래 JSON 형식으로만 응답하세요.`,
-        `단순 인사, 광고, 단순 알림, 할 일이 없는 잡담이면 {"tasks": []}를 반환하세요.`,
-        `할 일 제목(title)에는 발신자명과 핵심 행동을 45자 이내로 명확히 작성하세요 (예: "${senderLabel}님께 수정 견적서 발송").`,
+        `위 메시지에서 수신자(사용자)가 처리해야 할 실질적인 업무 할 일(Action Item: 견적/자료 발송, 회신/콜백, 미팅/방문 일정, 발주/출고/입금/세금계산서 처리, 계약/서류 검토, 확인 요청 등)만 추출하여 아래 JSON 형식으로만 응답하세요.`,
+        `단순 인사, 광고, 뉴스레터, 단순 알림, 할 일이 없는 내용이면 {"tasks": []}를 반환하세요.`,
+        `할 일 제목(title)에는 발신자명과 핵심 행동을 50자 이내로 명확히 작성하세요 (예: "[${senderLabel}] 수정 견적서 확인 및 회신 발송").`,
         `JSON 형식:`,
-        `{"tasks":[{"title":"할 일 내용","dueDate":"YYYY-MM-DD 또는 빈 문자열","priority":"URGENT 또는 HIGH 또는 NORMAL","badgeText":"견적/발주 | 일정/약속 | 회신요망 | 정산/계산서 | 카톡 요청 | 문자 요청 중 택1"}]}`,
+        `{"tasks":[{"title":"할 일 내용","dueDate":"YYYY-MM-DD 또는 빈 문자열","priority":"URGENT 또는 HIGH 또는 NORMAL","badgeText":"견적/발주 | 일정/약속 | 회신요망 | 정산/계산서 | 계약/서류 | ${defaultBadge} 중 택1"}]}`,
       ].join("\n");
 
       const aiRes = await Promise.race([
@@ -735,9 +782,7 @@ export async function extractAndCreateTasksFromMessage(
                     ? String(item.dueDate).trim()
                     : inferDueDateFromText(cleanText),
                 priority: String(item?.priority || "HIGH"),
-                badgeText:
-                  String(item?.badgeText || "").trim() ||
-                  (input.sourceType === "KAKAO" ? "카톡 요청" : "문자 요청"),
+                badgeText: String(item?.badgeText || "").trim() || defaultBadge,
               });
             }
           }
@@ -770,26 +815,32 @@ export async function extractAndCreateTasksFromMessage(
       return { extractedCount: 0, taskIds };
     }
 
-    // 2. 추출된 할 일을 sheetbot_tasks DB 및 [SheetBot] 통합 할 일 대장 시트에 등록
+    // 2. 추출된 할 일을 sheetbot_tasks DB, [SheetBot] 통합 할 일 대장 시트, 파일투시트 통합할일대장에 등록
     const baseSourceId =
       input.sourceId ||
       `${input.sourceType}_${senderLabel}_${cleanText.slice(0, 24).replace(/\s+/g, "_")}`;
 
+    const fullDesc = input.senderEmail && !cleanText.includes(input.senderEmail)
+      ? `[발신 이메일: ${input.senderEmail}]\n${cleanText}`
+      : cleanText;
+
     for (const task of extractedTasks) {
       const created = await createTaskItem({
         userEmail: input.userEmail,
+        userPhone: input.userPhone,
+        ftsProjectId: input.ftsProjectId,
         title: task.title,
-        description: cleanText,
+        description: fullDesc,
         sourceType: input.sourceType,
         sourceId: baseSourceId,
         contactName:
           input.contactName && input.contactName !== "미등록 연락처"
             ? input.contactName
             : input.chatRoomName || senderLabel,
-        contactPhone: input.contactPhone,
+        contactPhone: resolvedPhone,
         dueDate: task.dueDate,
         priority: task.priority,
-        badgeText: task.badgeText || (input.sourceType === "KAKAO" ? "카톡 요청" : "문자 요청"),
+        badgeText: task.badgeText || defaultBadge,
         deepLink: input.deepLink,
       });
       if (created.success && created.taskId) {

@@ -245,7 +245,7 @@ class FtsSheetViewerActivity : AppCompatActivity() {
             sheet.contains("명함관리") || (sheet.contains("명함") && !sheet.contains("발송")) -> "🪪 명함 등록" to "#4F46E5"
             sheet.contains("영수증") -> "🧾 영수증 등록" to "#0284C7"
             sheet.contains("카카오톡") -> "💬 대화 적재" to "#D97706"
-            sheet.contains("문자송수신") || sheet.contains("부재중") || sheet.contains("명함발송") || sheet.contains("결제입금") ->
+            sheet.contains("문자송수신") || sheet.contains("이메일") || sheet.contains("부재중") || sheet.contains("명함발송") || sheet.contains("결제입금") ->
                 "➕ 내역 추가" to "#475569"
             else -> "📤 파일 적재" to "#2563EB"
         }
@@ -593,6 +593,7 @@ class FtsSheetViewerActivity : AppCompatActivity() {
         if (clean.contains("부재중")) return "missed_call"
         if (clean.contains("문자송수신")) return "sms_sync"
         if (clean.contains("카카오톡")) return "kakao_sync"
+        if (clean.contains("이메일")) return "email_sync"
         if (clean.contains("명함발송")) return "call_ended_card"
         if (clean.contains("명함")) return "business_card"
         if (clean.contains("영수증")) return "receipt_scanner"
@@ -902,7 +903,7 @@ class FtsSheetViewerActivity : AppCompatActivity() {
             s.contains("명함관리") || (s.contains("명함") && !s.contains("발송")) -> SheetIngestCategory.BUSINESS_CARD
             s.contains("영수증") -> SheetIngestCategory.RECEIPT
             s.contains("카카오톡") -> SheetIngestCategory.KAKAO_CHAT
-            s.contains("문자송수신") || s.contains("부재중") || s.contains("명함발송") || s.contains("결제입금") ->
+            s.contains("문자송수신") || s.contains("이메일") || s.contains("부재중") || s.contains("명함발송") || s.contains("결제입금") ->
                 SheetIngestCategory.AUTO_LOG_SHEET
             else -> SheetIngestCategory.GENERAL_FTS_SHEET
         }
