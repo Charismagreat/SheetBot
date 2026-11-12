@@ -413,6 +413,12 @@ class AiCopilotCardController(
             return
         }
 
+        // 카드가 접혀있는 상태에서 검색 실행 시 자동으로 펼쳐서 결과를 보여줌
+        if (prefs.isCopilotDetailsHidden) {
+            prefs.isCopilotDetailsHidden = false
+            refreshCollapseState()
+        }
+
         // 최근 검색어 히스토리에 즉시 보존 및 칩 바 갱신
         prefs.addCopilotSearchHistory(command)
         renderRecentSearchHistory()

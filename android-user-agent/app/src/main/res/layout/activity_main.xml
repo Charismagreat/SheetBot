@@ -730,20 +730,20 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="파투(FileToSheet)의 모든 프로젝트·시트 자연어 통합 검색부터 요약·집계·문자 발송·할일 등록까지 말이나 글로 한 번에 처리하세요."
-                android:textColor="#94A3B8"
-                android:textSize="11sp"
-                android:layout_marginBottom="8dp" />
-
-            <!-- 접이식 세부 영역 -->
+            <!-- 접이식 세부 영역 (부제목 + 입력창 + 최근 검색어 + 조회 및 실행 결과 전체 포함) -->
             <LinearLayout
                 android:id="@+id/layoutCopilotDetails"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="파투(FileToSheet)의 모든 프로젝트·시트 자연어 통합 검색부터 요약·집계·문자 발송·할일 등록까지 말이나 글로 한 번에 처리하세요."
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="8dp" />
 
                 <!-- 💡 이용 요금 안내 & 평생 무료 혜택 배너 -->
                 <LinearLayout
@@ -973,57 +973,57 @@
                             android:orientation="horizontal" />
                     </HorizontalScrollView>
                 </LinearLayout>
-            </LinearLayout>
 
-            <!-- 실행 결과 피드백 브리핑 & 파투 통합 검색 카드 리스트 -->
-            <LinearLayout
-                android:id="@+id/layoutAiCommandResult"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="#0F172A"
-                android:padding="11dp"
-                android:layout_marginTop="10dp"
-                android:visibility="gone">
-
-                <TextView
-                    android:id="@+id/tvAiCommandExplanation"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:textColor="#10B981"
-                    android:textSize="12.5sp"
-                    android:lineSpacingExtra="3dp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tvAiCommandSpoken"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:textColor="#94A3B8"
-                    android:textSize="11sp" />
-
-                <!-- 🔍 파투 전 프로젝트·전 시트 자연어 검색 결과 가독성 카드 컨테이너 (Tag 기반) -->
+                <!-- 실행 결과 피드백 브리핑 & 파투 통합 검색 카드 리스트 (layoutCopilotDetails 내부로 포함하여 카드 접기 시 함께 접힘) -->
                 <LinearLayout
-                    android:tag="layoutAiSearchResultsContainer"
+                    android:id="@+id/layoutAiCommandResult"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
+                    android:background="#0F172A"
+                    android:padding="11dp"
                     android:layout_marginTop="10dp"
-                    android:visibility="gone" />
+                    android:visibility="gone">
 
-                <!-- 💾 1회성 작업을 구글 시트 상단 메뉴로 영구 저장(승격) 버튼 (v2.2.7, Tag 기반) -->
-                <Button
-                    android:tag="btnPromoteCommand"
-                    android:layout_width="match_parent"
-                    android:layout_height="38dp"
-                    android:layout_marginTop="8dp"
-                    android:backgroundTint="#4F46E5"
-                    android:text="💾 이 기능을 구글 시트 메뉴로 영구 저장"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11.5sp"
-                    android:textStyle="bold"
-                    android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/tvAiCommandExplanation"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="#10B981"
+                        android:textSize="12.5sp"
+                        android:lineSpacingExtra="3dp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvAiCommandSpoken"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textColor="#94A3B8"
+                        android:textSize="11sp" />
+
+                    <!-- 🔍 파투 전 프로젝트·전 시트 자연어 검색 결과 가독성 카드 컨테이너 (Tag 기반) -->
+                    <LinearLayout
+                        android:tag="layoutAiSearchResultsContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:layout_marginTop="10dp"
+                        android:visibility="gone" />
+
+                    <!-- 💾 1회성 작업을 구글 시트 상단 메뉴로 영구 저장(승격) 버튼 (v2.2.7, Tag 기반) -->
+                    <Button
+                        android:tag="btnPromoteCommand"
+                        android:layout_width="match_parent"
+                        android:layout_height="38dp"
+                        android:layout_marginTop="8dp"
+                        android:backgroundTint="#4F46E5"
+                        android:text="💾 이 기능을 구글 시트 메뉴로 영구 저장"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
 
