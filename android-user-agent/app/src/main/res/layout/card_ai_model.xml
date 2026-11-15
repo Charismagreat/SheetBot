@@ -120,7 +120,7 @@
                         android:layout_height="64dp"
                         android:background="#312E81"
                         android:scaleType="centerCrop"
-                        android:src="@android:drawable/ic_menu_camera"
+                        android:src="@drawable/model_jia_avatar"
                         android:contentDescription="전속 모델 대표 아바타"
                         android:clickable="true"
                         android:focusable="true" />

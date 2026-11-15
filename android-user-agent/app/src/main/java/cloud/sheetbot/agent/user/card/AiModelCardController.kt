@@ -163,7 +163,28 @@ class AiModelCardController(
     }
 
     /**
-     * 모델 페르소나 UI 텍스트 갱신
+     * 모델 ID에 따른 아바타 및 전신 3D 드로어블 리소스 매핑
+     */
+    private fun getAvatarResId(modelId: String): Int = when (modelId) {
+        "model_minsu" -> R.drawable.model_minsu_avatar
+        "model_seoyeon" -> R.drawable.model_seoyeon_avatar
+        else -> R.drawable.model_jia_avatar
+    }
+
+    private fun getFullBodyFrontResId(modelId: String): Int = when (modelId) {
+        "model_minsu" -> R.drawable.model_minsu_front
+        "model_seoyeon" -> R.drawable.model_seoyeon_front
+        else -> R.drawable.model_jia_front
+    }
+
+    private fun getTurnaroundResId(modelId: String): Int = when (modelId) {
+        "model_minsu" -> R.drawable.model_minsu_turnaround
+        "model_seoyeon" -> R.drawable.model_seoyeon_turnaround
+        else -> R.drawable.model_jia_turnaround
+    }
+
+    /**
+     * 모델 페르소나 UI 텍스트 및 아바타 갱신
      */
     private fun refreshModelPersonaUi() {
         val curModel = prefs.getActiveAiModel()
@@ -171,6 +192,7 @@ class AiModelCardController(
         binding.tvModelVoice.text = "🎙️ 음성: ${curModel.voice}"
         binding.tvModelHeight.text = "📐 전신: ${curModel.heightInfo}"
         binding.tvModelStyle.text = "👗 스타일: ${curModel.style}"
+        binding.ivModelMasterAvatar.setImageResource(getAvatarResId(curModel.id))
     }
 
     /**
@@ -189,9 +211,13 @@ class AiModelCardController(
      * 🔍 선택된 전속 모델의 전신 3D 룩북 & 스펙 브리핑 다이얼로그
      */
     private fun showFullBody3dDialog(model: cloud.sheetbot.agent.user.AiModelPersona) {
+        val scrollView = android.widget.ScrollView(activity).apply {
+            setBackgroundColor(android.graphics.Color.parseColor("#0F172A"))
+        }
+
         val container = android.widget.LinearLayout(activity).apply {
             orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(40, 30, 40, 20)
+            setPadding(36, 28, 36, 20)
             setBackgroundColor(android.graphics.Color.parseColor("#0F172A"))
         }
 
@@ -201,7 +227,40 @@ class AiModelCardController(
             setTextColor(android.graphics.Color.parseColor("#E9D5FF"))
             textSize = 14f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setPadding(0, 0, 0, 10)
+            setPadding(0, 0, 0, 14)
+        }
+
+        // 실제 전신 3D 정면 이미지 뷰
+        var isTurnaroundMode = false
+        val ivFullBody = android.widget.ImageView(activity).apply {
+            setImageResource(getFullBodyFrontResId(model.id))
+            adjustViewBounds = true
+            maxHeight = 820
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            setBackgroundColor(android.graphics.Color.parseColor("#070B14"))
+            setPadding(8, 8, 8, 8)
+        }
+
+        // 정면 3D ↔ 4분할 360° 턴어라운드 전환 버튼
+        val btnToggleSheet = android.widget.Button(activity).apply {
+            text = "🔄 4분할 360° 턴어라운드 시트 보기 (터치 전환)"
+            textSize = 11f
+            setTextColor(android.graphics.Color.parseColor("#F3E8FF"))
+            setBackgroundColor(android.graphics.Color.parseColor("#4C1D95"))
+            setOnClickListener {
+                isTurnaroundMode = !isTurnaroundMode
+                if (isTurnaroundMode) {
+                    ivFullBody.setImageResource(getTurnaroundResId(model.id))
+                    text = "👤 정면 단독 전신 3D 크게 보기"
+                } else {
+                    ivFullBody.setImageResource(getFullBodyFrontResId(model.id))
+                    text = "🔄 4분할 360° 턴어라운드 시트 보기 (터치 전환)"
+                }
+            }
+        }
+
+        ivFullBody.setOnClickListener {
+            btnToggleSheet.performClick()
         }
 
         // 전신 스펙 요약 박스
@@ -222,19 +281,22 @@ class AiModelCardController(
 
         // 3D 뷰어 바로가기 안내 문구
         val tvNotice = android.widget.TextView(activity).apply {
-            text = "💡 '360도 뷰어 열기'를 누르시면 모바일 화면에서 모델의 전신 포즈를 360도로 회전하며 감상하고 제품 착용 화보를 시뮬레이션할 수 있습니다."
+            text = "💡 '360도 뷰어 열기'를 누르시면 웹 스튜디오에서 좌우 스와이프 회전 및 PPL 제품 합성을 시뮬레이션할 수 있습니다."
             setTextColor(android.graphics.Color.parseColor("#A78BFA"))
             textSize = 10f
-            setPadding(0, 14, 0, 14)
+            setPadding(0, 14, 0, 8)
         }
 
         container.addView(tvHeader)
+        container.addView(ivFullBody)
+        container.addView(btnToggleSheet)
         container.addView(tvSpec)
         container.addView(tvNotice)
+        scrollView.addView(container)
 
         AlertDialog.Builder(activity)
             .setTitle("🎭 AI 전속 모델 전신 3D 프로필")
-            .setView(container)
+            .setView(scrollView)
             .setPositiveButton("🌐 360도 뷰어 열기") { _, _ ->
                 open3dWebShowcase(model)
             }
