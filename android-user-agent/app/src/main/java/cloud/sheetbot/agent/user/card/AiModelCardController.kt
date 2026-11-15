@@ -67,6 +67,23 @@ class AiModelCardController(
             Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
         }
 
+        // 클립보드 붙여넣기 시 검은색 텍스트(ForegroundColorSpan) 유입 방지 -> 항상 선명한 흰색(#FFFFFF) 표시
+        val cleanSpansWatcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                if (s == null) return
+                val spans = s.getSpans(0, s.length, android.text.style.CharacterStyle::class.java)
+                for (span in spans) {
+                    if (span is android.text.style.ForegroundColorSpan || span is android.text.style.BackgroundColorSpan) {
+                        s.removeSpan(span)
+                    }
+                }
+            }
+        }
+        binding.etProductTopic.addTextChangedListener(cleanSpansWatcher)
+        binding.etProductScript.addTextChangedListener(cleanSpansWatcher)
+
         // 1. 모델 페르소나 UI 초기화
         refreshModelPersonaUi()
         binding.btnManageModelPersona.setOnClickListener {
@@ -472,6 +489,7 @@ class AiModelCardController(
             return
         }
 
+        val curModel = prefs.getActiveAiModel()
         val userEmail = prefs.userEmail ?: ""
         binding.btnAiSuggestScript.isEnabled = false
         binding.btnAiSuggestScript.text = "작성 중..."
@@ -480,8 +498,8 @@ class AiModelCardController(
             try {
                 val script = ApiClient.requestAiModelSuggestScript(
                     topic = topic,
-                    modelName = prefs.aiModelName,
-                    modelVoice = prefs.aiModelVoice,
+                    modelName = curModel.name,
+                    modelVoice = curModel.voice,
                     userEmail = userEmail
                 )
                 if (script.isNotBlank()) {
