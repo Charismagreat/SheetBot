@@ -53,6 +53,7 @@ class CardSetupCoordinator(
     lateinit var lawCardController: LawAdvisoryCardController
     lateinit var blogCardController: BlogAutomationCardController
     lateinit var instaCardController: InstagramAutomationCardController
+    lateinit var aiModelCardController: AiModelCardController
     lateinit var siteCardController: MobileSiteCardController
     lateinit var fileUploadCardController: FileUploadCardController
     lateinit var linkScrapCardController: LinkScrapCardController
@@ -84,6 +85,7 @@ class CardSetupCoordinator(
     val isLawInitialized get() = ::lawCardController.isInitialized
     val isBlogInitialized get() = ::blogCardController.isInitialized
     val isInstaInitialized get() = ::instaCardController.isInitialized
+    val isAiModelInitialized get() = ::aiModelCardController.isInitialized
     val isSiteInitialized get() = ::siteCardController.isInitialized
     val isFileUploadInitialized get() = ::fileUploadCardController.isInitialized
     val isLinkScrapInitialized get() = ::linkScrapCardController.isInitialized
@@ -139,6 +141,9 @@ class CardSetupCoordinator(
 
         // 📸 AI 인스타그램 피드 & 해시태그 카드 초기화
         try { setupInstagramAutomationCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupInstagramAutomationCard 실패 방어", e) }
+
+        // 🎭 AI 전속 모델 & 홍보 크리에이터 카드 초기화
+        try { setupAiModelCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupAiModelCard 실패 방어", e) }
 
         // 🌐 AI 모바일 홈페이지 제작 & 관리 카드 초기화
         try { setupMobileSiteCard() } catch (e: Throwable) { android.util.Log.e("CardSetupCoordinator", "setupMobileSiteCard 실패 방어", e) }
@@ -434,6 +439,18 @@ class CardSetupCoordinator(
             onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
         )
         instaCardController.setup()
+    }
+
+    private fun setupAiModelCard() {
+        aiModelCardController = AiModelCardController(
+            activity = activity,
+            binding = binding.cardAiModel,
+            prefs = prefs,
+            onPickProductImage = { launchers.aiModelProductPickerLauncher.launch("image/*") },
+            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
+            onOpenDriveFolder = { sheetType, defaultFolderName -> openDriveFolder(sheetType, defaultFolderName) }
+        )
+        aiModelCardController.setup()
     }
 
     private fun setupMobileSiteCard() {

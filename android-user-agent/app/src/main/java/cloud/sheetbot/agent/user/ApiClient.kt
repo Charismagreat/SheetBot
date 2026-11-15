@@ -1436,6 +1436,106 @@ object ApiClient {
     }
 
     /**
+     * 🎭 AI 전속 모델 홍보 대본 자동 추천 (Gemini)
+     */
+    suspend fun requestAiModelSuggestScript(
+        topic: String,
+        modelName: String = "",
+        modelVoice: String = "",
+        userEmail: String
+    ): String = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val jsonPayload = JSONObject().apply {
+            put("topic", topic)
+            put("modelName", modelName)
+            put("modelVoice", modelVoice)
+            put("userEmail", userEmail)
+        }.toString()
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/ai-model/script"
+            try {
+                val req = Request.Builder()
+                    .url(endpoint)
+                    .post(jsonPayload.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                    .build()
+                val response = client.newCall(req).execute()
+                val body = response.body?.string() ?: ""
+                val resJson = JSONObject(body)
+                if (response.isSuccessful && resJson.optBoolean("success", true)) {
+                    return@withContext resJson.optString("script", "")
+                }
+            } catch (_: Exception) {}
+        }
+        ""
+    }
+
+    /**
+     * 🎬 AI 전속 모델 홍보 쇼츠 영상 생성 (Veo 3 + TTS + 이미지 합성)
+     */
+    suspend fun requestAiModelShortsVideo(
+        topic: String,
+        script: String,
+        modelName: String = "",
+        modelVoice: String = "",
+        modelStyle: String = "",
+        file: File? = null,
+        userEmail: String
+    ): AiModelShortsResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        var lastErr = "AI 전속 모델 쇼츠 영상 생성 실패"
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/ai-model/generate-video"
+            try {
+                val multipartBuilder = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("userEmail", userEmail)
+                    .addFormDataPart("topic", topic)
+                    .addFormDataPart("script", script)
+                    .addFormDataPart("modelName", modelName)
+                    .addFormDataPart("modelVoice", modelVoice)
+                    .addFormDataPart("modelStyle", modelStyle)
+
+                file?.let { f ->
+                    if (f.exists() && f.length() > 0) {
+                        val mediaType = "image/jpeg".toMediaType()
+                        multipartBuilder.addFormDataPart("file", f.name, f.asRequestBody(mediaType))
+                    }
+                }
+
+                val req = Request.Builder()
+                    .url(endpoint)
+                    .post(multipartBuilder.build())
+                    .build()
+
+                val response = client.newCall(req).execute()
+                val body = response.body?.string() ?: ""
+                val resJson = JSONObject(body)
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext AiModelShortsResult(
+                        success = true,
+                        videoUrl = resJson.optString("videoUrl", ""),
+                        thumbnailUrl = resJson.optString("thumbnailUrl", ""),
+                        script = resJson.optString("script", script),
+                        topic = resJson.optString("topic", topic),
+                        sheetUrl = resJson.optString("sheetUrl", ""),
+                        driveFolderUrl = resJson.optString("driveFolderUrl", ""),
+                        durationSeconds = resJson.optInt("durationSeconds", 8)
+                    )
+                } else {
+                    val msg = resJson.optString("error", "HTTP ${response.code}")
+                    lastErr = "$host: $msg"
+                }
+            } catch (e: Exception) {
+                lastErr = "$host: ${e.message}"
+            }
+        }
+        AiModelShortsResult(success = false, error = lastErr)
+    }
+
+    /**
      * 🌐 AI 모바일 홈페이지 생성 요청 (사진 복수 첨부 + AI 맞춤 카피/메뉴 구성)
      */
     suspend fun requestCreateMobileSite(
@@ -4303,6 +4403,18 @@ data class InstagramPostResult(
     val instagramHandle: String = "",
     val instagramAccountUrl: String = "",
     val driveFolderUrl: String = "",
+    val error: String? = null
+)
+
+data class AiModelShortsResult(
+    val success: Boolean,
+    val videoUrl: String = "",
+    val thumbnailUrl: String = "",
+    val script: String = "",
+    val topic: String = "",
+    val sheetUrl: String = "",
+    val driveFolderUrl: String = "",
+    val durationSeconds: Int = 8,
     val error: String? = null
 )
 

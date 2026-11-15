@@ -58,6 +58,7 @@ export type SheetBindingType =
   | "LAW_ADVISORY"
   | "NAVER_BLOG"
   | "INSTAGRAM"
+  | "AI_MODEL"
   | "MOBILE_SITE"
   | "FILE_UPLOAD"
   | "RECEIPT"

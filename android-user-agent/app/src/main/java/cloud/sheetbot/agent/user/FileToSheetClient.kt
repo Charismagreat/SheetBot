@@ -280,6 +280,11 @@ object FileToSheetClient {
             cardId = "tasks_hub",
             sheetName = "통합할일대장",
             headers = listOf("일련번호", "등록일시", "상태", "중요도", "할일제목", "고객명", "연락처", "기한", "출처", "뱃지", "완료일시", "비고")
+        ),
+        "ai_model" to FtsCardSheetSpec(
+            cardId = "ai_model",
+            sheetName = "AI모델콘텐츠대장",
+            headers = listOf("일련번호", "제작일시", "전속모델명", "보이스톤", "제품/홍보주제", "홍보쇼츠대본", "쇼츠영상링크", "제품사진링크", "제작상태")
         )
     )
 
@@ -315,6 +320,7 @@ object FileToSheetClient {
             "mobile_site", "cardsite" -> "mobile_site"
             "saas_otp_relay", "cardsaasotprelay", "saas_otp" -> "saas_otp_relay"
             "tasks_hub", "cardtaskshub", "tasks", "task" -> "tasks_hub"
+            "ai_model", "cardaimodel", "aimodel" -> "ai_model"
             else -> raw.lowercase()
         }
     }

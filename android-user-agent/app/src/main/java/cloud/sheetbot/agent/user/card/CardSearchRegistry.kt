@@ -218,6 +218,15 @@ object CardSearchRegistry {
             cardResId = R.id.cardInsta
         ),
         SearchableCard(
+            index = 25,
+            key = "cardAiModel",
+            title = "AI 전속 모델 & 홍보 크리에이터",
+            icon = "🎭",
+            chosung = "ㅇㅇㅈㅅㅁㄷㅎㅂㅋㄹㅇㅇㅌ",
+            keywords = listOf("모델", "전속모델", "쇼츠", "영상", "veo", "아바타", "live", "tts", "보이스", "크리에이터", "광고영상", "홍보", "ppl"),
+            cardResId = R.id.cardAiModel
+        ),
+        SearchableCard(
             index = 16,
             key = "cardSite",
             title = "AI 모바일 홈페이지 제작",

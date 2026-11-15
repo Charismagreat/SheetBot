@@ -76,6 +76,8 @@ class MainActivity : AppCompatActivity() {
         getSite = { cardCoordinator!!.siteCardController },
         isKakaoInitialized = { cardCoordinator?.isKakaoInitialized == true },
         getKakao = { cardCoordinator!!.kakaoCardController },
+        isAiModelInitialized = { cardCoordinator?.isAiModelInitialized == true },
+        getAiModel = { cardCoordinator!!.aiModelCardController },
         isTargetFilterInitialized = { ::coreCoordinator.isInitialized && coreCoordinator.isTargetFilterInitialized },
         getTargetFilter = { coreCoordinator.targetFilterController }
     )

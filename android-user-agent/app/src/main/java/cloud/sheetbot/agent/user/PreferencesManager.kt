@@ -13,6 +13,53 @@ data class CopilotSearchHistoryItem(
     val timestamp: Long
 )
 
+data class AiModelPersona(
+    val id: String,
+    val name: String,
+    val voice: String,
+    val style: String,
+    val avatarPath: String = ""
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("id", id)
+        put("name", name)
+        put("voice", voice)
+        put("style", style)
+        put("avatarPath", avatarPath)
+    }
+
+    companion object {
+        fun fromJson(obj: JSONObject): AiModelPersona = AiModelPersona(
+            id = obj.optString("id", System.currentTimeMillis().toString()),
+            name = obj.optString("name", "지아 (브랜드 앰배서더)"),
+            voice = obj.optString("voice", "Kore"),
+            style = obj.optString("style", "26-year-old Korean female brand ambassador, warm and trustworthy smile, sleek dark brown hair"),
+            avatarPath = obj.optString("avatarPath", "")
+        )
+
+        val DEFAULT_PRESETS = listOf(
+            AiModelPersona(
+                id = "model_jia",
+                name = "지아 (브랜드 앰배서더)",
+                voice = "Kore",
+                style = "26-year-old Korean female brand ambassador, warm and trustworthy smile, shoulder-length sleek dark brown hair, clear natural skin, wearing neat beige blazer, studio lighting"
+            ),
+            AiModelPersona(
+                id = "model_minsu",
+                name = "민수 (비즈니스 매니저)",
+                voice = "Puck",
+                style = "32-year-old Korean male business manager, confident warm smile, crisp navy suit over white shirt, modern office background, sharp commercial portrait"
+            ),
+            AiModelPersona(
+                id = "model_seoyeon",
+                name = "서연 (전문 컨설턴트)",
+                voice = "Aoede",
+                style = "29-year-old Korean female professional consultant, intelligent look, subtle glasses, cream blouse, neutral studio background, 85mm lens portrait"
+            )
+        )
+    }
+}
+
 class PreferencesManager(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("sheetbot_agent_prefs", Context.MODE_PRIVATE)
@@ -825,6 +872,78 @@ class PreferencesManager(context: Context) {
     var instagramId: String
         get() = prefs.getString("instagram_id", "") ?: ""
         set(value) = prefs.edit().putString("instagram_id", value).apply()
+
+    // 🎭 AI 전속 모델 & 홍보 크리에이터 설정 프로퍼티 (다중 모델 레지스트리 지원)
+    var selectedAiModelId: String
+        get() = prefs.getString("selected_ai_model_id", "model_jia") ?: "model_jia"
+        set(value) = prefs.edit().putString("selected_ai_model_id", value).apply()
+
+    fun getAiModelList(): List<AiModelPersona> {
+        val raw = prefs.getString("ai_model_list_json", null)
+        if (raw.isNullOrBlank()) return AiModelPersona.DEFAULT_PRESETS
+        return try {
+            val arr = JSONArray(raw)
+            val list = mutableListOf<AiModelPersona>()
+            for (i in 0 until arr.length()) {
+                val item = arr.optJSONObject(i) ?: continue
+                list.add(AiModelPersona.fromJson(item))
+            }
+            if (list.isEmpty()) AiModelPersona.DEFAULT_PRESETS else list
+        } catch (_: Exception) {
+            AiModelPersona.DEFAULT_PRESETS
+        }
+    }
+
+    fun saveAiModelList(list: List<AiModelPersona>) {
+        val arr = JSONArray()
+        list.forEach { arr.put(it.toJson()) }
+        prefs.edit().putString("ai_model_list_json", arr.toString()).apply()
+    }
+
+    fun getActiveAiModel(): AiModelPersona {
+        val list = getAiModelList()
+        val curId = selectedAiModelId
+        return list.firstOrNull { it.id == curId } ?: list.firstOrNull() ?: AiModelPersona.DEFAULT_PRESETS.first()
+    }
+
+    var aiModelName: String
+        get() = getActiveAiModel().name
+        set(value) {
+            val cur = getActiveAiModel()
+            updateAiModel(cur.copy(name = value))
+        }
+
+    var aiModelVoice: String
+        get() = getActiveAiModel().voice
+        set(value) {
+            val cur = getActiveAiModel()
+            updateAiModel(cur.copy(voice = value))
+        }
+
+    var aiModelStyle: String
+        get() = getActiveAiModel().style
+        set(value) {
+            val cur = getActiveAiModel()
+            updateAiModel(cur.copy(style = value))
+        }
+
+    var aiModelAvatarPath: String
+        get() = getActiveAiModel().avatarPath
+        set(value) {
+            val cur = getActiveAiModel()
+            updateAiModel(cur.copy(avatarPath = value))
+        }
+
+    fun updateAiModel(model: AiModelPersona) {
+        val list = getAiModelList().toMutableList()
+        val idx = list.indexOfFirst { it.id == model.id }
+        if (idx >= 0) {
+            list[idx] = model
+        } else {
+            list.add(model)
+        }
+        saveAiModelList(list)
+    }
 
     /**
      * 📦 추가 기능 보관함에 숨겨진 카드 키 목록 (미설정 시 기본 숨김 프리셋 적용)

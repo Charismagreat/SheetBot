@@ -690,6 +690,18 @@ class CardMarketplaceController(
                 version = "2.0.0"
             ),
             MarketplaceCardItemDto(
+                key = "cardAiModel",
+                title = "AI 전속 모델 & 홍보 크리에이터",
+                icon = "🎭",
+                category = "ai",
+                categoryName = "AI 자동화",
+                description = "구글 제미나이(Veo 3 & Live API)로 우리 회사 전속 모델을 구축하고 제품 사진 1장으로 쇼츠 영상 제작 및 실시간 음성 상담을 제공합니다.",
+                author = "시트봇 공식",
+                isExclusive = false,
+                isInstalledByDefault = true,
+                version = "1.0.0"
+            ),
+            MarketplaceCardItemDto(
                 key = "cardSite",
                 title = "AI 모바일 홈페이지 생성",
                 icon = "🌐",

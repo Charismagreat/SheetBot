@@ -1,0 +1,462 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_card_scenario"
+    android:padding="13dp"
+    android:layout_marginBottom="12dp">
+
+    <!-- 상단 구분선 -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#334155"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="10dp" />
+
+    <!-- 0. 카드 헤더 -->
+    <LinearLayout
+        android:id="@+id/layoutAiModelHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="8dp"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🎭 AI 전속 모델 &amp; 홍보 크리에이터"
+            android:textColor="#A855F7"
+            android:textSize="12.5sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_badge_version"
+            android:backgroundTint="#0F172A"
+            android:paddingHorizontal="7dp"
+            android:paddingVertical="2dp"
+            android:text="Veo 3 · Live API"
+            android:textColor="#C084FC"
+            android:textSize="9.5sp"
+            android:textStyle="bold"
+            android:layout_marginEnd="6dp" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switchAiModelAutomation"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:checked="false"
+            android:layout_marginEnd="6dp" />
+
+        <TextView
+            android:id="@+id/btnToggleAiModelDetails"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_badge_version"
+            android:backgroundTint="#0F172A"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="3dp"
+            android:text="▲"
+            android:textColor="#E2E8F0"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- 상세 영역 (접기/펼치기) -->
+    <LinearLayout
+        android:id="@+id/layoutAiModelDetails"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#0F172A"
+        android:padding="10dp"
+        android:layout_marginBottom="12dp">
+
+        <!-- 기능 설명 배너 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="💡 구글 제미나이(Nano Banana/Gemini 3 Pro)로 얼굴·목소리 일관성을 유지하는 우리 회사 전속 모델을 구축하고, 제품 사진 1장으로 Veo 3 발화 쇼츠 제작 및 실시간 음성 상담까지 올인원으로 제어합니다."
+            android:textColor="#C084FC"
+            android:textSize="10.5sp"
+            android:background="#3B0764"
+            android:padding="7dp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- 1. Model Registry (전속 모델 페르소나 카드) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#1E1B4B"
+            android:padding="9dp"
+            android:layout_marginBottom="10dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="👤 우리 회사 전속 모델 페르소나 (Model Registry)"
+                android:textColor="#E9D5FF"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <!-- 마스터 아바타 이미지 뷰어 -->
+                <ImageView
+                    android:id="@+id/ivModelMasterAvatar"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:background="#312E81"
+                    android:scaleType="centerCrop"
+                    android:src="@android:drawable/ic_menu_camera"
+                    android:contentDescription="전속 모델 대표 아바타"
+                    android:layout_marginEnd="10dp" />
+
+                <!-- 모델 상세 프로필 정보 -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvModelName"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="모델명: 지아 (브랜드 앰배서더)"
+                        android:textColor="#F3E8FF"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvModelVoice"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🎙️ 음성: Kore (밝고 신뢰감 있는 여성)"
+                        android:textColor="#A78BFA"
+                        android:textSize="10.5sp"
+                        android:layout_marginTop="2dp" />
+
+                    <TextView
+                        android:id="@+id/tvModelStyle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="👗 스타일: 20대 후반, 세련된 비즈니스 캐주얼"
+                        android:textColor="#94A3B8"
+                        android:textSize="10sp"
+                        android:maxLines="1"
+                        android:ellipsize="end"
+                        android:layout_marginTop="2dp" />
+                </LinearLayout>
+
+                <!-- 모델 설정 버튼 -->
+                <Button
+                    android:id="@+id/btnManageModelPersona"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:backgroundTint="#7C3AED"
+                    android:text="⚙️ 모델 설정"
+                    android:textColor="#FFFFFF"
+                    android:textSize="10sp"
+                    android:paddingHorizontal="8dp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 2. 파이프라인 A: 원클릭 홍보 쇼츠 영상 제작 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#1E293B"
+            android:padding="9dp"
+            android:layout_marginBottom="10dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🎬 [파이프라인 A] 원클릭 홍보 쇼츠 영상 제작 (Veo 3)"
+                android:textColor="#DDD6FE"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <!-- 제품 사진 선택 버튼 영역 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
+
+                <Button
+                    android:id="@+id/btnSelectProductImage"
+                    android:layout_width="0dp"
+                    android:layout_height="34dp"
+                    android:layout_weight="1"
+                    android:backgroundTint="#475569"
+                    android:text="📷 제품 사진 선택 (갤러리/촬영)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="10.5sp"
+                    android:layout_marginEnd="4dp" />
+
+                <Button
+                    android:id="@+id/btnResetProductImage"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:backgroundTint="#64748B"
+                    android:text="✕ 취소"
+                    android:textColor="#F1F5F9"
+                    android:textSize="10.5sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvProductImageStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="선택된 제품 사진: 없음 (1600px 85% 자동 최적화)"
+                android:textColor="#94A3B8"
+                android:textSize="10sp"
+                android:layout_marginBottom="8dp" />
+
+            <!-- 제품명 및 핵심 키워드 입력 -->
+            <EditText
+                android:id="@+id/etProductTopic"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:background="#0F172A"
+                android:hint="제품명 및 핵심 특징 (예: 친환경 텀블러, 보온 24시간)"
+                android:textColor="#F8FAFC"
+                android:textColorHint="#64748B"
+                android:textSize="11sp"
+                android:paddingHorizontal="8dp"
+                android:inputType="text"
+                android:layout_marginBottom="6dp" />
+
+            <!-- 홍보 대본 입력창 및 AI 추천 버튼 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="홍보 발화 대본 (또는 AI 자동 생성):"
+                    android:textColor="#CBD5E1"
+                    android:textSize="10.5sp" />
+
+                <Button
+                    android:id="@+id/btnAiSuggestScript"
+                    android:layout_width="wrap_content"
+                    android:layout_height="28dp"
+                    android:backgroundTint="#9333EA"
+                    android:text="✨ AI 대본 추천"
+                    android:textColor="#FFFFFF"
+                    android:textSize="9.5sp"
+                    android:paddingHorizontal="6dp" />
+            </LinearLayout>
+
+            <EditText
+                android:id="@+id/etProductScript"
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:background="#0F172A"
+                android:hint="전속 모델이 읽을 홍보 대본을 입력하세요. (비워둘 시 AI가 자동으로 트렌디한 쇼츠 대본 작성)"
+                android:textColor="#F8FAFC"
+                android:textColorHint="#64748B"
+                android:textSize="11sp"
+                android:padding="8dp"
+                android:gravity="top|start"
+                android:inputType="textMultiLine"
+                android:layout_marginBottom="8dp" />
+
+            <!-- 쇼츠 생성 시작 버튼 -->
+            <Button
+                android:id="@+id/btnStartAiModelShorts"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:backgroundTint="#8B5CF6"
+                android:text="🚀 AI 전속 모델 홍보 쇼츠 영상 생성 (Veo 3)"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <!-- 진행 상태 표시 -->
+            <ProgressBar
+                android:id="@+id/progressAiModel"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="6dp"
+                android:indeterminate="true"
+                android:visibility="gone"
+                android:layout_marginTop="6dp" />
+
+            <TextView
+                android:id="@+id/tvAiModelStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="대기 중..."
+                android:textColor="#A78BFA"
+                android:textSize="10.5sp"
+                android:visibility="gone"
+                android:layout_marginTop="4dp" />
+
+            <!-- 쇼츠 생성 완료 결과 영역 -->
+            <LinearLayout
+                android:id="@+id/layoutAiModelResultContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#2E1065"
+                android:padding="10dp"
+                android:layout_marginTop="8dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/tvResultVideoTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🎬 홍보 쇼츠 영상 생성 완료!"
+                    android:textColor="#F5D0FE"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/tvResultScriptPreview"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="대본 미리보기..."
+                    android:textColor="#E2E8F0"
+                    android:textSize="10.5sp"
+                    android:maxLines="3"
+                    android:ellipsize="end"
+                    android:layout_marginBottom="8dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnPlayVideoResult"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#7C3AED"
+                        android:text="▶️ 영상 재생"
+                        android:textColor="#FFFFFF"
+                        android:textSize="10.5sp"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btnOpenSheetResult"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#059669"
+                        android:text="📊 대장 시트"
+                        android:textColor="#FFFFFF"
+                        android:textSize="10.5sp"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btnShareVideoResult"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#4F46E5"
+                        android:text="↗️ 영상 공유"
+                        android:textColor="#FFFFFF"
+                        android:textSize="10.5sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 3. 파이프라인 B: 실시간 전속 모델 쇼케이스 / 대화 모드 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#1E293B"
+            android:padding="9dp"
+            android:layout_marginBottom="10dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🎙️ [파이프라인 B] 실시간 전속 모델 음성 상담 (Live API)"
+                android:textColor="#DDD6FE"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Gemini Multimodal Live API와 저지연 오디오 스트리밍으로 연결되어 전속 모델과 실시간으로 대화하고 반응형 비디오 루프(대기/말하기/인사)를 시연합니다."
+                android:textColor="#94A3B8"
+                android:textSize="10sp"
+                android:layout_marginBottom="8dp" />
+
+            <Button
+                android:id="@+id/btnStartLiveDialogue"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:backgroundTint="#0284C7"
+                android:text="🎙️ 전속 모델과 실시간 대화하기 (Live Demo)"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- 4. 상시 구글 시트 대장 및 드라이브 열기 버튼 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnOpenAiModelSheetAlways"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:backgroundTint="#1E293B"
+                android:text="📊 AI 콘텐츠 대장 ↗"
+                android:textColor="#C084FC"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:layout_marginEnd="4dp" />
+
+            <Button
+                android:id="@+id/btnOpenAiModelDriveAlways"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:backgroundTint="#1E293B"
+                android:text="📁 영상 보관함 드라이브 ↗"
+                android:textColor="#38BDF8"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+    </LinearLayout>
+</LinearLayout>

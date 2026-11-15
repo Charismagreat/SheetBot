@@ -1,0 +1,96 @@
+export const dynamic = "force-dynamic";
+
+import { NextRequest, NextResponse } from "next/server";
+import { getCurrentUserEmail } from "@/lib/auth";
+import { callAiCaller } from "@/lib/egdesk-helpers";
+import { recordAiUsageLog } from "@/lib/ai-usage";
+import { deductTokens } from "@/lib/token-wallet";
+
+/**
+ * AI Caller 응답 2중 언래핑 안전 파서 (재발 방지 절대 원칙)
+ */
+function unwrapAiCallerText(rawText: string): string {
+  if (!rawText) return "";
+  let clean = rawText.trim();
+  try {
+    const parsed = JSON.parse(clean);
+    if (typeof parsed === "object" && parsed !== null) {
+      if (typeof parsed.content === "string") return parsed.content;
+      if (Array.isArray(parsed.content) && parsed.content[0]?.text) {
+        return parsed.content[0].text;
+      }
+    }
+  } catch {}
+  return clean;
+}
+
+/**
+ * POST /api/user/ai-model/script
+ * 
+ * 전속 모델(페르소나) 맞춤형 AI 홍보 쇼츠 대본 자동 추천
+ */
+export async function POST(req: NextRequest) {
+  try {
+    const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
+    const headerEmail = req.headers.get("x-sheetbot-user-email");
+
+    const json = await req.json().catch(() => ({}));
+    const userEmailInput = String(json.userEmail || json.email || "").trim();
+    const topic = String(json.topic || "").trim();
+    const modelName = String(json.modelName || "지아").trim();
+    const modelVoice = String(json.modelVoice || "Kore").trim();
+
+    const userEmail = (userEmailInput && userEmailInput.includes("@"))
+      ? userEmailInput.toLowerCase().trim()
+      : (sessionEmail || (headerEmail && headerEmail.includes("@") ? headerEmail.toLowerCase().trim() : ""));
+
+    if (!userEmail) {
+      return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
+    }
+
+    if (!topic) {
+      return NextResponse.json({ success: false, error: "제품명이나 핵심 주제를 입력해 주세요." }, { status: 400 });
+    }
+
+    const systemPrompt = `당신은 최고 수준의 숏폼(유튜브 쇼츠, 인스타 릴스, 틱톡) 광고 카피라이터이자 브랜드 디렉터입니다.
+회사 전속 모델인 '${modelName}'(보이스: ${modelVoice})의 페르소나를 살려, 15~30초 동안 시청자를 사로잡는 세로형 쇼츠 홍보 발화 대본을 작성하세요.
+
+[규칙]
+1. 첫 문장은 스크롤을 멈추게 하는 강력한 훅(Hook)으로 시작할 것.
+2. 제품/서비스의 차별점과 혜택을 2~3문장으로 간결하고 명확하게 전달할 것.
+3. 마지막은 친근한 행동 촉구(Call to Action: 프로필 링크 확인, 지금 바로 주문 등)로 마무리할 것.
+4. 모델의 연기 톤 지시는 맨 앞이나 문맥에 '[연기 지시: 밝고 자신감 있는 미소로...]' 형식으로 자연스럽게 포함할 것.
+5. 오직 모델이 발화할 대본과 연기 지시만 깔끔하게 출력하고, 불필요한 설명이나 따옴표는 생략할 것.`;
+
+    const userPrompt = `제품/홍보 주제: ${topic}`;
+
+    const aiRes = await callAiCaller(
+      `${systemPrompt}\n\n${userPrompt}`,
+      { model: "gemini-2.5-flash" }
+    );
+
+    const script = unwrapAiCallerText(aiRes?.text || aiRes?.content || "");
+
+    // 토큰 차감 및 감사 로그 (가벼운 작업: 1토큰)
+    await deductTokens(userEmail, 1, "AI 전속 모델 쇼츠 대본 추천").catch(() => {});
+    await recordAiUsageLog({
+      userEmail,
+      feature: "AI_MODEL_SCRIPT",
+      tokensUsed: 1,
+      details: `주제: ${topic.slice(0, 30)}`,
+    }).catch(() => {});
+
+    return NextResponse.json({
+      success: true,
+      script: script || `안녕하세요! ${modelName}입니다. 오늘 소개해드릴 제품은 ${topic}입니다. 지금 프로필 링크에서 만나보세요!`,
+      modelName,
+      modelVoice,
+    });
+  } catch (error: any) {
+    console.error("[AiModelScript Error]:", error);
+    return NextResponse.json(
+      { success: false, error: error.message || "대본 생성 중 오류가 발생했습니다." },
+      { status: 500 }
+    );
+  }
+}

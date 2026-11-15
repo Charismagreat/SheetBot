@@ -3643,6 +3643,11 @@
             android:id="@+id/cardInsta"
             layout="@layout/card_instagram_automation" />
 
+        <!-- 독립 카드: ai_model (🎭 AI 전속 모델 & 홍보 크리에이터 - Veo 3 / Live API) -->
+        <include
+            android:id="@+id/cardAiModel"
+            layout="@layout/card_ai_model" />
+
         <!-- 독립 카드: mobile_site_builder (🌐 AI 모바일 홈페이지 제작 & 실시간 관리) -->
         <include
             android:id="@+id/cardSite"

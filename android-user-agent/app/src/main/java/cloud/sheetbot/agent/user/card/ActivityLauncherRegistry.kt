@@ -48,6 +48,8 @@ class ActivityLauncherRegistry(
     private val getSite: () -> MobileSiteCardController,
     private val isKakaoInitialized: () -> Boolean,
     private val getKakao: () -> KakaoSyncCardController,
+    private val isAiModelInitialized: () -> Boolean = { false },
+    private val getAiModel: () -> AiModelCardController = { throw IllegalStateException("AiModel not initialized") },
     private val isTargetFilterInitialized: () -> Boolean,
     private val getTargetFilter: () -> TargetFilterController
 ) {
@@ -186,6 +188,15 @@ class ActivityLauncherRegistry(
     ) { uri ->
         if (uri != null && isKakaoInitialized()) {
             getKakao().handleFileSelected(uri)
+        }
+    }
+
+    // 15-1. 🎭 AI 전속 모델 제품 사진 선택 런처
+    val aiModelProductPickerLauncher: ActivityResultLauncher<String> = activity.registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null && isAiModelInitialized()) {
+            getAiModel().handleProductImageSelected(uri)
         }
     }
 
