@@ -33,19 +33,32 @@ export async function POST(req: NextRequest) {
   try {
     const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
     const headerEmail = req.headers.get("x-sheetbot-user-email");
+    const headerPhone = req.headers.get("x-filetosheet-phone") || req.headers.get("x-sheetbot-phone");
 
     const json = await req.json().catch(() => ({}));
     const userEmailInput = String(json.userEmail || json.email || "").trim();
+    const phoneInput = String(json.phoneNumber || json.phone || headerPhone || "").trim();
     const topic = String(json.topic || "").trim();
     const modelName = String(json.modelName || "지아").trim();
     const modelVoice = String(json.modelVoice || "Kore").trim();
 
-    const userEmail = (userEmailInput && userEmailInput.includes("@"))
+    let userEmail = (userEmailInput && userEmailInput.includes("@"))
       ? userEmailInput.toLowerCase().trim()
       : (sessionEmail || (headerEmail && headerEmail.includes("@") ? headerEmail.toLowerCase().trim() : ""));
 
+    // 파투(FileToSheet) 휴대폰 로그인 회원 지원
+    if (!userEmail && phoneInput) {
+      const cleanDigits = phoneInput.replace(/[^0-9]/g, "");
+      if (cleanDigits.length >= 8) {
+        userEmail = `fts_${cleanDigits}@filetosheet.cloud`;
+      }
+    }
+
     if (!userEmail) {
-      return NextResponse.json({ success: false, error: "구글 계정 로그인이 필요합니다." }, { status: 401 });
+      return NextResponse.json(
+        { success: false, error: "구글 계정 로그인 또는 파투(FileToSheet) 휴대폰 로그인이 필요합니다." },
+        { status: 401 }
+      );
     }
 
     if (!topic) {

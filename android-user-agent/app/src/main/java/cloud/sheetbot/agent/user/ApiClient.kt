@@ -1442,10 +1442,11 @@ object ApiClient {
         topic: String,
         modelName: String = "",
         modelVoice: String = "",
-        userEmail: String
+        userEmail: String,
+        phoneNumber: String = ""
     ): String = withContext(Dispatchers.IO) {
-        if (userEmail.isBlank()) {
-            throw IllegalStateException("구글 계정 로그인이 필요합니다.")
+        if (userEmail.isBlank() && phoneNumber.isBlank()) {
+            throw IllegalStateException("구글 계정 로그인 또는 파투(FileToSheet) 휴대폰 로그인이 필요합니다.")
         }
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val jsonPayload = JSONObject().apply {
@@ -1453,17 +1454,20 @@ object ApiClient {
             put("modelName", modelName)
             put("modelVoice", modelVoice)
             put("userEmail", userEmail)
+            put("phoneNumber", phoneNumber)
         }.toString()
 
         var serverError: String? = null
         for (host in hosts) {
             val endpoint = "$host/api/user/ai-model/script"
             try {
-                val req = Request.Builder()
+                val reqBuilder = Request.Builder()
                     .url(endpoint)
                     .post(jsonPayload.toRequestBody("application/json; charset=utf-8".toMediaType()))
-                    .build()
-                val response = client.newCall(req).execute()
+                if (phoneNumber.isNotBlank()) {
+                    reqBuilder.header("x-filetosheet-phone", phoneNumber)
+                }
+                val response = client.newCall(reqBuilder.build()).execute()
                 val body = response.body?.string() ?: ""
                 if (body.startsWith("{")) {
                     val resJson = JSONObject(body)
@@ -1478,7 +1482,7 @@ object ApiClient {
                         }
                     }
                 } else if (response.code == 401) {
-                    throw IllegalStateException("구글 계정 로그인이 필요합니다.")
+                    throw IllegalStateException("구글 계정 로그인 또는 파투(FileToSheet) 휴대폰 로그인이 필요합니다.")
                 }
             } catch (e: Exception) {
                 if (e is IllegalStateException) throw e
@@ -1515,8 +1519,15 @@ object ApiClient {
         modelVoice: String = "",
         modelStyle: String = "",
         file: File? = null,
-        userEmail: String
+        userEmail: String,
+        phoneNumber: String = ""
     ): AiModelShortsResult = withContext(Dispatchers.IO) {
+        if (userEmail.isBlank() && phoneNumber.isBlank()) {
+            return@withContext AiModelShortsResult(
+                success = false,
+                error = "구글 계정 로그인 또는 파투(FileToSheet) 휴대폰 로그인이 필요합니다."
+            )
+        }
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         var lastErr = "AI 전속 모델 쇼츠 영상 생성 실패"
 
@@ -1526,6 +1537,7 @@ object ApiClient {
                 val multipartBuilder = MultipartBody.Builder()
                     .setType(MultipartBody.FORM)
                     .addFormDataPart("userEmail", userEmail)
+                    .addFormDataPart("phoneNumber", phoneNumber)
                     .addFormDataPart("topic", topic)
                     .addFormDataPart("script", script)
                     .addFormDataPart("modelName", modelName)

@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
     const headerEmail = req.headers.get("x-sheetbot-user-email");
 
     let userEmailInput = "";
+    let phoneInput = "";
     let topic = "";
     let script = "";
     let modelName = "지아 (브랜드 앰배서더)";
@@ -69,6 +70,7 @@ export async function POST(req: NextRequest) {
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
       userEmailInput = String(formData.get("userEmail") || formData.get("email") || "").trim();
+      phoneInput = String(formData.get("phoneNumber") || formData.get("phone") || "").trim();
       topic = String(formData.get("topic") || "").trim();
       script = String(formData.get("script") || "").trim();
       modelName = String(formData.get("modelName") || modelName).trim();
@@ -87,6 +89,7 @@ export async function POST(req: NextRequest) {
     } else {
       const json = await req.json().catch(() => ({}));
       userEmailInput = String(json.userEmail || json.email || "").trim();
+      phoneInput = String(json.phoneNumber || json.phone || "").trim();
       topic = String(json.topic || "").trim();
       script = String(json.script || "").trim();
       modelName = String(json.modelName || modelName).trim();
@@ -94,12 +97,26 @@ export async function POST(req: NextRequest) {
       modelStyle = String(json.modelStyle || modelStyle).trim();
     }
 
-    const userEmail = (userEmailInput && userEmailInput.includes("@"))
+    const headerPhone = req.headers.get("x-filetosheet-phone") || req.headers.get("x-sheetbot-phone");
+    if (!phoneInput && headerPhone) phoneInput = headerPhone;
+
+    let userEmail = (userEmailInput && userEmailInput.includes("@"))
       ? userEmailInput.toLowerCase().trim()
       : (sessionEmail || (headerEmail && headerEmail.includes("@") ? headerEmail.toLowerCase().trim() : ""));
 
+    // 파투(FileToSheet) 휴대폰 로그인 회원 지원
+    if (!userEmail && phoneInput) {
+      const cleanDigits = phoneInput.replace(/[^0-9]/g, "");
+      if (cleanDigits.length >= 8) {
+        userEmail = `fts_${cleanDigits}@filetosheet.cloud`;
+      }
+    }
+
     if (!userEmail) {
-      return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
+      return NextResponse.json(
+        { success: false, error: "구글 계정 로그인 또는 파투(FileToSheet) 휴대폰 로그인이 필요합니다." },
+        { status: 401 }
+      );
     }
 
     if (!topic && !script) {

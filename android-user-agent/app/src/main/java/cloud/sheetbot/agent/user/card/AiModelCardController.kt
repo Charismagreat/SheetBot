@@ -489,13 +489,22 @@ class AiModelCardController(
             return
         }
 
-        val curModel = prefs.getActiveAiModel()
-        val userEmail = prefs.userEmail ?: ""
-        if (userEmail.isBlank()) {
-            Toast.makeText(activity, "구글 계정 연동(로그인)이 필요합니다.", Toast.LENGTH_SHORT).show()
+        val hasGoogle = !prefs.userEmail.isNullOrBlank() && !prefs.userEmail!!.endsWith("@filetosheet.cloud")
+        val hasFts = prefs.isFtsPaired || !prefs.ftsPhoneNumber.isNullOrBlank()
+
+        if (!hasGoogle && !hasFts) {
+            Toast.makeText(activity, "구글 계정 로그인 또는 파투(FileToSheet) 휴대폰 로그인이 필요합니다.", Toast.LENGTH_SHORT).show()
             return
         }
 
+        val effectiveEmail = prefs.userEmail ?: if (!prefs.ftsPhoneNumber.isNullOrBlank()) {
+            "fts_${prefs.ftsPhoneNumber!!.replace("[^0-9]".toRegex(), "")}@filetosheet.cloud"
+        } else {
+            ""
+        }
+        val effectivePhone = prefs.ftsPhoneNumber ?: ""
+
+        val curModel = prefs.getActiveAiModel()
         binding.btnAiSuggestScript.isEnabled = false
         binding.btnAiSuggestScript.text = "작성 중..."
 
@@ -505,7 +514,8 @@ class AiModelCardController(
                     topic = topic,
                     modelName = curModel.name,
                     modelVoice = curModel.voice,
-                    userEmail = userEmail
+                    userEmail = effectiveEmail,
+                    phoneNumber = effectivePhone
                 )
                 if (script.isNotBlank()) {
                     binding.etProductScript.setText(script)
@@ -534,10 +544,21 @@ class AiModelCardController(
             Toast.makeText(activity, "제품명 또는 홍보 대본을 입력해 주세요.", Toast.LENGTH_SHORT).show()
             return
         }
-        if (userEmail.isBlank()) {
-            Toast.makeText(activity, "구글 계정 연동(이메일)이 필요합니다.", Toast.LENGTH_SHORT).show()
+
+        val hasGoogle = !prefs.userEmail.isNullOrBlank() && !prefs.userEmail!!.endsWith("@filetosheet.cloud")
+        val hasFts = prefs.isFtsPaired || !prefs.ftsPhoneNumber.isNullOrBlank()
+
+        if (!hasGoogle && !hasFts) {
+            Toast.makeText(activity, "구글 계정 로그인 또는 파투(FileToSheet) 휴대폰 로그인이 필요합니다.", Toast.LENGTH_SHORT).show()
             return
         }
+
+        val effectiveEmail = prefs.userEmail ?: if (!prefs.ftsPhoneNumber.isNullOrBlank()) {
+            "fts_${prefs.ftsPhoneNumber!!.replace("[^0-9]".toRegex(), "")}@filetosheet.cloud"
+        } else {
+            ""
+        }
+        val effectivePhone = prefs.ftsPhoneNumber ?: ""
 
         binding.progressAiModel.visibility = View.VISIBLE
         binding.tvAiModelStatus.visibility = View.VISIBLE
@@ -553,7 +574,8 @@ class AiModelCardController(
                     modelVoice = prefs.aiModelVoice,
                     modelStyle = prefs.aiModelStyle,
                     file = selectedProductFile,
-                    userEmail = userEmail
+                    userEmail = effectiveEmail,
+                    phoneNumber = effectivePhone
                 )
 
                 if (result.success) {
