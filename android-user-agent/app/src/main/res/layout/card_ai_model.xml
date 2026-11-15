@@ -8,14 +8,6 @@
     android:padding="13dp"
     android:layout_marginBottom="12dp">
 
-    <!-- 상단 구분선 -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#334155"
-        android:layout_marginTop="6dp"
-        android:layout_marginBottom="10dp" />
-
     <!-- 0. 카드 헤더 -->
     <LinearLayout
         android:id="@+id/layoutAiModelHeader"
@@ -23,7 +15,6 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:layout_marginBottom="8dp"
         android:clickable="true"
         android:focusable="true">
 
@@ -78,7 +69,7 @@
         android:orientation="vertical"
         android:background="#0F172A"
         android:padding="10dp"
-        android:layout_marginBottom="12dp">
+        android:layout_marginTop="8dp">
 
         <!-- 기능 설명 배너 -->
         <TextView
