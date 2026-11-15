@@ -115,16 +115,40 @@
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
 
-                <!-- 마스터 아바타 이미지 뷰어 -->
-                <ImageView
-                    android:id="@+id/ivModelMasterAvatar"
-                    android:layout_width="64dp"
-                    android:layout_height="64dp"
-                    android:background="#312E81"
-                    android:scaleType="centerCrop"
-                    android:src="@android:drawable/ic_menu_camera"
-                    android:contentDescription="전속 모델 대표 아바타"
-                    android:layout_marginEnd="10dp" />
+                <!-- 마스터 아바타 이미지 및 전신 3D 버튼 -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:layout_marginEnd="10dp">
+
+                    <ImageView
+                        android:id="@+id/ivModelMasterAvatar"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:background="#312E81"
+                        android:scaleType="centerCrop"
+                        android:src="@android:drawable/ic_menu_camera"
+                        android:contentDescription="전속 모델 대표 아바타"
+                        android:clickable="true"
+                        android:focusable="true" />
+
+                    <TextView
+                        android:id="@+id/btnViewFullBody3d"
+                        android:layout_width="64dp"
+                        android:layout_height="22dp"
+                        android:background="@drawable/bg_badge_version"
+                        android:backgroundTint="#4338CA"
+                        android:gravity="center"
+                        android:text="🔍 전신 3D"
+                        android:textColor="#E0E7FF"
+                        android:textSize="9.5sp"
+                        android:textStyle="bold"
+                        android:layout_marginTop="3dp"
+                        android:clickable="true"
+                        android:focusable="true" />
+                </LinearLayout>
 
                 <!-- 모델 상세 프로필 정보 -->
                 <LinearLayout
@@ -152,27 +176,54 @@
                         android:layout_marginTop="2dp" />
 
                     <TextView
+                        android:id="@+id/tvModelHeight"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📐 전신: 168cm / 슬림 체형"
+                        android:textColor="#C4B5FD"
+                        android:textSize="10sp"
+                        android:layout_marginTop="2dp" />
+
+                    <TextView
                         android:id="@+id/tvModelStyle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="👗 스타일: 20대 후반, 세련된 비즈니스 캐주얼"
                         android:textColor="#94A3B8"
-                        android:textSize="10sp"
+                        android:textSize="9.5sp"
                         android:maxLines="1"
                         android:ellipsize="end"
                         android:layout_marginTop="2dp" />
                 </LinearLayout>
 
-                <!-- 모델 설정 버튼 -->
-                <Button
-                    android:id="@+id/btnManageModelPersona"
+                <!-- 모델 관리 및 3D 뷰어 버튼 -->
+                <LinearLayout
                     android:layout_width="wrap_content"
-                    android:layout_height="34dp"
-                    android:backgroundTint="#7C3AED"
-                    android:text="⚙️ 모델 설정"
-                    android:textColor="#FFFFFF"
-                    android:textSize="10sp"
-                    android:paddingHorizontal="8dp" />
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center">
+
+                    <Button
+                        android:id="@+id/btnManageModelPersona"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:backgroundTint="#7C3AED"
+                        android:text="⚙️ 모델 관리"
+                        android:textColor="#FFFFFF"
+                        android:textSize="10sp"
+                        android:paddingHorizontal="8dp" />
+
+                    <Button
+                        android:id="@+id/btnOpen3dShowcase"
+                        android:layout_width="wrap_content"
+                        android:layout_height="30dp"
+                        android:backgroundTint="#312E81"
+                        android:text="🌐 3D 뷰어"
+                        android:textColor="#DDD6FE"
+                        android:textSize="9.5sp"
+                        android:paddingHorizontal="6dp"
+                        android:layout_marginTop="4dp" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
 

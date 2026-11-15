@@ -18,7 +18,10 @@ data class AiModelPersona(
     val name: String,
     val voice: String,
     val style: String,
-    val avatarPath: String = ""
+    val avatarPath: String = "",
+    val heightInfo: String = "168cm",
+    val fullBodyPrompt: String = "",
+    val fullBodyImageUrl: String = ""
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -26,6 +29,9 @@ data class AiModelPersona(
         put("voice", voice)
         put("style", style)
         put("avatarPath", avatarPath)
+        put("heightInfo", heightInfo)
+        put("fullBodyPrompt", fullBodyPrompt)
+        put("fullBodyImageUrl", fullBodyImageUrl)
     }
 
     companion object {
@@ -34,7 +40,10 @@ data class AiModelPersona(
             name = obj.optString("name", "지아 (브랜드 앰배서더)"),
             voice = obj.optString("voice", "Kore"),
             style = obj.optString("style", "26-year-old Korean female brand ambassador, warm and trustworthy smile, sleek dark brown hair"),
-            avatarPath = obj.optString("avatarPath", "")
+            avatarPath = obj.optString("avatarPath", ""),
+            heightInfo = obj.optString("heightInfo", "168cm"),
+            fullBodyPrompt = obj.optString("fullBodyPrompt", ""),
+            fullBodyImageUrl = obj.optString("fullBodyImageUrl", "")
         )
 
         val DEFAULT_PRESETS = listOf(
@@ -42,19 +51,28 @@ data class AiModelPersona(
                 id = "model_jia",
                 name = "지아 (브랜드 앰배서더)",
                 voice = "Kore",
-                style = "26-year-old Korean female brand ambassador, warm and trustworthy smile, shoulder-length sleek dark brown hair, clear natural skin, wearing neat beige blazer, studio lighting"
+                style = "26-year-old Korean female brand ambassador, warm and trustworthy smile, shoulder-length sleek dark brown hair, clear natural skin, wearing neat beige blazer, studio lighting",
+                heightInfo = "168cm / 슬림 체형",
+                fullBodyPrompt = "Full body 3D commercial photography of a 26-year-old Korean female brand ambassador, 168cm slender figure, tailored beige blazer with matching trousers, nude pumps, confident standing pose, neutral architectural studio background, soft cinematic studio lights, photorealistic 8k octane render",
+                fullBodyImageUrl = "https://sheetbot.cloud/assets/models/jia_fullbody_3d.png"
             ),
             AiModelPersona(
                 id = "model_minsu",
                 name = "민수 (비즈니스 매니저)",
                 voice = "Puck",
-                style = "32-year-old Korean male business manager, confident warm smile, crisp navy suit over white shirt, modern office background, sharp commercial portrait"
+                style = "32-year-old Korean male business manager, confident warm smile, crisp navy suit over white shirt, modern office background, sharp commercial portrait",
+                heightInfo = "180cm / 슬림핏 정장",
+                fullBodyPrompt = "Full body 3D commercial photography of a 32-year-old Korean male business manager, 180cm athletic posture, wearing crisp dark navy two-piece suit, white shirt, dark blue silk tie, leather dress shoes, standing confidently with arms slightly open, bright modern glass office atrium background, 8k hyperrealistic render",
+                fullBodyImageUrl = "https://sheetbot.cloud/assets/models/minsu_fullbody_3d.png"
             ),
             AiModelPersona(
                 id = "model_seoyeon",
                 name = "서연 (전문 컨설턴트)",
                 voice = "Aoede",
-                style = "29-year-old Korean female professional consultant, intelligent look, subtle glasses, cream blouse, neutral studio background, 85mm lens portrait"
+                style = "29-year-old Korean female professional consultant, intelligent look, subtle glasses, cream blouse, neutral studio background, 85mm lens portrait",
+                heightInfo = "166cm / 단정한 실루엣",
+                fullBodyPrompt = "Full body 3D commercial portrait of a 29-year-old Korean female professional consultant, 166cm, wearing soft cream silk blouse, charcoal gray pencil skirt, minimal stylish eyeglasses, holding a sleek digital tablet, warm intellectual smile, elegant library and studio background, photorealistic Unreal Engine 5 render",
+                fullBodyImageUrl = "https://sheetbot.cloud/assets/models/seoyeon_fullbody_3d.png"
             )
         )
     }

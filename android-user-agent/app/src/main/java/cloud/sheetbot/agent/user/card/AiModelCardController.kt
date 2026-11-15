@@ -72,6 +72,15 @@ class AiModelCardController(
         binding.btnManageModelPersona.setOnClickListener {
             showModelPersonaDialog()
         }
+        binding.ivModelMasterAvatar.setOnClickListener {
+            showFullBody3dDialog(prefs.getActiveAiModel())
+        }
+        binding.btnViewFullBody3d.setOnClickListener {
+            showFullBody3dDialog(prefs.getActiveAiModel())
+        }
+        binding.btnOpen3dShowcase.setOnClickListener {
+            open3dWebShowcase(prefs.getActiveAiModel())
+        }
 
         // 2. 파이프라인 A - 제품 사진 선택 및 초기화
         binding.btnSelectProductImage.setOnClickListener {
@@ -157,9 +166,83 @@ class AiModelCardController(
      * 모델 페르소나 UI 텍스트 갱신
      */
     private fun refreshModelPersonaUi() {
-        binding.tvModelName.text = "모델명: ${prefs.aiModelName}"
-        binding.tvModelVoice.text = "🎙️ 음성: ${prefs.aiModelVoice}"
-        binding.tvModelStyle.text = "👗 스타일: ${prefs.aiModelStyle}"
+        val curModel = prefs.getActiveAiModel()
+        binding.tvModelName.text = "모델명: ${curModel.name}"
+        binding.tvModelVoice.text = "🎙️ 음성: ${curModel.voice}"
+        binding.tvModelHeight.text = "📐 전신: ${curModel.heightInfo}"
+        binding.tvModelStyle.text = "👗 스타일: ${curModel.style}"
+    }
+
+    /**
+     * 🌐 360도 인터랙티브 3D 쇼케이스 웹 뷰어 오픈
+     */
+    private fun open3dWebShowcase(model: cloud.sheetbot.agent.user.AiModelPersona) {
+        val url = "https://sheetbot.cloud/demo/ai-model-3d-viewer?modelId=${model.id}&name=${Uri.encode(model.name)}&voice=${model.voice}"
+        try {
+            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (e: Exception) {
+            Toast.makeText(activity, "3D 뷰어 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * 🔍 선택된 전속 모델의 전신 3D 룩북 & 스펙 브리핑 다이얼로그
+     */
+    private fun showFullBody3dDialog(model: cloud.sheetbot.agent.user.AiModelPersona) {
+        val container = android.widget.LinearLayout(activity).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(40, 30, 40, 20)
+            setBackgroundColor(android.graphics.Color.parseColor("#0F172A"))
+        }
+
+        // 헤더 뱃지
+        val tvHeader = android.widget.TextView(activity).apply {
+            text = "✨ [${model.name}] 전신 3D 스튜디오 룩북"
+            setTextColor(android.graphics.Color.parseColor("#E9D5FF"))
+            textSize = 14f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setPadding(0, 0, 0, 10)
+        }
+
+        // 전신 스펙 요약 박스
+        val tvSpec = android.widget.TextView(activity).apply {
+            val specText = buildString {
+                append("• 신장/체형: ${model.heightInfo}\n")
+                append("• 보이스 페르소나: ${model.voice}\n")
+                append("• 3D 렌더링: 8K Octane / Unreal Engine 5 Photorealistic\n")
+                append("• 전속 라이선스: 사내 상업용 PPL & 쇼츠 무제한\n\n")
+                append("📐 [전신 3D 프롬프트 템플릿]:\n${model.fullBodyPrompt.ifBlank { model.style }}")
+            }
+            text = specText
+            setTextColor(android.graphics.Color.parseColor("#CBD5E1"))
+            textSize = 11f
+            setBackgroundColor(android.graphics.Color.parseColor("#1E293B"))
+            setPadding(20, 20, 20, 20)
+        }
+
+        // 3D 뷰어 바로가기 안내 문구
+        val tvNotice = android.widget.TextView(activity).apply {
+            text = "💡 '360도 뷰어 열기'를 누르시면 모바일 화면에서 모델의 전신 포즈를 360도로 회전하며 감상하고 제품 착용 화보를 시뮬레이션할 수 있습니다."
+            setTextColor(android.graphics.Color.parseColor("#A78BFA"))
+            textSize = 10f
+            setPadding(0, 14, 0, 14)
+        }
+
+        container.addView(tvHeader)
+        container.addView(tvSpec)
+        container.addView(tvNotice)
+
+        AlertDialog.Builder(activity)
+            .setTitle("🎭 AI 전속 모델 전신 3D 프로필")
+            .setView(container)
+            .setPositiveButton("🌐 360도 뷰어 열기") { _, _ ->
+                open3dWebShowcase(model)
+            }
+            .setNeutralButton("모델 변경") { _, _ ->
+                showModelPersonaDialog()
+            }
+            .setNegativeButton("닫기", null)
+            .show()
     }
 
     /**
