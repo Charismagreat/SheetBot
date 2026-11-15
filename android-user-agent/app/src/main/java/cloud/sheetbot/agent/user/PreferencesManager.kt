@@ -1184,6 +1184,15 @@ class PreferencesManager(context: Context) {
             modified = true
         }
 
+        // v2.4.59: 신규 추가된 AI 전속 모델 카드를 시트봇 보관함으로 기본 편입
+        if (!prefs.getBoolean("is_ai_model_moved_to_store_v2459", false)) {
+            currentKnown.add("cardAiModel")
+            currentHidden.add("cardAiModel")
+            currentActive.remove("cardAiModel")
+            prefs.edit().putBoolean("is_ai_model_moved_to_store_v2459", true).apply()
+            modified = true
+        }
+
         if (modified || knownDrawerCardKeys.size != currentKnown.size) {
             hiddenCardKeys = currentHidden
             activeCardOrder = currentActive
@@ -1422,6 +1431,7 @@ class PreferencesManager(context: Context) {
             // AI & 마케팅
             "cardBlog",
             "cardInsta",
+            "cardAiModel",
             "cardSite",
             "cardCompanyResearch",
             "cardLawAdvisory",

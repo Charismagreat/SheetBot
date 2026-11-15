@@ -87,6 +87,7 @@ class CardDrawerController(
         // [5] AI & 마케팅
         CardInfo("cardBlog", "AI 네이버 블로그 자동 포스팅", "✍️", "AI & 마케팅", R.id.cardBlog, R.id.layoutBlogHeader),
         CardInfo("cardInsta", "AI 인스타그램 피드 자동 발행", "📸", "AI & 마케팅", R.id.cardInsta, R.id.layoutInstaHeader),
+        CardInfo("cardAiModel", "AI 전속 모델 & 홍보 크리에이터", "🎭", "AI & 마케팅", R.id.cardAiModel, R.id.layoutAiModelHeader),
         CardInfo("cardSite", "AI 모바일 홈페이지 제작", "🌐", "AI & 마케팅", R.id.cardSite, R.id.layoutSiteHeader),
         CardInfo("cardCompanyResearch", "원클릭 기업 심층 리서치", "🏢", "AI & 마케팅", R.id.cardCompanyResearch, R.id.layoutCompanyResearchHeader),
         CardInfo("cardLawAdvisory", "AI 법률/계약서 팩트체크", "⚖️", "AI & 마케팅", R.id.cardLawAdvisory, R.id.layoutLawAdvisoryHeader),
