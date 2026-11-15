@@ -44,6 +44,10 @@ export async function POST(req: NextRequest) {
       ? userEmailInput.toLowerCase().trim()
       : (sessionEmail || (headerEmail && headerEmail.includes("@") ? headerEmail.toLowerCase().trim() : ""));
 
+    if (!userEmail) {
+      return NextResponse.json({ success: false, error: "구글 계정 로그인이 필요합니다." }, { status: 401 });
+    }
+
     if (!topic) {
       return NextResponse.json({ success: false, error: "제품명이나 핵심 주제를 입력해 주세요." }, { status: 400 });
     }
@@ -75,16 +79,14 @@ export async function POST(req: NextRequest) {
       script = `[연기 지시: 카메라를 향해 밝고 당당한 미소로 인사하며]\n안녕하세요! 전속 모델 ${modelName}입니다.\n\n[연기 지시: 제품의 핵심을 짚으며 신뢰감 넘치는 톤으로]\n이번에 새롭게 준비한 '${topic}'!\n직접 확인해보시면 탁월한 품질과 차별화된 매력을 바로 느끼실 수 있습니다.\n\n[연기 지시: 활기차게 제스처를 취하며]\n놓치면 아쉬운 특별 혜택, 지금 바로 확인해 보세요!`;
     }
 
-    // 로그인된 회원은 토큰 차감 및 감사 로그 기록
-    if (userEmail) {
-      await deductTokens(userEmail, 1, "AI 전속 모델 쇼츠 대본 추천").catch(() => {});
-      await recordAiUsageLog({
-        userEmail,
-        feature: "AI_MODEL_SCRIPT",
-        tokensUsed: 1,
-        details: `주제: ${topic.slice(0, 30)}`,
-      }).catch(() => {});
-    }
+    // 토큰 차감 및 감사 로그 기록 (대본 추천: 1토큰)
+    await deductTokens(userEmail, 1, "AI 전속 모델 쇼츠 대본 추천").catch(() => {});
+    await recordAiUsageLog({
+      userEmail,
+      feature: "AI_MODEL_SCRIPT",
+      tokensUsed: 1,
+      details: `주제: ${topic.slice(0, 30)}`,
+    }).catch(() => {});
 
     return NextResponse.json({
       success: true,

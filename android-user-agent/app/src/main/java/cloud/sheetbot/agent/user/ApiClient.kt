@@ -1444,6 +1444,9 @@ object ApiClient {
         modelVoice: String = "",
         userEmail: String
     ): String = withContext(Dispatchers.IO) {
+        if (userEmail.isBlank()) {
+            throw IllegalStateException("구글 계정 로그인이 필요합니다.")
+        }
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
         val jsonPayload = JSONObject().apply {
             put("topic", topic)
@@ -1452,6 +1455,7 @@ object ApiClient {
             put("userEmail", userEmail)
         }.toString()
 
+        var serverError: String? = null
         for (host in hosts) {
             val endpoint = "$host/api/user/ai-model/script"
             try {
@@ -1469,16 +1473,24 @@ object ApiClient {
                     } else {
                         val err = resJson.optString("error", "")
                         if (err.isNotBlank()) {
+                            serverError = err
                             Log.w(TAG, "대본 추천 API 에러 응답 ($host): $err")
                         }
                     }
+                } else if (response.code == 401) {
+                    throw IllegalStateException("구글 계정 로그인이 필요합니다.")
                 }
             } catch (e: Exception) {
+                if (e is IllegalStateException) throw e
                 Log.w(TAG, "대본 추천 네트워크 오류 ($host): ${e.message}")
             }
         }
 
-        // 지능형 폴백: 네트워크 불안정 시에도 모델 페르소나 맞춤형 쇼츠 대본 즉각 제공
+        if (!serverError.isNullOrBlank()) {
+            throw IllegalStateException(serverError)
+        }
+
+        // 로그인된 상태에서 일시적 네트워크 순단 시 페르소나 맞춤형 쇼츠 대본 보조
         val fallbackModel = if (modelName.isNotBlank()) modelName else "지아"
         """
         |[연기 지시: 카메라를 정면으로 바라보며 밝고 자신감 있는 미소로 시작]

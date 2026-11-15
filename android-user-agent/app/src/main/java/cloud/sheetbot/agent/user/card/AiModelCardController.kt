@@ -491,6 +491,11 @@ class AiModelCardController(
 
         val curModel = prefs.getActiveAiModel()
         val userEmail = prefs.userEmail ?: ""
+        if (userEmail.isBlank()) {
+            Toast.makeText(activity, "구글 계정 연동(로그인)이 필요합니다.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         binding.btnAiSuggestScript.isEnabled = false
         binding.btnAiSuggestScript.text = "작성 중..."
 
