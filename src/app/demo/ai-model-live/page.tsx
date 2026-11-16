@@ -3,6 +3,19 @@
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { getEgdeskBasePath } from "@/lib/egdesk-helpers";
+
+function resolveStaticAssetUrl(relativePath: string): string {
+  const cleanRel = relativePath.startsWith("/") ? relativePath : `/${relativePath}`;
+  if (typeof window === "undefined") {
+    return `/t/mcp-server-fxkud1/p/SheetBot${cleanRel}`;
+  }
+  const basePath = getEgdeskBasePath();
+  if (basePath) return `${basePath}${cleanRel}`;
+  const host = window.location.hostname;
+  if (host === "localhost" || host === "127.0.0.1") return cleanRel;
+  return `/t/mcp-server-fxkud1/p/SheetBot${cleanRel}`;
+}
 
 interface ModelProfile {
   id: string;
@@ -153,10 +166,10 @@ function LiveShowcaseContent() {
 
   const currentImage =
     modelState === "speaking"
-      ? `/assets/models/${model.assetKey}_front.jpg`
+      ? resolveStaticAssetUrl(`/assets/models/${model.assetKey}_front.jpg`)
       : modelState === "listening"
-      ? `/assets/models/${model.assetKey}_quarter.jpg`
-      : `/assets/models/${model.assetKey}_front.jpg`;
+      ? resolveStaticAssetUrl(`/assets/models/${model.assetKey}_quarter.jpg`)
+      : resolveStaticAssetUrl(`/assets/models/${model.assetKey}_front.jpg`);
 
   return (
     <div className="min-h-screen bg-[#070B14] text-slate-100 flex flex-col font-sans select-none">

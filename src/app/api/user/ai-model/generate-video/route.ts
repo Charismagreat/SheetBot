@@ -16,6 +16,10 @@ import {
 } from "@/lib/egdesk-helpers";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { setupDatabase } from "@/lib/setup-db";
+import { saveAiShortsMeta } from "@/app/api/user/ai-model/video-meta/route";
+import fs from "fs";
+import path from "path";
+import os from "os";
 
 const AI_MODEL_SHEET_HEADERS = [
   "ID",
@@ -132,9 +136,27 @@ export async function POST(req: NextRequest) {
       script = unwrapAiCallerText(aiScriptRes?.text || aiScriptRes?.content || `안녕하세요! ${modelName}입니다. 오늘 소개해드릴 제품은 ${topic}입니다.`);
     }
 
-    // 2. 구글 드라이브 폴더 격리 업로드 ([SheetBot] AI 모델 영상 보관함)
+    // 2. 구글 드라이브 폴더 격리 업로드 ([SheetBot] AI 모델 영상 보관함) 및 제품 이미지 로컬/프록시 캐싱
+    const nowStr = getKoreanTimeString();
+    const videoId = `aimodel_${Date.now()}`;
     let productDriveUrl = "";
+    let productProxyImgUrl = "";
     let driveFolderUrl = "";
+
+    if (uploadedFile) {
+      try {
+        const cacheDir = path.join(os.tmpdir(), "sheetbot_drive_attachments");
+        if (!fs.existsSync(cacheDir)) {
+          fs.mkdirSync(cacheDir, { recursive: true });
+        }
+        const safeName = uploadedFile.name.replace(/[\\/:*?"<>|]/g, "_").trim() || "product.jpg";
+        const localCachePath = path.join(cacheDir, `${videoId}_${safeName}`);
+        fs.writeFileSync(localCachePath, uploadedFile.buffer);
+        productProxyImgUrl = `/api/user/files/drive-download?fileId=${encodeURIComponent(videoId)}&fileName=${encodeURIComponent(safeName)}&mimeType=${encodeURIComponent(uploadedFile.mimeType)}`;
+      } catch (cacheErr: any) {
+        console.warn("[AiModelVideo] Local product image cache warning:", cacheErr.message);
+      }
+    }
 
     try {
       const parentFolder = await findOrCreateEgdeskFolder("[SheetBot] 연동 데이터");
@@ -152,15 +174,23 @@ export async function POST(req: NextRequest) {
           folderId: targetFolderId,
         });
         productDriveUrl = uploadRes?.file?.webViewLink || uploadRes?.webViewLink || "";
+        const driveId = uploadRes?.file?.id || uploadRes?.id || "";
+        if (driveId && !productProxyImgUrl) {
+          productProxyImgUrl = `/api/user/files/drive-download?fileId=${encodeURIComponent(driveId)}&fileName=${encodeURIComponent(uploadedFile.name)}`;
+        }
       }
     } catch (e: any) {
       console.warn("[AiModelVideo] Drive upload warning:", e.message);
     }
 
-    // 3. 비디오 생성 메타데이터 (Veo 3 비디오 렌더링 파이프라인)
-    const nowStr = getKoreanTimeString();
-    const videoId = `aimodel_${Date.now()}`;
-    const demoVideoUrl = `https://sheetbot.cloud/demo/ai-shorts-player?id=${videoId}&voice=${modelVoice}&name=${encodeURIComponent(modelName)}&topic=${encodeURIComponent(topic)}&script=${encodeURIComponent(script)}`;
+    // 3. 비디오 생성 메타데이터 저장 및 단축/호환 URL 구성
+    const firstTopicLine = topic
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)[0] || topic.slice(0, 32);
+    const shortTitle = firstTopicLine.length > 36 ? firstTopicLine.slice(0, 36) + "..." : firstTopicLine;
+
+    const demoVideoUrl = `https://sheetbot.cloud/demo/ai-shorts-player?id=${videoId}&voice=${encodeURIComponent(modelVoice)}&name=${encodeURIComponent(modelName)}&topic=${encodeURIComponent(topic)}&script=${encodeURIComponent(script)}${productProxyImgUrl ? `&img=${encodeURIComponent(productProxyImgUrl)}` : ""}`;
 
     // 4. 구글 시트 바인딩 및 장부 기록 ([SheetBot] AI 홍보 콘텐츠 관리대장)
     let sheetUrl = "";
@@ -195,6 +225,19 @@ export async function POST(req: NextRequest) {
     } catch (e: any) {
       console.warn("[AiModelVideo] Sheet binding warning:", e.message);
     }
+
+    saveAiShortsMeta({
+      id: videoId,
+      modelName,
+      modelVoice,
+      topic,
+      shortTitle,
+      script,
+      productImageUrl: productProxyImgUrl || productDriveUrl || undefined,
+      sheetUrl,
+      driveFolderUrl,
+      createdAt: nowStr,
+    });
 
     // 5. 토큰 차감 (영상 생성 5토큰) 및 감사 로그
     await deductTokens(userEmail, 5, "AI 전속 모델 쇼츠 영상 생성 (Veo 3)").catch(() => {});

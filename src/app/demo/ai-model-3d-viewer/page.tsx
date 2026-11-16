@@ -2,6 +2,19 @@
 
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { getEgdeskBasePath } from "@/lib/egdesk-helpers";
+
+function resolveStaticAssetUrl(relativePath: string): string {
+  const cleanRel = relativePath.startsWith("/") ? relativePath : `/${relativePath}`;
+  if (typeof window === "undefined") {
+    return `/t/mcp-server-fxkud1/p/SheetBot${cleanRel}`;
+  }
+  const basePath = getEgdeskBasePath();
+  if (basePath) return `${basePath}${cleanRel}`;
+  const host = window.location.hostname;
+  if (host === "localhost" || host === "127.0.0.1") return cleanRel;
+  return `/t/mcp-server-fxkud1/p/SheetBot${cleanRel}`;
+}
 
 interface ModelSpec {
   id: string;
@@ -126,8 +139,8 @@ function ViewerContent() {
 
   const currentImageUrl =
     activeAngle === "sheet"
-      ? `/assets/models/${model.assetKey}_turnaround.jpg`
-      : `/assets/models/${model.assetKey}_${activeAngle}.jpg`;
+      ? resolveStaticAssetUrl(`/assets/models/${model.assetKey}_turnaround.jpg`)
+      : resolveStaticAssetUrl(`/assets/models/${model.assetKey}_${activeAngle}.jpg`);
 
   return (
     <div className="min-h-screen bg-[#070B14] text-slate-100 flex flex-col font-sans select-none">
@@ -135,7 +148,7 @@ function ViewerContent() {
       <div className="hidden" aria-hidden="true">
         {Object.values(PRESET_MODELS).map((m) =>
           (["front", "quarter", "side", "walk", "turnaround"] as const).map((ang) => (
-            <img key={`${m.id}_${ang}`} src={`/assets/models/${m.assetKey}_${ang}.jpg`} alt="" />
+            <img key={`${m.id}_${ang}`} src={resolveStaticAssetUrl(`/assets/models/${m.assetKey}_${ang}.jpg`)} alt="" />
           ))
         )}
       </div>
@@ -185,7 +198,7 @@ function ViewerContent() {
                 }`}
               >
                 <img
-                  src={`/assets/models/${m.assetKey}_avatar.jpg`}
+                  src={resolveStaticAssetUrl(`/assets/models/${m.assetKey}_avatar.jpg`)}
                   alt={m.name}
                   className="w-6 h-6 rounded-full object-cover border border-white/30"
                 />
@@ -304,7 +317,7 @@ function ViewerContent() {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <img
-                src={`/assets/models/${model.assetKey}_avatar.jpg`}
+                src={resolveStaticAssetUrl(`/assets/models/${model.assetKey}_avatar.jpg`)}
                 alt={model.name}
                 className="w-8 h-8 rounded-full object-cover border border-purple-400/50"
               />
