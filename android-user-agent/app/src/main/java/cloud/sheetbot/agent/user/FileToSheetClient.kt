@@ -1737,6 +1737,11 @@ object FileToSheetClient {
                 try {
                     val queryArgs = JSONObject().apply {
                         put("tableName", "user_projects")
+                        if (cleanPhone.isNotBlank()) {
+                            put("filters", JSONObject().apply { put("phone_number", cleanPhone) })
+                        } else if (reqProjectId.isNotBlank()) {
+                            put("filters", JSONObject().apply { put("id", reqProjectId) })
+                        }
                         put("limit", 100)
                     }
                     val mcpReq = JSONObject().apply {

@@ -324,10 +324,17 @@ async function fetchFtsCopilotContext(params: {
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 5500);
+        const queryFilters: Record<string, string> = {};
+        if (reqProjectId.length > 0) {
+          queryFilters.id = reqProjectId;
+        } else if (cleanPhone.length >= 9) {
+          queryFilters.phone_number = cleanPhone;
+        }
         const mcpReq = {
           tool: "user_data_query",
           arguments: {
             tableName: "user_projects",
+            ...(Object.keys(queryFilters).length > 0 ? { filters: queryFilters } : {}),
             limit: 100,
           },
         };
