@@ -158,9 +158,18 @@ export async function POST(req: NextRequest) {
         if (!fs.existsSync(cacheDir)) {
           fs.mkdirSync(cacheDir, { recursive: true });
         }
+        const publicUploadDir = path.join(process.cwd(), "public", "uploads", "ai-products");
+        if (!fs.existsSync(publicUploadDir)) {
+          fs.mkdirSync(publicUploadDir, { recursive: true });
+        }
+
         const safeName = uploadedFile.name.replace(/[\\/:*?"<>|]/g, "_").trim() || "product.jpg";
         const localCachePath = path.join(cacheDir, `${videoId}_${safeName}`);
         fs.writeFileSync(localCachePath, uploadedFile.buffer);
+
+        const publicProductPath = path.join(publicUploadDir, `${videoId}_${safeName}`);
+        fs.writeFileSync(publicProductPath, uploadedFile.buffer);
+
         productProxyImgUrl = `/api/user/files/drive-download?fileId=${encodeURIComponent(videoId)}&fileName=${encodeURIComponent(safeName)}&mimeType=${encodeURIComponent(uploadedFile.mimeType)}`;
       } catch (cacheErr: any) {
         console.warn("[AiModelVideo] Local product image cache warning:", cacheErr.message);

@@ -19,6 +19,8 @@ function inferMimeTypeFromFileName(fileName: string, fallback = "application/oct
       return "image/webp";
     case "gif":
       return "image/gif";
+    case "svg":
+      return "image/svg+xml";
     case "pdf":
       return "application/pdf";
     case "xlsx":
@@ -58,6 +60,8 @@ export async function downloadDriveFileToLocalTemp(
   if (!fileId || fileId === "learned_file") return null;
 
   const cacheDir = path.join(os.tmpdir(), "sheetbot_drive_attachments");
+  const publicUploadDir = path.join(process.cwd(), "public", "uploads", "ai-products");
+  
   if (!fs.existsSync(cacheDir)) {
     fs.mkdirSync(cacheDir, { recursive: true });
   }
@@ -65,7 +69,7 @@ export async function downloadDriveFileToLocalTemp(
   const safeName = fileName.replace(/[\\/:*?"<>|]/g, "_").trim() || "file";
   const localPath = path.join(cacheDir, `${fileId}_${safeName}`);
 
-  // 이미 다운로드된 유효한 캐시 파일이 있으면 즉시 재사용 (0ms)
+  // 1. 직접 지정된 캐시 파일 존재 확인 (0ms)
   if (fs.existsSync(localPath)) {
     const stat = fs.statSync(localPath);
     if (stat.size > 0) {
@@ -77,7 +81,50 @@ export async function downloadDriveFileToLocalTemp(
     }
   }
 
-  // 1차: Owner / Personal OAuth drive_download 호출
+  // 2. public/uploads/ai-products 디렉토리 우선 탐색
+  if (fs.existsSync(publicUploadDir)) {
+    const publicPath = path.join(publicUploadDir, `${fileId}_${safeName}`);
+    if (fs.existsSync(publicPath)) {
+      const stat = fs.statSync(publicPath);
+      if (stat.size > 0) {
+        return {
+          localPath: publicPath,
+          mimeType: inferMimeTypeFromFileName(safeName),
+          size: stat.size,
+        };
+      }
+    }
+    const publicPathAlt = path.join(publicUploadDir, safeName);
+    if (fs.existsSync(publicPathAlt)) {
+      const stat = fs.statSync(publicPathAlt);
+      if (stat.size > 0) {
+        return {
+          localPath: publicPathAlt,
+          mimeType: inferMimeTypeFromFileName(safeName),
+          size: stat.size,
+        };
+      }
+    }
+  }
+
+  // 3. 캐시 디렉토리에서 fileId prefix로 시작하는 파일 자동 탐색 (와일드카드 폴백)
+  try {
+    const files = fs.readdirSync(cacheDir);
+    const matched = files.find((f) => f.startsWith(`${fileId}_`));
+    if (matched) {
+      const matchedPath = path.join(cacheDir, matched);
+      const stat = fs.statSync(matchedPath);
+      if (stat.size > 0) {
+        return {
+          localPath: matchedPath,
+          mimeType: inferMimeTypeFromFileName(matched),
+          size: stat.size,
+        };
+      }
+    }
+  } catch {}
+
+  // 4. Owner / Personal OAuth drive_download 호출
   try {
     await callDriveTool("drive_download", {
       fileId,
@@ -86,7 +133,7 @@ export async function downloadDriveFileToLocalTemp(
     });
   } catch (e1: any) {
     console.warn("[DriveDownload] Primary drive_download warning:", e1.message);
-    // 2차: Visitor Workspace Tool 폴백
+    // 5. Visitor Workspace Tool 폴백
     try {
       await callVisitorWorkspaceTool("drive", "drive_download", {
         fileId,
@@ -114,8 +161,8 @@ export async function downloadDriveFileToLocalTemp(
 
 /**
  * GET /api/user/files/drive-download?fileId=...&fileName=...
- * 모바일 앱에서 이메일 첨부(방식 B) 또는 폰 다운로드를 수행할 때
- * 구글 드라이브 로그인 없이 원본 바이너리 파일을 즉시 내려받는 스트리밍 프록시 엔드포인트
+ * 모바일 앱 또는 웹 쇼츠 플레이어에서 구글 드라이브/로컬 제품 이미지를
+ * 즉시 브라우저 인라인 렌더링(inline) 또는 스트리밍 수신하는 엔드포인트
  */
 export async function GET(req: NextRequest) {
   try {
@@ -147,8 +194,11 @@ export async function GET(req: NextRequest) {
       headers: {
         "Content-Type": finalMime,
         "Content-Length": String(fileBuffer.length),
-        "Content-Disposition": `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`,
-        "Cache-Control": "private, max-age=300",
+        // 브라우저 <img> 태그에서 100% 화면 렌더링을 위해 inline 지정 (절대 다운로드 강제 금지)
+        "Content-Disposition": `inline; filename="${encodedName}"; filename*=UTF-8''${encodedName}`,
+        "Cache-Control": "public, max-age=86400, stale-while-revalidate=3600",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
       },
     });
   } catch (err: any) {
