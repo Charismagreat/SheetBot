@@ -10,6 +10,7 @@ import {
   insertRows,
   sendPhoneSms,
   listDriveFiles,
+  callVisitorWorkspaceTool,
 } from "@/lib/egdesk-helpers";
 import { callDriveTool } from "@/lib/sqlite-drive-service";
 import { setupDatabase } from "@/lib/setup-db";
@@ -896,58 +897,93 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
     if (plan.actionType === "DRIVE_FILE_ACTION") {
       // (1-B) 구글 드라이브 & PC 동기화 폴더 파일 탐색 및 스마트폰 다이렉트 전송/요약/문자 연계
       try {
-        const fileKeyword = (plan.driveFileKeyword || plan.filterKeyword || command)
-          .replace(/(구글드라이브|드라이브|피씨|pc|폴더|파일|찾아서|보여줘|알려줘|전송해줘|보내줘|스마트폰|내폰|으로|에서)/gi, " ")
+        // 검색 키워드 정제: '관련', '이미지', '사진', '문서', '파일' 등 수식어 제거하고 핵심 명사만 추출
+        let fileKeyword = (plan.driveFileKeyword || plan.filterKeyword || command)
+          .replace(/(구글드라이브|드라이브|노트북|피씨|pc|컴퓨터|폴더|파일|이미지|사진|문서|자료|관련|찾아서|보여줘|알려줘|전송해줘|보내줘|스마트폰|내폰|으로|에서|의)/gi, " ")
           .trim();
-        const folderKeyword = (plan.driveFolderKeyword || "").trim();
+        // 여러 단어일 경우 가장 핵심적인 첫 번째 또는 긴 단어 추출
+        const keywordTokens = fileKeyword.split(/\s+/).filter((w) => w.length >= 2);
+        if (keywordTokens.length > 0) {
+          fileKeyword = keywordTokens[0];
+        }
+
+        let folderKeyword = (plan.driveFolderKeyword || "").replace(/(폴더|디렉토리|함|의)$/gi, "").trim();
         const operation = (plan.driveOperation || "FETCH").toUpperCase(); // "FETCH" | "SUMMARIZE" | "SEND_SMS"
 
-        // 1. 특정 폴더 지정이 있는 경우(예: '시트봇', '영수증', '다운로드' 등) 해당 폴더 ID 우선 탐색
+        console.log(`[DriveAction] Searching Drive - FileKeyword: "${fileKeyword}", FolderKeyword: "${folderKeyword}"`);
+
+        // 안전한 드라이브 호출 헬퍼
+        const searchDrive = async (q: string, size = 10): Promise<any[]> => {
+          try {
+            const r1 = await callDriveTool("drive_list_files", { query: q, pageSize: size });
+            const f1 = parseDriveToolFiles(r1);
+            if (f1.length > 0) return f1;
+          } catch (e1: any) {
+            console.warn("[DriveAction] callDriveTool error:", e1.message);
+          }
+          try {
+            const r2 = await callVisitorWorkspaceTool("drive", "drive_list_files", { query: q, pageSize: size });
+            const f2 = parseDriveToolFiles(r2);
+            if (f2.length > 0) return f2;
+          } catch (e2: any) {
+            console.warn("[DriveAction] callVisitorWorkspaceTool error:", e2.message);
+          }
+          return [];
+        };
+
+        // 1. 특정 폴더 지정이 있는 경우(예: 'demo', '시트봇', '영수증' 등) 해당 폴더 ID 우선 탐색
         let targetFolderId: string | null = null;
         if (folderKeyword) {
           try {
-            const folderRes = await callDriveTool("drive_list_files", {
-              query: `mimeType = 'application/vnd.google-apps.folder' and name contains '${folderKeyword}' and trashed = false`,
-              pageSize: 3,
-            }).catch(() => null);
-            const folderFiles = parseDriveToolFiles(folderRes);
+            const folderFiles = await searchDrive(
+              `mimeType = 'application/vnd.google-apps.folder' and name contains '${folderKeyword}' and trashed = false`,
+              5
+            );
             if (folderFiles.length > 0) {
+              // 최신 수정순 폴더 우선 선택
+              folderFiles.sort((a: any, b: any) => new Date(b.modifiedTime || 0).getTime() - new Date(a.modifiedTime || 0).getTime());
               targetFolderId = folderFiles[0].id;
+              console.log(`[DriveAction] Found target folder "${folderFiles[0].name}" (id: ${targetFolderId})`);
             }
           } catch (e: any) {
             console.warn("[DriveAction] Folder search warning:", e.message);
           }
         }
 
-        // 2. 파일 검색 쿼리 구성
-        let driveQuery = `trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
+        let foundFiles: any[] = [];
+
+        // 2-A. 특정 폴더가 특정된 경우: 해당 폴더 내부 탐색
         if (targetFolderId) {
-          driveQuery += ` and '${targetFolderId}' in parents`;
-        }
-        if (fileKeyword) {
-          driveQuery += ` and name contains '${fileKeyword}'`;
+          let folderQuery = `'${targetFolderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
+          if (fileKeyword) {
+            folderQuery += ` and name contains '${fileKeyword}'`;
+          }
+          foundFiles = await searchDrive(folderQuery, 10);
         }
 
-        // 3. 구글 드라이브 파일 탐색 (최신 수정순)
-        let driveSearchRes = await callDriveTool("drive_list_files", {
-          query: driveQuery,
-          pageSize: 10,
-        }).catch(() => null);
-        let foundFiles = parseDriveToolFiles(driveSearchRes);
+        // 2-B. 폴더 내에서 못 찾았거나 폴더가 없는 경우: 전체 드라이브에서 파일 키워드로 탐색
+        if (foundFiles.length === 0 && fileKeyword) {
+          console.log(`[DriveAction] Searching globally across Drive for: "${fileKeyword}"`);
+          foundFiles = await searchDrive(
+            `trashed = false and mimeType != 'application/vnd.google-apps.folder' and name contains '${fileKeyword}'`,
+            10
+          );
+        }
 
-        // 특정 폴더 내에서 못 찾았고 폴더 지정이 있었던 경우, 전체 드라이브에서 2차 검색
-        if (foundFiles.length === 0 && targetFolderId && fileKeyword) {
-          const fallbackRes = await callDriveTool("drive_list_files", {
-            query: `trashed = false and mimeType != 'application/vnd.google-apps.folder' and name contains '${fileKeyword}'`,
-            pageSize: 10,
-          }).catch(() => null);
-          foundFiles = parseDriveToolFiles(fallbackRes);
+        // 2-C. 만약 파일 키워드로도 못 찾았고 폴더는 있다면: 해당 폴더 내 모든 파일 목록 제시
+        if (foundFiles.length === 0 && targetFolderId) {
+          console.log(`[DriveAction] Listing all files inside folder id: ${targetFolderId}`);
+          foundFiles = await searchDrive(
+            `'${targetFolderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`,
+            10
+          );
         }
 
         if (foundFiles.length === 0) {
-          isSuccess = false;
-          plan.explanation = `⚠️ 구글 드라이브${folderKeyword ? ` [${folderKeyword}] 폴더` : ""}에서 '${fileKeyword || command}' 관련 파일을 찾지 못했습니다.`;
-          plan.spokenResult = `구글 드라이브에서 해당 파일을 찾지 못했습니다. 파일명을 다시 확인해 주세요.`;
+          // 검색 결과가 0건이어도 정상적인 질의 성공(isSuccess = true)으로 처리하여 앱에서 친절한 안내를 보여줌
+          isSuccess = true;
+          plan.explanation = `⚠️ 구글 드라이브${folderKeyword ? ` [${folderKeyword}] 폴더` : ""}에서 '${fileKeyword || command}' 관련 파일을 찾지 못했습니다.\n폴더명이나 파일명 키워드를 다시 확인해 주세요.`;
+          plan.spokenResult = `구글 드라이브에서 '${fileKeyword || "해당"}' 파일을 찾지 못했습니다. 파일명을 다시 확인해 주세요.`;
           executionDetails = {
             type: "DRIVE_FILE_ACTION",
             status: "NOT_FOUND",
@@ -1004,9 +1040,9 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
             const aiSummaryText = `📄 [${primaryFile.name}] 파일 요약\n• 형식: ${primaryFile.iconType.toUpperCase()} (${primaryFile.sizeFormatted || "크기 미확인"})\n• 최종 수정일: ${primaryFile.modifiedTime}\n• 바로보기 링크가 스마트폰으로 전송되었습니다.`;
             primaryFile.summary = aiSummaryText;
             plan.explanation = aiSummaryText;
-            plan.spokenResult = `구글 드라이브에서 '${primaryFile.name}' 파일을 찾아 핵심 정보를 요약해 드렸습니다.`;
+            plan.spokenResult = `구글 드라이브에서 '${primaryFile.name}' 파일을 찾아 요약해 드렸습니다.`;
           } else {
-            plan.explanation = `📁 구글 드라이브에서 '${primaryFile.name}' 외 ${driveFileDtos.length}건의 파일을 찾았습니다.\n아래 카드를 터치하여 스마트폰으로 바로 열거나 다운로드할 수 있습니다.`;
+            plan.explanation = `📁 구글 드라이브${folderKeyword ? ` [${folderKeyword}] 폴더` : ""}에서 '${primaryFile.name}' 외 ${driveFileDtos.length}건의 파일을 찾았습니다.\n아래 카드를 터치하여 스마트폰으로 바로 열거나 다운로드할 수 있습니다.`;
             plan.spokenResult = `구글 드라이브에서 '${primaryFile.name}' 파일을 찾았습니다. 스마트폰으로 전송해 드렸습니다.`;
           }
 
@@ -1022,9 +1058,9 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
         }
       } catch (driveErr: any) {
         console.error("[CommandExecute] Drive action error:", driveErr);
-        isSuccess = false;
-        plan.explanation = `⚠️ 구글 드라이브 파일 탐색 중 오류가 발생했습니다: ${driveErr.message}`;
-        plan.spokenResult = "구글 드라이브 파일 탐색 중 오류가 발생했습니다.";
+        isSuccess = true; // 통신 예외 시에도 200 반환하여 모바일 앱에 에러 사유를 부드럽게 전달
+        plan.explanation = `⚠️ 구글 드라이브 파일 탐색 중 안내: ${driveErr.message}`;
+        plan.spokenResult = "구글 드라이브 파일 탐색 중 문제가 발생했습니다.";
         executionDetails = { type: "DRIVE_FILE_ACTION", error: driveErr.message, driveFiles: [], primaryDriveFile: null };
       }
     } else if (plan.actionType === "APPS_SCRIPT_RUN") {

@@ -23,9 +23,11 @@ object ApiClient {
     private fun nowKstStr(): String =
         java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.KOREA).format(java.util.Date())
 
-    // 1차 메인 호스트: 이지데스크 운영 공식 터널 (Zero-Latency 즉시 직결)
-    const val PRIMARY_HOST = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot"
-    // 2차 백업 호스트
+    // 1차 메인 호스트: 이지데스크 운영 공식 터널 (현재 활성 인스턴스)
+    const val PRIMARY_HOST = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1-i01o2oa/p/SheetBot"
+    // 2차 백업 호스트: 표준 터널 엔드포인트
+    const val SECONDARY_HOST = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot"
+    // 3차 공식 도메인 호스트
     const val FALLBACK_HOST = "https://sheetbot.cloud"
 
     // 모든 요청에 이용자 세션(visitorSessionId) 및 이메일 헤더를 자동 주입하고,
@@ -95,7 +97,7 @@ object ApiClient {
         pinCode: String? = null,
         visitorSessionId: String? = null
     ): PairResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "페어링 요청 실패"
         val effectiveSid = visitorSessionId?.takeIf { it.isNotBlank() }
             ?: try { PreferencesManager(SheetBotApp.appContext).visitorSessionId } catch (_: Exception) { null }
@@ -170,7 +172,7 @@ object ApiClient {
         referralCode: String? = null,
         visitorSessionId: String? = null
     ): PairResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "구글 로그인 페어링 실패"
         val effectiveSid = visitorSessionId?.takeIf { it.isNotBlank() }
             ?: try { PreferencesManager(SheetBotApp.appContext).visitorSessionId } catch (_: Exception) { null }
@@ -344,7 +346,7 @@ object ApiClient {
      * - 터널 인바운드 레이트리밋(HTTP 429)은 서버 및 터널이 정상 가동 중임을 의미하므로 온라인으로 판정
      */
     suspend fun pingServer(): PingResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         for (host in hosts) {
             val endpoint = "$host/api/wallet/agent/version"
             try {
@@ -525,7 +527,7 @@ object ApiClient {
             }
         }
 
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         for (host in hosts) {
             val endpoint = "$host/api/user/website-monitor/log"
             try {
@@ -626,7 +628,7 @@ object ApiClient {
             }
         }
 
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
             put("sender", sender)
@@ -675,7 +677,7 @@ object ApiClient {
         userEmail: String,
         deviceModel: String? = null
     ): Boolean = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         for (host in hosts) {
             val endpoint = "$host/api/wallet/agent/unlink"
             try {
@@ -749,7 +751,7 @@ object ApiClient {
         }
 
         // 2. 서버 엔드포인트 교차 확인
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         for (host in hosts) {
             val endpoint = "$host/api/user/agent2/version"
             try {
@@ -804,7 +806,7 @@ object ApiClient {
      * 서버의 미발송 영수증 대기열(Outbox Queue) 조회
      */
     suspend fun fetchPendingReceipts(userEmail: String?): List<PendingReceipt> = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         for (host in hosts) {
             val baseEndpoint = "$host/api/wallet/agent/pending-receipts"
             val endpoint = if (!userEmail.isNullOrBlank()) {
@@ -849,7 +851,7 @@ object ApiClient {
      * 영수증 SMS 발송 완료 상태를 서버에 보고
      */
     suspend fun markReceiptSent(id: Long, success: Boolean = true, logId: String? = null): Boolean = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         for (host in hosts) {
             val endpoint = "$host/api/wallet/agent/pending-receipts"
             try {
@@ -943,7 +945,7 @@ object ApiClient {
                 error = "청크 업로드 실패 (파일 ${file.length() / 1024 / 1024}MB는 단일 업로드 한도 7MB 초과). 네트워크 확인 후 재시도해 주세요."
             )
         }
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val fileBytes = file.readBytes()
         val base64Str = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)
 
@@ -1023,7 +1025,7 @@ object ApiClient {
                 )
             }
         }
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val fileBytes = file.readBytes()
         val base64Str = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)
 
@@ -1094,7 +1096,7 @@ object ApiClient {
         domain: String,
         userEmail: String
     ): CompanyResearchResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
             put("companyName", companyName)
@@ -1156,7 +1158,7 @@ object ApiClient {
         val effectiveFileName = fileName?.takeIf { it.isNotBlank() } ?: file?.name ?: "법률자문질의"
 
         // 1. 시트봇 서버(/api/user/law-advisory) 법제처 법령 & 대법원 판례 분석 시도
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastErr = "법률 자문 요청 실패"
         var serverResult: LawAdvisoryResult? = null
 
@@ -1293,7 +1295,7 @@ object ApiClient {
         files: List<File> = emptyList(),
         userEmail: String
     ): BlogPostResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastErr = "블로그 포스팅 원고 작성 요청 실패"
 
         for (host in hosts) {
@@ -1375,7 +1377,7 @@ object ApiClient {
         files: List<File> = emptyList(),
         userEmail: String
     ): InstagramPostResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastErr = "인스타그램 콘텐츠 생성 요청 실패"
 
         for (host in hosts) {
@@ -1448,7 +1450,7 @@ object ApiClient {
         if (userEmail.isBlank() && phoneNumber.isBlank()) {
             throw IllegalStateException("구글 계정 로그인 또는 파투(FileToSheet) 휴대폰 로그인이 필요합니다.")
         }
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val jsonPayload = JSONObject().apply {
             put("topic", topic)
             put("modelName", modelName)
@@ -1528,7 +1530,7 @@ object ApiClient {
                 error = "구글 계정 로그인 또는 파투(FileToSheet) 휴대폰 로그인이 필요합니다."
             )
         }
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastErr = "AI 전속 모델 쇼츠 영상 생성 실패"
 
         for (host in hosts) {
@@ -1597,7 +1599,7 @@ object ApiClient {
         files: List<File> = emptyList(),
         userEmail: String
     ): MobileSiteResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastErr = "모바일 홈페이지 생성 요청 실패"
 
         for (host in hosts) {
@@ -1667,7 +1669,7 @@ object ApiClient {
         address: String? = null,
         slogan: String? = null
     ): Boolean = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("siteId", siteId)
             notice?.let { put("notice", it) }
@@ -1751,7 +1753,7 @@ object ApiClient {
         }
 
         // 2. [2순위 폴백] 기존 단일 Base64 업로드
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val fileBytes = file.readBytes()
         val base64Str = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)
 
@@ -1836,7 +1838,7 @@ object ApiClient {
         fallbackFileName: String = "명함",
         fallbackFolderName: String = "[SheetBot] 명함 보관함"
     ): UploadGenericFileResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val maxAttempts = 60 // 1.5초 * 60회 = 최대 90초 대기 (일시적 구글 지연 시에도 타임아웃 오류 방지)
 
         for (attempt in 1..maxAttempts) {
@@ -1927,7 +1929,7 @@ object ApiClient {
             }
         }
 
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
             put("url", url)
@@ -1979,7 +1981,7 @@ object ApiClient {
         projectId: String? = null,
         token: String? = null
     ): AiCommandResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val cleanPhone = phoneNumber?.replace(Regex("[^0-9]"), "") ?: ""
         val json = JSONObject().apply {
             if (userEmail.isNotBlank()) put("userEmail", userEmail)
@@ -2003,8 +2005,14 @@ object ApiClient {
                 val response = longTimeoutClient.newCall(request).execute()
                 val resStr = response.body?.string() ?: ""
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
-                if (response.isSuccessful && resJson.optBoolean("success", false)) {
-                    Log.i(TAG, "🎉 [자연어 명령 실행 성공] $command")
+                val isSuccessOrHasContent = response.isSuccessful && (
+                    resJson.optBoolean("success", false) ||
+                    resJson.has("explanation") ||
+                    resJson.has("driveFiles") ||
+                    resJson.has("actionType")
+                )
+                if (isSuccessOrHasContent) {
+                    Log.i(TAG, "🎉 [자연어 명령 실행 응답 수신] $command")
                     val detailsObj = resJson.optJSONObject("details")
                     val canPromote = resJson.optBoolean("canPromote", detailsObj?.optBoolean("canPromote", false) ?: false)
                     val suggestedTitle = resJson.optString("suggestedFunctionTitle", detailsObj?.optString("suggestedFunctionTitle", "") ?: "")
@@ -2150,7 +2158,7 @@ object ApiClient {
         spreadsheetId: String? = null,
         functionTitle: String? = null
     ): CommandPromoteResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
             put("command", command)
@@ -2196,7 +2204,7 @@ object ApiClient {
      * 연동 대장 및 스크립트 기반 실행 가능 추천 명령(Capabilities) 조회 (v2.2.6)
      */
     suspend fun fetchCommandCapabilities(userEmail: String): CommandCapabilitiesResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val encodedEmail = java.net.URLEncoder.encode(userEmail, "UTF-8")
 
         for (host in hosts) {
@@ -2278,7 +2286,7 @@ object ApiClient {
             }
         }
 
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
             put("direction", direction)
@@ -2356,7 +2364,7 @@ object ApiClient {
             }
         }
 
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
             put("recipientPhone", recipientPhone)
@@ -2419,7 +2427,7 @@ object ApiClient {
             }
         }
 
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
             put("recipientPhone", recipientPhone)
@@ -2482,7 +2490,7 @@ object ApiClient {
             }
         }
 
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
             put("chatRoomName", chatRoomName)
@@ -2553,7 +2561,7 @@ object ApiClient {
         }
 
         val shouldRecordGoogleSheet = prefs?.isDestinationGoogleSheet == true && prefs.hasGoogleAccount
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
             put("userPhone", prefs?.ftsPhoneNumber ?: "")
@@ -2644,7 +2652,7 @@ object ApiClient {
             }
         }
 
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
             put("textContent", textContent)
@@ -2735,7 +2743,7 @@ object ApiClient {
             }
         }
 
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
             put("userEmail", userEmail)
             put("callerPhone", callerPhone)
@@ -2773,7 +2781,7 @@ object ApiClient {
      * GET /api/wallet/balance?userEmail={email}
      */
     suspend fun fetchWalletBalance(userEmail: String): WalletBalanceResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "토큰 잔액 조회 실패"
 
         for ((index, host) in hosts.withIndex()) {
@@ -2821,7 +2829,7 @@ object ApiClient {
         depositorName: String,
         phoneNumber: String? = null
     ): DepositSessionResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "충전 세션 발급 실패"
 
         for ((index, host) in hosts.withIndex()) {
@@ -2884,7 +2892,7 @@ object ApiClient {
      * GET /api/wallet/referral?userEmail={email}
      */
     suspend fun fetchReferralInfo(userEmail: String): ReferralInfoResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "추천 정보 조회 실패"
 
         for ((index, host) in hosts.withIndex()) {
@@ -2933,7 +2941,7 @@ object ApiClient {
         referralCode: String,
         deviceId: String = "${Build.MANUFACTURER} ${Build.MODEL}"
     ): ReferralClaimResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "초대 코드 등록 실패"
 
         for ((index, host) in hosts.withIndex()) {
@@ -2984,7 +2992,7 @@ object ApiClient {
         sheetTitle: String? = null,
         folderName: String? = null
     ): ProvisionSheetResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "구글 시트 생성 요청 실패"
 
         for (host in hosts) {
@@ -3055,7 +3063,7 @@ object ApiClient {
         tabName: String = "문자발송목록",
         sheetType: String = "SHEET_SMS_CHECKBOX"
     ): AddTabResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "기존 시트 탭 추가 요청 실패"
 
         for (host in hosts) {
@@ -3106,7 +3114,7 @@ object ApiClient {
      * 사장님 상호명/프로필 조회 (type: "order" 또는 "estimate")
      */
     suspend fun getBusinessProfile(email: String, type: String = "order"): BusinessProfileResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "프로필 조회 실패"
 
         for (host in hosts) {
@@ -3140,7 +3148,7 @@ object ApiClient {
      * 사장님 상호명/프로필 실시간 업데이트
      */
     suspend fun updateBusinessProfile(email: String, businessName: String, phone: String = ""): Boolean = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val endpoints = listOf("/api/user/profile", "/api/user/quote/catalog")
         for (host in hosts) {
             for (path in endpoints) {
@@ -3180,7 +3188,7 @@ object ApiClient {
         userEmail: String,
         type: String = "order"
     ): UploadQuoteImageResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val base64Str = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)
         val json = JSONObject().apply {
             put("email", userEmail)
@@ -3233,7 +3241,7 @@ object ApiClient {
         isFullSync: Boolean = true,
         deviceId: String? = null
     ): ContactSyncResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "연락처 동기화 실패"
 
         val contactsArray = org.json.JSONArray()
@@ -3305,7 +3313,7 @@ object ApiClient {
         userEmail: String,
         callerPhone: String
     ): CallSummaryResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "고객 정보 조회 실패"
 
         for (host in hosts) {
@@ -3381,7 +3389,7 @@ object ApiClient {
         phoneNumber: String? = null,
         projectId: String? = null
     ): TaskListResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "할 일 목록 조회 실패"
         val cleanPhone = phoneNumber?.replace("[^0-9]".toRegex(), "").orEmpty()
 
@@ -3468,7 +3476,7 @@ object ApiClient {
         phoneNumber: String? = null,
         projectId: String? = null
     ): Boolean = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val cleanPhone = phoneNumber?.replace("[^0-9]".toRegex(), "").orEmpty()
         for (host in hosts) {
             val endpoint = "$host/api/user/tasks"
@@ -3513,7 +3521,7 @@ object ApiClient {
         phoneNumber: String? = null,
         projectId: String? = null
     ): Boolean = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val cleanPhone = phoneNumber?.replace("[^0-9]".toRegex(), "").orEmpty()
         for (host in hosts) {
             val endpoint = "$host/api/user/tasks"
@@ -3558,7 +3566,7 @@ object ApiClient {
         sourceType: String = "SMS",
         phoneNumber: String? = null
     ): List<String> = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val cleanPhone = phoneNumber?.replace("[^0-9]".toRegex(), "").orEmpty()
         val payload = JSONObject().apply {
             put("title", title)
@@ -3687,7 +3695,7 @@ object ApiClient {
      * 🎙️ 내 목소리(화자 성문 프로필) 등록 여부 조회 (GET /api/user/voice-profile)
      */
     suspend fun fetchVoiceProfile(userEmail: String): VoiceProfileResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "성문 프로필 조회 실패"
 
         for (host in hosts) {
@@ -3732,7 +3740,7 @@ object ApiClient {
         audioBase64: String,
         fileName: String = "voice_sample.m4a"
     ): VoiceProfileEnrollResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "성문 등록 실패"
 
         val bodyJson = JSONObject().apply {
@@ -3778,7 +3786,7 @@ object ApiClient {
      * 🎙️ 등록된 성문 프로필 삭제 (DELETE /api/user/voice-profile)
      */
     suspend fun deleteVoiceProfile(userEmail: String): Boolean = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         for (host in hosts) {
             val endpoint = "$host/api/user/voice-profile"
             try {
@@ -3804,7 +3812,7 @@ object ApiClient {
      * - 전체 공개 카드 및 내 계정 전용(Private) 카드 목록 반환
      */
     suspend fun fetchCardCatalog(userEmail: String): MarketplaceCatalogResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "카탈로그 조회 실패"
 
         for (host in hosts) {
@@ -3873,7 +3881,7 @@ object ApiClient {
         contact: String,
         userEmail: String
     ): FeatureRequestResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "요청 접수 실패"
 
         val bodyJson = JSONObject().apply {
@@ -3925,7 +3933,7 @@ object ApiClient {
         description: String? = null,
         manifestJson: String? = null
     ): CustomCardCreateResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "맞춤 카드 생성 실패"
 
         val bodyJson = JSONObject().apply {
@@ -3998,7 +4006,7 @@ object ApiClient {
         fields: Map<String, String>,
         attachedFile: java.io.File? = null
     ): DynamicCardExecuteResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         var lastError = "동적 카드 실행 실패"
 
         val fieldsJsonObj = JSONObject()
@@ -4070,7 +4078,7 @@ object ApiClient {
         verifiedStatus: String = "⏳ 미인증 (대기중)"
     ): Boolean = withContext(Dispatchers.IO) {
         if (userEmail.isBlank() || userEmail.endsWith("@filetosheet.cloud")) return@withContext false
-        val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val payload = JSONObject().apply {
             put("userEmail", userEmail)
             put("brandName", brandName)
