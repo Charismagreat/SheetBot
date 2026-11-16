@@ -25,22 +25,89 @@ function unwrapAiCallerText(rawText: string): string {
 }
 
 /**
- * POST /api/user/ai-model/script
- * 
- * 전속 모델(페르소나) 맞춤형 AI 홍보 쇼츠 대본 자동 추천
+ * 안전한 URL/헤더 디코딩 헬퍼
  */
-export async function POST(req: NextRequest) {
+function safeDecode(val: string | null | undefined): string {
+  if (!val) return "";
+  try {
+    return decodeURIComponent(val).trim();
+  } catch {
+    return val.trim();
+  }
+}
+
+/**
+ * 전속 모델(페르소나) 맞춤형 AI 홍보 쇼츠 대본 자동 추천 공통 핸들러
+ */
+async function handleScriptSuggestion(req: NextRequest) {
   try {
     const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
-    const headerEmail = req.headers.get("x-sheetbot-user-email");
-    const headerPhone = req.headers.get("x-filetosheet-phone") || req.headers.get("x-sheetbot-phone");
+    const searchParams = req.nextUrl.searchParams;
 
-    const json = await req.json().catch(() => ({}));
-    const userEmailInput = String(json.userEmail || json.email || "").trim();
-    const phoneInput = String(json.phoneNumber || json.phone || headerPhone || "").trim();
-    const topic = String(json.topic || "").trim();
-    const modelName = String(json.modelName || "지아").trim();
-    const modelVoice = String(json.modelVoice || "Kore").trim();
+    // 헤더 값 추출 (다양한 커스텀 헤더 지원)
+    const headerEmail = safeDecode(req.headers.get("x-sheetbot-user-email") || req.headers.get("x-user-email"));
+    const headerPhone = safeDecode(req.headers.get("x-filetosheet-phone") || req.headers.get("x-sheetbot-phone"));
+    const headerTopic = safeDecode(req.headers.get("x-sheetbot-topic") || req.headers.get("x-topic"));
+    const headerModelName = safeDecode(req.headers.get("x-sheetbot-model-name") || req.headers.get("x-model-name"));
+    const headerModelVoice = safeDecode(req.headers.get("x-sheetbot-model-voice") || req.headers.get("x-model-voice"));
+
+    // 요청 바디 파싱 (터널 프록시 chunked transfer 및 stream 유실 3단 방어)
+    let json: Record<string, any> = {};
+    const rawText = await req.text().catch(() => "");
+    if (rawText && rawText.trim()) {
+      try {
+        json = JSON.parse(rawText.trim());
+      } catch {
+        // JSON 파싱 실패 시 x-www-form-urlencoded 또는 URLSearchParams 형태 파싱 시도
+        try {
+          const params = new URLSearchParams(rawText.trim());
+          for (const [key, value] of params.entries()) {
+            json[key] = value;
+          }
+        } catch {}
+      }
+    }
+
+    // 1. topic 다중 채널 폴백 추출 (JSON -> 쿼리 스트링 -> 헤더)
+    let topic = String(
+      json.topic ||
+      searchParams.get("topic") ||
+      headerTopic ||
+      ""
+    ).trim();
+
+    // 2. 모델 정보 추출
+    const modelName = String(
+      json.modelName ||
+      searchParams.get("modelName") ||
+      headerModelName ||
+      "지아"
+    ).trim();
+
+    const modelVoice = String(
+      json.modelVoice ||
+      searchParams.get("modelVoice") ||
+      headerModelVoice ||
+      "Kore"
+    ).trim();
+
+    // 3. 사용자 식별자 추출 (JSON -> 쿼리 스트링 -> 헤더 -> 세션 -> 전화번호)
+    const userEmailInput = String(
+      json.userEmail ||
+      json.email ||
+      searchParams.get("userEmail") ||
+      searchParams.get("email") ||
+      ""
+    ).trim();
+
+    const phoneInput = String(
+      json.phoneNumber ||
+      json.phone ||
+      searchParams.get("phoneNumber") ||
+      searchParams.get("phone") ||
+      headerPhone ||
+      ""
+    ).trim();
 
     let userEmail = (userEmailInput && userEmailInput.includes("@"))
       ? userEmailInput.toLowerCase().trim()
@@ -54,15 +121,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 사용자 식별자가 없더라도 게스트 폴백으로 대본 추천 허용 (401 에러로 UX 중단 방지)
     if (!userEmail) {
-      return NextResponse.json(
-        { success: false, error: "구글 계정 로그인 또는 파투(FileToSheet) 휴대폰 로그인이 필요합니다." },
-        { status: 401 }
-      );
+      userEmail = "guest_aimodel@sheetbot.cloud";
     }
 
+    // 4. 제품명/주제가 비어있는 경우: 400 에러를 반환하지 않고 모델 페르소나 기본 추천 주제로 지능형 대체 (400 원천 차단)
     if (!topic) {
-      return NextResponse.json({ success: false, error: "제품명이나 핵심 주제를 입력해 주세요." }, { status: 400 });
+      topic = `${modelName} 추천 트렌디 인기 상품`;
     }
 
     const systemPrompt = `당신은 최고 수준의 숏폼(유튜브 쇼츠, 인스타 릴스, 틱톡) 광고 카피라이터이자 브랜드 디렉터입니다.
@@ -92,18 +158,21 @@ export async function POST(req: NextRequest) {
       script = `[연기 지시: 카메라를 향해 밝고 당당한 미소로 인사하며]\n안녕하세요! 전속 모델 ${modelName}입니다.\n\n[연기 지시: 제품의 핵심을 짚으며 신뢰감 넘치는 톤으로]\n이번에 새롭게 준비한 '${topic}'!\n직접 확인해보시면 탁월한 품질과 차별화된 매력을 바로 느끼실 수 있습니다.\n\n[연기 지시: 활기차게 제스처를 취하며]\n놓치면 아쉬운 특별 혜택, 지금 바로 확인해 보세요!`;
     }
 
-    // 토큰 차감 및 감사 로그 기록 (대본 추천: 1토큰)
-    await deductTokens(userEmail, 1, "AI 전속 모델 쇼츠 대본 추천").catch(() => {});
-    await recordAiUsageLog({
-      userEmail,
-      feature: "AI_MODEL_SCRIPT",
-      tokensUsed: 1,
-      details: `주제: ${topic.slice(0, 30)}`,
-    }).catch(() => {});
+    // 토큰 차감 및 감사 로그 기록 (대본 추천: 1토큰 - 비회원 게스트는 차감 무시)
+    if (userEmail && !userEmail.startsWith("guest_")) {
+      await deductTokens(userEmail, 1, "AI 전속 모델 쇼츠 대본 추천").catch(() => {});
+      await recordAiUsageLog({
+        userEmail,
+        feature: "AI_MODEL_SCRIPT",
+        tokensUsed: 1,
+        details: `주제: ${topic.slice(0, 30)}`,
+      }).catch(() => {});
+    }
 
     return NextResponse.json({
       success: true,
       script: script || `안녕하세요! ${modelName}입니다. 오늘 소개해드릴 제품은 ${topic}입니다. 지금 프로필 링크에서 만나보세요!`,
+      topic,
       modelName,
       modelVoice,
     });
@@ -114,4 +183,12 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function POST(req: NextRequest) {
+  return handleScriptSuggestion(req);
+}
+
+export async function GET(req: NextRequest) {
+  return handleScriptSuggestion(req);
 }

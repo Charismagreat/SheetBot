@@ -1459,13 +1459,25 @@ object ApiClient {
             put("phoneNumber", phoneNumber)
         }.toString()
 
+        val encTopic = java.net.URLEncoder.encode(topic, "UTF-8")
+        val encModel = java.net.URLEncoder.encode(modelName, "UTF-8")
+        val encVoice = java.net.URLEncoder.encode(modelVoice, "UTF-8")
+        val encEmail = java.net.URLEncoder.encode(userEmail, "UTF-8")
+        val encPhone = java.net.URLEncoder.encode(phoneNumber, "UTF-8")
+
         var serverError: String? = null
         for (host in hosts) {
-            val endpoint = "$host/api/user/ai-model/script"
+            val endpoint = "$host/api/user/ai-model/script?topic=$encTopic&modelName=$encModel&modelVoice=$encVoice&userEmail=$encEmail&phone=$encPhone"
             try {
                 val reqBuilder = Request.Builder()
                     .url(endpoint)
                     .post(jsonPayload.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                    .header("x-sheetbot-topic", encTopic)
+                    .header("x-sheetbot-model-name", encModel)
+                    .header("x-sheetbot-model-voice", encVoice)
+                if (userEmail.isNotBlank()) {
+                    reqBuilder.header("x-sheetbot-user-email", userEmail)
+                }
                 if (phoneNumber.isNotBlank()) {
                     reqBuilder.header("x-filetosheet-phone", phoneNumber)
                 }
@@ -1488,6 +1500,9 @@ object ApiClient {
                 }
             } catch (e: Exception) {
                 if (e is IllegalStateException) throw e
+                Log.w(TAG, "대본 추천 호스트 실패 ($host): ${e.message}")
+            }
+        }
                 Log.w(TAG, "대본 추천 네트워크 오류 ($host): ${e.message}")
             }
         }
