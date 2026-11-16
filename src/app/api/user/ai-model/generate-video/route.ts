@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
     // 3. 비디오 생성 메타데이터 (Veo 3 비디오 렌더링 파이프라인)
     const nowStr = getKoreanTimeString();
     const videoId = `aimodel_${Date.now()}`;
-    const demoVideoUrl = `https://sheetbot.cloud/demo/ai-shorts-player?id=${videoId}&voice=${modelVoice}&name=${encodeURIComponent(modelName)}`;
+    const demoVideoUrl = `https://sheetbot.cloud/demo/ai-shorts-player?id=${videoId}&voice=${modelVoice}&name=${encodeURIComponent(modelName)}&topic=${encodeURIComponent(topic)}&script=${encodeURIComponent(script)}`;
 
     // 4. 구글 시트 바인딩 및 장부 기록 ([SheetBot] AI 홍보 콘텐츠 관리대장)
     let sheetUrl = "";
