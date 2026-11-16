@@ -122,7 +122,7 @@
             android:id="@+id/tvDrawerSubtitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="터치하여 숨겨둔 기능을 홈으로 꺼내거나 순서를 바꿀 수 있습니다."
+            android:text="터치하거나 화면 우측을 왼쪽(⬅️)으로 밀어 열기 (카드를 우측(➡️)으로 밀면 보관)"
             android:textColor="#64748B"
             android:textSize="10.5sp"
             android:layout_marginTop="4dp" />

@@ -171,6 +171,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 🌟 화면 우측 엣지 스와이프 제스처 인터셉터 (우측 엣지에서 좌측으로 밀면 보관함 열기)
+    private var edgeSwipeDetector: ((android.view.MotionEvent) -> Boolean)? = null
+
+    fun setEdgeSwipeDetector(detector: ((android.view.MotionEvent) -> Boolean)?) {
+        this.edgeSwipeDetector = detector
+    }
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        try {
+            if (edgeSwipeDetector?.invoke(ev) == true) {
+                return true
+            }
+        } catch (e: Throwable) {
+            android.util.Log.e("MainActivity", "edgeSwipeDetector 처리 중 예외 방어: ${e.message}", e)
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         if (::coreCoordinator.isInitialized) {

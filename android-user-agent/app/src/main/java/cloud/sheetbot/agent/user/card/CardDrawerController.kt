@@ -18,7 +18,9 @@ import androidx.core.widget.NestedScrollView
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.snackbar.Snackbar
 import cloud.sheetbot.agent.user.FileToSheetClient
+import cloud.sheetbot.agent.user.MainActivity
 import cloud.sheetbot.agent.user.PreferencesManager
 import cloud.sheetbot.agent.user.R
 
@@ -179,7 +181,23 @@ class CardDrawerController(
         btnOpenDrawerManage?.setOnClickListener(openDrawerAction)
         btnDrawerManage?.setOnClickListener(openDrawerAction)
 
-        // 각 카드의 헤더 및 본체 롱클릭 시 "시트봇 스토어로 보관" 다이얼로그 지원
+        // 🌟 [제스처 2: 화면 우측 엣지에서 우→좌(⬅️) 스와이프 시 보관함 서랍 열기]
+        val rightEdgeDetector = CardSwipeGestureHelper.createRightEdgeSwipeDetector(activity) {
+            openReorderingBottomSheet()
+        }
+        (activity as? MainActivity)?.setEdgeSwipeDetector(rightEdgeDetector)
+
+        // 시트봇 보관함 카드 자체를 좌측으로 스와이프해도 열리도록 지원
+        cardDrawerBox?.let { box ->
+            CardSwipeGestureHelper.attachRightEdgeSwipeToOpenDrawer(box) {
+                openReorderingBottomSheet()
+            }
+        }
+
+        // 🌟 [제스처 1: 홈 화면 카드 좌→우(➡️) 스와이프 시 보관함으로 넣기]
+        setupCardSwipeGestures()
+
+        // 각 카드의 헤더 및 본체 롱클릭 시 "시트봇 보관함으로 보관" 다이얼로그 지원
         builtInCards.forEach { cardInfo ->
             val cardView = findCardView(cardInfo)
             val headerView = cardInfo.headerResId?.let { activity.findViewById<View>(it) }
@@ -217,6 +235,42 @@ class CardDrawerController(
                 }
             }
         }
+    }
+
+    /**
+     * 🌟 [제스처 1: 홈 화면 카드 좌→우(➡️) 스와이프 보관 제스처 연결]
+     * 카드를 오른쪽으로 밀면 보관함 서랍 속으로 쏙 들어가며 실행 취소(Undo) 스낵바 제공
+     */
+    fun setupCardSwipeGestures() {
+        allCards.forEach { cardInfo ->
+            val cardView = findCardView(cardInfo) ?: return@forEach
+            val headerView = cardInfo.headerResId?.let { activity.findViewById<View>(it) }
+            val touchTarget = headerView ?: cardView
+
+            CardSwipeGestureHelper.attachCardSwipeToArchive(
+                touchTargetView = touchTarget,
+                animatedView = cardView,
+                cardTitle = cardInfo.title
+            ) {
+                hideCard(cardInfo.key)
+                showArchiveSnackbarWithUndo(cardInfo)
+            }
+        }
+    }
+
+    /**
+     * 카드가 보관함으로 이동했을 때 하단에 실행 취소(Undo) 스낵바 표시
+     */
+    private fun showArchiveSnackbarWithUndo(cardInfo: CardInfo) {
+        val rootView = activity.findViewById<View>(android.R.id.content) ?: return
+        Snackbar.make(
+            rootView,
+            "📦 '${cardInfo.title}' 카드가 보관함으로 이동했습니다.",
+            Snackbar.LENGTH_LONG
+        ).setAction("실행 취소") {
+            restoreCard(cardInfo.key)
+            Toast.makeText(activity, "✨ '${cardInfo.title}' 카드가 복원되었습니다.", Toast.LENGTH_SHORT).show()
+        }.setActionTextColor(Color.parseColor("#38BDF8")).show()
     }
 
     fun showHideConfirmDialogByKey(cardKey: String, fallbackTitle: String) {
@@ -395,6 +449,9 @@ class CardDrawerController(
         } catch (e: Exception) {
             android.util.Log.e("CardDrawerController", "레이아웃 재배치 예외 방어: ${e.message}", e)
         }
+
+        // 3. 카드 스와이프 제스처 재바인딩 (새로 렌더링된 동적 카드 포함)
+        setupCardSwipeGestures()
     }
 
     /**
@@ -644,13 +701,21 @@ class CardDrawerController(
             // [섹션 2: 🛍️ 시트봇 스토어에 보관된 카드 (하단에 카테고리별 노출)]
             // ══════════════════════════════════════════════════════════
             val archiveHeader = TextView(activity).apply {
-                text = "📦 시트봇 보관함에 둔 카드 (${archivedCards.size}개) - 터치하여 홈으로 꺼내기"
+                text = "📦 시트봇 보관함에 둔 카드 (${archivedCards.size}개) - 좌측으로 밀거나 터치하여 홈에 추가"
                 setTextColor(Color.parseColor("#A855F7"))
                 textSize = 13f
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
-                setPadding(0, 0, 0, dp(8))
+                setPadding(0, 0, 0, dp(4))
             }
             rootLayout.addView(archiveHeader)
+
+            val swipeHintTv = TextView(activity).apply {
+                text = "💡 카드를 왼쪽(⬅️)으로 쓱 밀면 홈 화면으로 즉시 꺼내집니다."
+                setTextColor(Color.parseColor("#64748B"))
+                textSize = 10.5f
+                setPadding(0, 0, 0, dp(8))
+            }
+            rootLayout.addView(swipeHintTv)
 
             if (archivedCards.isEmpty()) {
                 val allActiveTv = TextView(activity).apply {
@@ -688,6 +753,16 @@ class CardDrawerController(
                             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                                 bottomMargin = dp(6)
                             }
+                        }
+
+                        // 🌟 [제스처 3: 우→좌(⬅️) 스와이프 시 홈으로 꺼내기]
+                        CardSwipeGestureHelper.attachCardSwipeToRestore(
+                            rowView = row,
+                            cardTitle = card.title
+                        ) {
+                            restoreCard(card.key)
+                            renderContent()
+                            Toast.makeText(activity, "✨ '${card.title}' 카드가 홈 화면에 추가되었습니다.", Toast.LENGTH_SHORT).show()
                         }
 
                         val nameTv = TextView(activity).apply {
