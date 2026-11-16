@@ -704,6 +704,22 @@
                     android:textStyle="bold" />
 
                 <TextView
+                    android:id="@+id/btnOpenCopilotSheet"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_version"
+                    android:backgroundTint="#1E293B"
+                    android:paddingHorizontal="7dp"
+                    android:paddingVertical="2dp"
+                    android:text="📊 대장"
+                    android:textColor="#38BDF8"
+                    android:textSize="9.5sp"
+                    android:textStyle="bold"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_badge_version"

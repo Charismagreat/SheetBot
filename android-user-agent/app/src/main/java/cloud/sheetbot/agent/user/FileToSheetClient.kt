@@ -326,6 +326,7 @@ object FileToSheetClient {
             "saas_otp_relay", "cardsaasotprelay", "saas_otp" -> "saas_otp_relay"
             "tasks_hub", "cardtaskshub", "tasks", "task" -> "tasks_hub"
             "ai_model", "cardaimodel", "aimodel" -> "ai_model"
+            "ai_copilot", "ai_copilot_log", "cardaicopilot", "copilot" -> "ai_copilot_log"
             else -> raw.lowercase()
         }
     }

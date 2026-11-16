@@ -61,6 +61,7 @@ class AiCopilotCardController(
     private val prefs: AppPreferences,
     private val scope: CoroutineScope,
     private val launchSpeechRecognizer: (Intent) -> Unit,
+    private val onOpenSheetChooser: (sheetType: String, defaultTitle: String) -> Unit,
     private val addLogItem: (title: String, detail: String, success: Boolean) -> Unit,
     private val updateCardCollapseState: (layout: View, button: View, isHidden: Boolean) -> Unit
 ) {
@@ -114,6 +115,11 @@ class AiCopilotCardController(
                 return@setOnClickListener
             }
             executeAiCommand(cmd)
+        }
+
+        // 📊 AI 비서 활동 대장 열기 버튼 리스너
+        binding.root.findViewById<View>(cloud.sheetbot.agent.user.R.id.btnOpenCopilotSheet)?.setOnClickListener {
+            onOpenSheetChooser("AI_COPILOT_LOG", "[SheetBot] AI 비서 활동 및 업무 학습 대장")
         }
 
         // 🕒 최근 검색어 & ⭐ 고정 즐겨찾기 히스토리 바 초기화

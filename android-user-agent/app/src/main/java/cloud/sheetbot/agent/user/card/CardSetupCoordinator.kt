@@ -500,6 +500,7 @@ class CardSetupCoordinator(
             prefs = prefs,
             scope = scope,
             launchSpeechRecognizer = { intent -> launchers.speechRecognizerLauncher.launch(intent) },
+            onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) },
             addLogItem = { title, detail, success -> addLogItem(title, detail, success) },
             updateCardCollapseState = { layout, button, isHidden -> updateCardCollapseState(layout, button, isHidden) }
         )
