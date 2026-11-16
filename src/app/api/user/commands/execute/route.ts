@@ -18,6 +18,10 @@ import {
   resolveUserFtsPhoneNumber,
   createTaskItem,
 } from "@/lib/task-hub-helper";
+import {
+  getUserCopilotLearningContext,
+  recordAiCopilotActivity,
+} from "@/lib/ai-copilot-learning";
 
 export interface DriveFileItemDto {
   id: string;
@@ -736,8 +740,8 @@ export async function POST(req: NextRequest) {
       cleanPhone = (await resolveUserFtsPhoneNumber(cleanEmail)) || "";
     }
 
-    // 1. 유저의 연동된 구글 시트 프로젝트/스케줄 목록 및 파투(FileToSheet) 시트 컨텍스트 병렬 조회
-    const [projectsRes, schedulesRes, ftsContext] = await Promise.all([
+    // 1. 유저의 연동된 구글 시트 프로젝트/스케줄 목록, 파투(FileToSheet) 시트 컨텍스트, 그리고 AI 학습 메모리 병렬 조회
+    const [projectsRes, schedulesRes, ftsContext, learningContext] = await Promise.all([
       queryTable("sheetbot_projects", {
         filters: { user_email: cleanEmail },
         limit: 20,
@@ -755,6 +759,7 @@ export async function POST(req: NextRequest) {
         projectId: ftsProjectId || undefined,
         token: ftsToken || undefined,
       }),
+      getUserCopilotLearningContext(cleanEmail, 35),
     ]);
 
     const userProjects = (projectsRes.rows || []).filter((p: any) => !p.deleted_at);
@@ -793,6 +798,9 @@ ${JSON.stringify(ftsSheetsSummary, null, 2)}
 [1-3] 현재 연동된 구글 시트 대장 목록:
 ${JSON.stringify(projectsSummary, null, 2)}
 
+[1-4] 사용자 개인 업무 학습 메모리 및 최근 활동 이력 (User Learning Context):
+${learningContext.promptContextText}
+
 [2] 구글 시트 대장에 실제 주입되어 실행 가능한 Apps Script 함수 목록 (Ground Truth):
 ${JSON.stringify(availableGasFunctions, null, 2)}
 
@@ -830,6 +838,7 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
 }
 
 * 판별 주의사항:
+- 사용자가 '방금 찾아온 파일', '이 파일', '그 파일', '아까 조회한 거래처', '방금 올린 내역' 등 대명사나 연속 맥락으로 지칭한 경우, 반드시 [1-4] 사용자 개인 업무 학습 메모리의 직전 탐색 파일, 직전 수신처, 최근 실행 이력을 참조하여 구체적인 파일명(driveFileKeyword), 폴더명(driveFolderKeyword), 이메일(targetEmail), 키워드(queryKeywords)로 자동 치환하세요.
 - 특정 파일(또는 '방금 찾아온 파일', '대출금 이미지' 등)을 이메일로 보내달라는 요청("방금 찾아온 대출금관련 이미지 파일을 chacho@nate.com으로 보내줘", "이 파일 gildong@gmail.com으로 메일 보내줘")은 반드시 "actionType": "DRIVE_FILE_ACTION", "driveOperation": "SEND_EMAIL"로 판별하고, "targetEmail"에 추출한 이메일 주소를 반드시 기입하세요.
 - 내 PC 폴더나 구글 드라이브에서 특정 파일(문서, 견적서, 계약서, PDF, 엑셀, 이미지 등)을 찾아달라거나 스마트폰으로 보여달라/보내달라/요약해달라는 요청("내 PC 시트봇 폴더에서 oo파일 찾아서 보여줘", "드라이브에서 2026 계약서 찾아줘", "이 파일 스마트폰으로 보내줘")은 반드시 "actionType": "DRIVE_FILE_ACTION"으로 판별하세요.
 - 파투 내 프로젝트/시트 데이터 검색, 특정 키워드/고객/기관 내역 찾기, 건수/금액 집계, 연락처/통화/문자/카톡/이메일/영수증/할일 조회, 결재 대기건 조회 등 모든 검색·질의는 반드시 "actionType": "SHEET_QUERY"로 판별하세요.
@@ -899,20 +908,73 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
     if (plan.actionType === "DRIVE_FILE_ACTION") {
       // (1-B) 구글 드라이브 & PC 동기화 폴더 파일 탐색 및 스마트폰 다이렉트 전송/요약/문자 연계
       try {
-        // 검색 키워드 정제: '관련', '이미지', '사진', '문서', '파일' 등 수식어 제거하고 핵심 명사만 추출
+        let folderKeyword = (plan.driveFolderKeyword || "").replace(/(폴더|디렉토리|함|의)$/gi, "").trim();
+        const operation = (plan.driveOperation || "FETCH").toUpperCase(); // "FETCH" | "SUMMARIZE" | "SEND_SMS" | "SEND_EMAIL"
+
+        // 검색 키워드 정제: 이메일 주소, 대명사('방금', '찾아온', '그', '최근'), '관련', '이미지', '사진', '문서', '파일' 등 수식어 제거하고 핵심 명사만 추출
+        const stopWordPattern = /(구글드라이브|드라이브|노트북|피씨|pc|컴퓨터|폴더|파일|이미지|사진|문서|자료|관련|방금|찾아온|찾은|아까|조회한|최근|최신|이메일로|메일로|이메일|메일|찾아서|보여줘|알려줘|전송해줘|보내줘|스마트폰|내폰|으로|에서|를|을|의)/gi;
         let fileKeyword = (plan.driveFileKeyword || plan.filterKeyword || command)
-          .replace(/(구글드라이브|드라이브|노트북|피씨|pc|컴퓨터|폴더|파일|이미지|사진|문서|자료|관련|찾아서|보여줘|알려줘|전송해줘|보내줘|스마트폰|내폰|으로|에서|의)/gi, " ")
+          .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, " ")
+          .replace(stopWordPattern, " ")
           .trim();
-        // 여러 단어일 경우 가장 핵심적인 첫 번째 또는 긴 단어 추출
-        const keywordTokens = fileKeyword.split(/\s+/).filter((w) => w.length >= 2);
+        // 여러 단어일 경우 폴더명과 겹치지 않는 가장 핵심적인 첫 번째 단어 추출
+        const keywordTokens = fileKeyword
+          .split(/\s+/)
+          .filter(
+            (w) =>
+              w.length >= 2 &&
+              !["이거", "그거", "저거", "해당", "최근", "최신"].includes(w) &&
+              (!folderKeyword || w.toLowerCase() !== folderKeyword.toLowerCase())
+          );
         if (keywordTokens.length > 0) {
           fileKeyword = keywordTokens[0];
+        } else {
+          fileKeyword = "";
         }
 
-        let folderKeyword = (plan.driveFolderKeyword || "").replace(/(폴더|디렉토리|함|의)$/gi, "").trim();
-        const operation = (plan.driveOperation || "FETCH").toUpperCase(); // "FETCH" | "SUMMARIZE" | "SEND_SMS"
+        // ★ [사용자 학습 반영 1] 폴더명을 생략했더라도 과거 학습 이력에서 해당 키워드 파일이 특정 폴더에서 탐색된 적이 있으면 우선 타겟팅
+        if (!folderKeyword && fileKeyword && learningContext.recentActivities.length > 0) {
+          const learnedFolderMatch = learningContext.recentActivities.find(
+            (a) =>
+              a.targetFolder &&
+              ((a.targetFile && a.targetFile.includes(fileKeyword)) ||
+                (a.command && a.command.includes(fileKeyword)))
+          );
+          if (learnedFolderMatch?.targetFolder) {
+            folderKeyword = learnedFolderMatch.targetFolder;
+            console.log(`[DriveAction/Learned] Auto-resolved folder "${folderKeyword}" from user learning history for keyword "${fileKeyword}"`);
+          }
+        }
 
         console.log(`[DriveAction] Searching Drive - FileKeyword: "${fileKeyword}", FolderKeyword: "${folderKeyword}"`);
+
+        let foundFiles: any[] = [];
+
+        // ★ [사용자 학습 반영 2 - 선제 문맥 복원] '방금 찾아온 파일', '그 파일', '이 파일' 지칭 시 직전 탐색 파일이 매칭되면 드라이브 재검색 없이 0초 즉시 복원
+        const isExplicitPronounRef = /(방금|아까|이\s*파일|그\s*파일|찾아온)/.test(command);
+        if (
+          learningContext.lastFileAction &&
+          isExplicitPronounRef &&
+          (!fileKeyword || learningContext.lastFileAction.fileName.includes(fileKeyword))
+        ) {
+          const lastFile = learningContext.lastFileAction;
+          console.log(`[DriveAction/Learned] Pre-emptively restored last file from user learning context: "${lastFile.fileName}"`);
+          foundFiles = [
+            {
+              id: lastFile.fileId || "learned_file",
+              name: lastFile.fileName,
+              mimeType: "application/octet-stream",
+              size: 0,
+              sizeFormattedHint: lastFile.fileSizeFormatted,
+              modifiedTime: lastFile.timestamp.slice(0, 10),
+              webViewLink: lastFile.webViewLink,
+              webContentLink: lastFile.webContentLink,
+            },
+          ];
+          if (!folderKeyword && lastFile.folderName) {
+            folderKeyword = lastFile.folderName;
+          }
+        }
 
         // 안전한 드라이브 호출 헬퍼
         const searchDrive = async (q: string, size = 10): Promise<any[]> => {
@@ -935,7 +997,7 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
 
         // 1. 특정 폴더 지정이 있는 경우(예: 'demo', '시트봇', '영수증' 등) 해당 폴더 ID 우선 탐색
         let targetFolderId: string | null = null;
-        if (folderKeyword) {
+        if (foundFiles.length === 0 && folderKeyword) {
           try {
             const folderFiles = await searchDrive(
               `mimeType = 'application/vnd.google-apps.folder' and name contains '${folderKeyword}' and trashed = false`,
@@ -952,10 +1014,8 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
           }
         }
 
-        let foundFiles: any[] = [];
-
         // 2-A. 특정 폴더가 특정된 경우: 해당 폴더 내부 탐색
-        if (targetFolderId) {
+        if (foundFiles.length === 0 && targetFolderId) {
           let folderQuery = `'${targetFolderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
           if (fileKeyword) {
             folderQuery += ` and name contains '${fileKeyword}'`;
@@ -979,6 +1039,33 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
             `'${targetFolderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`,
             10
           );
+        }
+
+        // ★ [사용자 학습 반영 2] 대명사('방금 찾아온 파일', '그 파일', '이 파일') 또는 이메일 발송 요청 시 직전 탐색 파일 자동 복원
+        if (foundFiles.length === 0 && learningContext.lastFileAction) {
+          const lastFile = learningContext.lastFileAction;
+          const isPronounOrEmailAction =
+            !fileKeyword ||
+            operation === "SEND_EMAIL" ||
+            /(방금|아까|이\s*파일|그\s*파일|찾아온|보내|전송|메일)/.test(command);
+          if (isPronounOrEmailAction) {
+            console.log(`[DriveAction/Learned] Restored last file from user learning context: "${lastFile.fileName}"`);
+            foundFiles = [
+              {
+                id: lastFile.fileId || "learned_file",
+                name: lastFile.fileName,
+                mimeType: "application/octet-stream",
+                size: 0,
+                sizeFormattedHint: lastFile.fileSizeFormatted,
+                modifiedTime: lastFile.timestamp.slice(0, 10),
+                webViewLink: lastFile.webViewLink,
+                webContentLink: lastFile.webContentLink,
+              },
+            ];
+            if (!folderKeyword && lastFile.folderName) {
+              folderKeyword = lastFile.folderName;
+            }
+          }
         }
 
         if (foundFiles.length === 0) {
@@ -1005,13 +1092,15 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
           // 파일 DTO 매핑
           const driveFileDtos: DriveFileItemDto[] = foundFiles.slice(0, 5).map((f: any) => {
             const sizeBytes = Number(f.size || 0);
-            let sizeFormatted = "";
-            if (sizeBytes > 1024 * 1024) {
-              sizeFormatted = `${(sizeBytes / (1024 * 1024)).toFixed(1)}MB`;
-            } else if (sizeBytes > 1024) {
-              sizeFormatted = `${(sizeBytes / 1024).toFixed(0)}KB`;
-            } else if (sizeBytes > 0) {
-              sizeFormatted = `${sizeBytes}B`;
+            let sizeFormatted = f.sizeFormattedHint || "";
+            if (!sizeFormatted) {
+              if (sizeBytes > 1024 * 1024) {
+                sizeFormatted = `${(sizeBytes / (1024 * 1024)).toFixed(1)}MB`;
+              } else if (sizeBytes > 1024) {
+                sizeFormatted = `${(sizeBytes / 1024).toFixed(0)}KB`;
+              } else if (sizeBytes > 0) {
+                sizeFormatted = `${sizeBytes}B`;
+              }
             }
 
             const ext = (f.name.split(".").pop() || "").toLowerCase();
@@ -1056,7 +1145,12 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
           } else if (operation === "SEND_EMAIL" || plan.targetEmail || (command.includes("@") && command.includes("보내"))) {
             // 4-B. 이메일 전송 요청인 경우 (SEND_EMAIL)
             const emailMatch = command.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-            const targetEmail = (plan.targetEmail || (emailMatch ? emailMatch[0] : "")).trim();
+            const targetEmail = (
+              plan.targetEmail ||
+              (emailMatch ? emailMatch[0] : "") ||
+              learningContext.lastRecipient?.email ||
+              ""
+            ).trim();
 
             const emailSubject = `[SheetBot] ${primaryFile.name} 파일 공유 안내`;
             const emailBody = `안녕하세요.\n요청하신 [${primaryFile.name}] (${primaryFile.sizeFormatted || ""}) 파일입니다.\n\n▶ 구글 드라이브 바로보기:\n${primaryFile.webViewLink}\n\n▶ 파일 다운로드:\n${primaryFile.webContentLink}\n\n시트봇(SheetBot)에서 발송되었습니다.`;
@@ -1657,22 +1751,66 @@ ${sampleDataTexts.join("\n\n====================\n\n")}
       };
     }
 
-    // 5. 감사 로그 DB 적재
-    const logId = Date.now();
-    await insertRows("sheetbot_user_dispatch_logs", [
-      {
-        id: logId,
-        user_email: cleanEmail,
-        rule_id: "AI_NATURAL_COMMAND",
-        rule_name: "🎙️ 모바일 자연어 시트 제어",
-        device_id: deviceId,
-        recipient: plan.targetName || cleanEmail,
-        content: `[명령] "${command}" -> ${plan.explanation || "작업 수행 완료"}`,
-        status: isSuccess ? "SUCCESS" : "FAILED",
-        error_message: isSuccess ? null : plan.explanation,
-        created_at: new Date().toISOString(),
-      },
-    ]).catch(() => {});
+    // 5. 전 작업 통합 학습 대장(DB + 구글 시트 [SheetBot] AI 비서 활동 및 업무 학습 대장 + 파투 시트) 기록
+    const resolvedSheetSummary =
+      executionDetails?.sheetName ||
+      plan.targetSheetName ||
+      (matchedRowsResult.length > 0
+        ? Array.from(new Set(matchedRowsResult.slice(0, 3).map((r) => `${r.projectName}/${r.sheetName}`))).join(", ")
+        : (plan.queryTargetSheets || []).join(", "));
+
+    const primaryFileObj = executionDetails?.primaryDriveFile;
+    const emailDispObj = executionDetails?.emailDispatch;
+
+    const activityStatus =
+      !isSuccess || executionDetails?.status === "NOT_FOUND" || executionDetails?.status === "FAILED"
+        ? "FAILED"
+        : executionDetails?.status === "EMAIL_DISPATCH_READY"
+          ? "READY"
+          : "SUCCESS";
+
+    await recordAiCopilotActivity({
+      userEmail: cleanEmail,
+      phoneNumber: cleanPhone || undefined,
+      ftsProjectId: ftsProjectId || ftsContext.projectId || undefined,
+      ftsToken: ftsToken || undefined,
+      deviceId,
+      req,
+      command,
+      actionType: emailDispObj ? "EMAIL_DISPATCH" : plan.actionType,
+      targetSheet: resolvedSheetSummary || "",
+      targetFolder: executionDetails?.searchedFolder || plan.driveFolderKeyword || "",
+      targetFile: primaryFileObj?.name || emailDispObj?.fileName || "",
+      fileId: primaryFileObj?.id || "",
+      fileSizeFormatted: primaryFileObj?.sizeFormatted || emailDispObj?.fileSizeFormatted || "",
+      webViewLink: primaryFileObj?.webViewLink || emailDispObj?.webViewLink || "",
+      webContentLink: primaryFileObj?.webContentLink || emailDispObj?.webContentLink || "",
+      targetEmail: emailDispObj?.recipientEmail || plan.targetEmail || "",
+      targetPhone:
+        executionDetails?.recipient && executionDetails.recipient !== "self"
+          ? executionDetails.recipient
+          : plan.targetPhone || "",
+      targetRecipient:
+        plan.targetName ||
+        emailDispObj?.recipientEmail ||
+        plan.queryTargetEntity ||
+        (executionDetails?.recipient && executionDetails.recipient !== "self" ? executionDetails.recipient : ""),
+      keywords:
+        resolvedQueryKeywords.length > 0
+          ? resolvedQueryKeywords
+          : executionDetails?.searchedKeyword
+            ? [executionDetails.searchedKeyword]
+            : [],
+      dispatchMethod: emailDispObj
+        ? "방식 A/B 선택대기"
+        : plan.actionType === "SMS_DISPATCH"
+          ? "SMS 문자발송"
+          : plan.actionType === "APPS_SCRIPT_RUN"
+            ? `AppsScript(${plan.functionName || ""})`
+            : "",
+      resultSummary: plan.explanation || "작업 수행 완료",
+      status: activityStatus,
+    });
 
     const targetSheetId = targetSpreadsheetId || userProjects[0]?.spreadsheet_id || "";
     const canPromote =

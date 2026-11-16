@@ -2175,7 +2175,8 @@ object ApiClient {
         subject: String = "",
         body: String = "",
         webViewLink: String = "",
-        webContentLink: String = ""
+        webContentLink: String = "",
+        mode: String = "DIRECT_SEND"
     ): DirectEmailSendResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val json = JSONObject().apply {
@@ -2187,6 +2188,7 @@ object ApiClient {
             put("body", body)
             put("webViewLink", webViewLink)
             put("webContentLink", webContentLink)
+            put("mode", mode)
         }
         val reqBody = json.toString().toRequestBody(JSON_MEDIA_TYPE)
 

@@ -3,13 +3,14 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { setupDatabase } from "@/lib/setup-db";
-import { insertRows, callGmailTool } from "@/lib/egdesk-helpers";
+import { callGmailTool } from "@/lib/egdesk-helpers";
 import { sendSystemEmail } from "@/lib/admin-email";
+import { recordAiCopilotActivity } from "@/lib/ai-copilot-learning";
 
 /**
  * POST /api/user/messages/email/send
- * 모바일 시트봇 AI 비서에서 구글 드라이브/PC 파일 이메일 전송 요청을 처리하는 엔드포인트
- * [방식 A: 시트봇으로 즉시 자동 발송] 전용
+ * 모바일 시트봇 AI 비서에서 구글 드라이브/PC 파일 이메일 전송 요청을 처리하고
+ * [SheetBot] AI 비서 활동 및 업무 학습 대장(구글 시트 + 파투 시트 + SQLite)에 발송 결과를 기록하는 엔드포인트
  */
 export async function POST(req: NextRequest) {
   try {
@@ -25,6 +26,7 @@ export async function POST(req: NextRequest) {
       webViewLink = "",
       webContentLink = "",
       userEmail: bodyEmail,
+      mode = "DIRECT_SEND", // "DIRECT_SEND" (방식 A) | "LOG_METHOD_B" (방식 B: 스마트폰 메일 앱 선택 기록)
     } = body;
 
     const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
@@ -41,6 +43,33 @@ export async function POST(req: NextRequest) {
         { success: false, error: "유효한 수신자 이메일 주소를 입력해 주세요." },
         { status: 400 }
       );
+    }
+
+    // [방식 B: 스마트폰 기본 메일 앱 발송 선택] 시트 및 학습 대장 기록 전용 분기
+    if (mode === "LOG_METHOD_B") {
+      await recordAiCopilotActivity({
+        userEmail: userEmail || "anonymous",
+        req,
+        command: `[방식 B 선택] '${fileName}' 파일을 ${to} 앞으로 스마트폰 메일 앱 발송`,
+        actionType: "EMAIL_DISPATCH",
+        domainTag: "이메일발송",
+        targetFile: fileName,
+        fileSizeFormatted,
+        webViewLink,
+        webContentLink,
+        targetEmail: to,
+        targetRecipient: to,
+        dispatchMethod: "방식 B (스마트폰 메일 앱)",
+        resultSummary: `📱 '${fileName}' 파일을 [${to}] 앞으로 스마트폰 기본 메일 앱(방식 B)을 통해 발송 실행`,
+        status: "SUCCESS",
+      });
+
+      return NextResponse.json({
+        success: true,
+        method: "LOCAL_MAIL_APP",
+        recipientEmail: to,
+        message: "스마트폰 메일 앱 발송 이력이 시트에 기록되었습니다.",
+      });
     }
 
     const mailSubject =
@@ -113,22 +142,25 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 감사 로그 적재
-    const logId = Date.now();
-    await insertRows("sheetbot_user_dispatch_logs", [
-      {
-        id: logId,
-        user_email: userEmail || "anonymous",
-        rule_id: "AI_EMAIL_DISPATCH",
-        rule_name: "✉️ AI 비서 파일 이메일 발송",
-        device_id: "SheetBot Mobile Agent",
-        recipient: to,
-        content: `[파일 공유] ${fileName} -> ${to} (${dispatchMethod || "FAILED"})`,
-        status: dispatchSuccess ? "SUCCESS" : "FAILED",
-        error_message: dispatchSuccess ? null : dispatchError,
-        created_at: new Date().toISOString(),
-      },
-    ]).catch(() => {});
+    // 통합 학습 대장(DB + 구글 시트 + 파투 시트) 기록
+    await recordAiCopilotActivity({
+      userEmail: userEmail || "anonymous",
+      req,
+      command: `[방식 A 선택] '${fileName}' 파일을 ${to} 앞으로 시트봇 자동 발송`,
+      actionType: "EMAIL_DISPATCH",
+      domainTag: "이메일발송",
+      targetFile: fileName,
+      fileSizeFormatted,
+      webViewLink,
+      webContentLink,
+      targetEmail: to,
+      targetRecipient: to,
+      dispatchMethod: `방식 A (시트봇 자동/${dispatchMethod || "FAILED"})`,
+      resultSummary: dispatchSuccess
+        ? `⚡ '${fileName}' 파일을 [${to}] 앞으로 시트봇 자동 발송(방식 A) 완료`
+        : `⚠️ 방식 A 발송 실패(${dispatchError}) -> 방식 B 안내`,
+      status: dispatchSuccess ? "SUCCESS" : "FAILED",
+    });
 
     if (dispatchSuccess) {
       return NextResponse.json({

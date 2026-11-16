@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
+import { getUserCopilotLearningContext } from "@/lib/ai-copilot-learning";
 
 export interface GasFunctionMeta {
   functionName: string;
@@ -185,8 +186,16 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 4. 모바일 앱 상단에 띄울 추천 명령 칩(Command Suggestions) 구성
+    // 4. 모바일 앱 상단에 띄울 추천 명령 칩(Command Suggestions) 구성 (사용자 학습 기반 맞춤형 칩 최우선 배치)
     const suggestions: CommandSuggestion[] = [];
+    const learningContext = await getUserCopilotLearningContext(cleanEmail, 35);
+
+    // (0) 사용자의 실제 활동 학습 데이터를 기반으로 동적 생성된 맞춤형 추천 칩
+    for (const learned of learningContext.personalizedSuggestions) {
+      if (!suggestions.some((s) => s.command === learned.command)) {
+        suggestions.push(learned);
+      }
+    }
 
     // (A) 스크립트 실행 칩들
     for (const fn of functions.slice(0, 4)) {

@@ -11,6 +11,7 @@ import {
 } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { sanitizeGasScriptCode } from "@/lib/gas-sanitizer";
+import { recordAiCopilotActivity } from "@/lib/ai-copilot-learning";
 
 /**
  * 기존 Code.gs 코드에 신규 함수를 안전하게 병합하고 onOpen 메뉴에 등록
@@ -249,6 +250,19 @@ ${requestedTitle ? `- 권장 기능명: ${requestedTitle}` : ""}
       },
       { filters: { id: String(targetProject.id) } }
     ).catch(() => {});
+
+    // 6. AI 비서 학습 대장에 메뉴 영구 승격(COMMAND_PROMOTE) 기록
+    await recordAiCopilotActivity({
+      userEmail: cleanEmail,
+      req,
+      command: `[메뉴 영구 승격] ${command}`,
+      actionType: "COMMAND_PROMOTE",
+      domainTag: "메뉴영구저장",
+      targetSheet: targetProject.name || spreadsheetId,
+      keywords: [generated.functionName, generated.functionTitle],
+      resultSummary: `💾 '${generated.functionTitle}' (${generated.functionName}) 기능을 [${targetProject.name}] 상단 메뉴로 영구 등록`,
+      status: "SUCCESS",
+    });
 
     return NextResponse.json({
       success: true,

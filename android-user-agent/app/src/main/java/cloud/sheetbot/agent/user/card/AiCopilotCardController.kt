@@ -1161,9 +1161,26 @@ class AiCopilotCardController(
     }
 
     /**
-     * 📱 방식 B: 스마트폰 기본 이메일 앱(Gmail, 삼성 메일, 네이버 메일 등) 호출
+     * 📱 방식 B: 스마트폰 기본 이메일 앱(Gmail, 삼성 메일, 네이버 메일 등) 호출 및 AI 학습 대장 비동기 기록
      */
     private fun sendViaLocalMailApp(dispatch: cloud.sheetbot.agent.user.EmailDispatchInfo) {
+        val userEmail = prefs.userEmail ?: ""
+        scope.launch {
+            try {
+                ApiClient.sendDirectEmail(
+                    userEmail = userEmail,
+                    recipientEmail = dispatch.recipientEmail,
+                    fileName = dispatch.fileName,
+                    fileSizeFormatted = dispatch.fileSizeFormatted,
+                    subject = dispatch.subject,
+                    body = dispatch.body,
+                    webViewLink = dispatch.webViewLink,
+                    webContentLink = dispatch.webContentLink,
+                    mode = "LOG_METHOD_B"
+                )
+            } catch (_: Exception) {}
+        }
+
         try {
             val mailUri = Uri.parse("mailto:${Uri.encode(dispatch.recipientEmail)}")
             val intent = Intent(Intent.ACTION_SENDTO, mailUri).apply {

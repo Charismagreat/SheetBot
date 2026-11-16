@@ -1,6 +1,7 @@
 // Central re-export of root egdesk-helpers
 if (typeof window === 'undefined') {
   process.env.NEXT_PUBLIC_EGDESK_API_URL = 'http://localhost:8080';
+  process.env.EGDESK_RUNTIME_ENV = 'development';
 }
 
 export * from '../../egdesk-helpers';
