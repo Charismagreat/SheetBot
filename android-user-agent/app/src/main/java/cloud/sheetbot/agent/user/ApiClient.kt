@@ -1503,9 +1503,6 @@ object ApiClient {
                 Log.w(TAG, "대본 추천 호스트 실패 ($host): ${e.message}")
             }
         }
-                Log.w(TAG, "대본 추천 네트워크 오류 ($host): ${e.message}")
-            }
-        }
 
         if (!serverError.isNullOrBlank()) {
             throw IllegalStateException(serverError)
