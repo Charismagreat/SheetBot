@@ -969,7 +969,7 @@ class AiCopilotCardController(
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#0F172A"))
                 cornerRadius = dpToPx(12).toFloat()
-                setStroke(dpToPx(1.5f), Color.parseColor("#2563EB"))
+                setStroke(dpToPx(1), Color.parseColor("#2563EB"))
             }
         }
 
