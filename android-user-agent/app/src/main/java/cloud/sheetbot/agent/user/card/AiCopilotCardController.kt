@@ -508,8 +508,12 @@ class AiCopilotCardController(
                     binding.tvAiCommandExplanation.text = "✅ $finalExplanation"
                     binding.tvAiCommandSpoken.text = "🗣️ $finalSpoken"
 
-                    // 구글 드라이브/PC 파일 전송 결과가 있으면 전용 파일 카드 렌더링
-                    if (res.driveFiles.isNotEmpty() || res.primaryDriveFile != null) {
+                    // 이메일 발송 대기(방식 A/B 선택)인 경우
+                    if (res.emailDispatch != null) {
+                        currentMatchedRows = emptyList()
+                        renderEmailDispatchCard(res.emailDispatch)
+                    } else if (res.driveFiles.isNotEmpty() || res.primaryDriveFile != null) {
+                        // 구글 드라이브/PC 파일 전송 결과가 있으면 전용 파일 카드 렌더링
                         currentMatchedRows = emptyList()
                         renderDriveFileCards(res.driveFiles, res.primaryDriveFile)
                     } else {
@@ -894,6 +898,294 @@ class AiCopilotCardController(
             activity.startActivity(intent)
         } catch (e: Exception) {
             Toast.makeText(activity, "파일 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * ✉️ 구글 드라이브 파일 이메일 전송 (방식 A: 시트봇 자동 발송 vs 방식 B: 스마트폰 메일 앱 발송) 선택 카드 렌더링
+     */
+    private fun renderEmailDispatchCard(dispatch: cloud.sheetbot.agent.user.EmailDispatchInfo) {
+        val container = binding.root.findViewWithTag<LinearLayout>("layoutAiSearchResultsContainer") ?: return
+        container.removeAllViews()
+        container.visibility = View.VISIBLE
+
+        // 1. 상단 구분선
+        val divider = View(activity).apply {
+            setBackgroundColor(Color.parseColor("#1E293B"))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(1)
+            ).apply {
+                bottomMargin = dpToPx(8)
+            }
+        }
+        container.addView(divider)
+
+        // 2. 헤더 바
+        val headerRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dpToPx(8)
+            }
+        }
+
+        val tvHeaderTitle = TextView(activity).apply {
+            text = "✉️ 파일 이메일 전송 선택 (방식 A / B)"
+            setTextColor(Color.parseColor("#38BDF8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            typeface = Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        headerRow.addView(tvHeaderTitle)
+
+        val btnClear = TextView(activity).apply {
+            text = "✕ 닫기"
+            setTextColor(Color.parseColor("#94A3B8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            setPadding(dpToPx(6), dpToPx(2), dpToPx(6), dpToPx(2))
+            setBackgroundResource(android.R.drawable.list_selector_background)
+            setOnClickListener {
+                container.removeAllViews()
+                container.visibility = View.GONE
+            }
+        }
+        headerRow.addView(btnClear)
+        container.addView(headerRow)
+
+        // 3. 메인 안내 카드
+        val cardView = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dpToPx(10)
+            }
+            setPadding(dpToPx(14), dpToPx(14), dpToPx(14), dpToPx(14))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#0F172A"))
+                cornerRadius = dpToPx(12).toFloat()
+                setStroke(dpToPx(1.5f), Color.parseColor("#2563EB"))
+            }
+        }
+
+        // 수신자 정보
+        val tvRecipient = TextView(activity).apply {
+            text = "📨 수신 대상: ${dispatch.recipientEmail}"
+            setTextColor(Color.parseColor("#38BDF8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, 0, 0, dpToPx(4))
+        }
+        cardView.addView(tvRecipient)
+
+        // 첨부 파일 정보
+        val tvFileInfo = TextView(activity).apply {
+            val sizeStr = if (dispatch.fileSizeFormatted.isNotBlank()) " (${dispatch.fileSizeFormatted})" else ""
+            text = "📁 첨부 파일: ${dispatch.fileName}$sizeStr"
+            setTextColor(Color.parseColor("#F1F5F9"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setPadding(0, 0, 0, dpToPx(4))
+        }
+        cardView.addView(tvFileInfo)
+
+        // 메일 제목
+        val tvSubject = TextView(activity).apply {
+            text = "📝 메일 제목: ${dispatch.subject}"
+            setTextColor(Color.parseColor("#94A3B8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            setPadding(0, 0, 0, dpToPx(12))
+        }
+        cardView.addView(tvSubject)
+
+        // 안내문
+        val tvGuide = TextView(activity).apply {
+            text = "원하시는 발송 방식을 선택해 주세요:"
+            setTextColor(Color.parseColor("#FDE047"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, 0, 0, dpToPx(8))
+        }
+        cardView.addView(tvGuide)
+
+        // 방식 A 버튼: 시트봇으로 즉시 자동 발송
+        val btnMethodA = Button(activity).apply {
+            text = "⚡ 방식 A: 시트봇으로 즉시 자동 발송"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            typeface = Typeface.DEFAULT_BOLD
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#2563EB"))
+                cornerRadius = dpToPx(8).toFloat()
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(42)
+            ).apply {
+                bottomMargin = dpToPx(8)
+            }
+        }
+
+        // 상태 메시지 뷰 (발송 결과 등)
+        val tvStatus = TextView(activity).apply {
+            visibility = View.GONE
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            setPadding(dpToPx(8), dpToPx(6), dpToPx(8), dpToPx(6))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dpToPx(8)
+            }
+        }
+
+        btnMethodA.setOnClickListener {
+            btnMethodA.isEnabled = false
+            btnMethodA.text = "⏳ 시트봇에서 이메일 발송 중..."
+            tvStatus.visibility = View.VISIBLE
+            tvStatus.text = "서버에서 [${dispatch.recipientEmail}] 앞으로 발송 요청을 처리하고 있습니다..."
+            tvStatus.setTextColor(Color.parseColor("#38BDF8"))
+
+            val userEmail = prefs.userEmail ?: ""
+            scope.launch {
+                val sendRes = ApiClient.sendDirectEmail(
+                    userEmail = userEmail,
+                    recipientEmail = dispatch.recipientEmail,
+                    fileName = dispatch.fileName,
+                    fileSizeFormatted = dispatch.fileSizeFormatted,
+                    subject = dispatch.subject,
+                    body = dispatch.body,
+                    webViewLink = dispatch.webViewLink,
+                    webContentLink = dispatch.webContentLink
+                )
+                withContext(Dispatchers.Main) {
+                    if (sendRes.success) {
+                        btnMethodA.text = "✅ 시트봇 발송 완료"
+                        btnMethodA.background = GradientDrawable().apply {
+                            setColor(Color.parseColor("#059669"))
+                            cornerRadius = dpToPx(8).toFloat()
+                        }
+                        tvStatus.text = sendRes.message ?: "이메일이 성공적으로 발송되었습니다."
+                        tvStatus.setTextColor(Color.parseColor("#34D399"))
+                        Toast.makeText(activity, "✅ ${dispatch.recipientEmail} 메일 발송 완료!", Toast.LENGTH_SHORT).show()
+                        addLogItem("이메일 발송 완료", "${dispatch.fileName} -> ${dispatch.recipientEmail}", true)
+                    } else {
+                        btnMethodA.isEnabled = true
+                        btnMethodA.text = "⚡ 방식 A: 시트봇으로 즉시 자동 발송 (재시도)"
+                        tvStatus.text = sendRes.error ?: "발송에 실패했습니다."
+                        tvStatus.setTextColor(Color.parseColor("#F87171"))
+                        if (sendRes.requireLocalApp) {
+                            Toast.makeText(activity, "서버 직접 발송 불가. 방식 B(스마트폰 메일 앱)를 이용해 주세요.", Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(activity, "발송 실패: ${sendRes.error}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        }
+        cardView.addView(btnMethodA)
+
+        // 방식 B 버튼: 내 스마트폰 메일 앱에서 확인 후 발송
+        val btnMethodB = Button(activity).apply {
+            text = "📱 방식 B: 내 메일 앱에서 확인 후 발송 (권장)"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            typeface = Typeface.DEFAULT_BOLD
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#059669"))
+                cornerRadius = dpToPx(8).toFloat()
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(42)
+            ).apply {
+                bottomMargin = dpToPx(8)
+            }
+            setOnClickListener {
+                sendViaLocalMailApp(dispatch)
+            }
+        }
+        cardView.addView(btnMethodB)
+        cardView.addView(tvStatus)
+
+        // 보조 버튼들 (미리보기 / 링크 복사)
+        val subActionRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        val btnOpenWeb = Button(activity).apply {
+            text = "🔍 파일 미리보기"
+            setTextColor(Color.parseColor("#CBD5E1"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#334155"))
+                cornerRadius = dpToPx(6).toFloat()
+            }
+            layoutParams = LinearLayout.LayoutParams(0, dpToPx(34), 1f).apply {
+                rightMargin = dpToPx(6)
+            }
+            setOnClickListener {
+                openFileInViewer(dispatch.fileName, dispatch.webViewLink)
+            }
+        }
+        subActionRow.addView(btnOpenWeb)
+
+        val btnCopyLink = Button(activity).apply {
+            text = "🔗 파일 링크 복사"
+            setTextColor(Color.parseColor("#CBD5E1"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#334155"))
+                cornerRadius = dpToPx(6).toFloat()
+            }
+            layoutParams = LinearLayout.LayoutParams(0, dpToPx(34), 1f)
+            setOnClickListener {
+                val linkToCopy = dispatch.webViewLink.ifBlank { dispatch.webContentLink }
+                val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                clipboard?.setPrimaryClip(ClipData.newPlainText("Drive Link", linkToCopy))
+                Toast.makeText(activity, "📋 파일 링크가 복사되었습니다.", Toast.LENGTH_SHORT).show()
+            }
+        }
+        subActionRow.addView(btnCopyLink)
+
+        cardView.addView(subActionRow)
+        container.addView(cardView)
+    }
+
+    /**
+     * 📱 방식 B: 스마트폰 기본 이메일 앱(Gmail, 삼성 메일, 네이버 메일 등) 호출
+     */
+    private fun sendViaLocalMailApp(dispatch: cloud.sheetbot.agent.user.EmailDispatchInfo) {
+        try {
+            val mailUri = Uri.parse("mailto:${Uri.encode(dispatch.recipientEmail)}")
+            val intent = Intent(Intent.ACTION_SENDTO, mailUri).apply {
+                putExtra(Intent.EXTRA_SUBJECT, dispatch.subject)
+                putExtra(Intent.EXTRA_TEXT, dispatch.body)
+            }
+            val chooser = Intent.createChooser(intent, "이메일 앱을 선택하세요")
+            activity.startActivity(chooser)
+            Toast.makeText(activity, "📱 메일 앱이 열리면 내용을 확인하고 전송 버튼을 눌러주세요.", Toast.LENGTH_LONG).show()
+            addLogItem("메일 앱 호출", "${dispatch.fileName} -> ${dispatch.recipientEmail}", true)
+        } catch (e: Exception) {
+            try {
+                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_EMAIL, arrayOf(dispatch.recipientEmail))
+                    putExtra(Intent.EXTRA_SUBJECT, dispatch.subject)
+                    putExtra(Intent.EXTRA_TEXT, dispatch.body)
+                }
+                activity.startActivity(Intent.createChooser(sendIntent, "이메일 전송 앱 선택"))
+            } catch (e2: Exception) {
+                Toast.makeText(activity, "메일 앱을 실행할 수 없습니다: ${e2.message}", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 

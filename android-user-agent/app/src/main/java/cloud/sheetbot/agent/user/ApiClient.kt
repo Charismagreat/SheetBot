@@ -2120,6 +2120,20 @@ object ApiClient {
                         primaryDriveFile = parsedDriveFiles.first()
                     }
 
+                    var emailDispatch: EmailDispatchInfo? = null
+                    val emailObj = resJson.optJSONObject("emailDispatch") ?: detailsObj?.optJSONObject("emailDispatch")
+                    if (emailObj != null) {
+                        emailDispatch = EmailDispatchInfo(
+                            recipientEmail = emailObj.optString("recipientEmail", ""),
+                            fileName = emailObj.optString("fileName", "파일"),
+                            fileSizeFormatted = emailObj.optString("fileSizeFormatted", ""),
+                            subject = emailObj.optString("subject", ""),
+                            body = emailObj.optString("body", ""),
+                            webViewLink = emailObj.optString("webViewLink", ""),
+                            webContentLink = emailObj.optString("webContentLink", "")
+                        )
+                    }
+
                     return@withContext AiCommandResult(
                         success = true,
                         command = resJson.optString("command", command),
@@ -2136,6 +2150,7 @@ object ApiClient {
                         matchedRows = parsedMatchedRows,
                         driveFiles = parsedDriveFiles,
                         primaryDriveFile = primaryDriveFile,
+                        emailDispatch = emailDispatch,
                         details = detailsObj
                     )
                 } else {
@@ -2147,6 +2162,66 @@ object ApiClient {
             }
         }
         AiCommandResult(success = false, error = "자연어 시트 명령 실행에 실패했습니다.")
+    }
+
+    /**
+     * 구글 드라이브/PC 파일 공유 이메일 직접 발송 (방식 A: 시트봇으로 즉시 자동 발송)
+     */
+    suspend fun sendDirectEmail(
+        userEmail: String,
+        recipientEmail: String,
+        fileName: String,
+        fileSizeFormatted: String = "",
+        subject: String = "",
+        body: String = "",
+        webViewLink: String = "",
+        webContentLink: String = ""
+    ): DirectEmailSendResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("recipientEmail", recipientEmail)
+            put("fileName", fileName)
+            put("fileSizeFormatted", fileSizeFormatted)
+            put("subject", subject)
+            put("body", body)
+            put("webViewLink", webViewLink)
+            put("webContentLink", webContentLink)
+        }
+        val reqBody = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/messages/email/send"
+            try {
+                val reqBuilder = Request.Builder().url(endpoint).post(reqBody)
+                if (userEmail.isNotBlank()) reqBuilder.addHeader("x-sheetbot-user-email", userEmail)
+                val request = reqBuilder.build()
+                val response = longTimeoutClient.newCall(request).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext DirectEmailSendResult(
+                        success = true,
+                        message = resJson.optString("message", "이메일이 성공적으로 발송되었습니다.")
+                    )
+                } else {
+                    val requireLocalApp = resJson.optBoolean("requireLocalApp", false)
+                    val err = resJson.optString("error", "이메일 발송에 실패했습니다.")
+                    return@withContext DirectEmailSendResult(
+                        success = false,
+                        requireLocalApp = requireLocalApp,
+                        error = err
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "이메일 직접 발송 통신 예외 ($host): ${e.message}")
+            }
+        }
+        DirectEmailSendResult(
+            success = false,
+            requireLocalApp = true,
+            error = "서버 통신에 실패했습니다. 스마트폰 기본 메일 앱을 이용해 주세요."
+        )
     }
 
     /**
@@ -4359,6 +4434,23 @@ data class DriveFileItem(
     val summary: String? = null
 )
 
+data class EmailDispatchInfo(
+    val recipientEmail: String,
+    val fileName: String = "파일",
+    val fileSizeFormatted: String = "",
+    val subject: String = "",
+    val body: String = "",
+    val webViewLink: String = "",
+    val webContentLink: String = ""
+)
+
+data class DirectEmailSendResult(
+    val success: Boolean,
+    val message: String? = null,
+    val requireLocalApp: Boolean = false,
+    val error: String? = null
+)
+
 data class AiCommandResult(
     val success: Boolean,
     val command: String? = null,
@@ -4375,6 +4467,7 @@ data class AiCommandResult(
     val matchedRows: List<FtsSearchMatchedRow> = emptyList(),
     val driveFiles: List<DriveFileItem> = emptyList(),
     val primaryDriveFile: DriveFileItem? = null,
+    val emailDispatch: EmailDispatchInfo? = null,
     val details: JSONObject? = null,
     val error: String? = null
 )

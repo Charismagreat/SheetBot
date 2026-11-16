@@ -801,13 +801,14 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
   "actionType": "SHEET_QUERY" | "SHEET_WRITE" | "SMS_DISPATCH" | "APPS_SCRIPT_RUN" | "DRIVE_FILE_ACTION" | "APPS_SCRIPT_NOT_FOUND" | "GENERAL_ASSIST",
   "targetName": "고객명 또는 대상자 (있을 경우)",
   "targetPhone": "전화번호 (있을 경우)",
+  "targetEmail": "수신자 이메일 주소 (이메일 발송 요청인 경우, 예: 'chacho@nate.com')",
   "messageText": "발송할 문자 내용 또는 전달할 내용",
   "scriptId": "실행할 Apps Script scriptId (APPS_SCRIPT_RUN인 경우)",
   "functionName": "실행할 Apps Script 실제 함수명 (availableGasFunctions에 실제로 존재하는 이름만 지정할 것)",
   "functionParams": [],
-  "driveFileKeyword": "구글 드라이브나 PC 폴더에서 찾을 파일명 또는 검색 키워드 (예: '계약서', '견적서', '보고서', '최종본', '매출내역')",
-  "driveFolderKeyword": "지칭한 특정 폴더명 (예: '시트봇', '영수증', '다운로드' 등, 전체 드라이브면 '')",
-  "driveOperation": "FETCH(조회/스마트폰 전송/열기) | SUMMARIZE(내용 3줄 요약) | SEND_SMS(문자로 전송)",
+  "driveFileKeyword": "구글 드라이브나 PC 폴더에서 찾을 파일명 또는 검색 키워드 (예: '계약서', '견적서', '보고서', '최종본', '매출내역', '대출금')",
+  "driveFolderKeyword": "지칭한 특정 폴더명 (예: 'demo', '시트봇', '영수증', '다운로드' 등, 전체 드라이브면 '')",
+  "driveOperation": "FETCH(조회/스마트폰 전송/열기) | SUMMARIZE(내용 3줄 요약) | SEND_SMS(문자로 전송) | SEND_EMAIL(이메일로 전송)",
   "queryKeywords": ["파투 시트 행 데이터에서 검색할 핵심 단어들 (조사/어미 제외, 유의어 포함. 예: ['국민건강보험공단', '건강보험', '분납'], ['032디자인', '이항식'], ['영수증', '식대'])"],
   "queryTargetEntity": "핵심 검색 대상 인물/기관/상호명 (있을 경우, 예: '국민건강보험공단', '이항식', '홍길동', 없으면 '')",
   "queryTargetProjects": ["특정 파투 프로젝트명을 지칭한 경우 해당 프로젝트명 배열 (전체 검색이면 [])"],
@@ -829,6 +830,7 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
 }
 
 * 판별 주의사항:
+- 특정 파일(또는 '방금 찾아온 파일', '대출금 이미지' 등)을 이메일로 보내달라는 요청("방금 찾아온 대출금관련 이미지 파일을 chacho@nate.com으로 보내줘", "이 파일 gildong@gmail.com으로 메일 보내줘")은 반드시 "actionType": "DRIVE_FILE_ACTION", "driveOperation": "SEND_EMAIL"로 판별하고, "targetEmail"에 추출한 이메일 주소를 반드시 기입하세요.
 - 내 PC 폴더나 구글 드라이브에서 특정 파일(문서, 견적서, 계약서, PDF, 엑셀, 이미지 등)을 찾아달라거나 스마트폰으로 보여달라/보내달라/요약해달라는 요청("내 PC 시트봇 폴더에서 oo파일 찾아서 보여줘", "드라이브에서 2026 계약서 찾아줘", "이 파일 스마트폰으로 보내줘")은 반드시 "actionType": "DRIVE_FILE_ACTION"으로 판별하세요.
 - 파투 내 프로젝트/시트 데이터 검색, 특정 키워드/고객/기관 내역 찾기, 건수/금액 집계, 연락처/통화/문자/카톡/이메일/영수증/할일 조회, 결재 대기건 조회 등 모든 검색·질의는 반드시 "actionType": "SHEET_QUERY"로 판별하세요.
 - queryKeywords에는 '찾아줘', '보여줘', '알려줘', '내역', '관련', '시트', '파투' 같은 일반 서술어를 넣지 말고, 실제 셀 값과 매칭될 명사/키워드만 추출하세요.
@@ -1041,20 +1043,61 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
             primaryFile.summary = aiSummaryText;
             plan.explanation = aiSummaryText;
             plan.spokenResult = `구글 드라이브에서 '${primaryFile.name}' 파일을 찾아 요약해 드렸습니다.`;
+
+            executionDetails = {
+              type: "DRIVE_FILE_ACTION",
+              status: "SUCCESS",
+              searchedKeyword: fileKeyword,
+              searchedFolder: folderKeyword,
+              operation,
+              driveFiles: driveFileDtos,
+              primaryDriveFile: primaryFile,
+            };
+          } else if (operation === "SEND_EMAIL" || plan.targetEmail || (command.includes("@") && command.includes("보내"))) {
+            // 4-B. 이메일 전송 요청인 경우 (SEND_EMAIL)
+            const emailMatch = command.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+            const targetEmail = (plan.targetEmail || (emailMatch ? emailMatch[0] : "")).trim();
+
+            const emailSubject = `[SheetBot] ${primaryFile.name} 파일 공유 안내`;
+            const emailBody = `안녕하세요.\n요청하신 [${primaryFile.name}] (${primaryFile.sizeFormatted || ""}) 파일입니다.\n\n▶ 구글 드라이브 바로보기:\n${primaryFile.webViewLink}\n\n▶ 파일 다운로드:\n${primaryFile.webContentLink}\n\n시트봇(SheetBot)에서 발송되었습니다.`;
+
+            const emailDispatchData = {
+              recipientEmail: targetEmail,
+              fileName: primaryFile.name,
+              fileSizeFormatted: primaryFile.sizeFormatted || "",
+              subject: emailSubject,
+              body: emailBody,
+              webViewLink: primaryFile.webViewLink,
+              webContentLink: primaryFile.webContentLink,
+            };
+
+            plan.explanation = `✉️ '${primaryFile.name}' 파일을 [${targetEmail}] 앞으로 전송할 준비가 되었습니다.\n아래에서 발송 방식을 선택해 주세요.\n• 방식 A: ⚡ 시트봇으로 즉시 자동 발송\n• 방식 B: 📱 내 스마트폰 메일 앱에서 확인 후 발송`;
+            plan.spokenResult = `${primaryFile.name} 파일을 ${targetEmail}로 보낼 준비를 마쳤습니다. 발송 방식을 선택해 주세요.`;
+
+            executionDetails = {
+              type: "DRIVE_FILE_ACTION",
+              status: "EMAIL_DISPATCH_READY",
+              searchedKeyword: fileKeyword,
+              searchedFolder: folderKeyword,
+              operation: "SEND_EMAIL",
+              driveFiles: driveFileDtos,
+              primaryDriveFile: primaryFile,
+              emailDispatch: emailDispatchData,
+            };
           } else {
             plan.explanation = `📁 구글 드라이브${folderKeyword ? ` [${folderKeyword}] 폴더` : ""}에서 '${primaryFile.name}' 외 ${driveFileDtos.length}건의 파일을 찾았습니다.\n아래 카드를 터치하여 스마트폰으로 바로 열거나 다운로드할 수 있습니다.`;
             plan.spokenResult = `구글 드라이브에서 '${primaryFile.name}' 파일을 찾았습니다. 스마트폰으로 전송해 드렸습니다.`;
-          }
 
-          executionDetails = {
-            type: "DRIVE_FILE_ACTION",
-            status: "SUCCESS",
-            searchedKeyword: fileKeyword,
-            searchedFolder: folderKeyword,
-            operation,
-            driveFiles: driveFileDtos,
-            primaryDriveFile: primaryFile,
-          };
+            executionDetails = {
+              type: "DRIVE_FILE_ACTION",
+              status: "SUCCESS",
+              searchedKeyword: fileKeyword,
+              searchedFolder: folderKeyword,
+              operation,
+              driveFiles: driveFileDtos,
+              primaryDriveFile: primaryFile,
+            };
+          }
         }
       } catch (driveErr: any) {
         console.error("[CommandExecute] Drive action error:", driveErr);
@@ -1656,6 +1699,7 @@ ${sampleDataTexts.join("\n\n====================\n\n")}
       matchedRows: matchedRowsResult,
       driveFiles: executionDetails?.driveFiles || [],
       primaryDriveFile: executionDetails?.primaryDriveFile || null,
+      emailDispatch: executionDetails?.emailDispatch || null,
       details: {
         ...executionDetails,
         canPromote,
