@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_dialog_rounded">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <!-- 1. 커스텀 타이틀 헤더 바 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🎭"
+                android:textSize="20sp"
+                android:layout_marginEnd="8dp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvDialogTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="AI 전속 모델 전신 3D 프로필"
+                    android:textColor="#FFFFFF"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Google Gemini &amp; Veo 3 Studio Persona"
+                    android:textColor="#C084FC"
+                    android:textSize="10.5sp" />
+            </LinearLayout>
+
+            <!-- 상단 우측 닫기 버튼 -->
+            <TextView
+                android:id="@+id/btnDialogCloseTop"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:gravity="center"
+                android:text="✕"
+                android:textColor="#94A3B8"
+                android:textSize="18sp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true" />
+        </LinearLayout>
+
+        <!-- 상단 구분선 -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#334155"
+            android:layout_marginBottom="12dp" />
+
+        <!-- 2. 모델 명칭 & 3D 룩북 헤더 -->
+        <TextView
+            android:id="@+id/tvModelLookbookTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="✨ 전신 3D 스튜디오 룩북"
+            android:textColor="#E9D5FF"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="10dp" />
+
+        <!-- 3. 실제 전신 3D 이미지 뷰 프레임 -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#070B14"
+            android:padding="6dp"
+            android:layout_marginBottom="8dp">
+
+            <ImageView
+                android:id="@+id/ivFullBodyProfile"
+                android:layout_width="match_parent"
+                android:layout_height="360dp"
+                android:scaleType="fitCenter"
+                android:adjustViewBounds="true"
+                android:contentDescription="전속 모델 전신 3D 렌더링"
+                android:clickable="true"
+                android:focusable="true" />
+        </FrameLayout>
+
+        <!-- 정면 3D ↔ 4분할 시트 전환 버튼 -->
+        <Button
+            android:id="@+id/btnToggleTurnaroundSheet"
+            android:layout_width="match_parent"
+            android:layout_height="38dp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingVertical="0dp"
+            android:gravity="center"
+            android:backgroundTint="#4C1D95"
+            android:text="🔄 4분할 360° 턴어라운드 시트 보기 (터치 전환)"
+            android:textColor="#F3E8FF"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="12dp" />
+
+        <!-- 4. 전신 3D 스펙 요약 박스 -->
+        <TextView
+            android:id="@+id/tvModelSpecDetails"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#1E293B"
+            android:padding="12dp"
+            android:text="스펙 정보 로딩 중..."
+            android:textColor="#CBD5E1"
+            android:textSize="11sp"
+            android:lineSpacingExtra="3dp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- 뷰어 안내 텍스트 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="💡 '360도 웹 뷰어 열기'를 누르시면 웹 스튜디오에서 마우스/터치 좌우 스와이프 360° 회전 및 제품 PPL 합성을 시뮬레이션할 수 있습니다."
+            android:textColor="#A78BFA"
+            android:textSize="10sp"
+            android:layout_marginBottom="14dp" />
+
+        <!-- 하단 구분선 -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#334155"
+            android:layout_marginBottom="12dp" />
+
+        <!-- 5. 하단 액션 버튼 영역 -->
+        <!-- 메인 액션: 360도 웹 뷰어 열기 -->
+        <Button
+            android:id="@+id/btnActionOpen3dWeb"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingVertical="0dp"
+            android:gravity="center"
+            android:backgroundTint="#7C3AED"
+            android:text="🌐 360도 웹 뷰어 열기"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <!-- 서브 액션: 모델 설정 수정 & 모델 변경 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <Button
+                android:id="@+id/btnActionEditModelSettings"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingVertical="0dp"
+                android:gravity="center"
+                android:backgroundTint="#312E81"
+                android:text="⚙️ 모델 설정 수정"
+                android:textColor="#E0E7FF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btnActionChangeModel"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingVertical="0dp"
+                android:gravity="center"
+                android:backgroundTint="#334155"
+                android:text="🔄 모델 변경"
+                android:textColor="#F1F5F9"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- 닫기 버튼 -->
+        <Button
+            android:id="@+id/btnActionDismiss"
+            android:layout_width="match_parent"
+            android:layout_height="34dp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingVertical="0dp"
+            android:gravity="center"
+            android:backgroundTint="#1E293B"
+            android:text="닫기"
+            android:textColor="#94A3B8"
+            android:textSize="11sp" />
+    </LinearLayout>
+</ScrollView>

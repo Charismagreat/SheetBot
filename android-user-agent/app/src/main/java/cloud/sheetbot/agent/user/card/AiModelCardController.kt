@@ -252,103 +252,71 @@ class AiModelCardController(
     }
 
     /**
-     * 🔍 선택된 전속 모델의 전신 3D 룩북 & 스펙 브리핑 다이얼로그
+     * 🔍 선택된 전속 모델의 전신 3D 룩북 & 스펙 브리핑 다이얼로그 (커스텀 프리미엄 UI)
      */
     private fun showFullBody3dDialog(model: cloud.sheetbot.agent.user.AiModelPersona) {
-        val scrollView = android.widget.ScrollView(activity).apply {
-            setBackgroundColor(android.graphics.Color.parseColor("#0F172A"))
-        }
+        val dialogView = LayoutInflater.from(activity).inflate(R.layout.dialog_ai_model_3d_profile, null)
+        val tvModelLookbookTitle = dialogView.findViewById<android.widget.TextView>(R.id.tvModelLookbookTitle)
+        val ivFullBodyProfile = dialogView.findViewById<android.widget.ImageView>(R.id.ivFullBodyProfile)
+        val btnToggleTurnaroundSheet = dialogView.findViewById<android.widget.Button>(R.id.btnToggleTurnaroundSheet)
+        val tvModelSpecDetails = dialogView.findViewById<android.widget.TextView>(R.id.tvModelSpecDetails)
+        val btnDialogCloseTop = dialogView.findViewById<android.widget.TextView>(R.id.btnDialogCloseTop)
+        val btnActionOpen3dWeb = dialogView.findViewById<android.widget.Button>(R.id.btnActionOpen3dWeb)
+        val btnActionEditModelSettings = dialogView.findViewById<android.widget.Button>(R.id.btnActionEditModelSettings)
+        val btnActionChangeModel = dialogView.findViewById<android.widget.Button>(R.id.btnActionChangeModel)
+        val btnActionDismiss = dialogView.findViewById<android.widget.Button>(R.id.btnActionDismiss)
 
-        val container = android.widget.LinearLayout(activity).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(36, 28, 36, 20)
-            setBackgroundColor(android.graphics.Color.parseColor("#0F172A"))
-        }
+        tvModelLookbookTitle.text = "✨ [${model.name}] 전신 3D 스튜디오 룩북"
+        ivFullBodyProfile.setImageResource(getFullBodyFrontResId(model.id))
 
-        // 헤더 뱃지
-        val tvHeader = android.widget.TextView(activity).apply {
-            text = "✨ [${model.name}] 전신 3D 스튜디오 룩북"
-            setTextColor(android.graphics.Color.parseColor("#E9D5FF"))
-            textSize = 14f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setPadding(0, 0, 0, 14)
-        }
-
-        // 실제 전신 3D 정면 이미지 뷰
         var isTurnaroundMode = false
-        val ivFullBody = android.widget.ImageView(activity).apply {
-            setImageResource(getFullBodyFrontResId(model.id))
-            adjustViewBounds = true
-            maxHeight = 820
-            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
-            setBackgroundColor(android.graphics.Color.parseColor("#070B14"))
-            setPadding(8, 8, 8, 8)
-        }
-
-        // 정면 3D ↔ 4분할 360° 턴어라운드 전환 버튼
-        val btnToggleSheet = android.widget.Button(activity).apply {
-            text = "🔄 4분할 360° 턴어라운드 시트 보기 (터치 전환)"
-            textSize = 11f
-            setTextColor(android.graphics.Color.parseColor("#F3E8FF"))
-            setBackgroundColor(android.graphics.Color.parseColor("#4C1D95"))
-            setOnClickListener {
-                isTurnaroundMode = !isTurnaroundMode
-                if (isTurnaroundMode) {
-                    ivFullBody.setImageResource(getTurnaroundResId(model.id))
-                    text = "👤 정면 단독 전신 3D 크게 보기"
-                } else {
-                    ivFullBody.setImageResource(getFullBodyFrontResId(model.id))
-                    text = "🔄 4분할 360° 턴어라운드 시트 보기 (터치 전환)"
-                }
+        val toggleTurnaroundAction = {
+            isTurnaroundMode = !isTurnaroundMode
+            if (isTurnaroundMode) {
+                ivFullBodyProfile.setImageResource(getTurnaroundResId(model.id))
+                btnToggleTurnaroundSheet.text = "👤 정면 단독 전신 3D 크게 보기"
+            } else {
+                ivFullBodyProfile.setImageResource(getFullBodyFrontResId(model.id))
+                btnToggleTurnaroundSheet.text = "🔄 4분할 360° 턴어라운드 시트 보기 (터치 전환)"
             }
         }
+        btnToggleTurnaroundSheet.setOnClickListener { toggleTurnaroundAction() }
+        ivFullBodyProfile.setOnClickListener { toggleTurnaroundAction() }
 
-        ivFullBody.setOnClickListener {
-            btnToggleSheet.performClick()
+        val specText = buildString {
+            append("• 신장/체형: ${model.heightInfo}\n")
+            append("• 보이스 페르소나: ${model.voice}\n")
+            append("• 3D 렌더링: 8K Octane / Unreal Engine 5 Photorealistic\n")
+            append("• 전속 라이선스: 사내 상업용 PPL & 쇼츠 무제한\n\n")
+            append("📐 [전신 3D 프롬프트 템플릿]:\n${model.fullBodyPrompt.ifBlank { model.style }}")
+        }
+        tvModelSpecDetails.text = specText
+
+        val dialog = AlertDialog.Builder(activity)
+            .setView(dialogView)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        btnDialogCloseTop.setOnClickListener { dialog.dismiss() }
+        btnActionDismiss.setOnClickListener { dialog.dismiss() }
+
+        btnActionOpen3dWeb.setOnClickListener {
+            open3dWebShowcase(model)
         }
 
-        // 전신 스펙 요약 박스
-        val tvSpec = android.widget.TextView(activity).apply {
-            val specText = buildString {
-                append("• 신장/체형: ${model.heightInfo}\n")
-                append("• 보이스 페르소나: ${model.voice}\n")
-                append("• 3D 렌더링: 8K Octane / Unreal Engine 5 Photorealistic\n")
-                append("• 전속 라이선스: 사내 상업용 PPL & 쇼츠 무제한\n\n")
-                append("📐 [전신 3D 프롬프트 템플릿]:\n${model.fullBodyPrompt.ifBlank { model.style }}")
-            }
-            text = specText
-            setTextColor(android.graphics.Color.parseColor("#CBD5E1"))
-            textSize = 11f
-            setBackgroundColor(android.graphics.Color.parseColor("#1E293B"))
-            setPadding(20, 20, 20, 20)
+        btnActionEditModelSettings.setOnClickListener {
+            dialog.dismiss()
+            showEditOrCreateModelDialog(model)
         }
 
-        // 3D 뷰어 바로가기 안내 문구
-        val tvNotice = android.widget.TextView(activity).apply {
-            text = "💡 '360도 뷰어 열기'를 누르시면 웹 스튜디오에서 좌우 스와이프 회전 및 PPL 제품 합성을 시뮬레이션할 수 있습니다."
-            setTextColor(android.graphics.Color.parseColor("#A78BFA"))
-            textSize = 10f
-            setPadding(0, 14, 0, 8)
+        btnActionChangeModel.setOnClickListener {
+            dialog.dismiss()
+            showModelPersonaDialog()
         }
 
-        container.addView(tvHeader)
-        container.addView(ivFullBody)
-        container.addView(btnToggleSheet)
-        container.addView(tvSpec)
-        container.addView(tvNotice)
-        scrollView.addView(container)
-
-        AlertDialog.Builder(activity)
-            .setTitle("🎭 AI 전속 모델 전신 3D 프로필")
-            .setView(scrollView)
-            .setPositiveButton("🌐 360도 뷰어 열기") { _, _ ->
-                open3dWebShowcase(model)
-            }
-            .setNeutralButton("모델 변경") { _, _ ->
-                showModelPersonaDialog()
-            }
-            .setNegativeButton("닫기", null)
-            .show()
+        dialog.show()
+    }
     }
 
     /**
@@ -401,30 +369,57 @@ class AiModelCardController(
 
         val container = android.widget.LinearLayout(activity).apply {
             orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(50, 30, 50, 20)
+            setPadding(40, 24, 40, 20)
+            setBackgroundColor(android.graphics.Color.parseColor("#0F172A"))
         }
 
         val etName = EditText(activity).apply {
             hint = "모델 이름 (예: 지아, 민수, 서연)"
             setText(targetModel?.name ?: "")
+            setTextColor(android.graphics.Color.WHITE)
+            setHintTextColor(android.graphics.Color.parseColor("#64748B"))
+            setBackgroundResource(R.drawable.bg_input_field)
+            setPadding(20, 16, 20, 16)
+            textSize = 12f
         }
         val spinnerVoice = Spinner(activity).apply {
             adapter = ArrayAdapter(activity, android.R.layout.simple_spinner_dropdown_item, voiceOptions)
             val currentVoice = targetModel?.voice ?: "Kore"
             val currentIdx = voiceKeys.indexOfFirst { it.equals(currentVoice, ignoreCase = true) }
             if (currentIdx >= 0) setSelection(currentIdx)
+            setBackgroundColor(android.graphics.Color.parseColor("#1E293B"))
         }
         val etStyle = EditText(activity).apply {
             hint = "외모/스타일 프롬프트 (예: 26-year-old Korean female brand ambassador...)"
             setText(targetModel?.style ?: "")
+            setTextColor(android.graphics.Color.WHITE)
+            setHintTextColor(android.graphics.Color.parseColor("#64748B"))
+            setBackgroundResource(R.drawable.bg_input_field)
+            setPadding(20, 16, 20, 16)
+            textSize = 12f
             minLines = 3
         }
 
-        container.addView(android.widget.TextView(activity).apply { text = "👤 전속 모델 명칭 / 직함"; textSize = 12f })
+        container.addView(android.widget.TextView(activity).apply {
+            text = "👤 전속 모델 명칭 / 직함"
+            setTextColor(android.graphics.Color.parseColor("#E2E8F0"))
+            textSize = 12f
+            setPadding(0, 0, 0, 6)
+        })
         container.addView(etName)
-        container.addView(android.widget.TextView(activity).apply { text = "🎙️ Gemini TTS 보이스 페르소나"; textSize = 12f; setPadding(0, 16, 0, 4) })
+        container.addView(android.widget.TextView(activity).apply {
+            text = "🎙️ Gemini TTS 보이스 페르소나"
+            setTextColor(android.graphics.Color.parseColor("#E2E8F0"))
+            textSize = 12f
+            setPadding(0, 16, 0, 6)
+        })
         container.addView(spinnerVoice)
-        container.addView(android.widget.TextView(activity).apply { text = "👗 외모·스타일 기준 프롬프트"; textSize = 12f; setPadding(0, 16, 0, 4) })
+        container.addView(android.widget.TextView(activity).apply {
+            text = "👗 외모·스타일 기준 프롬프트"
+            setTextColor(android.graphics.Color.parseColor("#E2E8F0"))
+            textSize = 12f
+            setPadding(0, 16, 0, 6)
+        })
         container.addView(etStyle)
 
         val title = if (isNew) "➕ 새 AI 전속 모델 등록" else "⚙️ [${targetModel?.name}] 모델 설정 수정"
