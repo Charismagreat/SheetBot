@@ -317,7 +317,6 @@ class AiModelCardController(
 
         dialog.show()
     }
-    }
 
     /**
      * ⚙️ 다중 모델 레지스트리 (선택, 전환, 추가, 편집) 다이얼로그
