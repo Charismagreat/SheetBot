@@ -3,9 +3,11 @@ package cloud.sheetbot.agent.user.card
 import kotlinx.coroutines.launch
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -239,38 +241,71 @@ class CardDrawerController(
 
     /**
      * 🌟 [제스처 1: 홈 화면 카드 좌→우(➡️) 스와이프 보관 제스처 연결]
-     * 카드를 오른쪽으로 밀면 보관함 서랍 속으로 쏙 들어가며 실행 취소(Undo) 스낵바 제공
+     * 카드를 오른쪽으로 밀면 보관함 서랍 속으로 쏙 들어가며 세련된 프리미엄 완료 팝업창 제공
      */
     fun setupCardSwipeGestures() {
         allCards.forEach { cardInfo ->
             val cardView = findCardView(cardInfo) ?: return@forEach
             val headerView = cardInfo.headerResId?.let { activity.findViewById<View>(it) }
-            val touchTarget = headerView ?: cardView
 
+            // 1. 카드 헤더 뷰 스와이프 바인딩
+            if (headerView != null) {
+                CardSwipeGestureHelper.attachCardSwipeToArchive(
+                    touchTargetView = headerView,
+                    animatedView = cardView,
+                    cardTitle = cardInfo.title
+                ) {
+                    hideCard(cardInfo.key)
+                    showArchivedSuccessDialog(cardInfo)
+                }
+            }
+
+            // 2. 카드 본체 뷰 스와이프 바인딩 (헤더 외 카드 배경/빈 공간을 잡아도 슬라이드 동작)
             CardSwipeGestureHelper.attachCardSwipeToArchive(
-                touchTargetView = touchTarget,
+                touchTargetView = cardView,
                 animatedView = cardView,
                 cardTitle = cardInfo.title
             ) {
                 hideCard(cardInfo.key)
-                showArchiveSnackbarWithUndo(cardInfo)
+                showArchivedSuccessDialog(cardInfo)
             }
         }
     }
 
     /**
-     * 카드가 보관함으로 이동했을 때 하단에 실행 취소(Undo) 스낵바 표시
+     * 🌟 [팝업창 UI 개선] 카드가 오른쪽으로 슬라이드되어 보관함에 들어갔을 때 뜨는 세련된 프리미엄 다이얼로그
      */
-    private fun showArchiveSnackbarWithUndo(cardInfo: CardInfo) {
-        val rootView = activity.findViewById<View>(android.R.id.content) ?: return
-        Snackbar.make(
-            rootView,
-            "📦 '${cardInfo.title}' 카드가 보관함으로 이동했습니다.",
-            Snackbar.LENGTH_LONG
-        ).setAction("실행 취소") {
+    private fun showArchivedSuccessDialog(cardInfo: CardInfo) {
+        val dialogView = LayoutInflater.from(activity).inflate(R.layout.dialog_card_archived_success, null)
+        val tvArchivedCardTitle = dialogView.findViewById<TextView>(R.id.tvArchivedCardTitle)
+        val btnArchiveDialogCloseTop = dialogView.findViewById<TextView>(R.id.btnArchiveDialogCloseTop)
+        val btnArchiveUndo = dialogView.findViewById<Button>(R.id.btnArchiveUndo)
+        val btnArchiveOpenDrawer = dialogView.findViewById<Button>(R.id.btnArchiveOpenDrawer)
+
+        tvArchivedCardTitle.text = "${cardInfo.icon} ${cardInfo.title}"
+
+        val dialog = AlertDialog.Builder(activity)
+            .setView(dialogView)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        btnArchiveDialogCloseTop.setOnClickListener { dialog.dismiss() }
+
+        // 실행 취소 (홈 화면으로 즉시 되돌리기)
+        btnArchiveUndo.setOnClickListener {
             restoreCard(cardInfo.key)
-            Toast.makeText(activity, "✨ '${cardInfo.title}' 카드가 복원되었습니다.", Toast.LENGTH_SHORT).show()
-        }.setActionTextColor(Color.parseColor("#38BDF8")).show()
+            dialog.dismiss()
+            Toast.makeText(activity, "✨ '${cardInfo.title}' 카드가 홈 화면에 복원되었습니다.", Toast.LENGTH_SHORT).show()
+        }
+
+        // 보관함 열어보기 (보관함 바텀시트 즉시 오픈)
+        btnArchiveOpenDrawer.setOnClickListener {
+            dialog.dismiss()
+            openReorderingBottomSheet()
+        }
+
+        dialog.show()
     }
 
     fun showHideConfirmDialogByKey(cardKey: String, fallbackTitle: String) {
@@ -280,18 +315,33 @@ class CardDrawerController(
     }
 
     /**
-     * 카드를 보관함으로 넣을 것인지 확인하는 다이얼로그
+     * 🌟 [다이얼로그 UI 개선] 카드를 보관함으로 넣을 것인지 확인하는 프리미엄 다이얼로그 (롱클릭 트리거)
      */
     private fun showHideConfirmDialog(cardInfo: CardInfo) {
-        android.app.AlertDialog.Builder(activity)
-            .setTitle("📦 시트봇 보관함으로 보관")
-            .setMessage("'${cardInfo.icon} ${cardInfo.title}' 카드를 시트봇 보관함으로 보관하시겠습니까?\n\n홈 화면에서 숨겨지며, 언제든 보관함에서 다시 꺼낼 수 있습니다.")
-            .setPositiveButton("보관함에 보관") { _, _ ->
-                hideCard(cardInfo.key)
-                Toast.makeText(activity, "'${cardInfo.title}' 카드가 시트봇 보관함으로 보관되었습니다.", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("취소", null)
-            .show()
+        val dialogView = LayoutInflater.from(activity).inflate(R.layout.dialog_card_archive_confirm, null)
+        val tvConfirmCardTitle = dialogView.findViewById<TextView>(R.id.tvConfirmCardTitle)
+        val btnConfirmDialogCloseTop = dialogView.findViewById<TextView>(R.id.btnConfirmDialogCloseTop)
+        val btnConfirmCancel = dialogView.findViewById<Button>(R.id.btnConfirmCancel)
+        val btnConfirmArchive = dialogView.findViewById<Button>(R.id.btnConfirmArchive)
+
+        tvConfirmCardTitle.text = "${cardInfo.icon} ${cardInfo.title}"
+
+        val dialog = AlertDialog.Builder(activity)
+            .setView(dialogView)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        btnConfirmDialogCloseTop.setOnClickListener { dialog.dismiss() }
+        btnConfirmCancel.setOnClickListener { dialog.dismiss() }
+
+        btnConfirmArchive.setOnClickListener {
+            hideCard(cardInfo.key)
+            dialog.dismiss()
+            showArchivedSuccessDialog(cardInfo)
+        }
+
+        dialog.show()
     }
 
     /**
@@ -743,6 +793,8 @@ class CardDrawerController(
                         val row = LinearLayout(activity).apply {
                             orientation = LinearLayout.HORIZONTAL
                             gravity = Gravity.CENTER_VERTICAL
+                            isClickable = true
+                            isFocusable = true
                             val gd = GradientDrawable().apply {
                                 setColor(Color.parseColor("#090D16"))
                                 cornerRadius = dp(8).toFloat()
@@ -752,6 +804,11 @@ class CardDrawerController(
                             setPadding(dp(12), dp(10), dp(12), dp(10))
                             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                                 bottomMargin = dp(6)
+                            }
+                            setOnClickListener {
+                                restoreCard(card.key)
+                                renderContent()
+                                Toast.makeText(activity, "✨ '${card.title}' 카드가 홈 화면에 추가되었습니다.", Toast.LENGTH_SHORT).show()
                             }
                         }
 
