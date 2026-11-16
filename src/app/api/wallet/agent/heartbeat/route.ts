@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { queryTable, updateRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { emitDepositEvent } from "@/lib/deposit-events";
-import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 
 /**
  * POST /api/wallet/agent/heartbeat
@@ -15,13 +15,18 @@ export async function POST(req: NextRequest) {
     // 생존 신호 수신 시 메인 스레드 블로킹 방지 (비동기 보장)
     setupDatabase().catch(() => {});
     const body = await req.json().catch(() => ({}));
-    const { userEmail, deviceModel, batteryLevel, isCharging, appVersion } = body;
+    const rawEmail =
+      body?.userEmail ||
+      req.headers.get("x-sheetbot-user-email") ||
+      req.headers.get("x-user-email") ||
+      (await getCurrentUserEmail(req).catch(() => null));
 
-    if (!userEmail) {
+    if (!rawEmail || typeof rawEmail !== "string" || !rawEmail.includes("@")) {
       return NextResponse.json({ success: false, error: "userEmail이 필요합니다." }, { status: 400 });
     }
 
-    const cleanEmail = String(userEmail).toLowerCase().trim();
+    const { deviceModel, batteryLevel, isCharging, appVersion } = body || {};
+    const cleanEmail = rawEmail.toLowerCase().trim();
     const nowIso = new Date().toISOString();
 
     // 해당 유저의 android_agent 최신 기기 레코드 탐색 및 갱신
@@ -71,7 +76,7 @@ export async function POST(req: NextRequest) {
 
     const pendingCount = (pendingRes.rows || []).length;
 
-    const wsOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req).catch(() => ({}));
+    const wsOptions: any = await getWorkspaceCallOptionsForEmail(cleanEmail, req).catch(() => ({}));
     const resolvedVisitorSid = wsOptions.visitorSessionId || null;
 
     const res = NextResponse.json({

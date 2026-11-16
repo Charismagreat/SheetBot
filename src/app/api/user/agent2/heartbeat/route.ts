@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { queryTable, updateRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
-import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 
 /**
  * POST /api/user/agent2/heartbeat
@@ -13,13 +13,18 @@ export async function POST(req: NextRequest) {
   try {
     await setupDatabase();
     const body = await req.json().catch(() => ({}));
-    const { userEmail, deviceId, battery, networkType } = body;
+    const rawEmail =
+      body?.userEmail ||
+      req.headers.get("x-sheetbot-user-email") ||
+      req.headers.get("x-user-email") ||
+      (await getCurrentUserEmail(req).catch(() => null));
 
-    if (!userEmail) {
+    if (!rawEmail || typeof rawEmail !== "string" || !rawEmail.includes("@")) {
       return NextResponse.json({ success: false, error: "userEmail이 필요합니다." }, { status: 400 });
     }
 
-    const cleanEmail = String(userEmail).toLowerCase().trim();
+    const { deviceId, battery, networkType } = body || {};
+    const cleanEmail = rawEmail.toLowerCase().trim();
     const now = new Date().toISOString();
 
     const existing = await queryTable("sheetbot_user_devices", {
@@ -48,7 +53,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const wsOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req).catch(() => ({}));
+    const wsOptions: any = await getWorkspaceCallOptionsForEmail(cleanEmail, req).catch(() => ({}));
     const resolvedVisitorSid = wsOptions.visitorSessionId || null;
 
     const res = NextResponse.json({
