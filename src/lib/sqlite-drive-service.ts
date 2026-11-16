@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { callAiCaller } from './egdesk-helpers';
 
 const EGDESK_API_URL =
-  (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
+  (typeof process !== 'undefined' && process.env?.EGDESK_MCP_INTERNAL_URL) ||
   'http://localhost:8080';
 
 /**

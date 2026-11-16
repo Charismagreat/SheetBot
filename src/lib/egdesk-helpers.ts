@@ -11,7 +11,6 @@ import { EGDESK_CONFIG } from '../../egdesk.config';
 export function getServerEgdeskApiUrl(): string {
   const raw =
     (typeof process !== 'undefined' && process.env?.EGDESK_MCP_INTERNAL_URL) ||
-    (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
     'http://localhost:8080';
   return String(raw).replace(/\/$/, '');
 }

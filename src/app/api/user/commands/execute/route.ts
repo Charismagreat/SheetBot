@@ -874,6 +874,18 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
       };
     }
 
+    // ★ [확정적 의도 가드] 이메일 주소가 포함되어 있고 파일 전송/보내기 요청인 경우 100% DRIVE_FILE_ACTION + SEND_EMAIL로 강제 보정
+    const directEmailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+    const directEmailMatch = command.match(directEmailRegex);
+    if (
+      directEmailMatch &&
+      /(파일|이미지|사진|문서|자료|계약서|견적서|방금|아까|찾아온|보내|전송|메일)/.test(command)
+    ) {
+      plan.actionType = "DRIVE_FILE_ACTION";
+      plan.driveOperation = "SEND_EMAIL";
+      plan.targetEmail = plan.targetEmail || directEmailMatch[0];
+    }
+
     let executionDetails: any = {};
     let isSuccess = true;
     let matchedRowsResult: FtsMatchedRowDto[] = [];
