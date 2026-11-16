@@ -32,6 +32,12 @@ export async function sendSystemEmail(options: {
   subject: string;
   text?: string;
   html?: string;
+  attachments?: Array<{
+    filename: string;
+    path?: string;
+    content?: Buffer | string;
+    contentType?: string;
+  }>;
   smtpConfig?: Partial<AdminSmtpSettings>;
   eventType?: "inquiry" | "tax_invoice" | "payment" | "test" | "other";
   ruleName?: string;
@@ -78,6 +84,7 @@ export async function sendSystemEmail(options: {
       subject: options.subject,
       text: options.text,
       html: options.html,
+      attachments: options.attachments,
     });
 
     // 발송 성공 로그 기록

@@ -2138,14 +2138,24 @@ object ApiClient {
                     var emailDispatch: EmailDispatchInfo? = null
                     val emailObj = resJson.optJSONObject("emailDispatch") ?: detailsObj?.optJSONObject("emailDispatch")
                     if (emailObj != null) {
+                        val rawWvLink = emailObj.optString("webViewLink", primaryDriveFile?.webViewLink ?: "")
+                        val rawWcLink = emailObj.optString("webContentLink", primaryDriveFile?.webContentLink ?: "")
+                        val rawFileId = emailObj.optString("fileId", primaryDriveFile?.id ?: "")
+                        val extractedId = if (rawFileId.isNotBlank() && rawFileId != "learned_file") {
+                            rawFileId
+                        } else {
+                            Regex("(?:\\/d\\/|id=)([a-zA-Z0-9_-]{10,})").find("$rawWvLink $rawWcLink")?.groupValues?.getOrNull(1) ?: ""
+                        }
                         emailDispatch = EmailDispatchInfo(
                             recipientEmail = emailObj.optString("recipientEmail", ""),
-                            fileName = emailObj.optString("fileName", "파일"),
+                            fileId = extractedId,
+                            fileName = emailObj.optString("fileName", primaryDriveFile?.name ?: "파일"),
+                            mimeType = emailObj.optString("mimeType", primaryDriveFile?.mimeType ?: "application/octet-stream"),
                             fileSizeFormatted = emailObj.optString("fileSizeFormatted", ""),
                             subject = emailObj.optString("subject", ""),
                             body = emailObj.optString("body", ""),
-                            webViewLink = emailObj.optString("webViewLink", ""),
-                            webContentLink = emailObj.optString("webContentLink", "")
+                            webViewLink = rawWvLink,
+                            webContentLink = rawWcLink
                         )
                     }
 
@@ -2180,12 +2190,14 @@ object ApiClient {
     }
 
     /**
-     * 구글 드라이브/PC 파일 공유 이메일 직접 발송 (방식 A: 시트봇으로 즉시 자동 발송)
+     * 구글 드라이브/PC 파일 공유 이메일 직접 발송 (방식 A: 시트봇으로 즉시 자동 발송 + 원본 파일 첨부)
      */
     suspend fun sendDirectEmail(
         userEmail: String,
         recipientEmail: String,
+        fileId: String = "",
         fileName: String,
+        mimeType: String = "",
         fileSizeFormatted: String = "",
         subject: String = "",
         body: String = "",
@@ -2197,7 +2209,9 @@ object ApiClient {
         val json = JSONObject().apply {
             put("userEmail", userEmail)
             put("recipientEmail", recipientEmail)
+            put("fileId", fileId)
             put("fileName", fileName)
+            put("mimeType", mimeType)
             put("fileSizeFormatted", fileSizeFormatted)
             put("subject", subject)
             put("body", body)
@@ -2239,6 +2253,79 @@ object ApiClient {
             requireLocalApp = true,
             error = "서버 통신에 실패했습니다. 스마트폰 기본 메일 앱을 이용해 주세요."
         )
+    }
+
+    /**
+     * 스마트폰 메일 앱(방식 B) 발송 시 실제 첨부파일(Attachment)로 첨부하기 위해
+     * 시트봇 백엔드 프록시(/api/user/files/drive-download)를 통해 원본 파일을 앱 캐시 폴더로 다운로드합니다.
+     */
+    suspend fun downloadDriveAttachmentToCache(
+        context: android.content.Context,
+        fileId: String,
+        fileName: String,
+        webContentLink: String = "",
+        webViewLink: String = ""
+    ): java.io.File? = withContext(Dispatchers.IO) {
+        val resolvedId = if (fileId.isNotBlank() && fileId != "learned_file") {
+            fileId.trim()
+        } else {
+            Regex("(?:\\/d\\/|id=)([a-zA-Z0-9_-]{10,})").find("$webViewLink $webContentLink")?.groupValues?.getOrNull(1) ?: ""
+        }
+
+        val safeName = fileName.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "attachment.jpg" }
+        val dir = java.io.File(context.cacheDir, "shared_attachments").apply { mkdirs() }
+        val destFile = java.io.File(dir, safeName)
+
+        if (destFile.exists() && destFile.length() > 100L) {
+            return@withContext destFile
+        }
+
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
+        if (resolvedId.isNotBlank()) {
+            val encId = java.net.URLEncoder.encode(resolvedId, "UTF-8")
+            val encName = java.net.URLEncoder.encode(safeName, "UTF-8")
+            for (host in hosts) {
+                val url = "$host/api/user/files/drive-download?fileId=$encId&fileName=$encName"
+                try {
+                    val req = Request.Builder().url(url).get().build()
+                    val res = longTimeoutClient.newCall(req).execute()
+                    val contentType = res.header("Content-Type") ?: ""
+                    if (res.isSuccessful && !contentType.contains("application/json") && !contentType.contains("text/html")) {
+                        val bytes = res.body?.bytes()
+                        if (bytes != null && bytes.isNotEmpty()) {
+                            destFile.writeBytes(bytes)
+                            Log.i(TAG, "✅ [첨부파일 캐시 다운로드 성공] ${destFile.name} (${bytes.size} bytes)")
+                            return@withContext destFile
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "첨부파일 프록시 다운로드 예외 ($host): ${e.message}")
+                }
+            }
+        }
+
+        // 폴백: 직접 다운로드 링크 시도
+        val fallbackUrl = webContentLink.ifBlank {
+            if (resolvedId.isNotBlank()) "https://drive.google.com/uc?id=$resolvedId&export=download" else ""
+        }
+        if (fallbackUrl.isNotBlank()) {
+            try {
+                val req = Request.Builder().url(fallbackUrl).get().build()
+                val res = longTimeoutClient.newCall(req).execute()
+                val contentType = res.header("Content-Type") ?: ""
+                if (res.isSuccessful && !contentType.contains("text/html")) {
+                    val bytes = res.body?.bytes()
+                    if (bytes != null && bytes.size > 100) {
+                        destFile.writeBytes(bytes)
+                        return@withContext destFile
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "첨부파일 직접 다운로드 폴백 실패: ${e.message}")
+            }
+        }
+
+        null
     }
 
     /**
@@ -4453,7 +4540,9 @@ data class DriveFileItem(
 
 data class EmailDispatchInfo(
     val recipientEmail: String,
+    val fileId: String = "",
     val fileName: String = "파일",
+    val mimeType: String = "application/octet-stream",
     val fileSizeFormatted: String = "",
     val subject: String = "",
     val body: String = "",

@@ -1055,7 +1055,9 @@ class AiCopilotCardController(
                 val sendRes = ApiClient.sendDirectEmail(
                     userEmail = userEmail,
                     recipientEmail = dispatch.recipientEmail,
+                    fileId = dispatch.fileId,
                     fileName = dispatch.fileName,
+                    mimeType = dispatch.mimeType,
                     fileSizeFormatted = dispatch.fileSizeFormatted,
                     subject = dispatch.subject,
                     body = dispatch.body,
@@ -1089,9 +1091,9 @@ class AiCopilotCardController(
         }
         cardView.addView(btnMethodA)
 
-        // 방식 B 버튼: 내 스마트폰 메일 앱에서 확인 후 발송
+        // 방식 B 버튼: 내 스마트폰 메일 앱에서 확인 후 발송 (원본 파일 직접 첨부)
         val btnMethodB = Button(activity).apply {
-            text = "📱 방식 B: 내 메일 앱에서 확인 후 발송 (권장)"
+            text = "📱 방식 B: 내 메일 앱에서 확인 후 발송 (📎원본첨부)"
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             typeface = Typeface.DEFAULT_BOLD
@@ -1105,9 +1107,9 @@ class AiCopilotCardController(
             ).apply {
                 bottomMargin = dpToPx(8)
             }
-            setOnClickListener {
-                sendViaLocalMailApp(dispatch)
-            }
+        }
+        btnMethodB.setOnClickListener {
+            sendViaLocalMailApp(dispatch, btnMethodB, tvStatus)
         }
         cardView.addView(btnMethodB)
         cardView.addView(tvStatus)
@@ -1161,47 +1163,192 @@ class AiCopilotCardController(
     }
 
     /**
-     * 📱 방식 B: 스마트폰 기본 이메일 앱(Gmail, 삼성 메일, 네이버 메일 등) 호출 및 AI 학습 대장 비동기 기록
+     * 파일명 확장자 기반 정확한 MIME 타입 추론 헬퍼
      */
-    private fun sendViaLocalMailApp(dispatch: cloud.sheetbot.agent.user.EmailDispatchInfo) {
-        val userEmail = prefs.userEmail ?: ""
-        scope.launch {
-            try {
-                ApiClient.sendDirectEmail(
-                    userEmail = userEmail,
-                    recipientEmail = dispatch.recipientEmail,
-                    fileName = dispatch.fileName,
-                    fileSizeFormatted = dispatch.fileSizeFormatted,
-                    subject = dispatch.subject,
-                    body = dispatch.body,
-                    webViewLink = dispatch.webViewLink,
-                    webContentLink = dispatch.webContentLink,
-                    mode = "LOG_METHOD_B"
-                )
-            } catch (_: Exception) {}
+    private fun resolveAttachmentMimeType(fileName: String, rawMime: String): String {
+        if (rawMime.isNotBlank() && rawMime != "application/octet-stream") return rawMime
+        val ext = fileName.substringAfterLast('.', "").lowercase()
+        return when (ext) {
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            "gif" -> "image/gif"
+            "pdf" -> "application/pdf"
+            "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            "xls" -> "application/vnd.ms-excel"
+            "csv" -> "text/csv"
+            "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            "doc" -> "application/msword"
+            "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            "zip" -> "application/zip"
+            "mp3" -> "audio/mpeg"
+            "m4a" -> "audio/mp4"
+            "mp4" -> "video/mp4"
+            "txt" -> "text/plain"
+            else -> "*/*"
         }
+    }
 
-        try {
-            val mailUri = Uri.parse("mailto:${Uri.encode(dispatch.recipientEmail)}")
-            val intent = Intent(Intent.ACTION_SENDTO, mailUri).apply {
-                putExtra(Intent.EXTRA_SUBJECT, dispatch.subject)
-                putExtra(Intent.EXTRA_TEXT, dispatch.body)
+    /**
+     * 📱 방식 B: 원본 파일을 시트봇 프록시에서 다운로드하여 FileProvider로 실제 첨부(EXTRA_STREAM)한 뒤
+     * 스마트폰 기본 이메일 앱(Gmail, 삼성 메일, 네이버 메일 등) 호출 및 AI 학습 대장 비동기 기록
+     */
+    private fun sendViaLocalMailApp(
+        dispatch: cloud.sheetbot.agent.user.EmailDispatchInfo,
+        triggerBtn: Button? = null,
+        statusView: TextView? = null
+    ) {
+        val userEmail = prefs.userEmail ?: ""
+        triggerBtn?.isEnabled = false
+        triggerBtn?.text = "⏳ 원본 첨부파일 준비 중..."
+        statusView?.visibility = View.VISIBLE
+        statusView?.text = "📎 '${dispatch.fileName}' 원본 파일을 다운로드하여 메일에 첨부하고 있습니다..."
+        statusView?.setTextColor(Color.parseColor("#38BDF8"))
+
+        scope.launch {
+            // 1. 백그라운드로 AI 학습 대장에 방식 B 선택 이력 기록
+            launch {
+                try {
+                    ApiClient.sendDirectEmail(
+                        userEmail = userEmail,
+                        recipientEmail = dispatch.recipientEmail,
+                        fileId = dispatch.fileId,
+                        fileName = dispatch.fileName,
+                        mimeType = dispatch.mimeType,
+                        fileSizeFormatted = dispatch.fileSizeFormatted,
+                        subject = dispatch.subject,
+                        body = dispatch.body,
+                        webViewLink = dispatch.webViewLink,
+                        webContentLink = dispatch.webContentLink,
+                        mode = "LOG_METHOD_B"
+                    )
+                } catch (_: Exception) {}
             }
-            val chooser = Intent.createChooser(intent, "이메일 앱을 선택하세요")
-            activity.startActivity(chooser)
-            Toast.makeText(activity, "📱 메일 앱이 열리면 내용을 확인하고 전송 버튼을 눌러주세요.", Toast.LENGTH_LONG).show()
-            addLogItem("메일 앱 호출", "${dispatch.fileName} -> ${dispatch.recipientEmail}", true)
-        } catch (e: Exception) {
-            try {
-                val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_EMAIL, arrayOf(dispatch.recipientEmail))
-                    putExtra(Intent.EXTRA_SUBJECT, dispatch.subject)
-                    putExtra(Intent.EXTRA_TEXT, dispatch.body)
+
+            // 2. 시트봇 서버 프록시를 통해 실제 원본 파일을 앱 캐시 폴더로 다운로드
+            val attachedFile = try {
+                ApiClient.downloadDriveAttachmentToCache(
+                    context = activity,
+                    fileId = dispatch.fileId,
+                    fileName = dispatch.fileName,
+                    webContentLink = dispatch.webContentLink,
+                    webViewLink = dispatch.webViewLink
+                )
+            } catch (_: Exception) {
+                null
+            }
+
+            withContext(Dispatchers.Main) {
+                triggerBtn?.isEnabled = true
+                triggerBtn?.text = "📱 방식 B: 내 메일 앱에서 확인 후 발송 (📎원본첨부)"
+
+                if (attachedFile != null && attachedFile.exists() && attachedFile.length() > 0L) {
+                    statusView?.text = "✅ '${dispatch.fileName}' 원본 파일이 메일에 첨부되었습니다. 메일 앱에서 전송을 눌러주세요."
+                    statusView?.setTextColor(Color.parseColor("#34D399"))
+
+                    try {
+                        val authority = "${activity.packageName}.fileprovider"
+                        val contentUri = androidx.core.content.FileProvider.getUriForFile(activity, authority, attachedFile)
+                        val resolvedMime = resolveAttachmentMimeType(dispatch.fileName, dispatch.mimeType)
+
+                        // 스마트폰에 설치된 이메일 전용 앱 패키지 목록 수집 (mailto: 인텐트 응답 앱 + 주요 메일 앱)
+                        val mailPackages = linkedSetOf<String>()
+                        try {
+                            val mailtoProbe = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:"))
+                            val resolvedList = activity.packageManager.queryIntentActivities(mailtoProbe, 0)
+                            for (info in resolvedList) {
+                                val pkg = info.activityInfo?.packageName
+                                if (!pkg.isNullOrBlank()) mailPackages.add(pkg)
+                            }
+                        } catch (_: Exception) {}
+
+                        mailPackages.addAll(
+                            listOf(
+                                "com.google.android.gm",
+                                "com.nhn.android.mail",
+                                "com.samsung.android.email.provider",
+                                "net.daum.android.mail",
+                                "com.microsoft.office.outlook",
+                                "com.worksmobile.android"
+                            )
+                        )
+
+                        // 모든 메일 앱에 첨부파일 URI 읽기 권한 명시적 부여
+                        for (pkg in mailPackages) {
+                            try {
+                                activity.grantUriPermission(pkg, contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            } catch (_: Exception) {}
+                        }
+
+                        // 메일 앱 전용 ACTION_SEND 인텐트 구성 (수신자 + 제목 + 본문 + EXTRA_STREAM 원본 파일 첨부)
+                        val targetedIntents = mutableListOf<Intent>()
+                        for (pkg in mailPackages) {
+                            try {
+                                val pkgIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = resolvedMime
+                                    setPackage(pkg)
+                                    putExtra(Intent.EXTRA_EMAIL, arrayOf(dispatch.recipientEmail))
+                                    putExtra(Intent.EXTRA_SUBJECT, dispatch.subject)
+                                    putExtra(Intent.EXTRA_TEXT, dispatch.body)
+                                    putExtra(Intent.EXTRA_STREAM, contentUri)
+                                    clipData = ClipData.newRawUri(dispatch.fileName, contentUri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                if (pkgIntent.resolveActivity(activity.packageManager) != null) {
+                                    targetedIntents.add(pkgIntent)
+                                }
+                            } catch (_: Exception) {}
+                        }
+
+                        val chooserIntent = if (targetedIntents.isNotEmpty()) {
+                            val primary = targetedIntents.removeAt(0)
+                            Intent.createChooser(primary, "📎 원본 파일이 첨부되었습니다. 메일 앱을 선택하세요").apply {
+                                if (targetedIntents.isNotEmpty()) {
+                                    putExtra(Intent.EXTRA_INITIAL_INTENTS, targetedIntents.toTypedArray())
+                                }
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                        } else {
+                            val genericSend = Intent(Intent.ACTION_SEND).apply {
+                                type = resolvedMime
+                                putExtra(Intent.EXTRA_EMAIL, arrayOf(dispatch.recipientEmail))
+                                putExtra(Intent.EXTRA_SUBJECT, dispatch.subject)
+                                putExtra(Intent.EXTRA_TEXT, dispatch.body)
+                                putExtra(Intent.EXTRA_STREAM, contentUri)
+                                clipData = ClipData.newRawUri(dispatch.fileName, contentUri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            Intent.createChooser(genericSend, "📎 원본 파일이 첨부되었습니다. 메일 앱을 선택하세요")
+                        }
+
+                        activity.startActivity(chooserIntent)
+                        Toast.makeText(
+                            activity,
+                            "📎 [${dispatch.fileName}] 원본 파일이 첨부되었습니다! 메일 앱에서 전송을 눌러주세요.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        addLogItem("메일 앱 호출 (원본첨부)", "${dispatch.fileName} -> ${dispatch.recipientEmail}", true)
+                        return@withContext
+                    } catch (attachErr: Exception) {
+                        Toast.makeText(activity, "첨부 인텐트 호출 중 폴백 전환: ${attachErr.message}", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    statusView?.text = "⚠️ 원본 파일 다운로드가 지연되어 드라이브 링크 포함 메일창을 엽니다."
+                    statusView?.setTextColor(Color.parseColor("#FBBF24"))
                 }
-                activity.startActivity(Intent.createChooser(sendIntent, "이메일 전송 앱 선택"))
-            } catch (e2: Exception) {
-                Toast.makeText(activity, "메일 앱을 실행할 수 없습니다: ${e2.message}", Toast.LENGTH_SHORT).show()
+
+                // 폴백: 첨부파일 다운로드 불가 시 기존 mailto: 인텐트 실행
+                try {
+                    val mailUri = Uri.parse("mailto:${Uri.encode(dispatch.recipientEmail)}")
+                    val intent = Intent(Intent.ACTION_SENDTO, mailUri).apply {
+                        putExtra(Intent.EXTRA_SUBJECT, dispatch.subject)
+                        putExtra(Intent.EXTRA_TEXT, dispatch.body)
+                    }
+                    activity.startActivity(Intent.createChooser(intent, "이메일 앱을 선택하세요"))
+                    addLogItem("메일 앱 호출", "${dispatch.fileName} -> ${dispatch.recipientEmail}", true)
+                } catch (e2: Exception) {
+                    Toast.makeText(activity, "메일 앱을 실행할 수 없습니다: ${e2.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }

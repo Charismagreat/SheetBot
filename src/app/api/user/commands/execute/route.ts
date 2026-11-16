@@ -1152,12 +1152,23 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
               ""
             ).trim();
 
+            const idFromLinkMatch =
+              (primaryFile.webViewLink || primaryFile.webContentLink || "").match(
+                /(?:\/d\/|[?&]id=)([a-zA-Z0-9_-]{10,})/
+              );
+            const resolvedFileId =
+              primaryFile.id && primaryFile.id !== "learned_file"
+                ? primaryFile.id
+                : idFromLinkMatch?.[1] || "";
+
             const emailSubject = `[SheetBot] ${primaryFile.name} 파일 공유 안내`;
-            const emailBody = `안녕하세요.\n요청하신 [${primaryFile.name}] (${primaryFile.sizeFormatted || ""}) 파일입니다.\n\n▶ 구글 드라이브 바로보기:\n${primaryFile.webViewLink}\n\n▶ 파일 다운로드:\n${primaryFile.webContentLink}\n\n시트봇(SheetBot)에서 발송되었습니다.`;
+            const emailBody = `안녕하세요.\n요청하신 [${primaryFile.name}] (${primaryFile.sizeFormatted || ""}) 파일이 첨부되어 있습니다.\n\n▶ 구글 드라이브 바로보기:\n${primaryFile.webViewLink}\n\n▶ 파일 다운로드:\n${primaryFile.webContentLink}\n\n시트봇(SheetBot)에서 발송되었습니다.`;
 
             const emailDispatchData = {
               recipientEmail: targetEmail,
+              fileId: resolvedFileId,
               fileName: primaryFile.name,
+              mimeType: primaryFile.mimeType || "application/octet-stream",
               fileSizeFormatted: primaryFile.sizeFormatted || "",
               subject: emailSubject,
               body: emailBody,
