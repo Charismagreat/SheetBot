@@ -261,6 +261,11 @@
                     android:layout_width="0dp"
                     android:layout_height="34dp"
                     android:layout_weight="1"
+                    android:minHeight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:paddingVertical="0dp"
+                    android:gravity="center"
                     android:backgroundTint="#475569"
                     android:text="📷 제품 사진 선택 (갤러리/촬영)"
                     android:textColor="#FFFFFF"
@@ -271,11 +276,60 @@
                     android:id="@+id/btnResetProductImage"
                     android:layout_width="wrap_content"
                     android:layout_height="34dp"
+                    android:minHeight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:paddingVertical="0dp"
+                    android:gravity="center"
                     android:backgroundTint="#64748B"
                     android:text="✕ 취소"
                     android:textColor="#F1F5F9"
                     android:textSize="10.5sp"
                     android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- 📷 등록된 제품 사진 미리보기 프레임 (사진 선택 시 표시) -->
+            <LinearLayout
+                android:id="@+id/layoutProductPreviewContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#090D16"
+                android:padding="6dp"
+                android:visibility="gone"
+                android:layout_marginBottom="6dp">
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_input_field">
+
+                    <ImageView
+                        android:id="@+id/ivProductPreview"
+                        android:layout_width="match_parent"
+                        android:layout_height="160dp"
+                        android:scaleType="fitCenter"
+                        android:adjustViewBounds="true"
+                        android:contentDescription="등록된 제품 사진 미리보기"
+                        android:clickable="true"
+                        android:focusable="true" />
+
+                    <!-- 상단 안내 태그 -->
+                    <TextView
+                        android:id="@+id/tvProductPreviewBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="top|start"
+                        android:layout_margin="6dp"
+                        android:background="@drawable/bg_badge_version"
+                        android:backgroundTint="#059669"
+                        android:paddingHorizontal="7dp"
+                        android:paddingVertical="2dp"
+                        android:text="✓ 1600px 85% 최적화 완료 (터치하여 크게 보기)"
+                        android:textColor="#FFFFFF"
+                        android:textSize="9.5sp"
+                        android:textStyle="bold" />
+                </FrameLayout>
             </LinearLayout>
 
             <TextView
@@ -287,21 +341,24 @@
                 android:textSize="10sp"
                 android:layout_marginBottom="8dp" />
 
-            <!-- 제품명 및 핵심 키워드 입력 -->
+            <!-- 제품명 및 핵심 키워드 입력 (줄바꿈 지원) -->
             <EditText
                 android:id="@+id/etProductTopic"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="42dp"
+                android:minHeight="54dp"
+                android:minLines="2"
+                android:maxLines="6"
                 android:background="@drawable/bg_input_field"
-                android:gravity="center_vertical"
-                android:hint="제품명 및 핵심 특징 (예: 친환경 텀블러, 보온 24시간)"
+                android:gravity="top|start"
+                android:hint="제품명 및 핵심 특징 (줄바꿈 입력 가능)\n예: 친환경 텀블러\n- 24시간 보온/보냉 지속\n- 세련된 파스텔 베이지 디자인"
                 android:textColor="#FFFFFF"
                 android:textColorHint="#64748B"
                 android:textSize="11.5sp"
                 android:paddingHorizontal="10dp"
                 android:paddingVertical="8dp"
-                android:inputType="text"
+                android:inputType="textMultiLine|textCapSentences"
+                android:scrollbars="vertical"
                 android:layout_marginBottom="6dp" />
 
             <!-- 홍보 대본 입력창 및 AI 추천 버튼 -->

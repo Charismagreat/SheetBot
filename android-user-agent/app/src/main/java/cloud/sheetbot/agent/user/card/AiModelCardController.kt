@@ -113,7 +113,34 @@ class AiModelCardController(
             selectedProductFile = null
             binding.tvProductImageStatus.text = "선택된 제품 사진: 없음 (1600px 85% 자동 최적화)"
             binding.btnResetProductImage.visibility = View.GONE
+            binding.layoutProductPreviewContainer.visibility = View.GONE
+            binding.ivProductPreview.setImageDrawable(null)
             Toast.makeText(activity, "제품 사진 첨부가 취소되었습니다.", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.ivProductPreview.setOnClickListener {
+            selectedProductFile?.let { file ->
+                if (file.exists()) {
+                    val fullBmp = BitmapFactory.decodeFile(file.absolutePath)
+                    if (fullBmp != null) {
+                        val iv = android.widget.ImageView(activity).apply {
+                            setImageBitmap(fullBmp)
+                            adjustViewBounds = true
+                            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                            setPadding(24, 24, 24, 24)
+                            setBackgroundColor(android.graphics.Color.parseColor("#0F172A"))
+                        }
+                        AlertDialog.Builder(activity)
+                            .setTitle("📷 등록된 제품 사진 원본 미리보기")
+                            .setView(iv)
+                            .setPositiveButton("확인", null)
+                            .setNegativeButton("사진 삭제") { _, _ ->
+                                binding.btnResetProductImage.performClick()
+                            }
+                            .show()
+                    }
+                }
+            }
         }
 
         // AI 대본 자동 추천
@@ -468,6 +495,9 @@ class AiModelCardController(
                     withContext(Dispatchers.Main) {
                         binding.tvProductImageStatus.text = "📷 최적화 완료: ${tempFile.name} (${kb} KB)"
                         binding.btnResetProductImage.visibility = View.VISIBLE
+                        binding.layoutProductPreviewContainer.visibility = View.VISIBLE
+                        binding.ivProductPreview.setImageBitmap(decoded)
+                        binding.tvProductPreviewBadge.text = "✓ 등록 완료 (${kb} KB) · 터치하여 크게 보기"
                         Toast.makeText(activity, "제품 사진 압축 최적화 완료 (${kb} KB)", Toast.LENGTH_SHORT).show()
                     }
                 }
