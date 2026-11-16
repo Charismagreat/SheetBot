@@ -3251,13 +3251,6 @@
             android:padding="13dp"
             android:layout_marginBottom="12dp">
 
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="#334155"
-                android:layout_marginTop="6dp"
-                android:layout_marginBottom="10dp" />
-
             <LinearLayout
                 android:id="@+id/layoutBusinessCardHeader"
                 android:layout_width="match_parent"
@@ -3386,6 +3379,7 @@
                     android:textColor="#F8FAFC"
                     android:textSize="11sp"
                     android:textStyle="bold"
+                    android:visibility="gone"
                     android:layout_marginBottom="8dp" />
 
                 <TextView
