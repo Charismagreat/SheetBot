@@ -92,9 +92,11 @@ const SHEETBOT_EGDESK_PROJECT_ID = "58311f71-0e17-4fd5-8680-1d74d0bcbf8c";
 const FTS_INTERNAL_ENDPOINTS = [
   process.env.FILETOSHEET_INTERNAL_URL,
   "https://file2sheet.cloud",
-  "https://tunneling-service.onrender.com/t/mcp-server-fxkud1-i01o2oa/p/FileToSheet",
+  "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/FileToSheet",
+  "http://127.0.0.1:3003",
   "http://127.0.0.1:4007",
   "http://127.0.0.1:3005",
+  "http://localhost:3003",
   "http://localhost:4007",
   "http://localhost:3005",
 ].filter(Boolean) as string[];

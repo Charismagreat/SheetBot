@@ -99,7 +99,7 @@ object FileToSheetClient {
     private const val TAG = "FileToSheetClient"
     const val FTS_OFFICIAL_DOMAIN = "https://file2sheet.cloud"
     const val FTS_TUNNEL_BASE = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/FileToSheet"
-    const val FTS_TUNNEL_BASE_LEGACY = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1-i01o2oa/p/FileToSheet"
+    const val FTS_TUNNEL_BASE_LEGACY = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/FileToSheet"
 
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 

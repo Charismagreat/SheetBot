@@ -9,7 +9,8 @@ import { resolveUserFtsPhoneNumber } from "@/lib/task-hub-helper";
 const FTS_INTERNAL_ENDPOINTS = [
   process.env.FILETOSHEET_INTERNAL_URL,
   "https://file2sheet.cloud",
-  "https://tunneling-service.onrender.com/t/mcp-server-fxkud1-i01o2oa/p/FileToSheet",
+  "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/FileToSheet",
+  "http://127.0.0.1:3003",
   "http://127.0.0.1:4007",
   "http://127.0.0.1:3005",
 ].filter(Boolean) as string[];

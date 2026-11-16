@@ -23,11 +23,11 @@ object ApiClient {
     private fun nowKstStr(): String =
         java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.KOREA).format(java.util.Date())
 
-    // 1차 메인 호스트: 이지데스크 운영 공식 터널 (현재 활성 인스턴스)
-    const val PRIMARY_HOST = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1-i01o2oa/p/SheetBot"
-    // 2차 백업 호스트: 표준 터널 엔드포인트
+    // 1차 메인 호스트: 공식 도메인 호스트 (mcp-server-fxkud1 직결)
+    const val PRIMARY_HOST = "https://sheetbot.cloud"
+    // 2차 백업 호스트: 이지데스크 운영 공식 터널 엔드포인트
     const val SECONDARY_HOST = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot"
-    // 3차 공식 도메인 호스트
+    // 3차 폴백 호스트
     const val FALLBACK_HOST = "https://sheetbot.cloud"
 
     // 모든 요청에 이용자 세션(visitorSessionId) 및 이메일 헤더를 자동 주입하고,
@@ -1481,7 +1481,7 @@ object ApiClient {
                 if (phoneNumber.isNotBlank()) {
                     reqBuilder.header("x-filetosheet-phone", phoneNumber)
                 }
-                val response = client.newCall(reqBuilder.build()).execute()
+                val response = longTimeoutClient.newCall(reqBuilder.build()).execute()
                 val body = response.body?.string() ?: ""
                 if (body.startsWith("{")) {
                     val resJson = JSONObject(body)
@@ -1570,7 +1570,7 @@ object ApiClient {
                     .post(multipartBuilder.build())
                     .build()
 
-                val response = client.newCall(req).execute()
+                val response = longTimeoutClient.newCall(req).execute()
                 val body = response.body?.string() ?: ""
                 val resJson = JSONObject(body)
 
