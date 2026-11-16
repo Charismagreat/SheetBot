@@ -57,6 +57,96 @@ function unwrapAiCallerText(rawText: string): string {
   return clean;
 }
 
+export interface ProductVisualContext {
+  theme: "taekwondo" | "beauty" | "food" | "tech" | "fashion" | "health" | "business" | "commercial";
+  themeTitle: string;
+  wardrobe: string;
+  environment: string;
+  holdingPose: string;
+  heroModelImg: string;
+}
+
+/**
+ * 제품 주제 및 대본에 맞춰 모델의 의상(Wardrobe), 배경(Environment), 제품 파지 포즈(Pose)를 지능형 자동 도출
+ */
+export function inferProductVisualContext(
+  topic: string,
+  script: string,
+  modelAssetKey: string = "minsu"
+): ProductVisualContext {
+  const combined = `${topic} ${script}`.toLowerCase();
+
+  // 1. 태권도 / 무도 / 도복 / 띠 / 칼라밴드 / 체육관
+  if (/(태권도|도복|칼라밴드|도장|승급|품띠|검은띠|유도|검도|체육관|무술|관장님|원생)/.test(combined)) {
+    return {
+      theme: "taekwondo",
+      themeTitle: "태권도 & 무도 스포츠",
+      wardrobe: "정통 태권도 도복 (흰색 도복 + 블랙 벨트)",
+      environment: "햇살 비치는 명품 태권도장 (Dojang Studio)",
+      holdingPose: "New 칼라밴드를 양손으로 팽팽히 당겨 탄성과 실링 마감을 직접 시연",
+      heroModelImg: "/assets/models/minsu_taekwondo_color_band.jpg",
+    };
+  }
+
+  // 2. 뷰티 / 화장품 / 스킨케어 / 앰플
+  if (/(화장품|뷰티|세럼|앰플|크림|스킨케어|피부|마스크팩|에스테틱|보습|미백)/.test(combined)) {
+    return {
+      theme: "beauty",
+      themeTitle: "프리미엄 뷰티 & 코스메틱",
+      wardrobe: "실키 화이트 뷰티 블라우스 & 파스텔 톤 가운",
+      environment: "자연광 가득한 미니멀 뷰티 파우더룸",
+      holdingPose: "제품 보틀을 손바닥 위에 올려 뺨 옆에 들고 화사하게 미소",
+      heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+    };
+  }
+
+  // 3. 식품 / 요리 / 맛집 / 디저트
+  if (/(식품|요리|맛집|디저트|커피|음료|베이커리|밀키트|간편식|맛있는|셰프)/.test(combined)) {
+    return {
+      theme: "food",
+      themeTitle: "고메 푸드 & 레스토랑",
+      wardrobe: "모던 셰프 에이프런 & 깔끔한 롤업 셔츠",
+      environment: "따뜻한 원목 감성의 부티크 레스토랑 키친",
+      holdingPose: "식품 패키지를 양손으로 정성스럽게 받쳐 들고 서빙",
+      heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+    };
+  }
+
+  // 4. IT / 전자기기 / 스마트 디바이스
+  if (/(스마트|전자|기기|블루투스|태블릿|충전기|이어폰|노트북|가전|디바이스)/.test(combined)) {
+    return {
+      theme: "tech",
+      themeTitle: "스마트 테크 & 일렉트로닉스",
+      wardrobe: "모던 슬림핏 스마트 캐주얼 & 블레이저",
+      environment: "도심 전경의 하이테크 테크 라운지",
+      holdingPose: "기기를 손에 들고 화면을 카메라 정면으로 가리키며 시연",
+      heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+    };
+  }
+
+  // 5. 비즈니스 / SaaS / 자동화 / 세무 / 법률
+  if (/(시트봇|업무|자동화|솔루션|엑셀|구글시트|세무|회계|법률|컨설팅|기업)/.test(combined)) {
+    return {
+      theme: "business",
+      themeTitle: "스마트 비즈니스 & 엔터프라이즈",
+      wardrobe: "테일러드 다크 네이비 비즈니스 수트",
+      environment: "고층 통유리 전망의 스마트 회의실",
+      holdingPose: "태블릿 화면의 데이터 차트를 짚으며 신뢰감 넘치는 발표",
+      heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+    };
+  }
+
+  // 기본 라이프스타일 커머셜
+  return {
+    theme: "commercial",
+    themeTitle: "프리미엄 브랜드 커머셜",
+    wardrobe: "친근하고 세련된 모던 데일리 룩",
+    environment: "감성적인 라이프스타일 스튜디오",
+    holdingPose: "제품을 한 손에 안정적으로 쥐고 카메라를 향해 소개",
+    heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+  };
+}
+
 /**
  * POST /api/user/ai-model/generate-video
  * 
@@ -201,14 +291,17 @@ export async function POST(req: NextRequest) {
       console.warn("[AiModelVideo] Drive upload warning:", e.message);
     }
 
-    // 3. 비디오 생성 메타데이터 저장 및 단축/호환 URL 구성
+    // 3. 제품 맞춤형 의상, 배경, 제품 시연 포즈 및 실사 히어로 컷 도출
+    const modelAssetKey = modelName.includes("서연") ? "seoyeon" : modelName.includes("지아") ? "jia" : "minsu";
+    const visualCtx = inferProductVisualContext(topic, script, modelAssetKey);
+
     const firstTopicLine = topic
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter(Boolean)[0] || topic.slice(0, 32);
     const shortTitle = firstTopicLine.length > 36 ? firstTopicLine.slice(0, 36) + "..." : firstTopicLine;
 
-    const demoVideoUrl = `https://sheetbot.cloud/demo/ai-shorts-player?id=${videoId}&voice=${encodeURIComponent(modelVoice)}&name=${encodeURIComponent(modelName)}&topic=${encodeURIComponent(topic)}&script=${encodeURIComponent(script)}${productProxyImgUrl ? `&img=${encodeURIComponent(productProxyImgUrl)}` : ""}`;
+    const demoVideoUrl = `https://sheetbot.cloud/demo/ai-shorts-player?id=${videoId}&voice=${encodeURIComponent(modelVoice)}&name=${encodeURIComponent(modelName)}&topic=${encodeURIComponent(topic)}&script=${encodeURIComponent(script)}&theme=${visualCtx.theme}&heroImg=${encodeURIComponent(visualCtx.heroModelImg)}&wardrobe=${encodeURIComponent(visualCtx.wardrobe)}&env=${encodeURIComponent(visualCtx.environment)}&pose=${encodeURIComponent(visualCtx.holdingPose)}${productProxyImgUrl ? `&img=${encodeURIComponent(productProxyImgUrl)}` : ""}`;
 
     // 4. 구글 시트 바인딩 및 장부 기록 ([SheetBot] AI 홍보 콘텐츠 관리대장)
     let sheetUrl = "";

@@ -29,6 +29,15 @@ export interface ScriptSceneSegment {
   showProductHighlight?: boolean;
 }
 
+export interface ProductVisualTheme {
+  theme: "taekwondo" | "beauty" | "food" | "tech" | "fashion" | "health" | "business" | "commercial";
+  themeTitle: string;
+  wardrobeBadge: string;
+  environmentBadge: string;
+  holdingPose: string;
+  heroModelImg: string;
+}
+
 const MODEL_PROFILES: Record<string, ModelProfile> = {
   minsu: {
     id: "model_minsu",
@@ -105,12 +114,10 @@ function resolveSafeMediaUrl(rawUrl: string): string {
   }
 
   const clean = rawUrl.startsWith("/") ? rawUrl : `/${rawUrl}`;
-
   if (typeof window === "undefined") {
     return clean;
   }
 
-  // 현재 브라우저 주소창이 이지데스크 터널 프록시 하위에 있을 때만 터널 접두사 결합
   const pathname = window.location.pathname;
   const isTunnelPath = pathname.startsWith("/t/mcp-server-fxkud1/p/SheetBot");
 
@@ -119,6 +126,87 @@ function resolveSafeMediaUrl(rawUrl: string): string {
   }
 
   return clean;
+}
+
+/**
+ * 🎯 제품 주제 및 대본을 기반으로 모델의 맞춤형 의상(Wardrobe), 배경(Environment), 제품 파지 포즈(Pose) 자동 도출
+ */
+function inferProductVisualTheme(
+  topic: string,
+  script: string,
+  modelAssetKey: string = "minsu"
+): ProductVisualTheme {
+  const combined = `${topic} ${script}`.toLowerCase();
+
+  // 1. 태권도 / 도복 / 띠 / 칼라밴드 / 무도 스포츠
+  if (/(태권도|도복|칼라밴드|도장|승급|품띠|검은띠|유도|검도|체육관|무술|관장님|원생)/.test(combined)) {
+    return {
+      theme: "taekwondo",
+      themeTitle: "태권도 & 무도 스포츠",
+      wardrobeBadge: "🥋 정통 태권도 도복 (블랙 벨트)",
+      environmentBadge: "🏟️ 명품 태권도장 (Dojang)",
+      holdingPose: "New 칼라밴드를 양손으로 팽팽히 당겨 탄성과 실링 마감을 직접 시연",
+      heroModelImg: "/assets/models/minsu_taekwondo_color_band.jpg",
+    };
+  }
+
+  // 2. 뷰티 / 화장품 / 스킨케어 / 앰플
+  if (/(화장품|뷰티|세럼|앰플|크림|스킨케어|피부|마스크팩|에스테틱|보습|미백)/.test(combined)) {
+    return {
+      theme: "beauty",
+      themeTitle: "프리미엄 뷰티 & 코스메틱",
+      wardrobeBadge: "👗 실키 화이트 뷰티 가운",
+      environmentBadge: "✨ 자연광 미니멀 에스테틱 룸",
+      holdingPose: "제품 앰플을 뺨 옆에 들고 화사하게 미소",
+      heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+    };
+  }
+
+  // 3. 식품 / 요리 / 맛집 / 디저트
+  if (/(식품|요리|맛집|디저트|커피|음료|베이커리|밀키트|간편식|맛있는|셰프)/.test(combined)) {
+    return {
+      theme: "food",
+      themeTitle: "고메 푸드 & 레스토랑",
+      wardrobeBadge: "👨‍🍳 모던 셰프 에이프런",
+      environmentBadge: "🍷 부티크 레스토랑 키친",
+      holdingPose: "식품 패키지를 양손으로 정성스럽게 받쳐 들고 서빙",
+      heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+    };
+  }
+
+  // 4. IT / 전자기기 / 스마트 디바이스
+  if (/(스마트|전자|기기|블루투스|태블릿|충전기|이어폰|노트북|가전|디바이스)/.test(combined)) {
+    return {
+      theme: "tech",
+      themeTitle: "스마트 테크 & 일렉트로닉스",
+      wardrobeBadge: "👔 모던 스마트 캐주얼",
+      environmentBadge: "🏢 하이테크 테크 라운지",
+      holdingPose: "기기를 손에 들고 화면을 카메라 정면으로 가리키며 시연",
+      heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+    };
+  }
+
+  // 5. 비즈니스 / SaaS / 자동화 / 세무 / 법률
+  if (/(시트봇|업무|자동화|솔루션|엑셀|구글시트|세무|회계|법률|컨설팅|기업)/.test(combined)) {
+    return {
+      theme: "business",
+      themeTitle: "스마트 비즈니스 & 엔터프라이즈",
+      wardrobeBadge: "💼 테일러드 다크 네이비 수트",
+      environmentBadge: "🏙️ 고층 파노라마 스마트 회의실",
+      holdingPose: "태블릿 화면의 데이터 차트를 짚으며 신뢰감 넘치는 발표",
+      heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+    };
+  }
+
+  // 기본 라이프스타일 커머셜
+  return {
+    theme: "commercial",
+    themeTitle: "프리미엄 브랜드 커머셜",
+    wardrobeBadge: "✨ 세련된 모던 데일리 룩",
+    environmentBadge: "🏠 감성 라이프스타일 스튜디오",
+    holdingPose: "제품을 한 손에 안정적으로 쥐고 카메라를 향해 소개",
+    heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+  };
 }
 
 /**
@@ -260,6 +348,10 @@ function ShortsPlayerContent() {
   const topicParam = searchParams.get("topic");
   const scriptParam = searchParams.get("script");
   const imgParam = searchParams.get("img");
+  const customHeroParam = searchParams.get("heroImg");
+  const wardrobeParam = searchParams.get("wardrobe");
+  const envParam = searchParams.get("env");
+  const poseParam = searchParams.get("pose");
 
   const [metaData, setMetaData] = useState<{
     modelName?: string;
@@ -295,6 +387,18 @@ function ShortsPlayerContent() {
   const rawTopic = effectiveTopic || model.defaultTopic;
   const rawScript = effectiveScript || model.defaultScript;
 
+  // 🌟 제품 특성에 맞춘 의상, 배경, 제품 파지 실사 샷 지능형 분석
+  const visualTheme = useMemo(() => {
+    const baseTheme = inferProductVisualTheme(rawTopic, rawScript, model.assetKey);
+    return {
+      ...baseTheme,
+      heroModelImg: customHeroParam || baseTheme.heroModelImg,
+      wardrobeBadge: wardrobeParam ? `🥋 ${wardrobeParam}` : baseTheme.wardrobeBadge,
+      environmentBadge: envParam ? `🏟️ ${envParam}` : baseTheme.environmentBadge,
+      holdingPose: poseParam || baseTheme.holdingPose,
+    };
+  }, [rawTopic, rawScript, model.assetKey, customHeroParam, wardrobeParam, envParam, poseParam]);
+
   const { shortTitle, featureCards } = useMemo(
     () => parseTopicAndFeatureCards(rawTopic),
     [rawTopic]
@@ -310,7 +414,7 @@ function ShortsPlayerContent() {
   const [duration, setDuration] = useState<number>(20);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [likes, setLikes] = useState<number>(428);
+  const [likes, setLikes] = useState<number>(456);
   const [hasLiked, setHasLiked] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>("");
   const [showFullScriptModal, setShowFullScriptModal] = useState<boolean>(false);
@@ -492,36 +596,25 @@ function ShortsPlayerContent() {
     return featureCards[idx] || featureCards[0];
   }, [featureCards, currentTime, duration]);
 
-  // 🎬 4단 시네마틱 앵글 사이클 (전면 -> 쿼터 -> 사이드 -> 전신 워크)
-  const angleCycle: Array<"front" | "quarter" | "walk" | "side"> = [
-    "front",
-    "quarter",
-    "walk",
-    "side",
-  ];
-  const currentAngle = angleCycle[activeSceneIndex % angleCycle.length] || "front";
-  const nextAngle = angleCycle[(activeSceneIndex + 1) % angleCycle.length] || "quarter";
-
   // 🌟 AI 모델 생동감 모션 파라미터 (숨쉬기, 고개 끄덕임, 미세 발화 바운스)
-  const breathPhase = Math.sin(currentTime * 2.5); // 호흡 주기
-  const nodPhase = isPlaying ? Math.cos(currentTime * 4.8) * 1.5 : 0; // 발화 끄덕임
+  const breathPhase = Math.sin(currentTime * 2.5);
+  const nodPhase = isPlaying ? Math.cos(currentTime * 4.8) * 1.5 : 0;
   const liveScale = isPlaying ? 1.025 + Math.sin(currentTime * 3.2) * 0.015 : 1.0;
   const liveTranslateY = isPlaying ? -4 + breathPhase * 3.5 + nodPhase : 0;
   const liveTranslateX = isPlaying ? Math.sin(currentTime * 1.8) * 3 : 0;
   const dynamicCameraTransform = `scale(${liveScale.toFixed(4)}) translate(${liveTranslateX.toFixed(2)}px, ${liveTranslateY.toFixed(2)}px)`;
 
-  const currentModelImgUrl = resolveSafeMediaUrl(`/assets/models/${model.assetKey}_${currentAngle}.jpg`);
-  const nextModelImgUrl = resolveSafeMediaUrl(`/assets/models/${model.assetKey}_${nextAngle}.jpg`);
+  // 🥋 [핵심] 제품 맞춤형 의상 및 배경에서 제품을 직접 들고 있는 실사 히어로 샷 URL
+  const currentModelImgUrl = resolveSafeMediaUrl(visualTheme.heroModelImg);
   const avatarImgUrl = resolveSafeMediaUrl(`/assets/models/${model.assetKey}_avatar.jpg`);
 
-  // 제품 쇼케이스 팝업 인서트 조건 (POINT 구간 또는 연기 지시 구간)
   const shouldHighlightProduct = Boolean(
     resolvedProductImgUrl &&
     (activeScene.showProductHighlight || activeFeatureCard || activeSceneIndex % 2 === 1)
   );
 
   /**
-   * 🎬 실제 쇼츠 비디오 파일(.webm) 캔버스 렌더링 및 다운로드 (제품 이미지 + 모델 합성)
+   * 🎬 실제 쇼츠 비디오 파일(.webm) 캔버스 렌더링 및 다운로드 (도복/맞춤 의상 모델 + 실물 제품 합성)
    */
   const handleDownloadVideoFile = async () => {
     if (isExportingVideo) return;
@@ -545,9 +638,8 @@ function ShortsPlayerContent() {
           img.src = url;
         });
 
-      const [frontImg, quarterImg, productImg] = await Promise.all([
-        loadImage(resolveSafeMediaUrl(`/assets/models/${model.assetKey}_front.jpg`)),
-        loadImage(resolveSafeMediaUrl(`/assets/models/${model.assetKey}_quarter.jpg`)),
+      const [heroModelImg, productImg] = await Promise.all([
+        loadImage(currentModelImgUrl),
         resolvedProductImgUrl ? loadImage(resolvedProductImgUrl) : Promise.resolve(null),
       ]);
 
@@ -573,28 +665,27 @@ function ShortsPlayerContent() {
         ctx.fillStyle = "#070B14";
         ctx.fillRect(0, 0, 720, 1280);
 
-        // 1. 모델 레이어
-        const activeMImg = f % 60 < 30 ? frontImg : quarterImg;
-        if (activeMImg) {
+        // 1. 제품 맞춤 의상(도복) & 배경에서 제품을 직접 들고 있는 모델 레이어
+        if (heroModelImg) {
           const z = 1.0 + Math.sin(f * 0.08) * 0.02;
           const dw = 720 * z;
           const dh = 1280 * z;
-          ctx.drawImage(activeMImg, -(dw - 720) / 2, 0, dw, dh);
+          ctx.drawImage(heroModelImg, -(dw - 720) / 2, 0, dw, dh);
         }
 
-        // 2. 스튜디오 조명 그라데이션
+        // 2. 조명 그라데이션
         const grad = ctx.createLinearGradient(0, 700, 0, 1280);
         grad.addColorStop(0, "rgba(0,0,0,0)");
         grad.addColorStop(1, "rgba(0,0,0,0.92)");
         ctx.fillStyle = grad;
         ctx.fillRect(0, 700, 720, 580);
 
-        // 3. 상단 PPL 제품 배너
-        ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
-        ctx.fillRect(36, 48, 648, 68);
+        // 3. 상단 의상/배경 및 PPL 제품 배너
+        ctx.fillStyle = "rgba(15, 23, 42, 0.90)";
+        ctx.fillRect(36, 48, 648, 70);
         ctx.fillStyle = "#FCD34D";
         ctx.font = "bold 24px sans-serif";
-        ctx.fillText(`🏷️ PPL: ${shortTitle}`, 56, 90);
+        ctx.fillText(`🏷️ PPL: ${shortTitle}`, 56, 92);
 
         // 4. 제품 실물 사진 3D 플로팅 인서트 컷
         if (productImg) {
@@ -604,7 +695,6 @@ function ShortsPlayerContent() {
           const px = 460 - (pw - 220) / 2;
           const py = 160;
 
-          // 제품 카드 배경 및 그림자
           ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
           ctx.strokeStyle = "#38BDF8";
           ctx.lineWidth = 3;
@@ -613,7 +703,6 @@ function ShortsPlayerContent() {
           ctx.fill();
           ctx.stroke();
 
-          // 제품 이미지 그리기
           ctx.save();
           ctx.beginPath();
           ctx.roundRect(px + 6, py + 6, pw - 12, ph - 12, 16);
@@ -641,7 +730,7 @@ function ShortsPlayerContent() {
           ctx.fillText(fc.detail.slice(0, 34), 58, 944);
         }
 
-        // 6. 하단 쇼츠 자막
+        // 6. 하단 자막
         const sc = scenes[Math.floor(ratio * scenes.length) % scenes.length];
         if (sc) {
           ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
@@ -676,17 +765,10 @@ function ShortsPlayerContent() {
 
   return (
     <div className="min-h-screen bg-[#070B14] text-slate-100 flex flex-col items-center justify-center font-sans select-none p-0 sm:p-4 overflow-hidden">
-      {/* 인라인 키프레임 애니메이션 주입 (호흡, 립싱크, 부유 모션) */}
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes model-live-breath {
           0%, 100% { transform: translateY(0px) scale(1.0); }
           50% { transform: translateY(-5px) scale(1.02); }
-        }
-        @keyframes model-speak-lip {
-          0%, 100% { transform: scale(1.0) translateY(0); opacity: 0.85; }
-          25% { transform: scale(1.06) translateY(-1px); opacity: 1; }
-          50% { transform: scale(0.98) translateY(1px); opacity: 0.9; }
-          75% { transform: scale(1.04) translateY(-0.5px); opacity: 1; }
         }
         @keyframes product-float-glow {
           0%, 100% { transform: translateY(0px) rotate(0deg); }
@@ -741,7 +823,7 @@ function ShortsPlayerContent() {
 
           {/* 상단 헤더 뱃지 & 컨트롤 */}
           <div className="flex items-center justify-between pt-1">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1.5 flex-wrap">
               <Link
                 href={`/demo/ai-model-3d-viewer?modelId=${model.id}`}
                 className="bg-black/60 backdrop-blur-md text-white/90 text-xs px-2.5 py-1 rounded-full border border-white/20 hover:bg-black/80 transition flex items-center space-x-1 shadow"
@@ -750,7 +832,7 @@ function ShortsPlayerContent() {
                 <span className="text-[11px] font-medium">3D 스튜디오</span>
               </Link>
               <span className="bg-gradient-to-r from-purple-600 to-pink-600 backdrop-blur text-[10px] text-white px-2.5 py-0.5 rounded-full border border-purple-400/40 font-bold tracking-tight shadow">
-                Veo 3 AI Shorts Studio
+                Veo 3 AI Shorts
               </span>
             </div>
 
@@ -769,7 +851,7 @@ function ShortsPlayerContent() {
           onClick={togglePlay}
           className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden cursor-pointer bg-slate-950"
         >
-          {/* 🌟 1. 전속 모델 생동감 모션 레이어 (살아 움직이는 호흡 & 발화 립싱크 모션) */}
+          {/* 🥋 [핵심] 제품 맞춤 의상(도복) 및 배경에서 제품을 직접 들고 있는 실사 샷 레이어 */}
           <div
             className={`relative w-full h-full flex items-center justify-center transition-transform duration-300 ease-out ${
               isPlaying ? "animate-live-breath" : ""
@@ -790,9 +872,9 @@ function ShortsPlayerContent() {
             />
 
             {/* 스튜디오 조명 & 앰비언트 비네팅 */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/10 to-black/40 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/10 to-black/35 pointer-events-none" />
 
-            {/* 🎙️ 발화 시 모델 입/얼굴 부분 생동감 립모핑 파동 (정적인 느낌 100% 탈피) */}
+            {/* 🎙️ 발화 시 입/얼굴 부분 생동감 립모핑 파동 */}
             {isPlaying && !isMuted && (
               <div className="absolute top-[28%] w-32 h-16 rounded-full bg-purple-400/10 blur-xl animate-pulse pointer-events-none" />
             )}
@@ -803,17 +885,17 @@ function ShortsPlayerContent() {
             )}
           </div>
 
-          {/* 🌟 2. 상단 PPL 제품 쇼케이스 배너 (썸네일 + 제품명 + 연기 지시 인디케이터) */}
+          {/* 🌟 2. 상단 PPL 제품 배너 및 [의상 / 배경] 테마 인디케이터 뱃지 */}
           <div
             onClick={(e) => e.stopPropagation()}
             className="absolute top-14 left-3 right-14 z-20 pointer-events-none flex flex-col space-y-1.5"
           >
+            {/* 제품 PPL 배너 */}
             <div
               onClick={() => resolvedProductImgUrl && setShowProductModal(true)}
               className="inline-flex items-center space-x-2 bg-slate-950/85 backdrop-blur-md border border-amber-400/70 rounded-full pl-1.5 pr-3.5 py-1 shadow-[0_4px_20px_rgba(245,158,11,0.3)] w-fit max-w-full pointer-events-auto cursor-pointer hover:border-amber-300 transition"
               title="클릭하여 제품 사진 크게 보기"
             >
-              {/* 상단 배너 제품 미니 썸네일 */}
               {resolvedProductImgUrl && !productImageFailed ? (
                 <img
                   src={resolvedProductImgUrl}
@@ -828,8 +910,22 @@ function ShortsPlayerContent() {
                 PPL: {shortTitle}
               </span>
               <span className="text-[9px] bg-amber-400/20 text-amber-200 px-1.5 py-0.2 rounded-full font-bold">
-                실물
+                직접시연
               </span>
+            </div>
+
+            {/* 🥋 제품 맞춤 의상 & 배경 인디케이터 (도복 착용 & 태권도장 배경 안내) */}
+            <div className="flex items-center space-x-1.5 flex-wrap">
+              <div className="inline-flex items-center space-x-1 bg-black/75 backdrop-blur-md border border-emerald-400/50 rounded-full px-2.5 py-0.5 shadow">
+                <span className="text-[10px] text-emerald-200 font-extrabold">
+                  {visualTheme.wardrobeBadge}
+                </span>
+              </div>
+              <div className="inline-flex items-center space-x-1 bg-black/75 backdrop-blur-md border border-sky-400/50 rounded-full px-2.5 py-0.5 shadow">
+                <span className="text-[10px] text-sky-200 font-extrabold">
+                  {visualTheme.environmentBadge}
+                </span>
+              </div>
             </div>
 
             {/* 현재 씬 연기 지시 인디케이터 */}
@@ -843,14 +939,14 @@ function ShortsPlayerContent() {
             )}
           </div>
 
-          {/* 🌟 3. [핵심] 우측 상단/중앙 3D 플로팅 제품 실물 사진 쇼케이스 카드 (PPL 인서트 컷) */}
+          {/* 🌟 3. 우측 3D 플로팅 실물 제품 사진 쇼케이스 카드 (PPL 인서트 컷) */}
           {resolvedProductImgUrl && !productImageFailed && (
             <div
               onClick={(e) => {
                 e.stopPropagation();
                 setShowProductModal(true);
               }}
-              className={`absolute top-28 right-3.5 z-25 pointer-events-auto cursor-pointer transition-all duration-500 ease-out animate-product-float ${
+              className={`absolute top-32 right-3.5 z-25 pointer-events-auto cursor-pointer transition-all duration-500 ease-out animate-product-float ${
                 shouldHighlightProduct
                   ? "scale-105 opacity-100"
                   : "scale-95 opacity-90"
@@ -858,7 +954,6 @@ function ShortsPlayerContent() {
               title="터치하여 제품 실물 사진 확대"
             >
               <div className="relative group bg-slate-950/90 backdrop-blur-md border-2 border-sky-400/80 rounded-2xl p-1.5 shadow-[0_0_30px_rgba(56,189,248,0.45)] hover:border-sky-300 transition flex flex-col items-center">
-                {/* 실물 제품 사진 */}
                 <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-xl overflow-hidden bg-black/60">
                   <img
                     src={resolvedProductImgUrl}
@@ -866,7 +961,6 @@ function ShortsPlayerContent() {
                     onError={() => setProductImageFailed(true)}
                     className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
                   />
-                  {/* PPL 뱃지 */}
                   <span className="absolute top-1 left-1 bg-sky-500 text-white text-[9px] font-black px-1.5 py-0.3 rounded shadow">
                     실물 PPL
                   </span>
@@ -888,7 +982,6 @@ function ShortsPlayerContent() {
               className="absolute bottom-36 left-3 right-16 z-20 pointer-events-auto transition-all duration-300"
             >
               <div className="bg-slate-950/90 backdrop-blur-md border border-sky-400/60 rounded-2xl p-3 shadow-[0_10px_35px_rgba(0,0,0,0.9)] flex items-start space-x-3">
-                {/* 만약 우측 팝업 외에 카드 내부에도 제품 썸네일 노출 */}
                 {resolvedProductImgUrl && !productImageFailed && (
                   <div
                     onClick={() => setShowProductModal(true)}
@@ -955,7 +1048,7 @@ function ShortsPlayerContent() {
             </div>
           )}
 
-          {/* 🌟 5. 쇼츠 시작 전 대기 화면 (원터치 재생) */}
+          {/* 🌟 5. 쇼츠 시작 전 대기 화면 */}
           {!hasStarted && (
             <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] z-30 flex flex-col items-center justify-center space-y-4 p-6">
               <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-purple-600 to-pink-500 p-[3px] shadow-[0_0_40px_rgba(168,85,247,0.8)] animate-pulse">
@@ -968,7 +1061,7 @@ function ShortsPlayerContent() {
                   🎬 {shortTitle}
                 </h3>
                 <p className="text-xs text-purple-300 font-medium">
-                  화면을 터치하면 AI 모델 음성과 함께 쇼츠 영상이 재생됩니다
+                  {displayName}이 {visualTheme.wardrobeBadge.replace(/^[^\s]+\s*/, "")}을 입고 직접 시연하는 쇼츠
                 </p>
               </div>
               <span className="text-[10px] bg-white/10 text-slate-300 px-3 py-1 rounded-full border border-white/20">
