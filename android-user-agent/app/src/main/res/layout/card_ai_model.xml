@@ -341,6 +341,40 @@
                 android:textSize="10sp"
                 android:layout_marginBottom="8dp" />
 
+            <!-- 제품명 및 핵심 특징 헤더 바 (라벨 + [🔍 크게 편집]) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="제품명 및 핵심 특징 (줄바꿈 입력 가능):"
+                    android:textColor="#CBD5E1"
+                    android:textSize="10.5sp" />
+
+                <Button
+                    android:id="@+id/btnExpandProductTopic"
+                    android:layout_width="wrap_content"
+                    android:layout_height="28dp"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:paddingVertical="0dp"
+                    android:paddingHorizontal="8dp"
+                    android:gravity="center"
+                    android:backgroundTint="#334155"
+                    android:text="🔍 크게 편집"
+                    android:textColor="#38BDF8"
+                    android:textSize="9.5sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
             <!-- 제품명 및 핵심 키워드 입력 (줄바꿈 지원) -->
             <EditText
                 android:id="@+id/etProductTopic"
@@ -351,7 +385,7 @@
                 android:maxLines="6"
                 android:background="@drawable/bg_input_field"
                 android:gravity="top|start"
-                android:hint="제품명 및 핵심 특징 (줄바꿈 입력 가능)\n예: 친환경 텀블러\n- 24시간 보온/보냉 지속\n- 세련된 파스텔 베이지 디자인"
+                android:hint="제품명 및 핵심 특징 (줄바꿈 입력 가능)\n예: 친환경 텀블러\n- 24시간 보온/보냉 지속\n- 세련된 파스텔 베이지 디자인\n(💡 [🔍 크게 편집]으로 팝업창에서 편하게 수정 가능)"
                 android:textColor="#FFFFFF"
                 android:textColorHint="#64748B"
                 android:textSize="11.5sp"
@@ -361,7 +395,7 @@
                 android:scrollbars="vertical"
                 android:layout_marginBottom="6dp" />
 
-            <!-- 홍보 대본 입력창 및 AI 추천 버튼 -->
+            <!-- 홍보 대본 입력창 및 AI 추천/크게편집 버튼 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -378,9 +412,27 @@
                     android:textSize="10.5sp" />
 
                 <Button
+                    android:id="@+id/btnExpandProductScript"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:paddingVertical="0dp"
+                    android:paddingHorizontal="8dp"
+                    android:gravity="center"
+                    android:backgroundTint="#334155"
+                    android:text="🔍 크게 편집"
+                    android:textColor="#38BDF8"
+                    android:textSize="9.5sp"
+                    android:textStyle="bold"
+                    android:layout_marginEnd="4dp" />
+
+                <Button
                     android:id="@+id/btnAiSuggestScript"
                     android:layout_width="wrap_content"
-                    android:layout_height="34dp"
+                    android:layout_height="32dp"
                     android:minHeight="0dp"
                     android:minWidth="0dp"
                     android:insetTop="0dp"
@@ -390,7 +442,7 @@
                     android:textColor="#FFFFFF"
                     android:textSize="10sp"
                     android:textStyle="bold"
-                    android:paddingHorizontal="10dp"
+                    android:paddingHorizontal="9dp"
                     android:paddingVertical="0dp"
                     android:gravity="center" />
             </LinearLayout>
@@ -401,7 +453,7 @@
                 android:layout_height="wrap_content"
                 android:minHeight="68dp"
                 android:background="@drawable/bg_input_field"
-                android:hint="전속 모델이 읽을 홍보 대본을 입력하세요. (비워둘 시 AI가 자동으로 트렌디한 쇼츠 대본 작성)"
+                android:hint="전속 모델이 읽을 홍보 대본을 입력하세요. (비워둘 시 AI가 자동으로 트렌디한 쇼츠 대본 작성)\n(💡 [🔍 크게 편집]으로 팝업창에서 편하게 수정 가능)"
                 android:textColor="#FFFFFF"
                 android:textColorHint="#64748B"
                 android:textSize="11.5sp"

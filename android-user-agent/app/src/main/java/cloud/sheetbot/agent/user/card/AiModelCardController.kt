@@ -148,6 +148,37 @@ class AiModelCardController(
             suggestScript()
         }
 
+        // 🌟 [확장 에디터 팝업] 제품 정보 및 홍보 대본 풀스크린 상세 편집 연동
+        val openTopicEditorAction = {
+            showExpandableEditorDialog(
+                title = "📝 제품명 및 특징 상세 편집",
+                initialText = binding.etProductTopic.text.toString(),
+                isScriptMode = false
+            ) { updatedText ->
+                binding.etProductTopic.setText(updatedText)
+            }
+        }
+        binding.btnExpandProductTopic.setOnClickListener { openTopicEditorAction() }
+        binding.etProductTopic.setOnLongClickListener {
+            openTopicEditorAction()
+            true
+        }
+
+        val openScriptEditorAction = {
+            showExpandableEditorDialog(
+                title = "🎬 AI 홍보 발화 대본 상세 편집",
+                initialText = binding.etProductScript.text.toString(),
+                isScriptMode = true
+            ) { updatedText ->
+                binding.etProductScript.setText(updatedText)
+            }
+        }
+        binding.btnExpandProductScript.setOnClickListener { openScriptEditorAction() }
+        binding.etProductScript.setOnLongClickListener {
+            openScriptEditorAction()
+            true
+        }
+
         // 쇼츠 영상 생성 시작
         binding.btnStartAiModelShorts.setOnClickListener {
             startGenerateShorts()
@@ -313,6 +344,109 @@ class AiModelCardController(
         btnActionChangeModel.setOnClickListener {
             dialog.dismiss()
             showModelPersonaDialog()
+        }
+
+        dialog.show()
+    }
+
+    /**
+     * 🌟 제품 정보 및 홍보 대본 풀스크린 확장 편집 팝업
+     */
+    private fun showExpandableEditorDialog(
+        title: String,
+        initialText: String,
+        isScriptMode: Boolean,
+        onApply: (String) -> Unit
+    ) {
+        val dialogView = LayoutInflater.from(activity).inflate(R.layout.dialog_expandable_text_editor, null)
+        val tvEditorTitle = dialogView.findViewById<android.widget.TextView>(R.id.tvEditorTitle)
+        val btnEditorCloseTop = dialogView.findViewById<android.widget.TextView>(R.id.btnEditorCloseTop)
+        val ivEditorProductThumb = dialogView.findViewById<android.widget.ImageView>(R.id.ivEditorProductThumb)
+        val tvEditorCharCount = dialogView.findViewById<android.widget.TextView>(R.id.tvEditorCharCount)
+        val btnEditorCopyAll = dialogView.findViewById<android.widget.Button>(R.id.btnEditorCopyAll)
+        val btnEditorClear = dialogView.findViewById<android.widget.Button>(R.id.btnEditorClear)
+        val etExpandedContent = dialogView.findViewById<android.widget.EditText>(R.id.etExpandedContent)
+        val btnEditorCancel = dialogView.findViewById<android.widget.Button>(R.id.btnEditorCancel)
+        val btnEditorApply = dialogView.findViewById<android.widget.Button>(R.id.btnEditorApply)
+
+        tvEditorTitle.text = title
+        etExpandedContent.setText(initialText)
+        try {
+            etExpandedContent.setSelection(etExpandedContent.text.length)
+        } catch (_: Exception) {}
+
+        // 제품 사진이 등록되어 있을 경우 미니 썸네일 노출
+        selectedProductFile?.let { file ->
+            if (file.exists()) {
+                val thumbBmp = BitmapFactory.decodeFile(file.absolutePath)
+                if (thumbBmp != null) {
+                    ivEditorProductThumb.setImageBitmap(thumbBmp)
+                    ivEditorProductThumb.visibility = View.VISIBLE
+                }
+            }
+        }
+
+        // 실시간 글자 수 카운터
+        val updateCharCount = {
+            val len = etExpandedContent.text?.length ?: 0
+            if (isScriptMode) {
+                tvEditorCharCount.text = "현재 ${len}자 (쇼츠 권장: 200~350자)"
+            } else {
+                tvEditorCharCount.text = "현재 ${len}자"
+            }
+        }
+        updateCharCount()
+
+        etExpandedContent.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                // 붙여넣기 시 검은색 텍스트 오염 방지
+                if (s != null) {
+                    val spans = s.getSpans(0, s.length, android.text.style.CharacterStyle::class.java)
+                    for (span in spans) {
+                        if (span is android.text.style.ForegroundColorSpan || span is android.text.style.BackgroundColorSpan) {
+                            s.removeSpan(span)
+                        }
+                    }
+                }
+                updateCharCount()
+            }
+        })
+
+        val dialog = AlertDialog.Builder(activity)
+            .setView(dialogView)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        btnEditorCloseTop.setOnClickListener { dialog.dismiss() }
+        btnEditorCancel.setOnClickListener { dialog.dismiss() }
+
+        // 전체 복사
+        btnEditorCopyAll.setOnClickListener {
+            val textToCopy = etExpandedContent.text.toString()
+            if (textToCopy.isNotBlank()) {
+                val clipboard = activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("SheetBot Editor", textToCopy)
+                clipboard?.setPrimaryClip(clip)
+                Toast.makeText(activity, "클립보드에 전체 복사되었습니다.", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(activity, "복사할 내용이 없습니다.", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // 비우기
+        btnEditorClear.setOnClickListener {
+            etExpandedContent.setText("")
+        }
+
+        // 수정 내용 적용
+        btnEditorApply.setOnClickListener {
+            val updated = etExpandedContent.text.toString()
+            onApply(updated)
+            dialog.dismiss()
+            Toast.makeText(activity, "수정 내용이 적용되었습니다.", Toast.LENGTH_SHORT).show()
         }
 
         dialog.show()

@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 🌟 시트봇 풀스크린 확장 텍스트 에디터 팝업 (제품 정보 / AI 홍보 대본) -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_dialog_rounded"
+    android:padding="16dp">
+
+    <!-- 1. 상단 커스텀 헤더 바 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="12dp">
+
+        <TextView
+            android:id="@+id/tvEditorTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="📝 전체 내용 상세 편집"
+            android:textColor="#F8FAFC"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnEditorCloseTop"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:gravity="center"
+            android:text="✕"
+            android:textColor="#94A3B8"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true" />
+    </LinearLayout>
+
+    <!-- 2. 서브 툴바 (제품 썸네일 + 실시간 글자수 + 복사/비우기) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="#1E293B"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="7dp"
+        android:layout_marginBottom="10dp">
+
+        <!-- 제품 미니 썸네일 (대본 작성 시 제품 참조용) -->
+        <ImageView
+            android:id="@+id/ivEditorProductThumb"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:scaleType="centerCrop"
+            android:background="@drawable/bg_input_field"
+            android:visibility="gone"
+            android:layout_marginEnd="8dp"
+            android:contentDescription="참조 제품 사진" />
+
+        <TextView
+            android:id="@+id/tvEditorCharCount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="글자 수: 0자"
+            android:textColor="#94A3B8"
+            android:textSize="11sp" />
+
+        <Button
+            android:id="@+id/btnEditorCopyAll"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingVertical="0dp"
+            android:paddingHorizontal="8dp"
+            android:backgroundTint="#334155"
+            android:text="📋 전체 복사"
+            android:textColor="#E2E8F0"
+            android:textSize="10sp"
+            android:layout_marginEnd="6dp" />
+
+        <Button
+            android:id="@+id/btnEditorClear"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingVertical="0dp"
+            android:paddingHorizontal="8dp"
+            android:backgroundTint="#334155"
+            android:text="↺ 비우기"
+            android:textColor="#EF4444"
+            android:textSize="10sp" />
+    </LinearLayout>
+
+    <!-- 3. 대형 멀티라인 편집 텍스트 영역 -->
+    <EditText
+        android:id="@+id/etExpandedContent"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="180dp"
+        android:maxHeight="320dp"
+        android:background="@drawable/bg_input_field"
+        android:gravity="top|start"
+        android:hint="내용을 입력하거나 자유롭게 수정하세요..."
+        android:textColor="#FFFFFF"
+        android:textColorHint="#64748B"
+        android:textSize="12.5sp"
+        android:lineSpacingMultiplier="1.25"
+        android:padding="12dp"
+        android:inputType="textMultiLine|textCapSentences"
+        android:scrollbars="vertical"
+        android:layout_marginBottom="14dp" />
+
+    <!-- 4. 하단 액션 버튼 바 ([취소] / [✓ 수정 내용 적용]) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center">
+
+        <Button
+            android:id="@+id/btnEditorCancel"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:backgroundTint="#334155"
+            android:text="✕ 취소"
+            android:textColor="#94A3B8"
+            android:textSize="12sp"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/btnEditorApply"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1.6"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:backgroundTint="#7C3AED"
+            android:text="✓ 수정 내용 적용"
+            android:textColor="#FFFFFF"
+            android:textSize="12.5sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+</LinearLayout>
