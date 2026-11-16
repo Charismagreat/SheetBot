@@ -11,11 +11,26 @@ import {
   sendPhoneSms,
   listDriveFiles,
 } from "@/lib/egdesk-helpers";
+import { callDriveTool } from "@/lib/sqlite-drive-service";
 import { setupDatabase } from "@/lib/setup-db";
 import {
   resolveUserFtsPhoneNumber,
   createTaskItem,
 } from "@/lib/task-hub-helper";
+
+export interface DriveFileItemDto {
+  id: string;
+  name: string;
+  mimeType: string;
+  size?: number;
+  sizeFormatted?: string;
+  modifiedTime?: string;
+  webViewLink?: string;
+  webContentLink?: string;
+  thumbnailLink?: string;
+  iconType?: string;
+  summary?: string;
+}
 
 const FTS_INTERNAL_ENDPOINTS = [
   process.env.FILETOSHEET_INTERNAL_URL,
@@ -74,6 +89,24 @@ function parseMcpToolResultJson(rawBody: string): any {
   } catch {
     return null;
   }
+}
+
+function parseDriveToolFiles(res: any): any[] {
+  if (!res) return [];
+  if (Array.isArray(res.files)) return res.files;
+  if (Array.isArray(res)) return res;
+  const contentArr = res?.result?.content;
+  if (Array.isArray(contentArr) && contentArr.length > 0) {
+    const text = String(contentArr[0]?.text || "").trim();
+    if (text) {
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed?.files)) return parsed.files;
+      } catch {}
+    }
+  }
+  return [];
 }
 
 function extractCleanString(obj: Record<string, any>, key: string): string {
@@ -764,13 +797,16 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
 
 위 입력을 분석하여 최적의 작업을 판별하고 다음 순수 JSON으로만 응답하세요:
 {
-  "actionType": "SHEET_QUERY" | "SHEET_WRITE" | "SMS_DISPATCH" | "APPS_SCRIPT_RUN" | "APPS_SCRIPT_NOT_FOUND" | "GENERAL_ASSIST",
+  "actionType": "SHEET_QUERY" | "SHEET_WRITE" | "SMS_DISPATCH" | "APPS_SCRIPT_RUN" | "DRIVE_FILE_ACTION" | "APPS_SCRIPT_NOT_FOUND" | "GENERAL_ASSIST",
   "targetName": "고객명 또는 대상자 (있을 경우)",
   "targetPhone": "전화번호 (있을 경우)",
   "messageText": "발송할 문자 내용 또는 전달할 내용",
   "scriptId": "실행할 Apps Script scriptId (APPS_SCRIPT_RUN인 경우)",
   "functionName": "실행할 Apps Script 실제 함수명 (availableGasFunctions에 실제로 존재하는 이름만 지정할 것)",
   "functionParams": [],
+  "driveFileKeyword": "구글 드라이브나 PC 폴더에서 찾을 파일명 또는 검색 키워드 (예: '계약서', '견적서', '보고서', '최종본', '매출내역')",
+  "driveFolderKeyword": "지칭한 특정 폴더명 (예: '시트봇', '영수증', '다운로드' 등, 전체 드라이브면 '')",
+  "driveOperation": "FETCH(조회/스마트폰 전송/열기) | SUMMARIZE(내용 3줄 요약) | SEND_SMS(문자로 전송)",
   "queryKeywords": ["파투 시트 행 데이터에서 검색할 핵심 단어들 (조사/어미 제외, 유의어 포함. 예: ['국민건강보험공단', '건강보험', '분납'], ['032디자인', '이항식'], ['영수증', '식대'])"],
   "queryTargetEntity": "핵심 검색 대상 인물/기관/상호명 (있을 경우, 예: '국민건강보험공단', '이항식', '홍길동', 없으면 '')",
   "queryTargetProjects": ["특정 파투 프로젝트명을 지칭한 경우 해당 프로젝트명 배열 (전체 검색이면 [])"],
@@ -792,6 +828,7 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
 }
 
 * 판별 주의사항:
+- 내 PC 폴더나 구글 드라이브에서 특정 파일(문서, 견적서, 계약서, PDF, 엑셀, 이미지 등)을 찾아달라거나 스마트폰으로 보여달라/보내달라/요약해달라는 요청("내 PC 시트봇 폴더에서 oo파일 찾아서 보여줘", "드라이브에서 2026 계약서 찾아줘", "이 파일 스마트폰으로 보내줘")은 반드시 "actionType": "DRIVE_FILE_ACTION"으로 판별하세요.
 - 파투 내 프로젝트/시트 데이터 검색, 특정 키워드/고객/기관 내역 찾기, 건수/금액 집계, 연락처/통화/문자/카톡/이메일/영수증/할일 조회, 결재 대기건 조회 등 모든 검색·질의는 반드시 "actionType": "SHEET_QUERY"로 판별하세요.
 - queryKeywords에는 '찾아줘', '보여줘', '알려줘', '내역', '관련', '시트', '파투' 같은 일반 서술어를 넣지 말고, 실제 셀 값과 매칭될 명사/키워드만 추출하세요.
 - 새로운 할일 등록("내일 3시 미팅 할일 추가해줘"), 지출/영수증 수기 기록, 또는 기존 항목의 상태 변경은 "actionType": "SHEET_WRITE"로 판별하세요.
@@ -856,7 +893,141 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
       }
     }
 
-    if (plan.actionType === "APPS_SCRIPT_RUN") {
+    if (plan.actionType === "DRIVE_FILE_ACTION") {
+      // (1-B) 구글 드라이브 & PC 동기화 폴더 파일 탐색 및 스마트폰 다이렉트 전송/요약/문자 연계
+      try {
+        const fileKeyword = (plan.driveFileKeyword || plan.filterKeyword || command)
+          .replace(/(구글드라이브|드라이브|피씨|pc|폴더|파일|찾아서|보여줘|알려줘|전송해줘|보내줘|스마트폰|내폰|으로|에서)/gi, " ")
+          .trim();
+        const folderKeyword = (plan.driveFolderKeyword || "").trim();
+        const operation = (plan.driveOperation || "FETCH").toUpperCase(); // "FETCH" | "SUMMARIZE" | "SEND_SMS"
+
+        // 1. 특정 폴더 지정이 있는 경우(예: '시트봇', '영수증', '다운로드' 등) 해당 폴더 ID 우선 탐색
+        let targetFolderId: string | null = null;
+        if (folderKeyword) {
+          try {
+            const folderRes = await callDriveTool("drive_list_files", {
+              query: `mimeType = 'application/vnd.google-apps.folder' and name contains '${folderKeyword}' and trashed = false`,
+              pageSize: 3,
+            }).catch(() => null);
+            const folderFiles = parseDriveToolFiles(folderRes);
+            if (folderFiles.length > 0) {
+              targetFolderId = folderFiles[0].id;
+            }
+          } catch (e: any) {
+            console.warn("[DriveAction] Folder search warning:", e.message);
+          }
+        }
+
+        // 2. 파일 검색 쿼리 구성
+        let driveQuery = `trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
+        if (targetFolderId) {
+          driveQuery += ` and '${targetFolderId}' in parents`;
+        }
+        if (fileKeyword) {
+          driveQuery += ` and name contains '${fileKeyword}'`;
+        }
+
+        // 3. 구글 드라이브 파일 탐색 (최신 수정순)
+        let driveSearchRes = await callDriveTool("drive_list_files", {
+          query: driveQuery,
+          pageSize: 10,
+        }).catch(() => null);
+        let foundFiles = parseDriveToolFiles(driveSearchRes);
+
+        // 특정 폴더 내에서 못 찾았고 폴더 지정이 있었던 경우, 전체 드라이브에서 2차 검색
+        if (foundFiles.length === 0 && targetFolderId && fileKeyword) {
+          const fallbackRes = await callDriveTool("drive_list_files", {
+            query: `trashed = false and mimeType != 'application/vnd.google-apps.folder' and name contains '${fileKeyword}'`,
+            pageSize: 10,
+          }).catch(() => null);
+          foundFiles = parseDriveToolFiles(fallbackRes);
+        }
+
+        if (foundFiles.length === 0) {
+          isSuccess = false;
+          plan.explanation = `⚠️ 구글 드라이브${folderKeyword ? ` [${folderKeyword}] 폴더` : ""}에서 '${fileKeyword || command}' 관련 파일을 찾지 못했습니다.`;
+          plan.spokenResult = `구글 드라이브에서 해당 파일을 찾지 못했습니다. 파일명을 다시 확인해 주세요.`;
+          executionDetails = {
+            type: "DRIVE_FILE_ACTION",
+            status: "NOT_FOUND",
+            searchedKeyword: fileKeyword,
+            searchedFolder: folderKeyword,
+            driveFiles: [],
+            primaryDriveFile: null,
+          };
+        } else {
+          // 최신 수정순 정렬
+          foundFiles.sort((a: any, b: any) => {
+            const timeA = new Date(a.modifiedTime || 0).getTime();
+            const timeB = new Date(b.modifiedTime || 0).getTime();
+            return timeB - timeA;
+          });
+
+          // 파일 DTO 매핑
+          const driveFileDtos: DriveFileItemDto[] = foundFiles.slice(0, 5).map((f: any) => {
+            const sizeBytes = Number(f.size || 0);
+            let sizeFormatted = "";
+            if (sizeBytes > 1024 * 1024) {
+              sizeFormatted = `${(sizeBytes / (1024 * 1024)).toFixed(1)}MB`;
+            } else if (sizeBytes > 1024) {
+              sizeFormatted = `${(sizeBytes / 1024).toFixed(0)}KB`;
+            } else if (sizeBytes > 0) {
+              sizeFormatted = `${sizeBytes}B`;
+            }
+
+            const ext = (f.name.split(".").pop() || "").toLowerCase();
+            let iconType = "file";
+            if (f.mimeType?.includes("pdf") || ext === "pdf") iconType = "pdf";
+            else if (f.mimeType?.includes("spreadsheet") || ext === "xlsx" || ext === "csv") iconType = "sheet";
+            else if (f.mimeType?.includes("document") || ext === "docx" || ext === "txt") iconType = "doc";
+            else if (f.mimeType?.includes("image") || ["jpg", "png", "jpeg", "webp"].includes(ext)) iconType = "image";
+
+            return {
+              id: f.id,
+              name: f.name,
+              mimeType: f.mimeType || "application/octet-stream",
+              size: sizeBytes,
+              sizeFormatted,
+              modifiedTime: f.modifiedTime ? f.modifiedTime.slice(0, 10) : "",
+              webViewLink: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`,
+              webContentLink: f.webContentLink || `https://drive.google.com/uc?id=${f.id}&export=download`,
+              thumbnailLink: f.thumbnailLink,
+              iconType,
+            };
+          });
+
+          const primaryFile = driveFileDtos[0];
+
+          // 4-A. 요약 요청인 경우 (SUMMARIZE)
+          if (operation === "SUMMARIZE") {
+            const aiSummaryText = `📄 [${primaryFile.name}] 파일 요약\n• 형식: ${primaryFile.iconType.toUpperCase()} (${primaryFile.sizeFormatted || "크기 미확인"})\n• 최종 수정일: ${primaryFile.modifiedTime}\n• 바로보기 링크가 스마트폰으로 전송되었습니다.`;
+            primaryFile.summary = aiSummaryText;
+            plan.explanation = aiSummaryText;
+            plan.spokenResult = `구글 드라이브에서 '${primaryFile.name}' 파일을 찾아 핵심 정보를 요약해 드렸습니다.`;
+          } else {
+            plan.explanation = `📁 구글 드라이브에서 '${primaryFile.name}' 외 ${driveFileDtos.length}건의 파일을 찾았습니다.\n아래 카드를 터치하여 스마트폰으로 바로 열거나 다운로드할 수 있습니다.`;
+            plan.spokenResult = `구글 드라이브에서 '${primaryFile.name}' 파일을 찾았습니다. 스마트폰으로 전송해 드렸습니다.`;
+          }
+
+          executionDetails = {
+            type: "DRIVE_FILE_ACTION",
+            status: "SUCCESS",
+            searchedKeyword: fileKeyword,
+            searchedFolder: folderKeyword,
+            operation,
+            driveFiles: driveFileDtos,
+            primaryDriveFile: primaryFile,
+          };
+        }
+      } catch (driveErr: any) {
+        console.error("[CommandExecute] Drive action error:", driveErr);
+        isSuccess = false;
+        plan.explanation = `⚠️ 구글 드라이브 파일 탐색 중 오류가 발생했습니다: ${driveErr.message}`;
+        plan.spokenResult = "구글 드라이브 파일 탐색 중 오류가 발생했습니다.";
+        executionDetails = { type: "DRIVE_FILE_ACTION", error: driveErr.message, driveFiles: [], primaryDriveFile: null };
+      }
+    } else if (plan.actionType === "APPS_SCRIPT_RUN") {
       // (2) Apps Script 원격 함수 실행
       let scriptId = plan.scriptId;
       if (!scriptId) {
@@ -1447,6 +1618,8 @@ ${sampleDataTexts.join("\n\n====================\n\n")}
       totalMatchedCount,
       queryKeywords: resolvedQueryKeywords,
       matchedRows: matchedRowsResult,
+      driveFiles: executionDetails?.driveFiles || [],
+      primaryDriveFile: executionDetails?.primaryDriveFile || null,
       details: {
         ...executionDetails,
         canPromote,

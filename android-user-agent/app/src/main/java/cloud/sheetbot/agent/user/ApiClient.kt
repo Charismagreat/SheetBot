@@ -2069,6 +2069,49 @@ object ApiClient {
                         }
                     }
 
+                    val parsedDriveFiles = mutableListOf<DriveFileItem>()
+                    val driveArr = resJson.optJSONArray("driveFiles") ?: detailsObj?.optJSONArray("driveFiles")
+                    if (driveArr != null) {
+                        for (i in 0 until driveArr.length()) {
+                            val dObj = driveArr.optJSONObject(i) ?: continue
+                            parsedDriveFiles.add(
+                                DriveFileItem(
+                                    id = dObj.optString("id", ""),
+                                    name = dObj.optString("name", "문서"),
+                                    mimeType = dObj.optString("mimeType", "application/octet-stream"),
+                                    size = dObj.optLong("size", 0L),
+                                    sizeFormatted = dObj.optString("sizeFormatted", ""),
+                                    modifiedTime = dObj.optString("modifiedTime", ""),
+                                    webViewLink = dObj.optString("webViewLink", ""),
+                                    webContentLink = dObj.optString("webContentLink", ""),
+                                    thumbnailLink = dObj.optString("thumbnailLink", "").takeIf { it.isNotBlank() },
+                                    iconType = dObj.optString("iconType", "file"),
+                                    summary = dObj.optString("summary", "").takeIf { it.isNotBlank() }
+                                )
+                            )
+                        }
+                    }
+
+                    var primaryDriveFile: DriveFileItem? = null
+                    val primaryDriveObj = resJson.optJSONObject("primaryDriveFile") ?: detailsObj?.optJSONObject("primaryDriveFile")
+                    if (primaryDriveObj != null) {
+                        primaryDriveFile = DriveFileItem(
+                            id = primaryDriveObj.optString("id", ""),
+                            name = primaryDriveObj.optString("name", "문서"),
+                            mimeType = primaryDriveObj.optString("mimeType", "application/octet-stream"),
+                            size = primaryDriveObj.optLong("size", 0L),
+                            sizeFormatted = primaryDriveObj.optString("sizeFormatted", ""),
+                            modifiedTime = primaryDriveObj.optString("modifiedTime", ""),
+                            webViewLink = primaryDriveObj.optString("webViewLink", ""),
+                            webContentLink = primaryDriveObj.optString("webContentLink", ""),
+                            thumbnailLink = primaryDriveObj.optString("thumbnailLink", "").takeIf { it.isNotBlank() },
+                            iconType = primaryDriveObj.optString("iconType", "file"),
+                            summary = primaryDriveObj.optString("summary", "").takeIf { it.isNotBlank() }
+                        )
+                    } else if (parsedDriveFiles.isNotEmpty()) {
+                        primaryDriveFile = parsedDriveFiles.first()
+                    }
+
                     return@withContext AiCommandResult(
                         success = true,
                         command = resJson.optString("command", command),
@@ -2083,6 +2126,8 @@ object ApiClient {
                         totalMatchedCount = resJson.optInt("totalMatchedCount", detailsObj?.optInt("totalMatchedCount", parsedMatchedRows.size) ?: parsedMatchedRows.size),
                         queryKeywords = kwList,
                         matchedRows = parsedMatchedRows,
+                        driveFiles = parsedDriveFiles,
+                        primaryDriveFile = primaryDriveFile,
                         details = detailsObj
                     )
                 } else {
@@ -4292,6 +4337,20 @@ data class FtsSearchMatchedRow(
     val headers: List<String> = emptyList()
 )
 
+data class DriveFileItem(
+    val id: String,
+    val name: String,
+    val mimeType: String,
+    val size: Long = 0L,
+    val sizeFormatted: String = "",
+    val modifiedTime: String = "",
+    val webViewLink: String = "",
+    val webContentLink: String = "",
+    val thumbnailLink: String? = null,
+    val iconType: String = "file",
+    val summary: String? = null
+)
+
 data class AiCommandResult(
     val success: Boolean,
     val command: String? = null,
@@ -4306,6 +4365,8 @@ data class AiCommandResult(
     val totalMatchedCount: Int = 0,
     val queryKeywords: List<String> = emptyList(),
     val matchedRows: List<FtsSearchMatchedRow> = emptyList(),
+    val driveFiles: List<DriveFileItem> = emptyList(),
+    val primaryDriveFile: DriveFileItem? = null,
     val details: JSONObject? = null,
     val error: String? = null
 )

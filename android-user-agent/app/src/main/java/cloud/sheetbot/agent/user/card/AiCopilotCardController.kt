@@ -72,6 +72,7 @@ class AiCopilotCardController(
     // 파투 통합 자연어 검색 & AI 비서 추천 칩
     private val defaultSuggestions = listOf(
         CommandSuggestionItem("fts_today", "SHEET_QUERY", "🔍 오늘 들어온 내역", "오늘 새로 등록된 내역 전체 찾아줘"),
+        CommandSuggestionItem("fts_drive_file", "DRIVE_FILE_ACTION", "📁 PC/드라이브 파일 찾기", "내 PC 시트봇 폴더에서 최근 파일 찾아서 보여줘"),
         CommandSuggestionItem("fts_pending", "SHEET_QUERY", "⏳ 미결재(대기중) 조회", "파투에서 승인 대기중인 미결재 내역 찾아줘"),
         CommandSuggestionItem("fts_call_sms", "SHEET_QUERY", "📞 최근 통화·문자 검색", "통화녹음과 문자에서 최근 중요 내역 찾아줘"),
         CommandSuggestionItem("fts_receipt", "SHEET_QUERY", "🧾 이번 달 영수증 합계", "이번 달 영수증 지출 내역과 합계 금액 알려줘"),
@@ -507,11 +508,17 @@ class AiCopilotCardController(
                     binding.tvAiCommandExplanation.text = "✅ $finalExplanation"
                     binding.tvAiCommandSpoken.text = "🗣️ $finalSpoken"
 
-                    // 매칭된 파투 행 데이터가 있으면 가독성 높은 카드 리스트 렌더링
-                    currentMatchedRows = mergedRows
-                    currentSearchKeywords = mergedKeywords
-                    selectedSheetFilterKey = "ALL"
-                    renderMatchedSearchResults()
+                    // 구글 드라이브/PC 파일 전송 결과가 있으면 전용 파일 카드 렌더링
+                    if (res.driveFiles.isNotEmpty() || res.primaryDriveFile != null) {
+                        currentMatchedRows = emptyList()
+                        renderDriveFileCards(res.driveFiles, res.primaryDriveFile)
+                    } else {
+                        // 매칭된 파투 행 데이터가 있으면 가독성 높은 카드 리스트 렌더링
+                        currentMatchedRows = mergedRows
+                        currentSearchKeywords = mergedKeywords
+                        selectedSheetFilterKey = "ALL"
+                        renderMatchedSearchResults()
+                    }
 
                     // 💾 1회성 작업을 구글 시트 상단 메뉴로 영구 저장(승격) 버튼 제어
                     val btnPromote = binding.root.findViewWithTag<Button>("btnPromoteCommand")
@@ -597,6 +604,297 @@ class AiCopilotCardController(
             }
         }
         return spannable
+    }
+
+    /**
+     * 📁 구글 드라이브 및 내 PC 동기화 폴더 파일 전송 카드 리스트 렌더링 (v2.4.71)
+     */
+    private fun renderDriveFileCards(
+        files: List<cloud.sheetbot.agent.user.DriveFileItem>,
+        primaryFile: cloud.sheetbot.agent.user.DriveFileItem?
+    ) {
+        val container = binding.root.findViewWithTag<LinearLayout>("layoutAiSearchResultsContainer") ?: return
+        container.removeAllViews()
+
+        val allFiles = when {
+            files.isNotEmpty() -> files
+            primaryFile != null -> listOf(primaryFile)
+            else -> emptyList()
+        }
+
+        if (allFiles.isEmpty()) {
+            container.visibility = View.GONE
+            return
+        }
+        container.visibility = View.VISIBLE
+
+        // 1. 상단 구분선
+        val divider = View(activity).apply {
+            setBackgroundColor(Color.parseColor("#1E293B"))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(1)
+            ).apply {
+                bottomMargin = dpToPx(8)
+            }
+        }
+        container.addView(divider)
+
+        // 2. 헤더 바 (총 파일 수 + 닫기)
+        val headerRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dpToPx(8)
+            }
+        }
+
+        val tvHeaderTitle = TextView(activity).apply {
+            text = "📁 구글 드라이브 / PC 동기화 파일 (${allFiles.size}건)"
+            setTextColor(Color.parseColor("#38BDF8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+            typeface = Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        headerRow.addView(tvHeaderTitle)
+
+        val btnClear = TextView(activity).apply {
+            text = "✕ 닫기"
+            setTextColor(Color.parseColor("#94A3B8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            setPadding(dpToPx(6), dpToPx(2), dpToPx(6), dpToPx(2))
+            setBackgroundResource(android.R.drawable.list_selector_background)
+            setOnClickListener {
+                container.removeAllViews()
+                container.visibility = View.GONE
+            }
+        }
+        headerRow.addView(btnClear)
+        container.addView(headerRow)
+
+        // 3. 파일 카드 렌더링
+        for (file in allFiles) {
+            val cardView = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = dpToPx(10)
+                }
+                setPadding(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12))
+
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#1E293B"))
+                    cornerRadius = dpToPx(10).toFloat()
+                    setStroke(dpToPx(1), Color.parseColor("#334155"))
+                }
+            }
+
+            // 파일 정보 상단 행 (아이콘 뱃지 + 파일명)
+            val titleRow = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            }
+
+            val (badgeText, badgeColor) = when (file.iconType) {
+                "pdf" -> "PDF" to Color.parseColor("#EF4444")
+                "sheet" -> "시트" to Color.parseColor("#10B981")
+                "doc" -> "문서" to Color.parseColor("#3B82F6")
+                "image" -> "사진" to Color.parseColor("#8B5CF6")
+                else -> "파일" to Color.parseColor("#64748B")
+            }
+
+            val badgeView = TextView(activity).apply {
+                text = badgeText
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(dpToPx(6), dpToPx(2), dpToPx(6), dpToPx(2))
+                background = GradientDrawable().apply {
+                    setColor(badgeColor)
+                    cornerRadius = dpToPx(4).toFloat()
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    rightMargin = dpToPx(8)
+                }
+            }
+            titleRow.addView(badgeView)
+
+            val tvFileName = TextView(activity).apply {
+                text = file.name
+                setTextColor(Color.parseColor("#F8FAFC"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+                typeface = Typeface.DEFAULT_BOLD
+                maxLines = 2
+                ellipsize = TextUtils.TruncateAt.END
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            titleRow.addView(tvFileName)
+            cardView.addView(titleRow)
+
+            // 파일 부가 정보 (크기, 수정일)
+            val metaParts = mutableListOf<String>()
+            if (file.sizeFormatted.isNotBlank()) metaParts.add("용량: ${file.sizeFormatted}")
+            if (file.modifiedTime.isNotBlank()) metaParts.add("수정: ${file.modifiedTime}")
+            val metaText = if (metaParts.isNotEmpty()) metaParts.joinToString(" · ") else "구글 드라이브 동기화 파일"
+
+            val tvMeta = TextView(activity).apply {
+                text = metaText
+                setTextColor(Color.parseColor("#94A3B8"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                setPadding(0, dpToPx(4), 0, dpToPx(6))
+            }
+            cardView.addView(tvMeta)
+
+            // AI 요약이 있을 경우 표시
+            if (!file.summary.isNullOrBlank()) {
+                val tvSummary = TextView(activity).apply {
+                    text = file.summary
+                    setTextColor(Color.parseColor("#FDE047"))
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                    setPadding(dpToPx(8), dpToPx(6), dpToPx(8), dpToPx(6))
+                    background = GradientDrawable().apply {
+                        setColor(Color.parseColor("#422006"))
+                        cornerRadius = dpToPx(6).toFloat()
+                        setStroke(dpToPx(1), Color.parseColor("#CA8A04"))
+                    }
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        bottomMargin = dpToPx(8)
+                    }
+                }
+                cardView.addView(tvSummary)
+            }
+
+            // 액션 버튼 바
+            val actionRow = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            }
+
+            val btnDownload = Button(activity).apply {
+                text = "📱 폰으로 받기"
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(dpToPx(8), 0, dpToPx(8), 0)
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#2563EB"))
+                    cornerRadius = dpToPx(6).toFloat()
+                }
+                layoutParams = LinearLayout.LayoutParams(0, dpToPx(36), 1f).apply {
+                    rightMargin = dpToPx(6)
+                }
+                setOnClickListener {
+                    val dlUrl = file.webContentLink.ifBlank { file.webViewLink }
+                    downloadFileToPhone(file.name, dlUrl)
+                }
+            }
+            actionRow.addView(btnDownload)
+
+            val btnOpen = Button(activity).apply {
+                text = "🔍 바로 열기"
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(dpToPx(8), 0, dpToPx(8), 0)
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#059669"))
+                    cornerRadius = dpToPx(6).toFloat()
+                }
+                layoutParams = LinearLayout.LayoutParams(0, dpToPx(36), 1f).apply {
+                    rightMargin = dpToPx(6)
+                }
+                setOnClickListener {
+                    openFileInViewer(file.name, file.webViewLink)
+                }
+            }
+            actionRow.addView(btnOpen)
+
+            val btnCopy = Button(activity).apply {
+                text = "🔗 링크"
+                setTextColor(Color.parseColor("#CBD5E1"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                setPadding(dpToPx(6), 0, dpToPx(6), 0)
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#334155"))
+                    cornerRadius = dpToPx(6).toFloat()
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    dpToPx(36)
+                )
+                setOnClickListener {
+                    val linkToCopy = file.webViewLink.ifBlank { file.webContentLink }
+                    val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                    clipboard?.setPrimaryClip(ClipData.newPlainText("Drive Link", linkToCopy))
+                    Toast.makeText(activity, "📋 파일 링크가 복사되었습니다.", Toast.LENGTH_SHORT).show()
+                }
+            }
+            actionRow.addView(btnCopy)
+
+            cardView.addView(actionRow)
+            container.addView(cardView)
+        }
+    }
+
+    /**
+     * 스마트폰 Android DownloadManager를 통한 백그라운드 다운로드
+     */
+    private fun downloadFileToPhone(name: String, downloadUrl: String) {
+        if (downloadUrl.isBlank()) {
+            Toast.makeText(activity, "⚠️ 다운로드 링크가 유효하지 않습니다.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            val request = android.app.DownloadManager.Request(Uri.parse(downloadUrl)).apply {
+                setTitle(name)
+                setDescription("시트봇 드라이브 전송 파일")
+                setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, "SheetBot/$name")
+                setAllowedOverMetered(true)
+                setAllowedOverRoaming(true)
+            }
+            val dm = activity.getSystemService(Context.DOWNLOAD_SERVICE) as? android.app.DownloadManager
+            dm?.enqueue(request)
+            Toast.makeText(activity, "📥 [$name] 스마트폰 다운로드를 시작했습니다. (상단 알림창 확인)", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))
+                activity.startActivity(intent)
+            } catch (e2: Exception) {
+                Toast.makeText(activity, "다운로드 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /**
+     * 구글 드라이브 앱 또는 웹 브라우저를 통한 즉시 열람
+     */
+    private fun openFileInViewer(name: String, webViewLink: String) {
+        val targetUrl = webViewLink.ifBlank { "https://drive.google.com" }
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
+            activity.startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(activity, "파일 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     /**
