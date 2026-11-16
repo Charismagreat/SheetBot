@@ -17,9 +17,18 @@ import {
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { setupDatabase } from "@/lib/setup-db";
 import { saveAiShortsMeta } from "@/app/api/user/ai-model/video-meta/route";
+import { resolveUserFtsPhoneNumber } from "@/lib/task-hub-helper";
 import fs from "fs";
 import path from "path";
 import os from "os";
+
+const FTS_ENDPOINTS = [
+  process.env.FILETOSHEET_INTERNAL_URL,
+  "https://file2sheet.cloud",
+  "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/FileToSheet",
+  "http://127.0.0.1:4007",
+  "http://127.0.0.1:3003",
+].filter(Boolean) as string[];
 
 const AI_MODEL_SHEET_HEADERS = [
   "ID",
@@ -238,6 +247,66 @@ export async function POST(req: NextRequest) {
       driveFolderUrl,
       createdAt: nowStr,
     });
+
+    // 4-B. 파투(FileToSheet) '시트봇 연동 장부' -> 'AI모델콘텐츠대장' 백엔드 동시 자동 프로비저닝 및 적재
+    void (async () => {
+      try {
+        const ftsPhone =
+          phoneInput.replace(/[^0-9]/g, "") ||
+          (await resolveUserFtsPhoneNumber(userEmail).catch(() => null)) ||
+          (userEmail === "chachogreat@gmail.com" ? "01072165884" : "");
+        if (!ftsPhone) return;
+
+        for (const baseUrl of FTS_ENDPOINTS) {
+          try {
+            const ensureRes = await fetch(`${baseUrl}/api/inbox/ensure-sheet`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                phoneNumber: ftsPhone,
+                cardId: "ai_model",
+                sheetName: "AI모델콘텐츠대장",
+                headers: [
+                  "일련번호",
+                  "제작일시",
+                  "전속모델명",
+                  "보이스톤",
+                  "제품/홍보주제",
+                  "홍보쇼츠대본",
+                  "쇼츠영상링크",
+                  "제품사진링크",
+                  "제작상태",
+                ],
+              }),
+            });
+            if (!ensureRes.ok) continue;
+            const ensureJson = await ensureRes.json().catch(() => ({}));
+            const token = ensureJson?.token;
+            if (!token) continue;
+
+            const rowRes = await fetch(`${baseUrl}/api/inbox/${encodeURIComponent(token)}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                fileName: shortTitle,
+                memo: script.slice(0, 100),
+                rowData: {
+                  제작일시: nowStr,
+                  전속모델명: modelName,
+                  보이스톤: modelVoice,
+                  "제품/홍보주제": topic,
+                  홍보쇼츠대본: script,
+                  쇼츠영상링크: demoVideoUrl,
+                  제품사진링크: productDriveUrl || driveFolderUrl || "-",
+                  제작상태: "✅ 렌더링 완료 (Veo 3)",
+                },
+              }),
+            });
+            if (rowRes.ok) break;
+          } catch {}
+        }
+      } catch {}
+    })();
 
     // 5. 토큰 차감 (영상 생성 5토큰) 및 감사 로그
     await deductTokens(userEmail, 5, "AI 전속 모델 쇼츠 영상 생성 (Veo 3)").catch(() => {});

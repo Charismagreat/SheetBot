@@ -285,6 +285,11 @@ object FileToSheetClient {
             cardId = "ai_model",
             sheetName = "AI모델콘텐츠대장",
             headers = listOf("일련번호", "제작일시", "전속모델명", "보이스톤", "제품/홍보주제", "홍보쇼츠대본", "쇼츠영상링크", "제품사진링크", "제작상태")
+        ),
+        "ai_copilot_log" to FtsCardSheetSpec(
+            cardId = "ai_copilot_log",
+            sheetName = "AI비서활동대장",
+            headers = listOf("일련번호", "일시", "발화원문", "작업유형", "도메인태그", "대상시트", "대상파일폴더", "고객수신처", "핵심키워드", "실행결과요약", "상태")
         )
     )
 

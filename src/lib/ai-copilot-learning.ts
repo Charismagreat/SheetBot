@@ -11,6 +11,7 @@ import {
 } from "@/lib/egdesk-helpers";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { getKoreanTimeString } from "@/lib/date-utils";
+import { resolveUserFtsPhoneNumber } from "@/lib/task-hub-helper";
 
 export type CopilotActionCategory =
   | "SHEET_QUERY"
@@ -440,40 +441,102 @@ async function syncActivityToSheetsBackground(
     }
   }
 
-  // 2-B. 파투(FileToSheet) 장부 연동 기록 (`AI비서활동대장`)
-  if (params.phoneNumber || params.ftsProjectId || params.ftsToken) {
-    const ftsPayload = {
-      phoneNumber: params.phoneNumber || undefined,
-      projectId: params.ftsProjectId || undefined,
-      token: params.ftsToken || undefined,
-      operation: "ADD_ROW",
-      sheetName: "AI비서활동대장",
-      rowValues: {
-        일시: meta.timestamp,
-        발화원문: meta.command,
-        작업유형: formatActionTypeKorean(meta.actionType),
-        도메인태그: meta.domainTag,
-        대상시트: meta.targetSheet || "-",
-        대상파일폴더: fileOrFolderCol || "-",
-        고객수신처: recipientCol || "-",
-        핵심키워드: keywordsCol || "-",
-        실행결과요약: meta.resultSummary,
-        상태: statusKorean,
-      },
+  // 2-B. 파투(FileToSheet) '시트봇 연동 장부' -> 'AI비서활동대장' 시트 자동 생성(ensure-sheet) 및 행 동시 적재
+  const resolvedPhone =
+    params.phoneNumber ||
+    (await resolveUserFtsPhoneNumber(cleanEmail).catch(() => null)) ||
+    (cleanEmail === "chachogreat@gmail.com" ? "01072165884" : "");
+
+  if (resolvedPhone || params.ftsProjectId || params.ftsToken) {
+    const ftsHeaders = [
+      "일련번호",
+      "일시",
+      "발화원문",
+      "작업유형",
+      "도메인태그",
+      "대상시트",
+      "대상파일폴더",
+      "고객수신처",
+      "핵심키워드",
+      "실행결과요약",
+      "상태",
+    ];
+    const rowDataObj = {
+      일시: meta.timestamp,
+      발화원문: meta.command,
+      작업유형: formatActionTypeKorean(meta.actionType),
+      도메인태그: meta.domainTag,
+      대상시트: meta.targetSheet || "-",
+      대상파일폴더: fileOrFolderCol || "-",
+      고객수신처: recipientCol || "-",
+      핵심키워드: keywordsCol || "-",
+      실행결과요약: meta.resultSummary,
+      상태: statusKorean,
     };
 
     for (const baseUrl of FTS_INTERNAL_ENDPOINTS) {
       try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 4000);
-        const res = await fetch(`${baseUrl}/api/inbox/copilot`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(ftsPayload),
-          signal: controller.signal,
-        });
-        clearTimeout(timer);
-        if (res.ok) break;
+        // Step 1: ensure-sheet 호출로 '시트봇 연동 장부' 내 'AI비서활동대장' 시트 보장 및 토큰 획득
+        let inboxToken = params.ftsToken || "";
+        if (resolvedPhone) {
+          const ensureCtrl = new AbortController();
+          const ensureTimer = setTimeout(() => ensureCtrl.abort(), 4500);
+          const ensureRes = await fetch(`${baseUrl}/api/inbox/ensure-sheet`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              phoneNumber: resolvedPhone,
+              cardId: "ai_copilot_log",
+              sheetName: "AI비서활동대장",
+              headers: ftsHeaders,
+              projectId: params.ftsProjectId || undefined,
+            }),
+            signal: ensureCtrl.signal,
+          }).catch(() => null);
+          clearTimeout(ensureTimer);
+          if (ensureRes && ensureRes.ok) {
+            const ensureJson = await ensureRes.json().catch(() => ({}));
+            if (ensureJson?.token) {
+              inboxToken = ensureJson.token;
+            }
+          }
+        }
+
+        // Step 2: 획득한 inboxToken으로 행 데이터 즉시 적재 (또는 /api/inbox/copilot 폴백)
+        if (inboxToken) {
+          const rowCtrl = new AbortController();
+          const rowTimer = setTimeout(() => rowCtrl.abort(), 4500);
+          const rowRes = await fetch(`${baseUrl}/api/inbox/${encodeURIComponent(inboxToken)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fileName: meta.targetFile || `AI비서_${meta.domainTag}`,
+              memo: meta.command,
+              rowData: rowDataObj,
+            }),
+            signal: rowCtrl.signal,
+          });
+          clearTimeout(rowTimer);
+          if (rowRes.ok) break;
+        } else {
+          const copilotCtrl = new AbortController();
+          const copilotTimer = setTimeout(() => copilotCtrl.abort(), 4000);
+          const res = await fetch(`${baseUrl}/api/inbox/copilot`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              phoneNumber: resolvedPhone || undefined,
+              projectId: params.ftsProjectId || undefined,
+              token: params.ftsToken || undefined,
+              operation: "ADD_ROW",
+              sheetName: "AI비서활동대장",
+              rowValues: rowDataObj,
+            }),
+            signal: copilotCtrl.signal,
+          });
+          clearTimeout(copilotTimer);
+          if (res.ok) break;
+        }
       } catch {
         // try next endpoint
       }
