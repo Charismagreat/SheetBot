@@ -64,10 +64,11 @@ export interface ProductVisualContext {
   environment: string;
   holdingPose: string;
   heroModelImg: string;
+  sceneImages: string[];
 }
 
 /**
- * 제품 주제 및 대본에 맞춰 모델의 의상(Wardrobe), 배경(Environment), 제품 파지 포즈(Pose)를 지능형 자동 도출
+ * 제품 주제 및 대본에 맞춰 모델의 의상(Wardrobe), 배경(Environment), 제품 파지 포즈(Pose) 및 4단 멀티 액션 씬 도출
  */
 export function inferProductVisualContext(
   topic: string,
@@ -85,8 +86,21 @@ export function inferProductVisualContext(
       environment: "햇살 비치는 명품 태권도장 (Dojang Studio)",
       holdingPose: "New 칼라밴드를 양손으로 팽팽히 당겨 탄성과 실링 마감을 직접 시연",
       heroModelImg: "/assets/models/minsu_taekwondo_color_band.jpg",
+      sceneImages: [
+        "/assets/models/minsu_taekwondo_scene1_hook.jpg",
+        "/assets/models/minsu_taekwondo_color_band.jpg",
+        "/assets/models/minsu_taekwondo_scene3_colors.jpg",
+        "/assets/models/minsu_taekwondo_scene4_cta.jpg",
+      ],
     };
   }
+
+  const defaultScenes = [
+    `/assets/models/${modelAssetKey}_front.jpg`,
+    `/assets/models/${modelAssetKey}_quarter.jpg`,
+    `/assets/models/${modelAssetKey}_walk.jpg`,
+    `/assets/models/${modelAssetKey}_side.jpg`,
+  ];
 
   // 2. 뷰티 / 화장품 / 스킨케어 / 앰플
   if (/(화장품|뷰티|세럼|앰플|크림|스킨케어|피부|마스크팩|에스테틱|보습|미백)/.test(combined)) {
@@ -97,6 +111,7 @@ export function inferProductVisualContext(
       environment: "자연광 가득한 미니멀 뷰티 파우더룸",
       holdingPose: "제품 보틀을 손바닥 위에 올려 뺨 옆에 들고 화사하게 미소",
       heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+      sceneImages: defaultScenes,
     };
   }
 
@@ -109,6 +124,7 @@ export function inferProductVisualContext(
       environment: "따뜻한 원목 감성의 부티크 레스토랑 키친",
       holdingPose: "식품 패키지를 양손으로 정성스럽게 받쳐 들고 서빙",
       heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+      sceneImages: defaultScenes,
     };
   }
 
@@ -121,6 +137,7 @@ export function inferProductVisualContext(
       environment: "도심 전경의 하이테크 테크 라운지",
       holdingPose: "기기를 손에 들고 화면을 카메라 정면으로 가리키며 시연",
       heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+      sceneImages: defaultScenes,
     };
   }
 
@@ -133,6 +150,7 @@ export function inferProductVisualContext(
       environment: "고층 통유리 전망의 스마트 회의실",
       holdingPose: "태블릿 화면의 데이터 차트를 짚으며 신뢰감 넘치는 발표",
       heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+      sceneImages: defaultScenes,
     };
   }
 
@@ -144,6 +162,7 @@ export function inferProductVisualContext(
     environment: "감성적인 라이프스타일 스튜디오",
     holdingPose: "제품을 한 손에 안정적으로 쥐고 카메라를 향해 소개",
     heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+    sceneImages: defaultScenes,
   };
 }
 
@@ -294,6 +313,29 @@ export async function POST(req: NextRequest) {
     // 3. 제품 맞춤형 의상, 배경, 제품 시연 포즈 및 실사 히어로 컷 도출
     const modelAssetKey = modelName.includes("서연") ? "seoyeon" : modelName.includes("지아") ? "jia" : "minsu";
     const visualCtx = inferProductVisualContext(topic, script, modelAssetKey);
+
+    // 2번째 재생성 시 제품 사진 첨부가 생략되었더라도 최근 업로드된 제품 이미지 자동 복원
+    if (!productProxyImgUrl) {
+      try {
+        const publicUploadDir = path.join(process.cwd(), "public", "uploads", "ai-products");
+        if (fs.existsSync(publicUploadDir)) {
+          const files = fs
+            .readdirSync(publicUploadDir)
+            .map((name) => ({
+              name,
+              mtime: fs.statSync(path.join(publicUploadDir, name)).mtimeMs,
+            }))
+            .sort((a, b) => b.mtime - a.mtime);
+          if (files.length > 0) {
+            productProxyImgUrl = `/uploads/ai-products/${encodeURIComponent(files[0].name)}`;
+          }
+        }
+      } catch {}
+    }
+
+    if (!productProxyImgUrl && visualCtx.theme === "taekwondo") {
+      productProxyImgUrl = "/assets/models/minsu_taekwondo_scene3_colors.jpg";
+    }
 
     const firstTopicLine = topic
       .split(/\r?\n/)

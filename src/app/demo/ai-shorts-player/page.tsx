@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo, Suspense, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { getEgdeskBasePath, apiFetch } from "@/lib/egdesk-helpers";
+import { apiFetch } from "@/lib/egdesk-helpers";
 
 interface ModelProfile {
   id: string;
@@ -27,6 +27,20 @@ export interface ScriptSceneSegment {
   caption: string;
   stageDirection?: string;
   showProductHighlight?: boolean;
+  actionPoseIndex: number; // 0: Hook/인사, 1: 양손 탄성 시연, 2: 방수/10종 컬러 시연, 3: CTA 가리키기
+}
+
+export interface ActionSceneAsset {
+  imgUrl: string;
+  label: string;
+  mouthX: number; // 정규화 X (0~1)
+  mouthY: number; // 정규화 Y (0~1)
+  mouthW: number; // 입 폭 비율
+  jawH: number;   // 하관(아랫입술~턱끝) 높이 비율
+  eyeY: number;   // 눈 높이 비율
+  eyeSpan: number;// 미간 거리 비율
+  handAnchorX: number;
+  handAnchorY: number;
 }
 
 export interface ProductVisualTheme {
@@ -36,6 +50,8 @@ export interface ProductVisualTheme {
   environmentBadge: string;
   holdingPose: string;
   heroModelImg: string;
+  actionScenes: ActionSceneAsset[];
+  defaultProductImg: string;
 }
 
 const MODEL_PROFILES: Record<string, ModelProfile> = {
@@ -129,7 +145,7 @@ function resolveSafeMediaUrl(rawUrl: string): string {
 }
 
 /**
- * 🎯 제품 주제 및 대본을 기반으로 모델의 맞춤형 의상(Wardrobe), 배경(Environment), 제품 파지 포즈(Pose) 자동 도출
+ * 🎯 제품 주제 및 대본을 기반으로 모델의 맞춤형 의상, 배경, 4단 멀티 액션 씬 & 립싱크 좌표를 도출합니다.
  */
 function inferProductVisualTheme(
   topic: string,
@@ -138,19 +154,121 @@ function inferProductVisualTheme(
 ): ProductVisualTheme {
   const combined = `${topic} ${script}`.toLowerCase();
 
-  // 1. 태권도 / 도복 / 띠 / 칼라밴드 / 무도 스포츠
+  // 1. 태권도 / 도복 / 띠 / 칼라밴드 / 무도 스포츠 (4단 멀티 액션 씬 완비)
   if (/(태권도|도복|칼라밴드|도장|승급|품띠|검은띠|유도|검도|체육관|무술|관장님|원생)/.test(combined)) {
     return {
       theme: "taekwondo",
       themeTitle: "태권도 & 무도 스포츠",
       wardrobeBadge: "🥋 정통 태권도 도복 (블랙 벨트)",
       environmentBadge: "🏟️ 명품 태권도장 (Dojang)",
-      holdingPose: "New 칼라밴드를 양손으로 팽팽히 당겨 탄성과 실링 마감을 직접 시연",
+      holdingPose: "New 칼라밴드 4단계 실물 시연 (인사 ➔ 탄성 당기기 ➔ 방수/10종 컬러 ➔ 링크 안내)",
       heroModelImg: "/assets/models/minsu_taekwondo_color_band.jpg",
+      defaultProductImg: "/assets/models/minsu_taekwondo_scene3_colors.jpg",
+      actionScenes: [
+        {
+          imgUrl: "/assets/models/minsu_taekwondo_scene1_hook.jpg",
+          label: "SCENE 01 · 손가락 스냅 & 오프닝 훅",
+          mouthX: 0.502,
+          mouthY: 0.304,
+          mouthW: 0.082,
+          jawH: 0.052,
+          eyeY: 0.250,
+          eyeSpan: 0.095,
+          handAnchorX: 0.44,
+          handAnchorY: 0.46,
+        },
+        {
+          imgUrl: "/assets/models/minsu_taekwondo_color_band.jpg",
+          label: "SCENE 02 · 칼라밴드 양손 고탄성·실링 시연",
+          mouthX: 0.512,
+          mouthY: 0.281,
+          mouthW: 0.080,
+          jawH: 0.050,
+          eyeY: 0.227,
+          eyeSpan: 0.092,
+          handAnchorX: 0.50,
+          handAnchorY: 0.54,
+        },
+        {
+          imgUrl: "/assets/models/minsu_taekwondo_scene3_colors.jpg",
+          label: "SCENE 03 · 방수 TPU 소재 & 10종 풀컬러 시연",
+          mouthX: 0.502,
+          mouthY: 0.304,
+          mouthW: 0.082,
+          jawH: 0.052,
+          eyeY: 0.250,
+          eyeSpan: 0.095,
+          handAnchorX: 0.45,
+          handAnchorY: 0.58,
+        },
+        {
+          imgUrl: "/assets/models/minsu_taekwondo_scene4_cta.jpg",
+          label: "SCENE 04 · 윙크 & 프로필 링크 클릭 유도(CTA)",
+          mouthX: 0.505,
+          mouthY: 0.305,
+          mouthW: 0.084,
+          jawH: 0.052,
+          eyeY: 0.250,
+          eyeSpan: 0.095,
+          handAnchorX: 0.36,
+          handAnchorY: 0.48,
+        },
+      ],
     };
   }
 
-  // 2. 뷰티 / 화장품 / 스킨케어 / 앰플
+  const defaultActionScenes: ActionSceneAsset[] = [
+    {
+      imgUrl: `/assets/models/${modelAssetKey}_front.jpg`,
+      label: "SCENE 01 · 오프닝 인사 & 훅",
+      mouthX: 0.50,
+      mouthY: 0.27,
+      mouthW: 0.075,
+      jawH: 0.048,
+      eyeY: 0.22,
+      eyeSpan: 0.085,
+      handAnchorX: 0.50,
+      handAnchorY: 0.58,
+    },
+    {
+      imgUrl: `/assets/models/${modelAssetKey}_quarter.jpg`,
+      label: "SCENE 02 · 제품 핵심 강점 소개",
+      mouthX: 0.49,
+      mouthY: 0.27,
+      mouthW: 0.072,
+      jawH: 0.048,
+      eyeY: 0.22,
+      eyeSpan: 0.082,
+      handAnchorX: 0.48,
+      handAnchorY: 0.58,
+    },
+    {
+      imgUrl: `/assets/models/${modelAssetKey}_walk.jpg`,
+      label: "SCENE 03 · 디테일 & 라이프스타일 시연",
+      mouthX: 0.50,
+      mouthY: 0.26,
+      mouthW: 0.070,
+      jawH: 0.045,
+      eyeY: 0.21,
+      eyeSpan: 0.080,
+      handAnchorX: 0.52,
+      handAnchorY: 0.56,
+    },
+    {
+      imgUrl: `/assets/models/${modelAssetKey}_side.jpg`,
+      label: "SCENE 04 · 특별 혜택 & 행동 촉구(CTA)",
+      mouthX: 0.48,
+      mouthY: 0.27,
+      mouthW: 0.068,
+      jawH: 0.046,
+      eyeY: 0.22,
+      eyeSpan: 0.078,
+      handAnchorX: 0.50,
+      handAnchorY: 0.60,
+    },
+  ];
+
+  // 2. 뷰티 / 화장품
   if (/(화장품|뷰티|세럼|앰플|크림|스킨케어|피부|마스크팩|에스테틱|보습|미백)/.test(combined)) {
     return {
       theme: "beauty",
@@ -159,10 +277,12 @@ function inferProductVisualTheme(
       environmentBadge: "✨ 자연광 미니멀 에스테틱 룸",
       holdingPose: "제품 앰플을 뺨 옆에 들고 화사하게 미소",
       heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+      defaultProductImg: "",
+      actionScenes: defaultActionScenes,
     };
   }
 
-  // 3. 식품 / 요리 / 맛집 / 디저트
+  // 3. 식품 / 요리
   if (/(식품|요리|맛집|디저트|커피|음료|베이커리|밀키트|간편식|맛있는|셰프)/.test(combined)) {
     return {
       theme: "food",
@@ -171,10 +291,12 @@ function inferProductVisualTheme(
       environmentBadge: "🍷 부티크 레스토랑 키친",
       holdingPose: "식품 패키지를 양손으로 정성스럽게 받쳐 들고 서빙",
       heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+      defaultProductImg: "",
+      actionScenes: defaultActionScenes,
     };
   }
 
-  // 4. IT / 전자기기 / 스마트 디바이스
+  // 4. IT / 전자기기
   if (/(스마트|전자|기기|블루투스|태블릿|충전기|이어폰|노트북|가전|디바이스)/.test(combined)) {
     return {
       theme: "tech",
@@ -183,22 +305,12 @@ function inferProductVisualTheme(
       environmentBadge: "🏢 하이테크 테크 라운지",
       holdingPose: "기기를 손에 들고 화면을 카메라 정면으로 가리키며 시연",
       heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+      defaultProductImg: "",
+      actionScenes: defaultActionScenes,
     };
   }
 
-  // 5. 비즈니스 / SaaS / 자동화 / 세무 / 법률
-  if (/(시트봇|업무|자동화|솔루션|엑셀|구글시트|세무|회계|법률|컨설팅|기업)/.test(combined)) {
-    return {
-      theme: "business",
-      themeTitle: "스마트 비즈니스 & 엔터프라이즈",
-      wardrobeBadge: "💼 테일러드 다크 네이비 수트",
-      environmentBadge: "🏙️ 고층 파노라마 스마트 회의실",
-      holdingPose: "태블릿 화면의 데이터 차트를 짚으며 신뢰감 넘치는 발표",
-      heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
-    };
-  }
-
-  // 기본 라이프스타일 커머셜
+  // 기본 비즈니스 / 커머셜
   return {
     theme: "commercial",
     themeTitle: "프리미엄 브랜드 커머셜",
@@ -206,6 +318,8 @@ function inferProductVisualTheme(
     environmentBadge: "🏠 감성 라이프스타일 스튜디오",
     holdingPose: "제품을 한 손에 안정적으로 쥐고 카메라를 향해 소개",
     heroModelImg: `/assets/models/${modelAssetKey}_front.jpg`,
+    defaultProductImg: "",
+    actionScenes: defaultActionScenes,
   };
 }
 
@@ -277,7 +391,7 @@ function parseTopicAndFeatureCards(rawTopic: string): {
 }
 
 /**
- * 대본을 쇼츠 씬 단위로 파싱하며 연기 지시와 제품 하이라이트 구간을 분리합니다.
+ * 대본을 쇼츠 씬 단위로 파싱하며 연기 지시와 4단 액션 포즈(0~3)를 지능형 매핑합니다.
  */
 function parseScriptIntoScenes(rawScript: string): {
   scenes: ScriptSceneSegment[];
@@ -294,7 +408,8 @@ function parseScriptIntoScenes(rawScript: string): {
 
   const scenes: ScriptSceneSegment[] = [];
 
-  for (const block of blocks) {
+  for (let bIdx = 0; bIdx < blocks.length; bIdx++) {
+    const block = blocks[bIdx];
     let stageDirection = "";
     const dirMatch = block.match(/^\[([^\]]+)\]/);
     if (dirMatch) {
@@ -316,14 +431,28 @@ function parseScriptIntoScenes(rawScript: string): {
       .filter((s) => s.length > 1);
 
     for (const sentence of sentences) {
-      const showProductHighlight = /(소재|방수|실링|가격|비용|컬러|품질|착용|확인|제품|디자인|선물|주문)/i.test(sentence);
-      if (sentence.length > 46 && sentence.includes(",")) {
+      const combinedCheck = `${stageDirection} ${sentence}`;
+      let actionPoseIndex = 1;
+      if (/(손가락|튕기|설마|관장님|안녕|잠깐|고민)/.test(combinedCheck) && scenes.length === 0) {
+        actionPoseIndex = 0; // Scene 1: 오프닝 훅 & 손가락 스냅
+      } else if (/(프로필|링크|아래|가리키|윙크|지금 바로|확인해)/.test(combinedCheck)) {
+        actionPoseIndex = 3; // Scene 4: CTA 아래쪽 가리키기
+      } else if (/(10가지|10종|컬러|색상|성취감|물티슈|방수|TPU|땀|오염)/i.test(combinedCheck)) {
+        actionPoseIndex = 2; // Scene 3: 방수 TPU & 10종 컬러 시연
+      } else {
+        actionPoseIndex = 1; // Scene 2: 양손으로 밴드 당기며 탄성/실링/원가절감 시연
+      }
+
+      const showProductHighlight = /(소재|방수|실링|가격|비용|컬러|품질|착용|확인|제품|디자인|300원|90%)/i.test(sentence);
+
+      if (sentence.length > 48 && sentence.includes(",")) {
         const subParts = sentence.split(/,\s*/).map((p) => p.trim()).filter(Boolean);
         for (const sub of subParts) {
-          scenes.push({ caption: sub, stageDirection, showProductHighlight });
+          const subPose = /(10가지|컬러|물티슈|방수|TPU)/i.test(sub) ? 2 : actionPoseIndex;
+          scenes.push({ caption: sub, stageDirection, showProductHighlight, actionPoseIndex: subPose });
         }
       } else {
-        scenes.push({ caption: sentence, stageDirection, showProductHighlight });
+        scenes.push({ caption: sentence, stageDirection, showProductHighlight, actionPoseIndex });
       }
     }
   }
@@ -333,11 +462,255 @@ function parseScriptIntoScenes(rawScript: string): {
       .replace(/\[[\s\S]*?\]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-    scenes.push({ caption: fallbackClean || "지금 바로 프로필 링크에서 만나보세요!" });
+    scenes.push({
+      caption: fallbackClean || "지금 바로 프로필 링크에서 만나보세요!",
+      actionPoseIndex: 1,
+    });
   }
 
   const cleanFullText = scenes.map((s) => s.caption).join(" ");
   return { scenes, cleanFullText };
+}
+
+/**
+ * 🎙️ 발화 중인 텍스트와 시간(t)을 기반으로 실제 한국어 자모음 음절 개폐율(Lip-Sync Envelope)을 60fps로 계산합니다.
+ */
+function computeSpeechLipSyncEnvelope(
+  timeSec: number,
+  caption: string,
+  analyserData?: Uint8Array | null
+): { mouthOpen: number; mouthSpread: number } {
+  // 1. Web Audio Analyser 실시간 주파수 에너지가 유효할 경우 우선 결합
+  let audioEnergy = 0;
+  if (analyserData && analyserData.length > 0) {
+    let sum = 0;
+    // 음성 포먼트 주요 대역 (bin 2 ~ 28)
+    const limit = Math.min(28, analyserData.length);
+    for (let i = 2; i < limit; i++) {
+      sum += analyserData[i];
+    }
+    audioEnergy = sum / ((limit - 2) * 255);
+  }
+
+  // 2. 한국어 음절(Syllable) 발화 리듬 시뮬레이터 (초당 약 5.2음절 발화)
+  const cleanChars = (caption || "").replace(/\s+/g, "");
+  const syllableRate = 5.4;
+  const syllablePos = timeSec * syllableRate;
+  const charIdx = cleanChars.length > 0 ? Math.floor(syllablePos) % cleanChars.length : 0;
+  const phaseInSyllable = syllablePos - Math.floor(syllablePos); // 0.0 ~ 1.0
+
+  // 자음 시작(닫힘) -> 모음 정점(열림) -> 종성(반닫힘) 곡선
+  const syllableCurve = Math.sin(phaseInSyllable * Math.PI);
+
+  // 글자 코드에 따른 모음 크기 변화 (아/어/오/우/이 다변화)
+  const charCode = cleanChars.charCodeAt(charIdx) || 44032;
+  const vowelType = charCode % 5;
+  const vowelAmplitude =
+    vowelType === 0 ? 0.95 : // '아/와' 계열 (크게 열림)
+    vowelType === 1 ? 0.78 : // '어/에' 계열
+    vowelType === 2 ? 0.65 : // '오/우' 계열 (원순)
+    vowelType === 3 ? 0.50 : // '이/으' 계열 (옆으로 벌어짐)
+    0.85;
+
+  // 문장 내 자연스러운 호흡 휴지기 (쉼표/마침표 부근)
+  const breathPause = Math.sin(timeSec * 1.9) > 0.92 ? 0.15 : 1.0;
+
+  const simulatedOpen = syllableCurve * vowelAmplitude * breathPause;
+  const finalMouthOpen = Math.min(1.0, Math.max(0.05, audioEnergy > 0.08 ? audioEnergy * 1.35 : simulatedOpen));
+
+  const mouthSpread =
+    vowelType === 3 ? 0.25 : // '이/으' 발음 시 입꼬리 넓어짐
+    vowelType === 2 ? -0.20 : // '오/우' 발음 시 입술 오므라듦
+    Math.sin(timeSec * 8.5) * 0.12;
+
+  return { mouthOpen: finalMouthOpen, mouthSpread };
+}
+
+/**
+ * 🎬 캔버스 위에 립싱크(하관 메쉬 워핑 & 구강 렌더링) + 눈 깜빡임 + 호흡 모션이 적용된 모델 프레임을 그립니다.
+ */
+function renderLipSyncModelFrame(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  sceneAsset: ActionSceneAsset,
+  canvasW: number,
+  canvasH: number,
+  timeSec: number,
+  isPlaying: boolean,
+  isMuted: boolean,
+  caption: string,
+  analyserData?: Uint8Array | null,
+  alpha: number = 1.0
+) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // 1. 생체 호흡 및 시네마틱 카메라 줌/패닝 계산
+  const breathY = isPlaying ? Math.sin(timeSec * 2.6) * 4.5 : 0;
+  const subtleNodY = isPlaying && !isMuted ? Math.cos(timeSec * 5.2) * 2.0 : 0;
+  const camZoom = isPlaying ? 1.03 + Math.sin(timeSec * 1.4) * 0.018 : 1.01;
+  const camPanX = isPlaying ? Math.sin(timeSec * 1.1) * 5.0 : 0;
+
+  // 이미지 원본 비율 유지 Cover 계산 (object-top 기준)
+  const imgAspect = img.width / Math.max(1, img.height);
+  const canvasAspect = canvasW / canvasH;
+  let drawW = canvasW;
+  let drawH = canvasH;
+  if (imgAspect > canvasAspect) {
+    drawH = canvasH;
+    drawW = canvasH * imgAspect;
+  } else {
+    drawW = canvasW;
+    drawH = canvasW / imgAspect;
+  }
+
+  drawW *= camZoom;
+  drawH *= camZoom;
+
+  const offsetX = (canvasW - drawW) / 2 + camPanX;
+  const offsetY = -12 + breathY + subtleNodY; // 상단 정렬 + 호흡 바운스
+
+  // 기본 모델 베이스 이미지 그리기
+  ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
+
+  // 2. 발화 중일 때 실시간 안면 립싱크(Lip-Sync) & 하관 워핑 렌더링
+  if (isPlaying && !isMuted && alpha > 0.35) {
+    const { mouthOpen, mouthSpread } = computeSpeechLipSyncEnvelope(timeSec, caption, analyserData);
+
+    // 원본 이미지 상의 입술 및 하관 픽셀 좌표
+    const srcMouthX = sceneAsset.mouthX * img.width;
+    const srcMouthY = sceneAsset.mouthY * img.height;
+    const srcMouthW = sceneAsset.mouthW * img.width;
+    const srcJawH = sceneAsset.jawH * img.height;
+
+    // 캔버스 상의 입술 및 하관 좌표
+    const dstMouthX = offsetX + sceneAsset.mouthX * drawW;
+    const dstMouthY = offsetY + sceneAsset.mouthY * drawH;
+    const dstMouthW = sceneAsset.mouthW * drawW * (1 + mouthSpread * 0.18);
+    const dstJawH = sceneAsset.jawH * drawH;
+
+    // 하관(아랫입술~턱끝) 드롭 변위량 (최대 11.5px 개폐)
+    const jawDropPx = mouthOpen * 11.5;
+
+    if (jawDropPx > 0.8) {
+      // (A) 하관 메쉬 슬라이스 워핑: 아랫입술부터 턱 아래까지 8개 수평 스트립으로 자연스럽게 내려줌
+      const slices = 8;
+      for (let s = 0; s < slices; s++) {
+        const ratio = s / slices;
+        const nextRatio = (s + 1) / slices;
+        // 입술 바로 아래는 많이 내려가고, 턱 끝 아래 목 부분으로 갈수록 변위가 부드럽게 감쇠
+        const sliceDrop = jawDropPx * Math.sin((1 - ratio * 0.65) * (Math.PI / 2));
+
+        const sy = srcMouthY + ratio * srcJawH;
+        const sh = (nextRatio - ratio) * srcJawH;
+        const sx = srcMouthX - srcMouthW * 0.72;
+        const sw = srcMouthW * 1.44;
+
+        const dy = dstMouthY + ratio * dstJawH + sliceDrop;
+        const dh = (nextRatio - ratio) * dstJawH + 1.2;
+        const dx = dstMouthX - dstMouthW * 0.72;
+        const dw = dstMouthW * 1.44;
+
+        ctx.save();
+        // 좌우 경계선이 티나지 않도록 타원형 클리핑 마스크 적용
+        ctx.beginPath();
+        ctx.ellipse(
+          dstMouthX,
+          dstMouthY + dstJawH * 0.48 + sliceDrop * 0.5,
+          dstMouthW * 0.72,
+          dstJawH * 0.68,
+          0,
+          0,
+          Math.PI * 2
+        );
+        ctx.clip();
+        ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+        ctx.restore();
+      }
+
+      // (B) 입술 벌어짐(Oral Cavity) 다이나믹 쉐이딩 (입 안쪽 음영 + 윗니 + 아랫입술 윤곽)
+      const openHalfH = Math.max(1.5, jawDropPx * 0.58);
+      const openHalfW = dstMouthW * 0.44;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(dstMouthX - openHalfW, dstMouthY);
+      // 윗입술 아치
+      ctx.quadraticCurveTo(dstMouthX, dstMouthY - openHalfH * 0.35, dstMouthX + openHalfW, dstMouthY);
+      // 아랫입술 개폐 곡선
+      ctx.quadraticCurveTo(dstMouthX, dstMouthY + openHalfH * 1.45, dstMouthX - openHalfW, dstMouthY);
+      ctx.closePath();
+
+      // 구강 내부 자연스러운 다크 레드-브라운 그라데이션
+      const mouthGrad = ctx.createRadialGradient(
+        dstMouthX,
+        dstMouthY + openHalfH * 0.3,
+        1,
+        dstMouthX,
+        dstMouthY + openHalfH * 0.3,
+        openHalfW
+      );
+      mouthGrad.addColorStop(0, "rgba(42, 14, 18, 0.88)");
+      mouthGrad.addColorStop(0.7, "rgba(68, 22, 28, 0.82)");
+      mouthGrad.addColorStop(1, "rgba(115, 48, 52, 0.45)");
+      ctx.fillStyle = mouthGrad;
+      ctx.fill();
+
+      // 발화 시 살짝 보이는 윗니 하이라이트
+      if (mouthOpen > 0.32) {
+        ctx.clip();
+        ctx.fillStyle = "rgba(248, 250, 252, 0.78)";
+        ctx.fillRect(
+          dstMouthX - openHalfW * 0.68,
+          dstMouthY - openHalfH * 0.25,
+          openHalfW * 1.36,
+          openHalfH * 0.48
+        );
+      }
+      ctx.restore();
+
+      // 아랫입술 자연스러운 윤기 하이라이트
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(
+        dstMouthX,
+        dstMouthY + openHalfH * 0.95,
+        openHalfW * 0.65,
+        Math.max(1.2, openHalfH * 0.24),
+        0,
+        0,
+        Math.PI * 2
+      );
+      ctx.fillStyle = "rgba(215, 110, 115, 0.38)";
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // 3. 자연스러운 눈 깜빡임(Natural Eye Blink: 3.4초 주기, 0.13초 지속)
+  const blinkCycle = timeSec % 3.4;
+  if (isPlaying && blinkCycle > 3.15 && blinkCycle < 3.29) {
+    const blinkProgress = Math.sin(((blinkCycle - 3.15) / 0.14) * Math.PI);
+    const eyeCenterY = offsetY + sceneAsset.eyeY * drawH;
+    const eyeCenterX = offsetX + sceneAsset.mouthX * drawW;
+    const eyeHalfSpan = (sceneAsset.eyeSpan * drawW) / 2;
+    const eyeW = drawW * 0.042;
+    const eyeH = drawH * 0.009 * blinkProgress;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(218, 175, 148, 0.86)";
+    // 왼쪽 눈꺼풀
+    ctx.beginPath();
+    ctx.ellipse(eyeCenterX - eyeHalfSpan, eyeCenterY, eyeW, eyeH, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // 오른쪽 눈꺼풀
+    ctx.beginPath();
+    ctx.ellipse(eyeCenterX + eyeHalfSpan, eyeCenterY, eyeW, eyeH, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.restore();
 }
 
 function ShortsPlayerContent() {
@@ -379,7 +752,6 @@ function ShortsPlayerContent() {
   const effectiveVoice = voiceParam || metaData?.modelVoice || null;
   const effectiveTopic = topicParam || metaData?.topic || "";
   const effectiveScript = scriptParam || metaData?.script || "";
-  const effectiveProductImg = imgParam || metaData?.productImageUrl || "";
 
   const model = resolveModel(effectiveName, effectiveVoice);
   const displayName = effectiveName || model.name;
@@ -387,7 +759,7 @@ function ShortsPlayerContent() {
   const rawTopic = effectiveTopic || model.defaultTopic;
   const rawScript = effectiveScript || model.defaultScript;
 
-  // 🌟 제품 특성에 맞춘 의상, 배경, 제품 파지 실사 샷 지능형 분석
+  // 🌟 제품 특성에 맞춘 의상, 배경, 4단 액션 씬 시퀀스 도출
   const visualTheme = useMemo(() => {
     const baseTheme = inferProductVisualTheme(rawTopic, rawScript, model.assetKey);
     return {
@@ -398,6 +770,15 @@ function ShortsPlayerContent() {
       holdingPose: poseParam || baseTheme.holdingPose,
     };
   }, [rawTopic, rawScript, model.assetKey, customHeroParam, wardrobeParam, envParam, poseParam]);
+
+  // 제품 이미지 URL 안전 매핑 (URL 파라미터 -> 메타데이터 -> 테마 기본 실물 이미지 순 폴백)
+  const effectiveProductImg =
+    imgParam || metaData?.productImageUrl || visualTheme.defaultProductImg || "";
+
+  const resolvedProductImgUrl = useMemo(() => {
+    if (!effectiveProductImg) return "";
+    return resolveSafeMediaUrl(effectiveProductImg);
+  }, [effectiveProductImg]);
 
   const { shortTitle, featureCards } = useMemo(
     () => parseTopicAndFeatureCards(rawTopic),
@@ -414,16 +795,25 @@ function ShortsPlayerContent() {
   const [duration, setDuration] = useState<number>(20);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [likes, setLikes] = useState<number>(456);
+  const [likes, setLikes] = useState<number>(512);
   const [hasLiked, setHasLiked] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>("");
   const [showFullScriptModal, setShowFullScriptModal] = useState<boolean>(false);
   const [showProductModal, setShowProductModal] = useState<boolean>(false);
   const [isExportingVideo, setIsExportingVideo] = useState<boolean>(false);
   const [productImageFailed, setProductImageFailed] = useState<boolean>(false);
+  const [imagesReady, setImagesReady] = useState<boolean>(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const stageCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const loadedSceneImagesRef = useRef<Record<string, HTMLImageElement>>({});
+  const loadedProductImgRef = useRef<HTMLImageElement | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioDataArrayRef = useRef<Uint8Array | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const lastPoseIndexRef = useRef<number>(0);
+  const poseTransitionStartRef = useRef<number>(0);
+  const prevPoseIndexRef = useRef<number>(0);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -438,11 +828,53 @@ function ShortsPlayerContent() {
     );
   }, [cleanFullText, displayVoice]);
 
-  // 제품 이미지 URL 안전 매핑 (프록시/로컬/도메인 완벽 대응)
-  const resolvedProductImgUrl = useMemo(() => {
-    if (!effectiveProductImg) return "";
-    return resolveSafeMediaUrl(effectiveProductImg);
-  }, [effectiveProductImg]);
+  // 4단 액션 씬 이미지 및 실물 제품 이미지 프리로드
+  useEffect(() => {
+    let mounted = true;
+    const loadImg = (rawUrl: string): Promise<HTMLImageElement | null> =>
+      new Promise((resolve) => {
+        if (!rawUrl) return resolve(null);
+        const fullUrl = resolveSafeMediaUrl(rawUrl);
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => resolve(img);
+        img.onerror = () => {
+          // 터널/루트 양방향 폴백
+          const altUrl = fullUrl.replace("/t/mcp-server-fxkud1/p/SheetBot", "");
+          if (altUrl !== fullUrl) {
+            const img2 = new Image();
+            img2.crossOrigin = "anonymous";
+            img2.onload = () => resolve(img2);
+            img2.onerror = () => resolve(null);
+            img2.src = altUrl;
+          } else {
+            resolve(null);
+          }
+        };
+        img.src = fullUrl;
+      });
+
+    Promise.all([
+      ...visualTheme.actionScenes.map(async (sc) => {
+        const loaded = await loadImg(sc.imgUrl);
+        if (loaded) {
+          loadedSceneImagesRef.current[sc.imgUrl] = loaded;
+        }
+      }),
+      (async () => {
+        if (resolvedProductImgUrl) {
+          const pImg = await loadImg(resolvedProductImgUrl);
+          if (pImg) loadedProductImgRef.current = pImg;
+        }
+      })(),
+    ]).then(() => {
+      if (mounted) setImagesReady(true);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [visualTheme.actionScenes, resolvedProductImgUrl]);
 
   // 브라우저 내장 TTS 폴백
   const playFallbackWebSpeech = useCallback(() => {
@@ -465,12 +897,32 @@ function ShortsPlayerContent() {
     }
   }, []);
 
+  // Web Audio API Analyser 연결 (실시간 음성 주파수 립싱크용)
+  const ensureAudioAnalyser = useCallback(() => {
+    if (analyserRef.current || !audioRef.current || typeof window === "undefined") return;
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const source = ctx.createMediaElementSource(audioRef.current);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 128;
+      source.connect(analyser);
+      analyser.connect(ctx.destination);
+      analyserRef.current = analyser;
+      audioDataArrayRef.current = new Uint8Array(analyser.frequencyBinCount);
+    } catch {
+      // 이미 연결되었거나 브라우저 정책 예외 시 음절 시뮬레이터가 자동 동작
+    }
+  }, []);
+
   const startPlayback = useCallback(() => {
     setHasStarted(true);
     setIsPlaying(true);
     setCurrentTime(0);
 
     if (audioRef.current && ttsAudioUrl) {
+      ensureAudioAnalyser();
       audioRef.current.muted = isMuted;
       audioRef.current.currentTime = 0;
       audioRef.current.play().catch(() => {
@@ -479,19 +931,51 @@ function ShortsPlayerContent() {
     } else {
       playFallbackWebSpeech();
     }
-  }, [isMuted, playFallbackWebSpeech, ttsAudioUrl]);
+  }, [isMuted, playFallbackWebSpeech, ttsAudioUrl, ensureAudioAnalyser]);
 
-  // 타이머 및 오디오 진행도 동기화
+  // 현재 재생 시점에 매칭되는 자막 씬 및 4단 액션 포즈 계산
+  const activeSceneIndex = Math.min(
+    Math.max(scenes.length - 1, 0),
+    Math.floor((currentTime / Math.max(duration, 1)) * scenes.length)
+  );
+  const activeScene = scenes[activeSceneIndex] || { caption: "", actionPoseIndex: 1 };
+
+  const activePoseIdx = Math.min(
+    visualTheme.actionScenes.length - 1,
+    Math.max(0, activeScene.actionPoseIndex ?? (activeSceneIndex % visualTheme.actionScenes.length))
+  );
+  const activeActionAsset = visualTheme.actionScenes[activePoseIdx] || visualTheme.actionScenes[0];
+
+  // 씬 전환 시 부드러운 크로스페이드 타이밍 기록
   useEffect(() => {
-    if (isPlaying && hasStarted) {
-      timerRef.current = setInterval(() => {
-        const audioEl = audioRef.current;
+    if (activePoseIdx !== lastPoseIndexRef.current) {
+      prevPoseIndexRef.current = lastPoseIndexRef.current;
+      lastPoseIndexRef.current = activePoseIdx;
+      poseTransitionStartRef.current = performance.now();
+    }
+  }, [activePoseIdx]);
+
+  // 🎬 60fps 실시간 캔버스 비디오 & 립싱크 렌더링 루프
+  useEffect(() => {
+    let running = true;
+    let lastTick = performance.now();
+
+    const renderLoop = (now: number) => {
+      if (!running) return;
+      const dt = (now - lastTick) / 1000;
+      lastTick = now;
+
+      // 1. 재생 시간 업데이트
+      let t = currentTime;
+      const audioEl = audioRef.current;
+      if (isPlaying && hasStarted) {
         if (audioEl && !audioEl.paused && audioEl.duration && isFinite(audioEl.duration)) {
+          t = audioEl.currentTime;
           setDuration(audioEl.duration);
-          setCurrentTime(audioEl.currentTime);
+          setCurrentTime(t);
         } else {
           setCurrentTime((prev) => {
-            const next = prev + 0.1;
+            const next = prev + Math.min(dt, 0.1);
             if (next >= duration) {
               if (audioEl) {
                 audioEl.currentTime = 0;
@@ -501,18 +985,129 @@ function ShortsPlayerContent() {
               }
               return 0;
             }
+            t = next;
             return next;
           });
         }
-      }, 100);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-    }
+      }
 
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      // 2. 스테이지 캔버스 렌더링 (립싱크 + 크로스페이드 + 눈 깜빡임 + 실물 제품 앵커링)
+      const canvas = stageCanvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          const cw = canvas.width;
+          const ch = canvas.height;
+          ctx.fillStyle = "#070B14";
+          ctx.fillRect(0, 0, cw, ch);
+
+          if (analyserRef.current && audioDataArrayRef.current && isPlaying && !isMuted) {
+            try {
+              analyserRef.current.getByteFrequencyData(audioDataArrayRef.current);
+            } catch {}
+          }
+
+          const curSceneIdx = Math.min(
+            Math.max(scenes.length - 1, 0),
+            Math.floor((t / Math.max(duration, 1)) * scenes.length)
+          );
+          const curScene = scenes[curSceneIdx] || { caption: "", actionPoseIndex: 1 };
+          const targetPoseIdx = Math.min(
+            visualTheme.actionScenes.length - 1,
+            Math.max(0, curScene.actionPoseIndex ?? 1)
+          );
+
+          const curAsset = visualTheme.actionScenes[targetPoseIdx] || visualTheme.actionScenes[0];
+          const prevAsset = visualTheme.actionScenes[prevPoseIndexRef.current] || curAsset;
+
+          const curImg = loadedSceneImagesRef.current[curAsset.imgUrl];
+          const prevImg = loadedSceneImagesRef.current[prevAsset.imgUrl];
+
+          const transElapsed = (now - poseTransitionStartRef.current) / 480; // 0.48초 시네마틱 디졸브
+          const fadeAlpha = Math.min(1, Math.max(0, transElapsed));
+
+          if (prevImg && fadeAlpha < 1 && prevAsset.imgUrl !== curAsset.imgUrl) {
+            renderLipSyncModelFrame(
+              ctx,
+              prevImg,
+              prevAsset,
+              cw,
+              ch,
+              t,
+              isPlaying,
+              isMuted,
+              curScene.caption,
+              audioDataArrayRef.current,
+              1.0
+            );
+          }
+
+          if (curImg) {
+            renderLipSyncModelFrame(
+              ctx,
+              curImg,
+              curAsset,
+              cw,
+              ch,
+              t,
+              isPlaying,
+              isMuted,
+              curScene.caption,
+              audioDataArrayRef.current,
+              prevImg && prevAsset.imgUrl !== curAsset.imgUrl ? fadeAlpha : 1.0
+            );
+          }
+
+          // 사용자가 별도 업로드한 제품 사진이 있을 경우 손 파지 위치 근처에 실물 뱃지 오버레이 합성
+          const pImg = loadedProductImgRef.current;
+          if (
+            pImg &&
+            imgParam &&
+            !imgParam.includes("minsu_taekwondo_scene3") &&
+            (targetPoseIdx === 1 || targetPoseIdx === 2)
+          ) {
+            const boxW = 190;
+            const boxH = 190;
+            const anchorX = curAsset.handAnchorX * cw - boxW / 2;
+            const anchorY = curAsset.handAnchorY * ch - boxH / 2 + Math.sin(t * 3.0) * 5;
+
+            ctx.save();
+            ctx.shadowColor = "rgba(56, 189, 248, 0.75)";
+            ctx.shadowBlur = 22;
+            ctx.strokeStyle = "rgba(56, 189, 248, 0.9)";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.roundRect(anchorX, anchorY, boxW, boxH, 24);
+            ctx.stroke();
+            ctx.clip();
+            ctx.drawImage(pImg, anchorX, anchorY, boxW, boxH);
+            ctx.restore();
+          }
+
+          // 스튜디오 상·하단 시네마틱 비네팅
+          const topGrad = ctx.createLinearGradient(0, 0, 0, 220);
+          topGrad.addColorStop(0, "rgba(0,0,0,0.75)");
+          topGrad.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.fillStyle = topGrad;
+          ctx.fillRect(0, 0, cw, 220);
+
+          const botGrad = ctx.createLinearGradient(0, ch - 460, 0, ch);
+          botGrad.addColorStop(0, "rgba(0,0,0,0)");
+          botGrad.addColorStop(1, "rgba(0,0,0,0.92)");
+          ctx.fillStyle = botGrad;
+          ctx.fillRect(0, ch - 460, cw, 460);
+        }
+      }
+
+      animFrameRef.current = requestAnimationFrame(renderLoop);
     };
-  }, [isPlaying, hasStarted, duration, playFallbackWebSpeech]);
+
+    animFrameRef.current = requestAnimationFrame(renderLoop);
+    return () => {
+      running = false;
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [isPlaying, hasStarted, isMuted, duration, scenes, visualTheme.actionScenes, imagesReady, imgParam, playFallbackWebSpeech]);
 
   useEffect(() => {
     return () => stopAllAudio();
@@ -579,13 +1174,6 @@ function ShortsPlayerContent() {
     }
   };
 
-  // 현재 재생 시점에 매칭되는 자막 씬 계산
-  const activeSceneIndex = Math.min(
-    Math.max(scenes.length - 1, 0),
-    Math.floor((currentTime / Math.max(duration, 1)) * scenes.length)
-  );
-  const activeScene = scenes[activeSceneIndex] || { caption: "" };
-
   // 현재 재생 시점에 매칭되는 특장점(POINT) 카드 계산
   const activeFeatureCard: ProductFeatureCard | null = useMemo(() => {
     if (featureCards.length === 0) return null;
@@ -596,16 +1184,6 @@ function ShortsPlayerContent() {
     return featureCards[idx] || featureCards[0];
   }, [featureCards, currentTime, duration]);
 
-  // 🌟 AI 모델 생동감 모션 파라미터 (숨쉬기, 고개 끄덕임, 미세 발화 바운스)
-  const breathPhase = Math.sin(currentTime * 2.5);
-  const nodPhase = isPlaying ? Math.cos(currentTime * 4.8) * 1.5 : 0;
-  const liveScale = isPlaying ? 1.025 + Math.sin(currentTime * 3.2) * 0.015 : 1.0;
-  const liveTranslateY = isPlaying ? -4 + breathPhase * 3.5 + nodPhase : 0;
-  const liveTranslateX = isPlaying ? Math.sin(currentTime * 1.8) * 3 : 0;
-  const dynamicCameraTransform = `scale(${liveScale.toFixed(4)}) translate(${liveTranslateX.toFixed(2)}px, ${liveTranslateY.toFixed(2)}px)`;
-
-  // 🥋 [핵심] 제품 맞춤형 의상 및 배경에서 제품을 직접 들고 있는 실사 히어로 샷 URL
-  const currentModelImgUrl = resolveSafeMediaUrl(visualTheme.heroModelImg);
   const avatarImgUrl = resolveSafeMediaUrl(`/assets/models/${model.assetKey}_avatar.jpg`);
 
   const shouldHighlightProduct = Boolean(
@@ -614,12 +1192,12 @@ function ShortsPlayerContent() {
   );
 
   /**
-   * 🎬 실제 쇼츠 비디오 파일(.webm) 캔버스 렌더링 및 다운로드 (도복/맞춤 의상 모델 + 실물 제품 합성)
+   * 🎬 실제 쇼츠 비디오 파일(.webm) 캔버스 렌더링 및 다운로드 (4단 멀티 액션 씬 + 립싱크 + 제품 합성)
    */
   const handleDownloadVideoFile = async () => {
     if (isExportingVideo) return;
     setIsExportingVideo(true);
-    showToast("🎬 쇼츠 동영상(.webm) 파일을 합성 및 생성하고 있습니다 (약 4초)...");
+    showToast("🎬 4단 멀티 씬 & 립싱크 쇼츠 동영상(.webm)을 생성하고 있습니다 (약 5초)...");
 
     try {
       const canvas = document.createElement("canvas");
@@ -627,21 +1205,6 @@ function ShortsPlayerContent() {
       canvas.height = 1280;
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Canvas context 생성 실패");
-
-      const loadImage = (url: string): Promise<HTMLImageElement | null> =>
-        new Promise((resolve) => {
-          if (!url) return resolve(null);
-          const img = new Image();
-          img.crossOrigin = "anonymous";
-          img.onload = () => resolve(img);
-          img.onerror = () => resolve(null);
-          img.src = url;
-        });
-
-      const [heroModelImg, productImg] = await Promise.all([
-        loadImage(currentModelImgUrl),
-        resolvedProductImgUrl ? loadImage(resolvedProductImgUrl) : Promise.resolve(null),
-      ]);
 
       const stream = canvas.captureStream(30);
       const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
@@ -659,42 +1222,59 @@ function ShortsPlayerContent() {
 
       recorder.start();
 
-      const totalFrames = 120;
+      const totalFrames = 160; // 4단 액션 씬 각각 40프레임씩
       for (let f = 0; f < totalFrames; f++) {
         const ratio = f / totalFrames;
+        const simTime = ratio * duration;
+        const scIdx = Math.min(scenes.length - 1, Math.floor(ratio * scenes.length));
+        const sc = scenes[scIdx] || scenes[0];
+        const poseIdx = Math.min(
+          visualTheme.actionScenes.length - 1,
+          sc?.actionPoseIndex ?? (Math.floor(ratio * 4) % visualTheme.actionScenes.length)
+        );
+        const asset = visualTheme.actionScenes[poseIdx] || visualTheme.actionScenes[0];
+        const mImg = loadedSceneImagesRef.current[asset.imgUrl];
+
         ctx.fillStyle = "#070B14";
         ctx.fillRect(0, 0, 720, 1280);
 
-        // 1. 제품 맞춤 의상(도복) & 배경에서 제품을 직접 들고 있는 모델 레이어
-        if (heroModelImg) {
-          const z = 1.0 + Math.sin(f * 0.08) * 0.02;
-          const dw = 720 * z;
-          const dh = 1280 * z;
-          ctx.drawImage(heroModelImg, -(dw - 720) / 2, 0, dw, dh);
+        if (mImg) {
+          renderLipSyncModelFrame(
+            ctx,
+            mImg,
+            asset,
+            720,
+            1280,
+            simTime,
+            true,
+            false,
+            sc?.caption || "",
+            null,
+            1.0
+          );
         }
 
-        // 2. 조명 그라데이션
-        const grad = ctx.createLinearGradient(0, 700, 0, 1280);
+        // 하단 그라데이션
+        const grad = ctx.createLinearGradient(0, 720, 0, 1280);
         grad.addColorStop(0, "rgba(0,0,0,0)");
         grad.addColorStop(1, "rgba(0,0,0,0.92)");
         ctx.fillStyle = grad;
-        ctx.fillRect(0, 700, 720, 580);
+        ctx.fillRect(0, 720, 720, 560);
 
-        // 3. 상단 의상/배경 및 PPL 제품 배너
+        // 상단 PPL 배너
         ctx.fillStyle = "rgba(15, 23, 42, 0.90)";
-        ctx.fillRect(36, 48, 648, 70);
+        ctx.fillRect(36, 48, 648, 68);
         ctx.fillStyle = "#FCD34D";
         ctx.font = "bold 24px sans-serif";
-        ctx.fillText(`🏷️ PPL: ${shortTitle}`, 56, 92);
+        ctx.fillText(`🏷️ PPL: ${shortTitle}`, 56, 90);
 
-        // 4. 제품 실물 사진 3D 플로팅 인서트 컷
-        if (productImg) {
-          const pScale = 1.0 + Math.sin(f * 0.1) * 0.03;
-          const pw = 220 * pScale;
-          const ph = 220 * pScale;
-          const px = 460 - (pw - 220) / 2;
-          const py = 160;
-
+        // 우측 상단 실물 제품 인서트
+        const pImg = loadedProductImgRef.current;
+        if (pImg) {
+          const pw = 200;
+          const ph = 200;
+          const px = 480;
+          const py = 140;
           ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
           ctx.strokeStyle = "#38BDF8";
           ctx.lineWidth = 3;
@@ -702,16 +1282,15 @@ function ShortsPlayerContent() {
           ctx.roundRect(px, py, pw, ph, 20);
           ctx.fill();
           ctx.stroke();
-
           ctx.save();
           ctx.beginPath();
-          ctx.roundRect(px + 6, py + 6, pw - 12, ph - 12, 16);
+          ctx.roundRect(px + 5, py + 5, pw - 10, ph - 10, 16);
           ctx.clip();
-          ctx.drawImage(productImg, px + 6, py + 6, pw - 12, ph - 12);
+          ctx.drawImage(pImg, px + 5, py + 5, pw - 10, ph - 10);
           ctx.restore();
         }
 
-        // 5. 포인트 카드 오버레이
+        // 포인트 카드 오버레이
         if (featureCards.length > 0) {
           const fc = featureCards[Math.floor(ratio * featureCards.length) % featureCards.length];
           ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
@@ -730,8 +1309,7 @@ function ShortsPlayerContent() {
           ctx.fillText(fc.detail.slice(0, 34), 58, 944);
         }
 
-        // 6. 하단 자막
-        const sc = scenes[Math.floor(ratio * scenes.length) % scenes.length];
+        // 하단 자막
         if (sc) {
           ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
           ctx.fillRect(36, 1020, 648, 140);
@@ -755,7 +1333,7 @@ function ShortsPlayerContent() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      showToast("✅ 쇼츠 동영상 파일 다운로드가 완료되었습니다!");
+      showToast("✅ 4단 멀티 씬 쇼츠 동영상(.webm) 다운로드 완료!");
     } catch (e: any) {
       showToast(`⚠️ 영상 저장 안내: ${e.message}`);
     } finally {
@@ -766,19 +1344,12 @@ function ShortsPlayerContent() {
   return (
     <div className="min-h-screen bg-[#070B14] text-slate-100 flex flex-col items-center justify-center font-sans select-none p-0 sm:p-4 overflow-hidden">
       <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes model-live-breath {
-          0%, 100% { transform: translateY(0px) scale(1.0); }
-          50% { transform: translateY(-5px) scale(1.02); }
-        }
         @keyframes product-float-glow {
           0%, 100% { transform: translateY(0px) rotate(0deg); }
-          50% { transform: translateY(-8px) rotate(1.5deg); }
-        }
-        .animate-live-breath {
-          animation: model-live-breath 3.2s ease-in-out infinite;
+          50% { transform: translateY(-7px) rotate(1.2deg); }
         }
         .animate-product-float {
-          animation: product-float-glow 4s ease-in-out infinite;
+          animation: product-float-glow 3.8s ease-in-out infinite;
         }
       `}} />
 
@@ -787,6 +1358,7 @@ function ShortsPlayerContent() {
         <audio
           ref={audioRef}
           src={ttsAudioUrl}
+          crossOrigin="anonymous"
           preload="auto"
           onLoadedMetadata={(e) => {
             const d = e.currentTarget.duration;
@@ -812,13 +1384,19 @@ function ShortsPlayerContent() {
 
       {/* 9:16 모바일 세로형 쇼츠 비디오 컨테이너 */}
       <div className="relative w-full max-w-[430px] h-[100dvh] sm:h-[860px] sm:rounded-3xl overflow-hidden bg-black shadow-[0_0_70px_rgba(0,0,0,0.95)] border border-slate-800/80 flex flex-col justify-between">
-        {/* 상단 프로그레스 타임라인 */}
+        {/* 상단 프로그레스 타임라인 (4단 씬 구간 분할 마커 포함) */}
         <div className="absolute top-0 left-0 right-0 z-30 px-3 pt-3 flex flex-col space-y-1 bg-gradient-to-b from-black/90 via-black/40 to-transparent">
-          <div className="w-full bg-white/20 h-1 rounded-full overflow-hidden backdrop-blur-sm">
+          <div className="relative w-full bg-white/20 h-1.5 rounded-full overflow-hidden backdrop-blur-sm">
             <div
               className="bg-gradient-to-r from-purple-400 via-pink-400 to-amber-300 h-full transition-all duration-100 ease-linear rounded-full"
               style={{ width: `${progress}%` }}
             />
+            {/* 4단 액션 씬 구분선 */}
+            <div className="absolute inset-0 flex justify-evenly pointer-events-none">
+              <span className="w-[1px] h-full bg-black/60" />
+              <span className="w-[1px] h-full bg-black/60" />
+              <span className="w-[1px] h-full bg-black/60" />
+            </div>
           </div>
 
           {/* 상단 헤더 뱃지 & 컨트롤 */}
@@ -832,7 +1410,10 @@ function ShortsPlayerContent() {
                 <span className="text-[11px] font-medium">3D 스튜디오</span>
               </Link>
               <span className="bg-gradient-to-r from-purple-600 to-pink-600 backdrop-blur text-[10px] text-white px-2.5 py-0.5 rounded-full border border-purple-400/40 font-bold tracking-tight shadow">
-                Veo 3 AI Shorts
+                Veo 3 · Live Lip-Sync
+              </span>
+              <span className="bg-emerald-950/85 border border-emerald-400/50 text-emerald-300 text-[9px] px-2 py-0.5 rounded-full font-extrabold">
+                {activeActionAsset.label.split("·")[0].trim()} / 04
               </span>
             </div>
 
@@ -846,46 +1427,19 @@ function ShortsPlayerContent() {
           </div>
         </div>
 
-        {/* 🎬 메인 비디오 렌더링 스테이지 */}
+        {/* 🎬 메인 실시간 60fps 립싱크 & 멀티 액션 비디오 캔버스 스테이지 */}
         <div
           onClick={togglePlay}
           className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden cursor-pointer bg-slate-950"
         >
-          {/* 🥋 [핵심] 제품 맞춤 의상(도복) 및 배경에서 제품을 직접 들고 있는 실사 샷 레이어 */}
-          <div
-            className={`relative w-full h-full flex items-center justify-center transition-transform duration-300 ease-out ${
-              isPlaying ? "animate-live-breath" : ""
-            }`}
-            style={{ transform: dynamicCameraTransform }}
-          >
-            <img
-              src={currentModelImgUrl}
-              alt={displayName}
-              onError={(e) => {
-                const target = e.currentTarget;
-                const fallback = `/assets/models/${model.assetKey}_front.jpg`;
-                if (!target.src.endsWith(fallback)) {
-                  target.src = fallback;
-                }
-              }}
-              className="w-full h-full object-cover object-top select-none pointer-events-none filter brightness-105 contrast-105"
-            />
+          <canvas
+            ref={stageCanvasRef}
+            width={720}
+            height={1280}
+            className="w-full h-full object-cover object-top select-none pointer-events-none"
+          />
 
-            {/* 스튜디오 조명 & 앰비언트 비네팅 */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/10 to-black/35 pointer-events-none" />
-
-            {/* 🎙️ 발화 시 입/얼굴 부분 생동감 립모핑 파동 */}
-            {isPlaying && !isMuted && (
-              <div className="absolute top-[28%] w-32 h-16 rounded-full bg-purple-400/10 blur-xl animate-pulse pointer-events-none" />
-            )}
-
-            {/* 스튜디오 발화 조명 앰비언스 */}
-            {isPlaying && (
-              <div className="absolute top-1/4 w-52 h-52 rounded-full bg-blue-500/15 blur-3xl animate-pulse pointer-events-none" />
-            )}
-          </div>
-
-          {/* 🌟 2. 상단 PPL 제품 배너 및 [의상 / 배경] 테마 인디케이터 뱃지 */}
+          {/* 🌟 2. 상단 PPL 제품 배너 및 [의상 / 배경 / 현재 액션 씬] 인디케이터 */}
           <div
             onClick={(e) => e.stopPropagation()}
             className="absolute top-14 left-3 right-14 z-20 pointer-events-none flex flex-col space-y-1.5"
@@ -909,13 +1463,13 @@ function ShortsPlayerContent() {
               <span className="text-[11px] font-extrabold text-amber-300 truncate">
                 PPL: {shortTitle}
               </span>
-              <span className="text-[9px] bg-amber-400/20 text-amber-200 px-1.5 py-0.2 rounded-full font-bold">
-                직접시연
+              <span className="text-[9px] bg-amber-400/20 text-amber-200 px-1.5 py-0.2 rounded-full font-bold shrink-0">
+                실물시연
               </span>
             </div>
 
-            {/* 🥋 제품 맞춤 의상 & 배경 인디케이터 (도복 착용 & 태권도장 배경 안내) */}
-            <div className="flex items-center space-x-1.5 flex-wrap">
+            {/* 🥋 제품 맞춤 의상 & 배경 인디케이터 */}
+            <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
               <div className="inline-flex items-center space-x-1 bg-black/75 backdrop-blur-md border border-emerald-400/50 rounded-full px-2.5 py-0.5 shadow">
                 <span className="text-[10px] text-emerald-200 font-extrabold">
                   {visualTheme.wardrobeBadge}
@@ -928,15 +1482,13 @@ function ShortsPlayerContent() {
               </div>
             </div>
 
-            {/* 현재 씬 연기 지시 인디케이터 */}
-            {activeScene.stageDirection && (
-              <div className="inline-flex items-center space-x-1 bg-indigo-950/85 backdrop-blur-md border border-indigo-400/50 rounded-full px-2.5 py-0.5 w-fit max-w-full">
-                <span className="text-[10px]">🎬</span>
-                <span className="text-[10px] text-indigo-200 font-semibold truncate">
-                  {activeScene.stageDirection}
-                </span>
-              </div>
-            )}
+            {/* 현재 씬 액션 & 립싱크 상태 인디케이터 */}
+            <div className="inline-flex items-center space-x-1.5 bg-indigo-950/85 backdrop-blur-md border border-indigo-400/50 rounded-full px-2.5 py-0.5 w-fit max-w-full">
+              <span className="text-[10px] animate-pulse">🎬</span>
+              <span className="text-[10px] text-indigo-200 font-bold truncate">
+                {activeActionAsset.label}
+              </span>
+            </div>
           </div>
 
           {/* 🌟 3. 우측 3D 플로팅 실물 제품 사진 쇼케이스 카드 (PPL 인서트 컷) */}
@@ -946,7 +1498,7 @@ function ShortsPlayerContent() {
                 e.stopPropagation();
                 setShowProductModal(true);
               }}
-              className={`absolute top-32 right-3.5 z-25 pointer-events-auto cursor-pointer transition-all duration-500 ease-out animate-product-float ${
+              className={`absolute top-36 right-3 z-25 pointer-events-auto cursor-pointer transition-all duration-500 ease-out animate-product-float ${
                 shouldHighlightProduct
                   ? "scale-105 opacity-100"
                   : "scale-95 opacity-90"
@@ -954,7 +1506,7 @@ function ShortsPlayerContent() {
               title="터치하여 제품 실물 사진 확대"
             >
               <div className="relative group bg-slate-950/90 backdrop-blur-md border-2 border-sky-400/80 rounded-2xl p-1.5 shadow-[0_0_30px_rgba(56,189,248,0.45)] hover:border-sky-300 transition flex flex-col items-center">
-                <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-xl overflow-hidden bg-black/60">
+                <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden bg-black/60">
                   <img
                     src={resolvedProductImgUrl}
                     alt={shortTitle}
@@ -964,12 +1516,12 @@ function ShortsPlayerContent() {
                   <span className="absolute top-1 left-1 bg-sky-500 text-white text-[9px] font-black px-1.5 py-0.3 rounded shadow">
                     실물 PPL
                   </span>
-                  <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[8px] px-1 py-0.2 rounded backdrop-blur">
+                  <span className="absolute bottom-1 right-1 bg-black/75 text-white text-[8px] px-1 py-0.2 rounded backdrop-blur">
                     🔍 확대
                   </span>
                 </div>
-                <span className="text-[10px] font-bold text-sky-200 pt-1 text-center truncate max-w-[120px]">
-                  {shortTitle.slice(0, 14)}
+                <span className="text-[9px] font-bold text-sky-200 pt-1 text-center truncate max-w-[105px]">
+                  {shortTitle.slice(0, 12)}
                 </span>
               </div>
             </div>
@@ -1050,7 +1602,7 @@ function ShortsPlayerContent() {
 
           {/* 🌟 5. 쇼츠 시작 전 대기 화면 */}
           {!hasStarted && (
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] z-30 flex flex-col items-center justify-center space-y-4 p-6">
+            <div className="absolute inset-0 bg-black/55 backdrop-blur-[2px] z-30 flex flex-col items-center justify-center space-y-4 p-6">
               <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-purple-600 to-pink-500 p-[3px] shadow-[0_0_40px_rgba(168,85,247,0.8)] animate-pulse">
                 <div className="w-full h-full rounded-full bg-black/80 flex items-center justify-center text-white text-3xl pl-1">
                   ▶
@@ -1061,12 +1613,17 @@ function ShortsPlayerContent() {
                   🎬 {shortTitle}
                 </h3>
                 <p className="text-xs text-purple-300 font-medium">
-                  {displayName}이 {visualTheme.wardrobeBadge.replace(/^[^\s]+\s*/, "")}을 입고 직접 시연하는 쇼츠
+                  터치하면 실시간 립싱크(Lip-Sync)와 4단 멀티 액션 쇼츠가 재생됩니다
                 </p>
               </div>
-              <span className="text-[10px] bg-white/10 text-slate-300 px-3 py-1 rounded-full border border-white/20">
-                Google Gemini · Veo 3 AI Shorts Studio
-              </span>
+              <div className="flex items-center space-x-2">
+                <span className="text-[10px] bg-purple-950/80 text-purple-200 px-3 py-1 rounded-full border border-purple-400/40 font-bold">
+                  🎙️ 실시간 발화 립싱크
+                </span>
+                <span className="text-[10px] bg-sky-950/80 text-sky-200 px-3 py-1 rounded-full border border-sky-400/40 font-bold">
+                  🥋 4단 멀티 액션 컷
+                </span>
+              </div>
             </div>
           )}
 
@@ -1084,7 +1641,6 @@ function ShortsPlayerContent() {
             onClick={(e) => e.stopPropagation()}
             className="absolute right-2.5 bottom-24 z-20 flex flex-col items-center space-y-3"
           >
-            {/* 모델 아바타 프로필 링크 */}
             <Link
               href={`/demo/ai-model-3d-viewer?modelId=${model.id}`}
               className="relative group flex flex-col items-center"
@@ -1106,7 +1662,6 @@ function ShortsPlayerContent() {
               </span>
             </Link>
 
-            {/* 실물 제품 사진 확대 버튼 */}
             {resolvedProductImgUrl && !productImageFailed && (
               <button
                 onClick={() => setShowProductModal(true)}
@@ -1120,7 +1675,6 @@ function ShortsPlayerContent() {
               </button>
             )}
 
-            {/* 좋아요 버튼 */}
             <button
               onClick={handleLike}
               className="flex flex-col items-center space-y-0.5 transition active:scale-90"
@@ -1137,7 +1691,6 @@ function ShortsPlayerContent() {
               <span className="text-[10px] font-bold text-white drop-shadow">{likes}</span>
             </button>
 
-            {/* 대본 전문 보기 모달 버튼 */}
             <button
               onClick={() => setShowFullScriptModal(true)}
               className="flex flex-col items-center space-y-0.5 transition active:scale-90"
@@ -1148,7 +1701,6 @@ function ShortsPlayerContent() {
               <span className="text-[10px] font-bold text-amber-200 drop-shadow">대본</span>
             </button>
 
-            {/* 실제 동영상 파일(.webm) 다운로드 버튼 */}
             <button
               onClick={handleDownloadVideoFile}
               disabled={isExportingVideo}
@@ -1162,7 +1714,6 @@ function ShortsPlayerContent() {
               </span>
             </button>
 
-            {/* 공유 버튼 */}
             <button
               onClick={handleShare}
               className="flex flex-col items-center space-y-0.5 transition active:scale-90"
@@ -1174,24 +1725,23 @@ function ShortsPlayerContent() {
             </button>
           </div>
 
-          {/* 🌟 7. 하단 쇼츠 바이럴 자막 */}
+          {/* 🌟 7. 하단 쇼츠 바이럴 자막 & 4단 씬 수동 점프 탭 */}
           <div
             onClick={(e) => e.stopPropagation()}
             className="absolute bottom-3 left-3 right-16 z-20 flex flex-col space-y-1.5 pointer-events-auto"
           >
-            {/* 모델 핸들 & 보이스 뱃지 */}
-            <div className="flex items-center space-x-2">
+            {/* 모델 핸들 & 립싱크 라이브 뱃지 */}
+            <div className="flex items-center space-x-2 flex-wrap">
               <span className="font-extrabold text-xs sm:text-sm text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
                 @{displayName}
               </span>
               <span className="bg-purple-900/80 border border-purple-400/50 text-purple-200 text-[10px] px-2 py-0.5 rounded-full font-bold">
-                {displayVoice.split(" ")[0]} AI Voice
+                {displayVoice.split(" ")[0]} AI Lip-Sync
               </span>
               {isPlaying && !isMuted && (
-                <span className="flex space-x-0.5 items-end h-3">
-                  <span className="w-1 h-2 bg-purple-400 animate-pulse" />
-                  <span className="w-1 h-3.5 bg-pink-400 animate-pulse delay-75" />
-                  <span className="w-1 h-2 bg-amber-400 animate-pulse delay-150" />
+                <span className="inline-flex items-center space-x-1 bg-rose-600/80 text-white text-[9px] font-black px-2 py-0.5 rounded-full animate-pulse">
+                  <span>●</span>
+                  <span>LIVE 발화중</span>
                 </span>
               )}
             </div>
@@ -1208,13 +1758,13 @@ function ShortsPlayerContent() {
             {/* 하단 미니 타이머 & 대본 전문 버튼 */}
             <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
               <span className="font-mono">
-                {Math.floor(currentTime)}s / {Math.floor(duration)}s
+                {Math.floor(currentTime)}s / {Math.floor(duration)}s · 씬 {activePoseIdx + 1}/4
               </span>
               <button
                 onClick={() => setShowFullScriptModal(true)}
-                className="text-[10px] text-purple-300 hover:underline"
+                className="text-[10px] text-purple-300 hover:underline font-semibold"
               >
-                제품 포인트 & 대본 전문 보기 ➔
+                4단 씬 & 대본 전문 보기 ➔
               </button>
             </div>
           </div>
@@ -1289,7 +1839,7 @@ function ShortsPlayerContent() {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center space-x-2">
                 <span className="text-lg">📝</span>
-                <h4 className="text-sm font-bold text-white">{shortTitle} · 쇼츠 상세 정보</h4>
+                <h4 className="text-sm font-bold text-white">{shortTitle} · 4단 씬 & 쇼츠 상세</h4>
               </div>
               <button
                 onClick={() => setShowFullScriptModal(false)}
@@ -1300,6 +1850,27 @@ function ShortsPlayerContent() {
             </div>
 
             <div className="space-y-3 text-xs">
+              {/* 4단 액션 씬 미리보기 그리드 */}
+              <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                <span className="text-[10px] text-emerald-400 font-bold block">
+                  🎬 대본 연기 지시 연동 4단 멀티 액션 씬
+                </span>
+                <div className="grid grid-cols-4 gap-2">
+                  {visualTheme.actionScenes.map((sc, i) => (
+                    <div key={i} className="flex flex-col items-center space-y-1">
+                      <img
+                        src={resolveSafeMediaUrl(sc.imgUrl)}
+                        alt={sc.label}
+                        className="w-full aspect-[9/16] object-cover rounded-lg border border-white/20"
+                      />
+                      <span className="text-[9px] text-slate-300 font-bold text-center line-clamp-1">
+                        씬 0{i + 1}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {featureCards.length > 0 && (
                 <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
                   <span className="text-[10px] text-sky-400 font-bold block">
