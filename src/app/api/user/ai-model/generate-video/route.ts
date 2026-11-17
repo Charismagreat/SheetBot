@@ -13,6 +13,7 @@ import {
   insertRows,
   queryTable,
   callDriveTool,
+  callYouTubeTool,
 } from "@/lib/egdesk-helpers";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { setupDatabase } from "@/lib/setup-db";
@@ -387,10 +388,92 @@ export async function POST(req: NextRequest) {
       shortTitle,
       script,
       productImageUrl: productProxyImgUrl || productDriveUrl || undefined,
+      veoStatus: "PENDING",
       sheetUrl,
       driveFolderUrl,
       createdAt: nowStr,
     });
+
+    // 4-A. 이지데스크 내장 Google Veo 3.1 실제 동영상(.mp4) 비동기 생성 파이프라인
+    void (async () => {
+      try {
+        const productImagesPayload: any[] = [];
+        if (uploadedFile) {
+          productImagesPayload.push({
+            dataBase64: uploadedFile.buffer.toString("base64"),
+            mimeType: uploadedFile.mimeType || "image/jpeg",
+          });
+        }
+
+        const veoRes: any = await callYouTubeTool("youtube_generate_shorts", {
+          topic: shortTitle,
+          productName: shortTitle,
+          extraInstructions: `전속 모델(${modelName})이 ${visualCtx.wardrobe}을 착용하고 ${visualCtx.environment}에서 제품을 직접 손에 들고 시연하며 다음 대본을 발화합니다: ${script}`,
+          productImages: productImagesPayload.length > 0 ? productImagesPayload : undefined,
+          generateVideo: true,
+          skipOutro: true,
+        });
+
+        const generatedMp4Path =
+          veoRes?.video?.finalPath ||
+          veoRes?.video?.composedPath ||
+          veoRes?.video?.rawClipPath ||
+          "";
+
+        if (generatedMp4Path && fs.existsSync(/*turbopackIgnore: true*/ generatedMp4Path)) {
+          const cacheDir = path.join(os.tmpdir(), "sheetbot_drive_attachments");
+          if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+          const targetMp4Path = path.join(cacheDir, `${videoId}_veo_shorts.mp4`);
+          fs.copyFileSync(/*turbopackIgnore: true*/ generatedMp4Path, targetMp4Path);
+
+          const mp4ProxyUrl = `/api/user/files/drive-download?fileId=${encodeURIComponent(videoId)}&fileName=veo_shorts.mp4&mimeType=video%2Fmp4`;
+          saveAiShortsMeta({
+            id: videoId,
+            modelName,
+            modelVoice,
+            topic,
+            shortTitle,
+            script,
+            productImageUrl: productProxyImgUrl || productDriveUrl || undefined,
+            mp4VideoUrl: mp4ProxyUrl,
+            veoStatus: "COMPLETED",
+            sheetUrl,
+            driveFolderUrl,
+            createdAt: nowStr,
+          });
+        } else {
+          saveAiShortsMeta({
+            id: videoId,
+            modelName,
+            modelVoice,
+            topic,
+            shortTitle,
+            script,
+            productImageUrl: productProxyImgUrl || productDriveUrl || undefined,
+            veoStatus: "UNAVAILABLE",
+            veoError: veoRes?.error || "Veo clip not returned",
+            sheetUrl,
+            driveFolderUrl,
+            createdAt: nowStr,
+          });
+        }
+      } catch (veoErr: any) {
+        saveAiShortsMeta({
+          id: videoId,
+          modelName,
+          modelVoice,
+          topic,
+          shortTitle,
+          script,
+          productImageUrl: productProxyImgUrl || productDriveUrl || undefined,
+          veoStatus: "UNAVAILABLE",
+          veoError: veoErr?.message || "Veo generation failed",
+          sheetUrl,
+          driveFolderUrl,
+          createdAt: nowStr,
+        });
+      }
+    })();
 
     // 4-B. 파투(FileToSheet) '시트봇 연동 장부' -> 'AI모델콘텐츠대장' 백엔드 동시 자동 프로비저닝 및 적재
     void (async () => {

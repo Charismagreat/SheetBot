@@ -527,31 +527,30 @@ function computeSpeechLipSyncEnvelope(
 }
 
 /**
- * 🎬 캔버스 위에 립싱크(하관 메쉬 워핑 & 구강 렌더링) + 눈 깜빡임 + 호흡 모션이 적용된 모델 프레임을 그립니다.
+ * 🎬 캔버스 위에 얼굴 왜곡 없는 깨끗한 고화질 4단 시네마틱 컷 + 자연스러운 카메라 호흡 모션을 그립니다.
  */
 function renderLipSyncModelFrame(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
-  sceneAsset: ActionSceneAsset,
+  _sceneAsset: ActionSceneAsset,
   canvasW: number,
   canvasH: number,
   timeSec: number,
   isPlaying: boolean,
   isMuted: boolean,
-  caption: string,
-  analyserData?: Uint8Array | null,
+  _caption: string,
+  _analyserData?: Uint8Array | null,
   alpha: number = 1.0
 ) {
   ctx.save();
   ctx.globalAlpha = alpha;
 
-  // 1. 생체 호흡 및 시네마틱 카메라 줌/패닝 계산
-  const breathY = isPlaying ? Math.sin(timeSec * 2.6) * 4.5 : 0;
-  const subtleNodY = isPlaying && !isMuted ? Math.cos(timeSec * 5.2) * 2.0 : 0;
-  const camZoom = isPlaying ? 1.03 + Math.sin(timeSec * 1.4) * 0.018 : 1.01;
-  const camPanX = isPlaying ? Math.sin(timeSec * 1.1) * 5.0 : 0;
+  // 자연스러운 시네마틱 카메라 호흡 및 패닝 (얼굴/치아 절단 왜곡 완전 제거)
+  const breathY = isPlaying ? Math.sin(timeSec * 2.4) * 3.5 : 0;
+  const subtleNodY = isPlaying && !isMuted ? Math.cos(timeSec * 4.6) * 1.5 : 0;
+  const camZoom = isPlaying ? 1.025 + Math.sin(timeSec * 1.3) * 0.015 : 1.01;
+  const camPanX = isPlaying ? Math.sin(timeSec * 1.0) * 4.0 : 0;
 
-  // 이미지 원본 비율 유지 Cover 계산 (object-top 기준)
   const imgAspect = img.width / Math.max(1, img.height);
   const canvasAspect = canvasW / canvasH;
   let drawW = canvasW;
@@ -568,148 +567,9 @@ function renderLipSyncModelFrame(
   drawH *= camZoom;
 
   const offsetX = (canvasW - drawW) / 2 + camPanX;
-  const offsetY = -12 + breathY + subtleNodY; // 상단 정렬 + 호흡 바운스
+  const offsetY = -10 + breathY + subtleNodY;
 
-  // 기본 모델 베이스 이미지 그리기
   ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
-
-  // 2. 발화 중일 때 실시간 안면 립싱크(Lip-Sync) & 하관 워핑 렌더링
-  if (isPlaying && !isMuted && alpha > 0.35) {
-    const { mouthOpen, mouthSpread } = computeSpeechLipSyncEnvelope(timeSec, caption, analyserData);
-
-    // 원본 이미지 상의 입술 및 하관 픽셀 좌표
-    const srcMouthX = sceneAsset.mouthX * img.width;
-    const srcMouthY = sceneAsset.mouthY * img.height;
-    const srcMouthW = sceneAsset.mouthW * img.width;
-    const srcJawH = sceneAsset.jawH * img.height;
-
-    // 캔버스 상의 입술 및 하관 좌표
-    const dstMouthX = offsetX + sceneAsset.mouthX * drawW;
-    const dstMouthY = offsetY + sceneAsset.mouthY * drawH;
-    const dstMouthW = sceneAsset.mouthW * drawW * (1 + mouthSpread * 0.18);
-    const dstJawH = sceneAsset.jawH * drawH;
-
-    // 하관(아랫입술~턱끝) 드롭 변위량 (최대 11.5px 개폐)
-    const jawDropPx = mouthOpen * 11.5;
-
-    if (jawDropPx > 0.8) {
-      // (A) 하관 메쉬 슬라이스 워핑: 아랫입술부터 턱 아래까지 8개 수평 스트립으로 자연스럽게 내려줌
-      const slices = 8;
-      for (let s = 0; s < slices; s++) {
-        const ratio = s / slices;
-        const nextRatio = (s + 1) / slices;
-        // 입술 바로 아래는 많이 내려가고, 턱 끝 아래 목 부분으로 갈수록 변위가 부드럽게 감쇠
-        const sliceDrop = jawDropPx * Math.sin((1 - ratio * 0.65) * (Math.PI / 2));
-
-        const sy = srcMouthY + ratio * srcJawH;
-        const sh = (nextRatio - ratio) * srcJawH;
-        const sx = srcMouthX - srcMouthW * 0.72;
-        const sw = srcMouthW * 1.44;
-
-        const dy = dstMouthY + ratio * dstJawH + sliceDrop;
-        const dh = (nextRatio - ratio) * dstJawH + 1.2;
-        const dx = dstMouthX - dstMouthW * 0.72;
-        const dw = dstMouthW * 1.44;
-
-        ctx.save();
-        // 좌우 경계선이 티나지 않도록 타원형 클리핑 마스크 적용
-        ctx.beginPath();
-        ctx.ellipse(
-          dstMouthX,
-          dstMouthY + dstJawH * 0.48 + sliceDrop * 0.5,
-          dstMouthW * 0.72,
-          dstJawH * 0.68,
-          0,
-          0,
-          Math.PI * 2
-        );
-        ctx.clip();
-        ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
-        ctx.restore();
-      }
-
-      // (B) 입술 벌어짐(Oral Cavity) 다이나믹 쉐이딩 (입 안쪽 음영 + 윗니 + 아랫입술 윤곽)
-      const openHalfH = Math.max(1.5, jawDropPx * 0.58);
-      const openHalfW = dstMouthW * 0.44;
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(dstMouthX - openHalfW, dstMouthY);
-      // 윗입술 아치
-      ctx.quadraticCurveTo(dstMouthX, dstMouthY - openHalfH * 0.35, dstMouthX + openHalfW, dstMouthY);
-      // 아랫입술 개폐 곡선
-      ctx.quadraticCurveTo(dstMouthX, dstMouthY + openHalfH * 1.45, dstMouthX - openHalfW, dstMouthY);
-      ctx.closePath();
-
-      // 구강 내부 자연스러운 다크 레드-브라운 그라데이션
-      const mouthGrad = ctx.createRadialGradient(
-        dstMouthX,
-        dstMouthY + openHalfH * 0.3,
-        1,
-        dstMouthX,
-        dstMouthY + openHalfH * 0.3,
-        openHalfW
-      );
-      mouthGrad.addColorStop(0, "rgba(42, 14, 18, 0.88)");
-      mouthGrad.addColorStop(0.7, "rgba(68, 22, 28, 0.82)");
-      mouthGrad.addColorStop(1, "rgba(115, 48, 52, 0.45)");
-      ctx.fillStyle = mouthGrad;
-      ctx.fill();
-
-      // 발화 시 살짝 보이는 윗니 하이라이트
-      if (mouthOpen > 0.32) {
-        ctx.clip();
-        ctx.fillStyle = "rgba(248, 250, 252, 0.78)";
-        ctx.fillRect(
-          dstMouthX - openHalfW * 0.68,
-          dstMouthY - openHalfH * 0.25,
-          openHalfW * 1.36,
-          openHalfH * 0.48
-        );
-      }
-      ctx.restore();
-
-      // 아랫입술 자연스러운 윤기 하이라이트
-      ctx.save();
-      ctx.beginPath();
-      ctx.ellipse(
-        dstMouthX,
-        dstMouthY + openHalfH * 0.95,
-        openHalfW * 0.65,
-        Math.max(1.2, openHalfH * 0.24),
-        0,
-        0,
-        Math.PI * 2
-      );
-      ctx.fillStyle = "rgba(215, 110, 115, 0.38)";
-      ctx.fill();
-      ctx.restore();
-    }
-  }
-
-  // 3. 자연스러운 눈 깜빡임(Natural Eye Blink: 3.4초 주기, 0.13초 지속)
-  const blinkCycle = timeSec % 3.4;
-  if (isPlaying && blinkCycle > 3.15 && blinkCycle < 3.29) {
-    const blinkProgress = Math.sin(((blinkCycle - 3.15) / 0.14) * Math.PI);
-    const eyeCenterY = offsetY + sceneAsset.eyeY * drawH;
-    const eyeCenterX = offsetX + sceneAsset.mouthX * drawW;
-    const eyeHalfSpan = (sceneAsset.eyeSpan * drawW) / 2;
-    const eyeW = drawW * 0.042;
-    const eyeH = drawH * 0.009 * blinkProgress;
-
-    ctx.save();
-    ctx.fillStyle = "rgba(218, 175, 148, 0.86)";
-    // 왼쪽 눈꺼풀
-    ctx.beginPath();
-    ctx.ellipse(eyeCenterX - eyeHalfSpan, eyeCenterY, eyeW, eyeH, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // 오른쪽 눈꺼풀
-    ctx.beginPath();
-    ctx.ellipse(eyeCenterX + eyeHalfSpan, eyeCenterY, eyeW, eyeH, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
   ctx.restore();
 }
 
@@ -732,21 +592,33 @@ function ShortsPlayerContent() {
     topic?: string;
     script?: string;
     productImageUrl?: string;
+    mp4VideoUrl?: string;
+    veoStatus?: "PENDING" | "COMPLETED" | "UNAVAILABLE";
+    veoError?: string;
   } | null>(null);
 
-  // 단축 URL 접속 시 서버 메타데이터 자동 조회
+  // 서버 메타데이터 및 Veo .mp4 생성 완료 여부 조회
   useEffect(() => {
-    if (videoId && (!topicParam || !scriptParam || !imgParam)) {
+    if (!videoId) return;
+    let timer: NodeJS.Timeout | null = null;
+    const fetchMeta = () => {
       apiFetch(`/api/user/ai-model/video-meta?id=${encodeURIComponent(videoId)}`)
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
           if (d?.success && d.data) {
             setMetaData(d.data);
+            if (d.data.veoStatus === "PENDING") {
+              timer = setTimeout(fetchMeta, 5000);
+            }
           }
         })
         .catch(() => {});
-    }
-  }, [videoId, topicParam, scriptParam, imgParam]);
+    };
+    fetchMeta();
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [videoId]);
 
   const effectiveName = nameParam || metaData?.modelName || null;
   const effectiveVoice = voiceParam || metaData?.modelVoice || null;
@@ -1058,44 +930,18 @@ function ShortsPlayerContent() {
             );
           }
 
-          // 사용자가 별도 업로드한 제품 사진이 있을 경우 손 파지 위치 근처에 실물 뱃지 오버레이 합성
-          const pImg = loadedProductImgRef.current;
-          if (
-            pImg &&
-            imgParam &&
-            !imgParam.includes("minsu_taekwondo_scene3") &&
-            (targetPoseIdx === 1 || targetPoseIdx === 2)
-          ) {
-            const boxW = 190;
-            const boxH = 190;
-            const anchorX = curAsset.handAnchorX * cw - boxW / 2;
-            const anchorY = curAsset.handAnchorY * ch - boxH / 2 + Math.sin(t * 3.0) * 5;
-
-            ctx.save();
-            ctx.shadowColor = "rgba(56, 189, 248, 0.75)";
-            ctx.shadowBlur = 22;
-            ctx.strokeStyle = "rgba(56, 189, 248, 0.9)";
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.roundRect(anchorX, anchorY, boxW, boxH, 24);
-            ctx.stroke();
-            ctx.clip();
-            ctx.drawImage(pImg, anchorX, anchorY, boxW, boxH);
-            ctx.restore();
-          }
-
           // 스튜디오 상·하단 시네마틱 비네팅
-          const topGrad = ctx.createLinearGradient(0, 0, 0, 220);
-          topGrad.addColorStop(0, "rgba(0,0,0,0.75)");
+          const topGrad = ctx.createLinearGradient(0, 0, 0, 140);
+          topGrad.addColorStop(0, "rgba(0,0,0,0.65)");
           topGrad.addColorStop(1, "rgba(0,0,0,0)");
           ctx.fillStyle = topGrad;
-          ctx.fillRect(0, 0, cw, 220);
+          ctx.fillRect(0, 0, cw, 140);
 
-          const botGrad = ctx.createLinearGradient(0, ch - 460, 0, ch);
+          const botGrad = ctx.createLinearGradient(0, ch - 420, 0, ch);
           botGrad.addColorStop(0, "rgba(0,0,0,0)");
-          botGrad.addColorStop(1, "rgba(0,0,0,0.92)");
+          botGrad.addColorStop(1, "rgba(0,0,0,0.90)");
           ctx.fillStyle = botGrad;
-          ctx.fillRect(0, ch - 460, cw, 460);
+          ctx.fillRect(0, ch - 420, cw, 420);
         }
       }
 
@@ -1427,27 +1273,37 @@ function ShortsPlayerContent() {
           </div>
         </div>
 
-        {/* 🎬 메인 실시간 60fps 립싱크 & 멀티 액션 비디오 캔버스 스테이지 */}
+        {/* 🎬 메인 비디오 스테이지 (Veo .mp4 실제 동영상 우선 재생 + 4단 시네마틱 캔버스) */}
         <div
           onClick={togglePlay}
           className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden cursor-pointer bg-slate-950"
         >
-          <canvas
-            ref={stageCanvasRef}
-            width={720}
-            height={1280}
-            className="w-full h-full object-cover object-top select-none pointer-events-none"
-          />
+          {metaData?.mp4VideoUrl ? (
+            <video
+              src={resolveSafeMediaUrl(metaData.mp4VideoUrl)}
+              autoPlay
+              playsInline
+              loop
+              muted={isMuted}
+              className="w-full h-full object-cover object-top"
+            />
+          ) : (
+            <canvas
+              ref={stageCanvasRef}
+              width={720}
+              height={1280}
+              className="w-full h-full object-cover object-top select-none pointer-events-none"
+            />
+          )}
 
-          {/* 🌟 2. 상단 PPL 제품 배너 및 [의상 / 배경 / 현재 액션 씬] 인디케이터 */}
+          {/* 🌟 2. 상단 슬림 PPL 제품 배너 (시야 가림 없는 1줄 컴팩트 헤더) */}
           <div
             onClick={(e) => e.stopPropagation()}
-            className="absolute top-14 left-3 right-14 z-20 pointer-events-none flex flex-col space-y-1.5"
+            className="absolute top-13 left-3 right-14 z-20 pointer-events-none flex items-center"
           >
-            {/* 제품 PPL 배너 */}
             <div
               onClick={() => resolvedProductImgUrl && setShowProductModal(true)}
-              className="inline-flex items-center space-x-2 bg-slate-950/85 backdrop-blur-md border border-amber-400/70 rounded-full pl-1.5 pr-3.5 py-1 shadow-[0_4px_20px_rgba(245,158,11,0.3)] w-fit max-w-full pointer-events-auto cursor-pointer hover:border-amber-300 transition"
+              className="inline-flex items-center space-x-2 bg-slate-950/80 backdrop-blur-md border border-amber-400/60 rounded-full pl-1.5 pr-3 py-1 shadow-lg w-fit max-w-full pointer-events-auto cursor-pointer hover:border-amber-300 transition"
               title="클릭하여 제품 사진 크게 보기"
             >
               {resolvedProductImgUrl && !productImageFailed ? (
@@ -1455,77 +1311,19 @@ function ShortsPlayerContent() {
                   src={resolvedProductImgUrl}
                   alt={shortTitle}
                   onError={() => setProductImageFailed(true)}
-                  className="w-6 h-6 rounded-full object-cover border border-amber-400 shadow shrink-0"
+                  className="w-5 h-5 rounded-full object-cover border border-amber-400 shadow shrink-0"
                 />
               ) : (
-                <span className="text-sm">🏷️</span>
+                <span className="text-xs">🏷️</span>
               )}
               <span className="text-[11px] font-extrabold text-amber-300 truncate">
-                PPL: {shortTitle}
+                {shortTitle}
               </span>
               <span className="text-[9px] bg-amber-400/20 text-amber-200 px-1.5 py-0.2 rounded-full font-bold shrink-0">
-                실물시연
-              </span>
-            </div>
-
-            {/* 🥋 제품 맞춤 의상 & 배경 인디케이터 */}
-            <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
-              <div className="inline-flex items-center space-x-1 bg-black/75 backdrop-blur-md border border-emerald-400/50 rounded-full px-2.5 py-0.5 shadow">
-                <span className="text-[10px] text-emerald-200 font-extrabold">
-                  {visualTheme.wardrobeBadge}
-                </span>
-              </div>
-              <div className="inline-flex items-center space-x-1 bg-black/75 backdrop-blur-md border border-sky-400/50 rounded-full px-2.5 py-0.5 shadow">
-                <span className="text-[10px] text-sky-200 font-extrabold">
-                  {visualTheme.environmentBadge}
-                </span>
-              </div>
-            </div>
-
-            {/* 현재 씬 액션 & 립싱크 상태 인디케이터 */}
-            <div className="inline-flex items-center space-x-1.5 bg-indigo-950/85 backdrop-blur-md border border-indigo-400/50 rounded-full px-2.5 py-0.5 w-fit max-w-full">
-              <span className="text-[10px] animate-pulse">🎬</span>
-              <span className="text-[10px] text-indigo-200 font-bold truncate">
-                {activeActionAsset.label}
+                🔍 실물보기
               </span>
             </div>
           </div>
-
-          {/* 🌟 3. 우측 3D 플로팅 실물 제품 사진 쇼케이스 카드 (PPL 인서트 컷) */}
-          {resolvedProductImgUrl && !productImageFailed && (
-            <div
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowProductModal(true);
-              }}
-              className={`absolute top-36 right-3 z-25 pointer-events-auto cursor-pointer transition-all duration-500 ease-out animate-product-float ${
-                shouldHighlightProduct
-                  ? "scale-105 opacity-100"
-                  : "scale-95 opacity-90"
-              }`}
-              title="터치하여 제품 실물 사진 확대"
-            >
-              <div className="relative group bg-slate-950/90 backdrop-blur-md border-2 border-sky-400/80 rounded-2xl p-1.5 shadow-[0_0_30px_rgba(56,189,248,0.45)] hover:border-sky-300 transition flex flex-col items-center">
-                <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden bg-black/60">
-                  <img
-                    src={resolvedProductImgUrl}
-                    alt={shortTitle}
-                    onError={() => setProductImageFailed(true)}
-                    className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
-                  />
-                  <span className="absolute top-1 left-1 bg-sky-500 text-white text-[9px] font-black px-1.5 py-0.3 rounded shadow">
-                    실물 PPL
-                  </span>
-                  <span className="absolute bottom-1 right-1 bg-black/75 text-white text-[8px] px-1 py-0.2 rounded backdrop-blur">
-                    🔍 확대
-                  </span>
-                </div>
-                <span className="text-[9px] font-bold text-sky-200 pt-1 text-center truncate max-w-[105px]">
-                  {shortTitle.slice(0, 12)}
-                </span>
-              </div>
-            </div>
-          )}
 
           {/* 🌟 4. 중앙/하단 다이내믹 POINT 01~04 핵심 셀링 포인트 인포그래픽 카드 */}
           {activeFeatureCard && (

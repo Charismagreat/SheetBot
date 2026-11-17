@@ -13,6 +13,9 @@ export interface AiShortsMetaItem {
   shortTitle: string;
   script: string;
   productImageUrl?: string;
+  mp4VideoUrl?: string;
+  veoStatus?: "PENDING" | "COMPLETED" | "UNAVAILABLE";
+  veoError?: string;
   sheetUrl?: string;
   driveFolderUrl?: string;
   createdAt: string;
@@ -32,7 +35,7 @@ function loadMetaStore(): Record<string, AiShortsMetaItem> {
 export function saveAiShortsMeta(item: AiShortsMetaItem): void {
   try {
     const store = loadMetaStore();
-    store[item.id] = item;
+    store[item.id] = { ...(store[item.id] || {}), ...item };
     const dir = path.dirname(META_STORE_PATH);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
