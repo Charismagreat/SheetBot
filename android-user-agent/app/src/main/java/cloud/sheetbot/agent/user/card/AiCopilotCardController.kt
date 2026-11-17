@@ -73,6 +73,7 @@ class AiCopilotCardController(
     // 파투 통합 자연어 검색 & AI 비서 추천 칩
     private val defaultSuggestions = listOf(
         CommandSuggestionItem("fts_today", "SHEET_QUERY", "🔍 오늘 들어온 내역", "오늘 새로 등록된 내역 전체 찾아줘"),
+        CommandSuggestionItem("fts_kakao_reply", "KAKAO_DISPATCH", "💛 카톡 답장 보내기", "최근에 온 카톡 확인하고 알겠다고 답장 보내줘"),
         CommandSuggestionItem("fts_drive_file", "DRIVE_FILE_ACTION", "📁 PC/드라이브 파일 찾기", "내 PC 시트봇 폴더에서 최근 파일 찾아서 보여줘"),
         CommandSuggestionItem("fts_pending", "SHEET_QUERY", "⏳ 미결재(대기중) 조회", "파투에서 승인 대기중인 미결재 내역 찾아줘"),
         CommandSuggestionItem("fts_call_sms", "SHEET_QUERY", "📞 최근 통화·문자 검색", "통화녹음과 문자에서 최근 중요 내역 찾아줘"),
@@ -514,10 +515,13 @@ class AiCopilotCardController(
                     binding.tvAiCommandExplanation.text = "✅ $finalExplanation"
                     binding.tvAiCommandSpoken.text = "🗣️ $finalSpoken"
 
-                    // 이메일 발송 대기(방식 A/B 선택)인 경우
+                    // 이메일 발송 대기(방식 A/B 선택) 또는 카카오톡 답장 대기인 경우
                     if (res.emailDispatch != null) {
                         currentMatchedRows = emptyList()
                         renderEmailDispatchCard(res.emailDispatch)
+                    } else if (res.kakaoDispatch != null) {
+                        currentMatchedRows = emptyList()
+                        renderKakaoDispatchCard(res.kakaoDispatch)
                     } else if (res.driveFiles.isNotEmpty() || res.primaryDriveFile != null) {
                         // 구글 드라이브/PC 파일 전송 결과가 있으면 전용 파일 카드 렌더링
                         currentMatchedRows = emptyList()
@@ -1169,6 +1173,401 @@ class AiCopilotCardController(
     }
 
     /**
+     * 💛 카카오톡 답장 초안 확인·수정 및 발송 방식(방식 A: 스마트폰 카톡 즉시 답장 / 방식 B: 호스트 PC 카톡 무포커스 브릿지) 선택 카드 렌더링
+     */
+    private fun renderKakaoDispatchCard(dispatch: cloud.sheetbot.agent.user.KakaoDispatchInfo) {
+        val container = binding.root.findViewWithTag<LinearLayout>("layoutAiSearchResultsContainer") ?: return
+        container.removeAllViews()
+        container.visibility = View.VISIBLE
+
+        val activeNotiSession = cloud.sheetbot.agent.user.KakaoReplySessionCache.findSession(
+            dispatch.chatRoomName,
+            dispatch.recipientName
+        )
+        val hasDirectRemoteInput = activeNotiSession != null && activeNotiSession.canDirectReply
+
+        // 1. 상단 구분선
+        val divider = View(activity).apply {
+            setBackgroundColor(Color.parseColor("#1E293B"))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(1)
+            ).apply {
+                bottomMargin = dpToPx(8)
+            }
+        }
+        container.addView(divider)
+
+        // 2. 헤더 바
+        val headerRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dpToPx(8)
+            }
+        }
+
+        val tvHeaderTitle = TextView(activity).apply {
+            text = "💛 카카오톡 AI 맞춤 답장 발송"
+            setTextColor(Color.parseColor("#FDE047"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            typeface = Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        headerRow.addView(tvHeaderTitle)
+
+        val btnClear = TextView(activity).apply {
+            text = "✕ 닫기"
+            setTextColor(Color.parseColor("#94A3B8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            setPadding(dpToPx(6), dpToPx(2), dpToPx(6), dpToPx(2))
+            setBackgroundResource(android.R.drawable.list_selector_background)
+            setOnClickListener {
+                container.removeAllViews()
+                container.visibility = View.GONE
+            }
+        }
+        headerRow.addView(btnClear)
+        container.addView(headerRow)
+
+        // 3. 메인 카드 컨테이너
+        val cardView = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dpToPx(10)
+            }
+            setPadding(dpToPx(14), dpToPx(14), dpToPx(14), dpToPx(14))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#0F172A"))
+                cornerRadius = dpToPx(12).toFloat()
+                setStroke(dpToPx(1), Color.parseColor("#CA8A04"))
+            }
+        }
+
+        // 수신 대상 및 상단바 알림 세션 상태 배지
+        val tvRoomInfo = TextView(activity).apply {
+            val statusTag = if (hasDirectRemoteInput) " (🟢 상단바 0초 직접답장 가능)" else " (🖥️ 과거 대화 · PC브릿지/앱연동)"
+            text = "💬 대화방/상대: ${dispatch.chatRoomName}$statusTag"
+            setTextColor(Color.parseColor("#FDE047"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, 0, 0, dpToPx(6))
+        }
+        cardView.addView(tvRoomInfo)
+
+        // 직전 받은 카톡 메시지가 있는 경우 표시
+        if (dispatch.lastInboundMessage.isNotBlank()) {
+            val tvInbound = TextView(activity).apply {
+                val timeTag = if (dispatch.lastInboundTime.isNotBlank()) " (${formatShortTimestamp(dispatch.lastInboundTime)})" else ""
+                text = "📩 최근 받은 카톡$timeTag:\n\"${dispatch.lastInboundMessage}\""
+                setTextColor(Color.parseColor("#E2E8F0"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#1E293B"))
+                    cornerRadius = dpToPx(8).toFloat()
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = dpToPx(8)
+                }
+            }
+            cardView.addView(tvInbound)
+        }
+
+        // 안전 관문(Hold Gate) 주의 배지 표시 (금전·계좌·일정 확정 등)
+        for (warn in dispatch.safetyWarnings) {
+            val tvWarn = TextView(activity).apply {
+                text = warn
+                setTextColor(Color.parseColor("#FBBF24"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(dpToPx(8), dpToPx(5), dpToPx(8), dpToPx(5))
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#422006"))
+                    cornerRadius = dpToPx(6).toFloat()
+                    setStroke(dpToPx(1), Color.parseColor("#D97706"))
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = dpToPx(6)
+                }
+            }
+            cardView.addView(tvWarn)
+        }
+
+        // 답장 초안 라벨 + AI 다시 생성 버튼 행
+        val draftHeaderRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dpToPx(4)
+            }
+        }
+
+        val tvDraftLabel = TextView(activity).apply {
+            text = "✏️ 보낼 카톡 답장 내용 (직접 수정 가능):"
+            setTextColor(Color.parseColor("#94A3B8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            typeface = Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        draftHeaderRow.addView(tvDraftLabel)
+
+        val etReply = EditText(activity).apply {
+            setText(dispatch.suggestedReply)
+            hint = "전송할 카카오톡 답장 내용을 입력하세요"
+            setHintTextColor(Color.parseColor("#64748B"))
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            minLines = 2
+            maxLines = 5
+            gravity = Gravity.TOP or Gravity.START
+            setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#1E293B"))
+                cornerRadius = dpToPx(8).toFloat()
+                setStroke(dpToPx(1), Color.parseColor("#475569"))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dpToPx(10)
+            }
+        }
+
+        val btnRegenReply = TextView(activity).apply {
+            text = "✨ AI 문구 다듬기"
+            setTextColor(Color.parseColor("#38BDF8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dpToPx(8), dpToPx(3), dpToPx(8), dpToPx(3))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#0F172A"))
+                cornerRadius = dpToPx(6).toFloat()
+                setStroke(dpToPx(1), Color.parseColor("#0284C7"))
+            }
+            setOnClickListener {
+                val curHint = etReply.text.toString().trim()
+                val userEmail = prefs.userEmail ?: ""
+                val ftsPhone = prefs.ftsPhoneNumber ?: ""
+                Toast.makeText(activity, "🤖 AI가 상대방 맞춤 답장 문구를 다듬고 있습니다...", Toast.LENGTH_SHORT).show()
+                scope.launch {
+                    val res = ApiClient.sendKakaoReplyViaServer(
+                        userEmail = userEmail,
+                        phoneNumber = ftsPhone,
+                        chatRoomName = dispatch.chatRoomName,
+                        recipientName = dispatch.recipientName,
+                        message = curHint,
+                        inboundContext = dispatch.lastInboundMessage,
+                        mode = "SUGGEST_REPLY"
+                    )
+                    withContext(Dispatchers.Main) {
+                        if (res.success && !res.suggestedReply.isNullOrBlank()) {
+                            etReply.setText(res.suggestedReply)
+                            etReply.setSelection(res.suggestedReply.length)
+                        }
+                    }
+                }
+            }
+        }
+        draftHeaderRow.addView(btnRegenReply)
+        cardView.addView(draftHeaderRow)
+        cardView.addView(etReply)
+
+        val tvStatus = TextView(activity).apply {
+            visibility = View.GONE
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            setPadding(dpToPx(8), dpToPx(6), dpToPx(8), dpToPx(6))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dpToPx(8)
+            }
+        }
+
+        // 방식 A 버튼: 내 스마트폰 카톡으로 즉시 답장 (RemoteInput 0초 전송 또는 카톡방 점프)
+        val btnMobileSend = Button(activity).apply {
+            text = if (hasDirectRemoteInput) {
+                "⚡ 방식 A: 내 폰 카톡 알림으로 0초 즉시 답장"
+            } else {
+                "📱 방식 A: 답장 복사 후 내 폰 카톡방 바로 열기"
+            }
+            setTextColor(Color.parseColor("#1E1B4B"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            typeface = Typeface.DEFAULT_BOLD
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#FACC15"))
+                cornerRadius = dpToPx(8).toFloat()
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(42)
+            ).apply {
+                bottomMargin = dpToPx(8)
+            }
+        }
+
+        btnMobileSend.setOnClickListener {
+            val replyMsg = etReply.text.toString().trim()
+            if (replyMsg.isBlank()) {
+                Toast.makeText(activity, "보낼 카카오톡 답장 내용을 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val userEmail = prefs.userEmail ?: ""
+            val ftsPhone = prefs.ftsPhoneNumber ?: ""
+            val latestSession = cloud.sheetbot.agent.user.KakaoReplySessionCache.findSession(
+                dispatch.chatRoomName,
+                dispatch.recipientName
+            )
+
+            if (latestSession != null && latestSession.canDirectReply) {
+                val sent = cloud.sheetbot.agent.user.KakaoReplySessionCache.sendDirectReply(
+                    activity,
+                    latestSession,
+                    replyMsg
+                )
+                if (sent) {
+                    btnMobileSend.text = "✅ 스마트폰 카톡 즉시 답장 완료"
+                    tvStatus.visibility = View.VISIBLE
+                    tvStatus.text = "💛 [${dispatch.chatRoomName}] 대화방으로 카카오톡 답장을 즉시 전송했습니다!"
+                    tvStatus.setTextColor(Color.parseColor("#34D399"))
+                    Toast.makeText(activity, "✅ [${dispatch.chatRoomName}] 카톡 답장 전송 완료!", Toast.LENGTH_SHORT).show()
+                    addLogItem("카톡 즉시답장", "${dispatch.chatRoomName}: $replyMsg", true)
+
+                    scope.launch {
+                        ApiClient.sendKakaoReplyViaServer(
+                            userEmail = userEmail,
+                            phoneNumber = ftsPhone,
+                            chatRoomName = dispatch.chatRoomName,
+                            recipientName = dispatch.recipientName,
+                            message = replyMsg,
+                            inboundContext = dispatch.lastInboundMessage,
+                            mode = "LOG_MOBILE_DIRECT"
+                        )
+                    }
+                    return@setOnClickListener
+                }
+            }
+
+            // 상단바 알림이 만료된 경우: 답장 문구를 클립보드에 자동 복사하고 해당 카톡방/카톡 메인으로 이동
+            val cm = activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            cm?.setPrimaryClip(ClipData.newPlainText("카카오톡 답장", replyMsg))
+
+            cloud.sheetbot.agent.user.KakaoReplySessionCache.launchKakaoTalkOrRoom(
+                context = activity,
+                session = latestSession,
+                targetName = dispatch.chatRoomName,
+                taskTitle = dispatch.recipientName
+            )
+            Toast.makeText(
+                activity,
+                "📋 답장 문구가 복사되었습니다! 열린 카카오톡 대화창에 붙여넣기(길게 눌러 붙여넣기) 해주세요.",
+                Toast.LENGTH_LONG
+            ).show()
+
+            scope.launch {
+                ApiClient.sendKakaoReplyViaServer(
+                    userEmail = userEmail,
+                    phoneNumber = ftsPhone,
+                    chatRoomName = dispatch.chatRoomName,
+                    recipientName = dispatch.recipientName,
+                    message = replyMsg,
+                    inboundContext = dispatch.lastInboundMessage,
+                    mode = "LOG_MOBILE_JUMP"
+                )
+            }
+        }
+        cardView.addView(btnMobileSend)
+
+        // 방식 B 버튼: 호스트 PC 카카오톡 무포커스 브릿지(pc_kakao_send.py)로 자동 발송
+        val btnPcBridgeSend = Button(activity).apply {
+            text = "🖥️ 방식 B: 호스트 PC 카톡으로 무포커스 자동 발송 (과거대화 가능)"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            typeface = Typeface.DEFAULT_BOLD
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#2563EB"))
+                cornerRadius = dpToPx(8).toFloat()
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(42)
+            ).apply {
+                bottomMargin = dpToPx(6)
+            }
+        }
+
+        btnPcBridgeSend.setOnClickListener {
+            val replyMsg = etReply.text.toString().trim()
+            if (replyMsg.isBlank()) {
+                Toast.makeText(activity, "보낼 카카오톡 답장 내용을 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            btnPcBridgeSend.isEnabled = false
+            btnPcBridgeSend.text = "⏳ 호스트 PC 카톡으로 전송 중..."
+            tvStatus.visibility = View.VISIBLE
+            tvStatus.text = "🖥️ 호스트 PC 카카오톡에서 [${dispatch.chatRoomName}] 방을 열어 무포커스 전송 중입니다..."
+            tvStatus.setTextColor(Color.parseColor("#38BDF8"))
+
+            val userEmail = prefs.userEmail ?: ""
+            val ftsPhone = prefs.ftsPhoneNumber ?: ""
+
+            scope.launch {
+                val res = ApiClient.sendKakaoReplyViaServer(
+                    userEmail = userEmail,
+                    phoneNumber = ftsPhone,
+                    chatRoomName = dispatch.chatRoomName,
+                    recipientName = dispatch.recipientName,
+                    message = replyMsg,
+                    inboundContext = dispatch.lastInboundMessage,
+                    mode = "PC_BRIDGE"
+                )
+                withContext(Dispatchers.Main) {
+                    if (res.success) {
+                        btnPcBridgeSend.text = "✅ 호스트 PC 카톡 자동 발송 완료"
+                        btnPcBridgeSend.background = GradientDrawable().apply {
+                            setColor(Color.parseColor("#059669"))
+                            cornerRadius = dpToPx(8).toFloat()
+                        }
+                        tvStatus.text = res.message ?: "PC 카카오톡을 통해 성공적으로 전송되었습니다."
+                        tvStatus.setTextColor(Color.parseColor("#34D399"))
+                        Toast.makeText(activity, "✅ PC 카톡 자동 발송 완료!", Toast.LENGTH_SHORT).show()
+                        addLogItem("PC 카톡 자동발송", "${dispatch.chatRoomName}: $replyMsg", true)
+                    } else {
+                        btnPcBridgeSend.isEnabled = true
+                        btnPcBridgeSend.text = "🖥️ 방식 B: 호스트 PC 카톡으로 무포커스 자동 발송 (재시도)"
+                        tvStatus.text = res.error ?: "PC 카카오톡 발송에 실패했습니다."
+                        tvStatus.setTextColor(Color.parseColor("#F87171"))
+                        Toast.makeText(activity, res.error ?: "PC 카톡 전송 불가. 방식 A(스마트폰 카톡)를 이용해 주세요.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+        cardView.addView(btnPcBridgeSend)
+        cardView.addView(tvStatus)
+
+        container.addView(cardView)
+    }
+
+    /**
      * 파일명 확장자 기반 정확한 MIME 타입 추론 헬퍼
      */
     private fun resolveAttachmentMimeType(fileName: String, rawMime: String): String {
@@ -1723,6 +2122,36 @@ class AiCopilotCardController(
             actionRow.addView(
                 makeActionChip("💬 문자", "#312E81", "#C7D2FE") {
                     showMatchedRowDetailBottomSheet(item, focusSms = true)
+                }
+            )
+        }
+
+        // 카카오톡 대장 내역이거나 발신자/채팅방 정보가 있는 경우 [💛 카톡 답장] 원터치 칩 제공
+        val isKakaoRow = item.sheetName.contains("카카오") || item.sheetName.contains("카톡")
+        if (isKakaoRow || item.primaryTitle.isNotBlank()) {
+            actionRow.addView(
+                makeActionChip("💛 카톡 답장", "#422006", "#FDE047") {
+                    val roomName = item.rowJson.optString("채팅방/상대방 이름", "")
+                        .ifBlank { item.rowJson.optString("채팅방", "") }
+                        .ifBlank { item.rowJson.optString("발신자", "") }
+                        .ifBlank { item.primaryTitle }
+                        .trim()
+                    val senderName = item.rowJson.optString("발신자", roomName).trim()
+                    val inboundMsg = item.rowJson.optString("메시지 내용", item.primarySubtitle).trim()
+                    val defaultReply = if (inboundMsg.isNotBlank()) {
+                        "네, ${senderName}님! 보내주신 내용 잘 확인했습니다. 감사합니다."
+                    } else {
+                        "안녕하세요 ${senderName}님, 관련하여 연락드립니다."
+                    }
+                    renderKakaoDispatchCard(
+                        cloud.sheetbot.agent.user.KakaoDispatchInfo(
+                            chatRoomName = roomName,
+                            recipientName = senderName,
+                            lastInboundMessage = inboundMsg,
+                            lastInboundTime = item.dateText,
+                            suggestedReply = defaultReply
+                        )
+                    )
                 }
             )
         }

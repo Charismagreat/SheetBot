@@ -2156,6 +2156,27 @@ object ApiClient {
                         )
                     }
 
+                    var kakaoDispatch: KakaoDispatchInfo? = null
+                    val kakaoObj = resJson.optJSONObject("kakaoDispatch") ?: detailsObj?.optJSONObject("kakaoDispatch")
+                    if (kakaoObj != null) {
+                        val warnList = mutableListOf<String>()
+                        val warnArr = kakaoObj.optJSONArray("safetyWarnings")
+                        if (warnArr != null) {
+                            for (i in 0 until warnArr.length()) {
+                                val w = warnArr.optString(i, "").trim()
+                                if (w.isNotBlank()) warnList.add(w)
+                            }
+                        }
+                        kakaoDispatch = KakaoDispatchInfo(
+                            chatRoomName = kakaoObj.optString("chatRoomName", ""),
+                            recipientName = kakaoObj.optString("recipientName", ""),
+                            lastInboundMessage = kakaoObj.optString("lastInboundMessage", ""),
+                            lastInboundTime = kakaoObj.optString("lastInboundTime", ""),
+                            suggestedReply = kakaoObj.optString("suggestedReply", ""),
+                            safetyWarnings = warnList
+                        )
+                    }
+
                     return@withContext AiCommandResult(
                         success = true,
                         command = resJson.optString("command", command),
@@ -2173,6 +2194,7 @@ object ApiClient {
                         driveFiles = parsedDriveFiles,
                         primaryDriveFile = primaryDriveFile,
                         emailDispatch = emailDispatch,
+                        kakaoDispatch = kakaoDispatch,
                         details = detailsObj
                     )
                 } else {
@@ -2249,6 +2271,75 @@ object ApiClient {
             success = false,
             requireLocalApp = true,
             error = "서버 통신에 실패했습니다. 스마트폰 기본 메일 앱을 이용해 주세요."
+        )
+    }
+
+    /**
+     * 💛 카카오톡 답장 초안 AI 생성 및 발송 (방식 A: PC 카톡 무포커스 브릿지 / 방식 B: 스마트폰 카톡 발송 기록)
+     */
+    suspend fun sendKakaoReplyViaServer(
+        userEmail: String,
+        phoneNumber: String = "",
+        chatRoomName: String,
+        recipientName: String = "",
+        message: String,
+        inboundContext: String = "",
+        mode: String = "PC_BRIDGE" // "PC_BRIDGE" | "LOG_MOBILE_DIRECT" | "LOG_MOBILE_JUMP" | "SUGGEST_REPLY"
+    ): KakaoSendResult = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
+        val json = JSONObject().apply {
+            put("userEmail", userEmail)
+            put("phoneNumber", phoneNumber)
+            put("chatRoomName", chatRoomName)
+            put("recipientName", recipientName.ifBlank { chatRoomName })
+            put("message", message)
+            put("inboundContext", inboundContext)
+            put("mode", mode)
+        }
+        val reqBody = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+        for (host in hosts) {
+            val endpoint = "$host/api/user/messages/kakao/send"
+            try {
+                val reqBuilder = Request.Builder().url(endpoint).post(reqBody)
+                if (userEmail.isNotBlank()) reqBuilder.addHeader("x-sheetbot-user-email", userEmail)
+                if (phoneNumber.isNotBlank()) reqBuilder.addHeader("x-filetosheet-phone", phoneNumber)
+                val response = longTimeoutClient.newCall(reqBuilder.build()).execute()
+                val resStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+
+                val warnList = mutableListOf<String>()
+                val warnArr = resJson.optJSONArray("safetyWarnings")
+                if (warnArr != null) {
+                    for (i in 0 until warnArr.length()) {
+                        val w = warnArr.optString(i, "").trim()
+                        if (w.isNotBlank()) warnList.add(w)
+                    }
+                }
+
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    return@withContext KakaoSendResult(
+                        success = true,
+                        message = resJson.optString("message", "카카오톡 답장이 전송되었습니다."),
+                        suggestedReply = resJson.optString("suggestedReply", "").takeIf { it.isNotBlank() },
+                        safetyWarnings = warnList
+                    )
+                } else {
+                    return@withContext KakaoSendResult(
+                        success = false,
+                        requireMobileFallback = resJson.optBoolean("requireMobileFallback", true),
+                        draftProtected = resJson.optBoolean("draftProtected", false),
+                        error = resJson.optString("error", "PC 카카오톡 발송에 실패했습니다.")
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "카카오톡 발송 API 통신 예외 ($host): ${e.message}")
+            }
+        }
+        KakaoSendResult(
+            success = false,
+            requireMobileFallback = true,
+            error = "서버 통신에 실패했습니다. 스마트폰 카톡 발송을 이용해 주세요."
         )
     }
 
@@ -4554,6 +4645,25 @@ data class DirectEmailSendResult(
     val error: String? = null
 )
 
+data class KakaoDispatchInfo(
+    val chatRoomName: String,
+    val recipientName: String = "",
+    val lastInboundMessage: String = "",
+    val lastInboundTime: String = "",
+    val suggestedReply: String = "",
+    val safetyWarnings: List<String> = emptyList()
+)
+
+data class KakaoSendResult(
+    val success: Boolean,
+    val message: String? = null,
+    val suggestedReply: String? = null,
+    val safetyWarnings: List<String> = emptyList(),
+    val requireMobileFallback: Boolean = false,
+    val draftProtected: Boolean = false,
+    val error: String? = null
+)
+
 data class AiCommandResult(
     val success: Boolean,
     val command: String? = null,
@@ -4571,6 +4681,7 @@ data class AiCommandResult(
     val driveFiles: List<DriveFileItem> = emptyList(),
     val primaryDriveFile: DriveFileItem? = null,
     val emailDispatch: EmailDispatchInfo? = null,
+    val kakaoDispatch: KakaoDispatchInfo? = null,
     val details: JSONObject? = null,
     val error: String? = null
 )

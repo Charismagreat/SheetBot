@@ -22,6 +22,7 @@ import {
   getUserCopilotLearningContext,
   recordAiCopilotActivity,
 } from "@/lib/ai-copilot-learning";
+import { evaluateKakaoSafetyGate } from "@/app/api/user/messages/kakao/send/route";
 
 export interface DriveFileItemDto {
   id: string;
@@ -815,11 +816,11 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
 
 위 입력을 분석하여 최적의 작업을 판별하고 다음 순수 JSON으로만 응답하세요:
 {
-  "actionType": "SHEET_QUERY" | "SHEET_WRITE" | "SMS_DISPATCH" | "APPS_SCRIPT_RUN" | "DRIVE_FILE_ACTION" | "APPS_SCRIPT_NOT_FOUND" | "GENERAL_ASSIST",
-  "targetName": "고객명 또는 대상자 (있을 경우)",
+  "actionType": "SHEET_QUERY" | "SHEET_WRITE" | "SMS_DISPATCH" | "KAKAO_DISPATCH" | "APPS_SCRIPT_RUN" | "DRIVE_FILE_ACTION" | "APPS_SCRIPT_NOT_FOUND" | "GENERAL_ASSIST",
+  "targetName": "고객명, 카카오톡 대화방명 또는 대상자 (있을 경우)",
   "targetPhone": "전화번호 (있을 경우)",
   "targetEmail": "수신자 이메일 주소 (이메일 발송 요청인 경우, 예: 'chacho@nate.com')",
-  "messageText": "발송할 문자 내용 또는 전달할 내용",
+  "messageText": "발송할 문자/카카오톡 답장 내용 또는 전달할 내용",
   "scriptId": "실행할 Apps Script scriptId (APPS_SCRIPT_RUN인 경우)",
   "functionName": "실행할 Apps Script 실제 함수명 (availableGasFunctions에 실제로 존재하는 이름만 지정할 것)",
   "functionParams": [],
@@ -853,6 +854,7 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
 - 파투 내 프로젝트/시트 데이터 검색, 특정 키워드/고객/기관 내역 찾기, 건수/금액 집계, 연락처/통화/문자/카톡/이메일/영수증/할일 조회, 결재 대기건 조회 등 모든 검색·질의는 반드시 "actionType": "SHEET_QUERY"로 판별하세요.
 - queryKeywords에는 '찾아줘', '보여줘', '알려줘', '내역', '관련', '시트', '파투' 같은 일반 서술어를 넣지 말고, 실제 셀 값과 매칭될 명사/키워드만 추출하세요.
 - 새로운 할일 등록("내일 3시 미팅 할일 추가해줘"), 지출/영수증 수기 기록, 또는 기존 항목의 상태 변경은 "actionType": "SHEET_WRITE"로 판별하세요.
+- 누군가에게 카카오톡 발송이나 카톡 답장("홍길동에게 카톡 보내줘", "박 과장님 카톡에 확인했다고 답장해줘", "방금 온 카톡에 알겠다고 답장 보내줘")을 요청한 경우 반드시 "actionType": "KAKAO_DISPATCH"로 판별하고, "targetName"에 상대방/채팅방 이름을, "messageText"에 보낼 답장 초안을 기입하세요.
 - 누군가에게 문자 발송("홍길동에게 문자 보내줘")을 요청한 경우 "actionType": "SMS_DISPATCH"로 판별하세요.`;
 
     const aiRes = await callAiCaller(planningPrompt, {
@@ -893,6 +895,12 @@ ${JSON.stringify(availableGasFunctions, null, 2)}
       plan.actionType = "DRIVE_FILE_ACTION";
       plan.driveOperation = "SEND_EMAIL";
       plan.targetEmail = plan.targetEmail || directEmailMatch[0];
+    } else if (
+      /(카톡|카카오톡)/.test(command) &&
+      /(보내|답장|전송|회신|톡해|말해|연락)/.test(command) &&
+      !/(찾아줘|조회해줘|검색해줘|목록|내역만)/.test(command)
+    ) {
+      plan.actionType = "KAKAO_DISPATCH";
     }
 
     let executionDetails: any = {};
@@ -1775,6 +1783,104 @@ ${sampleDataTexts.join("\n\n====================\n\n")}
         message: msgToSend,
         result: smsRes,
       };
+    } else if (plan.actionType === "KAKAO_DISPATCH") {
+      // (6) 카카오톡 답장 초안 생성 및 발송 방식(방식 A: PC 카톡 무포커스 브릿지 / 방식 B: 스마트폰 카톡) 카드 준비
+      let targetRoomOrPerson = String(
+        plan.targetName ||
+          plan.queryTargetEntity ||
+          learningContext.lastRecipient?.name ||
+          ""
+      ).trim();
+
+      let lastInboundMessage = "";
+      let lastInboundTime = "";
+      let resolvedRoomName = targetRoomOrPerson;
+
+      // 파투 [카카오톡대화대장] 및 전체 시트에서 해당 상대방의 최근 카톡 대화 맥락 자동 탐색
+      const kakaoRows = (ftsContext.allRows || []).filter(
+        (r) =>
+          r.sheetName.includes("카카오") ||
+          r.sheetName.includes("카톡") ||
+          r.sheetType?.includes("KAKAO")
+      );
+
+      if (kakaoRows.length > 0) {
+        const matchedRow = targetRoomOrPerson
+          ? kakaoRows.find((r) => {
+              const rowStr = JSON.stringify(r.row || {});
+              return rowStr.includes(targetRoomOrPerson);
+            })
+          : kakaoRows[0];
+
+        if (matchedRow && matchedRow.row) {
+          const rowObj = matchedRow.row;
+          const roomCandidate = String(
+            rowObj["채팅방/상대방 이름"] ||
+              rowObj["채팅방"] ||
+              rowObj["상대방"] ||
+              rowObj["발신자"] ||
+              targetRoomOrPerson ||
+              ""
+          ).trim();
+          const senderCandidate = String(
+            rowObj["발신자"] || rowObj["보낸사람"] || roomCandidate || ""
+          ).trim();
+          const msgCandidate = String(
+            rowObj["메시지 내용"] || rowObj["내용"] || rowObj["메시지"] || ""
+          ).trim();
+          const timeCandidate = String(
+            rowObj["수신 일시"] || rowObj["일시"] || matchedRow.createdAt || ""
+          ).trim();
+
+          if (roomCandidate) resolvedRoomName = roomCandidate;
+          if (!targetRoomOrPerson && senderCandidate) targetRoomOrPerson = senderCandidate;
+          if (msgCandidate) lastInboundMessage = msgCandidate;
+          if (timeCandidate) lastInboundTime = timeCandidate;
+        }
+      }
+
+      if (!resolvedRoomName) {
+        resolvedRoomName = targetRoomOrPerson || "나와의 채팅";
+      }
+      if (!targetRoomOrPerson) {
+        targetRoomOrPerson = resolvedRoomName;
+      }
+
+      let suggestedReply = String(plan.messageText || "").trim();
+      if (!suggestedReply) {
+        try {
+          const replyRes = await callAiCaller(
+            `상대방('${targetRoomOrPerson}', 카톡방: '${resolvedRoomName}')에게 보낼 정중하고 자연스러운 카카오톡 답장 초안 1~2문장을 작성하세요.\n직전 받은 카톡: ${lastInboundMessage || "(없음)"}\n사용자 명령: ${command}\n오직 보낼 카톡 메시지 본문만 출력하세요.`,
+            { model: "gemini-3.8-flash", temperature: 0.3 }
+          );
+          suggestedReply = (replyRes.text || replyRes.content || "").trim();
+        } catch {}
+      }
+      if (!suggestedReply) {
+        suggestedReply = lastInboundMessage
+          ? `네, ${targetRoomOrPerson}님! 보내주신 카톡 내용 확인했습니다. 감사합니다.`
+          : `안녕하세요 ${targetRoomOrPerson}님, 관련하여 카톡 드립니다. 확인 부탁드립니다!`;
+      }
+
+      const safetyWarnings = evaluateKakaoSafetyGate(suggestedReply, lastInboundMessage);
+
+      const kakaoDispatchData = {
+        chatRoomName: resolvedRoomName,
+        recipientName: targetRoomOrPerson,
+        lastInboundMessage,
+        lastInboundTime,
+        suggestedReply,
+        safetyWarnings,
+      };
+
+      plan.explanation = `💛 [${resolvedRoomName}] 카카오톡 답장 초안이 준비되었습니다.\n• 답장 초안: "${suggestedReply}"\n아래 카드에서 내용을 확인·수정한 뒤 발송 방식(스마트폰 즉시 답장 / PC 카톡 자동 발송)을 선택해 주세요.`;
+      plan.spokenResult = `${targetRoomOrPerson}님에게 보낼 카카오톡 답장 초안을 준비했습니다. 확인 후 발송 버튼을 눌러주세요.`;
+
+      executionDetails = {
+        type: "KAKAO_DISPATCH",
+        status: "KAKAO_DISPATCH_READY",
+        kakaoDispatch: kakaoDispatchData,
+      };
     } else {
       // 일반 지원
       executionDetails = {
@@ -1793,11 +1899,12 @@ ${sampleDataTexts.join("\n\n====================\n\n")}
 
     const primaryFileObj = executionDetails?.primaryDriveFile;
     const emailDispObj = executionDetails?.emailDispatch;
+    const kakaoDispObj = executionDetails?.kakaoDispatch;
 
     const activityStatus =
       !isSuccess || executionDetails?.status === "NOT_FOUND" || executionDetails?.status === "FAILED"
         ? "FAILED"
-        : executionDetails?.status === "EMAIL_DISPATCH_READY"
+        : executionDetails?.status === "EMAIL_DISPATCH_READY" || executionDetails?.status === "KAKAO_DISPATCH_READY"
           ? "READY"
           : "SUCCESS";
 
@@ -1809,8 +1916,8 @@ ${sampleDataTexts.join("\n\n====================\n\n")}
       deviceId,
       req,
       command,
-      actionType: emailDispObj ? "EMAIL_DISPATCH" : plan.actionType,
-      targetSheet: resolvedSheetSummary || "",
+      actionType: emailDispObj ? "EMAIL_DISPATCH" : kakaoDispObj ? "KAKAO_DISPATCH" : plan.actionType,
+      targetSheet: resolvedSheetSummary || (kakaoDispObj ? "카카오톡대화대장" : ""),
       targetFolder: executionDetails?.searchedFolder || plan.driveFolderKeyword || "",
       targetFile: primaryFileObj?.name || emailDispObj?.fileName || "",
       fileId: primaryFileObj?.id || "",
@@ -1823,6 +1930,7 @@ ${sampleDataTexts.join("\n\n====================\n\n")}
           ? executionDetails.recipient
           : plan.targetPhone || "",
       targetRecipient:
+        kakaoDispObj?.chatRoomName ||
         plan.targetName ||
         emailDispObj?.recipientEmail ||
         plan.queryTargetEntity ||
@@ -1835,11 +1943,13 @@ ${sampleDataTexts.join("\n\n====================\n\n")}
             : [],
       dispatchMethod: emailDispObj
         ? "방식 A/B 선택대기"
-        : plan.actionType === "SMS_DISPATCH"
-          ? "SMS 문자발송"
-          : plan.actionType === "APPS_SCRIPT_RUN"
-            ? `AppsScript(${plan.functionName || ""})`
-            : "",
+        : kakaoDispObj
+          ? "카톡 답장(방식 A/B 선택대기)"
+          : plan.actionType === "SMS_DISPATCH"
+            ? "SMS 문자발송"
+            : plan.actionType === "APPS_SCRIPT_RUN"
+              ? `AppsScript(${plan.functionName || ""})`
+              : "",
       resultSummary: plan.explanation || "작업 수행 완료",
       status: activityStatus,
     });
@@ -1870,6 +1980,7 @@ ${sampleDataTexts.join("\n\n====================\n\n")}
       driveFiles: executionDetails?.driveFiles || [],
       primaryDriveFile: executionDetails?.primaryDriveFile || null,
       emailDispatch: executionDetails?.emailDispatch || null,
+      kakaoDispatch: executionDetails?.kakaoDispatch || null,
       details: {
         ...executionDetails,
         canPromote,

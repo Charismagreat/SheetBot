@@ -19,6 +19,7 @@ export type CopilotActionCategory =
   | "DRIVE_FILE_ACTION"
   | "EMAIL_DISPATCH"
   | "SMS_DISPATCH"
+  | "KAKAO_DISPATCH"
   | "APPS_SCRIPT_RUN"
   | "COMMAND_PROMOTE"
   | "GENERAL_ASSIST";
