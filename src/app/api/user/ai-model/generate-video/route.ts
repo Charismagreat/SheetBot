@@ -344,7 +344,26 @@ export async function POST(req: NextRequest) {
       .filter(Boolean)[0] || topic.slice(0, 32);
     const shortTitle = firstTopicLine.length > 36 ? firstTopicLine.slice(0, 36) + "..." : firstTopicLine;
 
-    const demoVideoUrl = `https://sheetbot.cloud/demo/ai-shorts-player?id=${videoId}&voice=${encodeURIComponent(modelVoice)}&name=${encodeURIComponent(modelName)}&topic=${encodeURIComponent(topic)}&script=${encodeURIComponent(script)}&theme=${visualCtx.theme}&heroImg=${encodeURIComponent(visualCtx.heroModelImg)}&wardrobe=${encodeURIComponent(visualCtx.wardrobe)}&env=${encodeURIComponent(visualCtx.environment)}&pose=${encodeURIComponent(visualCtx.holdingPose)}${productProxyImgUrl ? `&img=${encodeURIComponent(productProxyImgUrl)}` : ""}`;
+    // 414 URI Too Long 및 메신저 링크 잘림 방지를 위해 초단축 URL(?id=aimodel_...) 표준 채택
+    const demoVideoUrl = `https://sheetbot.cloud/demo/ai-shorts-player?id=${videoId}`;
+
+    // 시트 기록 전에 메타데이터 선저장 (0ms 즉시 조회 보장)
+    saveAiShortsMeta({
+      id: videoId,
+      modelName,
+      modelVoice,
+      topic,
+      shortTitle,
+      script,
+      theme: visualCtx.theme,
+      heroModelImg: visualCtx.heroModelImg,
+      wardrobe: visualCtx.wardrobe,
+      environment: visualCtx.environment,
+      holdingPose: visualCtx.holdingPose,
+      productImageUrl: productProxyImgUrl || productDriveUrl || undefined,
+      veoStatus: "PENDING",
+      createdAt: nowStr,
+    });
 
     // 4. 구글 시트 바인딩 및 장부 기록 ([SheetBot] AI 홍보 콘텐츠 관리대장)
     let sheetUrl = "";
@@ -387,6 +406,11 @@ export async function POST(req: NextRequest) {
       topic,
       shortTitle,
       script,
+      theme: visualCtx.theme,
+      heroModelImg: visualCtx.heroModelImg,
+      wardrobe: visualCtx.wardrobe,
+      environment: visualCtx.environment,
+      holdingPose: visualCtx.holdingPose,
       productImageUrl: productProxyImgUrl || productDriveUrl || undefined,
       veoStatus: "PENDING",
       sheetUrl,

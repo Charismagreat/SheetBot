@@ -591,11 +591,23 @@ function ShortsPlayerContent() {
     modelVoice?: string;
     topic?: string;
     script?: string;
+    heroModelImg?: string;
+    wardrobe?: string;
+    environment?: string;
+    holdingPose?: string;
     productImageUrl?: string;
     mp4VideoUrl?: string;
     veoStatus?: "PENDING" | "COMPLETED" | "UNAVAILABLE";
     veoError?: string;
   } | null>(null);
+
+  // 긴 쿼리 파라미터로 접속한 경우 주소창을 깔끔한 단축 URL(?id=...)로 자동 정리
+  useEffect(() => {
+    if (typeof window !== "undefined" && videoId && (topicParam || scriptParam)) {
+      const cleanShortPath = `${window.location.pathname}?id=${encodeURIComponent(videoId)}`;
+      window.history.replaceState(null, "", cleanShortPath);
+    }
+  }, [videoId, topicParam, scriptParam]);
 
   // 서버 메타데이터 및 Veo .mp4 생성 완료 여부 조회
   useEffect(() => {
@@ -634,14 +646,16 @@ function ShortsPlayerContent() {
   // 🌟 제품 특성에 맞춘 의상, 배경, 4단 액션 씬 시퀀스 도출
   const visualTheme = useMemo(() => {
     const baseTheme = inferProductVisualTheme(rawTopic, rawScript, model.assetKey);
+    const resolvedWardrobe = wardrobeParam || metaData?.wardrobe;
+    const resolvedEnv = envParam || metaData?.environment;
     return {
       ...baseTheme,
-      heroModelImg: customHeroParam || baseTheme.heroModelImg,
-      wardrobeBadge: wardrobeParam ? `🥋 ${wardrobeParam}` : baseTheme.wardrobeBadge,
-      environmentBadge: envParam ? `🏟️ ${envParam}` : baseTheme.environmentBadge,
-      holdingPose: poseParam || baseTheme.holdingPose,
+      heroModelImg: customHeroParam || metaData?.heroModelImg || baseTheme.heroModelImg,
+      wardrobeBadge: resolvedWardrobe ? `🥋 ${resolvedWardrobe}` : baseTheme.wardrobeBadge,
+      environmentBadge: resolvedEnv ? `🏟️ ${resolvedEnv}` : baseTheme.environmentBadge,
+      holdingPose: poseParam || metaData?.holdingPose || baseTheme.holdingPose,
     };
-  }, [rawTopic, rawScript, model.assetKey, customHeroParam, wardrobeParam, envParam, poseParam]);
+  }, [rawTopic, rawScript, model.assetKey, customHeroParam, wardrobeParam, envParam, poseParam, metaData]);
 
   // 제품 이미지 URL 안전 매핑 (URL 파라미터 -> 메타데이터 -> 테마 기본 실물 이미지 순 폴백)
   const effectiveProductImg =
@@ -1011,10 +1025,10 @@ function ShortsPlayerContent() {
   };
 
   const handleShare = async () => {
-    const cleanShareUrl = `${window.location.origin}${window.location.pathname}?id=${encodeURIComponent(videoId)}&voice=${encodeURIComponent(displayVoice.split(" ")[0])}&name=${encodeURIComponent(displayName)}&topic=${encodeURIComponent(shortTitle)}&script=${encodeURIComponent(rawScript)}${effectiveProductImg ? `&img=${encodeURIComponent(effectiveProductImg)}` : ""}`;
+    const cleanShareUrl = `${window.location.origin}${window.location.pathname}?id=${encodeURIComponent(videoId)}`;
     if (navigator.clipboard) {
       await navigator.clipboard.writeText(cleanShareUrl);
-      showToast("🔗 쇼츠 영상 링크가 클립보드에 복사되었습니다!");
+      showToast("🔗 단축 쇼츠 링크가 클립보드에 복사되었습니다!");
     } else {
       showToast("주소창의 링크를 복사하여 공유할 수 있습니다.");
     }

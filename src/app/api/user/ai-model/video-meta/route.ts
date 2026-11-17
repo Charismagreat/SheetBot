@@ -12,6 +12,11 @@ export interface AiShortsMetaItem {
   topic: string;
   shortTitle: string;
   script: string;
+  theme?: string;
+  heroModelImg?: string;
+  wardrobe?: string;
+  environment?: string;
+  holdingPose?: string;
   productImageUrl?: string;
   mp4VideoUrl?: string;
   veoStatus?: "PENDING" | "COMPLETED" | "UNAVAILABLE";
