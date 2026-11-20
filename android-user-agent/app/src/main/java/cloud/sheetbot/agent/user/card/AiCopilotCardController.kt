@@ -1466,16 +1466,15 @@ class AiCopilotCardController(
                 }
             }
 
-            // 상단바 알림이 만료된 경우: 답장 문구를 클립보드에 자동 복사하고 해당 카톡방/카톡 메인으로 이동
-            val cm = activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-            cm?.setPrimaryClip(ClipData.newPlainText("카카오톡 답장", replyMsg))
-
+            // 상단바 알림이 만료된 경우: 해당 카톡방/카톡 메인으로 이동한 뒤 답장 문구를 클립보드에 자동 복사
             cloud.sheetbot.agent.user.KakaoReplySessionCache.launchKakaoTalkOrRoom(
                 context = activity,
                 session = latestSession,
                 targetName = dispatch.chatRoomName,
                 taskTitle = dispatch.recipientName
             )
+            val cm = activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            cm?.setPrimaryClip(ClipData.newPlainText("카카오톡 답장", replyMsg))
             Toast.makeText(
                 activity,
                 "📋 답장 문구가 복사되었습니다! 열린 카카오톡 대화창에 붙여넣기(길게 눌러 붙여넣기) 해주세요.",
@@ -2203,7 +2202,7 @@ class AiCopilotCardController(
                             chatRoomName = roomName,
                             recipientName = senderName,
                             lastInboundMessage = inboundMsg,
-                            lastInboundTime = item.dateText,
+                            lastInboundTime = item.timestampText,
                             suggestedReply = defaultReply
                         )
                     )
