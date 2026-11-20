@@ -33,6 +33,7 @@ export interface KakaoPcDispatchJob {
 interface RelayStoreData {
   agentsByEmail: Record<string, KakaoPcAgentStatus>;
   emailByPairingCode: Record<string, string>;
+  emailByPhone: Record<string, string>;
   jobsById: Record<string, KakaoPcDispatchJob>;
 }
 
@@ -60,6 +61,7 @@ function getRuntime(): GlobalRelayRuntime {
       data: {
         agentsByEmail: {},
         emailByPairingCode: {},
+        emailByPhone: {},
         jobsById: {},
       },
       loaded: false,
@@ -81,12 +83,63 @@ function loadFromDisk(rt: GlobalRelayRuntime) {
       if (parsed && typeof parsed === "object") {
         rt.data.agentsByEmail = parsed.agentsByEmail || {};
         rt.data.emailByPairingCode = parsed.emailByPairingCode || {};
+        rt.data.emailByPhone = parsed.emailByPhone || {};
         rt.data.jobsById = parsed.jobsById || {};
       }
     }
   } catch (e) {
     console.warn("[KakaoPcRelay] Failed to load relay store:", e);
   }
+}
+
+/**
+ * 파투(FileToSheet) 휴대폰 번호(010-XXXX-XXXX) 또는 가상 이메일(010XXXXXXXX@fts.local, @filetosheet.cloud)과
+ * 구글 이메일을 단일 표준 키로 정규화합니다.
+ */
+export function normalizeRelayUserIdentifier(rawEmailOrPhone: string, rawPhone?: string): string {
+  const rt = getRuntime();
+  const cleanPhoneParam = (rawPhone || "").replace(/[^0-9]/g, "");
+  const input = (rawEmailOrPhone || "").toLowerCase().trim();
+
+  // 1. 휴대폰 번호 기반 가상 이메일(@fts.local, @filetosheet.cloud)은 모두 <번호>@fts.local로 통일
+  const ftsEmailMatch = input.match(/^([0-9]{9,12})@(fts\.local|filetosheet\.cloud)$/);
+  if (ftsEmailMatch) {
+    const phoneDigits = ftsEmailMatch[1];
+    // 만약 해당 휴대폰 번호가 이미 실제 구글 이메일과 매핑되어 있다면 매핑된 계정을 반환
+    if (rt.data.emailByPhone[phoneDigits]) {
+      return rt.data.emailByPhone[phoneDigits];
+    }
+    return `${phoneDigits}@fts.local`;
+  }
+
+  // 2. 일반 구글 이메일인 경우: 함께 전달된 파투 휴대폰 번호가 있으면 양방향 매핑 등록
+  if (input.includes("@")) {
+    if (cleanPhoneParam.length >= 9 && rt.data.emailByPhone[cleanPhoneParam] !== input) {
+      rt.data.emailByPhone[cleanPhoneParam] = input;
+      // 휴대폰 번호 기반 페어링 코드도 함께 등록
+      const phoneFtsId = `${cleanPhoneParam}@fts.local`;
+      const phoneCode = crypto
+        .createHash("sha256")
+        .update(`sheetbot-kakao-bridge:${phoneFtsId}`)
+        .digest("hex")
+        .toUpperCase()
+        .slice(0, 6);
+      rt.data.emailByPairingCode[phoneCode] = input;
+      saveToDisk(rt);
+    }
+    return input;
+  }
+
+  // 3. 이메일 없이 휴대폰 번호(예: 010-1234-5678 또는 01012345678)만 입력한 파투 이용자
+  const digitsOnly = input.replace(/[^0-9]/g, "") || cleanPhoneParam;
+  if (digitsOnly.length >= 9 && digitsOnly.startsWith("01")) {
+    if (rt.data.emailByPhone[digitsOnly]) {
+      return rt.data.emailByPhone[digitsOnly];
+    }
+    return `${digitsOnly}@fts.local`;
+  }
+
+  return input;
 }
 
 function saveToDisk(rt: GlobalRelayRuntime) {
@@ -113,10 +166,10 @@ function saveToDisk(rt: GlobalRelayRuntime) {
 }
 
 /**
- * 이메일 기반 고정 6자리 페어링 코드 생성 (예: K7F92A)
+ * 이메일 또는 파투 휴대폰 번호 기반 고정 6자리 페어링 코드 생성 (예: K7F92A)
  */
-export function getOrCreatePairingCode(rawEmail: string): string {
-  const email = (rawEmail || "").toLowerCase().trim();
+export function getOrCreatePairingCode(rawEmailOrPhone: string, rawPhone?: string): string {
+  const email = normalizeRelayUserIdentifier(rawEmailOrPhone, rawPhone);
   if (!email) return "000000";
   const rt = getRuntime();
   const hash = crypto
@@ -133,19 +186,23 @@ export function getOrCreatePairingCode(rawEmail: string): string {
 }
 
 /**
- * 이메일 또는 페어링 코드로부터 정규화된 사용자 이메일을 확인합니다.
+ * 이메일, 파투 휴대폰 번호(010-XXXX-XXXX), 또는 페어링 코드(SB-XXXXXX)로부터 정규화된 사용자 식별자를 확인합니다.
  */
-export function resolveUserEmailFromAuth(emailOrCode: string, pairingCode?: string): string | null {
+export function resolveUserEmailFromAuth(
+  emailOrPhoneOrCode: string,
+  pairingCode?: string,
+  phoneNumber?: string
+): string | null {
   const rt = getRuntime();
   loadFromDisk(rt);
 
-  const candidateEmail = (emailOrCode || "").toLowerCase().trim();
-  if (candidateEmail.includes("@")) {
-    getOrCreatePairingCode(candidateEmail);
-    return candidateEmail;
+  const normalized = normalizeRelayUserIdentifier(emailOrPhoneOrCode, phoneNumber);
+  if (normalized && normalized.includes("@")) {
+    getOrCreatePairingCode(normalized, phoneNumber);
+    return normalized;
   }
 
-  const code = (pairingCode || emailOrCode || "").toUpperCase().trim().replace(/^SB-/, "");
+  const code = (pairingCode || emailOrPhoneOrCode || "").toUpperCase().trim().replace(/^SB-/, "");
   if (code && rt.data.emailByPairingCode[code]) {
     return rt.data.emailByPairingCode[code];
   }
@@ -157,14 +214,15 @@ export function resolveUserEmailFromAuth(emailOrCode: string, pairingCode?: stri
  */
 export function recordPcAgentHeartbeat(params: {
   userEmail: string;
+  phoneNumber?: string;
   pcName?: string;
   kakaoReady?: boolean;
   kakaoDetail?: string;
   version?: string;
 }): KakaoPcAgentStatus {
   const rt = getRuntime();
-  const email = params.userEmail.toLowerCase().trim();
-  const pairingCode = getOrCreatePairingCode(email);
+  const email = normalizeRelayUserIdentifier(params.userEmail, params.phoneNumber);
+  const pairingCode = getOrCreatePairingCode(email, params.phoneNumber);
 
   const status: KakaoPcAgentStatus = {
     userEmail: email,
@@ -185,7 +243,7 @@ export function recordPcAgentHeartbeat(params: {
 /**
  * 해당 회원의 개인 PC 브리지가 현재 온라인(최근 45초 이내 폴링)인지 확인
  */
-export function getUserPcAgentStatus(rawEmail: string): {
+export function getUserPcAgentStatus(rawEmailOrPhone: string, rawPhone?: string): {
   online: boolean;
   kakaoReady: boolean;
   pcName: string;
@@ -195,8 +253,8 @@ export function getUserPcAgentStatus(rawEmail: string): {
 } {
   const rt = getRuntime();
   loadFromDisk(rt);
-  const email = (rawEmail || "").toLowerCase().trim();
-  const pairingCode = email ? getOrCreatePairingCode(email) : "000000";
+  const email = normalizeRelayUserIdentifier(rawEmailOrPhone, rawPhone);
+  const pairingCode = email ? getOrCreatePairingCode(email, rawPhone) : "000000";
   const agent = email ? rt.data.agentsByEmail[email] : undefined;
 
   if (!agent) {
@@ -226,12 +284,12 @@ export function getUserPcAgentStatus(rawEmail: string): {
  * 해당 회원의 대기 중인(PENDING) 첫 번째 카톡 발송 작업을 가져와 CLAIMED 상태로 변경
  */
 export function claimNextPendingJobForUser(
-  rawEmail: string,
+  rawEmailOrPhone: string,
   pcName?: string
 ): KakaoPcDispatchJob | null {
   const rt = getRuntime();
   loadFromDisk(rt);
-  const email = (rawEmail || "").toLowerCase().trim();
+  const email = normalizeRelayUserIdentifier(rawEmailOrPhone);
   if (!email) return null;
 
   const pendingJobs = Object.values(rt.data.jobsById)
@@ -252,11 +310,11 @@ export function claimNextPendingJobForUser(
  * 이용자 PC 브리지가 대기할 때(Long-Polling) 새 작업이 들어오면 0.01초 만에 즉시 깨워 반환
  */
 export async function waitForNextJobForUser(
-  rawEmail: string,
+  rawEmailOrPhone: string,
   pcName: string,
   waitMs: number = 12_000
 ): Promise<KakaoPcDispatchJob | null> {
-  const email = (rawEmail || "").toLowerCase().trim();
+  const email = normalizeRelayUserIdentifier(rawEmailOrPhone);
   const immediate = claimNextPendingJobForUser(email, pcName);
   if (immediate) return immediate;
 
@@ -317,8 +375,9 @@ export function completePcKakaoJob(params: {
   const job = rt.data.jobsById[params.jobId];
   if (!job) return null;
 
+  const normalizedEmail = normalizeRelayUserIdentifier(params.userEmail);
   // 회원별 격리 검증
-  if (params.userEmail && job.userEmail !== params.userEmail.toLowerCase().trim()) {
+  if (normalizedEmail && job.userEmail !== normalizedEmail) {
     return null;
   }
 
@@ -341,6 +400,7 @@ export function completePcKakaoJob(params: {
  */
 export async function enqueueAndAwaitUserPcKakaoJob(params: {
   userEmail: string;
+  phoneNumber?: string;
   roomName: string;
   recipientName: string;
   message: string;
@@ -356,12 +416,12 @@ export async function enqueueAndAwaitUserPcKakaoJob(params: {
   const rt = getRuntime();
   loadFromDisk(rt);
 
-  const email = (params.userEmail || "").toLowerCase().trim();
+  const email = normalizeRelayUserIdentifier(params.userEmail, params.phoneNumber);
   if (!email || !email.includes("@")) {
     return {
       handledByRemotePc: false,
       ok: false,
-      error: "사용자 이메일 인증 정보가 없어 내 PC 브리지를 식별할 수 없습니다.",
+      error: "사용자 계정(구글 이메일 또는 파투 휴대폰 번호) 정보가 없어 내 PC 브리지를 식별할 수 없습니다.",
     };
   }
 

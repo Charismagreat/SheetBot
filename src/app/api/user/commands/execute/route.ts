@@ -1864,8 +1864,8 @@ ${sampleDataTexts.join("\n\n====================\n\n")}
       }
 
       const safetyWarnings = evaluateKakaoSafetyGate(suggestedReply, lastInboundMessage);
-      const pcStatus = getUserPcAgentStatus(cleanEmail);
-      const pcBridgeGuideUrl = `https://sheetbot.cloud/api/user/messages/kakao/pc-agent?guide=1&email=${encodeURIComponent(cleanEmail)}`;
+      const pcStatus = getUserPcAgentStatus(cleanEmail, cleanPhone);
+      const pcBridgeGuideUrl = `https://sheetbot.cloud/api/user/messages/kakao/pc-agent?guide=1&email=${encodeURIComponent(cleanEmail)}&phone=${encodeURIComponent(cleanPhone)}`;
 
       const kakaoDispatchData = {
         chatRoomName: resolvedRoomName,

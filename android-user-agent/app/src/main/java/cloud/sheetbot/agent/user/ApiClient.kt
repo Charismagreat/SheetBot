@@ -2323,12 +2323,34 @@ object ApiClient {
                 }
 
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val sentPcName = resJson.optString("pcName", "").takeIf { it.isNotBlank() }
+                    if (mode != "SUGGEST_REPLY") {
+                        try {
+                            val prefs = PreferencesManager(SheetBotApp.appContext)
+                            if (prefs.isDestinationFileToSheet) {
+                                val nowStr = nowKstStr()
+                                val methodTag = when (mode) {
+                                    "LOG_MOBILE_DIRECT" -> "스마트폰 카톡 즉시답장"
+                                    "LOG_MOBILE_JUMP" -> "스마트폰 카톡방 이동 발송"
+                                    else -> "내 PC(${sentPcName ?: "Windows PC"}) 카톡 무포커스 자동발송"
+                                }
+                                val rowData = JSONObject().apply {
+                                    put("수신일시", nowStr)
+                                    put("채팅방/발신자", "📤 [나 ➔ $chatRoomName]")
+                                    put("메시지내용", message)
+                                    put("기기명", methodTag)
+                                    put("동기화일시", nowStr)
+                                }
+                                FileToSheetClient.syncCardRowToFts("kakao_sync", rowData, memo = message)
+                            }
+                        } catch (_: Exception) {}
+                    }
                     return@withContext KakaoSendResult(
                         success = true,
                         message = resJson.optString("message", "카카오톡 답장이 전송되었습니다."),
                         suggestedReply = resJson.optString("suggestedReply", "").takeIf { it.isNotBlank() },
                         safetyWarnings = warnList,
-                        pcName = resJson.optString("pcName", "").takeIf { it.isNotBlank() }
+                        pcName = sentPcName
                     )
                 } else {
                     return@withContext KakaoSendResult(

@@ -58,6 +58,14 @@ function buildWindowsBatchLauncher(userEmail: string, pairingCode: string, serve
   return lines.join("\r\n");
 }
 
+function formatDisplayAccount(userEmail: string): string {
+  const ftsMatch = (userEmail || "").match(/^([0-9]{3})([0-9]{3,4})([0-9]{4})@(fts\.local|filetosheet\.cloud)$/);
+  if (ftsMatch) {
+    return `${ftsMatch[1]}-${ftsMatch[2]}-${ftsMatch[3]} (파투 휴대폰 계정)`;
+  }
+  return userEmail || "시트봇 / 파투 로그인 계정";
+}
+
 /**
  * 이용자 안내 및 원클릭 다운로드 웹페이지 HTML 생성
  */
@@ -67,6 +75,7 @@ function buildGuideHtml(
   serverOrigin: string
 ): string {
   const encodedEmail = encodeURIComponent(userEmail);
+  const displayAccount = formatDisplayAccount(userEmail);
   const batUrl = `${serverOrigin}/api/user/messages/kakao/pc-agent?download=bat&email=${encodedEmail}`;
   const pyUrl = `${serverOrigin}/downloads/sheetbot_pc_kakao_agent.py`;
   const oneLineCmd = `curl.exe -sSL "${batUrl}" -o "%TEMP%\\sb_kakao.bat" && "%TEMP%\\sb_kakao.bat"`;
@@ -112,13 +121,14 @@ function buildGuideHtml(
     <div class="card">
       <div class="step">2단계 · 내 계정 전용 원클릭 브리지 실행 (최초 1회)</div>
       <div class="meta">
-        연결 계정: <b style="color:#FDE047;">${userEmail || "시트봇 로그인 계정"}</b> &nbsp;|&nbsp;
+        연결 계정: <b style="color:#FDE047;">${displayAccount}</b> &nbsp;|&nbsp;
         페어링 코드: <b style="color:#38BDF8;">SB-${status.pairingCode}</b>
       </div>
       <a class="btn" href="${batUrl}">📥 내 PC 전용 원클릭 실행파일 (.bat) 다운로드</a>
       <div class="meta" style="margin-top:12px;">
         다운로드한 <b>SheetBot_PC_Kakao_Bridge.bat</b> 파일을 내 PC에서 더블클릭하면 즉시 연결됩니다.<br/>
-        (또는 단독 Python 스크립트 직접 받기: <a href="${pyUrl}" style="color:#38BDF8;">sheetbot_pc_kakao_agent.py</a>)
+        (시트봇 구글 이메일 회원과 <b>파투(FileToSheet) 휴대폰 번호 회원</b> 모두 동일하게 사용 가능합니다.)<br/>
+        (단독 Python 스크립트 직접 받기: <a href="${pyUrl}" style="color:#38BDF8;">sheetbot_pc_kakao_agent.py</a>)
       </div>
     </div>
 
@@ -147,12 +157,19 @@ export async function GET(req: NextRequest) {
   const isStatusOnly = url.searchParams.get("status") === "1";
 
   const queryEmail = url.searchParams.get("email") || "";
+  const queryPhone = url.searchParams.get("phone") || "";
   const queryCode = url.searchParams.get("code") || "";
   const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
   const headerEmail = req.headers.get("x-sheetbot-user-email") || "";
+  const headerPhone =
+    req.headers.get("x-filetosheet-phone") || req.headers.get("x-user-phone") || "";
 
   const resolvedEmail =
-    resolveUserEmailFromAuth(queryEmail || headerEmail || sessionEmail || "", queryCode) || "";
+    resolveUserEmailFromAuth(
+      queryEmail || headerEmail || sessionEmail || queryPhone || headerPhone || "",
+      queryCode,
+      queryPhone || headerPhone
+    ) || "";
 
   const serverOrigin = "https://sheetbot.cloud";
 
@@ -252,6 +269,7 @@ export async function POST(req: NextRequest) {
     const {
       jobId = "",
       email = "",
+      phone = "",
       code = "",
       pcName = "내 PC",
       ok = false,
@@ -261,7 +279,7 @@ export async function POST(req: NextRequest) {
       error = "",
     } = body;
 
-    const resolvedEmail = resolveUserEmailFromAuth(email, code) || "";
+    const resolvedEmail = resolveUserEmailFromAuth(email || phone, code, phone) || "";
     if (!jobId) {
       return NextResponse.json({ ok: false, error: "jobId가 누락되었습니다." }, { status: 400 });
     }

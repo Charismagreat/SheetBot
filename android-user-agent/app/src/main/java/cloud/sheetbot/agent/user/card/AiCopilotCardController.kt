@@ -1519,10 +1519,16 @@ class AiCopilotCardController(
             }
         }
 
-        // 내 PC 카톡 브리지 연결 상태 및 원클릭 설치 가이드/링크 복사 버튼
-        val userEmailForGuide = (prefs.userEmail ?: "").trim()
+        // 내 PC 카톡 브리지 연결 상태 및 원클릭 설치 가이드/링크 복사 버튼 (시트봇 구글 이메일 회원 + 파투 휴대폰 번호 회원 모두 지원)
+        val rawEmailPref = (prefs.userEmail ?: "").trim()
+        val rawFtsPhonePref = (prefs.ftsPhoneNumber ?: "").replace(Regex("[^0-9]"), "")
+        val userEmailForGuide = when {
+            rawEmailPref.isNotBlank() -> rawEmailPref
+            rawFtsPhonePref.isNotBlank() -> "${rawFtsPhonePref}@fts.local"
+            else -> ""
+        }
         val defaultGuideUrl = dispatch.pcBridgeGuideUrl.ifBlank {
-            "https://sheetbot.cloud/api/user/messages/kakao/pc-agent?guide=1&email=${Uri.encode(userEmailForGuide)}"
+            "https://sheetbot.cloud/api/user/messages/kakao/pc-agent?guide=1&email=${Uri.encode(userEmailForGuide)}&phone=${Uri.encode(rawFtsPhonePref)}"
         }
         val btnPcBridgeGuide = TextView(activity).apply {
             val codeTag = if (dispatch.pairingCode.isNotBlank()) " (코드: SB-${dispatch.pairingCode})" else ""

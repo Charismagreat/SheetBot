@@ -13,6 +13,7 @@ import { recordAiCopilotActivity } from "@/lib/ai-copilot-learning";
 import {
   enqueueAndAwaitUserPcKakaoJob,
   getUserPcAgentStatus,
+  normalizeRelayUserIdentifier,
 } from "@/lib/kakao-pc-relay-store";
 
 /**
@@ -160,11 +161,16 @@ export async function POST(req: NextRequest) {
 
     const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
     const headerEmail = req.headers.get("x-sheetbot-user-email");
-    const userEmail =
+    const headerPhone =
+      req.headers.get("x-filetosheet-phone") || req.headers.get("x-user-phone") || "";
+    const cleanPhone = String(phoneNumber || headerPhone || "").replace(/[^0-9]/g, "");
+    const rawUserEmail =
       bodyEmail && bodyEmail.includes("@")
         ? bodyEmail.toLowerCase().trim()
         : sessionEmail ||
           (headerEmail && headerEmail.includes("@") ? headerEmail.toLowerCase().trim() : "");
+    // 파투(FileToSheet) 휴대폰 번호 로그인 이용자도 <휴대폰번호>@fts.local 로 자동 정규화하여 100% 지원
+    const userEmail = normalizeRelayUserIdentifier(rawUserEmail, cleanPhone);
 
     const roomName = String(rawRoomName || rawRecipient || "").trim();
     const recipientName = String(rawRecipient || rawRoomName || "상대방").trim();

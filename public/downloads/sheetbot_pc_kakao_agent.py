@@ -456,14 +456,17 @@ def resolve_agent_settings() -> tuple[str, str, str]:
 
     if not email and not code:
         print("=" * 68)
-        print("  💛 [SheetBot] 내 PC 카카오톡 원격 자동 발송 브리지 설정")
+        print("  💛 [SheetBot / 파투(FileToSheet)] 내 PC 카카오톡 원격 자동 발송 브리지 설정")
         print("=" * 68)
-        print("시트봇 모바일 앱에 로그인한 구글 이메일 주소(또는 6자리 연결 코드)를 입력하세요.")
-        user_input = input("👉 시트봇 이메일 (예: myname@gmail.com): ").strip()
+        print("시트봇/파투 모바일 앱에 연동된 [파투 휴대폰 번호], [구글 이메일], 또는 [6자리 연결 코드]를 입력하세요.")
+        user_input = input("👉 휴대폰 번호(010-XXXX-XXXX) 또는 이메일 입력: ").strip()
+        digits_only = "".join(ch for ch in user_input if ch.isdigit())
         if "@" in user_input:
             email = user_input.lower()
+        elif len(digits_only) >= 9 and digits_only.startswith("01"):
+            email = f"{digits_only}@fts.local"
         else:
-            code = user_input.upper()
+            code = user_input.upper().replace("SB-", "")
 
     save_config({"serverUrl": server_url, "userEmail": email, "pairingCode": code})
     return server_url.rstrip("/"), email, code
