@@ -1366,17 +1366,29 @@ class KakaoNativeLiveWatcher:
             "messages": new_events,
         }).encode("utf-8")
 
-        req = urllib.request.Request(
-            f"{self.server_url}/api/user/messages/kakao/pc-agent",
-            data=payload,
-            method="POST",
-            headers={
-                "Content-Type": "application/json; charset=utf-8",
-                "User-Agent": "SheetBot-PC-Kakao-Agent/2.0",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=10, context=self.ssl_ctx) as resp:
-            res_data = json.loads(resp.read().decode("utf-8", errors="replace"))
+        res_data = None
+        for attempt in range(4):
+            try:
+                req = urllib.request.Request(
+                    f"{self.server_url}/api/user/messages/kakao/pc-agent",
+                    data=payload,
+                    method="POST",
+                    headers={
+                        "Content-Type": "application/json; charset=utf-8",
+                        "User-Agent": "SheetBot-PC-Kakao-Agent/2.0",
+                        "Cookie": "__egdesk_tunnel_ctx=mcp-server-fxkud1:SheetBot",
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=10, context=self.ssl_ctx) as resp:
+                    res_data = json.loads(resp.read().decode("utf-8", errors="replace"))
+                    break
+            except Exception:
+                if attempt < 3:
+                    time.sleep(0.5 * (attempt + 1))
+                else:
+                    raise
+
+        if res_data is not None:
             synced = res_data.get("syncedCount", 0)
             dedup = res_data.get("deduplicatedCount", 0)
             ts = time.strftime("%H:%M:%S")
@@ -1526,18 +1538,29 @@ def run_bridge_loop():
                 "pcName": pc_name,
                 "kakaoReady": "1" if ready else "0",
                 "kakaoDetail": detail,
-                "waitMs": "8000",
+                "waitMs": "0",
             })
             poll_url = f"{server_url}/api/user/messages/kakao/pc-agent?{query}"
-            req = urllib.request.Request(poll_url, method="GET", headers={"User-Agent": "SheetBot-PC-Kakao-Agent/2.0"})
+            req = urllib.request.Request(
+                poll_url,
+                method="GET",
+                headers={
+                    "User-Agent": "SheetBot-PC-Kakao-Agent/2.0",
+                    "Cookie": "__egdesk_tunnel_ctx=mcp-server-fxkud1:SheetBot",
+                },
+            )
 
-            with urllib.request.urlopen(req, timeout=20, context=ssl_ctx) as resp:
+            with urllib.request.urlopen(req, timeout=10, context=ssl_ctx) as resp:
                 raw = resp.read().decode("utf-8", errors="replace")
                 data = json.loads(raw)
 
+            if consecutive_errors >= 5:
+                ts = time.strftime("%H:%M:%S")
+                print(f"[{ts}] 🟢 서버 연결이 정상 복구되었습니다.")
             consecutive_errors = 0
             job = data.get("job")
             if not job:
+                time.sleep(2.5)
                 continue
 
             job_id = job.get("jobId", "")
@@ -1565,17 +1588,22 @@ def run_bridge_loop():
                 "error": send_res.get("error", ""),
             }).encode("utf-8")
 
-            report_req = urllib.request.Request(
-                f"{server_url}/api/user/messages/kakao/pc-agent",
-                data=report_payload,
-                method="POST",
-                headers={
-                    "Content-Type": "application/json; charset=utf-8",
-                    "User-Agent": "SheetBot-PC-Kakao-Agent/2.0",
-                },
-            )
-            with urllib.request.urlopen(report_req, timeout=10, context=ssl_ctx) as _:
-                pass
+            for _rep_try in range(4):
+                try:
+                    report_req = urllib.request.Request(
+                        f"{server_url}/api/user/messages/kakao/pc-agent",
+                        data=report_payload,
+                        method="POST",
+                        headers={
+                            "Content-Type": "application/json; charset=utf-8",
+                            "User-Agent": "SheetBot-PC-Kakao-Agent/2.0",
+                            "Cookie": "__egdesk_tunnel_ctx=mcp-server-fxkud1:SheetBot",
+                        },
+                    )
+                    with urllib.request.urlopen(report_req, timeout=10, context=ssl_ctx) as _:
+                        break
+                except Exception:
+                    time.sleep(0.5)
 
         except KeyboardInterrupt:
             print("\n👋 사용자에 의해 시트봇 내 PC 카톡 브리지가 종료되었습니다.")
@@ -1583,10 +1611,14 @@ def run_bridge_loop():
         except urllib.error.HTTPError as e:
             err_body = ""
             try:
-                err_body = e.read().decode("utf-8", errors="replace")[:160]
+                err_body = e.read().decode("utf-8", errors="replace").strip()[:160]
             except Exception:
                 pass
             consecutive_errors += 1
+            # Render/Cloudflare 터널 프록시의 간헐적 빈 400 응답(Content-Length: 0)은 콘솔을 어지럽히지 않고 1초 뒤 조용히 재시도
+            if e.code == 400 and not err_body and consecutive_errors < 5:
+                time.sleep(1.0)
+                continue
             wait_sec = min(10, 2 * consecutive_errors)
             ts = time.strftime("%H:%M:%S")
             detail_msg = f"HTTP {e.code} {e.reason}" + (f" - {err_body}" if err_body else "")
@@ -1594,6 +1626,9 @@ def run_bridge_loop():
             time.sleep(wait_sec)
         except Exception as e:
             consecutive_errors += 1
+            if consecutive_errors < 3:
+                time.sleep(1.0)
+                continue
             wait_sec = min(10, 2 * consecutive_errors)
             ts = time.strftime("%H:%M:%S")
             print(f"[{ts}] 🔄 서버 재연결 대기 중 ({wait_sec}초)... ({e})")
