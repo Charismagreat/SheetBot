@@ -10,6 +10,10 @@ import { callSheetsTool, callAiCaller } from "@/lib/egdesk-helpers";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import { recordAiCopilotActivity } from "@/lib/ai-copilot-learning";
+import {
+  enqueueAndAwaitUserPcKakaoJob,
+  getUserPcAgentStatus,
+} from "@/lib/kakao-pc-relay-store";
 
 /**
  * AI Caller 응답 2중 언래핑 안전 파서
@@ -282,8 +286,77 @@ ${message || "맥락에 맞게 정중하고 간결하게 답장 작성"}
       });
     }
 
-    // 4. [방식 A: 호스트 PC 카카오톡 무포커스 창 제어(pc_kakao_send.py) 자동 발송]
-    const bridgeResult = await runPcKakaoSendBridge(roomName, message, false);
+    // 4. [방식 B: 이용자 개인 PC 카카오톡 릴레이 브리지 우선 발송 + 로컬 호스트 폴백]
+    const encodedEmail = encodeURIComponent(userEmail || "");
+    const guideUrl = `https://sheetbot.cloud/api/user/messages/kakao/pc-agent?guide=1&email=${encodedEmail}`;
+    const pcStatus = getUserPcAgentStatus(userEmail);
+
+    // 4-1. 해당 이용자(userEmail)의 개인 PC 카톡 브리지가 연결되어 있으면 이용자 PC로 즉시 릴레이 전송
+    if (userEmail && pcStatus.online) {
+      const remoteResult = await enqueueAndAwaitUserPcKakaoJob({
+        userEmail,
+        roomName,
+        recipientName,
+        message,
+        timeoutMs: 9_500,
+      });
+
+      if (remoteResult.ok) {
+        const pcLabel = remoteResult.pcName || pcStatus.pcName || "내 PC";
+        await Promise.all([
+          appendOutboundKakaoToSheet(
+            userEmail,
+            req,
+            roomName,
+            recipientName,
+            message,
+            `🖥️ 내 PC(${pcLabel}) 카카오톡 무포커스 자동발송`
+          ),
+          recordAiCopilotActivity({
+            userEmail: userEmail || "anonymous",
+            phoneNumber,
+            req,
+            command: `[내 PC 카톡 자동발송] '${roomName}' 방에 카카오톡 전송: ${message.slice(0, 40)}`,
+            actionType: "KAKAO_DISPATCH",
+            domainTag: "문자/소통",
+            targetSheet: "카카오톡대화대장",
+            targetRecipient: roomName,
+            dispatchMethod: `방식 B (내 PC [${pcLabel}] 카카오톡 Win32 무포커스 브릿지)`,
+            resultSummary: `🖥️ 내 PC(${pcLabel})에서 [${roomName}] 카카오톡 무포커스 자동 전송 완료${remoteResult.confirmed ? " (입력칸 비워짐 확인됨)" : ""}: "${message.slice(0, 50)}"`,
+            status: "SUCCESS",
+          }),
+        ]);
+
+        return NextResponse.json({
+          success: true,
+          method: "USER_PC_KAKAO_BRIDGE",
+          confirmed: Boolean(remoteResult.confirmed),
+          chatRoomName: roomName,
+          pcName: pcLabel,
+          message: `🖥️ 내 PC(${pcLabel}) 카카오톡을 통해 [${roomName}] 방으로 답장을 자동 전송했습니다!`,
+        });
+      }
+
+      const isDraftProtected = Boolean(remoteResult.draftPresent);
+      return NextResponse.json({
+        success: false,
+        requireMobileFallback: true,
+        draftProtected: isDraftProtected,
+        pcAgentOnline: true,
+        guideUrl,
+        pairingCode: pcStatus.pairingCode,
+        error: isDraftProtected
+          ? `⚠️ 내 PC(${remoteResult.pcName || "Windows PC"}) 카카오톡 [${roomName}] 입력창에 작성 중이던 글(초안)이 있어 덮어쓰지 않고 보호했습니다.`
+          : `내 PC(${remoteResult.pcName || "Windows PC"}) 카카오톡 자동 전송 불가: ${remoteResult.error || "카카오톡 로그인/잠금 상태를 확인해 주세요."}`,
+      });
+    }
+
+    // 4-2. 로컬 서버 호스트 PC 폴백 (단, HOST_KAKAO_OWNER_EMAIL이 지정된 경우 해당 계정만 허용하여 타 회원 오발송 차단)
+    const hostOwnerEmail = (process.env.HOST_KAKAO_OWNER_EMAIL || "").toLowerCase().trim();
+    const canTryHostLocal = !hostOwnerEmail || hostOwnerEmail === userEmail;
+    const bridgeResult = canTryHostLocal
+      ? await runPcKakaoSendBridge(roomName, message, false)
+      : { ok: false, error: "내 PC 카톡 브리지가 연결되어 있지 않습니다." };
 
     if (bridgeResult.ok) {
       await Promise.all([
@@ -304,7 +377,7 @@ ${message || "맥락에 맞게 정중하고 간결하게 답장 작성"}
           domainTag: "문자/소통",
           targetSheet: "카카오톡대화대장",
           targetRecipient: roomName,
-          dispatchMethod: "방식 A (PC 카카오톡 Win32 무포커스 브릿지)",
+          dispatchMethod: "방식 B (PC 카카오톡 Win32 무포커스 브릿지)",
           resultSummary: `🖥️ [${roomName}] PC 카카오톡 무포커스 자동 전송 완료${bridgeResult.confirmed ? " (입력칸 비워짐 확인됨)" : ""}: "${message.slice(0, 50)}"`,
           status: "SUCCESS",
         }),
@@ -319,17 +392,19 @@ ${message || "맥락에 맞게 정중하고 간결하게 답장 작성"}
       });
     }
 
-    // PC 카카오톡 미실행 또는 입력창 초안 존재 등으로 거부된 경우
-    const errReason = bridgeResult.error || "호스트 PC에서 열려 있는 카카오톡을 찾지 못했습니다.";
+    // 내 PC 브리지 미연결 또는 카카오톡 미실행 시 안내
     const isDraftProtected = Boolean(bridgeResult.draft_present);
 
     return NextResponse.json({
       success: false,
       requireMobileFallback: true,
       draftProtected: isDraftProtected,
+      pcAgentOnline: false,
+      guideUrl,
+      pairingCode: pcStatus.pairingCode,
       error: isDraftProtected
-        ? `⚠️ PC 카카오톡 [${roomName}] 입력창에 작성 중이던 글(초안)이 있어 덮어쓰지 않고 보호했습니다. 스마트폰 카톡 발송(방식 B)을 이용해 주세요.`
-        : `PC 카카오톡 자동 전송 불가 (${errReason}). 스마트폰 카톡 발송(방식 B)을 이용해 주세요.`,
+        ? `⚠️ PC 카카오톡 [${roomName}] 입력창에 작성 중이던 글(초안)이 있어 덮어쓰지 않고 보호했습니다.`
+        : `내 PC에 '시트봇 PC 카톡 브리지'가 실행되어 있지 않거나 PC 카카오톡이 닫혀 있습니다. 아래 [🔗 내 PC 카톡 연결 안내]에서 원클릭 브리지를 실행하거나 내 폰 카톡 발송(방식 A)을 이용해 주세요.`,
     });
   } catch (err: any) {
     console.error("[KakaoSend] Error:", err);

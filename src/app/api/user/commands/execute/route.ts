@@ -23,6 +23,7 @@ import {
   recordAiCopilotActivity,
 } from "@/lib/ai-copilot-learning";
 import { evaluateKakaoSafetyGate } from "@/app/api/user/messages/kakao/send/route";
+import { getUserPcAgentStatus } from "@/lib/kakao-pc-relay-store";
 
 export interface DriveFileItemDto {
   id: string;
@@ -1863,6 +1864,8 @@ ${sampleDataTexts.join("\n\n====================\n\n")}
       }
 
       const safetyWarnings = evaluateKakaoSafetyGate(suggestedReply, lastInboundMessage);
+      const pcStatus = getUserPcAgentStatus(cleanEmail);
+      const pcBridgeGuideUrl = `https://sheetbot.cloud/api/user/messages/kakao/pc-agent?guide=1&email=${encodeURIComponent(cleanEmail)}`;
 
       const kakaoDispatchData = {
         chatRoomName: resolvedRoomName,
@@ -1871,6 +1874,11 @@ ${sampleDataTexts.join("\n\n====================\n\n")}
         lastInboundTime,
         suggestedReply,
         safetyWarnings,
+        pcAgentOnline: pcStatus.online,
+        pcKakaoReady: pcStatus.kakaoReady,
+        pcName: pcStatus.pcName,
+        pairingCode: pcStatus.pairingCode,
+        pcBridgeGuideUrl,
       };
 
       plan.explanation = `💛 [${resolvedRoomName}] 카카오톡 답장 초안이 준비되었습니다.\n• 답장 초안: "${suggestedReply}"\n아래 카드에서 내용을 확인·수정한 뒤 발송 방식(스마트폰 즉시 답장 / PC 카톡 자동 발송)을 선택해 주세요.`;

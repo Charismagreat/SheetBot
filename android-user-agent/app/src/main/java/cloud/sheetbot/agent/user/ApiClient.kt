@@ -2173,7 +2173,12 @@ object ApiClient {
                             lastInboundMessage = kakaoObj.optString("lastInboundMessage", ""),
                             lastInboundTime = kakaoObj.optString("lastInboundTime", ""),
                             suggestedReply = kakaoObj.optString("suggestedReply", ""),
-                            safetyWarnings = warnList
+                            safetyWarnings = warnList,
+                            pcAgentOnline = kakaoObj.optBoolean("pcAgentOnline", false),
+                            pcKakaoReady = kakaoObj.optBoolean("pcKakaoReady", false),
+                            pcName = kakaoObj.optString("pcName", ""),
+                            pairingCode = kakaoObj.optString("pairingCode", ""),
+                            pcBridgeGuideUrl = kakaoObj.optString("pcBridgeGuideUrl", "")
                         )
                     }
 
@@ -2322,13 +2327,17 @@ object ApiClient {
                         success = true,
                         message = resJson.optString("message", "카카오톡 답장이 전송되었습니다."),
                         suggestedReply = resJson.optString("suggestedReply", "").takeIf { it.isNotBlank() },
-                        safetyWarnings = warnList
+                        safetyWarnings = warnList,
+                        pcName = resJson.optString("pcName", "").takeIf { it.isNotBlank() }
                     )
                 } else {
                     return@withContext KakaoSendResult(
                         success = false,
                         requireMobileFallback = resJson.optBoolean("requireMobileFallback", true),
                         draftProtected = resJson.optBoolean("draftProtected", false),
+                        pcAgentOnline = resJson.optBoolean("pcAgentOnline", false),
+                        guideUrl = resJson.optString("guideUrl", "").takeIf { it.isNotBlank() },
+                        pairingCode = resJson.optString("pairingCode", "").takeIf { it.isNotBlank() },
                         error = resJson.optString("error", "PC 카카오톡 발송에 실패했습니다.")
                     )
                 }
@@ -4651,7 +4660,12 @@ data class KakaoDispatchInfo(
     val lastInboundMessage: String = "",
     val lastInboundTime: String = "",
     val suggestedReply: String = "",
-    val safetyWarnings: List<String> = emptyList()
+    val safetyWarnings: List<String> = emptyList(),
+    val pcAgentOnline: Boolean = false,
+    val pcKakaoReady: Boolean = false,
+    val pcName: String = "",
+    val pairingCode: String = "",
+    val pcBridgeGuideUrl: String = ""
 )
 
 data class KakaoSendResult(
@@ -4661,6 +4675,10 @@ data class KakaoSendResult(
     val safetyWarnings: List<String> = emptyList(),
     val requireMobileFallback: Boolean = false,
     val draftProtected: Boolean = false,
+    val pcAgentOnline: Boolean = false,
+    val pcName: String? = null,
+    val guideUrl: String? = null,
+    val pairingCode: String? = null,
     val error: String? = null
 )
 

@@ -1496,9 +1496,14 @@ class AiCopilotCardController(
         }
         cardView.addView(btnMobileSend)
 
-        // 방식 B 버튼: 호스트 PC 카카오톡 무포커스 브릿지(pc_kakao_send.py)로 자동 발송
+        // 방식 B 버튼: 내 개인/사무실 PC 카카오톡 무포커스 브릿지(sheetbot_pc_kakao_agent.py)로 자동 발송
+        val pcDisplayLabel = if (dispatch.pcAgentOnline && dispatch.pcName.isNotBlank()) {
+            "내 PC(${dispatch.pcName})"
+        } else {
+            "내 PC"
+        }
         val btnPcBridgeSend = Button(activity).apply {
-            text = "🖥️ 방식 B: 호스트 PC 카톡으로 무포커스 자동 발송 (과거대화 가능)"
+            text = "🖥️ 방식 B: $pcDisplayLabel 카톡으로 무포커스 자동 발송 (과거대화 가능)"
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
             typeface = Typeface.DEFAULT_BOLD
@@ -1514,6 +1519,48 @@ class AiCopilotCardController(
             }
         }
 
+        // 내 PC 카톡 브리지 연결 상태 및 원클릭 설치 가이드/링크 복사 버튼
+        val userEmailForGuide = (prefs.userEmail ?: "").trim()
+        val defaultGuideUrl = dispatch.pcBridgeGuideUrl.ifBlank {
+            "https://sheetbot.cloud/api/user/messages/kakao/pc-agent?guide=1&email=${Uri.encode(userEmailForGuide)}"
+        }
+        val btnPcBridgeGuide = TextView(activity).apply {
+            val codeTag = if (dispatch.pairingCode.isNotBlank()) " (코드: SB-${dispatch.pairingCode})" else ""
+            text = if (dispatch.pcAgentOnline) {
+                "🟢 내 PC(${dispatch.pcName.ifBlank { "Windows PC" }}) 카톡 브리지 연결됨$codeTag · 설정 보기"
+            } else {
+                "🔗 내 PC 카톡 원격 연결 안내 및 원클릭 실행파일 받기$codeTag"
+            }
+            setTextColor(Color.parseColor(if (dispatch.pcAgentOnline) "#34D399" else "#93C5FD"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(dpToPx(10), dpToPx(7), dpToPx(10), dpToPx(7))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#1E293B"))
+                cornerRadius = dpToPx(8).toFloat()
+                setStroke(dpToPx(1), Color.parseColor(if (dispatch.pcAgentOnline) "#059669" else "#334155"))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dpToPx(6)
+            }
+            setOnClickListener {
+                val cm = activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                cm?.setPrimaryClip(ClipData.newPlainText("SheetBot PC 카톡 브리지 연결 주소", defaultGuideUrl))
+                Toast.makeText(
+                    activity,
+                    "📋 내 PC 카톡 연결 주소가 복사되었습니다! PC로 보내거나 아래 안내 페이지를 확인하세요.",
+                    Toast.LENGTH_LONG
+                ).show()
+                try {
+                    activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(defaultGuideUrl)))
+                } catch (_: Exception) {}
+            }
+        }
+
         btnPcBridgeSend.setOnClickListener {
             val replyMsg = etReply.text.toString().trim()
             if (replyMsg.isBlank()) {
@@ -1522,9 +1569,9 @@ class AiCopilotCardController(
             }
 
             btnPcBridgeSend.isEnabled = false
-            btnPcBridgeSend.text = "⏳ 호스트 PC 카톡으로 전송 중..."
+            btnPcBridgeSend.text = "⏳ $pcDisplayLabel 카톡으로 전송 중..."
             tvStatus.visibility = View.VISIBLE
-            tvStatus.text = "🖥️ 호스트 PC 카카오톡에서 [${dispatch.chatRoomName}] 방을 열어 무포커스 전송 중입니다..."
+            tvStatus.text = "🖥️ $pcDisplayLabel 카카오톡에서 [${dispatch.chatRoomName}] 방을 열어 무포커스 전송 중입니다..."
             tvStatus.setTextColor(Color.parseColor("#38BDF8"))
 
             val userEmail = prefs.userEmail ?: ""
@@ -1542,26 +1589,28 @@ class AiCopilotCardController(
                 )
                 withContext(Dispatchers.Main) {
                     if (res.success) {
-                        btnPcBridgeSend.text = "✅ 호스트 PC 카톡 자동 발송 완료"
+                        val sentPcLabel = res.pcName?.takeIf { it.isNotBlank() }?.let { "내 PC($it)" } ?: pcDisplayLabel
+                        btnPcBridgeSend.text = "✅ $sentPcLabel 카톡 자동 발송 완료"
                         btnPcBridgeSend.background = GradientDrawable().apply {
                             setColor(Color.parseColor("#059669"))
                             cornerRadius = dpToPx(8).toFloat()
                         }
-                        tvStatus.text = res.message ?: "PC 카카오톡을 통해 성공적으로 전송되었습니다."
+                        tvStatus.text = res.message ?: "내 PC 카카오톡을 통해 성공적으로 전송되었습니다."
                         tvStatus.setTextColor(Color.parseColor("#34D399"))
-                        Toast.makeText(activity, "✅ PC 카톡 자동 발송 완료!", Toast.LENGTH_SHORT).show()
-                        addLogItem("PC 카톡 자동발송", "${dispatch.chatRoomName}: $replyMsg", true)
+                        Toast.makeText(activity, "✅ $sentPcLabel 카톡 자동 발송 완료!", Toast.LENGTH_SHORT).show()
+                        addLogItem("내 PC 카톡 자동발송", "${dispatch.chatRoomName}: $replyMsg", true)
                     } else {
                         btnPcBridgeSend.isEnabled = true
-                        btnPcBridgeSend.text = "🖥️ 방식 B: 호스트 PC 카톡으로 무포커스 자동 발송 (재시도)"
-                        tvStatus.text = res.error ?: "PC 카카오톡 발송에 실패했습니다."
+                        btnPcBridgeSend.text = "🖥️ 방식 B: $pcDisplayLabel 카톡으로 무포커스 자동 발송 (재시도)"
+                        tvStatus.text = res.error ?: "내 PC 카카오톡 발송에 실패했습니다."
                         tvStatus.setTextColor(Color.parseColor("#F87171"))
-                        Toast.makeText(activity, res.error ?: "PC 카톡 전송 불가. 방식 A(스마트폰 카톡)를 이용해 주세요.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(activity, res.error ?: "내 PC 카톡 전송 불가. 연결 안내를 확인하거나 방식 A를 이용해 주세요.", Toast.LENGTH_LONG).show()
                     }
                 }
             }
         }
         cardView.addView(btnPcBridgeSend)
+        cardView.addView(btnPcBridgeGuide)
         cardView.addView(tvStatus)
 
         container.addView(cardView)
