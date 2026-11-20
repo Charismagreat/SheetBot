@@ -181,8 +181,11 @@ def top_windows() -> list[int]:
     out: list[int] = []
 
     def cb(h, _):
-        if process_exe(window_pid(h)) == KAKAO_EXE:
-            out.append(h)
+        try:
+            if process_exe(window_pid(h)) == KAKAO_EXE:
+                out.append(h)
+        except BaseException:
+            return False
         return True
 
     user32.EnumWindows(EnumProc(cb), 0)
@@ -193,7 +196,10 @@ def descendants(hwnd: int) -> list[int]:
     out: list[int] = []
 
     def cb(h, _):
-        out.append(h)
+        try:
+            out.append(h)
+        except BaseException:
+            return False
         return True
 
     user32.EnumChildWindows(hwnd, EnumProc(cb), 0)
@@ -891,7 +897,7 @@ class MemoryKeys:
     def key_for(self, relpath: str):
         return self.keys.get(relpath)
 
-    def scan(self, relpaths: list[str], deep: bool = False) -> int:
+    def scan(self, relpaths: list[str], deep: bool = False, hex_only: bool = False) -> int:
         want: dict[str, bytes] = {}
         for rel in relpaths:
             if rel in self.keys:
@@ -917,8 +923,10 @@ class MemoryKeys:
                     found += 1
             return not want
 
-        passes = [("hex", None), ("raw8", 8)]
-        if deep:
+        passes: list[tuple[str, int | None]] = [("hex", None)]
+        if not hex_only:
+            passes.append(("raw8", 8))
+        if deep and not hex_only:
             passes.append(("raw1", 1))
         for _label, step in passes:
             if not want:
@@ -1038,7 +1046,9 @@ class KakaoAccountReader:
         self.names: dict[str, str] = {}
         self.my_id = ""
         self.rooms: list[dict] = []
-        self.keys.scan([ROOMLIST_DB, USER_DB])
+        self.keys.scan([ROOMLIST_DB, USER_DB], hex_only=True)
+        if not self.keys.key_for(ROOMLIST_DB):
+            self.keys.scan([ROOMLIST_DB])
         self._load_users()
         self._load_rooms()
 
@@ -1063,9 +1073,30 @@ class KakaoAccountReader:
         with self.db(relpath) as conn:
             return _rows(conn, sql, bind)
 
-    def scan_rooms(self, chat_ids: list[str] | None = None) -> int:
-        ids = chat_ids if chat_ids is not None else [r["id"] for r in self.rooms if r["type"] != "PlusChat"]
-        return self.keys.scan([self.chat_relpath(c) for c in ids])
+    def scan_rooms(self, chat_ids: list[str] | None = None, hex_only: bool = True) -> int:
+        if chat_ids is not None:
+            ids = chat_ids
+        else:
+            # PC 카카오톡에서 현재 실제로 열려 있어 WAL 파일(.edb-wal)이 존재하는 활성 대화방만 스캔 (닫힌 방은 메모리에 키가 없으므로 스캔 제외)
+            wal_rooms: list[tuple[float, str]] = []
+            for r in self.rooms:
+                if r["type"] == "PlusChat":
+                    continue
+                cid = r["id"]
+                if self.readable(cid):
+                    continue
+                rel = self.chat_relpath(cid)
+                wal_path = os.path.join(self.acc, rel) + "-wal"
+                try:
+                    if os.path.exists(wal_path) and os.path.getsize(wal_path) > 0:
+                        wal_rooms.append((os.path.getmtime(wal_path), cid))
+                except OSError:
+                    continue
+            wal_rooms.sort(reverse=True)
+            ids = [cid for _, cid in wal_rooms]
+            if not ids:
+                return 0
+        return self.keys.scan([self.chat_relpath(c) for c in ids], hex_only=hex_only)
 
     def readable(self, chat_id: str) -> bool:
         return self.keys.key_for(self.chat_relpath(chat_id)) is not None
@@ -1164,9 +1195,10 @@ class KakaoNativeLiveWatcher:
     - 브리지 시작 이후 새로 발생한 메시지(logId > last_log_id AND sendAt >= start_ts - 5)만 파투 시트로 실시간 전송합니다.
     """
 
-    def __init__(self, server_url: str, email: str, code: str, pc_name: str, ssl_ctx):
+    def __init__(self, server_url: str, email: str, phone: str, code: str, pc_name: str, ssl_ctx):
         self.server_url = server_url
         self.email = email
+        self.phone = phone
         self.code = code
         self.pc_name = pc_name
         self.ssl_ctx = ssl_ctx
@@ -1328,6 +1360,7 @@ class KakaoNativeLiveWatcher:
         payload = json.dumps({
             "action": "SYNC_MESSAGES",
             "email": self.email,
+            "phone": self.phone,
             "code": self.code,
             "pcName": self.pc_name,
             "messages": new_events,
@@ -1399,30 +1432,37 @@ def save_config(cfg: dict) -> None:
             pass
 
 
-def resolve_agent_settings() -> tuple[str, str, str]:
+def resolve_agent_settings() -> tuple[str, str, str, str]:
     cfg = load_saved_config()
     server_url = os.environ.get("SHEETBOT_SERVER_URL") or cfg.get("sheetbotServerUrl") or cfg.get("serverUrl") or DEFAULT_SERVER_URL
-    email = os.environ.get("SHEETBOT_USER_EMAIL") or cfg.get("userEmail") or ""
-    phone = os.environ.get("SHEETBOT_USER_PHONE") or cfg.get("phoneNumber") or ""
-    code = os.environ.get("SHEETBOT_PAIRING_CODE") or cfg.get("pairingCode") or ""
-
-    if not email and phone:
-        digits = "".join(ch for ch in str(phone) if ch.isdigit())
-        if len(digits) >= 9 and digits.startswith("01"):
-            email = f"{digits}@fts.local"
+    email = (os.environ.get("SHEETBOT_USER_EMAIL") or cfg.get("userEmail") or "").strip()
+    phone = (os.environ.get("SHEETBOT_USER_PHONE") or cfg.get("phoneNumber") or "").strip()
+    code = (os.environ.get("SHEETBOT_PAIRING_CODE") or cfg.get("pairingCode") or "").strip()
 
     args = sys.argv[1:]
     for i, a in enumerate(args):
         if a in ("--email", "-e") and i + 1 < len(args):
             email = args[i + 1].strip()
         elif a in ("--phone", "-p") and i + 1 < len(args):
-            p_digits = "".join(ch for ch in args[i + 1] if ch.isdigit())
-            if len(p_digits) >= 9:
-                email = f"{p_digits}@fts.local"
+            phone = args[i + 1].strip()
         elif a in ("--code", "-c") and i + 1 < len(args):
             code = args[i + 1].strip()
         elif a in ("--server", "-s") and i + 1 < len(args):
             server_url = args[i + 1].strip().rstrip("/")
+
+    # SB- 접두어 자동 정규화
+    if code:
+        code = code.upper().replace("SB-", "").strip()
+
+    # 전화번호 숫자 정규화 및 이메일이 비어 있을 때 자동 생성
+    clean_phone = "".join(ch for ch in str(phone) if ch.isdigit())
+    if not clean_phone and email:
+        m = re.match(r"^([0-9]{9,12})@", email)
+        if m:
+            clean_phone = m.group(1)
+
+    if not email and clean_phone and len(clean_phone) >= 9 and clean_phone.startswith("01"):
+        email = f"{clean_phone}@fts.local"
 
     if not email and not code:
         print("=" * 68)
@@ -1434,23 +1474,24 @@ def resolve_agent_settings() -> tuple[str, str, str]:
         if "@" in user_input:
             email = user_input.lower()
         elif len(digits_only) >= 9 and digits_only.startswith("01"):
+            clean_phone = digits_only
             email = f"{digits_only}@fts.local"
         else:
-            code = user_input.upper().replace("SB-", "")
+            code = user_input.upper().replace("SB-", "").strip()
 
-    save_config({"serverUrl": server_url, "userEmail": email, "phoneNumber": phone, "pairingCode": code})
-    return server_url.rstrip("/"), email, code
+    save_config({"serverUrl": server_url, "userEmail": email, "phoneNumber": clean_phone, "pairingCode": code})
+    return server_url.rstrip("/"), email, clean_phone, code
 
 
 def run_bridge_loop():
-    server_url, email, code = resolve_agent_settings()
+    server_url, email, phone, code = resolve_agent_settings()
     pc_name = socket.gethostname() or "Windows-PC"
     ssl_ctx = ssl.create_default_context()
 
     print("\n" + "=" * 68)
     print("  🚀 [SheetBot & 파투 내 PC 카톡 브리지 v2.0] 실시간 연결 시작!")
     print(f"  • 연결 서버   : {server_url}")
-    print(f"  • 연동 계정   : {email or code}")
+    print(f"  • 연동 계정   : {email or phone or code}")
     print(f"  • 내 PC 이름  : {pc_name}")
     print("=" * 68)
 
@@ -1461,7 +1502,7 @@ def run_bridge_loop():
     print("  • 기능 2: PC 카톡 열린 대화창의 실시간 대화(수신 + 내 PC 직접 발신) 파투 시트 자동 기록\n")
 
     # 열린 대화창 실시간 감시 백그라운드 스레드 기동 (kakao_native)
-    watcher = KakaoNativeLiveWatcher(server_url, email, code, pc_name, ssl_ctx)
+    watcher = KakaoNativeLiveWatcher(server_url, email, phone, code, pc_name, ssl_ctx)
     watcher.start_background_thread()
 
     last_ready_state = None
@@ -1480,11 +1521,12 @@ def run_bridge_loop():
 
             query = urllib.parse.urlencode({
                 "email": email,
+                "phone": phone,
                 "code": code,
                 "pcName": pc_name,
                 "kakaoReady": "1" if ready else "0",
                 "kakaoDetail": detail,
-                "waitMs": "12000",
+                "waitMs": "8000",
             })
             poll_url = f"{server_url}/api/user/messages/kakao/pc-agent?{query}"
             req = urllib.request.Request(poll_url, method="GET", headers={"User-Agent": "SheetBot-PC-Kakao-Agent/2.0"})
@@ -1513,6 +1555,7 @@ def run_bridge_loop():
             report_payload = json.dumps({
                 "jobId": job_id,
                 "email": email,
+                "phone": phone,
                 "code": code,
                 "pcName": pc_name,
                 "ok": bool(send_res.get("ok")),
@@ -1537,6 +1580,18 @@ def run_bridge_loop():
         except KeyboardInterrupt:
             print("\n👋 사용자에 의해 시트봇 내 PC 카톡 브리지가 종료되었습니다.")
             break
+        except urllib.error.HTTPError as e:
+            err_body = ""
+            try:
+                err_body = e.read().decode("utf-8", errors="replace")[:160]
+            except Exception:
+                pass
+            consecutive_errors += 1
+            wait_sec = min(10, 2 * consecutive_errors)
+            ts = time.strftime("%H:%M:%S")
+            detail_msg = f"HTTP {e.code} {e.reason}" + (f" - {err_body}" if err_body else "")
+            print(f"[{ts}] 🔄 서버 재연결 대기 중 ({wait_sec}초)... ({detail_msg})")
+            time.sleep(wait_sec)
         except Exception as e:
             consecutive_errors += 1
             wait_sec = min(10, 2 * consecutive_errors)

@@ -224,7 +224,18 @@ export async function GET(req: NextRequest) {
   }
 
   // 4. 이용자 개인 PC 브리지의 아웃바운드 Long-Polling
-  if (!resolvedEmail) {
+  let effectiveEmail = resolvedEmail;
+  if (!effectiveEmail) {
+    const cleanPhoneFallback = (queryPhone || headerPhone || queryEmail).replace(/[^0-9]/g, "");
+    const cleanCodeFallback = (queryCode || queryEmail).toUpperCase().trim().replace(/^SB-/, "");
+    if (cleanPhoneFallback.length >= 9 && cleanPhoneFallback.startsWith("01")) {
+      effectiveEmail = `${cleanPhoneFallback}@fts.local`;
+    } else if (/^[0-9A-F]{6}$/.test(cleanCodeFallback)) {
+      effectiveEmail = `code-${cleanCodeFallback.toLowerCase()}@fts.local`;
+    }
+  }
+
+  if (!effectiveEmail) {
     return NextResponse.json(
       {
         ok: false,
@@ -237,21 +248,22 @@ export async function GET(req: NextRequest) {
   const pcName = url.searchParams.get("pcName") || "내 Windows PC";
   const kakaoReady = url.searchParams.get("kakaoReady") === "1";
   const kakaoDetail = url.searchParams.get("kakaoDetail") || "";
-  const waitMs = Number(url.searchParams.get("waitMs") || "12000");
+  const waitMs = Number(url.searchParams.get("waitMs") || "8000");
 
   recordPcAgentHeartbeat({
-    userEmail: resolvedEmail,
+    userEmail: effectiveEmail,
+    phoneNumber: queryPhone || headerPhone,
     pcName,
     kakaoReady,
     kakaoDetail,
   });
 
-  const job = await waitForNextJobForUser(resolvedEmail, pcName, waitMs);
+  const job = await waitForNextJobForUser(effectiveEmail, pcName, waitMs);
 
   return NextResponse.json(
     {
       ok: true,
-      userEmail: resolvedEmail,
+      userEmail: effectiveEmail,
       job: job
         ? {
             jobId: job.jobId,
