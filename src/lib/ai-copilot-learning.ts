@@ -713,6 +713,9 @@ export async function syncPcLiveKakaoMessageToSheets(params: {
     if (!primaryKey) return { synced: false, deduplicated: false };
 
     // 2단계 교차 채널 통합 지문 검사 (스마트폰 알림 또는 AI 비서 발송으로 이미 기록된 메시지이면 즉시 스킵)
+    // 주의: userEmail이 "01072165884@fts.local"이고 resolvedPhone이 "01072165884"일 때
+    // isDuplicateAndRegisterKakaoMessage 내부에서 @fts.local을 제거하므로 두 키가 동일한 cleanUser("01072165884")가 됩니다.
+    // 따라서 두 번 호출하면 자기 자신이 방금 등록한 지문에 걸려 항상 중복(true)으로 판정되므로 반드시 서로 다른 정규화 키일 때만 2차 호출합니다.
     const isDupPrimary = isDuplicateAndRegisterKakaoMessage({
       userKey: primaryKey,
       roomName: params.roomName,
@@ -723,9 +726,10 @@ export async function syncPcLiveKakaoMessageToSheets(params: {
     if (isDupPrimary) {
       return { synced: false, deduplicated: true };
     }
-    if (cleanEmail && cleanEmail !== primaryKey) {
+    const strippedEmailKey = cleanEmail.replace(/@(fts\.local|filetosheet\.cloud)$/, "");
+    if (strippedEmailKey && strippedEmailKey !== primaryKey) {
       const isDupEmail = isDuplicateAndRegisterKakaoMessage({
-        userKey: cleanEmail,
+        userKey: strippedEmailKey,
         roomName: params.roomName,
         senderName: params.senderName,
         message: msgText,
