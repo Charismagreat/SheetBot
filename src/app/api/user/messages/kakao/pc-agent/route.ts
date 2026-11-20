@@ -200,17 +200,26 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // 3. 모바일 앱에서 내 PC 연결 상태 조회
+  // 3. 모바일 앱 및 파투(FileToSheet) 웹에서 내 PC 연결 상태 조회 (CORS 허용)
   if (isStatusOnly) {
     const status = getUserPcAgentStatus(resolvedEmail);
     const encodedEmail = encodeURIComponent(resolvedEmail);
-    return NextResponse.json({
-      success: true,
-      userEmail: resolvedEmail,
-      ...status,
-      guideUrl: `${serverOrigin}/api/user/messages/kakao/pc-agent?guide=1&email=${encodedEmail}`,
-      downloadBatUrl: `${serverOrigin}/api/user/messages/kakao/pc-agent?download=bat&email=${encodedEmail}`,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        userEmail: resolvedEmail,
+        ...status,
+        guideUrl: `${serverOrigin}/api/user/messages/kakao/pc-agent?guide=1&email=${encodedEmail}`,
+        downloadBatUrl: `${serverOrigin}/api/user/messages/kakao/pc-agent?download=bat&email=${encodedEmail}`,
+      },
+      {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Cache-Control": "no-store",
+        },
+      }
+    );
   }
 
   // 4. 이용자 개인 PC 브리지의 아웃바운드 Long-Polling

@@ -414,41 +414,58 @@ def send_kakao_message(room_name: str, text: str) -> dict:
 
 
 # ============================================================================
-# 2. SheetBot 클라우드 서버 아웃바운드 릴레이 루프
+# 2. SheetBot / FileToSheet(파투) 클라우드 서버 아웃바운드 릴레이 루프
 # ============================================================================
-CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sheetbot_kakao_bridge.json")
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+LOCAL_CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
+HOME_CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sheetbot_kakao_bridge.json")
 DEFAULT_SERVER_URL = "https://sheetbot.cloud"
 
 
 def load_saved_config() -> dict:
-    try:
-        if os.path.exists(CONFIG_PATH):
-            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
-    except Exception:
-        pass
-    return {}
+    merged: dict = {}
+    for p in (HOME_CONFIG_PATH, LOCAL_CONFIG_PATH):
+        try:
+            if os.path.exists(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        merged.update({k: v for k, v in data.items() if v})
+        except Exception:
+            pass
+    return merged
 
 
 def save_config(cfg: dict) -> None:
-    try:
-        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+    for p in (LOCAL_CONFIG_PATH, HOME_CONFIG_PATH):
+        try:
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
 
 
 def resolve_agent_settings() -> tuple[str, str, str]:
     cfg = load_saved_config()
-    server_url = os.environ.get("SHEETBOT_SERVER_URL") or cfg.get("serverUrl") or DEFAULT_SERVER_URL
+    server_url = os.environ.get("SHEETBOT_SERVER_URL") or cfg.get("sheetbotServerUrl") or cfg.get("serverUrl") or DEFAULT_SERVER_URL
     email = os.environ.get("SHEETBOT_USER_EMAIL") or cfg.get("userEmail") or ""
+    phone = os.environ.get("SHEETBOT_USER_PHONE") or cfg.get("phoneNumber") or ""
     code = os.environ.get("SHEETBOT_PAIRING_CODE") or cfg.get("pairingCode") or ""
+
+    if not email and phone:
+        digits = "".join(ch for ch in str(phone) if ch.isdigit())
+        if len(digits) >= 9 and digits.startswith("01"):
+            email = f"{digits}@fts.local"
 
     # CLI 인자 파싱
     args = sys.argv[1:]
     for i, a in enumerate(args):
         if a in ("--email", "-e") and i + 1 < len(args):
             email = args[i + 1].strip()
+        elif a in ("--phone", "-p") and i + 1 < len(args):
+            p_digits = "".join(ch for ch in args[i + 1] if ch.isdigit())
+            if len(p_digits) >= 9:
+                email = f"{p_digits}@fts.local"
         elif a in ("--code", "-c") and i + 1 < len(args):
             code = args[i + 1].strip()
         elif a in ("--server", "-s") and i + 1 < len(args):
@@ -468,7 +485,7 @@ def resolve_agent_settings() -> tuple[str, str, str]:
         else:
             code = user_input.upper().replace("SB-", "")
 
-    save_config({"serverUrl": server_url, "userEmail": email, "pairingCode": code})
+    save_config({"serverUrl": server_url, "userEmail": email, "phoneNumber": phone, "pairingCode": code})
     return server_url.rstrip("/"), email, code
 
 
