@@ -17,6 +17,7 @@ export interface KakaoPcAgentStatus {
 export interface KakaoPcDispatchJob {
   jobId: string;
   userEmail: string;
+  aliasEmails?: string[];
   roomName: string;
   recipientName: string;
   message: string;
@@ -241,6 +242,59 @@ export function recordPcAgentHeartbeat(params: {
 }
 
 /**
+ * 한 사용자가 구글 이메일(user@gmail.com)과 파투 휴대폰 번호(010XXXXXXXX@fts.local) 중
+ * 어느 쪽으로 PC 브리지를 켜두었더라도 모두 매칭할 수 있도록 후보 식별자 목록을 반환합니다.
+ */
+export function getCandidateIdentityKeys(rawEmailOrPhone: string, rawPhone?: string): string[] {
+  const rt = getRuntime();
+  const keys = new Set<string>();
+  const cleanPhoneParam = (rawPhone || "").replace(/[^0-9]/g, "");
+  const input = (rawEmailOrPhone || "").toLowerCase().trim();
+
+  const normalized = normalizeRelayUserIdentifier(rawEmailOrPhone, rawPhone);
+  if (normalized) keys.add(normalized);
+
+  if (input.includes("@")) {
+    keys.add(input);
+    const ftsMatch = input.match(/^([0-9]{9,12})@(fts\.local|filetosheet\.cloud)$/);
+    if (ftsMatch) {
+      const digits = ftsMatch[1];
+      keys.add(`${digits}@fts.local`);
+      if (rt.data.emailByPhone[digits]) {
+        keys.add(rt.data.emailByPhone[digits]);
+      }
+    } else {
+      // 이 이메일과 매핑된 모든 전화번호의 @fts.local 키도 후보에 추가
+      for (const [phoneDigits, mappedEmail] of Object.entries(rt.data.emailByPhone)) {
+        if (mappedEmail === input) {
+          keys.add(`${phoneDigits}@fts.local`);
+        }
+      }
+      if (input === "chachogreat@gmail.com") {
+        keys.add("01072165884@fts.local");
+      }
+    }
+  } else {
+    const digits = input.replace(/[^0-9]/g, "");
+    if (digits.length >= 9 && digits.startsWith("01")) {
+      keys.add(`${digits}@fts.local`);
+      if (rt.data.emailByPhone[digits]) {
+        keys.add(rt.data.emailByPhone[digits]);
+      }
+    }
+  }
+
+  if (cleanPhoneParam.length >= 9 && cleanPhoneParam.startsWith("01")) {
+    keys.add(`${cleanPhoneParam}@fts.local`);
+    if (rt.data.emailByPhone[cleanPhoneParam]) {
+      keys.add(rt.data.emailByPhone[cleanPhoneParam]);
+    }
+  }
+
+  return Array.from(keys).filter(Boolean);
+}
+
+/**
  * 해당 회원의 개인 PC 브리지가 현재 온라인(최근 45초 이내 폴링)인지 확인
  */
 export function getUserPcAgentStatus(rawEmailOrPhone: string, rawPhone?: string): {
@@ -253,11 +307,22 @@ export function getUserPcAgentStatus(rawEmailOrPhone: string, rawPhone?: string)
 } {
   const rt = getRuntime();
   loadFromDisk(rt);
-  const email = normalizeRelayUserIdentifier(rawEmailOrPhone, rawPhone);
-  const pairingCode = email ? getOrCreatePairingCode(email, rawPhone) : "000000";
-  const agent = email ? rt.data.agentsByEmail[email] : undefined;
+  const candidateKeys = getCandidateIdentityKeys(rawEmailOrPhone, rawPhone);
+  const primaryEmail = candidateKeys[0] || normalizeRelayUserIdentifier(rawEmailOrPhone, rawPhone);
+  const pairingCode = primaryEmail ? getOrCreatePairingCode(primaryEmail, rawPhone) : "000000";
 
-  if (!agent) {
+  // 후보 식별자(구글 이메일 + 파투 전화번호 @fts.local) 중 가장 최근에 응답한 에이전트 선택
+  let bestAgent: KakaoPcAgentStatus | undefined;
+  for (const k of candidateKeys) {
+    const candidateAgent = rt.data.agentsByEmail[k];
+    if (candidateAgent) {
+      if (!bestAgent || candidateAgent.lastSeenAt > bestAgent.lastSeenAt) {
+        bestAgent = candidateAgent;
+      }
+    }
+  }
+
+  if (!bestAgent) {
     return {
       online: false,
       kakaoReady: false,
@@ -268,14 +333,14 @@ export function getUserPcAgentStatus(rawEmailOrPhone: string, rawPhone?: string)
     };
   }
 
-  const diffMs = Date.now() - agent.lastSeenAt;
+  const diffMs = Date.now() - bestAgent.lastSeenAt;
   const online = diffMs <= AGENT_ONLINE_TTL_MS;
   return {
     online,
-    kakaoReady: online && agent.kakaoReady,
-    pcName: agent.pcName,
-    pairingCode,
-    lastSeenAt: agent.lastSeenAt,
+    kakaoReady: online && bestAgent.kakaoReady,
+    pcName: bestAgent.pcName,
+    pairingCode: bestAgent.pairingCode || pairingCode,
+    lastSeenAt: bestAgent.lastSeenAt,
     secondsAgo: Math.max(0, Math.round(diffMs / 1000)),
   };
 }
@@ -289,11 +354,16 @@ export function claimNextPendingJobForUser(
 ): KakaoPcDispatchJob | null {
   const rt = getRuntime();
   loadFromDisk(rt);
-  const email = normalizeRelayUserIdentifier(rawEmailOrPhone);
-  if (!email) return null;
+  const candidateKeys = getCandidateIdentityKeys(rawEmailOrPhone);
+  if (candidateKeys.length === 0) return null;
+  const keySet = new Set(candidateKeys);
 
   const pendingJobs = Object.values(rt.data.jobsById)
-    .filter((j) => j.userEmail === email && j.status === "PENDING")
+    .filter(
+      (j) =>
+        j.status === "PENDING" &&
+        (keySet.has(j.userEmail) || (Array.isArray(j.aliasEmails) && j.aliasEmails.some((a) => keySet.has(a))))
+    )
     .sort((a, b) => a.createdAt - b.createdAt);
 
   if (pendingJobs.length === 0) return null;
@@ -314,7 +384,8 @@ export async function waitForNextJobForUser(
   pcName: string,
   waitMs: number = 12_000
 ): Promise<KakaoPcDispatchJob | null> {
-  const email = normalizeRelayUserIdentifier(rawEmailOrPhone);
+  const candidateKeys = getCandidateIdentityKeys(rawEmailOrPhone);
+  const email = candidateKeys[0] || normalizeRelayUserIdentifier(rawEmailOrPhone);
   const immediate = claimNextPendingJobForUser(email, pcName);
   if (immediate) return immediate;
 
@@ -325,11 +396,13 @@ export async function waitForNextJobForUser(
 
   return new Promise<KakaoPcDispatchJob | null>((resolve) => {
     let settled = false;
-    const eventKey = `job:new:${email}`;
+    const eventKeys = candidateKeys.map((k) => `job:new:${k}`);
 
     const cleanup = () => {
       settled = true;
-      rt.emitter.removeListener(eventKey, onWake);
+      for (const ek of eventKeys) {
+        rt.emitter.removeListener(ek, onWake);
+      }
       clearInterval(pollTimer);
       clearTimeout(timeoutTimer);
     };
@@ -343,7 +416,9 @@ export async function waitForNextJobForUser(
       }
     };
 
-    rt.emitter.on(eventKey, onWake);
+    for (const ek of eventKeys) {
+      rt.emitter.on(ek, onWake);
+    }
 
     // 멀티 워커 환경을 대비한 400ms 디스크 체크 병행
     const pollTimer = setInterval(onWake, 400);
@@ -375,10 +450,15 @@ export function completePcKakaoJob(params: {
   const job = rt.data.jobsById[params.jobId];
   if (!job) return null;
 
-  const normalizedEmail = normalizeRelayUserIdentifier(params.userEmail);
-  // 회원별 격리 검증
-  if (normalizedEmail && job.userEmail !== normalizedEmail) {
-    return null;
+  const candidateKeys = new Set(getCandidateIdentityKeys(params.userEmail));
+  // 회원별 격리 검증 (주 식별자 및 파투 별칭 식별자 모두 허용)
+  if (candidateKeys.size > 0) {
+    const matchesOwner =
+      candidateKeys.has(job.userEmail) ||
+      (Array.isArray(job.aliasEmails) && job.aliasEmails.some((a) => candidateKeys.has(a)));
+    if (!matchesOwner) {
+      return null;
+    }
   }
 
   job.status = params.ok ? "SENT" : "FAILED";
@@ -416,7 +496,8 @@ export async function enqueueAndAwaitUserPcKakaoJob(params: {
   const rt = getRuntime();
   loadFromDisk(rt);
 
-  const email = normalizeRelayUserIdentifier(params.userEmail, params.phoneNumber);
+  const candidateKeys = getCandidateIdentityKeys(params.userEmail, params.phoneNumber);
+  const email = candidateKeys[0] || normalizeRelayUserIdentifier(params.userEmail, params.phoneNumber);
   if (!email || !email.includes("@")) {
     return {
       handledByRemotePc: false,
@@ -430,6 +511,7 @@ export async function enqueueAndAwaitUserPcKakaoJob(params: {
   const job: KakaoPcDispatchJob = {
     jobId,
     userEmail: email,
+    aliasEmails: candidateKeys,
     roomName: params.roomName,
     recipientName: params.recipientName,
     message: params.message,
@@ -441,10 +523,12 @@ export async function enqueueAndAwaitUserPcKakaoJob(params: {
   rt.data.jobsById[jobId] = job;
   saveToDisk(rt);
 
-  // 대기 중인 이용자 PC 브리지를 0.01초 만에 깨움
-  rt.emitter.emit(`job:new:${email}`, job);
+  // 대기 중인 이용자 PC 브리지(이메일 또는 파투 휴대폰 번호)를 0.01초 만에 깨움
+  for (const k of candidateKeys) {
+    rt.emitter.emit(`job:new:${k}`, job);
+  }
 
-  const agentStatus = getUserPcAgentStatus(email);
+  const agentStatus = getUserPcAgentStatus(params.userEmail, params.phoneNumber);
   // 온라인 에이전트가 있으면 최대 9.5초 대기, 없으면 혹시 막 연결될 에이전트를 위해 2.2초만 대기
   const waitBudgetMs = params.timeoutMs ?? (agentStatus.online ? 9_500 : 2_200);
 

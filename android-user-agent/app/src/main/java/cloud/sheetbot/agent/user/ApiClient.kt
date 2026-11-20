@@ -2324,7 +2324,9 @@ object ApiClient {
 
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
                     val sentPcName = resJson.optString("pcName", "").takeIf { it.isNotBlank() }
-                    if (mode != "SUGGEST_REPLY") {
+                    val serverFtsSynced = resJson.optBoolean("ftsSynced", false)
+                    // 서버에서 파투 카카오톡대화대장 적재를 이미 마친 경우 중복 적재하지 않고, 미적재 시에만 앱에서 폴백 적재
+                    if (mode != "SUGGEST_REPLY" && !serverFtsSynced) {
                         try {
                             val prefs = PreferencesManager(SheetBotApp.appContext)
                             if (prefs.isDestinationFileToSheet) {

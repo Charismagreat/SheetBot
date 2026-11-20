@@ -176,6 +176,9 @@ export function inferDomainTag(command: string, actionType: string, targetSheet?
   if (actionType === "DRIVE_FILE_ACTION" || text.includes("폴더") || text.includes("파일") || text.includes("드라이브") || text.includes("노트북")) {
     return "파일/드라이브";
   }
+  if (actionType === "KAKAO_DISPATCH" || text.includes("카톡") || text.includes("카카오")) {
+    return "카카오톡/소통";
+  }
   if (actionType === "SMS_DISPATCH" || text.includes("문자") || text.includes("메시지")) {
     return "문자/소통";
   }
@@ -221,6 +224,8 @@ function formatActionTypeKorean(actionType: string): string {
       return "이메일발송";
     case "SMS_DISPATCH":
       return "문자발송";
+    case "KAKAO_DISPATCH":
+      return "카카오톡발송";
     case "APPS_SCRIPT_RUN":
       return "자동화실행";
     case "COMMAND_PROMOTE":
@@ -443,8 +448,10 @@ async function syncActivityToSheetsBackground(
   }
 
   // 2-B. 파투(FileToSheet) '시트봇 연동 장부' -> 'AI비서활동대장' 시트 자동 생성(ensure-sheet) 및 행 동시 적재
+  const ftsEmailDigits = cleanEmail.match(/^([0-9]{9,12})@(fts\.local|filetosheet\.cloud)$/)?.[1] || "";
   const resolvedPhone =
-    params.phoneNumber ||
+    (params.phoneNumber || "").replace(/[^0-9]/g, "") ||
+    ftsEmailDigits ||
     (await resolveUserFtsPhoneNumber(cleanEmail).catch(() => null)) ||
     (cleanEmail === "chachogreat@gmail.com" ? "01072165884" : "");
 
@@ -543,6 +550,125 @@ async function syncActivityToSheetsBackground(
       }
     }
   }
+}
+
+/**
+ * 시트봇 AI 비서 카드를 통해 발송(PC 카톡 브리지 무포커스 자동발송 / 스마트폰 즉시답장 / 카톡방 이동 발송)한
+ * 카카오톡 메시지를 파투(FileToSheet) '시트봇 연동 장부 -> 카카오톡대화대장' 시트에 실시간 기록합니다.
+ */
+export async function appendOutboundKakaoToFtsSheet(params: {
+  userEmail: string;
+  phoneNumber?: string;
+  roomName: string;
+  recipientName: string;
+  message: string;
+  methodLabel: string;
+}): Promise<boolean> {
+  try {
+    const cleanEmail = (params.userEmail || "").toLowerCase().trim();
+    const ftsEmailDigits = cleanEmail.match(/^([0-9]{9,12})@(fts\.local|filetosheet\.cloud)$/)?.[1] || "";
+    const resolvedPhone =
+      (params.phoneNumber || "").replace(/[^0-9]/g, "") ||
+      ftsEmailDigits ||
+      (cleanEmail ? await resolveUserFtsPhoneNumber(cleanEmail).catch(() => null) : null) ||
+      (cleanEmail === "chachogreat@gmail.com" ? "01072165884" : "");
+
+    if (!resolvedPhone) return false;
+
+    const nowStr = getKoreanTimeString();
+    const roomLabel = params.roomName || params.recipientName || "대화방";
+    const recipientLabel = params.recipientName || params.roomName || "상대방";
+
+    const ftsHeaders = [
+      "일련번호",
+      "수신일시",
+      "채팅방/발신자",
+      "메시지내용",
+      "기기명",
+      "동기화일시",
+    ];
+
+    // 파투 카카오톡대화대장 기본 컬럼 및 .txt 가져오기 컬럼 모두 100% 호환 매핑
+    const rowDataObj = {
+      수신일시: nowStr,
+      "수신 일시": nowStr,
+      일시: nowStr,
+      "채팅방/발신자": `📤 [나 ➔ ${roomLabel}]`,
+      "채팅방/상대방 이름": roomLabel,
+      채팅방: roomLabel,
+      발신자: `📤 나 ➔ ${recipientLabel}`,
+      메시지내용: params.message,
+      "메시지 내용": params.message,
+      내용: params.message,
+      기기명: params.methodLabel,
+      동기화일시: nowStr,
+    };
+
+    for (const baseUrl of FTS_INTERNAL_ENDPOINTS) {
+      try {
+        let inboxToken = "";
+        const ensureCtrl = new AbortController();
+        const ensureTimer = setTimeout(() => ensureCtrl.abort(), 4500);
+        const ensureRes = await fetch(`${baseUrl}/api/inbox/ensure-sheet`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phoneNumber: resolvedPhone,
+            cardId: "kakao_sync",
+            sheetName: "카카오톡대화대장",
+            headers: ftsHeaders,
+          }),
+          signal: ensureCtrl.signal,
+        }).catch(() => null);
+        clearTimeout(ensureTimer);
+
+        if (ensureRes && ensureRes.ok) {
+          const ensureJson = await ensureRes.json().catch(() => ({}));
+          if (ensureJson?.token) {
+            inboxToken = ensureJson.token;
+          }
+        }
+
+        if (inboxToken) {
+          const rowCtrl = new AbortController();
+          const rowTimer = setTimeout(() => rowCtrl.abort(), 4500);
+          const rowRes = await fetch(`${baseUrl}/api/inbox/${encodeURIComponent(inboxToken)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fileName: `카톡발송_${roomLabel}`,
+              memo: `[${params.methodLabel}] ${params.message}`,
+              rowData: rowDataObj,
+            }),
+            signal: rowCtrl.signal,
+          });
+          clearTimeout(rowTimer);
+          if (rowRes.ok) return true;
+        } else {
+          const copilotCtrl = new AbortController();
+          const copilotTimer = setTimeout(() => copilotCtrl.abort(), 4000);
+          const res = await fetch(`${baseUrl}/api/inbox/copilot`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              phoneNumber: resolvedPhone,
+              operation: "ADD_ROW",
+              sheetName: "카카오톡대화대장",
+              rowValues: rowDataObj,
+            }),
+            signal: copilotCtrl.signal,
+          });
+          clearTimeout(copilotTimer);
+          if (res.ok) return true;
+        }
+      } catch {
+        // try next endpoint
+      }
+    }
+  } catch (err: any) {
+    console.warn("[AiCopilotLearning] appendOutboundKakaoToFtsSheet error:", err.message);
+  }
+  return false;
 }
 
 /**
