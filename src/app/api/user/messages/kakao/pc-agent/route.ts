@@ -10,6 +10,7 @@ import {
   resolveUserEmailFromAuth,
   waitForNextJobForUser,
 } from "@/lib/kakao-pc-relay-store";
+import { syncPcLiveKakaoMessageToSheets } from "@/lib/ai-copilot-learning";
 
 /**
  * 이용자 맞춤형 원클릭 Windows 실행 배치 파일(.bat) 생성
@@ -276,6 +277,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const {
+      action = "",
       jobId = "",
       email = "",
       phone = "",
@@ -286,9 +288,50 @@ export async function POST(req: NextRequest) {
       alreadyOpen = false,
       draftPresent = false,
       error = "",
+      messages = [],
     } = body;
 
     const resolvedEmail = resolveUserEmailFromAuth(email || phone, code, phone) || "";
+
+    // 1. PC 카톡 브리지(kakao_native)가 감지한 '열린 대화창 실시간 대화(수신 + 내 PC 직접 발신)' 일괄 적재
+    if (action === "SYNC_MESSAGES" && Array.isArray(messages)) {
+      if (resolvedEmail) {
+        recordPcAgentHeartbeat({
+          userEmail: resolvedEmail,
+          phoneNumber: phone,
+          pcName,
+          kakaoReady: true,
+        });
+      }
+
+      let syncedCount = 0;
+      let deduplicatedCount = 0;
+      for (const m of messages) {
+        if (!m || typeof m !== "object") continue;
+        const res = await syncPcLiveKakaoMessageToSheets({
+          userEmail: resolvedEmail || email,
+          phoneNumber: phone,
+          roomName: String(m.roomName || m.room || ""),
+          senderName: String(m.senderName || m.sender || ""),
+          message: String(m.message || m.text || ""),
+          mine: Boolean(m.mine),
+          sentAtStr: String(m.sentAtStr || ""),
+          logId: m.logId ?? m.log_id,
+          pcName: String(pcName || "내 PC"),
+          req,
+        });
+        if (res.synced) syncedCount++;
+        if (res.deduplicated) deduplicatedCount++;
+      }
+
+      return NextResponse.json({
+        ok: true,
+        action: "SYNC_MESSAGES",
+        syncedCount,
+        deduplicatedCount,
+      });
+    }
+
     if (!jobId) {
       return NextResponse.json({ ok: false, error: "jobId가 누락되었습니다." }, { status: 400 });
     }

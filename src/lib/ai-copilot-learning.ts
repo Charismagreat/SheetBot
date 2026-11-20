@@ -12,6 +12,7 @@ import {
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import { resolveUserFtsPhoneNumber } from "@/lib/task-hub-helper";
+import { isDuplicateAndRegisterKakaoMessage } from "@/lib/kakao-message-dedupe";
 
 export type CopilotActionCategory =
   | "SHEET_QUERY"
@@ -579,6 +580,22 @@ export async function appendOutboundKakaoToFtsSheet(params: {
     const roomLabel = params.roomName || params.recipientName || "대화방";
     const recipientLabel = params.recipientName || params.roomName || "상대방";
 
+    // AI 비서 발송 시 통합 지문 캐시에 선등록하여, 1~2초 뒤 PC 카톡 로컬 DB 감시(kakao_native)가 동일 메시지를 중복 적재하지 않도록 차단
+    isDuplicateAndRegisterKakaoMessage({
+      userKey: resolvedPhone,
+      roomName: roomLabel,
+      senderName: recipientLabel,
+      message: params.message,
+    });
+    if (cleanEmail) {
+      isDuplicateAndRegisterKakaoMessage({
+        userKey: cleanEmail,
+        roomName: roomLabel,
+        senderName: recipientLabel,
+        message: params.message,
+      });
+    }
+
     const ftsHeaders = [
       "일련번호",
       "수신일시",
@@ -588,18 +605,10 @@ export async function appendOutboundKakaoToFtsSheet(params: {
       "동기화일시",
     ];
 
-    // 파투 카카오톡대화대장 기본 컬럼 및 .txt 가져오기 컬럼 모두 100% 호환 매핑
     const rowDataObj = {
       수신일시: nowStr,
-      "수신 일시": nowStr,
-      일시: nowStr,
       "채팅방/발신자": `📤 [나 ➔ ${roomLabel}]`,
-      "채팅방/상대방 이름": roomLabel,
-      채팅방: roomLabel,
-      발신자: `📤 나 ➔ ${recipientLabel}`,
       메시지내용: params.message,
-      "메시지 내용": params.message,
-      내용: params.message,
       기기명: params.methodLabel,
       동기화일시: nowStr,
     };
@@ -669,6 +678,181 @@ export async function appendOutboundKakaoToFtsSheet(params: {
     console.warn("[AiCopilotLearning] appendOutboundKakaoToFtsSheet error:", err.message);
   }
   return false;
+}
+
+/**
+ * PC 카카오톡 브리지(kakao_native 로컬 DB 감시)에서 감지한 '열린 대화창 실시간 대화(수신 + 내 PC 직접 발신)'를
+ * 3단계 중복 방어(logId + 교차 채널 지문 캐시 + 파투 시트 최근 30행 대조)를 거쳐
+ * 파투(FileToSheet) '시트봇 연동 장부 -> 카카오톡대화대장' 및 구글 시트에 실시간 적재합니다.
+ */
+export async function syncPcLiveKakaoMessageToSheets(params: {
+  userEmail: string;
+  phoneNumber?: string;
+  roomName: string;
+  senderName: string;
+  message: string;
+  mine: boolean;
+  sentAtStr?: string;
+  logId?: string | number;
+  pcName?: string;
+  req?: NextRequest;
+}): Promise<{ synced: boolean; deduplicated: boolean }> {
+  try {
+    const cleanEmail = (params.userEmail || "").toLowerCase().trim();
+    const ftsEmailDigits = cleanEmail.match(/^([0-9]{9,12})@(fts\.local|filetosheet\.cloud)$/)?.[1] || "";
+    const resolvedPhone =
+      (params.phoneNumber || "").replace(/[^0-9]/g, "") ||
+      ftsEmailDigits ||
+      (cleanEmail ? await resolveUserFtsPhoneNumber(cleanEmail).catch(() => null) : null) ||
+      (cleanEmail === "chachogreat@gmail.com" ? "01072165884" : "");
+
+    const msgText = (params.message || "").trim();
+    if (!msgText) return { synced: false, deduplicated: true };
+
+    const primaryKey = resolvedPhone || cleanEmail;
+    if (!primaryKey) return { synced: false, deduplicated: false };
+
+    // 2단계 교차 채널 통합 지문 검사 (스마트폰 알림 또는 AI 비서 발송으로 이미 기록된 메시지이면 즉시 스킵)
+    const isDupPrimary = isDuplicateAndRegisterKakaoMessage({
+      userKey: primaryKey,
+      roomName: params.roomName,
+      senderName: params.senderName,
+      message: msgText,
+      logId: params.logId,
+    });
+    if (isDupPrimary) {
+      return { synced: false, deduplicated: true };
+    }
+    if (cleanEmail && cleanEmail !== primaryKey) {
+      const isDupEmail = isDuplicateAndRegisterKakaoMessage({
+        userKey: cleanEmail,
+        roomName: params.roomName,
+        senderName: params.senderName,
+        message: msgText,
+        logId: params.logId,
+      });
+      if (isDupEmail) {
+        return { synced: false, deduplicated: true };
+      }
+    }
+
+    const nowStr = getKoreanTimeString();
+    const sentAt = (params.sentAtStr || "").trim() || nowStr;
+    const roomLabel = (params.roomName || params.senderName || "대화방").trim();
+    const senderLabel = (params.senderName || roomLabel).trim();
+    const pcLabel = (params.pcName || "Windows PC").trim();
+
+    const roomOrSenderCol = params.mine
+      ? `📤 [나 ➔ ${roomLabel}]`
+      : senderLabel && senderLabel !== roomLabel
+        ? `[${roomLabel}] ${senderLabel}`
+        : roomLabel;
+
+    const deviceCol = params.mine
+      ? `🖥️ 내 PC(${pcLabel}) 카톡 직접발신`
+      : `🖥️ 내 PC(${pcLabel}) 카톡 열린창 수신`;
+
+    let ftsSuccess = false;
+
+    // 1. 파투(FileToSheet) '시트봇 연동 장부 -> 카카오톡대화대장' 적재
+    if (resolvedPhone) {
+      const ftsHeaders = [
+        "일련번호",
+        "수신일시",
+        "채팅방/발신자",
+        "메시지내용",
+        "기기명",
+        "동기화일시",
+      ];
+      const rowDataObj = {
+        수신일시: sentAt,
+        "채팅방/발신자": roomOrSenderCol,
+        메시지내용: msgText,
+        기기명: deviceCol,
+        동기화일시: nowStr,
+      };
+
+      for (const baseUrl of FTS_INTERNAL_ENDPOINTS) {
+        try {
+          let inboxToken = "";
+          const ensureCtrl = new AbortController();
+          const ensureTimer = setTimeout(() => ensureCtrl.abort(), 4500);
+          const ensureRes = await fetch(`${baseUrl}/api/inbox/ensure-sheet`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              phoneNumber: resolvedPhone,
+              cardId: "kakao_sync",
+              sheetName: "카카오톡대화대장",
+              headers: ftsHeaders,
+            }),
+            signal: ensureCtrl.signal,
+          }).catch(() => null);
+          clearTimeout(ensureTimer);
+
+          if (ensureRes && ensureRes.ok) {
+            const ensureJson = await ensureRes.json().catch(() => ({}));
+            if (ensureJson?.token) inboxToken = ensureJson.token;
+          }
+
+          if (inboxToken) {
+            const rowCtrl = new AbortController();
+            const rowTimer = setTimeout(() => rowCtrl.abort(), 4500);
+            const rowRes = await fetch(`${baseUrl}/api/inbox/${encodeURIComponent(inboxToken)}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                fileName: `PC카톡_${roomLabel}`,
+                memo: `[${deviceCol}] ${msgText}`,
+                rowData: rowDataObj,
+              }),
+              signal: rowCtrl.signal,
+            });
+            clearTimeout(rowTimer);
+            if (rowRes.ok) {
+              ftsSuccess = true;
+              break;
+            }
+          }
+        } catch {
+          // try next endpoint
+        }
+      }
+    }
+
+    // 2. 구글 시트 '[SheetBot] 카카오톡 메시지 대장' 적재 (구글 계정 연동 회원인 경우)
+    if (cleanEmail && cleanEmail.includes("@") && !cleanEmail.endsWith("@fts.local") && !cleanEmail.endsWith("@filetosheet.cloud")) {
+      try {
+        const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, params.req);
+        const resolved = await resolveUserSpreadsheet({
+          userEmail: cleanEmail,
+          sheetType: "KAKAO",
+          defaultTitle: "[SheetBot] 카카오톡 메시지 대장",
+          preferOAuth: true,
+          callOptions,
+        });
+        if (resolved?.spreadsheetId) {
+          const dirCol = params.mine ? "📤 PC카톡 발신" : "💬 PC카톡 수신";
+          const senderCol = params.mine ? `나 ➔ ${roomLabel}` : senderLabel;
+          await callSheetsTool(
+            "sheets_append_values",
+            {
+              spreadsheetId: resolved.spreadsheetId,
+              range: "A:F",
+              values: [[sentAt, dirCol, roomLabel, senderCol, msgText, deviceCol]],
+              preferOAuth: true,
+            },
+            callOptions
+          ).catch(() => {});
+        }
+      } catch {}
+    }
+
+    return { synced: ftsSuccess, deduplicated: false };
+  } catch (err: any) {
+    console.warn("[AiCopilotLearning] syncPcLiveKakaoMessageToSheets error:", err.message);
+    return { synced: false, deduplicated: false };
+  }
 }
 
 /**

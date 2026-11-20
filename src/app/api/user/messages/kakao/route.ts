@@ -12,7 +12,8 @@ import { realtimeHub } from "@/lib/realtime-hub";
 import { maskRecipient, formatZeroRetentionContent } from "@/lib/privacy";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { getKoreanTimeString } from "@/lib/date-utils";
-import { extractAndCreateTasksFromMessage } from "@/lib/task-hub-helper";
+import { extractAndCreateTasksFromMessage, resolveUserFtsPhoneNumber } from "@/lib/task-hub-helper";
+import { isDuplicateAndRegisterKakaoMessage } from "@/lib/kakao-message-dedupe";
 
 // 15초 이내 동일 카카오톡 메시지 중복 기록 방어 캐시 (키: userEmail:roomName:senderName:message, 값: timestamp)
 const recentKakaoDedupeCache = new Map<string, number>();
@@ -58,14 +59,32 @@ export async function POST(req: NextRequest) {
     const senderName = sender && sender.trim().length > 0 ? sender.trim() : roomName;
     const nowStr = timestamp || getKoreanTimeString();
 
-    // 0. 15초 이내 동일 카카오톡 메시지 중복 요청 방어 (Idempotency Guard)
+    // 0. 15초 이내 동일 카카오톡 메시지 중복 요청 방어 (Idempotency Guard) + PC 카톡 브리지와의 교차 채널 통합 지문 등록
     const dedupeKey = `${cleanEmail}:${roomName}:${senderName}:${message.trim()}`;
     const now = Date.now();
     const lastSeen = recentKakaoDedupeCache.get(dedupeKey) || 0;
-    if (now - lastSeen < 15_000) {
+    const isCrossDup = isDuplicateAndRegisterKakaoMessage({
+      userKey: cleanEmail,
+      roomName,
+      senderName,
+      message,
+    });
+    const resolvedFtsPhone =
+      (await resolveUserFtsPhoneNumber(cleanEmail).catch(() => null)) ||
+      (cleanEmail === "chachogreat@gmail.com" ? "01072165884" : "");
+    if (resolvedFtsPhone) {
+      isDuplicateAndRegisterKakaoMessage({
+        userKey: resolvedFtsPhone,
+        roomName,
+        senderName,
+        message,
+      });
+    }
+
+    if (now - lastSeen < 15_000 || isCrossDup) {
       return NextResponse.json({
         success: true,
-        message: "중복된 카카오톡 메시지가 15초 이내에 감지되어 시트 중복 기록을 안전하게 방어했습니다.",
+        message: "중복된 카카오톡 메시지가 감지되어 시트 중복 기록을 안전하게 방어했습니다.",
         isDuplicate: true,
       });
     }
