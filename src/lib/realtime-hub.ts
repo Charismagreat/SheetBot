@@ -22,6 +22,7 @@ import crypto from 'crypto';
 import { EGDESK_CONFIG } from '../../egdesk.config';
 import { resolveServerEgdeskMcpApiUrlForSse } from './egdesk-helpers';
 import { depositEventBus, DepositEventPayload } from './deposit-events';
+import { notifySmsQueueJobAdded } from './manager-devices';
 
 export type RealtimeTopic = 'all' | 'deposit' | 'sms' | 'schedules' | 'projects' | 'wallet';
 
@@ -357,6 +358,11 @@ class SheetBotRealtimeHub {
       const params = eventData.params || {};
       const tableName = params.tableName as string;
       if (!tableName) return;
+
+      // DB 왓처에서 인증번호 SMS 큐 변경 감지 시 장폴링 워커 즉시 기상
+      if (tableName === 'sheetbot_sms_dispatch_queue') {
+        notifySmsQueueJobAdded();
+      }
 
       const topics = TABLE_TOPIC_MAP[tableName] || ['all'];
 

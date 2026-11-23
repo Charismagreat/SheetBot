@@ -50,8 +50,21 @@ export default function AdminManagerDevicesCard() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 10000); // 온라인 상태 갱신 (관리자 화면 한정)
-    return () => clearInterval(t);
+    const tick = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void load();
+    };
+    const onVisibility = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        void load();
+      }
+    };
+    const t = setInterval(tick, 30000); // 백그라운드 탭 일시정지 + 30초 간격 갱신
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [load]);
 
   const [copiedUrl, setCopiedUrl] = useState(false);

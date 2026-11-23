@@ -77,50 +77,94 @@ class KeepAliveService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private var consecutiveHeartbeatFailures = 0
+    private var isServerCurrentlyDown = false
 
+    /**
+     * 🛡️ 민첩한 생존 감시(60초, 초경량 /api/health) + DB 텔레메트리 하트비트(2분) 분리 루프
+     * - 정상 API 응답이 45초 이내 있었으면 추가 핑 생략 (Passive Freshness)
+     * - 장애 의심 시: 폰 자체 인터넷(generate_204) 교차 확인 후 /api/health 15초 간격 3회 연속 확인(~30초)
+     *   -> 실제 장애는 기존 2분보다 빠르게 감지하면서도 일시적 터널 지연·네트워크 전환 오탐 100% 차단
+     */
     private fun startHeartbeatLoop() {
         heartbeatJob?.cancel()
         heartbeatJob = serviceScope.launch {
+            var tickCount = 0
             while (isActive) {
                 val email = prefs.userEmail
                 if (!email.isNullOrBlank()) {
-                    val battery = BatteryUtil.getBatteryStatus(this@KeepAliveService)
-                    val isSuccess = ApiClient.sendHeartbeat(
-                        prefs.heartbeatUrl,
-                        prefs.fallbackHeartbeatUrl,
-                        email,
-                        batteryLevel = battery.level,
-                        isCharging = battery.isCharging
-                    )
+                    var isAlive = false
 
-                    if (isSuccess) {
-                        if (consecutiveHeartbeatFailures >= 2) {
+                    // 1. 2분(짝수 틱)마다 DB 텔레메트리(배터리/충전 상태) 보고
+                    if (tickCount % 2 == 0) {
+                        val battery = BatteryUtil.getBatteryStatus(this@KeepAliveService)
+                        val hbOk = ApiClient.sendHeartbeat(
+                            prefs.heartbeatUrl,
+                            prefs.fallbackHeartbeatUrl,
+                            email,
+                            batteryLevel = battery.level,
+                            isCharging = battery.isCharging
+                        )
+                        // DB 하트비트가 느려 실패했더라도 초경량 /api/health가 살아있으면 서버 다운이 아님!
+                        isAlive = if (hbOk) true else ApiClient.pingServer().isOnline
+                    } else {
+                        // 2. 홀수 틱(60초): 최근 45초 내 정상 통신(장폴링/웹훅 등)이 있었으면 재사용, 아니면 초경량 /api/health 확인
+                        isAlive = if (ApiClient.hasRecentServerSuccess(45_000L)) {
+                            true
+                        } else {
+                            ApiClient.pingServer().isOnline
+                        }
+                    }
+                    tickCount++
+
+                    if (isAlive) {
+                        if (isServerCurrentlyDown) {
                             Log.i(TAG, "🎉 서버 통신 정상 복구 감지!")
+                            isServerCurrentlyDown = false
                             showWatchdogNotification("🟢 서버 통신 복구 완료", "SheetBot 서버와의 연결이 정상화되었습니다.", false)
                             if (prefs.isTtsEnabled) {
                                 TtsManager.speak(this@KeepAliveService, "시트봇 서버 연결이 정상 복구되었습니다.")
                             }
-                            // 오프라인 큐 즉시 비우기
                             val drained = DepositQueueManager.drainQueue(this@KeepAliveService)
                             if (drained > 0) {
                                 Log.i(TAG, "대기열 ${drained}건 서버 자동 전송 완료")
                             }
-                            // 포그라운드 노티 복구
                             updateForegroundNotification("🟢 실시간 입금 감지 & SMS 중계 중 ($email)")
                         }
-                        consecutiveHeartbeatFailures = 0
                     } else {
-                        consecutiveHeartbeatFailures++
-                        Log.w(TAG, "서버 헬스체크 실패 (${consecutiveHeartbeatFailures}회 연속)")
+                        // 3단계 확정 검증: 폰 인터넷 확인 -> 15초 간격 /api/health 2회 추가 재확인 (총 3회 실패, ~30초)
+                        val hasPhoneInternet = ApiClient.verifyInternetConnectivity(this@KeepAliveService)
+                        if (!hasPhoneInternet) {
+                            Log.w(TAG, "스마트폰 자체 인터넷 일시 단절 감지 - 서버 다운 경보 유예")
+                            updateForegroundNotification("🟡 스마트폰 네트워크 연결 대기 중")
+                        } else {
+                            Log.w(TAG, "서버 /api/health 1차 무응답 (폰 인터넷 정상) -> 15초 간격 정밀 재확인 개시")
+                            var confirmedDown = true
+                            for (attempt in 2..3) {
+                                delay(15_000L)
+                                if (!isActive) break
+                                val recheck = ApiClient.pingServer()
+                                if (recheck.isOnline) {
+                                    Log.i(TAG, "✅ /api/health ${attempt}차 재확인 정상 (${recheck.latencyMs}ms) - 일시적 지연으로 판정")
+                                    confirmedDown = false
+                                    break
+                                }
+                                Log.w(TAG, "서버 /api/health ${attempt}차 재확인 실패: ${recheck.error}")
+                            }
 
-                        // 2회 연속 실패 (2분 경과 시) 비상 경보 발동
-                        if (consecutiveHeartbeatFailures >= 2) {
-                            triggerEmergencyAlarm()
+                            if (confirmedDown && isActive) {
+                                // 마지막으로 폰 인터넷이 아직 정상인지 1회 더 확인 후 비상 경보 발동
+                                if (ApiClient.verifyInternetConnectivity(this@KeepAliveService)) {
+                                    if (!isServerCurrentlyDown) {
+                                        isServerCurrentlyDown = true
+                                        triggerEmergencyAlarm()
+                                    }
+                                } else {
+                                    updateForegroundNotification("🟡 스마트폰 네트워크 연결 대기 중")
+                                }
+                            }
                         }
                     }
                 }
-                // 1분(60초)마다 생존 신호 전송 (기존 5분에서 1분으로 단축)
                 delay(60 * 1000L)
             }
         }
@@ -227,38 +271,64 @@ class KeepAliveService : Service() {
     }
 
     /**
-     * 5초마다 인증번호 SMS 발송 대기열(FileToSheet 브릿지 큐)을 폴링하여 즉시 발송
+     * ⚡ 이벤트 기반 장폴링(waitMs=25초)으로 인증번호 SMS 대기열을 <0.1초 만에 즉시 수신·발송
+     * - 독립 매니저 SMS 서비스(ManagerSmsService)가 이미 페어링된 경우 중복 폴링 차단
+     * - 유휴 시 분당 ~2회 요청·DB 쿼리 0건으로 터널/SQLite 부하 90%+ 절감
      */
     private fun startSmsDispatchLoop() {
         smsDispatchJob?.cancel()
         smsDispatchJob = serviceScope.launch {
-            delay(3000L)
+            delay(2000L)
+            var consecutiveErrors = 0
+            val managerSmsPrefs = cloud.sheetbot.agent.sms.ManagerSmsPrefs(this@KeepAliveService)
+
             while (isActive) {
+                // ManagerSmsService가 별도로 페어링되어 가동 중이면 동일 큐 중복 폴링 방지
+                if (managerSmsPrefs.isPaired) {
+                    delay(30_000L)
+                    continue
+                }
+
                 val email = prefs.userEmail
                 if (prefs.isPaired && !email.isNullOrBlank()) {
                     try {
-                        val jobs = ApiClient.fetchSmsDispatchJobs(email, prefs.deviceToken)
-                        if (jobs.isNotEmpty()) {
-                            Log.i(TAG, "📨 [인증번호 SMS 대기열] ${jobs.size}건 발견, 즉시 순차 발송 개시")
-                        }
-                        for (job in jobs) {
-                            if (job.recipient.isBlank() || job.message.isBlank()) continue
-                            val isSent = SmsSenderUtil.sendSms(this@KeepAliveService, job.recipient, job.message)
-                            val errText = if (isSent) null else "휴대폰 기기 SMS 발송 실패"
-                            val reported = ApiClient.reportSmsDispatchJob(
-                                id = job.id,
-                                success = isSent,
-                                error = errText,
-                                userEmail = email,
-                                deviceToken = prefs.deviceToken
-                            )
-                            Log.i(TAG, "🚀 [인증번호 SMS 처리] ID: ${job.id}, 수신: ${job.recipient}, 발송성공: $isSent, 서버보고: $reported")
+                        val (ok, jobs) = ApiClient.pollSmsDispatchJobs(email, prefs.deviceToken, waitMs = 25_000L)
+                        if (ok) {
+                            consecutiveErrors = 0
+                            if (jobs.isNotEmpty()) {
+                                Log.i(TAG, "📨 [인증번호 SMS 대기열] ${jobs.size}건 즉시 수신, 순차 발송 개시")
+                            }
+                            for (job in jobs) {
+                                if (job.recipient.isBlank() || job.message.isBlank()) continue
+                                val isSent = SmsSenderUtil.sendSms(this@KeepAliveService, job.recipient, job.message)
+                                val errText = if (isSent) null else "휴대폰 기기 SMS 발송 실패"
+                                val reported = ApiClient.reportSmsDispatchJob(
+                                    id = job.id,
+                                    success = isSent,
+                                    error = errText,
+                                    userEmail = email,
+                                    deviceToken = prefs.deviceToken
+                                )
+                                Log.i(TAG, "🚀 [인증번호 SMS 처리] ID: ${job.id}, 수신: ${job.recipient}, 발송성공: $isSent, 서버보고: $reported")
+                            }
+                            delay(400L)
+                        } else {
+                            consecutiveErrors = (consecutiveErrors + 1).coerceAtMost(4)
+                            val backoffMs = when (consecutiveErrors) {
+                                1 -> 5_000L
+                                2 -> 10_000L
+                                3 -> 20_000L
+                                else -> 30_000L
+                            }
+                            delay(backoffMs)
                         }
                     } catch (e: Exception) {
-                        Log.w(TAG, "인증번호 SMS 대기열 폴링 오류: ${e.message}")
+                        Log.w(TAG, "인증번호 SMS 대기열 장폴링 오류: ${e.message}")
+                        delay(10_000L)
                     }
+                } else {
+                    delay(15_000L)
                 }
-                delay(5000L)
             }
         }
     }

@@ -141,7 +141,7 @@ class EmergencyAlarmActivity : AppCompatActivity() {
         autoCheckJob?.cancel()
         autoCheckJob = activityScope.launch {
             while (isActive) {
-                delay(10000L) // 10초마다 자동 복구 점검
+                delay(15000L) // 15초마다 초경량 /api/health 자동 복구 점검
                 updatePendingCount()
                 val ping = withContext(Dispatchers.IO) { ApiClient.pingServer() }
                 if (ping.isOnline) {

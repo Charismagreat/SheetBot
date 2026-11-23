@@ -5,6 +5,7 @@ import { queryTable, updateRows } from "@/lib/egdesk-helpers";
 import { setupDatabase } from "@/lib/setup-db";
 import { emitDepositEvent } from "@/lib/deposit-events";
 import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
+import { touchManagerDeviceSeen } from "@/lib/manager-devices";
 
 /**
  * POST /api/wallet/agent/heartbeat
@@ -48,12 +49,14 @@ export async function POST(req: NextRequest) {
       if (dev.deleted_at) {
         updates.deleted_at = null;
         updates.deleted_by = null;
-        updates.restored_at = nowIso,
+        updates.restored_at = nowIso;
         updates.restored_by = "agent_heartbeat";
       }
       if (deviceModel) updates.label = `스마트폰 (${deviceModel})`;
       if (batteryLevel !== undefined && batteryLevel !== null) updates.battery_level = Number(batteryLevel);
       if (isCharging !== undefined && isCharging !== null) updates.is_charging = isCharging ? 1 : 0;
+
+      touchManagerDeviceSeen(String(dev.id));
 
       await updateRows("sheetbot_user_devices", updates, {
         filters: { id: dev.id },
@@ -68,22 +71,21 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 현재 입금 대기 중인 세션 개수 반환 (앱 화면에 "현재 1건 입금 대기 중" 표시 지원)
-    const pendingRes = await queryTable("sheetbot_deposit_requests", {
-      filters: { status: "PENDING" },
-      limit: 5,
-    }).catch(() => ({ rows: [] }));
-
-    const pendingCount = (pendingRes.rows || []).length;
-
-    const wsOptions: any = await getWorkspaceCallOptionsForEmail(cleanEmail, req).catch(() => ({}));
-    const resolvedVisitorSid = wsOptions.visitorSessionId || null;
+    // 클라이언트가 이미 유효한 visitorSessionId 헤더를 보유 중이면 불필요한 추가 DB 조회 생략
+    const existingSid =
+      req.headers.get("x-visitor-session-id")?.trim() ||
+      req.headers.get("x-egdesk-visitor-session")?.trim() ||
+      null;
+    let resolvedVisitorSid = existingSid;
+    if (!resolvedVisitorSid) {
+      const wsOptions: any = await getWorkspaceCallOptionsForEmail(cleanEmail, req).catch(() => ({}));
+      resolvedVisitorSid = wsOptions.visitorSessionId || null;
+    }
 
     const res = NextResponse.json({
       success: true,
       status: "CONNECTED",
       serverTime: nowIso,
-      pendingDepositsCount: pendingCount,
       visitorSessionId: resolvedVisitorSid,
       message: "정상 통신 중입니다.",
     });

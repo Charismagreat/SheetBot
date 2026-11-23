@@ -25,10 +25,41 @@ object ApiClient {
 
     // 1차 메인 호스트: 공식 도메인 호스트 (mcp-server-fxkud1 직결)
     const val PRIMARY_HOST = "https://sheetbot.cloud"
-    // 2차 백업 호스트: 이지데스크 운영 공식 터널 엔드포인트
+    // 2차 백업 호스트: 이지데스크 운영 공식 터널 엔드포인트 (DNS/TLS 장애 시에만 폴백)
     const val SECONDARY_HOST = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot"
-    // 3차 폴백 호스트
-    const val FALLBACK_HOST = "https://sheetbot.cloud"
+    // 3차 호환 상수 (기존 참조 호환용)
+    const val FALLBACK_HOST = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot"
+
+    // Passive 서버 생존 추적기: 어떤 정상 API든 성공하면 서버 생존 시각과 지연시간을 기록해 불필요한 중복 핑 생략
+    @Volatile
+    var lastServerSuccessAtMs: Long = 0L
+        private set
+
+    @Volatile
+    var lastServerLatencyMs: Long = 0L
+        private set
+
+    @Volatile
+    var lastConnectedHost: String = PRIMARY_HOST
+        private set
+
+    fun recordServerSuccess(latencyMs: Long, host: String = PRIMARY_HOST) {
+        lastServerSuccessAtMs = System.currentTimeMillis()
+        lastServerLatencyMs = latencyMs
+        lastConnectedHost = host
+    }
+
+    fun hasRecentServerSuccess(withinMs: Long): Boolean {
+        val last = lastServerSuccessAtMs
+        return last > 0L && (System.currentTimeMillis() - last) <= withinMs
+    }
+
+    private fun isDnsOrTlsFailure(e: Exception): Boolean {
+        return e is java.net.UnknownHostException ||
+            e is javax.net.ssl.SSLException ||
+            e.cause is java.net.UnknownHostException ||
+            e.cause is javax.net.ssl.SSLException
+    }
 
     // 모든 요청에 이용자 세션(visitorSessionId) 및 이메일 헤더를 자동 주입하고,
     // 서버 응답에 갱신된 x-visitor-session-id 헤더가 있으면 자동으로 Preferences에 동기화하는 인터셉터
@@ -52,8 +83,16 @@ object ApiClient {
             }
         } catch (_: Exception) {}
 
+        val startMs = System.currentTimeMillis()
         val response = chain.proceed(reqBuilder.build())
         try {
+            val hostStr = original.url.host
+            if ((response.isSuccessful || response.code == 429) &&
+                (hostStr.contains("sheetbot.cloud", ignoreCase = true) ||
+                    original.url.toString().contains("/p/SheetBot", ignoreCase = true))
+            ) {
+                recordServerSuccess(System.currentTimeMillis() - startMs, original.url.scheme + "://" + hostStr)
+            }
             val returnedSid = response.header("x-visitor-session-id")
                 ?: response.header("x-egdesk-visitor-session")
             if (!returnedSid.isNullOrBlank()) {
@@ -66,14 +105,13 @@ object ApiClient {
         response
     }
 
-    // 빠른 2단계 폴백을 위한 타임아웃 최적화 (1차 서버 장애 시 3.5초 내 2차로 즉시 전환)
-    // ★ [Zero-Stale Connection] 터널 프록시의 유휴 커넥션 풀 재사용으로 인한 간헐적 HTTP 400 (0B) 오탐 원천 차단
+    // ★ [Zero-Stale Connection] 터널 프록시의 유휴 커넥션 풀 재사용으로 인한 간헐적 HTTP 400 (0B) 원천 차단
     private val client = OkHttpClient.Builder()
         .connectionPool(okhttp3.ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
         .addInterceptor(sessionInterceptor)
-        .connectTimeout(3500, TimeUnit.MILLISECONDS)
-        .readTimeout(6000, TimeUnit.MILLISECONDS)
-        .writeTimeout(4000, TimeUnit.MILLISECONDS)
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(12, TimeUnit.SECONDS)
+        .writeTimeout(6, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
 
@@ -343,12 +381,15 @@ object ApiClient {
 
     /**
      * 서버 생존 상태(Ping) 및 지연 시간(ms) 실시간 확인
+     * - DB/GitHub/SSR을 전혀 건드리지 않는 초경량 GET /api/health 사용 (<2ms)
+     * - 동일 터널(mcp-server-fxkud1) 3중 폭주 차단: DNS/TLS 오류 시에만 SECONDARY_HOST 폴백
      * - 터널 인바운드 레이트리밋(HTTP 429)은 서버 및 터널이 정상 가동 중임을 의미하므로 온라인으로 판정
      */
     suspend fun pingServer(): PingResult = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
-        for (host in hosts) {
-            val endpoint = "$host/api/wallet/agent/version"
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST)
+        var lastError = "서버 및 터널 응답 없음"
+        for ((idx, host) in hosts.withIndex()) {
+            val endpoint = "$host/api/health"
             try {
                 val request = Request.Builder()
                     .url(endpoint)
@@ -360,24 +401,29 @@ object ApiClient {
                 healthCheckClient.newCall(request).execute().use { response ->
                     val elapsed = System.currentTimeMillis() - startTime
                     if (response.isSuccessful || response.code == 429) {
+                        recordServerSuccess(elapsed, host)
                         return@withContext PingResult(
                             isOnline = true,
                             latencyMs = elapsed,
                             connectedHost = host
                         )
                     }
-                    // 동일 터널 레이트리밋(429)이 아닌데 1차 실패한 경우에만 다음 호스트 폴백
+                    lastError = "HTTP ${response.code}"
                     Log.w(TAG, "서버 핑 비정상 응답 HTTP ${response.code} ($endpoint)")
                 }
+                // HTTP 응답 자체가 수신되었다면 DNS/TLS는 정상이므로 동일 터널 중복 폴백 생략
+                if (idx == 0) break
             } catch (e: Exception) {
+                lastError = e.message ?: "연결 실패"
                 Log.w(TAG, "서버 핑 확인 실패 ($host): ${e.message}")
+                if (idx == 0 && !isDnsOrTlsFailure(e)) break
             }
         }
-        PingResult(isOnline = false, error = "서버 및 터널 응답 없음")
+        PingResult(isOnline = false, error = lastError)
     }
 
-    // 웹사이트 헬스체크 전용 클라이언트 (3분 주기 점검 시 유휴 소켓 재사용으로 인한 HTTP 400 오탐 원천 차단)
-    private val healthCheckClient = client.newBuilder()
+    // 웹사이트 헬스체크 전용 클라이언트 (유휴 소켓 재사용으로 인한 HTTP 400 오탐 원천 차단)
+    private val healthCheckClient = OkHttpClient.Builder()
         .connectionPool(okhttp3.ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
         .connectTimeout(6, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
@@ -387,6 +433,7 @@ object ApiClient {
 
     /**
      * 감시 대상 웹사이트(홈페이지/쇼핑몰) 실시간 헬스체크 (HEAD 또는 GET)
+     * - sheetbot.cloud / file2sheet.cloud 루트 감시 시 전체 SSR HTML 대신 초경량 엔드포인트(/api/health, /favicon.ico) 우선 점검
      */
     suspend fun checkWebsiteHealth(targetUrl: String): WebsiteCheckResult = withContext(Dispatchers.IO) {
         val trimmed = targetUrl.trim()
@@ -402,6 +449,29 @@ object ApiClient {
         var normalizedUrl = trimmed
         if (!normalizedUrl.startsWith("http://", ignoreCase = true) && !normalizedUrl.startsWith("https://", ignoreCase = true)) {
             normalizedUrl = "https://$normalizedUrl"
+        }
+
+        // 자체 서비스(sheetbot.cloud 루트) 감시 시 무거운 SSR 대신 초경량 /api/health 직접 확인
+        val lowerUrl = normalizedUrl.lowercase().trimEnd('/')
+        if (lowerUrl == "https://sheetbot.cloud" || lowerUrl == "http://sheetbot.cloud" || lowerUrl == "https://www.sheetbot.cloud") {
+            val ping = pingServer()
+            return@withContext WebsiteCheckResult(
+                isOnline = ping.isOnline,
+                statusCode = if (ping.isOnline) 200 else 0,
+                responseTimeMs = ping.latencyMs,
+                errorMessage = if (ping.isOnline) null else (ping.error ?: "서버 응답 없음"),
+                checkedUrl = normalizedUrl
+            )
+        }
+        if (lowerUrl == "https://file2sheet.cloud" || lowerUrl == "http://file2sheet.cloud" || lowerUrl == "https://www.file2sheet.cloud") {
+            val ping = FileToSheetClient.pingFtsServer(normalizedUrl)
+            return@withContext WebsiteCheckResult(
+                isOnline = ping.isOnline,
+                statusCode = if (ping.isOnline) 200 else 0,
+                responseTimeMs = ping.latencyMs,
+                errorMessage = if (ping.isOnline) null else (ping.error ?: "서버 응답 없음"),
+                checkedUrl = normalizedUrl
+            )
         }
 
         val startTime = System.currentTimeMillis()
@@ -441,7 +511,7 @@ object ApiClient {
                 }
             }
 
-            // sheetbot.cloud 도메인 감시 중 일시적 프록시 지연/400 발생 시 공식 핑 엔드포인트로 한 번 더 교차 검증
+            // sheetbot.cloud 하위 경로 감시 중 일시적 프록시 지연/400 발생 시 공식 /api/health로 한 번 더 교차 검증
             if (statusCode !in 200..399 && statusCode != 429 && normalizedUrl.contains("sheetbot.cloud", ignoreCase = true)) {
                 val pingRes = pingServer()
                 if (pingRes.isOnline) {
@@ -475,26 +545,31 @@ object ApiClient {
 
     /**
      * 휴대폰 자체의 외부 인터넷 정상 연결 여부 교차 검증 (False Alarm 오탐 방지)
-     * Google generate_204 핑 확인
+     * ConnectivityManager + Google generate_204 확인 (자체 서버 순환 호출 제거)
      */
     suspend fun verifyInternetConnectivity(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val cm = SheetBotApp.appContext.getSystemService(android.content.Context.CONNECTIVITY_SERVICE)
+                as? android.net.ConnectivityManager
+            val activeNet = cm?.activeNetwork
+            val caps = if (activeNet != null) cm.getNetworkCapabilities(activeNet) else null
+            if (caps == null || !caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                return@withContext false
+            }
+        } catch (_: Exception) {}
+
         try {
             val request = Request.Builder()
                 .url("https://www.google.com/generate_204")
                 .header("User-Agent", "SheetBotSentinel/1.0")
+                .header("Connection", "close")
                 .get()
                 .build()
-            client.newCall(request).execute().use { response ->
+            healthCheckClient.newCall(request).execute().use { response ->
                 response.isSuccessful || response.code == 204
             }
         } catch (_: Exception) {
-            // 보조 검증: 시트봇 서버 핑 시도
-            try {
-                val ping = pingServer()
-                ping.isOnline
-            } catch (_: Exception) {
-                false
-            }
+            false
         }
     }
 
@@ -555,7 +630,8 @@ object ApiClient {
     }
 
     /**
-     * 백그라운드 생존 신호(Heartbeat) 전송 (1차 실패 시 2차 폴백)
+     * 백그라운드 생존 신호(Heartbeat) 전송 (DNS/TLS 장애 시에만 2차 폴백)
+     * - FileToSheet 전용 가상 계정(@filetosheet.cloud)은 SheetBot DB 하트비트 전송 생략
      */
     suspend fun sendHeartbeat(
         heartbeatUrl: String,
@@ -564,21 +640,26 @@ object ApiClient {
         batteryLevel: Int? = null,
         isCharging: Boolean? = null
     ): Boolean = withContext(Dispatchers.IO) {
+        val cleanEmail = userEmail.trim().lowercase()
+        if (cleanEmail.endsWith("@filetosheet.cloud") || cleanEmail.endsWith("@fts.local")) {
+            return@withContext true
+        }
+
         val targets = buildList {
             add(heartbeatUrl)
             if (!fallbackHeartbeatUrl.isNullOrBlank() && fallbackHeartbeatUrl != heartbeatUrl) {
                 add(fallbackHeartbeatUrl)
-            } else if (!heartbeatUrl.contains(FALLBACK_HOST)) {
-                add("$FALLBACK_HOST/api/user/agent2/heartbeat")
+            } else if (!heartbeatUrl.contains(SECONDARY_HOST)) {
+                add("$SECONDARY_HOST/api/user/agent2/heartbeat")
             }
         }
 
-        for (targetUrl in targets) {
+        for ((idx, targetUrl) in targets.withIndex()) {
             try {
                 val json = JSONObject().apply {
                     put("userEmail", userEmail)
                     put("deviceModel", "${Build.MANUFACTURER} ${Build.MODEL}")
-                    put("appVersion", "1.5.0")
+                    put("appVersion", BuildConfig.VERSION_NAME)
                     if (batteryLevel != null) put("batteryLevel", batteryLevel)
                     if (isCharging != null) put("isCharging", isCharging)
                 }
@@ -586,6 +667,7 @@ object ApiClient {
                 val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
                 val request = Request.Builder()
                     .url(targetUrl)
+                    .header("Connection", "close")
                     .post(body)
                     .build()
 
@@ -594,8 +676,10 @@ object ApiClient {
                         return@withContext true
                     }
                 }
+                if (idx == 0) break
             } catch (e: Exception) {
                 Log.w(TAG, "Heartbeat 실패 ($targetUrl): ${e.message}")
+                if (idx == 0 && !isDnsOrTlsFailure(e)) break
             }
         }
         false
@@ -804,44 +888,54 @@ object ApiClient {
 
     /**
      * 서버의 미발송 영수증 대기열(Outbox Queue) 조회
+     * - 동일 터널 중복 재시도 제거 (DNS/TLS 장애 시에만 SECONDARY_HOST 폴백)
      */
     suspend fun fetchPendingReceipts(userEmail: String?): List<PendingReceipt> = withContext(Dispatchers.IO) {
-        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
-        for (host in hosts) {
-            val baseEndpoint = "$host/api/wallet/agent/pending-receipts"
-            val endpoint = if (!userEmail.isNullOrBlank()) {
-                val enc = java.net.URLEncoder.encode(userEmail, "UTF-8")
-                "$baseEndpoint?email=$enc"
-            } else {
-                baseEndpoint
-            }
+        val cleanEmail = userEmail?.trim()
+        if (cleanEmail.isNullOrBlank() || !cleanEmail.contains("@") ||
+            cleanEmail.endsWith("@filetosheet.cloud", ignoreCase = true) ||
+            cleanEmail.endsWith("@fts.local", ignoreCase = true)
+        ) {
+            return@withContext emptyList()
+        }
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST)
+        val enc = java.net.URLEncoder.encode(cleanEmail, "UTF-8")
+        for ((idx, host) in hosts.withIndex()) {
+            val endpoint = "$host/api/wallet/agent/pending-receipts?email=$enc"
             try {
-                val request = Request.Builder().url(endpoint).get().build()
-                val response = client.newCall(request).execute()
-                val resStr = response.body?.string() ?: ""
-                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
-                if (response.isSuccessful && resJson.optBoolean("success", false)) {
-                    val array = resJson.optJSONArray("pendingReceipts") ?: continue
-                    val list = mutableListOf<PendingReceipt>()
-                    for (i in 0 until array.length()) {
-                        val item = array.getJSONObject(i)
-                        val itemLogId = item.optString("logId", "")
-                        list.add(
-                            PendingReceipt(
-                                id = item.optLong("id", 0L),
-                                logId = if (itemLogId.isNotBlank()) itemLogId else null,
-                                recipientPhone = item.optString("recipientPhone", ""),
-                                depositorName = item.optString("depositorName", ""),
-                                amountKrw = item.optInt("amountKrw", 0),
-                                tokensToCredit = item.optInt("tokensToCredit", 0),
-                                message = item.optString("message", "")
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .header("Connection", "close")
+                    .get()
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    val resStr = response.body?.string() ?: ""
+                    val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                    if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                        val array = resJson.optJSONArray("pendingReceipts") ?: return@withContext emptyList()
+                        val list = mutableListOf<PendingReceipt>()
+                        for (i in 0 until array.length()) {
+                            val item = array.getJSONObject(i)
+                            val itemLogId = item.optString("logId", "")
+                            list.add(
+                                PendingReceipt(
+                                    id = item.optLong("id", 0L),
+                                    logId = if (itemLogId.isNotBlank()) itemLogId else null,
+                                    recipientPhone = item.optString("recipientPhone", ""),
+                                    depositorName = item.optString("depositorName", ""),
+                                    amountKrw = item.optInt("amountKrw", 0),
+                                    tokensToCredit = item.optInt("tokensToCredit", 0),
+                                    message = item.optString("message", "")
+                                )
                             )
-                        )
+                        }
+                        return@withContext list
                     }
-                    return@withContext list
                 }
+                if (idx == 0) break
             } catch (e: Exception) {
                 Log.w(TAG, "미발송 영수증 대기열 조회 실패 ($host): ${e.message}")
+                if (idx == 0 && !isDnsOrTlsFailure(e)) break
             }
         }
         emptyList()

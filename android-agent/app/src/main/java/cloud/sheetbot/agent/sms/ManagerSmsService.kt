@@ -52,9 +52,10 @@ class ManagerSmsService : Service() {
     }
 
     private suspend fun pollLoop() {
+        var consecutiveErrors = 0
         while (scope.isActive) {
             flushPendingReports()
-            when (val r = ManagerSmsApi.fetchQueue(prefs)) {
+            when (val r = ManagerSmsApi.fetchQueue(prefs, waitMs = 25_000L)) {
                 is QueueResult.Unauthorized -> {
                     // 관리자가 기기를 폐기함 → 페어링 해제 후 종료
                     prefs.clearPairing()
@@ -63,12 +64,26 @@ class ManagerSmsService : Service() {
                     return
                 }
                 is QueueResult.Ok -> {
+                    consecutiveErrors = 0
                     setStatus(if (r.jobs.isEmpty()) "서버 연결됨 · 대기 중" else "발송 처리 중 (${r.jobs.size}건)")
                     for (job in r.jobs) handle(job)
+                    // 장폴링(25초) 정상 반환 후 짧은 숨고르기 뒤 즉시 재연결
+                    delay(400L)
                 }
-                is QueueResult.Error -> setStatus("서버 연결 오류: ${r.message}")
+                is QueueResult.Error -> {
+                    consecutiveErrors = (consecutiveErrors + 1).coerceAtMost(4)
+                    if (consecutiveErrors >= 2) {
+                        setStatus("서버 연결 재시도 중 (${r.message})")
+                    }
+                    val backoffMs = when (consecutiveErrors) {
+                        1 -> 5_000L
+                        2 -> 10_000L
+                        3 -> 20_000L
+                        else -> 30_000L
+                    }
+                    delay(backoffMs)
+                }
             }
-            delay(5_000L)
         }
     }
 

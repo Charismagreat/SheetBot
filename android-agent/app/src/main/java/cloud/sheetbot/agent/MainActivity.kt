@@ -114,12 +114,14 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         serverMonitorJob?.cancel()
+        statusCheckJob?.cancel()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         aodJob?.cancel()
         serverMonitorJob?.cancel()
+        statusCheckJob?.cancel()
         try {
             unregisterReceiver(depositUpdateReceiver)
         } catch (_: Exception) {}
@@ -306,6 +308,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var consecutiveUiPingFailures = 0
+    private var statusCheckJob: Job? = null
+
     private fun startServerMonitorLoop() {
         serverMonitorJob?.cancel()
         if (!prefs.isPaired) return
@@ -313,16 +318,17 @@ class MainActivity : AppCompatActivity() {
         serverMonitorJob = activityScope.launch {
             while (isActive) {
                 checkServerAndQueueStatus(showToast = false)
-                delay(30000L) // 30초마다 갱신
+                delay(45_000L) // 45초마다 초경량 /api/health 갱신 (최근 25초 내 정상 통신 시 패시브 재사용)
             }
         }
     }
 
     private fun checkServerAndQueueStatus(showToast: Boolean = false) {
         if (!prefs.isPaired) return
+        if (!showToast && statusCheckJob?.isActive == true) return
 
-        activityScope.launch {
-            val ping = withContext(Dispatchers.IO) { ApiClient.pingServer() }
+        statusCheckJob?.cancel()
+        statusCheckJob = activityScope.launch {
             val pendingCount = DepositQueueManager.getPendingCount(this@MainActivity)
             val email = prefs.userEmail ?: ""
 
@@ -332,7 +338,19 @@ class MainActivity : AppCompatActivity() {
                 "📥 오프라인 안전 대기열: 0건 보관 중 (안전)"
             }
 
+            // 수동 재점검이 아니고 최근 25초 이내 실제 서버 통신(장폴링/하트비트/웹훅 등)이 성공했다면 추가 핑 생략
+            val ping = if (!showToast && ApiClient.hasRecentServerSuccess(25_000L)) {
+                PingResult(
+                    isOnline = true,
+                    latencyMs = ApiClient.lastServerLatencyMs,
+                    connectedHost = ApiClient.lastConnectedHost
+                )
+            } else {
+                withContext(Dispatchers.IO) { ApiClient.pingServer() }
+            }
+
             if (ping.isOnline) {
+                consecutiveUiPingFailures = 0
                 binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
                 binding.tvStatusTitle.text = "🟢 실시간 입금 감지 중"
                 binding.tvStatusDesc.text = "계정: $email\n24시간 백그라운드에서 은행 입금 문자를 감지합니다."
@@ -344,7 +362,6 @@ class MainActivity : AppCompatActivity() {
                     if (drained > 0) {
                         Toast.makeText(this@MainActivity, "🎉 오프라인 대기열 ${drained}건이 자동 전송되었습니다!", Toast.LENGTH_SHORT).show()
                         addLogItem("대기열 자동전송", "${drained}건 전송 완료", true)
-                        checkServerAndQueueStatus(false)
                     }
                 }
 
@@ -352,7 +369,36 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, "✅ sheetbot.cloud 서버 통신 정상 (${ping.latencyMs}ms)", Toast.LENGTH_SHORT).show()
                 }
             } else {
-                // 서버 연결 두절 상태 표시
+                val phoneNetOk = withContext(Dispatchers.IO) { ApiClient.verifyInternetConnectivity(this@MainActivity) }
+                if (!phoneNetOk) {
+                    binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
+                    binding.tvStatusTitle.text = "🟡 스마트폰 네트워크 확인 중"
+                    binding.tvStatusDesc.text = "스마트폰의 Wi-Fi 또는 모바일 데이터 연결이 일시 불안정합니다.\n입금 대기열(${pendingCount}건)은 안전하게 로컬 보관 중입니다."
+                    binding.tvServerStatus.text = "🌐 서버 통신: 🟡 기기 네트워크 대기 중"
+                    if (showToast) {
+                        Toast.makeText(this@MainActivity, "⚠️ 스마트폰 인터넷 연결 상태를 확인해 주세요.", Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+
+                consecutiveUiPingFailures++
+                if (consecutiveUiPingFailures < 2 && !showToast) {
+                    // 1차 일시 지연 시 즉시 붉은색 오탐 대신 10초 뒤 초경량 /api/health 1회 재검증
+                    binding.tvServerStatus.text = "🌐 서버 통신: 🟡 연결 재확인 중..."
+                    delay(10_000L)
+                    val recheck = withContext(Dispatchers.IO) { ApiClient.pingServer() }
+                    if (recheck.isOnline) {
+                        consecutiveUiPingFailures = 0
+                        binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
+                        binding.tvStatusTitle.text = "🟢 실시간 입금 감지 중"
+                        binding.tvStatusDesc.text = "계정: $email\n24시간 백그라운드에서 은행 입금 문자를 감지합니다."
+                        binding.tvServerStatus.text = "🌐 서버 통신: 🟢 정상 (${recheck.latencyMs}ms)"
+                        return@launch
+                    }
+                    consecutiveUiPingFailures++
+                }
+
+                // 2회 연속 확정 실패 시 서버 연결 두절 상태 표시
                 binding.cardStatus.setBackgroundColor(0xFF7F1D1D.toInt())
                 binding.tvStatusTitle.text = "🚨 서버 연결 두절 (서버 점검 필요)"
                 binding.tvStatusDesc.text = "sheetbot.cloud 서버가 응답하지 않습니다.\n입금 데이터는 스마트폰 대기열(${pendingCount}건)에 임시 보관 중입니다."

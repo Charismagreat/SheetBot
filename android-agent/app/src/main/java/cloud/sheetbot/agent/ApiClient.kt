@@ -1,29 +1,85 @@
 package cloud.sheetbot.agent
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.ConnectionPool
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLException
 
 object ApiClient {
     private const val TAG = "SheetBotApiClient"
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
-    // 1차 메인 호스트 및 2차 이지데스크 터널 폴백 호스트
+    // 1차 메인 호스트 및 2차 이지데스크 터널 폴백 호스트 (DNS/TLS 장애 시에만 사용)
     const val PRIMARY_HOST = "https://sheetbot.cloud"
     const val FALLBACK_HOST = "https://tunneling-service.onrender.com/t/mcp-server-fxkud1/p/SheetBot"
 
-    // 빠른 2단계 폴백을 위한 타임아웃 최적화 (1차 서버 장애 시 3.5초 내 2차로 즉시 전환)
+    // Passive 서버 생존 추적기: 어떤 정상 API든 성공하면 서버 생존 시각과 지연시간 기록
+    @Volatile
+    var lastServerSuccessAtMs: Long = 0L
+        private set
+
+    @Volatile
+    var lastServerLatencyMs: Long = 0L
+        private set
+
+    @Volatile
+    var lastConnectedHost: String = PRIMARY_HOST
+        private set
+
+    fun recordServerSuccess(latencyMs: Long, host: String = PRIMARY_HOST) {
+        lastServerSuccessAtMs = System.currentTimeMillis()
+        lastServerLatencyMs = latencyMs
+        lastConnectedHost = host
+    }
+
+    fun hasRecentServerSuccess(withinMs: Long): Boolean {
+        val last = lastServerSuccessAtMs
+        return last > 0L && (System.currentTimeMillis() - last) <= withinMs
+    }
+
+    private fun isDnsOrTlsFailure(e: Exception): Boolean {
+        return e is UnknownHostException ||
+            e is SSLException ||
+            e.cause is UnknownHostException ||
+            e.cause is SSLException
+    }
+
+    // ★ [Zero-Stale Connection] 터널 프록시의 유휴 커넥션 풀 재사용으로 인한 간헐적 HTTP 400 (0B) 원천 차단
     private val client = OkHttpClient.Builder()
-        .connectTimeout(3500, TimeUnit.MILLISECONDS)
-        .readTimeout(6000, TimeUnit.MILLISECONDS)
-        .writeTimeout(4000, TimeUnit.MILLISECONDS)
+        .connectionPool(ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(12, TimeUnit.SECONDS)
+        .writeTimeout(6, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
+
+    // 초경량 /api/health 생존 확인 전용 클라이언트
+    private val healthCheckClient = OkHttpClient.Builder()
+        .connectionPool(ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
+        .writeTimeout(5, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
+
+    // 이벤트 기반 SMS 큐 장폴링 전용 클라이언트 (waitMs=25000 + 네트워크 여유 10초)
+    private val longPollClient = OkHttpClient.Builder()
+        .connectionPool(ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(35, TimeUnit.SECONDS)
+        .writeTimeout(6, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
 
@@ -163,34 +219,76 @@ object ApiClient {
 
     /**
      * 서버 생존 상태(Ping) 및 지연 시간(ms) 실시간 확인
+     * - DB/GitHub/SSR을 전혀 건드리지 않는 초경량 GET /api/health 사용 (<2ms)
+     * - 동일 터널(mcp-server-fxkud1) 중복 폭주 방지: DNS/TLS 오류 시에만 FALLBACK_HOST 시도
      */
     suspend fun pingServer(): PingResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
-        for (host in hosts) {
-            val endpoint = "$host/api/wallet/agent/version"
+        var lastError = "서버 및 터널 응답 없음"
+        for ((idx, host) in hosts.withIndex()) {
+            val endpoint = "$host/api/health"
             try {
-                val request = Request.Builder().url(endpoint).get().build()
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .header("Cache-Control", "no-cache")
+                    .header("Connection", "close")
+                    .get()
+                    .build()
                 val startTime = System.currentTimeMillis()
-                client.newCall(request).execute().use { response ->
+                healthCheckClient.newCall(request).execute().use { response ->
                     val elapsed = System.currentTimeMillis() - startTime
                     if (response.isSuccessful || response.code == 429) {
+                        recordServerSuccess(elapsed, host)
                         return@withContext PingResult(
                             isOnline = true,
                             latencyMs = elapsed,
                             connectedHost = host
                         )
                     }
+                    lastError = "HTTP ${response.code}"
                     Log.w(TAG, "서버 핑 HTTP ${response.code} ($endpoint)")
                 }
+                // HTTP 응답 자체가 왔다는 것은 DNS/TLS가 정상이며 동일 터널을 탔다는 의미이므로 중복 폴백 생략
+                if (idx == 0) break
             } catch (e: Exception) {
+                lastError = e.message ?: "연결 실패"
                 Log.w(TAG, "서버 핑 확인 실패 ($host): ${e.message}")
+                if (idx == 0 && !isDnsOrTlsFailure(e)) break
             }
         }
-        PingResult(isOnline = false, error = "서버 및 터널 응답 없음")
+        PingResult(isOnline = false, error = lastError)
     }
 
     /**
-     * 백그라운드 생존 신호(Heartbeat) 전송 (1차 실패 시 2차 폴백)
+     * 스마트폰 자체의 외부 인터넷 연결 상태 교차 검증 (Wi-Fi/LTE 전환 및 Doze 오탐 차단)
+     */
+    suspend fun verifyInternetConnectivity(context: Context? = null): Boolean = withContext(Dispatchers.IO) {
+        if (context != null) {
+            try {
+                val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                val activeNet = cm?.activeNetwork
+                val caps = if (activeNet != null) cm.getNetworkCapabilities(activeNet) else null
+                if (caps == null || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                    return@withContext false
+                }
+            } catch (_: Exception) {}
+        }
+        try {
+            val request = Request.Builder()
+                .url("https://www.google.com/generate_204")
+                .header("Connection", "close")
+                .get()
+                .build()
+            healthCheckClient.newCall(request).execute().use { res ->
+                res.isSuccessful || res.code == 204
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * 백그라운드 생존 신호(Heartbeat) 전송 (DNS/TLS 장애 시에만 2차 폴백)
      */
     suspend fun sendHeartbeat(
         heartbeatUrl: String,
@@ -208,12 +306,12 @@ object ApiClient {
             }
         }
 
-        for (targetUrl in targets) {
+        for ((idx, targetUrl) in targets.withIndex()) {
             try {
                 val json = JSONObject().apply {
                     put("userEmail", userEmail)
                     put("deviceModel", "${Build.MANUFACTURER} ${Build.MODEL}")
-                    put("appVersion", "1.5.0")
+                    put("appVersion", BuildConfig.VERSION_NAME)
                     if (batteryLevel != null) put("batteryLevel", batteryLevel)
                     if (isCharging != null) put("isCharging", isCharging)
                 }
@@ -221,16 +319,23 @@ object ApiClient {
                 val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
                 val request = Request.Builder()
                     .url(targetUrl)
+                    .header("Connection", "close")
                     .post(body)
                     .build()
 
+                val startTime = System.currentTimeMillis()
                 client.newCall(request).execute().use { response ->
+                    val elapsed = System.currentTimeMillis() - startTime
                     if (response.isSuccessful || response.code == 429) {
+                        recordServerSuccess(elapsed, targetUrl)
                         return@withContext true
                     }
+                    Log.w(TAG, "Heartbeat HTTP ${response.code} ($targetUrl)")
                 }
+                if (idx == 0) break
             } catch (e: Exception) {
                 Log.w(TAG, "Heartbeat 실패 ($targetUrl): ${e.message}")
+                if (idx == 0 && !isDnsOrTlsFailure(e)) break
             }
         }
         false
@@ -355,36 +460,53 @@ object ApiClient {
 
     /**
      * 서버의 미발송 영수증 대기열(Outbox Queue) 조회
+     * - userEmail 필수 전달 (미전달 시 HTTP 400 반복 발생 방지)
      */
     suspend fun fetchPendingReceipts(userEmail: String?): List<PendingReceipt> = withContext(Dispatchers.IO) {
+        val cleanEmail = userEmail?.trim()
+        if (cleanEmail.isNullOrBlank() || !cleanEmail.contains("@")) {
+            return@withContext emptyList()
+        }
+        val encodedEmail = java.net.URLEncoder.encode(cleanEmail, "UTF-8")
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
-        for (host in hosts) {
-            val endpoint = "$host/api/wallet/agent/pending-receipts"
+        for ((idx, host) in hosts.withIndex()) {
+            val endpoint = "$host/api/wallet/agent/pending-receipts?email=$encodedEmail"
             try {
-                val request = Request.Builder().url(endpoint).get().build()
-                val response = client.newCall(request).execute()
-                val resStr = response.body?.string() ?: ""
-                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
-                if (response.isSuccessful && resJson.optBoolean("success", false)) {
-                    val array = resJson.optJSONArray("pendingReceipts") ?: continue
-                    val list = mutableListOf<PendingReceipt>()
-                    for (i in 0 until array.length()) {
-                        val item = array.getJSONObject(i)
-                        list.add(
-                            PendingReceipt(
-                                id = item.optLong("id", 0L),
-                                recipientPhone = item.optString("recipientPhone", ""),
-                                depositorName = item.optString("depositorName", ""),
-                                amountKrw = item.optInt("amountKrw", 0),
-                                tokensToCredit = item.optInt("tokensToCredit", 0),
-                                message = item.optString("message", "")
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .header("x-sheetbot-user-email", cleanEmail)
+                    .header("Connection", "close")
+                    .get()
+                    .build()
+                val startTime = System.currentTimeMillis()
+                client.newCall(request).execute().use { response ->
+                    val elapsed = System.currentTimeMillis() - startTime
+                    val resStr = response.body?.string() ?: ""
+                    val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                    if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                        recordServerSuccess(elapsed, host)
+                        val array = resJson.optJSONArray("pendingReceipts") ?: return@withContext emptyList()
+                        val list = mutableListOf<PendingReceipt>()
+                        for (i in 0 until array.length()) {
+                            val item = array.getJSONObject(i)
+                            list.add(
+                                PendingReceipt(
+                                    id = item.optLong("id", 0L),
+                                    recipientPhone = item.optString("recipientPhone", ""),
+                                    depositorName = item.optString("depositorName", ""),
+                                    amountKrw = item.optInt("amountKrw", 0),
+                                    tokensToCredit = item.optInt("tokensToCredit", 0),
+                                    message = item.optString("message", "")
+                                )
                             )
-                        )
+                        }
+                        return@withContext list
                     }
-                    return@withContext list
                 }
+                if (idx == 0) break
             } catch (e: Exception) {
                 Log.w(TAG, "미발송 영수증 대기열 조회 실패 ($host): ${e.message}")
+                if (idx == 0 && !isDnsOrTlsFailure(e)) break
             }
         }
         emptyList()
@@ -414,41 +536,64 @@ object ApiClient {
     }
 
     /**
-     * 인증번호 SMS 발송 대기열(FileToSheet 브릿지 큐) 조회 (1차 및 2차 폴백 지원)
+     * 인증번호 SMS 발송 대기열(FileToSheet 브릿지 큐) 이벤트 기반 장폴링 조회
+     * - waitMs=25000: 큐가 비어 있으면 서버 메모리에서 최대 25초 대기(유휴 DB 쿼리 0건),
+     *   신규 인증번호 적재 시 <100ms 만에 즉시 반환.
+     * - @return Pair(통신 성공 여부, 발송 작업 목록)
      */
-    suspend fun fetchSmsDispatchJobs(userEmail: String?, deviceToken: String?): List<SmsDispatchJob> = withContext(Dispatchers.IO) {
+    suspend fun pollSmsDispatchJobs(
+        userEmail: String?,
+        deviceToken: String?,
+        waitMs: Long = 25000L
+    ): Pair<Boolean, List<SmsDispatchJob>> = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, FALLBACK_HOST)
-        for (host in hosts) {
-            val endpoint = "$host/api/manager-agent/sms-queue?limit=3"
+        for ((idx, host) in hosts.withIndex()) {
+            val endpoint = "$host/api/manager-agent/sms-queue?limit=3&waitMs=$waitMs"
             try {
-                val reqBuilder = Request.Builder().url(endpoint).get()
+                val reqBuilder = Request.Builder()
+                    .url(endpoint)
+                    .header("Cache-Control", "no-cache")
+                    .header("Connection", "close")
+                    .get()
                 if (!userEmail.isNullOrBlank()) reqBuilder.header("x-sheetbot-user-email", userEmail)
                 if (!deviceToken.isNullOrBlank()) reqBuilder.header("x-sheetbot-device-token", deviceToken)
-                val response = client.newCall(reqBuilder.build()).execute()
-                val resStr = response.body?.string() ?: ""
-                val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
-                if (response.isSuccessful && resJson.optBoolean("success", false)) {
-                    val array = resJson.optJSONArray("items") ?: continue
-                    val list = mutableListOf<SmsDispatchJob>()
-                    for (i in 0 until array.length()) {
-                        val item = array.getJSONObject(i)
-                        list.add(
-                            SmsDispatchJob(
-                                id = item.optLong("id", 0L),
-                                recipient = item.optString("recipient", ""),
-                                message = item.optString("message", ""),
-                                sourceService = item.optString("sourceService", "FileToSheet")
+                val startTime = System.currentTimeMillis()
+                val httpClient = if (waitMs > 0L) longPollClient else client
+                httpClient.newCall(reqBuilder.build()).execute().use { response ->
+                    val elapsed = System.currentTimeMillis() - startTime
+                    val resStr = response.body?.string() ?: ""
+                    val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                    if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                        // 장폴링 완료 자체로 서버 정상 통신 확인됨 (실제 RTT는 짧게 보정)
+                        recordServerSuccess(if (waitMs > 0L) minOf(elapsed, 500L) else elapsed, host)
+                        val array = resJson.optJSONArray("items") ?: return@withContext Pair(true, emptyList())
+                        val list = mutableListOf<SmsDispatchJob>()
+                        for (i in 0 until array.length()) {
+                            val item = array.getJSONObject(i)
+                            list.add(
+                                SmsDispatchJob(
+                                    id = item.optLong("id", 0L),
+                                    recipient = item.optString("recipient", ""),
+                                    message = item.optString("message", ""),
+                                    sourceService = item.optString("sourceService", "FileToSheet")
+                                )
                             )
-                        )
+                        }
+                        return@withContext Pair(true, list)
                     }
-                    return@withContext list
+                    Log.w(TAG, "인증번호 SMS 대기열 응답 오류 HTTP ${response.code} ($host)")
                 }
-            } catch (_: Exception) {
-                // failover to fallback
+                if (idx == 0) break
+            } catch (e: Exception) {
+                Log.w(TAG, "인증번호 SMS 대기열 통신 실패 ($host): ${e.message}")
+                if (idx == 0 && !isDnsOrTlsFailure(e)) break
             }
         }
-        emptyList()
+        Pair(false, emptyList())
     }
+
+    suspend fun fetchSmsDispatchJobs(userEmail: String?, deviceToken: String?): List<SmsDispatchJob> =
+        pollSmsDispatchJobs(userEmail, deviceToken, waitMs = 25000L).second
 
     /**
      * 인증번호 SMS 발송 결과 서버 보고

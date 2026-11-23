@@ -117,47 +117,90 @@ class KeepAliveService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private var consecutiveHeartbeatFailures = 0
+    private var isServerCurrentlyOffline = false
+    @Volatile
+    private var isDispatchSseHealthy = false
 
+    /**
+     * 🛡️ 민첩한 생존 감시(60초, 초경량 /api/health 또는 FTS /favicon.ico) + DB 텔레메트리 하트비트(3분) 분리
+     * - 최근 45초 이내 정상 API 통신이 있었으면 패시브 재사용하여 중복 핑 생략
+     * - FileToSheet 전용 계정은 SheetBot DB 하트비트 대신 경량 FTS 생존 확인만 수행
+     * - 장애 의심 시 폰 인터넷(generate_204) 교차 검증 + 15초 재확인으로 오탐 차단
+     */
     private fun startHeartbeatLoop() {
         heartbeatJob?.cancel()
         heartbeatJob = serviceScope.launch {
+            var tickCount = 0
             while (isActive) {
                 val email = prefs.userEmail
-                if (!email.isNullOrBlank()) {
-                    val battery = BatteryUtil.getBatteryStatus(this@KeepAliveService)
-                    val isSuccess = ApiClient.sendHeartbeat(
-                        prefs.heartbeatUrl,
-                        prefs.fallbackHeartbeatUrl,
-                        email,
-                        batteryLevel = battery.level,
-                        isCharging = battery.isCharging
-                    )
-
-                    if (isSuccess) {
-                        if (consecutiveHeartbeatFailures >= 2) {
-                            Log.i(TAG, "🎉 서버 통신 정상 복구 감지!")
-                            // 포그라운드 노티 정상 복구 (이용자 친화적 문구)
-                            updateForegroundNotification("🟢 24시간 실시간 고객 알림 문자 발송 대기 중 ($email)")
+                val isFtsOnly = !prefs.hasGoogleAccount && prefs.isFtsPaired
+                if (!email.isNullOrBlank() || isFtsOnly) {
+                    var isAlive: Boolean
+                    if (isFtsOnly) {
+                        isAlive = if (FileToSheetClient.hasRecentFtsSuccess(45_000L)) {
+                            true
+                        } else {
+                            FileToSheetClient.pingFtsServer(prefs.ftsEndpoint).isOnline
                         }
-                        consecutiveHeartbeatFailures = 0
+                    } else if (tickCount % 3 == 0 && !email.isNullOrBlank()) {
+                        // 3분마다 DB 텔레메트리(배터리/충전) 보고 — 느린 DB 지연은 /api/health로 분리 검증
+                        val battery = BatteryUtil.getBatteryStatus(this@KeepAliveService)
+                        val hbOk = ApiClient.sendHeartbeat(
+                            prefs.heartbeatUrl,
+                            prefs.fallbackHeartbeatUrl,
+                            email,
+                            batteryLevel = battery.level,
+                            isCharging = battery.isCharging
+                        )
+                        isAlive = if (hbOk) true else ApiClient.pingServer().isOnline
                     } else {
-                        consecutiveHeartbeatFailures++
-                        Log.w(TAG, "서버 헬스체크 실패 (${consecutiveHeartbeatFailures}회 연속)")
+                        // 매 60초 민첩한 생존 감시 (최근 45초 내 정상 통신이 있었으면 추가 핑 생략)
+                        isAlive = if (ApiClient.hasRecentServerSuccess(45_000L)) {
+                            true
+                        } else {
+                            ApiClient.pingServer().isOnline
+                        }
+                    }
+                    tickCount++
 
-                        // 2회 연속 실패 시 비상 사이렌 대신 조용히 오프라인 상태 노티로만 업데이트 (사용자 불편 방지)
-                        if (consecutiveHeartbeatFailures >= 2) {
-                            updateForegroundNotification("🟡 오프라인 모드 (네트워크 재연결 대기 중)")
+                    if (isAlive) {
+                        if (isServerCurrentlyOffline) {
+                            Log.i(TAG, "🎉 서버 통신 정상 복구 감지!")
+                            isServerCurrentlyOffline = false
+                            updateForegroundNotification("🟢 24시간 실시간 고객 알림 문자 발송 대기 중 (${email ?: "FileToSheet"})")
+                        }
+                    } else {
+                        val hasPhoneNet = ApiClient.verifyInternetConnectivity()
+                        if (!hasPhoneNet) {
+                            updateForegroundNotification("🟡 스마트폰 네트워크 연결 대기 중")
+                        } else {
+                            // 15초 뒤 경량 헬스체크 1회 재확인하여 일시적 터널 블립 필터링
+                            delay(15_000L)
+                            val confirmedAlive = if (isFtsOnly) {
+                                FileToSheetClient.pingFtsServer(prefs.ftsEndpoint).isOnline
+                            } else {
+                                ApiClient.pingServer().isOnline
+                            }
+                            if (confirmedAlive) {
+                                if (isServerCurrentlyOffline) {
+                                    isServerCurrentlyOffline = false
+                                    updateForegroundNotification("🟢 24시간 실시간 고객 알림 문자 발송 대기 중 (${email ?: "FileToSheet"})")
+                                }
+                            } else {
+                                isServerCurrentlyOffline = true
+                                Log.w(TAG, "서버 경량 헬스체크 연속 실패 - 오프라인 상태 표시")
+                                updateForegroundNotification("🟡 오프라인 모드 (서버 재연결 대기 중)")
+                            }
                         }
                     }
                 }
-                // 📋 데일리 모닝 브리핑 점검 (아침 9시 전후 1회 상단바 알림)
+                // 📋 데일리 모닝 브리핑 점검 (아침 8~12시 1일 1회)
                 TaskBriefingManager.checkAndNotifyDailyBriefing(this@KeepAliveService)
 
                 // 🔔 앱 업데이트 등으로 언바인딩된 알림 리스너(카카오톡/금융푸시) 상시 재연결 보장
                 BankNotificationListener.ensureListenerBound(this@KeepAliveService)
 
-                // 1분(60초)마다 생존 신호 전송
+                // 1분(60초)마다 민첩한 생존 확인 루프 유지
                 delay(60 * 1000L)
             }
         }
@@ -319,7 +362,7 @@ class KeepAliveService : Service() {
     private fun startReceiptQueueLoop() {
         receiptQueueJob?.cancel()
         receiptQueueJob = serviceScope.launch {
-            delay(3000L)
+            delay(5000L)
             while (isActive) {
                 try {
                     val count = SmsSenderUtil.processPendingReceipts(this@KeepAliveService)
@@ -329,8 +372,8 @@ class KeepAliveService : Service() {
                 } catch (e: Exception) {
                     Log.w(TAG, "영수증/알림 문자 대기열 자동 발송 중 오류: ${e.message}")
                 }
-                // 실시간 반응성을 위해 20초마다 대기열 체크 (기존 3분에서 20초로 단축)
-                delay(60 * 1000L)
+                // SSE 스트림이 정상 연결 중이면 2분 안전망 폴링, SSE 단절 시 60초 폴백 폴링
+                delay(if (isDispatchSseHealthy) 120 * 1000L else 60 * 1000L)
             }
         }
     }
@@ -379,7 +422,12 @@ class KeepAliveService : Service() {
 
             while (isActive) {
                 val email = prefs.userEmail
-                if (!prefs.isPaired || email.isNullOrBlank() || email.endsWith("@filetosheet.cloud")) {
+                val wantsSmsDispatch = prefs.isReceiptSmsEnabled || prefs.isSheetSmsCheckboxEnabled
+                if (!prefs.isPaired || !wantsSmsDispatch || email.isNullOrBlank() ||
+                    email.endsWith("@filetosheet.cloud", ignoreCase = true) ||
+                    email.endsWith("@fts.local", ignoreCase = true)
+                ) {
+                    isDispatchSseHealthy = false
                     delay(15000L)
                     continue
                 }
@@ -391,7 +439,7 @@ class KeepAliveService : Service() {
                 try {
                     val hosts = listOf(ApiClient.PRIMARY_HOST, ApiClient.FALLBACK_HOST)
 
-                    for (host in hosts) {
+                    for ((idx, host) in hosts.withIndex()) {
                         if (!isActive) break
                         val sseUrl = "$host/api/user/dispatch/stream?userEmail=" + java.net.URLEncoder.encode(email, "UTF-8")
 
@@ -401,10 +449,16 @@ class KeepAliveService : Service() {
                             .header("Cache-Control", "no-cache")
                             .build()
 
+                        var shouldFallbackOnDns = false
                         try {
                             val response = sseStreamClient.newCall(request).execute()
                             try {
                                 if (response.isSuccessful && response.body != null) {
+                                    ApiClient.recordServerSuccess(
+                                        (System.currentTimeMillis() - attemptStartMs).coerceAtMost(500L),
+                                        host
+                                    )
+                                    isDispatchSseHealthy = true
                                     if (!hasSyncedInitialQueue) {
                                         hasSyncedInitialQueue = true
                                         Log.i(TAG, "⚡ [SSE] 실시간 발송 대기열 최초 연결 성공 ($host)")
@@ -415,6 +469,9 @@ class KeepAliveService : Service() {
                                     while (isActive) {
                                         val line = reader.readLine() ?: break
                                         val trimmed = line.trim()
+                                        if (trimmed.isNotEmpty()) {
+                                            ApiClient.recordServerSuccess(100L, host)
+                                        }
                                         if (trimmed.startsWith("data:")) {
                                             val data = trimmed.substring(5).trim()
                                             if (
@@ -439,6 +496,7 @@ class KeepAliveService : Service() {
                                     break
                                 } else {
                                     Log.w(TAG, "⚡ [SSE] 비정상 응답 (HTTP ${response.code}, $host)")
+                                    break
                                 }
                             } finally {
                                 response.close()
@@ -449,22 +507,27 @@ class KeepAliveService : Service() {
                                 connectedAndHealthy = true
                             } else {
                                 Log.w(TAG, "⚡ [SSE] 스트림 연결 중단 ($host): " + e.message)
+                                shouldFallbackOnDns = e is java.net.UnknownHostException || e is javax.net.ssl.SSLException
                             }
                         }
 
                         if (connectedAndHealthy || receivedDispatchEvent) break
+                        if (idx == 0 && !shouldFallbackOnDns) break
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "⚡ [SSE] 루프 예외: " + e.message)
                 }
 
                 if (receivedDispatchEvent) {
+                    isDispatchSseHealthy = true
                     consecutiveFastDisconnects = 0
                     delay(1000L)
                 } else if (connectedAndHealthy) {
+                    isDispatchSseHealthy = true
                     consecutiveFastDisconnects = 0
                     delay(3000L)
                 } else {
+                    isDispatchSseHealthy = false
                     consecutiveFastDisconnects = (consecutiveFastDisconnects + 1).coerceAtMost(4)
                     val backoffMs = when (consecutiveFastDisconnects) {
                         1 -> 10000L

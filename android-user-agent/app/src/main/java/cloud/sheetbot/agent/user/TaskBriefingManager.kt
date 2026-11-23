@@ -49,7 +49,15 @@ object TaskBriefingManager {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val result = ApiClient.fetchTasks(userEmail, "PENDING")
-                if (!result.success || result.tasks.isEmpty()) return@launch
+                if (!result.success) return@launch
+
+                // 성공적으로 조회했으면 할 일이 0건이어도 오늘 날짜를 저장하여 오전 내내 60초마다 반복 호출하는 현상 차단
+                context.getSharedPreferences("sheetbot_prefs", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(PREF_KEY_LAST_BRIEFING_DATE, todayStr)
+                    .apply()
+
+                if (result.tasks.isEmpty()) return@launch
 
                 val pendingTasks = result.tasks
                 val dueTodayCount = pendingTasks.count { it.dueDate?.startsWith(todayStr) == true }
@@ -62,11 +70,6 @@ object TaskBriefingManager {
                         dueTodayCount = dueTodayCount,
                         urgentCount = urgentCount
                     )
-
-                    context.getSharedPreferences("sheetbot_prefs", Context.MODE_PRIVATE)
-                        .edit()
-                        .putString(PREF_KEY_LAST_BRIEFING_DATE, todayStr)
-                        .apply()
 
                     Log.i(TAG, "🎉 [데일리 할 일 모닝 브리핑 발행 완료] 미완료: ${pendingTasks.size}건, 오늘마감: ${dueTodayCount}건")
                 }

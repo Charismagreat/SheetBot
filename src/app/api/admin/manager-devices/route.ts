@@ -5,6 +5,9 @@ import * as crypto from "crypto";
 import { queryTable, insertRows, updateRows } from "@/lib/egdesk-helpers";
 import { getCurrentUserEmail, isCurrentUserAdmin } from "@/lib/auth";
 import {
+  AGENT_M_ONLINE_WINDOW_MS,
+  getEffectiveLastSeenMs,
+  invalidateManagerDeviceCache,
   MANAGER_DEVICES_TABLE,
   MANAGER_ONLINE_WINDOW_MS,
   PAIR_TOKEN_TTL_MS,
@@ -40,7 +43,7 @@ export async function GET(req: NextRequest) {
   const managerDevices = (res.rows || [])
     .filter((r: any) => !r.deleted_at)
     .map((r: any) => {
-      const seen = r.last_seen_at ? Date.parse(r.last_seen_at) : NaN;
+      const seen = getEffectiveLastSeenMs(String(r.id), r.last_seen_at);
       const pairExpired = r.pair_expires_at ? Date.parse(r.pair_expires_at) < now : false;
       return {
         id: r.id,
@@ -49,8 +52,8 @@ export async function GET(req: NextRequest) {
         deviceModel: r.device_model || "",
         appVersion: r.app_version || "",
         pairedAt: r.paired_at || null,
-        lastSeenAt: r.last_seen_at || null,
-        online: r.status === "ACTIVE" && Number.isFinite(seen) && now - seen <= MANAGER_ONLINE_WINDOW_MS,
+        lastSeenAt: seen > 0 ? new Date(seen).toISOString() : (r.last_seen_at || null),
+        online: r.status === "ACTIVE" && seen > 0 && now - seen <= MANAGER_ONLINE_WINDOW_MS,
         createdAt: r.created_at,
         source: "MANAGER_RELAY",
       };
@@ -67,10 +70,8 @@ export async function GET(req: NextRequest) {
   const agentMDevices = (userDevRes.rows || [])
     .filter((r: any) => !r.deleted_at)
     .map((r: any) => {
-      const rawSeen = r.last_connected_at;
-      const timeStr = rawSeen ? (rawSeen.includes("T") ? rawSeen : rawSeen.replace(" ", "T") + "Z") : "";
-      const seen = timeStr ? Date.parse(timeStr) : NaN;
-      const isOnline = r.status === "CONNECTED" && Number.isFinite(seen) && now - seen <= 150 * 1000;
+      const seen = getEffectiveLastSeenMs(String(r.id), r.last_connected_at);
+      const isOnline = r.status === "CONNECTED" && seen > 0 && now - seen <= AGENT_M_ONLINE_WINDOW_MS;
       return {
         id: `agent_m_${r.id}`,
         label: `${r.label || "Agent M (입금 에이전트)"} (${r.user_email})`,
@@ -78,7 +79,7 @@ export async function GET(req: NextRequest) {
         deviceModel: r.label || "Android Device",
         appVersion: "Agent M v2.3.5+",
         pairedAt: r.created_at || null,
-        lastSeenAt: r.last_connected_at || null,
+        lastSeenAt: seen > 0 ? new Date(seen).toISOString() : (r.last_connected_at || null),
         online: isOnline,
         createdAt: r.created_at,
         source: "AGENT_M_UNIFIED",
@@ -159,6 +160,8 @@ export async function DELETE(req: NextRequest) {
     },
     filters: { id: String(id) },
   });
+
+  invalidateManagerDeviceCache(String(id));
 
   return NextResponse.json({ success: true });
 }

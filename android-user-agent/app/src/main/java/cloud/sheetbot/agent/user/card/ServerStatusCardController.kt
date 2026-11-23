@@ -37,6 +37,7 @@ class ServerStatusCardController(
     private val scope: CoroutineScope
 ) {
     private var serverMonitorJob: Job? = null
+    private var statusCheckJob: Job? = null
     private var consecutivePingFailures = 0
 
     fun setup() {
@@ -107,8 +108,11 @@ class ServerStatusCardController(
 
         serverMonitorJob = scope.launch {
             while (isActive) {
-                checkServerAndQueueStatus(showToast = false)
-                delay(30000L) // 30초마다 갱신
+                // 🛍️ 관제 상태 카드가 보관함에 숨겨져 있는 동안에는 네트워크 핑을 생략하고, 꺼내면 즉시 재개
+                if (!prefs.hiddenCardKeys.contains("cardStatus")) {
+                    checkServerAndQueueStatus(showToast = false)
+                }
+                delay(45_000L) // 45초마다 초경량 점검 (최근 25초 내 정상 통신 시 패시브 재사용)
             }
         }
     }
@@ -117,20 +121,30 @@ class ServerStatusCardController(
         try {
             serverMonitorJob?.cancel()
             serverMonitorJob = null
+            statusCheckJob?.cancel()
+            statusCheckJob = null
         } catch (_: Throwable) {}
     }
 
     fun checkServerAndQueueStatus(showToast: Boolean = false) {
+        if (!showToast && prefs.hiddenCardKeys.contains("cardStatus")) return
+        if (!showToast && statusCheckJob?.isActive == true) return
+
         val isFtsMode = prefs.isDestinationFileToSheet && prefs.isFtsPaired
 
+        statusCheckJob?.cancel()
         if (isFtsMode) {
             val pName = prefs.ftsProjectName ?: "File to Sheet"
             val sName = prefs.ftsSheetName ?: "기본 시트"
-            scope.launch {
-                var ping = withContext(Dispatchers.IO) { FileToSheetClient.pingFtsServer(prefs.ftsEndpoint) }
-                if (!ping.isOnline && !showToast) {
-                    delay(1500L)
-                    ping = withContext(Dispatchers.IO) { FileToSheetClient.pingFtsServer(prefs.ftsEndpoint) }
+            statusCheckJob = scope.launch {
+                val ping = if (!showToast && FileToSheetClient.hasRecentFtsSuccess(25_000L)) {
+                    cloud.sheetbot.agent.user.PingResult(
+                        isOnline = true,
+                        latencyMs = FileToSheetClient.lastFtsLatencyMs,
+                        connectedHost = FileToSheetClient.lastFtsConnectedHost
+                    )
+                } else {
+                    withContext(Dispatchers.IO) { FileToSheetClient.pingFtsServer(prefs.ftsEndpoint) }
                 }
                 if (activity.isFinishing || activity.isDestroyed) return@launch
 
@@ -144,13 +158,40 @@ class ServerStatusCardController(
                         Toast.makeText(activity, "✅ file2sheet.cloud 연결 정상 (${ping.latencyMs}ms)", Toast.LENGTH_SHORT).show()
                     }
                 } else {
-                    consecutivePingFailures++
-                    if (consecutivePingFailures >= 2 || showToast) {
+                    val hasNet = withContext(Dispatchers.IO) { ApiClient.verifyInternetConnectivity() }
+                    if (activity.isFinishing || activity.isDestroyed) return@launch
+                    if (!hasNet) {
                         binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
-                        binding.tvStatusTitle.text = "🔴 [File to Sheet] 서버 응답 없음"
+                        binding.tvStatusTitle.text = "🟡 스마트폰 네트워크 대기 중"
                         binding.tvConnectedAccount.text = "연결 대상: [$pName - $sName]"
-                        binding.tvServerStatus.text = "🌐 서버 통신: 🔴 연결 실패 (서버 응답 없음)"
+                        binding.tvServerStatus.text = "🌐 서버 통신: 🟡 기기 인터넷 연결 확인 중"
+                        if (showToast) {
+                            Toast.makeText(activity, "⚠️ 스마트폰 인터넷 연결을 확인해 주세요.", Toast.LENGTH_SHORT).show()
+                        }
+                        return@launch
                     }
+
+                    consecutivePingFailures++
+                    if (consecutivePingFailures < 2 && !showToast) {
+                        binding.tvServerStatus.text = "🌐 서버 통신: 🟡 연결 재확인 중 (file2sheet.cloud)"
+                        delay(10_000L)
+                        val recheck = withContext(Dispatchers.IO) { FileToSheetClient.pingFtsServer(prefs.ftsEndpoint) }
+                        if (activity.isFinishing || activity.isDestroyed) return@launch
+                        if (recheck.isOnline) {
+                            consecutivePingFailures = 0
+                            binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
+                            binding.tvStatusTitle.text = "🟢 [File to Sheet] 정상 작동 중"
+                            binding.tvConnectedAccount.text = "연결 대상: [$pName - $sName]"
+                            binding.tvServerStatus.text = "🌐 서버 통신: 🟢 정상 (file2sheet.cloud · ${recheck.latencyMs}ms)"
+                            return@launch
+                        }
+                        consecutivePingFailures++
+                    }
+
+                    binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
+                    binding.tvStatusTitle.text = "🔴 [File to Sheet] 서버 응답 없음"
+                    binding.tvConnectedAccount.text = "연결 대상: [$pName - $sName]"
+                    binding.tvServerStatus.text = "🌐 서버 통신: 🔴 연결 실패 (서버 응답 없음)"
                     if (showToast) {
                         Toast.makeText(activity, "❌ file2sheet.cloud 서버 응답이 없습니다.", Toast.LENGTH_SHORT).show()
                     }
@@ -159,11 +200,15 @@ class ServerStatusCardController(
             return
         }
 
-        scope.launch {
-            var ping = withContext(Dispatchers.IO) { ApiClient.pingServer() }
-            if (!ping.isOnline && !showToast) {
-                delay(1500L)
-                ping = withContext(Dispatchers.IO) { ApiClient.pingServer() }
+        statusCheckJob = scope.launch {
+            val ping = if (!showToast && ApiClient.hasRecentServerSuccess(25_000L)) {
+                cloud.sheetbot.agent.user.PingResult(
+                    isOnline = true,
+                    latencyMs = ApiClient.lastServerLatencyMs,
+                    connectedHost = ApiClient.lastConnectedHost
+                )
+            } else {
+                withContext(Dispatchers.IO) { ApiClient.pingServer() }
             }
             if (activity.isFinishing || activity.isDestroyed) return@launch
             val email = prefs.userEmail ?: ""
@@ -186,13 +231,46 @@ class ServerStatusCardController(
                     Toast.makeText(activity, "✅ sheetbot.cloud 서버 통신 정상 (${ping.latencyMs}ms)", Toast.LENGTH_SHORT).show()
                 }
             } else {
-                consecutivePingFailures++
-                if (consecutivePingFailures >= 2 || showToast) {
+                val hasNet = withContext(Dispatchers.IO) { ApiClient.verifyInternetConnectivity() }
+                if (activity.isFinishing || activity.isDestroyed) return@launch
+                if (!hasNet) {
                     binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
-                    binding.tvStatusTitle.text = "🔴 시트봇 서버 응답 없음 (연결 끊김)"
+                    binding.tvStatusTitle.text = "🟡 스마트폰 네트워크 대기 중"
                     binding.tvConnectedAccount.text = if (paired) "연결된 계정: $email" else "연결된 계정: 미연동"
-                    binding.tvServerStatus.text = "🌐 서버 통신: 🔴 연결 실패 (서버 응답 없음 · 자동 재시도)"
+                    binding.tvServerStatus.text = "🌐 서버 통신: 🟡 기기 인터넷 연결 확인 중"
+                    if (showToast) {
+                        Toast.makeText(activity, "⚠️ 스마트폰 인터넷 연결을 확인해 주세요.", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
                 }
+
+                consecutivePingFailures++
+                if (consecutivePingFailures < 2 && !showToast) {
+                    binding.tvServerStatus.text = "🌐 서버 통신: 🟡 연결 재확인 중 (sheetbot.cloud)"
+                    delay(10_000L)
+                    val recheck = withContext(Dispatchers.IO) { ApiClient.pingServer() }
+                    if (activity.isFinishing || activity.isDestroyed) return@launch
+                    if (recheck.isOnline) {
+                        consecutivePingFailures = 0
+                        if (paired) {
+                            binding.cardStatus.setBackgroundResource(R.drawable.bg_card_connected)
+                            binding.tvStatusTitle.text = "🟢 시트봇 정상 작동 중"
+                            binding.tvConnectedAccount.text = "연결된 계정: $email"
+                        } else {
+                            binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
+                            binding.tvStatusTitle.text = "⚠️ 미연동 상태 (서버 정상)"
+                            binding.tvConnectedAccount.text = "연결된 계정: 미연동 (휴대폰 번호 또는 구글/QR 인증 필요)"
+                        }
+                        binding.tvServerStatus.text = "🌐 서버 통신: 🟢 정상 (${recheck.latencyMs}ms)"
+                        return@launch
+                    }
+                    consecutivePingFailures++
+                }
+
+                binding.cardStatus.setBackgroundResource(R.drawable.bg_card_unpaired)
+                binding.tvStatusTitle.text = "🔴 시트봇 서버 응답 없음 (연결 끊김)"
+                binding.tvConnectedAccount.text = if (paired) "연결된 계정: $email" else "연결된 계정: 미연동"
+                binding.tvServerStatus.text = "🌐 서버 통신: 🔴 연결 실패 (서버 응답 없음 · 자동 재시도)"
 
                 if (showToast) {
                     Toast.makeText(activity, "❌ sheetbot.cloud 서버 응답이 없습니다.", Toast.LENGTH_SHORT).show()

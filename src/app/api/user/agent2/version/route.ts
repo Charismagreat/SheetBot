@@ -16,7 +16,12 @@ interface CachedVersion {
 }
 
 let versionCache: CachedVersion | null = null;
-const CACHE_TTL_MS = 15 * 1000; // 15초 캐시 (GitHub API Rate Limit 보호 및 실시간 반영)
+let inFlightRefresh: Promise<CachedVersion["data"]> | null = null;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5분 캐시 + Stale-While-Revalidate + Single-Flight 중복 차단
+
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+};
 
 function parseVersionToCode(versionName: string): number {
   const clean = versionName.replace(/^(user-|manager-)?v?/i, "").trim();
@@ -35,7 +40,7 @@ function parseVersionToCode(versionName: string): number {
       return 97 + (patch - 76);
     }
   }
-  return 20428;
+  return 20481;
 }
 
 function readLocalPropertiesVersion(): string {
@@ -47,69 +52,85 @@ function readLocalPropertiesVersion(): string {
       if (m?.[1]?.trim()) return m[1].trim();
     }
   } catch {}
-  return "2.4.28";
+  return "2.4.81";
+}
+
+function refreshVersionCache(): Promise<CachedVersion["data"]> {
+  if (inFlightRefresh) return inFlightRefresh;
+
+  inFlightRefresh = (async () => {
+    const localVer = readLocalPropertiesVersion();
+    let latestName = localVer;
+    let latestCode = parseVersionToCode(localVer);
+    let apkUrl = `https://github.com/Charismagreat/SheetBot/releases/download/v${localVer}/SheetBotAgent.apk`;
+    const releaseNotes =
+      `✨ 시트봇 에이전트 v${latestName} 업데이트: 초경량 서버 상태 진단(/api/health) 분리 및 오탐 방지·배터리/트래픽 최적화`;
+
+    try {
+      // Rate-limit이 없는 GitHub Web 302 리다이렉트로 최신 릴리즈 태그 즉시 확인 (3초 타임아웃 보호)
+      const webRes = await fetch("https://github.com/Charismagreat/SheetBot/releases/latest", {
+        redirect: "manual",
+        headers: { "User-Agent": "SheetBot-Version-Checker" },
+        cache: "no-store",
+        signal: AbortSignal.timeout(3000),
+      });
+      const loc = webRes.headers.get("location") || "";
+      const tagMatch = loc.match(/\/releases\/tag\/([^/?#]+)/i);
+      if (tagMatch?.[1]) {
+        const rawTag = decodeURIComponent(tagMatch[1]).trim();
+        const cleanVer = rawTag.replace(/^(user-)?v?/i, "").trim();
+        const ghCode = parseVersionToCode(cleanVer);
+        if (cleanVer && ghCode >= latestCode) {
+          latestName = cleanVer;
+          latestCode = ghCode;
+          apkUrl = `https://github.com/Charismagreat/SheetBot/releases/download/${rawTag}/SheetBotAgent.apk`;
+        }
+      }
+    } catch (err: any) {
+      console.warn("[VersionCheck] GitHub release redirect check warning:", err.message);
+    }
+
+    const resultData: CachedVersion["data"] = {
+      latestVersionCode: latestCode,
+      latestVersionName: latestName,
+      apkUrl,
+      fallbackApkUrl: "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk",
+      releaseNotes,
+    };
+
+    versionCache = {
+      timestamp: Date.now(),
+      data: resultData,
+    };
+    return resultData;
+  })().finally(() => {
+    inFlightRefresh = null;
+  });
+
+  return inFlightRefresh;
 }
 
 /**
  * GET /api/user/agent2/version
  *
- * 1순위: GitHub Releases Web 302 Location 헤더 조회 (API Rate Limit 무제한, 0.1초 응답)
+ * 1순위: GitHub Releases Web 302 Location 헤더 조회 (API Rate Limit 무제한, 5분 SWR 캐시)
  * 2순위: 로컬 android-version.properties 버전 폴백
  */
 export async function GET() {
   const now = Date.now();
-  if (versionCache && now - versionCache.timestamp < CACHE_TTL_MS) {
+  if (versionCache) {
+    if (now - versionCache.timestamp >= CACHE_TTL_MS) {
+      void refreshVersionCache().catch(() => {});
+    }
     return NextResponse.json(
       { success: true, ...versionCache.data },
-      { headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" } }
+      { headers: NO_STORE_HEADERS }
     );
   }
 
-  const localVer = readLocalPropertiesVersion();
-  let latestName = localVer;
-  let latestCode = parseVersionToCode(localVer);
-  let apkUrl = `https://github.com/Charismagreat/SheetBot/releases/download/v${localVer}/SheetBotAgent.apk`;
-  let releaseNotes =
-    "✨ 시트봇 에이전트 v2.4.35 업데이트: (1) 스마트 통합 할 일 허브 배경 로딩 스피너 제거 및 상단 인라인 동기화 바 적용 (2) 할 일 카드 내 'null' 표시 제거 및 고객 연락처 자동 추출·중복 뱃지 정리";
-
-  try {
-    // Rate-limit이 없는 GitHub Web 302 리다이렉트로 최신 릴리즈 태그 즉시 확인
-    const webRes = await fetch("https://github.com/Charismagreat/SheetBot/releases/latest", {
-      redirect: "manual",
-      headers: { "User-Agent": "SheetBot-Version-Checker" },
-      cache: "no-store",
-    });
-    const loc = webRes.headers.get("location") || "";
-    const tagMatch = loc.match(/\/releases\/tag\/([^/?#]+)/i);
-    if (tagMatch?.[1]) {
-      const rawTag = decodeURIComponent(tagMatch[1]).trim();
-      const cleanVer = rawTag.replace(/^(user-)?v?/i, "").trim();
-      const ghCode = parseVersionToCode(cleanVer);
-      if (cleanVer && ghCode >= latestCode) {
-        latestName = cleanVer;
-        latestCode = ghCode;
-        apkUrl = `https://github.com/Charismagreat/SheetBot/releases/download/${rawTag}/SheetBotAgent.apk`;
-      }
-    }
-  } catch (err: any) {
-    console.warn("[VersionCheck] GitHub release redirect check warning:", err.message);
-  }
-
-  const resultData = {
-    latestVersionCode: latestCode,
-    latestVersionName: latestName,
-    apkUrl,
-    fallbackApkUrl: "https://github.com/Charismagreat/SheetBot/releases/latest/download/SheetBotAgent.apk",
-    releaseNotes,
-  };
-
-  versionCache = {
-    timestamp: now,
-    data: resultData,
-  };
-
+  const resultData = await refreshVersionCache();
   return NextResponse.json(
     { success: true, ...resultData },
-    { headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" } }
+    { headers: NO_STORE_HEADERS }
   );
 }

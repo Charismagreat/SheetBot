@@ -3,6 +3,7 @@ package cloud.sheetbot.agent.sms
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.ConnectionPool
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -23,8 +24,17 @@ data class PairInfo(val server: String, val token: String)
 object ManagerSmsApi {
     private val JSON = "application/json; charset=utf-8".toMediaType()
     private val client = OkHttpClient.Builder()
+        .connectionPool(ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .build()
+
+    // 이벤트 기반 장폴링(waitMs=25000) 전용 클라이언트
+    private val longPollClient = OkHttpClient.Builder()
+        .connectionPool(ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(35, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
 
@@ -65,13 +75,16 @@ object ManagerSmsApi {
             }
         }
 
-    suspend fun fetchQueue(prefs: ManagerSmsPrefs): QueueResult = withContext(Dispatchers.IO) {
+    suspend fun fetchQueue(prefs: ManagerSmsPrefs, waitMs: Long = 25_000L): QueueResult = withContext(Dispatchers.IO) {
         try {
             val req = Request.Builder()
-                .url("${prefs.server}/api/manager-agent/sms-queue?limit=3")
+                .url("${prefs.server}/api/manager-agent/sms-queue?limit=3&waitMs=$waitMs")
                 .header("x-manager-device-key", prefs.deviceKey ?: "")
+                .header("Cache-Control", "no-cache")
+                .header("Connection", "close")
                 .get().build()
-            client.newCall(req).execute().use { res ->
+            val httpClient = if (waitMs > 0L) longPollClient else client
+            httpClient.newCall(req).execute().use { res ->
                 if (res.code == 401) return@withContext QueueResult.Unauthorized
                 val json = try { JSONObject(res.body?.string() ?: "") } catch (_: Exception) { JSONObject() }
                 if (!res.isSuccessful || !json.optBoolean("success")) {

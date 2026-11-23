@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { insertRows } from "@/lib/egdesk-helpers";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import * as crypto from "crypto";
-import { ALLOWED_SMS_PURPOSES, isAnyManagerOnline, safeEqual } from "@/lib/manager-devices";
+import { ALLOWED_SMS_PURPOSES, isAnyManagerOnline, notifySmsQueueJobAdded, safeEqual } from "@/lib/manager-devices";
 
 function normalizePhoneNumber(phone: string): string {
   if (!phone) return "";
@@ -134,6 +134,9 @@ export async function POST(req: NextRequest) {
     ]);
 
     const dispatchId = queueInsertRes?.insertedIds?.[0] || itemUuid;
+
+    // ⚡ 대기 중인 매니저(Agent M) 장폴링 커넥션을 0.05초 내 즉시 깨워 인증번호 발송 개시
+    notifySmsQueueJobAdded();
 
     try {
       await insertRows("sheetbot_dispatch_logs", [

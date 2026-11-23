@@ -103,16 +103,74 @@ object FileToSheetClient {
 
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
+    // Passive FTS 서버 생존 추적기: 어떤 정상 FTS API든 성공하면 생존 시각·지연시간 기록
+    @Volatile
+    var lastFtsSuccessAtMs: Long = 0L
+        private set
+
+    @Volatile
+    var lastFtsLatencyMs: Long = 0L
+        private set
+
+    @Volatile
+    var lastFtsConnectedHost: String = FTS_OFFICIAL_DOMAIN
+        private set
+
+    fun recordFtsSuccess(latencyMs: Long, host: String = FTS_OFFICIAL_DOMAIN) {
+        lastFtsSuccessAtMs = System.currentTimeMillis()
+        lastFtsLatencyMs = latencyMs
+        lastFtsConnectedHost = host
+    }
+
+    fun hasRecentFtsSuccess(withinMs: Long): Boolean {
+        val last = lastFtsSuccessAtMs
+        return last > 0L && (System.currentTimeMillis() - last) <= withinMs
+    }
+
+    private fun isDnsOrTlsFailure(e: Exception): Boolean {
+        return e is java.net.UnknownHostException ||
+            e is javax.net.ssl.SSLException ||
+            e.cause is java.net.UnknownHostException ||
+            e.cause is javax.net.ssl.SSLException
+    }
+
+    private val ftsSuccessInterceptor = okhttp3.Interceptor { chain ->
+        val req = chain.request()
+        val startMs = System.currentTimeMillis()
+        val res = chain.proceed(req)
+        try {
+            val hostStr = req.url.host
+            if ((res.isSuccessful || res.code == 429) &&
+                (hostStr.contains("file2sheet.cloud", ignoreCase = true) ||
+                    req.url.toString().contains("/p/FileToSheet", ignoreCase = true))
+            ) {
+                recordFtsSuccess(System.currentTimeMillis() - startMs, req.url.scheme + "://" + hostStr)
+            }
+        } catch (_: Exception) {}
+        res
+    }
+
     private val client = OkHttpClient.Builder()
         .connectionPool(okhttp3.ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
+        .addInterceptor(ftsSuccessInterceptor)
         .connectTimeout(6, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
 
+    private val healthClient = OkHttpClient.Builder()
+        .connectionPool(okhttp3.ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
+        .writeTimeout(5, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
+
     /**
      * 파일투시트 서버 실시간 생존 상태(Ping) 및 지연 시간(ms) 확인
+     * - 28KB 전체 SSR 랜딩 페이지 GET 대신 0바이트 정적 리소스 HEAD /favicon.ico 사용 (SSR 부하 0)
+     * - 동일 터널 중복 폭주 방지: DNS/TLS 오류 시에만 터널 직통 주소 폴백
      */
     suspend fun pingFtsServer(endpointHint: String? = null): PingResult = withContext(Dispatchers.IO) {
         val candidates = mutableListOf<String>()
@@ -123,20 +181,25 @@ object FileToSheetClient {
         }
         if (!candidates.contains(FTS_OFFICIAL_DOMAIN)) candidates.add(FTS_OFFICIAL_DOMAIN)
         if (!candidates.contains(FTS_TUNNEL_BASE)) candidates.add(FTS_TUNNEL_BASE)
-        if (!candidates.contains(FTS_TUNNEL_BASE_LEGACY)) candidates.add(FTS_TUNNEL_BASE_LEGACY)
 
-        for (host in candidates) {
+        var lastError = "파일투시트 서버 응답 없음"
+        for ((idx, host) in candidates.withIndex()) {
             try {
+                // 1순위: 0바이트 정적 리소스 HEAD /favicon.ico (Next.js SSR 완전 우회)
+                val probeUrl = "${host.trimEnd('/')}/favicon.ico"
                 val req = Request.Builder()
-                    .url(host)
+                    .url(probeUrl)
                     .header("Cache-Control", "no-cache")
                     .header("Connection", "close")
-                    .get()
+                    .head()
                     .build()
                 val startTime = System.currentTimeMillis()
-                client.newCall(req).execute().use { res ->
+                var code = 0
+                healthClient.newCall(req).execute().use { res ->
+                    code = res.code
                     val elapsed = System.currentTimeMillis() - startTime
-                    if (res.code in 200..499 && res.code != 400 && res.code != 404) {
+                    if (code in 200..399 || code == 429) {
+                        recordFtsSuccess(elapsed, host)
                         return@withContext PingResult(
                             isOnline = true,
                             latencyMs = elapsed,
@@ -144,11 +207,39 @@ object FileToSheetClient {
                         )
                     }
                 }
+                // favicon.ico가 404인 환경에 한해 0바이트 HEAD / 1회 보조 확인
+                if (code == 404) {
+                    val rootReq = Request.Builder()
+                        .url(host)
+                        .header("Cache-Control", "no-cache")
+                        .header("Connection", "close")
+                        .head()
+                        .build()
+                    val t2 = System.currentTimeMillis()
+                    healthClient.newCall(rootReq).execute().use { res2 ->
+                        val elapsed2 = System.currentTimeMillis() - t2
+                        if (res2.code in 200..399 || res2.code == 429) {
+                            recordFtsSuccess(elapsed2, host)
+                            return@withContext PingResult(
+                                isOnline = true,
+                                latencyMs = elapsed2,
+                                connectedHost = host
+                            )
+                        }
+                        lastError = "HTTP ${res2.code}"
+                    }
+                } else {
+                    lastError = "HTTP $code"
+                }
+                // HTTP 응답 자체가 왔으면 동일 터널을 이미 통과했으므로 중복 폴백 생략
+                if (idx == 0) break
             } catch (e: Exception) {
+                lastError = e.message ?: "연결 실패"
                 Log.w(TAG, "FTS 서버 핑 확인 실패 ($host): ${e.message}")
+                if (idx == 0 && !isDnsOrTlsFailure(e)) break
             }
         }
-        PingResult(isOnline = false, error = "파일투시트 서버 응답 없음")
+        PingResult(isOnline = false, error = lastError)
     }
 
     /**
@@ -1268,13 +1359,14 @@ object FileToSheetClient {
             if (userEmail.isNotBlank()) append("&userEmail=").append(java.net.URLEncoder.encode(userEmail, "UTF-8"))
         }
 
-        for (base in getSaasOtpBaseHosts(prefs)) {
+        for ((idx, base) in getSaasOtpBaseHosts(prefs).withIndex()) {
             val url = "$base/api/saas/otp/pending?$query"
             try {
                 val req = Request.Builder()
                     .url(url)
                     .header("Accept", "application/json")
                     .header("x-saas-otp-key", apiKey)
+                    .header("Connection", "close")
                     .get()
                     .build()
                 client.newCall(req).execute().use { res ->
@@ -1305,8 +1397,10 @@ object FileToSheetClient {
                         return@withContext items
                     }
                 }
+                if (idx == 0) break
             } catch (e: Exception) {
                 Log.d(TAG, "fetchPendingSaasOtps 참고 ($base): ${e.message}")
+                if (idx == 0 && !isDnsOrTlsFailure(e)) break
             }
         }
         emptyList()
