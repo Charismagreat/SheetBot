@@ -759,6 +759,7 @@ export async function syncPcLiveKakaoMessageToSheets(params: {
     let ftsSuccess = false;
 
     // 1. 파투(FileToSheet) '시트봇 연동 장부 -> 카카오톡대화대장' 적재
+    const logIdStr = params.logId !== undefined && params.logId !== null ? String(params.logId).trim() : "";
     if (resolvedPhone) {
       const ftsHeaders = [
         "일련번호",
@@ -767,6 +768,9 @@ export async function syncPcLiveKakaoMessageToSheets(params: {
         "메시지내용",
         "기기명",
         "동기화일시",
+        "상태",
+        "메시지ID",
+        "파일링크",
       ];
       const rowDataObj = {
         수신일시: sentAt,
@@ -774,6 +778,9 @@ export async function syncPcLiveKakaoMessageToSheets(params: {
         메시지내용: msgText,
         기기명: deviceCol,
         동기화일시: nowStr,
+        상태: "정상",
+        메시지ID: logIdStr,
+        파일링크: "",
       };
 
       for (const baseUrl of FTS_INTERNAL_ENDPOINTS) {
@@ -825,6 +832,7 @@ export async function syncPcLiveKakaoMessageToSheets(params: {
     }
 
     // 2. 구글 시트 '[SheetBot] 카카오톡 메시지 대장' 적재 (구글 계정 연동 회원인 경우)
+    let googleSheetSuccess = false;
     if (cleanEmail && cleanEmail.includes("@") && !cleanEmail.endsWith("@fts.local") && !cleanEmail.endsWith("@filetosheet.cloud")) {
       try {
         const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, params.req);
@@ -836,26 +844,485 @@ export async function syncPcLiveKakaoMessageToSheets(params: {
           callOptions,
         });
         if (resolved?.spreadsheetId) {
+          await ensureKakaoSheetStatusHeaders(resolved.spreadsheetId, callOptions);
           const dirCol = params.mine ? "📤 PC카톡 발신" : "💬 PC카톡 수신";
           const senderCol = params.mine ? `나 ➔ ${roomLabel}` : senderLabel;
+          const logIdStr = params.logId !== undefined && params.logId !== null ? String(params.logId).trim() : "";
           await callSheetsTool(
             "sheets_append_values",
             {
               spreadsheetId: resolved.spreadsheetId,
-              range: "A:F",
-              values: [[sentAt, dirCol, roomLabel, senderCol, msgText, deviceCol]],
+              range: "A:I",
+              values: [[sentAt, dirCol, roomLabel, senderCol, msgText, deviceCol, "정상", logIdStr, ""]],
               preferOAuth: true,
             },
             callOptions
           ).catch(() => {});
+          googleSheetSuccess = true;
         }
       } catch {}
     }
 
-    return { synced: ftsSuccess, deduplicated: false };
+    return { synced: ftsSuccess || googleSheetSuccess, deduplicated: false };
   } catch (err: any) {
     console.warn("[AiCopilotLearning] syncPcLiveKakaoMessageToSheets error:", err.message);
     return { synced: false, deduplicated: false };
+  }
+}
+
+/**
+ * 구글 시트 '[SheetBot] 카카오톡 메시지 대장'의 1행 헤더(A1:I1)를 보장합니다.
+ * - 빈 시트: A1:I1 전체 헤더 생성
+ * - 기존 6/8컬럼 시트: G1("상태"), H1("메시지ID"), I1("파일링크")만 안전하게 자동 확장
+ */
+export async function ensureKakaoSheetStatusHeaders(
+  spreadsheetId: string,
+  callOptions?: any
+): Promise<void> {
+  const firstRowCheck = await callSheetsTool(
+    "sheets_get_range",
+    {
+      spreadsheetId,
+      range: "A1:I1",
+      preferOAuth: true,
+    },
+    callOptions
+  ).catch(() => null);
+
+  const firstRow = firstRowCheck?.values?.[0] || [];
+  const hasHeader = Boolean(firstRow[0]);
+  const hasStatusHeader = Boolean(firstRow[6]);
+  const hasFileLinkHeader = Boolean(firstRow[8]);
+
+  if (!hasHeader) {
+    await callSheetsTool(
+      "sheets_update_range",
+      {
+        spreadsheetId,
+        range: "A1:I1",
+        values: [["수신 일시", "채팅방 구분", "채팅방/상대방 이름", "발신자", "메시지 내용", "기기명", "상태", "메시지ID", "파일링크"]],
+        preferOAuth: true,
+      },
+      callOptions
+    ).catch(() => {});
+  } else if (!hasStatusHeader || !hasFileLinkHeader) {
+    await callSheetsTool(
+      "sheets_update_range",
+      {
+        spreadsheetId,
+        range: "G1:I1",
+        values: [["상태", "메시지ID", "파일링크"]],
+        preferOAuth: true,
+      },
+      callOptions
+    ).catch(() => {});
+  }
+}
+
+export interface DeletedKakaoMessageEvent {
+  logId?: string | number;
+  roomName: string;
+  senderName?: string;
+  message?: string;
+  deleteType?: "ALL" | "LOCAL" | string;
+  deletedAtStr?: string;
+}
+
+/**
+ * 파투(FileToSheet) '카카오톡대화대장' 인박스 토큰을 확보하고 PATCH 요청을 전송하는 공용 헬퍼
+ */
+async function patchFtsKakaoSheet(
+  resolvedPhone: string,
+  patchBody: Record<string, any>
+): Promise<{ ok: boolean; data?: any }> {
+  if (!resolvedPhone) return { ok: false };
+  const ftsHeaders = [
+    "일련번호",
+    "수신일시",
+    "채팅방/발신자",
+    "메시지내용",
+    "기기명",
+    "동기화일시",
+    "상태",
+    "메시지ID",
+    "파일링크",
+  ];
+  for (const baseUrl of FTS_INTERNAL_ENDPOINTS) {
+    try {
+      let inboxToken = "";
+      const ensureCtrl = new AbortController();
+      const ensureTimer = setTimeout(() => ensureCtrl.abort(), 4500);
+      const ensureRes = await fetch(`${baseUrl}/api/inbox/ensure-sheet`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phoneNumber: resolvedPhone,
+          cardId: "kakao_sync",
+          sheetName: "카카오톡대화대장",
+          headers: ftsHeaders,
+        }),
+        signal: ensureCtrl.signal,
+      }).catch(() => null);
+      clearTimeout(ensureTimer);
+
+      if (ensureRes && ensureRes.ok) {
+        const ensureJson = await ensureRes.json().catch(() => ({}));
+        if (ensureJson?.token) inboxToken = ensureJson.token;
+      }
+
+      if (inboxToken) {
+        const patchCtrl = new AbortController();
+        const patchTimer = setTimeout(() => patchCtrl.abort(), 8000);
+        const patchRes = await fetch(`${baseUrl}/api/inbox/${encodeURIComponent(inboxToken)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patchBody),
+          signal: patchCtrl.signal,
+        });
+        clearTimeout(patchTimer);
+        if (patchRes.ok) {
+          const data = await patchRes.json().catch(() => ({}));
+          return { ok: true, data };
+        }
+      }
+    } catch {
+      // try next endpoint
+    }
+  }
+  return { ok: false };
+}
+
+/**
+ * PC 카톡 브리지에서 감지한 삭제 메시지/첨부파일을 시트에서 삭제하지 않고
+ * 원본 내용은 그대로 보존한 채 구글 시트(G열) 및 파투 시트('상태' 열)에 '🗑️ 삭제됨 (...)' 표시를 기록합니다.
+ */
+export async function markKakaoMessagesDeletedInSheets(params: {
+  userEmail: string;
+  phoneNumber?: string;
+  deletedMessages: DeletedKakaoMessageEvent[];
+  pcName?: string;
+  req?: NextRequest;
+}): Promise<{ updatedCount: number; alreadyMarkedCount: number; notFoundCount: number; ftsUpdatedCount?: number }> {
+  let updatedCount = 0;
+  let alreadyMarkedCount = 0;
+  let notFoundCount = 0;
+  let ftsUpdatedCount = 0;
+
+  try {
+    const cleanEmail = (params.userEmail || "").toLowerCase().trim();
+    const items = Array.isArray(params.deletedMessages) ? params.deletedMessages : [];
+    if (!items.length) {
+      return { updatedCount, alreadyMarkedCount, notFoundCount, ftsUpdatedCount };
+    }
+
+    // 1. 파투(FileToSheet) '카카오톡대화대장' 삭제 상태 반영
+    const ftsEmailDigits = cleanEmail.match(/^([0-9]{9,12})@(fts\.local|filetosheet\.cloud)$/)?.[1] || "";
+    const resolvedPhone =
+      (params.phoneNumber || "").replace(/[^0-9]/g, "") ||
+      ftsEmailDigits ||
+      (cleanEmail ? await resolveUserFtsPhoneNumber(cleanEmail).catch(() => null) : null) ||
+      (cleanEmail === "chachogreat@gmail.com" ? "01072165884" : "");
+
+    if (resolvedPhone) {
+      const ftsRes = await patchFtsKakaoSheet(resolvedPhone, {
+        action: "MARK_DELETED",
+        deletedMessages: items,
+      });
+      if (ftsRes.ok && ftsRes.data) {
+        ftsUpdatedCount = Number(ftsRes.data.updatedCount || 0);
+      }
+    }
+
+    // 2. 구글 계정 연동 회원 시트('[SheetBot] 카카오톡 메시지 대장') 반영
+    if (!cleanEmail || !cleanEmail.includes("@") || cleanEmail.endsWith("@fts.local") || cleanEmail.endsWith("@filetosheet.cloud")) {
+      return {
+        updatedCount: ftsUpdatedCount,
+        alreadyMarkedCount,
+        notFoundCount: Math.max(0, items.length - ftsUpdatedCount),
+        ftsUpdatedCount,
+      };
+    }
+
+    const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, params.req);
+    const resolved = await resolveUserSpreadsheet({
+      userEmail: cleanEmail,
+      sheetType: "KAKAO",
+      defaultTitle: "[SheetBot] 카카오톡 메시지 대장",
+      preferOAuth: true,
+      callOptions,
+    });
+
+    if (!resolved?.spreadsheetId) {
+      return { updatedCount, alreadyMarkedCount, notFoundCount: items.length };
+    }
+
+    const spreadsheetId = resolved.spreadsheetId;
+    await ensureKakaoSheetStatusHeaders(spreadsheetId, callOptions);
+
+    // 시트 데이터 조회 (A1:H5000 범위)
+    const sheetData = await callSheetsTool(
+      "sheets_get_range",
+      {
+        spreadsheetId,
+        range: "A1:H5000",
+        preferOAuth: true,
+      },
+      callOptions
+    ).catch(() => null);
+
+    const rows: string[][] = Array.isArray(sheetData?.values) ? sheetData.values : [];
+    if (rows.length <= 1) {
+      return { updatedCount, alreadyMarkedCount, notFoundCount: items.length };
+    }
+
+    const nowStr = getKoreanTimeString();
+    const matchedRowsInBatch = new Set<number>();
+
+    for (const item of items) {
+      const targetLogId = item.logId !== undefined && item.logId !== null ? String(item.logId).trim() : "";
+      const targetRoom = (item.roomName || "").trim();
+      const targetMsg = (item.message || "").trim();
+      const deletedAt = (item.deletedAtStr || "").trim() || nowStr;
+      const deleteScopeLabel = item.deleteType === "ALL" ? "모두에게 삭제" : "삭제됨";
+      const statusText = `🗑️ ${deleteScopeLabel} (${deletedAt})`;
+
+      let targetRowIndex = -1; // 0-based index in `rows`
+
+      // 1순위: H열(메시지ID / logId) 정확 일치 검색 (최신 행부터 역순 탐색)
+      if (targetLogId) {
+        for (let i = rows.length - 1; i >= 1; i--) {
+          const rowLogId = String(rows[i]?.[7] ?? "").trim();
+          if (rowLogId && rowLogId === targetLogId) {
+            targetRowIndex = i;
+            break;
+          }
+        }
+      }
+
+      // 2순위: 모바일 알림 선행 적재 등으로 H열이 비어있는 경우, C열(채팅방) + E열(메시지 내용) 지문 역순 매칭
+      if (targetRowIndex === -1 && targetRoom && targetMsg) {
+        for (let i = rows.length - 1; i >= 1; i--) {
+          if (matchedRowsInBatch.has(i)) continue;
+          const rowRoom = String(rows[i]?.[2] ?? "").trim();
+          const rowMsg = String(rows[i]?.[4] ?? "").trim();
+          const rowStatus = String(rows[i]?.[6] ?? "").trim();
+          const rowLogId = String(rows[i]?.[7] ?? "").trim();
+          if (rowRoom === targetRoom && rowMsg === targetMsg && !rowLogId && !rowStatus.includes("삭제")) {
+            targetRowIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (targetRowIndex === -1) {
+        notFoundCount++;
+        continue;
+      }
+
+      const existingStatus = String(rows[targetRowIndex]?.[6] ?? "").trim();
+      if (existingStatus.includes("삭제")) {
+        alreadyMarkedCount++;
+        continue;
+      }
+
+      const sheetRowNumber = targetRowIndex + 1; // 1-based Google Sheet row number
+      const existingLogId = String(rows[targetRowIndex]?.[7] ?? "").trim();
+      const finalLogId = existingLogId || targetLogId;
+
+      await callSheetsTool(
+        "sheets_update_range",
+        {
+          spreadsheetId,
+          range: `G${sheetRowNumber}:H${sheetRowNumber}`,
+          values: [[statusText, finalLogId]],
+          preferOAuth: true,
+        },
+        callOptions
+      );
+
+      // 메모리 스냅샷 갱신 (동일 배치 내 중복 매칭 방지)
+      while (rows[targetRowIndex].length < 8) {
+        rows[targetRowIndex].push("");
+      }
+      rows[targetRowIndex][6] = statusText;
+      rows[targetRowIndex][7] = finalLogId;
+      matchedRowsInBatch.add(targetRowIndex);
+      updatedCount++;
+    }
+
+    return {
+      updatedCount: Math.max(updatedCount, ftsUpdatedCount),
+      alreadyMarkedCount,
+      notFoundCount,
+      ftsUpdatedCount,
+    };
+  } catch (err: any) {
+    console.warn("[AiCopilotLearning] markKakaoMessagesDeletedInSheets error:", err?.message || err);
+    return { updatedCount, alreadyMarkedCount, notFoundCount, ftsUpdatedCount };
+  }
+}
+
+/**
+ * 구글 드라이브에 업로드된 카카오톡 첨부 파일의 링크(webViewLink) 및 원본 파일을
+ * 구글 시트 '[SheetBot] 카카오톡 메시지 대장'(I열)과 파투 '카카오톡대화대장'('파일링크' + _fileId)에 동시 연결합니다.
+ */
+export async function attachDriveLinkToKakaoSheetRow(params: {
+  userEmail: string;
+  phoneNumber?: string;
+  logId?: string | number;
+  roomName: string;
+  senderName?: string;
+  fileName: string;
+  mimeType?: string;
+  fileBase64?: string;
+  webViewLink: string;
+  pcName?: string;
+  req?: NextRequest;
+}): Promise<{ updated: boolean; appended: boolean; spreadsheetUrl: string; ftsUpdated?: boolean; ftsFileUrl?: string }> {
+  let ftsUpdated = false;
+  let ftsFileUrl = "";
+  try {
+    const cleanEmail = (params.userEmail || "").toLowerCase().trim();
+
+    // 1. 파투(FileToSheet) '카카오톡대화대장' 원본 파일 저장 + '파일링크' 연결
+    const ftsEmailDigits = cleanEmail.match(/^([0-9]{9,12})@(fts\.local|filetosheet\.cloud)$/)?.[1] || "";
+    const resolvedPhone =
+      (params.phoneNumber || "").replace(/[^0-9]/g, "") ||
+      ftsEmailDigits ||
+      (cleanEmail ? await resolveUserFtsPhoneNumber(cleanEmail).catch(() => null) : null) ||
+      (cleanEmail === "chachogreat@gmail.com" ? "01072165884" : "");
+
+    if (resolvedPhone) {
+      const ftsRes = await patchFtsKakaoSheet(resolvedPhone, {
+        action: "ATTACH_FILE",
+        logId: params.logId,
+        roomName: params.roomName,
+        senderName: params.senderName,
+        fileName: params.fileName,
+        mimeType: params.mimeType,
+        fileBase64: params.fileBase64,
+        webViewLink: params.webViewLink,
+        pcName: params.pcName,
+      });
+      if (ftsRes.ok && ftsRes.data) {
+        ftsUpdated = Boolean(ftsRes.data.updated || ftsRes.data.appended);
+        ftsFileUrl = String(ftsRes.data.fileUrl || "");
+      }
+    }
+
+    // 2. 구글 시트 '[SheetBot] 카카오톡 메시지 대장' I열('파일링크') 연결
+    if (!cleanEmail || !cleanEmail.includes("@") || cleanEmail.endsWith("@fts.local") || cleanEmail.endsWith("@filetosheet.cloud")) {
+      return { updated: ftsUpdated, appended: false, spreadsheetUrl: "", ftsUpdated, ftsFileUrl };
+    }
+    if (!params.webViewLink) {
+      return { updated: ftsUpdated, appended: false, spreadsheetUrl: "", ftsUpdated, ftsFileUrl };
+    }
+
+    const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, params.req);
+    const resolved = await resolveUserSpreadsheet({
+      userEmail: cleanEmail,
+      sheetType: "KAKAO",
+      defaultTitle: "[SheetBot] 카카오톡 메시지 대장",
+      preferOAuth: true,
+      callOptions,
+    });
+
+    if (!resolved?.spreadsheetId) {
+      return { updated: false, appended: false, spreadsheetUrl: "" };
+    }
+
+    const spreadsheetId = resolved.spreadsheetId;
+    await ensureKakaoSheetStatusHeaders(spreadsheetId, callOptions);
+
+    const sheetData = await callSheetsTool(
+      "sheets_get_range",
+      {
+        spreadsheetId,
+        range: "A1:I5000",
+        preferOAuth: true,
+      },
+      callOptions
+    ).catch(() => null);
+
+    const rows: string[][] = Array.isArray(sheetData?.values) ? sheetData.values : [];
+    const targetLogId = params.logId !== undefined && params.logId !== null ? String(params.logId).trim() : "";
+    const targetRoom = (params.roomName || "").trim();
+    const targetFileName = (params.fileName || "").trim();
+
+    let targetRowIndex = -1;
+
+    // 1순위: H열(메시지ID) 정확 일치
+    if (targetLogId) {
+      for (let i = rows.length - 1; i >= 1; i--) {
+        const rowLogId = String(rows[i]?.[7] ?? "").trim();
+        if (rowLogId && rowLogId === targetLogId) {
+          targetRowIndex = i;
+          break;
+        }
+      }
+    }
+
+    // 2순위: C열(채팅방) + E열(메시지 내용에 파일명 포함) 역순 매칭
+    if (targetRowIndex === -1 && targetRoom && targetFileName) {
+      for (let i = rows.length - 1; i >= 1; i--) {
+        const rowRoom = String(rows[i]?.[2] ?? "").trim();
+        const rowMsg = String(rows[i]?.[4] ?? "").trim();
+        if (rowRoom === targetRoom && rowMsg.includes(targetFileName)) {
+          targetRowIndex = i;
+          break;
+        }
+      }
+    }
+
+    if (targetRowIndex !== -1) {
+      const sheetRowNumber = targetRowIndex + 1;
+      const existingLink = String(rows[targetRowIndex]?.[8] ?? "").trim();
+      const existingLogId = String(rows[targetRowIndex]?.[7] ?? "").trim();
+      const finalLogId = existingLogId || targetLogId;
+
+      // 사진 묶음 등으로 여러 파일이 같은 logId에 매칭되면 줄바꿈으로 누적 (중복 링크 방지)
+      let finalLink = params.webViewLink;
+      if (existingLink && !existingLink.includes(params.webViewLink)) {
+        finalLink = `${existingLink}\n${params.webViewLink}`;
+      } else if (existingLink.includes(params.webViewLink)) {
+        finalLink = existingLink;
+      }
+
+      await callSheetsTool(
+        "sheets_update_range",
+        {
+          spreadsheetId,
+          range: `H${sheetRowNumber}:I${sheetRowNumber}`,
+          values: [[finalLogId, finalLink]],
+          preferOAuth: true,
+        },
+        callOptions
+      );
+
+      return { updated: true, appended: false, spreadsheetUrl: resolved.spreadsheetUrl, ftsUpdated, ftsFileUrl };
+    }
+
+    // 매칭되는 기존 행이 없는 경우 신규 행으로 안전하게 기록
+    const nowStr = getKoreanTimeString();
+    const roomLabel = targetRoom || "대화방";
+    const senderLabel = (params.senderName || roomLabel).trim();
+    const deviceLabel = `🖥️ 내 PC(${(params.pcName || "Windows PC").trim()}) 카톡 첨부파일`;
+
+    await callSheetsTool(
+      "sheets_append_values",
+      {
+        spreadsheetId,
+        range: "A:I",
+        values: [[nowStr, "📎 PC카톡 첨부", roomLabel, senderLabel, `[파일: ${targetFileName}]`, deviceLabel, "정상", targetLogId, params.webViewLink]],
+        preferOAuth: true,
+      },
+      callOptions
+    );
+
+    return { updated: false, appended: true, spreadsheetUrl: resolved.spreadsheetUrl, ftsUpdated, ftsFileUrl };
+  } catch (err: any) {
+    console.warn("[AiCopilotLearning] attachDriveLinkToKakaoSheetRow error:", err?.message || err);
+    return { updated: false, appended: false, spreadsheetUrl: "", ftsUpdated, ftsFileUrl };
   }
 }
 

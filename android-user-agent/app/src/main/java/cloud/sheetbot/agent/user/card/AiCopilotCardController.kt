@@ -13,9 +13,12 @@ import android.speech.RecognizerIntent
 import android.text.Editable
 import android.text.SpannableString
 import android.text.Spanned
+import android.text.TextPaint
 import android.text.TextUtils
 import android.text.TextWatcher
+import android.text.method.LinkMovementMethod
 import android.text.style.BackgroundColorSpan
+import android.text.style.ClickableSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.util.TypedValue
@@ -85,6 +88,16 @@ class AiCopilotCardController(
     private var currentMatchedRows: List<FtsSearchMatchedRow> = emptyList()
     private var currentSearchKeywords: List<String> = emptyList()
     private var selectedSheetFilterKey: String = "ALL" // "ALL" or "projectName::sheetName"
+    private var lastExecutedCommand: String = ""
+    private var lastAiExplanation: String = ""
+    private var isFollowUpSearchEnabled: Boolean = false
+
+    private enum class ActionEntityType { URL, EMAIL, PHONE, ADDRESS }
+    private data class DetectedActionEntity(
+        val type: ActionEntityType,
+        val value: String,
+        val displayLabel: String
+    )
 
     fun setup() {
         val chipsSection = binding.root.findViewWithTag<View>("copilotChipsSection")
@@ -431,6 +444,16 @@ class AiCopilotCardController(
         prefs.addCopilotSearchHistory(command)
         renderRecentSearchHistory()
 
+        // 결과 내 재검색 여부 결정: 토글 ON 또는 직전 결과를 가리키는 지시어 감지 시 활성화
+        val hasPreviousContext = currentMatchedRows.isNotEmpty() || lastAiExplanation.isNotBlank()
+        val hasFollowUpPronoun = Regex(
+            "(이\\s*(문자|카톡|내용|결과|내역|파일|메시지|행)|방금|위\\s*(내용|결과|문자)|그\\s*(중|사람|업체|거래처|번호|주소|일정|문자)|여기서|저기서|거기|추가로|다시\\s*알려)"
+        ).containsMatchIn(command)
+        val useFollowUpMode = hasPreviousContext && (isFollowUpSearchEnabled || hasFollowUpPronoun)
+        val prevRowsSnapshot = if (useFollowUpMode) currentMatchedRows.toList() else emptyList()
+        val prevCommandSnapshot = if (useFollowUpMode) lastExecutedCommand else ""
+        val prevExplanationSnapshot = if (useFollowUpMode) lastAiExplanation else ""
+
         binding.layoutAiCommandResult.visibility = View.GONE
         val searchContainer = binding.root.findViewWithTag<LinearLayout>("layoutAiSearchResultsContainer")
         searchContainer?.removeAllViews()
@@ -438,9 +461,9 @@ class AiCopilotCardController(
 
         CardInlineLoadingHelper.show(
             container = binding.layoutCopilotDetails,
-            message = "🔍 파투 전체 프로젝트·시트 검색 및 AI 분석 중...",
+            message = if (useFollowUpMode) "🔄 이전 검색 결과 내에서 추가 분석 중..." else "🔍 파투 전체 프로젝트·시트 검색 및 AI 분석 중...",
             triggerButton = binding.btnExecuteCommand,
-            loadingButtonText = "⏳ AI 검색 중..."
+            loadingButtonText = if (useFollowUpMode) "🔄 결과 내 분석 중..." else "⏳ AI 검색 중..."
         )
 
         scope.launch {
@@ -452,11 +475,15 @@ class AiCopilotCardController(
                         command = command,
                         phoneNumber = ftsPhone.takeIf { it.isNotBlank() },
                         projectId = ftsProjectId.takeIf { it.isNotBlank() },
-                        token = ftsToken.takeIf { it.isNotBlank() }
+                        token = ftsToken.takeIf { it.isNotBlank() },
+                        searchWithinPrevious = useFollowUpMode,
+                        previousCommand = prevCommandSnapshot.takeIf { it.isNotBlank() },
+                        previousExplanation = prevExplanationSnapshot.takeIf { it.isNotBlank() },
+                        previousMatchedRows = prevRowsSnapshot.takeIf { it.isNotEmpty() }
                     )
                 }
                 val localSearchDeferred = async {
-                    if (ftsPhone.isNotBlank() || ftsProjectId.isNotBlank()) {
+                    if (!useFollowUpMode && (ftsPhone.isNotBlank() || ftsProjectId.isNotBlank())) {
                         FileToSheetClient.searchAcrossAllWorkspaceProjects(
                             phoneNumber = ftsPhone,
                             projectIdHint = ftsProjectId,
@@ -470,8 +497,8 @@ class AiCopilotCardController(
                 val res = serverDeferred.await()
                 var localRes = localSearchDeferred.await()
 
-                // 서버가 추출한 정밀 키워드가 있고 로컬 검색을 보강할 수 있는 경우 캐시 기반 즉시 재검색
-                if (res.success && res.queryKeywords.isNotEmpty() && (ftsPhone.isNotBlank() || ftsProjectId.isNotBlank())) {
+                // 서버가 추출한 정밀 키워드가 있고 로컬 검색을 보강할 수 있는 경우 캐시 기반 즉시 재검색 (전체 검색 모드일 때만)
+                if (!useFollowUpMode && res.success && res.queryKeywords.isNotEmpty() && (ftsPhone.isNotBlank() || ftsProjectId.isNotBlank())) {
                     val refinedLocal = FileToSheetClient.searchAcrossAllWorkspaceProjects(
                         phoneNumber = ftsPhone,
                         projectIdHint = ftsProjectId,
@@ -489,6 +516,7 @@ class AiCopilotCardController(
                 val isSearchOrQuery = res.actionType == "SHEET_QUERY" || res.actionType == "GENERAL_ASSIST" || !res.success
                 val mergedRows = when {
                     res.matchedRows.isNotEmpty() -> res.matchedRows
+                    useFollowUpMode && prevRowsSnapshot.isNotEmpty() -> prevRowsSnapshot
                     isSearchOrQuery && localRes != null && localRes.matchedRows.isNotEmpty() -> localRes.matchedRows
                     else -> emptyList()
                 }
@@ -512,8 +540,21 @@ class AiCopilotCardController(
                         else -> "검색이 완료되었습니다."
                     }
 
-                    binding.tvAiCommandExplanation.text = "✅ $finalExplanation"
-                    binding.tvAiCommandSpoken.text = "🗣️ $finalSpoken"
+                    lastExecutedCommand = command
+                    lastAiExplanation = finalExplanation
+
+                    // 주소(구글지도) · 전화번호(전화걸기) · 이메일(지메일) · 웹주소(브라우저) 원터치 링크 자동 적용
+                    val detectedActions = mutableListOf<DetectedActionEntity>()
+                    binding.tvAiCommandExplanation.text = buildInteractiveResultSpannable("✅ $finalExplanation", detectedActions)
+                    binding.tvAiCommandExplanation.movementMethod = LinkMovementMethod.getInstance()
+                    binding.tvAiCommandExplanation.highlightColor = Color.TRANSPARENT
+
+                    binding.tvAiCommandSpoken.text = buildInteractiveResultSpannable("🗣️ $finalSpoken", detectedActions)
+                    binding.tvAiCommandSpoken.movementMethod = LinkMovementMethod.getInstance()
+                    binding.tvAiCommandSpoken.highlightColor = Color.TRANSPARENT
+
+                    // 감지된 항목 원터치 칩 바 + 결과 내 재검색 토글 바 렌더링
+                    renderResultInteractiveToolbar(detectedActions, hasRows = mergedRows.isNotEmpty())
 
                     // 이메일 발송 대기(방식 A/B 선택) 또는 카카오톡 답장 대기인 경우
                     if (res.emailDispatch != null) {
@@ -567,6 +608,276 @@ class AiCopilotCardController(
                 Toast.makeText(activity, "검색/실행 중 오류: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    /**
+     * AI 응답 텍스트 내의 웹주소(URL), 이메일, 전화번호, 한국 도로명/지번 주소를 자동 감지하여
+     * 원터치 클릭 가능한 SpannableString으로 변환하고, 하단 칩 바용 액션 목록을 수집합니다.
+     */
+    private fun buildInteractiveResultSpannable(
+        rawText: String,
+        collectedActions: MutableList<DetectedActionEntity>
+    ): SpannableString {
+        val spannable = SpannableString(rawText)
+        val occupied = mutableListOf<IntRange>()
+
+        fun isOverlapping(start: Int, end: Int): Boolean {
+            return occupied.any { !(end <= it.first || start >= it.last + 1) }
+        }
+
+        fun applyLinkSpan(
+            start: Int,
+            end: Int,
+            colorHex: String,
+            entity: DetectedActionEntity
+        ) {
+            if (start < 0 || end > rawText.length || start >= end || isOverlapping(start, end)) return
+            occupied.add(start until end)
+            if (collectedActions.none { it.type == entity.type && it.value == entity.value }) {
+                collectedActions.add(entity)
+            }
+            val linkColor = Color.parseColor(colorHex)
+            spannable.setSpan(
+                object : ClickableSpan() {
+                    override fun onClick(widget: View) {
+                        openDetectedEntity(entity)
+                    }
+
+                    override fun updateDrawState(ds: TextPaint) {
+                        super.updateDrawState(ds)
+                        ds.color = linkColor
+                        ds.isUnderlineText = true
+                        ds.isFakeBoldText = true
+                    }
+                },
+                start,
+                end,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
+
+        // 1. 웹주소 (https://..., http://..., www....)
+        val urlRegex = Regex("""(https?://[^\s<>()\[\]"'가-힣]+|www\.[A-Za-z0-9.-]+\.[A-Za-z]{2,}[^\s<>()\[\]"'가-힣]*)""")
+        for (m in urlRegex.findAll(rawText)) {
+            val rawUrl = m.value.trimEnd('.', ',', ')', ']', ';', ':')
+            val fullUrl = if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) rawUrl else "https://$rawUrl"
+            applyLinkSpan(
+                m.range.first,
+                m.range.first + rawUrl.length,
+                "#38BDF8",
+                DetectedActionEntity(ActionEntityType.URL, fullUrl, rawUrl.take(28))
+            )
+        }
+
+        // 2. 이메일 주소 -> 지메일 작성
+        val emailRegex = Regex("""[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}""")
+        for (m in emailRegex.findAll(rawText)) {
+            val email = m.value.trim()
+            applyLinkSpan(
+                m.range.first,
+                m.range.last + 1,
+                "#C4B5FD",
+                DetectedActionEntity(ActionEntityType.EMAIL, email, email)
+            )
+        }
+
+        // 3. 전화번호 (휴대폰 / 지역번호 / 대표번호) -> 전화 걸기
+        val phoneRegex = Regex("""(?<!\d)(01[016789][-.\s]?\d{3,4}[-.\s]?\d{4}|02[-.\s]?\d{3,4}[-.\s]?\d{4}|0[3-9][0-9][-.\s]?\d{3,4}[-.\s]?\d{4}|1[568][0-9]{2}[-.\s]?\d{4})(?!\d)""")
+        for (m in phoneRegex.findAll(rawText)) {
+            val displayPhone = m.value.trim()
+            val digits = displayPhone.replace(Regex("[^0-9]"), "")
+            if (digits.length in 8..11) {
+                applyLinkSpan(
+                    m.range.first,
+                    m.range.last + 1,
+                    "#34D399",
+                    DetectedActionEntity(ActionEntityType.PHONE, digits, displayPhone)
+                )
+            }
+        }
+
+        // 4. 한국 도로명 / 지번 주소 -> 구글 지도 열기
+        val addressRegex = Regex(
+            """(?:서울(?:특별시|시)?|부산(?:광역시|시)?|대구(?:광역시|시)?|인천(?:광역시|시)?|광주(?:광역시|시)?|대전(?:광역시|시)?|울산(?:광역시|시)?|세종(?:특별자치시|시)?|경기(?:도)?|강원(?:특별자치도|도)?|충북|충청북도|충남|충청남도|전북|전북특별자치도|전라북도|전남|전라남도|경북|경상북도|경남|경상남도|제주(?:특별자치도|도)?)\s+[가-힣0-9]+(?:시|군|구)(?:\s+[가-힣0-9]+(?:구|읍|면|동|가|로|길)){1,3}\s*\d+(?:-\d+)?"""
+        )
+        for (m in addressRegex.findAll(rawText)) {
+            val addr = m.value.trim()
+            applyLinkSpan(
+                m.range.first,
+                m.range.last + 1,
+                "#FDE047",
+                DetectedActionEntity(ActionEntityType.ADDRESS, addr, addr)
+            )
+        }
+
+        return spannable
+    }
+
+    /**
+     * 감지된 항목(주소/전화/이메일/URL)을 클릭했을 때 해당 앱(구글지도/전화/Gmail/브라우저)으로 즉시 연결
+     */
+    private fun openDetectedEntity(entity: DetectedActionEntity) {
+        try {
+            when (entity.type) {
+                ActionEntityType.ADDRESS -> {
+                    val encoded = Uri.encode(entity.value)
+                    val gmapsIntent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=$encoded")).apply {
+                        setPackage("com.google.android.apps.maps")
+                    }
+                    if (gmapsIntent.resolveActivity(activity.packageManager) != null) {
+                        activity.startActivity(gmapsIntent)
+                    } else {
+                        val webMapsIntent = Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse("https://www.google.com/maps/search/?api=1&query=$encoded")
+                        )
+                        activity.startActivity(webMapsIntent)
+                    }
+                }
+                ActionEntityType.PHONE -> {
+                    val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${entity.value}"))
+                    activity.startActivity(dialIntent)
+                }
+                ActionEntityType.EMAIL -> {
+                    val gmailIntent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${entity.value}")).apply {
+                        setPackage("com.google.android.gm")
+                    }
+                    if (gmailIntent.resolveActivity(activity.packageManager) != null) {
+                        activity.startActivity(gmailIntent)
+                    } else {
+                        val mailIntent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${entity.value}"))
+                        activity.startActivity(Intent.createChooser(mailIntent, "이메일 작성 앱 선택"))
+                    }
+                }
+                ActionEntityType.URL -> {
+                    val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(entity.value))
+                    activity.startActivity(webIntent)
+                }
+            }
+        } catch (e: Exception) {
+            Toast.makeText(activity, "연결할 수 있는 앱을 찾지 못했습니다: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * 응답 결과 박스 하단에:
+     * 1) 감지된 주소/전화/이메일/웹링크 원터치 액션 칩 바
+     * 2) '🔄 결과 내 재검색 ON/OFF' 토글 바
+     * 를 동적으로 렌더링합니다.
+     */
+    private fun renderResultInteractiveToolbar(
+        detectedActions: List<DetectedActionEntity>,
+        hasRows: Boolean
+    ) {
+        val parent = binding.layoutAiCommandResult as? LinearLayout ?: return
+        val existing = parent.findViewWithTag<View>("layoutAiResultInteractiveToolbar")
+        if (existing != null) {
+            parent.removeView(existing)
+        }
+
+        val dp = activity.resources.displayMetrics.density
+        val toolbar = LinearLayout(activity).apply {
+            tag = "layoutAiResultInteractiveToolbar"
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = (10 * dp).toInt()
+            }
+        }
+
+        // 1) 감지된 원터치 액션 칩 (구글지도 / 전화 / 지메일 / 웹링크)
+        if (detectedActions.isNotEmpty()) {
+            val hsv = HorizontalScrollView(activity).apply {
+                isHorizontalScrollBarEnabled = false
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = (8 * dp).toInt()
+                }
+            }
+            val row = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+            }
+            detectedActions.take(6).forEach { entity ->
+                val (prefix, bgHex, borderHex, textHex) = when (entity.type) {
+                    ActionEntityType.ADDRESS -> listOf("📍 지도", "#2A2411", "#FDE047", "#FEF08A")
+                    ActionEntityType.PHONE -> listOf("📞 전화", "#0F2922", "#34D399", "#A7F3D0")
+                    ActionEntityType.EMAIL -> listOf("✉️ Gmail", "#221A38", "#A78BFA", "#DDD6FE")
+                    ActionEntityType.URL -> listOf("🌐 열기", "#0F2537", "#38BDF8", "#BAE6FD")
+                }
+                val shortLabel = if (entity.displayLabel.length > 18) {
+                    entity.displayLabel.take(18) + "…"
+                } else {
+                    entity.displayLabel
+                }
+                val chip = TextView(activity).apply {
+                    text = "$prefix · $shortLabel"
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                    setTextColor(Color.parseColor(textHex))
+                    setTypeface(null, Typeface.BOLD)
+                    setPadding((10 * dp).toInt(), (6 * dp).toInt(), (10 * dp).toInt(), (6 * dp).toInt())
+                    background = GradientDrawable().apply {
+                        setColor(Color.parseColor(bgHex))
+                        setStroke((1 * dp).toInt(), Color.parseColor(borderHex))
+                        cornerRadius = 16 * dp
+                    }
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        marginEnd = (6 * dp).toInt()
+                    }
+                    setOnClickListener { openDetectedEntity(entity) }
+                }
+                row.addView(chip)
+            }
+            hsv.addView(row)
+            toolbar.addView(hsv)
+        }
+
+        // 2) 결과 내 추가 검색(이어 묻기) 토글 바
+        if (hasRows || lastAiExplanation.isNotBlank()) {
+            val toggleRow = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val toggleChip = TextView(activity).apply {
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                setTypeface(null, Typeface.BOLD)
+                setPadding((12 * dp).toInt(), (6 * dp).toInt(), (12 * dp).toInt(), (6 * dp).toInt())
+                fun refreshStyle() {
+                    text = if (isFollowUpSearchEnabled) {
+                        "🔄 결과 내 추가 검색 ON (위 입력창에서 이어 묻기)"
+                    } else {
+                        "🔄 결과 내 추가 검색 OFF (누르면 현재 결과 내에서 재검색)"
+                    }
+                    setTextColor(Color.parseColor(if (isFollowUpSearchEnabled) "#E0F2FE" else "#94A3B8"))
+                    background = GradientDrawable().apply {
+                        setColor(Color.parseColor(if (isFollowUpSearchEnabled) "#0369A1" else "#1E293B"))
+                        setStroke((1 * dp).toInt(), Color.parseColor(if (isFollowUpSearchEnabled) "#38BDF8" else "#475569"))
+                        cornerRadius = 16 * dp
+                    }
+                }
+                refreshStyle()
+                setOnClickListener {
+                    isFollowUpSearchEnabled = !isFollowUpSearchEnabled
+                    refreshStyle()
+                    if (isFollowUpSearchEnabled) {
+                        binding.etAiCommand.hint = "현재 검색 결과 내에서 추가로 물어보세요..."
+                        binding.etAiCommand.requestFocus()
+                    } else {
+                        binding.etAiCommand.hint = "무엇을 찾아드릴까요? (말로 입력 또는 타이핑)"
+                    }
+                }
+            }
+            toggleRow.addView(toggleChip)
+            toolbar.addView(toggleRow)
+        }
+
+        parent.addView(toolbar)
     }
 
     private fun extractFallbackKeywords(rawQuery: String): List<String> {

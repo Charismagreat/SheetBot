@@ -11,6 +11,7 @@ SheetBot & 파투(FileToSheet) 내 PC 카카오톡 원격 발송 + 열린 대화
 """
 from __future__ import annotations
 
+import base64
 import contextlib
 import ctypes
 import ctypes.wintypes as W
@@ -20,6 +21,7 @@ import glob
 import hashlib
 import hmac as _hmac
 import json
+import mimetypes
 import os
 import re
 import socket
@@ -1177,6 +1179,16 @@ class KakaoAccountReader:
             except sqlite3.DatabaseError:
                 return None
 
+    def read_recent(self, chat_id: str, limit: int = 120) -> list[sqlite3.Row] | None:
+        sql = "SELECT logId, authorId, type, message, attachement, sendAt FROM chatLogs ORDER BY logId DESC LIMIT ?"
+        with self.db(self.chat_relpath(chat_id)) as conn:
+            if conn is None:
+                return None
+            try:
+                return list(conn.execute(sql, (limit,)))
+            except sqlite3.DatabaseError:
+                return None
+
     def max_log_id(self, chat_id: str) -> int | None:
         with self.db(self.chat_relpath(chat_id)) as conn:
             if conn is None:
@@ -1209,6 +1221,18 @@ class KakaoNativeLiveWatcher:
         self._seen_sig: dict[str, tuple] = {}
         self._mtimes: dict[str, float] = {}
         self._last_rescan = 0.0
+        # 삭제 감지용 최근 메시지 추적 스냅샷 (방별 최대 100건)
+        self._tracked_messages: dict[str, dict[int, dict]] = {}
+        self._reported_deleted: set[tuple[str, int]] = set()
+        self._last_del_sig: dict[str, tuple] = {}
+        self._last_delete_check = 0.0
+        # 하이브리드 첨부 파일 자동 수집 큐 (1차 URL 다운로드 + 2차 로컬 '카카오톡 받은 파일' 폴더 감시)
+        self._att_lock = threading.Lock()
+        self._attachment_queue: list[dict] = []
+        self._pending_local_files: list[dict] = []
+        self._uploaded_att_keys: set[str] = set()
+        self._seen_local_files: dict[str, tuple[int, int]] = {}
+        self._last_local_scan = 0.0
 
     def _load_cursor(self) -> dict[str, int]:
         try:
@@ -1244,6 +1268,7 @@ class KakaoNativeLiveWatcher:
                 if mx is not None:
                     self.last_by_room[cid] = max(self.last_by_room.get(cid, 0), mx)
                 self._seen_sig[cid] = (self.acct.signature(cid), self.last_by_room.get(cid, 0))
+                self._seed_tracked_recent(cid, room, limit=30)
             self._save_cursor()
             ts = time.strftime("%H:%M:%S")
             print(
@@ -1312,11 +1337,495 @@ class KakaoNativeLiveWatcher:
             "sentAtStr": format_kst_ts(send_at),
         }
 
+    def _track_message(self, cid: str, ev: dict, orig_type: int) -> None:
+        lid = _int(ev.get("logId"))
+        if lid <= 0:
+            return
+        bucket = self._tracked_messages.setdefault(cid, {})
+        bucket[lid] = {
+            "logId": lid,
+            "roomName": ev.get("roomName") or "",
+            "senderName": ev.get("senderName") or "",
+            "message": ev.get("message") or "",
+            "origType": orig_type,
+            "sentAtStr": ev.get("sentAtStr") or "",
+        }
+        # 방당 최근 100건만 메모리 유지
+        if len(bucket) > 100:
+            for old_lid in sorted(bucket.keys())[:-100]:
+                bucket.pop(old_lid, None)
+
+    def _seed_tracked_recent(self, cid: str, room: dict, limit: int = 30) -> None:
+        if not self.acct:
+            return
+        rows = self.acct.read_recent(cid, limit=limit)
+        if not rows:
+            return
+        for r in reversed(rows):
+            ev = self._format_message_row(r, room)
+            if ev:
+                self._track_message(cid, ev, _int(r["type"], 1))
+        self._last_del_sig[cid] = self.acct.signature(cid)
+
+    @staticmethod
+    def _is_deleted_message_row(r: sqlite3.Row, tracked: dict) -> bool:
+        typ = _int(r["type"], 1)
+        msg = (r["message"] or "").strip()
+        # 카카오톡 '모두에게서 삭제' 시 삭제 비트마스크(>=16384) 또는 type==0 적용
+        if typ == 0 or typ >= 16384:
+            return True
+        # 본문이 삭제 안내 문구로 치환된 경우 (원본이 해당 문구가 아니었을 때만)
+        deleted_phrases = ("삭제된 메시지입니다.", "삭제된 메시지입니다", "This message was deleted.")
+        if msg in deleted_phrases and (tracked.get("message") or "").strip() not in deleted_phrases:
+            return True
+        return False
+
+    def _detect_and_sync_deletions(self) -> None:
+        if not self.acct:
+            return
+        now = time.time()
+        if now - self._last_delete_check < 10.0:
+            return
+        self._last_delete_check = now
+
+        deleted_events: list[dict] = []
+        now_kst = dt.datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
+
+        for room in self.acct.rooms:
+            cid = room["id"]
+            tracked_map = self._tracked_messages.get(cid)
+            if not tracked_map or room["type"] == "PlusChat" or not self.acct.readable(cid):
+                continue
+
+            sig = self.acct.signature(cid)
+            if self._last_del_sig.get(cid) == sig:
+                continue
+
+            # 활성 방에서 정상적으로 최근 120건을 읽은 경우에만 삭제 판정 (방 닫힘/키 해제 오탐 원천 방지)
+            recent_rows = self.acct.read_recent(cid, limit=120)
+            if not recent_rows:
+                continue
+            self._last_del_sig[cid] = sig
+
+            rows_by_id = {_int(r["logId"]): r for r in recent_rows}
+            min_fetched_lid = min(rows_by_id.keys())
+            expired_lids: list[int] = []
+
+            for lid, info in list(tracked_map.items()):
+                if (cid, lid) in self._reported_deleted:
+                    expired_lids.append(lid)
+                    continue
+
+                if lid in rows_by_id:
+                    if self._is_deleted_message_row(rows_by_id[lid], info):
+                        deleted_events.append({
+                            "cid": cid,
+                            "logId": lid,
+                            "roomName": info["roomName"],
+                            "senderName": info["senderName"],
+                            "message": info["message"],
+                            "deleteType": "ALL",
+                            "deletedAtStr": now_kst,
+                        })
+                        expired_lids.append(lid)
+                else:
+                    if lid < min_fetched_lid:
+                        # 최근 120건 윈도우 밖으로 밀려난 정상 오래된 메시지 -> 추적 종료
+                        expired_lids.append(lid)
+                    else:
+                        # 최신 윈도우 내부에서 행 자체가 소실됨 -> 나에게만 삭제(로컬 삭제) 판정
+                        deleted_events.append({
+                            "cid": cid,
+                            "logId": lid,
+                            "roomName": info["roomName"],
+                            "senderName": info["senderName"],
+                            "message": info["message"],
+                            "deleteType": "LOCAL",
+                            "deletedAtStr": now_kst,
+                        })
+                        expired_lids.append(lid)
+
+            for lid in expired_lids:
+                tracked_map.pop(lid, None)
+
+        if not deleted_events:
+            return
+
+        payload = json.dumps({
+            "action": "MARK_DELETED",
+            "email": self.email,
+            "phone": self.phone,
+            "code": self.code,
+            "pcName": self.pc_name,
+            "deletedMessages": [
+                {
+                    "logId": ev["logId"],
+                    "roomName": ev["roomName"],
+                    "senderName": ev["senderName"],
+                    "message": ev["message"],
+                    "deleteType": ev["deleteType"],
+                    "deletedAtStr": ev["deletedAtStr"],
+                }
+                for ev in deleted_events
+            ],
+        }).encode("utf-8")
+
+        res_data = None
+        for attempt in range(4):
+            try:
+                req = urllib.request.Request(
+                    f"{self.server_url}/api/user/messages/kakao/pc-agent",
+                    data=payload,
+                    method="POST",
+                    headers={
+                        "Content-Type": "application/json; charset=utf-8",
+                        "User-Agent": "SheetBot-PC-Kakao-Agent/2.0",
+                        "Cookie": "__egdesk_tunnel_ctx=mcp-server-fxkud1:SheetBot",
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=10, context=self.ssl_ctx) as resp:
+                    res_data = json.loads(resp.read().decode("utf-8", errors="replace"))
+                    break
+            except Exception:
+                if attempt < 3:
+                    time.sleep(0.5 * (attempt + 1))
+
+        if res_data is not None:
+            for ev in deleted_events:
+                self._reported_deleted.add((ev["cid"], ev["logId"]))
+            updated = res_data.get("updatedCount", 0)
+            ts = time.strftime("%H:%M:%S")
+            for ev in deleted_events:
+                scope_tag = "모두에게 삭제" if ev["deleteType"] == "ALL" else "대화창 삭제"
+                print(
+                    f"[{ts}] 🗑️ [{scope_tag} 감지] [{ev['roomName']}] {ev['senderName']}: {ev['message'][:35]} "
+                    f"(시트 원본 보존 · '삭제됨' 표시: {updated}건)"
+                )
+
+    # ------------------------------------------------------------------
+    # 하이브리드 첨부 파일 자동 저장 (1차 URL 다운로드 + 2차 로컬 폴더 감시)
+    # ------------------------------------------------------------------
+    MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024
+
+    @staticmethod
+    def _normalize_kakao_filename(name: str) -> str:
+        """카톡 중복 다운로드 접미사('파일 (1).pdf' -> '파일.pdf')를 제거해 매칭용 이름을 정규화합니다."""
+        base, ext = os.path.splitext((name or "").strip())
+        base = re.sub(r"\s*\(\d+\)$", "", base).strip()
+        return (base + ext).lower()
+
+    @staticmethod
+    def _kakao_download_dirs() -> list[Path]:
+        home = Path.home()
+        candidates = [
+            home / "Documents" / "카카오톡 받은 파일",
+            home / "OneDrive" / "Documents" / "카카오톡 받은 파일",
+            home / "OneDrive" / "문서" / "카카오톡 받은 파일",
+            home / "문서" / "카카오톡 받은 파일",
+            home / "Downloads" / "카카오톡 받은 파일",
+        ]
+        out: list[Path] = []
+        seen: set[str] = set()
+        for p in candidates:
+            try:
+                if p.exists() and p.is_dir():
+                    rp = str(p.resolve()).lower()
+                    if rp not in seen:
+                        seen.add(rp)
+                        out.append(p)
+            except Exception:
+                pass
+        return out
+
+    def _enqueue_attachment_if_any(self, r: sqlite3.Row, ev: dict) -> None:
+        typ = _int(r["type"], 1)
+        if typ not in (2, 3, 5, 18, 27):
+            return
+        try:
+            att = json.loads(r["attachement"] or "{}")
+            if not isinstance(att, dict):
+                att = {}
+        except Exception:
+            att = {}
+
+        # URL 후보 추출 (단일 url / originalUrl / imageUrls 등)
+        urls: list[str] = []
+        for k in ("url", "originalUrl", "orgUrl", "path", "fileUrl"):
+            v = att.get(k)
+            if isinstance(v, str) and v.startswith(("http://", "https://")) and v not in urls:
+                urls.append(v)
+        for k in ("imageUrls", "urls", "orgUrls"):
+            arr = att.get(k)
+            if isinstance(arr, list):
+                for item in arr:
+                    if isinstance(item, str) and item.startswith(("http://", "https://")) and item not in urls:
+                        urls.append(item)
+        urls = urls[:5]
+
+        raw_name = str(att.get("name") or att.get("fileName") or "").strip()
+        if not raw_name:
+            default_ext = {2: ".jpg", 27: ".jpg", 3: ".mp4", 5: ".m4a", 18: ".bin"}.get(typ, ".bin")
+            if urls:
+                parsed_path = urllib.parse.urlparse(urls[0]).path
+                _, url_ext = os.path.splitext(parsed_path)
+                if url_ext and len(url_ext) <= 6:
+                    default_ext = url_ext
+            raw_name = f"kakao_{ev['logId']}{default_ext}"
+
+        size = _int(att.get("size"), 0)
+        if size > self.MAX_ATTACHMENT_BYTES:
+            ts = time.strftime("%H:%M:%S")
+            print(f"[{ts}] ⚠️ [첨부 스킵] [{ev['roomName']}] {raw_name} (15MB 초과: {size // (1024*1024)}MB)")
+            return
+
+        job = {
+            "logId": ev["logId"],
+            "roomName": ev["roomName"],
+            "senderName": ev["senderName"],
+            "fileName": raw_name,
+            "urls": urls,
+            "msgType": typ,
+            "createdAt": time.time(),
+        }
+        with self._att_lock:
+            self._attachment_queue.append(job)
+
+    def _upload_attachment_bytes(
+        self,
+        *,
+        log_id: int,
+        room_name: str,
+        sender_name: str,
+        file_name: str,
+        data: bytes,
+        mime_type: str,
+        source: str,
+    ) -> bool:
+        if not data or len(data) > self.MAX_ATTACHMENT_BYTES:
+            return False
+        dedupe_key = f"{log_id}:{file_name}:{len(data)}"
+        if dedupe_key in self._uploaded_att_keys:
+            return True
+
+        payload = json.dumps({
+            "email": self.email,
+            "phone": self.phone,
+            "code": self.code,
+            "pcName": self.pc_name,
+            "logId": log_id,
+            "roomName": room_name,
+            "senderName": sender_name,
+            "fileName": file_name,
+            "mimeType": mime_type or "application/octet-stream",
+            "fileBase64": base64.b64encode(data).decode("ascii"),
+            "source": source,
+        }).encode("utf-8")
+
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(
+                    f"{self.server_url}/api/user/messages/kakao/attachment",
+                    data=payload,
+                    method="POST",
+                    headers={
+                        "Content-Type": "application/json; charset=utf-8",
+                        "User-Agent": "SheetBot-PC-Kakao-Agent/2.0",
+                        "Cookie": "__egdesk_tunnel_ctx=mcp-server-fxkud1:SheetBot",
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=30, context=self.ssl_ctx) as resp:
+                    res = json.loads(resp.read().decode("utf-8", errors="replace"))
+                if res.get("ok"):
+                    self._uploaded_att_keys.add(dedupe_key)
+                    ts = time.strftime("%H:%M:%S")
+                    src_tag = "URL 자동저장" if source == "URL_DOWNLOAD" else "로컬폴더 자동저장"
+                    print(
+                        f"[{ts}] 📎 [{src_tag}] [{room_name}] {file_name} -> 구글 드라이브 & 시트 링크 기록 완료"
+                    )
+                    return True
+                if res.get("skipped"):
+                    return True
+            except Exception:
+                if attempt < 2:
+                    time.sleep(1.0 * (attempt + 1))
+        return False
+
+    def _download_url_bytes(self, url: str) -> tuple[bytes | None, str]:
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) KakaoTalk"},
+            )
+            with urllib.request.urlopen(req, timeout=15, context=self.ssl_ctx) as resp:
+                ctype = (resp.headers.get("Content-Type") or "application/octet-stream").split(";")[0].strip().lower()
+                if ctype.startswith("text/html"):
+                    return None, ctype
+                clen = _int(resp.headers.get("Content-Length"), 0)
+                if clen > self.MAX_ATTACHMENT_BYTES:
+                    return None, ctype
+                chunks: list[bytes] = []
+                total = 0
+                while True:
+                    chunk = resp.read(65536)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > self.MAX_ATTACHMENT_BYTES:
+                        return None, ctype
+                    chunks.append(chunk)
+                data = b"".join(chunks)
+                return (data if data else None), ctype
+        except Exception:
+            return None, "application/octet-stream"
+
+    def _process_attachment_queue_once(self) -> None:
+        with self._att_lock:
+            jobs = list(self._attachment_queue)
+            self._attachment_queue.clear()
+
+        for job in jobs:
+            uploaded_any = False
+            urls = job.get("urls") or []
+            base_name = job["fileName"]
+
+            # 1차 시도: attachement URL 직접 다운로드
+            for idx, u in enumerate(urls):
+                data, ctype = self._download_url_bytes(u)
+                if not data:
+                    continue
+                fname = base_name
+                if len(urls) > 1:
+                    stem, ext = os.path.splitext(base_name)
+                    fname = f"{stem}_{idx + 1}{ext}"
+                guessed_mime = mimetypes.guess_type(fname)[0] or ctype
+                if self._upload_attachment_bytes(
+                    log_id=job["logId"],
+                    room_name=job["roomName"],
+                    sender_name=job["senderName"],
+                    file_name=fname,
+                    data=data,
+                    mime_type=guessed_mime,
+                    source="URL_DOWNLOAD",
+                ):
+                    uploaded_any = True
+
+            # 2차 보완: URL이 없거나 다운로드 실패한 파일(type==18 등)은 로컬 '카카오톡 받은 파일' 폴더 감시 대기열로 이관
+            if not uploaded_any:
+                with self._att_lock:
+                    self._pending_local_files.append(job)
+                    # 최대 50건, 최근 2시간 이내 항목만 유지
+                    cutoff = time.time() - 7200
+                    self._pending_local_files = [
+                        x for x in self._pending_local_files[-50:] if x.get("createdAt", 0) >= cutoff
+                    ]
+                ts = time.strftime("%H:%M:%S")
+                print(
+                    f"[{ts}] 📎 [로컬 저장 대기] [{job['roomName']}] {base_name} "
+                    f"(PC 카톡에서 파일을 클릭해 저장하면 자동으로 구글 드라이브에 업로드됩니다)"
+                )
+
+    def _scan_kakao_download_folder_once(self) -> None:
+        now = time.time()
+        if now - self._last_local_scan < 5.0:
+            return
+        self._last_local_scan = now
+
+        with self._att_lock:
+            if not self._pending_local_files:
+                return
+            cutoff = now - 7200
+            self._pending_local_files = [x for x in self._pending_local_files if x.get("createdAt", 0) >= cutoff]
+            pending_snapshot = list(self._pending_local_files)
+
+        if not pending_snapshot:
+            return
+
+        dirs = self._kakao_download_dirs()
+        if not dirs:
+            return
+
+        matched_log_ids: set[int] = set()
+        for d in dirs:
+            try:
+                entries = list(d.iterdir())
+            except Exception:
+                continue
+            for p in entries:
+                if not p.is_file():
+                    continue
+                try:
+                    st = p.stat()
+                except OSError:
+                    continue
+                # 쓰기 완료된 1초 이상 경과 + 15MB 이하 파일만 대상
+                if st.st_size <= 0 or st.st_size > self.MAX_ATTACHMENT_BYTES:
+                    continue
+                if now - st.st_mtime < 1.0:
+                    continue
+                sig = (st.st_mtime_ns, st.st_size)
+                key_path = str(p)
+                if self._seen_local_files.get(key_path) == sig:
+                    continue
+
+                norm_local = self._normalize_kakao_filename(p.name)
+                matched_job = None
+                for job in reversed(pending_snapshot):
+                    if job["logId"] in matched_log_ids:
+                        continue
+                    # 메시지가 감지된 시점 전후(최대 30초 이전~이후)에 저장된 파일 매칭
+                    if st.st_mtime < job.get("createdAt", 0) - 30:
+                        continue
+                    if self._normalize_kakao_filename(job["fileName"]) == norm_local:
+                        matched_job = job
+                        break
+
+                if not matched_job:
+                    continue
+
+                try:
+                    data = p.read_bytes()
+                except Exception:
+                    continue
+
+                guessed_mime = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
+                ok = self._upload_attachment_bytes(
+                    log_id=matched_job["logId"],
+                    room_name=matched_job["roomName"],
+                    sender_name=matched_job["senderName"],
+                    file_name=matched_job["fileName"],
+                    data=data,
+                    mime_type=guessed_mime,
+                    source="LOCAL_FOLDER",
+                )
+                if ok:
+                    self._seen_local_files[key_path] = sig
+                    matched_log_ids.add(matched_job["logId"])
+
+        if matched_log_ids:
+            with self._att_lock:
+                self._pending_local_files = [
+                    x for x in self._pending_local_files if x["logId"] not in matched_log_ids
+                ]
+
+    def _start_attachment_worker_thread(self) -> None:
+        def _att_loop():
+            while True:
+                try:
+                    self._process_attachment_queue_once()
+                    self._scan_kakao_download_folder_once()
+                except Exception:
+                    pass
+                time.sleep(2.0)
+
+        t = threading.Thread(target=_att_loop, daemon=True)
+        t.start()
+
     def poll_and_sync(self) -> None:
         if not self._ensure_initialized() or self.acct is None:
             return
         self._rescan_changed_rooms()
         new_events: list[dict] = []
+        pending_att_rows: list[tuple[sqlite3.Row, dict]] = []
         cursor_dirty = False
 
         for room in self.acct.rooms:
@@ -1348,11 +1857,19 @@ class KakaoNativeLiveWatcher:
                 ev = self._format_message_row(r, room)
                 if ev:
                     new_events.append(ev)
+                    self._track_message(cid, ev, _int(r["type"], 1))
+                    pending_att_rows.append((r, ev))
 
             self._seen_sig[cid] = (sig, self.last_by_room.get(cid, 0))
 
         if cursor_dirty:
             self._save_cursor()
+
+        # 삭제된 대화/첨부파일 감지 및 시트 '삭제됨' 표시 동기화 (10초 주기, DB 변경 시에만 조회)
+        try:
+            self._detect_and_sync_deletions()
+        except Exception:
+            pass
 
         if not new_events:
             return
@@ -1399,7 +1916,13 @@ class KakaoNativeLiveWatcher:
                     f"(파투적재: {synced}건, 중복스킵: {dedup}건)"
                 )
 
+        # 메시지 행이 시트에 먼저 적재된 뒤 첨부 파일 업로드 워커로 전달 (I열 파일링크 100% 매칭)
+        for r, ev in pending_att_rows:
+            self._enqueue_attachment_if_any(r, ev)
+
     def start_background_thread(self) -> None:
+        self._start_attachment_worker_thread()
+
         def _loop():
             while True:
                 try:

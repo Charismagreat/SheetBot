@@ -731,6 +731,10 @@ export async function POST(req: NextRequest) {
     const command = (body.command as string | undefined)?.trim();
     const targetSpreadsheetId = body.spreadsheetId as string | undefined;
     const deviceId = (body.deviceId as string | undefined)?.trim() || "SheetBot Agent";
+    const searchWithinPrevious = Boolean(body.searchWithinPrevious);
+    const previousCommand = typeof body.previousCommand === "string" ? body.previousCommand.trim() : "";
+    const previousExplanation = typeof body.previousExplanation === "string" ? body.previousExplanation.trim() : "";
+    const previousMatchedRows = Array.isArray(body.previousMatchedRows) ? body.previousMatchedRows.slice(0, 20) : [];
 
     let cleanPhone = bodyPhone.replace(/[^0-9]/g, "");
     const rawEmail = (bodyEmail && bodyEmail.includes("@"))
@@ -749,6 +753,117 @@ export async function POST(req: NextRequest) {
     const cleanEmail = userEmail.toLowerCase().trim();
     if (!cleanPhone && cleanEmail && !cleanEmail.endsWith("@fts.local")) {
       cleanPhone = (await resolveUserFtsPhoneNumber(cleanEmail)) || "";
+    }
+
+    // 0. [결과 내 추가 질문 / 이어 묻기] 이전 검색 결과가 전달되었고 결과 내 재검색 모드인 경우
+    //    문자/카톡/이메일 발송·파일 전송 같은 실행 명령이 아닌 '조회/분석/요약' 후속 질문에 한해 직전 결과 내에서 초고속 정밀 분석
+    const isActionDispatchCommand = /(문자\s*(보내|발송)|카톡\s*(보내|발송|답장)|이메일\s*(보내|발송)|메일\s*(보내|발송)|파일\s*(보내|전송)|할\s*일\s*(추가|등록|완료))/i.test(command);
+    if (
+      searchWithinPrevious &&
+      !isActionDispatchCommand &&
+      (previousMatchedRows.length > 0 || previousExplanation.length > 0)
+    ) {
+      try {
+        const serializedPrevRows = previousMatchedRows.map((row: any, idx: number) => ({
+          index: idx,
+          projectName: row?.projectName || "",
+          sheetName: row?.sheetName || "",
+          title: row?.title || "",
+          subtitle: row?.subtitle || "",
+          detail: row?.detail || "",
+          phone: row?.phone || "",
+          date: row?.date || "",
+          rawRow: row?.rawRow || {},
+        }));
+
+        const followUpPrompt = `당신은 SheetBot AI 비서입니다.
+사용자가 직전 검색 결과 내에서 추가 질문(결과 내 재검색)을 요청했습니다.
+반드시 아래 [이전 검색 결과]와 [이전 AI 응답]을 최우선 근거로 답변하세요.
+
+[이전 질문]: ${previousCommand || "(없음)"}
+[이전 AI 응답]: ${previousExplanation || "(없음)"}
+[이전 검색 결과 (${serializedPrevRows.length}건)]:
+${JSON.stringify(serializedPrevRows, null, 2).slice(0, 12000)}
+
+[사용자의 추가 질문]: "${command}"
+
+지침:
+1. 주소, 전화번호, 이메일, 웹사이트 링크가 데이터에 있으면 사용자가 바로 클릭할 수 있도록 생략 없이 정확한 원문 그대로 포함해 주세요.
+2. 이전 검색 결과 중에서 추가 질문과 직접 관련된 행의 index 번호 배열을 matchedIndexes에 담아주세요. (모두 관련되거나 구분이 모호하면 전체 index 반환)
+3. 이전 검색 결과에 전혀 없는 완전 새로운 주제의 질문이라면 needsFullSearch를 true로 설정하세요.
+4. 반드시 아래 JSON 형식으로만 응답하세요 (마크다운 코드블록 없이 순수 JSON):
+{
+  "needsFullSearch": false,
+  "explanation": "핵심 답변 (불릿 포인트 활용, 주소/전화번호/이메일/URL 원문 유지)",
+  "spokenResult": "음성 브리핑용 자연스러운 1~2문장 요약",
+  "matchedIndexes": [0],
+  "queryKeywords": ["핵심키워드1", "핵심키워드2"]
+}`;
+
+        const fuAiRes = await callAiCaller(followUpPrompt, {
+          model: "gemini-3.8-flash",
+          temperature: 0.1,
+        });
+
+        // AI Caller 2중 언래핑 안전 추출
+        let fuRaw = "";
+        const candidateText = (fuAiRes?.text || fuAiRes?.content || "").trim();
+        if (candidateText) {
+          try {
+            const outer = JSON.parse(candidateText);
+            if (outer && typeof outer === "object" && typeof outer.content === "string") {
+              fuRaw = outer.content.trim();
+            } else {
+              fuRaw = candidateText;
+            }
+          } catch {
+            fuRaw = candidateText;
+          }
+        }
+        fuRaw = fuRaw.replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim();
+
+        let fuParsed: any = null;
+        try {
+          fuParsed = JSON.parse(fuRaw);
+        } catch {
+          const jsonMatch = fuRaw.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            try {
+              fuParsed = JSON.parse(jsonMatch[0]);
+            } catch {}
+          }
+        }
+
+        if (fuParsed && fuParsed.needsFullSearch !== true && (fuParsed.explanation || fuParsed.spokenResult)) {
+          const idxs: number[] = Array.isArray(fuParsed.matchedIndexes)
+            ? fuParsed.matchedIndexes
+                .map((n: any) => Number(n))
+                .filter((n: number) => Number.isInteger(n) && n >= 0 && n < previousMatchedRows.length)
+            : [];
+          const filteredRows =
+            idxs.length > 0
+              ? idxs.map((i) => previousMatchedRows[i])
+              : previousMatchedRows;
+          const kwList: string[] = Array.isArray(fuParsed.queryKeywords)
+            ? fuParsed.queryKeywords.map((k: any) => String(k).trim()).filter(Boolean)
+            : [];
+
+          const explanationText = `🔄 [결과 내 추가 검색 · ${filteredRows.length}건 기준]\n${String(fuParsed.explanation || "").trim()}`;
+          const spokenText = String(fuParsed.spokenResult || fuParsed.explanation || "이전 검색 결과에서 확인했습니다.").trim();
+
+          return NextResponse.json({
+            success: true,
+            actionType: "SHEET_QUERY",
+            searchedWithinPrevious: true,
+            explanation: explanationText,
+            spokenResult: spokenText,
+            queryKeywords: kwList,
+            matchedRows: filteredRows,
+          });
+        }
+      } catch (followUpErr: any) {
+        console.warn("[CommandsExecute] Follow-up search fallback to full search:", followUpErr?.message || followUpErr);
+      }
     }
 
     // 1. 유저의 연동된 구글 시트 프로젝트/스케줄 목록, 파투(FileToSheet) 시트 컨텍스트, 그리고 AI 학습 메모리 병렬 조회

@@ -121,31 +121,34 @@ export async function POST(req: NextRequest) {
         const targetSpreadsheetId = resolved.spreadsheetId;
         spreadsheetUrl = resolved.spreadsheetUrl;
 
-        // 시트에 신규 카카오톡 메시지 행 추가 (자가 치유: 1행 헤더 보장)
+        // 시트에 신규 카카오톡 메시지 행 추가 (자가 치유: 1행 헤더 A1:I1 보장 — G: 상태, H: 메시지ID, I: 파일링크)
         if (targetSpreadsheetId) {
           const headerValues = [
-            ["수신 일시", "채팅방 구분", "채팅방/상대방 이름", "발신자", "메시지 내용", "기기명"]
+            ["수신 일시", "채팅방 구분", "채팅방/상대방 이름", "발신자", "메시지 내용", "기기명", "상태", "메시지ID", "파일링크"]
           ];
 
-          // 1행 A1 셀 확인하여 비어있으면 헤더 선제 주입
+          // 1행 A1:I1 확인하여 비어있으면 전체 헤더 주입, 기존 6/8컬럼 시트는 부족한 우측 헤더만 자동 확장
           const firstRowCheck = await callSheetsTool(
             "sheets_get_range",
             {
               spreadsheetId: targetSpreadsheetId,
-              range: "A1:A1",
+              range: "A1:I1",
               preferOAuth: true,
             },
             callOptions
           ).catch(() => null);
 
-          const hasHeaderOrData = firstRowCheck?.values && firstRowCheck.values.length > 0 && firstRowCheck.values[0]?.[0];
+          const firstRow = firstRowCheck?.values?.[0] || [];
+          const hasHeaderOrData = Boolean(firstRow[0]);
+          const hasStatusHeader = Boolean(firstRow[6]);
+          const hasFileLinkHeader = Boolean(firstRow[8]);
 
           if (!hasHeaderOrData) {
             await callSheetsTool(
               "sheets_update_range",
               {
                 spreadsheetId: targetSpreadsheetId,
-                range: "A1:F1",
+                range: "A1:I1",
                 values: headerValues,
                 preferOAuth: true,
               },
@@ -163,16 +166,27 @@ export async function POST(req: NextRequest) {
               },
               callOptions
             ).catch(() => {});
+          } else if (!hasStatusHeader || !hasFileLinkHeader) {
+            await callSheetsTool(
+              "sheets_update_range",
+              {
+                spreadsheetId: targetSpreadsheetId,
+                range: "G1:I1",
+                values: [["상태", "메시지ID", "파일링크"]],
+                preferOAuth: true,
+              },
+              callOptions
+            ).catch(() => {});
           }
 
           const newRowValues = [
-            [nowStr, roomTypeLabel, roomName, senderName, message, deviceId]
+            [nowStr, roomTypeLabel, roomName, senderName, message, deviceId, "정상", "", ""]
           ];
           await callSheetsTool(
             "sheets_append_values",
             {
               spreadsheetId: targetSpreadsheetId,
-              range: "A:F",
+              range: "A:I",
               values: newRowValues,
               preferOAuth: true,
             },

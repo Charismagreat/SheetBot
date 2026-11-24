@@ -10,7 +10,10 @@ import {
   resolveUserEmailFromAuth,
   waitForNextJobForUser,
 } from "@/lib/kakao-pc-relay-store";
-import { syncPcLiveKakaoMessageToSheets } from "@/lib/ai-copilot-learning";
+import {
+  markKakaoMessagesDeletedInSheets,
+  syncPcLiveKakaoMessageToSheets,
+} from "@/lib/ai-copilot-learning";
 
 /**
  * 이용자 맞춤형 원클릭 Windows 실행 배치 파일(.bat) 생성
@@ -301,9 +304,47 @@ export async function POST(req: NextRequest) {
       draftPresent = false,
       error = "",
       messages = [],
+      deletedMessages = [],
     } = body;
 
     const resolvedEmail = resolveUserEmailFromAuth(email || phone, code, phone) || "";
+
+    // 0. PC 카톡 브리지(kakao_native)가 감지한 삭제 메시지/첨부파일 -> 시트 원본 보존 + G열 '삭제됨' 상태 표시
+    if (action === "MARK_DELETED" && Array.isArray(deletedMessages)) {
+      if (resolvedEmail) {
+        recordPcAgentHeartbeat({
+          userEmail: resolvedEmail,
+          phoneNumber: phone,
+          pcName,
+          kakaoReady: true,
+        });
+      }
+
+      const normalized = deletedMessages
+        .filter((m: any) => m && typeof m === "object")
+        .map((m: any) => ({
+          logId: m.logId ?? m.log_id,
+          roomName: String(m.roomName || m.room || ""),
+          senderName: String(m.senderName || m.sender || ""),
+          message: String(m.message || m.text || ""),
+          deleteType: String(m.deleteType || "LOCAL"),
+          deletedAtStr: String(m.deletedAtStr || ""),
+        }));
+
+      const res = await markKakaoMessagesDeletedInSheets({
+        userEmail: resolvedEmail || email,
+        phoneNumber: phone,
+        deletedMessages: normalized,
+        pcName: String(pcName || "내 PC"),
+        req,
+      });
+
+      return NextResponse.json({
+        ok: true,
+        action: "MARK_DELETED",
+        ...res,
+      });
+    }
 
     // 1. PC 카톡 브리지(kakao_native)가 감지한 '열린 대화창 실시간 대화(수신 + 내 PC 직접 발신)' 일괄 적재
     if (action === "SYNC_MESSAGES" && Array.isArray(messages)) {

@@ -2085,7 +2085,11 @@ object ApiClient {
         deviceId: String? = null,
         phoneNumber: String? = null,
         projectId: String? = null,
-        token: String? = null
+        token: String? = null,
+        searchWithinPrevious: Boolean = false,
+        previousCommand: String? = null,
+        previousExplanation: String? = null,
+        previousMatchedRows: List<FtsSearchMatchedRow>? = null
     ): AiCommandResult = withContext(Dispatchers.IO) {
         val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
         val cleanPhone = phoneNumber?.replace(Regex("[^0-9]"), "") ?: ""
@@ -2097,6 +2101,33 @@ object ApiClient {
             put("command", command)
             if (!spreadsheetId.isNullOrBlank()) put("spreadsheetId", spreadsheetId)
             put("deviceId", deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL} (SheetBot Agent)")
+            if (searchWithinPrevious) {
+                put("searchWithinPrevious", true)
+                if (!previousCommand.isNullOrBlank()) put("previousCommand", previousCommand)
+                if (!previousExplanation.isNullOrBlank()) put("previousExplanation", previousExplanation)
+                if (!previousMatchedRows.isNullOrEmpty()) {
+                    val prevArr = JSONArray()
+                    previousMatchedRows.take(20).forEach { r ->
+                        prevArr.put(JSONObject().apply {
+                            put("projectId", r.projectId)
+                            put("projectName", r.projectName)
+                            put("sheetName", r.sheetName)
+                            put("rowNumber", r.rowNumber)
+                            put("rawRowIndex", r.rawRowIndex)
+                            put("serialNumber", r.serialNumber)
+                            put("approvalStatus", r.approvalStatus)
+                            put("title", r.primaryTitle)
+                            put("subtitle", r.primarySubtitle)
+                            put("detail", r.matchedFields.joinToString(" | ") { "${it.first}: ${it.second}" })
+                            put("amount", r.amountText)
+                            put("phone", r.phoneNumber)
+                            put("date", r.timestampText)
+                            put("rawRow", r.rowJson)
+                        })
+                    }
+                    put("previousMatchedRows", prevArr)
+                }
+            }
         }
         val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
 
