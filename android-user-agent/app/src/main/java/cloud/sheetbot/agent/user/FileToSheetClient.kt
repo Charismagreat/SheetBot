@@ -79,6 +79,12 @@ data class FtsEnsureSheetResult(
     val error: String? = null
 )
 
+data class FtsAttachmentFile(
+    val file: File,
+    val fileName: String,
+    val mimeType: String = "application/octet-stream"
+)
+
 data class FtsUploadResult(
     val success: Boolean,
     val message: String? = null,
@@ -270,7 +276,7 @@ object FileToSheetClient {
         "sms_sync" to FtsCardSheetSpec(
             cardId = "sms_sync",
             sheetName = "문자송수신대장",
-            headers = listOf("일련번호", "일시", "구분", "상대방이름", "전화번호", "메시지내용", "기기명")
+            headers = listOf("일련번호", "일시", "구분", "상대방이름", "전화번호", "메시지내용", "기기명", "파일링크")
         ),
         "sheet_sms_checkbox" to FtsCardSheetSpec(
             cardId = "sheet_sms_checkbox",
@@ -891,6 +897,106 @@ object FileToSheetClient {
         } catch (e: Exception) {
             Log.w(TAG, "syncCardFileToFts 예외 ($cardIdOrType): ${e.message}")
             FtsUploadResult(success = false, error = e.localizedMessage ?: "파일 업로드 실패")
+        }
+    }
+
+    /**
+     * ⚡ MMS 등 다중 첨부파일과 정형 행(rowData)을 함께 파일투시트 인박스로 멀티파트 전송
+     */
+    suspend fun syncCardFilesToFts(
+        cardIdOrType: String,
+        files: List<FtsAttachmentFile>,
+        rowData: JSONObject,
+        memo: String? = null,
+        ocrType: String? = null
+    ): FtsUploadResult = withContext(Dispatchers.IO) {
+        if (files.isEmpty()) {
+            return@withContext syncCardRowToFts(cardIdOrType, rowData, memo = memo)
+        }
+        try {
+            val prefs = PreferencesManager(SheetBotApp.appContext)
+            var (endpoint, _) = FileUploadManager.resolveOrEnsureFtsSheet(prefs, cardIdOrType, forceRefresh = false)
+            if (endpoint.isBlank() || !endpoint.contains("/api/inbox/")) {
+                val refreshed = FileUploadManager.resolveOrEnsureFtsSheet(prefs, cardIdOrType, forceRefresh = true)
+                endpoint = refreshed.first
+            }
+            if (endpoint.isBlank()) {
+                return@withContext FtsUploadResult(success = false, error = "파일투시트 엔드포인트가 설정되지 않았습니다.")
+            }
+
+            val devId = "${Build.MANUFACTURER} ${Build.MODEL}"
+            var attempt = doUploadFiles(endpoint, files, memo, ocrType, devId, rowData)
+            if (!attempt.success && !endpoint.contains("tunneling-service.onrender.com")) {
+                val fallbackUrl = getTunnelFallbackEndpoint(endpoint)
+                if (fallbackUrl.isNotBlank() && fallbackUrl != endpoint) {
+                    attempt = doUploadFiles(fallbackUrl, files, memo, ocrType, devId, rowData)
+                }
+            }
+            if (!attempt.success && !prefs.ftsPhoneNumber.isNullOrBlank()) {
+                val refreshed = FileUploadManager.resolveOrEnsureFtsSheet(prefs, cardIdOrType, forceRefresh = true)
+                if (refreshed.first.isNotBlank()) {
+                    attempt = doUploadFiles(refreshed.first, files, memo, ocrType, devId, rowData)
+                }
+            }
+            attempt
+        } catch (e: Exception) {
+            Log.w(TAG, "syncCardFilesToFts 예외 ($cardIdOrType): ${e.message}")
+            FtsUploadResult(success = false, error = e.localizedMessage ?: "다중 파일 업로드 실패")
+        }
+    }
+
+    private fun doUploadFiles(
+        endpoint: String,
+        files: List<FtsAttachmentFile>,
+        memo: String?,
+        ocrType: String?,
+        devId: String,
+        rowData: JSONObject
+    ): FtsUploadResult {
+        return try {
+            val multipartBuilder = MultipartBody.Builder().setType(MultipartBody.FORM)
+            for (att in files) {
+                if (!att.file.exists() || att.file.length() <= 0L) continue
+                multipartBuilder.addFormDataPart(
+                    "files",
+                    att.fileName,
+                    att.file.asRequestBody(att.mimeType.toMediaTypeOrNull())
+                )
+            }
+            multipartBuilder.addFormDataPart("fileName", files.first().fileName)
+            if (!memo.isNullOrBlank()) multipartBuilder.addFormDataPart("memo", memo)
+            if (!ocrType.isNullOrBlank()) multipartBuilder.addFormDataPart("ocrType", ocrType)
+            multipartBuilder.addFormDataPart("rowData", rowData.toString())
+            multipartBuilder.addFormDataPart("deviceId", devId)
+
+            val request = Request.Builder()
+                .url(endpoint)
+                .post(multipartBuilder.build())
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string() ?: ""
+                val resJson = try { JSONObject(bodyStr) } catch (_: Exception) { JSONObject() }
+                if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    FtsUploadResult(
+                        success = true,
+                        message = resJson.optString("message", "적재 완료"),
+                        targetSheet = resJson.optString("targetSheet", ""),
+                        projectId = resJson.optString("projectId", ""),
+                        token = resJson.optString("token", ""),
+                        data = resJson.optJSONObject("data"),
+                        rowsCount = resJson.optInt("rowsCount", 1)
+                    )
+                } else {
+                    FtsUploadResult(
+                        success = false,
+                        error = resJson.optString("error", "HTTP ${response.code}")
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "doUploadFiles 실패 ($endpoint): ${e.message}")
+            FtsUploadResult(success = false, error = e.message ?: "다중 파일 전송 오류")
         }
     }
 

@@ -2757,6 +2757,111 @@ object ApiClient {
     }
 
     /**
+     * MMS 수발신 시 본문 + 첨부파일(이미지/PDF/문서 등)을 파투(FileToSheet) 및 구글시트(구글 드라이브 포함)로 동시 전송
+     */
+    suspend fun sendSmsSyncWithAttachments(
+        userEmail: String,
+        direction: String, // "INBOUND" 또는 "OUTBOUND"
+        phoneNumber: String,
+        contactName: String?,
+        message: String,
+        attachments: List<FtsAttachmentFile>,
+        deviceId: String? = null,
+        sheetTitle: String = "[SheetBot] 스마트폰 문자(SMS) 송수신 대장"
+    ): SmsSyncResult = withContext(Dispatchers.IO) {
+        if (attachments.isEmpty()) {
+            return@withContext sendSmsSync(
+                userEmail = userEmail,
+                direction = direction,
+                phoneNumber = phoneNumber,
+                contactName = contactName,
+                message = message,
+                deviceId = deviceId,
+                sheetTitle = sheetTitle
+            )
+        }
+
+        val prefs = try { PreferencesManager(SheetBotApp.appContext) } catch (_: Exception) { null }
+        val devId = deviceId ?: "${Build.MANUFACTURER} ${Build.MODEL}"
+        val effectiveMsg = message.trim().ifBlank {
+            "[첨부파일: ${attachments.joinToString(", ") { it.fileName }}]"
+        }
+
+        var ftsSuccess = false
+        if (prefs?.isDestinationFileToSheet == true) {
+            val dirLabel = if (direction.equals("OUTBOUND", ignoreCase = true)) "발신" else "수신"
+            val rowData = JSONObject().apply {
+                put("일시", nowKstStr())
+                put("구분", dirLabel)
+                put("상대방이름", contactName?.takeIf { it.isNotBlank() } ?: "미등록 연락처")
+                put("전화번호", phoneNumber)
+                put("메시지내용", effectiveMsg)
+                put("기기명", devId)
+            }
+            val ftsRes = FileToSheetClient.syncCardFilesToFts(
+                cardIdOrType = "sms_sync",
+                files = attachments,
+                rowData = rowData,
+                memo = effectiveMsg,
+                ocrType = "MMS_ATTACHMENT"
+            )
+            ftsSuccess = ftsRes.success
+            if (ftsSuccess) {
+                Log.i(TAG, "✅ [FTS MMS($dirLabel) + 첨부 ${attachments.size}건 기록 성공] 상대방: $phoneNumber")
+            }
+            if (!prefs.isDestinationGoogleSheet || !prefs.hasGoogleAccount) {
+                return@withContext SmsSyncResult(success = ftsSuccess)
+            }
+        }
+
+        if (userEmail.isBlank()) {
+            return@withContext SmsSyncResult(success = ftsSuccess)
+        }
+
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST)
+        for (host in hosts) {
+            val endpoint = "$host/api/user/messages/sms"
+            try {
+                val multipartBuilder = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("userEmail", userEmail)
+                    .addFormDataPart("direction", direction)
+                    .addFormDataPart("phoneNumber", phoneNumber)
+                    .addFormDataPart("contactName", contactName ?: "")
+                    .addFormDataPart("message", effectiveMsg)
+                    .addFormDataPart("deviceId", devId)
+                    .addFormDataPart("sheetTitle", sheetTitle)
+
+                for (att in attachments) {
+                    if (!att.file.exists() || att.file.length() <= 0L) continue
+                    multipartBuilder.addFormDataPart(
+                        "files",
+                        att.fileName,
+                        att.file.asRequestBody(att.mimeType.toMediaTypeOrNull())
+                    )
+                }
+
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(multipartBuilder.build())
+                    .build()
+
+                longTimeoutClient.newCall(request).execute().use { response ->
+                    val resStr = response.body?.string() ?: ""
+                    val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
+                    if (response.isSuccessful && resJson.optBoolean("success", true)) {
+                        Log.i(TAG, "✅ [MMS($direction) + 첨부 ${attachments.size}건 구글시트 동기화 성공] 상대방: $phoneNumber")
+                        return@withContext SmsSyncResult(success = true)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "MMS($direction) 첨부파일 시트 동기화 예외 ($host): ${e.message}")
+            }
+        }
+        SmsSyncResult(success = ftsSuccess)
+    }
+
+    /**
      * 통화 종료 후 발송된 모바일 명함 구글 드라이브 [SheetBot] 모바일 명함 발송 대장 시트 실시간 기록
      */
     suspend fun sendBusinessCardSync(

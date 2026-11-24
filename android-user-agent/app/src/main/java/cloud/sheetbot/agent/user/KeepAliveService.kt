@@ -30,6 +30,7 @@ class KeepAliveService : Service() {
     private var recordingSyncJob: Job? = null
     private var websiteMonitorJob: Job? = null
     private var smsSentObserver: SmsSentObserver? = null
+    private var mmsObserver: MmsObserver? = null
     private lateinit var prefs: PreferencesManager
 
     companion object {
@@ -66,7 +67,8 @@ class KeepAliveService : Service() {
         startRecordingSyncLoop()
         startWebsiteMonitorLoop()
         registerSmsSentObserver()
-        Log.i(TAG, "KeepAliveService created with SMS, Heartbeat, Call Recording, and Website Monitor Watchdog.")
+        registerMmsObserver()
+        Log.i(TAG, "KeepAliveService created with SMS, MMS, Heartbeat, Call Recording, and Website Monitor Watchdog.")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -84,6 +86,7 @@ class KeepAliveService : Service() {
         recordingSyncJob?.cancel()
         websiteMonitorJob?.cancel()
         unregisterSmsSentObserver()
+        unregisterMmsObserver()
         Log.w(TAG, "KeepAliveService destroyed.")
     }
 
@@ -112,6 +115,34 @@ class KeepAliveService : Service() {
             }
         } catch (e: Exception) {
             Log.w(TAG, "KeepAliveService SmsSentObserver 해제 실패: ${e.message}")
+        }
+    }
+
+    private fun registerMmsObserver() {
+        try {
+            if (mmsObserver == null) {
+                mmsObserver = MmsObserver(this)
+                contentResolver.registerContentObserver(
+                    MmsObserver.MMS_SMS_URI,
+                    true,
+                    mmsObserver!!
+                )
+                Log.i(TAG, "📎 [KeepAliveService] 24시간 MMS(첨부파일 포함 문자) 수발신 감지 Observer 등록 완료")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "KeepAliveService MmsObserver 등록 실패: ${e.message}")
+        }
+    }
+
+    private fun unregisterMmsObserver() {
+        try {
+            mmsObserver?.let {
+                contentResolver.unregisterContentObserver(it)
+                mmsObserver = null
+                Log.i(TAG, "KeepAliveService MmsObserver 해제 완료")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "KeepAliveService MmsObserver 해제 실패: ${e.message}")
         }
     }
 

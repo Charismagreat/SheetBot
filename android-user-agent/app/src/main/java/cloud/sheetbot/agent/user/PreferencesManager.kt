@@ -803,6 +803,22 @@ class PreferencesManager(context: Context) {
         }
     }
 
+    fun isMmsSynced(id: Long): Boolean {
+        val synced = prefs.getStringSet("synced_mms_ids", emptySet()) ?: emptySet()
+        return synced.contains(id.toString())
+    }
+
+    fun markMmsSynced(id: Long) {
+        val current = (prefs.getStringSet("synced_mms_ids", emptySet()) ?: emptySet()).toMutableSet()
+        current.add(id.toString())
+        if (current.size > 1000) {
+            val trimmed = current.toList().takeLast(1000).toSet()
+            prefs.edit().putStringSet("synced_mms_ids", trimmed).apply()
+        } else {
+            prefs.edit().putStringSet("synced_mms_ids", current).apply()
+        }
+    }
+
     fun isRecordingSynced(fileName: String): Boolean {
         val synced = prefs.getStringSet("synced_recording_files", emptySet()) ?: emptySet()
         return synced.contains(fileName)

@@ -4,9 +4,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import {
   callSheetsTool,
+  callDriveTool,
   listDriveFiles,
   insertRows,
 } from "@/lib/egdesk-helpers";
+import { uploadDriveFileWithBridge } from "@/lib/drive-upload-helper";
 import { setupDatabase } from "@/lib/setup-db";
 import { realtimeHub } from "@/lib/realtime-hub";
 import { maskPhoneNumber, formatZeroRetentionContent } from "@/lib/privacy";
@@ -21,6 +23,58 @@ import { extractAndCreateTasksFromMessage } from "@/lib/task-hub-helper";
 const recentSmsDedupeCache = new Map<string, number>();
 // 동일 본문 기준 2차 중복 방어 캐시 (단말기 이중 감시로 인한 번호 왜곡 중복 방지)
 const recentSmsBodyCache = new Map<string, { time: number; phone: string }>();
+// 사용자별 문자 첨부파일 구글 드라이브 폴더 ID 캐시
+const smsAttachmentFolderCache = new Map<string, string>();
+
+interface IncomingSmsAttachment {
+  fileName: string;
+  mimeType: string;
+  buffer: Buffer;
+}
+
+const SMS_ATTACHMENT_FOLDER_NAME = "[SheetBot] 문자 첨부파일";
+
+async function resolveSmsAttachmentFolderId(
+  cleanEmail: string,
+  callOptions: any
+): Promise<string | undefined> {
+  const cacheKey = `${callOptions?.visitorSessionId || cleanEmail}:${SMS_ATTACHMENT_FOLDER_NAME}`;
+  const cached = smsAttachmentFolderCache.get(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const folderSearch = await listDriveFiles(
+      {
+        query: `mimeType = 'application/vnd.google-apps.folder' and name = '${SMS_ATTACHMENT_FOLDER_NAME}' and trashed = false`,
+      },
+      { preferOAuth: true, ...callOptions }
+    ).catch(() => null);
+
+    const existing = folderSearch?.files?.[0]?.id;
+    if (existing) {
+      smsAttachmentFolderCache.set(cacheKey, existing);
+      return existing;
+    }
+
+    const created: any = await callDriveTool(
+      "drive_create_folder",
+      { name: SMS_ATTACHMENT_FOLDER_NAME, preferOAuth: true },
+      callOptions
+    ).catch(() => null);
+
+    const createdId =
+      created?.id ||
+      created?.folderId ||
+      (typeof created === "string" ? created : undefined);
+    if (createdId) {
+      smsAttachmentFolderCache.set(cacheKey, createdId);
+      return createdId;
+    }
+  } catch (err: any) {
+    console.warn("[SmsSync] Attachment folder resolve warning:", err?.message);
+  }
+  return undefined;
+}
 
 /**
  * 국가코드(82) 제거 및 한국 표준 전화번호 형식(010-XXXX-XXXX, 1599-XXXX 등)으로 정규화
@@ -78,18 +132,104 @@ export async function POST(req: NextRequest) {
   try {
     await setupDatabase();
 
-    const body = await req.json().catch(() => ({}));
-    const {
-      userEmail: bodyEmail,
-      direction = "INBOUND", // "INBOUND" (수신) 또는 "OUTBOUND" (발신)
-      phoneNumber: rawPhoneNumber,
-      contactName,
-      message,
-      timestamp,
-      deviceId = "SheetBot Agent",
-      sheetTitle: rawSheetTitle = "[SheetBot] 스마트폰 문자(SMS) 송수신 대장",
-      autoRecordSheet = true,
-    } = body;
+    const contentType = req.headers.get("content-type") || "";
+    let bodyEmail = "";
+    let direction = "INBOUND";
+    let rawPhoneNumber = "";
+    let contactName = "";
+    let rawMessage = "";
+    let timestamp = "";
+    let deviceId = "SheetBot Agent";
+    let rawSheetTitle = "[SheetBot] 스마트폰 문자(SMS) 송수신 대장";
+    let autoRecordSheet = true;
+    const incomingAttachments: IncomingSmsAttachment[] = [];
+    const externalFileLinks: string[] = [];
+
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await req.formData();
+      bodyEmail = String(formData.get("userEmail") || "").trim();
+      direction = String(formData.get("direction") || "INBOUND").trim();
+      rawPhoneNumber = String(formData.get("phoneNumber") || "").trim();
+      contactName = String(formData.get("contactName") || "").trim();
+      rawMessage = String(formData.get("message") || "").trim();
+      timestamp = String(formData.get("timestamp") || "").trim();
+      deviceId = String(formData.get("deviceId") || "SheetBot Agent").trim();
+      rawSheetTitle = String(
+        formData.get("sheetTitle") || "[SheetBot] 스마트폰 문자(SMS) 송수신 대장"
+      ).trim();
+      const autoRecStr = String(formData.get("autoRecordSheet") ?? "true").toLowerCase();
+      autoRecordSheet = autoRecStr !== "false" && autoRecStr !== "0";
+
+      const extLinksStr = String(formData.get("fileLinks") || "").trim();
+      if (extLinksStr) {
+        extLinksStr
+          .split(/\r?\n|,/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .forEach((s) => externalFileLinks.push(s));
+      }
+
+      const rawFiles = [
+        ...formData.getAll("file"),
+        ...formData.getAll("files"),
+      ].filter(
+        (item): item is File =>
+          typeof item === "object" && item !== null && "arrayBuffer" in item && item.size > 0
+      );
+
+      for (let i = 0; i < rawFiles.length; i++) {
+        const f = rawFiles[i];
+        const buf = Buffer.from(await f.arrayBuffer());
+        if (buf.length > 0 && buf.length <= 15 * 1024 * 1024) {
+          incomingAttachments.push({
+            fileName: f.name || `mms_attachment_${Date.now()}_${i + 1}.bin`,
+            mimeType: f.type || "application/octet-stream",
+            buffer: buf,
+          });
+        }
+      }
+    } else {
+      const body = await req.json().catch(() => ({}));
+      bodyEmail = String(body.userEmail || "").trim();
+      direction = String(body.direction || "INBOUND").trim();
+      rawPhoneNumber = String(body.phoneNumber || "").trim();
+      contactName = String(body.contactName || "").trim();
+      rawMessage = String(body.message || "").trim();
+      timestamp = String(body.timestamp || "").trim();
+      deviceId = String(body.deviceId || "SheetBot Agent").trim();
+      rawSheetTitle = String(
+        body.sheetTitle || "[SheetBot] 스마트폰 문자(SMS) 송수신 대장"
+      ).trim();
+      autoRecordSheet = body.autoRecordSheet !== false;
+
+      if (Array.isArray(body.fileLinks)) {
+        body.fileLinks
+          .map((s: any) => String(s || "").trim())
+          .filter(Boolean)
+          .forEach((s: string) => externalFileLinks.push(s));
+      }
+      if (Array.isArray(body.attachments)) {
+        for (let i = 0; i < body.attachments.length; i++) {
+          const att = body.attachments[i];
+          if (!att?.fileBase64) continue;
+          const cleanB64 = String(att.fileBase64).replace(/^data:[^;]+;base64,/, "");
+          const buf = Buffer.from(cleanB64, "base64");
+          if (buf.length > 0 && buf.length <= 15 * 1024 * 1024) {
+            incomingAttachments.push({
+              fileName: String(att.fileName || `mms_attachment_${Date.now()}_${i + 1}.bin`),
+              mimeType: String(att.mimeType || "application/octet-stream"),
+              buffer: buf,
+            });
+          }
+        }
+      }
+    }
+
+    const message =
+      rawMessage ||
+      (incomingAttachments.length > 0
+        ? `[첨부파일: ${incomingAttachments.map((a) => a.fileName).join(", ")}]`
+        : "");
 
     const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
     const headerEmail = req.headers.get("x-sheetbot-user-email");
@@ -100,8 +240,8 @@ export async function POST(req: NextRequest) {
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "로그인이 필요합니다." }, { status: 401 });
     }
-    if (!rawPhoneNumber || !message) {
-      return NextResponse.json({ success: false, error: "전화번호와 메시지 내용은 필수입니다." }, { status: 400 });
+    if (!rawPhoneNumber || (!message && incomingAttachments.length === 0)) {
+      return NextResponse.json({ success: false, error: "전화번호와 메시지 내용(또는 첨부파일)은 필수입니다." }, { status: 400 });
     }
 
     const cleanEmail = userEmail.toLowerCase().trim();
@@ -110,9 +250,13 @@ export async function POST(req: NextRequest) {
     const phoneNumber = normalizePhoneNumber(rawPhoneNumber);
     const displayName = contactName && contactName.trim().length > 0 ? contactName.trim() : "미등록 연락처";
     const nowStr = timestamp || getKoreanTimeString();
+    const attachmentSignature =
+      incomingAttachments.length > 0
+        ? `|att:${incomingAttachments.map((a) => `${a.fileName}:${a.buffer.length}`).join(",")}`
+        : "";
 
-    // 0. 15초 이내 동일 송수신 중복 요청 방어 (Idempotency Guard)
-    const dedupeKey = `${cleanEmail}:${directionLabel}:${phoneNumber}:${message.trim()}`;
+    // 0. 15초 이내 동일 송수신 중복 요청 방어 (Idempotency Guard — 첨부파일 시그니처 포함)
+    const dedupeKey = `${cleanEmail}:${directionLabel}:${phoneNumber}:${message.trim()}${attachmentSignature}`;
     const now = Date.now();
     const lastSeen = recentSmsDedupeCache.get(dedupeKey) || 0;
     if (now - lastSeen < 15_000) {
@@ -124,12 +268,12 @@ export async function POST(req: NextRequest) {
     }
     recentSmsDedupeCache.set(dedupeKey, now);
 
-    // 0-1. 본문 기준 2차 지능형 중복 방어 (단말기 이중 감시로 번호가 왜곡되어 들어온 2차 요청 스킵)
+    // 0-1. 본문 기준 2차 지능형 중복 방어 (첨부파일이 없는 텍스트 중복만 스킵, MMS 첨부파일은 보존)
     const bodyKey = `${cleanEmail}:${directionLabel}:${message.trim()}`;
     const lastBodyRecord = recentSmsBodyCache.get(bodyKey);
     const currentDigits = phoneNumber.replace(/[^0-9]/g, "");
 
-    if (lastBodyRecord && (now - lastBodyRecord.time < 15_000)) {
+    if (incomingAttachments.length === 0 && lastBodyRecord && (now - lastBodyRecord.time < 15_000)) {
       const prevDigits = lastBodyRecord.phone.replace(/[^0-9]/g, "");
       // 동일 본문이 15초 내에 이미 들어왔는데, 현재 번호가 7자리 미만의 비정상이거나 알림 접두어인 경우 중복 스킵
       if (currentDigits.length < 7 || phoneNumber.startsWith("알림:") || (prevDigits.length >= 9 && currentDigits.length < prevDigits.length)) {
@@ -160,12 +304,38 @@ export async function POST(req: NextRequest) {
       sheetTitle = `[SheetBot] ${sheetTitle}`;
     }
 
-    // 1. 구글 스프레드시트 대장 고유 ID 영구 바인딩 및 행 기록 (비동기 처리로 응답 지연 원천 차단)
+    // 1. 구글 드라이브 첨부파일 업로드 + 구글 스프레드시트 대장 기록 (비동기 처리로 응답 지연 원천 차단)
     let spreadsheetUrl = "";
     if (autoRecordSheet) {
       (async () => {
         try {
           const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req);
+
+          // 1-A. MMS 첨부파일이 있다면 사용자 구글 드라이브 전용 폴더에 업로드하고 링크 수집
+          const uploadedLinks: string[] = [...externalFileLinks];
+          if (incomingAttachments.length > 0) {
+            const folderId = await resolveSmsAttachmentFolderId(cleanEmail, callOptions);
+            for (const att of incomingAttachments) {
+              try {
+                const upRes = await uploadDriveFileWithBridge({
+                  buffer: att.buffer,
+                  fileName: att.fileName,
+                  folderId,
+                  mimeType: att.mimeType,
+                  preferOAuth: true,
+                  userEmail: cleanEmail,
+                  callOptions,
+                });
+                if (upRes?.webViewLink && !uploadedLinks.includes(upRes.webViewLink)) {
+                  uploadedLinks.push(upRes.webViewLink);
+                }
+              } catch (upErr: any) {
+                console.warn("[SmsSync] Attachment Drive upload warning:", upErr?.message);
+              }
+            }
+          }
+          const joinedFileLinks = uploadedLinks.join("\n");
+
           const resolved = await resolveUserSpreadsheet({
             userEmail: cleanEmail,
             sheetType: "SMS",
@@ -177,31 +347,33 @@ export async function POST(req: NextRequest) {
 
           const targetSpreadsheetId = resolved.spreadsheetId;
 
-          // 시트에 신규 문자 기록 행 추가 (자가 치유: 1행 헤더 보장)
+          // 시트에 신규 문자 기록 행 추가 (자가 치유: 1행 A1:G1 헤더 보장)
           if (targetSpreadsheetId) {
             const headerValues = [
-              ["일시", "구분", "상대방 이름", "상대방 전화번호", "메시지 내용", "기기명"]
+              ["일시", "구분", "상대방 이름", "상대방 전화번호", "메시지 내용", "기기명", "파일링크"]
             ];
 
-            // 1행 A1 셀 확인하여 비어있으면 헤더 선제 주입
+            // 1행 A1:G1 확인하여 비어있으면 헤더 선제 주입, 기존 6열 시트면 G1에 '파일링크' 보강
             const firstRowCheck = await callSheetsTool(
               "sheets_get_range",
               {
                 spreadsheetId: targetSpreadsheetId,
-                range: "A1:A1",
+                range: "A1:G1",
                 preferOAuth: true,
               },
               callOptions
             ).catch(() => null);
 
-            const hasHeaderOrData = firstRowCheck?.values && firstRowCheck.values.length > 0 && firstRowCheck.values[0]?.[0];
+            const firstRow = firstRowCheck?.values?.[0] || [];
+            const hasHeaderOrData = firstRow.length > 0 && Boolean(firstRow[0]);
+            const hasFileLinkHeader = Boolean(firstRow[6]);
 
             if (!hasHeaderOrData) {
               await callSheetsTool(
                 "sheets_update_range",
                 {
                   spreadsheetId: targetSpreadsheetId,
-                  range: "A1:F1",
+                  range: "A1:G1",
                   values: headerValues,
                   preferOAuth: true,
                 },
@@ -219,16 +391,27 @@ export async function POST(req: NextRequest) {
                 },
                 callOptions
               ).catch(() => {});
+            } else if (!hasFileLinkHeader && joinedFileLinks) {
+              await callSheetsTool(
+                "sheets_update_range",
+                {
+                  spreadsheetId: targetSpreadsheetId,
+                  range: "G1:G1",
+                  values: [["파일링크"]],
+                  preferOAuth: true,
+                },
+                callOptions
+              ).catch(() => {});
             }
 
             const newRowValues = [
-              [nowStr, directionLabel, displayName, phoneNumber, message, deviceId]
+              [nowStr, directionLabel, displayName, phoneNumber, message, deviceId, joinedFileLinks]
             ];
             await callSheetsTool(
               "sheets_append_values",
               {
                 spreadsheetId: targetSpreadsheetId,
-                range: "A:F",
+                range: "A:G",
                 values: newRowValues,
                 preferOAuth: true,
               },
