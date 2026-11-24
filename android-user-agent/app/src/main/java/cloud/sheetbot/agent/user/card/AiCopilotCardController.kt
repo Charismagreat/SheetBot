@@ -9,6 +9,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.provider.CalendarContract
 import android.speech.RecognizerIntent
 import android.text.Editable
 import android.text.SpannableString
@@ -49,6 +50,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
 
 /**
  * 🤖 자연어 음성/텍스트 AI 비서 & 파투(FileToSheet) 전 프로젝트·전 시트 통합 검색 컨트롤러 (v2.4.50)
@@ -92,11 +97,16 @@ class AiCopilotCardController(
     private var lastAiExplanation: String = ""
     private var isFollowUpSearchEnabled: Boolean = false
 
-    private enum class ActionEntityType { URL, EMAIL, PHONE, ADDRESS }
+    private enum class ActionEntityType { URL, EMAIL, PHONE, ADDRESS, CALENDAR }
     private data class DetectedActionEntity(
         val type: ActionEntityType,
         val value: String,
-        val displayLabel: String
+        val displayLabel: String,
+        val eventTitle: String = "",
+        val eventLocation: String = "",
+        val startMillis: Long = 0L,
+        val endMillis: Long = 0L,
+        val allDay: Boolean = true
     )
 
     fun setup() {
@@ -710,11 +720,113 @@ class AiCopilotCardController(
             )
         }
 
+        // 5. 일정/날짜 표현 -> 구글 캘린더 일정 등록 (수신/발송/동기화 로그 타임스탬프는 자동 제외)
+        val detectedAddress = collectedActions.firstOrNull { it.type == ActionEntityType.ADDRESS }?.value ?: ""
+        val calRegex = Regex(
+            """(?:(\d{4})\s*[년.\-/]\s*)?(\d{1,2})\s*[월.\-/]\s*(\d{1,2})\s*일?(?:\s*\([월화수목금토일]\))?(?:\s*(오전|오후)?\s*(\d{1,2})\s*(?:시|:)\s*(\d{1,2})?\s*분?)?(?:\s*(?:~|부터|-)\s*(?:(\d{4})\s*[년.\-/]\s*)?(?:(\d{1,2})\s*[월.\-/]\s*)?(\d{1,2})\s*일?(?:\s*\([월화수목금토일]\))?(?:\s*(?:까지))?)?"""
+        )
+        val nowCal = Calendar.getInstance()
+        val currentYear = nowCal.get(Calendar.YEAR)
+
+        for (m in calRegex.findAll(rawText)) {
+            val matchedText = m.value.trim()
+            // 연도(YYYY)나 '월' 표기가 전혀 없는 단순 '4-9', '1/2' 형태 오탐 차단
+            if (matchedText.length < 4) continue
+            if (m.groupValues[1].isBlank() && !matchedText.contains("월")) continue
+            val lineStart = rawText.lastIndexOf('\n', m.range.first).let { if (it == -1) 0 else it + 1 }
+            val linePrefix = rawText.substring(lineStart, m.range.first).trim()
+            val afterIdx = m.range.last + 1
+            val trailingText = if (afterIdx < rawText.length) rawText.substring(afterIdx, minOf(rawText.length, afterIdx + 4)) else ""
+            // 단순 로그 타임스탬프(수신 일시 / 발송 일시 / 동기화 일시 / 등록 일시) 또는 초(:SS)가 붙은 로그 시각 제외
+            if (Regex("""(수신\s*일시|발송\s*일시|동기화\s*일시|등록\s*일시|생성\s*일시|작성\s*일시)""").containsMatchIn(linePrefix)) {
+                continue
+            }
+            if (trailingText.startsWith(":")) continue
+
+            val sYear = m.groupValues[1].toIntOrNull() ?: currentYear
+            val sMonth = m.groupValues[2].toIntOrNull() ?: continue
+            val sDay = m.groupValues[3].toIntOrNull() ?: continue
+            if (sMonth !in 1..12 || sDay !in 1..31) continue
+
+            val amPm = m.groupValues[4]
+            val rawHour = m.groupValues[5].toIntOrNull()
+            val rawMin = m.groupValues[6].toIntOrNull() ?: 0
+            val eYear = m.groupValues[7].toIntOrNull() ?: sYear
+            val eMonth = m.groupValues[8].toIntOrNull() ?: sMonth
+            val eDay = m.groupValues[9].toIntOrNull()
+
+            val hasTime = rawHour != null
+            val startCal = Calendar.getInstance().apply {
+                set(Calendar.YEAR, sYear)
+                set(Calendar.MONTH, sMonth - 1)
+                set(Calendar.DAY_OF_MONTH, sDay)
+                if (hasTime) {
+                    var h = rawHour!!
+                    if (amPm == "오후" && h in 1..11) h += 12
+                    if (amPm == "오전" && h == 12) h = 0
+                    set(Calendar.HOUR_OF_DAY, h.coerceIn(0, 23))
+                    set(Calendar.MINUTE, rawMin.coerceIn(0, 59))
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                } else {
+                    set(Calendar.HOUR_OF_DAY, 9)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+            }
+
+            val endCal = (startCal.clone() as Calendar).apply {
+                if (eDay != null && eDay in 1..31) {
+                    set(Calendar.YEAR, eYear)
+                    set(Calendar.MONTH, (eMonth - 1).coerceIn(0, 11))
+                    set(Calendar.DAY_OF_MONTH, eDay)
+                    if (!hasTime) {
+                        // 종일 일정 종료일은 exclusive이므로 +1일
+                        add(Calendar.DAY_OF_MONTH, 1)
+                    } else {
+                        add(Calendar.HOUR_OF_DAY, 1)
+                    }
+                } else if (hasTime) {
+                    add(Calendar.HOUR_OF_DAY, 1)
+                } else {
+                    add(Calendar.DAY_OF_MONTH, 1)
+                }
+            }
+
+            // 같은 줄의 콜론(:) 앞 라벨에서 일정 제목 추출 (예: "• 워크샵 일정:" -> "워크샵 일정")
+            val lineLabel = linePrefix
+                .replace(Regex("""^[•\-\*✅🗣️\s]+"""), "")
+                .replace(Regex("""[:：]\s*$"""), "")
+                .trim()
+            val eventTitle = when {
+                lineLabel.length in 2..24 -> lineLabel
+                lastExecutedCommand.isNotBlank() -> lastExecutedCommand.take(24)
+                else -> "시트봇 일정"
+            }
+
+            applyLinkSpan(
+                m.range.first,
+                m.range.last + 1,
+                "#FB923C",
+                DetectedActionEntity(
+                    type = ActionEntityType.CALENDAR,
+                    value = matchedText,
+                    displayLabel = matchedText,
+                    eventTitle = eventTitle,
+                    eventLocation = detectedAddress,
+                    startMillis = startCal.timeInMillis,
+                    endMillis = endCal.timeInMillis,
+                    allDay = !hasTime
+                )
+            )
+        }
+
         return spannable
     }
 
     /**
-     * 감지된 항목(주소/전화/이메일/URL)을 클릭했을 때 해당 앱(구글지도/전화/Gmail/브라우저)으로 즉시 연결
+     * 감지된 항목(주소/전화/이메일/URL/일정)을 클릭했을 때 해당 앱(구글지도/전화/Gmail/브라우저/구글캘린더)으로 즉시 연결
      */
     private fun openDetectedEntity(entity: DetectedActionEntity) {
         try {
@@ -752,6 +864,57 @@ class AiCopilotCardController(
                 ActionEntityType.URL -> {
                     val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(entity.value))
                     activity.startActivity(webIntent)
+                }
+                ActionEntityType.CALENDAR -> {
+                    val title = entity.eventTitle.ifBlank { "시트봇 일정" }
+                    val desc = lastAiExplanation.take(500)
+                    val gcalIntent = Intent(Intent.ACTION_INSERT).apply {
+                        data = CalendarContract.Events.CONTENT_URI
+                        putExtra(CalendarContract.Events.TITLE, title)
+                        if (entity.eventLocation.isNotBlank()) {
+                            putExtra(CalendarContract.Events.EVENT_LOCATION, entity.eventLocation)
+                        }
+                        if (desc.isNotBlank()) {
+                            putExtra(CalendarContract.Events.DESCRIPTION, desc)
+                        }
+                        if (entity.startMillis > 0L) {
+                            putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, entity.startMillis)
+                        }
+                        if (entity.endMillis > 0L) {
+                            putExtra(CalendarContract.EXTRA_EVENT_END_TIME, entity.endMillis)
+                        }
+                        putExtra(CalendarContract.EXTRA_EVENT_ALL_DAY, entity.allDay)
+                        setPackage("com.google.android.calendar")
+                    }
+
+                    if (gcalIntent.resolveActivity(activity.packageManager) != null) {
+                        activity.startActivity(gcalIntent)
+                    } else {
+                        val fallbackCalIntent = Intent(gcalIntent).apply { setPackage(null) }
+                        if (fallbackCalIntent.resolveActivity(activity.packageManager) != null) {
+                            activity.startActivity(fallbackCalIntent)
+                        } else {
+                            // 웹 구글 캘린더 폴백
+                            val fmt = if (entity.allDay) {
+                                SimpleDateFormat("yyyyMMdd", Locale.US)
+                            } else {
+                                SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'", Locale.US).apply {
+                                    timeZone = TimeZone.getTimeZone("UTC")
+                                }
+                            }
+                            val datesParam = if (entity.startMillis > 0L && entity.endMillis > 0L) {
+                                "&dates=${fmt.format(entity.startMillis)}/${fmt.format(entity.endMillis)}"
+                            } else {
+                                ""
+                            }
+                            val webUrl = "https://calendar.google.com/calendar/render?action=TEMPLATE" +
+                                "&text=${Uri.encode(title)}" +
+                                datesParam +
+                                (if (entity.eventLocation.isNotBlank()) "&location=${Uri.encode(entity.eventLocation)}" else "") +
+                                (if (desc.isNotBlank()) "&details=${Uri.encode(desc)}" else "")
+                            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(webUrl)))
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -807,6 +970,7 @@ class AiCopilotCardController(
                     ActionEntityType.PHONE -> listOf("📞 전화", "#0F2922", "#34D399", "#A7F3D0")
                     ActionEntityType.EMAIL -> listOf("✉️ Gmail", "#221A38", "#A78BFA", "#DDD6FE")
                     ActionEntityType.URL -> listOf("🌐 열기", "#0F2537", "#38BDF8", "#BAE6FD")
+                    ActionEntityType.CALENDAR -> listOf("📅 캘린더", "#2E1A0B", "#FB923C", "#FED7AA")
                 }
                 val shortLabel = if (entity.displayLabel.length > 18) {
                     entity.displayLabel.take(18) + "…"
