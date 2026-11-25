@@ -58,16 +58,19 @@ class FileUploadCardController(
         rgUploadDestination.setOnCheckedChangeListener { _, checkedId ->
             when (checkedId) {
                 rbDestBoth.id -> {
+                    prefs.isUploadDestinationUserSelected = true
                     prefs.uploadDestination = AppPreferences.DESTINATION_BOTH
                     refreshFtsUi()
                     Toast.makeText(activity, "🌟 파일투시트 + 구글 시트 동시 전송 모드가 선택되었습니다.", Toast.LENGTH_SHORT).show()
                 }
                 rbDestFileToSheet.id -> {
+                    prefs.isUploadDestinationUserSelected = true
                     prefs.uploadDestination = AppPreferences.DESTINATION_FILE_TO_SHEET
                     refreshFtsUi()
                     Toast.makeText(activity, "⚡ 파일투시트(FileToSheet) 직결 전송 모드가 선택되었습니다.", Toast.LENGTH_SHORT).show()
                 }
                 rbDestGoogleSheet.id -> {
+                    prefs.isUploadDestinationUserSelected = true
                     prefs.uploadDestination = AppPreferences.DESTINATION_GOOGLE_SHEETS
                     refreshFtsUi()
                     Toast.makeText(activity, "📊 구글 스프레드시트 연동 모드가 선택되었습니다.", Toast.LENGTH_SHORT).show()

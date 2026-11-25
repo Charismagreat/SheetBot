@@ -732,7 +732,11 @@ class SheetActionController(
                         if (!ftsRes.projectName.isNullOrBlank()) {
                             prefs.ftsProjectName = ftsRes.projectName
                         }
-                        prefs.uploadDestination = AppPreferences.DESTINATION_FILE_TO_SHEET
+                        prefs.uploadDestination = if (prefs.hasGoogleAccount) {
+                            AppPreferences.DESTINATION_BOTH
+                        } else {
+                            AppPreferences.DESTINATION_FILE_TO_SHEET
+                        }
                         prefs.isPaired = true
                         if (prefs.userEmail.isNullOrBlank()) {
                             prefs.userEmail = "fts_${phoneNumber.takeLast(4)}@filetosheet.cloud"

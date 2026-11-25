@@ -129,9 +129,22 @@ class PreferencesManager(context: Context) {
         get() = (prefs.getBoolean("is_paired", false) && !userEmail.isNullOrBlank()) || isFtsPaired
         set(value) = prefs.edit().putBoolean("is_paired", value).apply()
 
-    // 🎯 전송 목적지 제어: GOOGLE_SHEETS (구글 시트/드라이브) vs FILE_TO_SHEET (파일투시트 직결)
+    // 🎯 전송 목적지 제어: GOOGLE_SHEETS (구글 시트/드라이브) vs FILE_TO_SHEET (파일투시트 직결) vs BOTH (동시 전송)
+    // 사용자가 UI에서 명시적으로 목적지를 선택한 이력이 있는지 여부 (이전 버전의 자동 덮어쓰기로 인한 FILE_TO_SHEET 고착 자가 치유용)
+    var isUploadDestinationUserSelected: Boolean
+        get() = prefs.getBoolean("upload_destination_user_selected", false)
+        set(value) = prefs.edit().putBoolean("upload_destination_user_selected", value).apply()
+
     var uploadDestination: String
-        get() = prefs.getString("upload_destination", DESTINATION_GOOGLE_SHEETS) ?: DESTINATION_GOOGLE_SHEETS
+        get() {
+            val saved = prefs.getString("upload_destination", DESTINATION_GOOGLE_SHEETS) ?: DESTINATION_GOOGLE_SHEETS
+            // 구글 계정과 파일투시트가 모두 연동되어 있는데, 사용자가 직접 FILE_TO_SHEET 전용을 선택한 적이 없다면
+            // 과거 버전의 자동 덮어쓰기로 고착된 상태이므로 자동으로 양측 동시 전송(DESTINATION_BOTH)으로 자가 치유
+            if (saved == DESTINATION_FILE_TO_SHEET && hasGoogleAccount && isFtsPaired && !isUploadDestinationUserSelected) {
+                return DESTINATION_BOTH
+            }
+            return saved
+        }
         set(value) = prefs.edit().putString("upload_destination", value).apply()
 
     val isDestinationFileToSheet: Boolean
