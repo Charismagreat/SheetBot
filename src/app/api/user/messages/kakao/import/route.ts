@@ -92,8 +92,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. 구글 스프레드시트 구간 덮어쓰기 (Replace Window) 실행
-    const syncResult = await syncKakaoChatToSheet(userEmail, parseResult, sheetTitle);
+    // 2. 구글 스프레드시트 구간 덮어쓰기 (Replace Window) 실행 (요청 헤더의 visitorSessionId 전달을 위해 req 포함)
+    const syncResult = await syncKakaoChatToSheet(userEmail, parseResult, sheetTitle, req);
 
     if (!syncResult.success) {
       return NextResponse.json(
@@ -132,10 +132,14 @@ export async function POST(req: NextRequest) {
       outboundCount: parseResult.outboundCount,
       startTime: parseResult.startTime,
       endTime: parseResult.endTime,
+      startDate: parseResult.startTime,
+      endDate: parseResult.endTime,
       replacedRowsCount: syncResult.replacedRowsCount,
       newRowsCount: syncResult.newRowsCount,
+      insertedCount: syncResult.newRowsCount,
       totalSheetRowsCount: syncResult.totalSheetRowsCount,
       spreadsheetUrl: syncResult.spreadsheetUrl,
+      sheetUrl: syncResult.spreadsheetUrl,
       message: `카카오톡 대화 ${parseResult.totalCount}건(수신 ${parseResult.inboundCount}건, 발신 ${parseResult.outboundCount}건)이 구글 시트에 덮어쓰기 반영되었습니다. (기존 중복 ${syncResult.replacedRowsCount}행 교체)`,
     });
   } catch (error: any) {

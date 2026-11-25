@@ -153,17 +153,34 @@ class KakaoSyncCardController(
                     val roomMsg = if (!result.chatRoomName.isNullOrBlank()) {
                         "• 채팅방: ${result.chatRoomName}\n"
                     } else ""
-                    val destDesc = if (isFtsReady && !prefs.isDestinationGoogleSheet) {
-                        val ftsSheet = prefs.getFtsSheetNameFor("kakao_sync") ?: "카카오톡대화대장"
-                        "파일투시트 [$ftsSheet]에 원본 파일($fileName) 및 대화 내역이 적재되었습니다."
-                    } else {
-                        "구글 시트 [${prefs.kakaoDriveSheetTitle}]에 구간 덮어쓰기되었습니다."
+                    val ftsSheet = prefs.getFtsSheetNameFor("kakao_sync") ?: "카카오톡대화대장"
+                    val isPartialGoogleFail = result.ftsSuccess == true && result.googleSuccess == false
+                    val isBothSuccess = result.ftsSuccess == true && result.googleSuccess == true
+                    val destDesc = when {
+                        isPartialGoogleFail ->
+                            "⚠️ 파일투시트 [$ftsSheet]에는 적재되었으나, 구글 시트 [${prefs.kakaoDriveSheetTitle}] 기록에 실패했습니다.\n• 구글 시트 오류: ${result.googleError ?: "알 수 없는 오류"}"
+                        isBothSuccess ->
+                            "파일투시트 [$ftsSheet] 및 구글 시트 [${prefs.kakaoDriveSheetTitle}]에 모두 동기화되었습니다."
+                        isFtsReady && !prefs.isDestinationGoogleSheet ->
+                            "파일투시트 [$ftsSheet]에 원본 파일($fileName) 및 대화 내역이 적재되었습니다."
+                        else ->
+                            "구글 시트 [${prefs.kakaoDriveSheetTitle}]에 구간 덮어쓰기되었습니다."
                     }
 
-                    onAddLogItem("💬 카톡 가져오기", "${result.chatRoomName ?: "채팅방"} ${countFormatted}건 시트 동기화 완료", true)
+                    val dialogTitle = if (isPartialGoogleFail) {
+                        "⚠️ 카톡 대화 일부 동기화 완료"
+                    } else {
+                        "🎉 카톡 대화 파일 가져오기 완료!"
+                    }
+                    val logDetail = if (isPartialGoogleFail) {
+                        "${result.chatRoomName ?: "채팅방"} ${countFormatted}건 (파투 성공 / 구글 시트 실패: ${result.googleError ?: "오류"})"
+                    } else {
+                        "${result.chatRoomName ?: "채팅방"} ${countFormatted}건 시트 동기화 완료"
+                    }
+                    onAddLogItem("💬 카톡 가져오기", logDetail, !isPartialGoogleFail)
 
                     AlertDialog.Builder(activity)
-                        .setTitle("🎉 카톡 대화 파일 가져오기 완료!")
+                        .setTitle(dialogTitle)
                         .setMessage("${roomMsg}• 동기화 대화: 총 ${countFormatted}건${periodMsg}\n\n$destDesc")
                         .setPositiveButton("시트") { _, _ ->
                             onOpenSheetChooser("KAKAO", prefs.kakaoDriveSheetTitle)

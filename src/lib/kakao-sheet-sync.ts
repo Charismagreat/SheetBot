@@ -27,7 +27,8 @@ export interface SyncKakaoChatResult {
 export async function syncKakaoChatToSheet(
   userEmail: string,
   parseResult: KakaoChatParseResult,
-  sheetTitle: string = "[SheetBot] 카카오톡 메시지 대장"
+  sheetTitle: string = "[SheetBot] 카카오톡 메시지 대장",
+  req?: Request
 ): Promise<SyncKakaoChatResult> {
   const { chatRoomName, startTime, endTime, messages } = parseResult;
 
@@ -44,11 +45,12 @@ export async function syncKakaoChatToSheet(
     };
   }
 
-  // 1. 대장 시트 고유 ID 영구 바인딩 및 생성
+  // 1. 대장 시트 고유 ID 영구 바인딩 및 생성 (모바일 앱 x-visitor-session-id 헤더 포함)
   let targetSpreadsheetId: string | null = null;
   let spreadsheetUrl = "";
+  let resolveError = "";
 
-  const callOptions = await getWorkspaceCallOptionsForEmail(userEmail);
+  const callOptions = await getWorkspaceCallOptionsForEmail(userEmail, req);
 
   try {
     const resolved = await resolveUserSpreadsheet({
@@ -62,7 +64,8 @@ export async function syncKakaoChatToSheet(
     targetSpreadsheetId = resolved.spreadsheetId;
     spreadsheetUrl = resolved.spreadsheetUrl;
   } catch (err: any) {
-    console.warn("[KakaoSheetSync] 시트 연동 실패:", err.message);
+    resolveError = String(err?.message || err || "");
+    console.warn("[KakaoSheetSync] 시트 연동 실패:", resolveError);
   }
 
   if (!targetSpreadsheetId) {
@@ -74,63 +77,124 @@ export async function syncKakaoChatToSheet(
       replacedRowsCount: 0,
       newRowsCount: 0,
       totalSheetRowsCount: 0,
-      error: "구글 스프레드시트 접근 또는 생성에 실패했습니다.",
+      error: resolveError || "구글 스프레드시트 접근 또는 생성에 실패했습니다.",
     };
   }
 
-  // 2. 1행 헤더 보장 (Self-Healing)
+  // 1-1. 첫 번째 시트 탭명 동적 조회 ("시트1" 하드코딩 제거 → 영어 "Sheet1"/커스텀 탭명 호환)
+  let firstTabName = "";
+  try {
+    const meta = await callSheetsTool(
+      "sheets_get_spreadsheet",
+      {
+        spreadsheetId: targetSpreadsheetId,
+        preferOAuth: true,
+      },
+      callOptions
+    );
+    const sheetsArr = meta?.sheets;
+    if (Array.isArray(sheetsArr) && sheetsArr.length > 0 && sheetsArr[0]?.title) {
+      firstTabName = String(sheetsArr[0].title);
+    }
+  } catch (metaErr: any) {
+    console.warn("[KakaoSheetSync] 시트 메타데이터 조회 경고(기본 첫 탭 범위로 진행):", metaErr?.message);
+  }
+
+  const rangeOf = (a1: string) =>
+    firstTabName ? `'${firstTabName.replace(/'/g, "''")}'!${a1}` : a1;
+
+  // 2. 1행 헤더 보장 (Self-Healing: 실시간 카톡 대장 A1:I1 9컬럼 스키마와 완전 통일)
   const headers = [
-    ["일시", "구분", "채팅방/상대방 이름", "발신자", "메시지 내용", "기기명"]
+    ["수신 일시", "채팅방 구분", "채팅방/상대방 이름", "발신자", "메시지 내용", "기기명", "상태", "메시지ID", "파일링크"]
   ];
 
   const firstRowCheck = await callSheetsTool(
     "sheets_get_range",
     {
       spreadsheetId: targetSpreadsheetId,
-      range: "시트1!A1:F1",
+      range: rangeOf("A1:I1"),
       preferOAuth: true,
     },
     callOptions
-  ).catch(() => null);
+  ).catch((err: any) => {
+    console.warn("[KakaoSheetSync] 헤더 확인 경고:", err?.message);
+    return null;
+  });
 
-  const hasHeader = firstRowCheck?.values && firstRowCheck.values.length > 0 && firstRowCheck.values[0]?.[0];
+  const firstRow = firstRowCheck?.values?.[0] || [];
+  const hasHeader = Boolean(firstRow[0]);
+  const hasStatusHeader = Boolean(firstRow[6]);
+  const hasFileLinkHeader = Boolean(firstRow[8]);
+
   if (!hasHeader) {
     await callSheetsTool(
       "sheets_update_range",
       {
         spreadsheetId: targetSpreadsheetId,
-        range: "시트1!A1:F1",
+        range: rangeOf("A1:I1"),
         values: headers,
         preferOAuth: true,
       },
       callOptions
-    ).catch(() => {});
+    ).catch((err: any) => {
+      console.warn("[KakaoSheetSync] 헤더 작성 경고:", err?.message);
+    });
 
+    if (firstTabName) {
+      await callSheetsTool(
+        "sheets_format_headers",
+        {
+          spreadsheetId: targetSpreadsheetId,
+          tabName: firstTabName,
+          headerBgColor: "#3c1e1e",
+          headerTextColor: "#fee500",
+          preferOAuth: true,
+        },
+        callOptions
+      ).catch(() => {});
+    }
+  } else if (!hasStatusHeader || !hasFileLinkHeader) {
     await callSheetsTool(
-      "sheets_format_headers",
+      "sheets_update_range",
       {
         spreadsheetId: targetSpreadsheetId,
-        tabName: "시트1",
-        headerBgColor: "#1e293b",
-        headerTextColor: "#ffffff",
+        range: rangeOf("G1:I1"),
+        values: [["상태", "메시지ID", "파일링크"]],
         preferOAuth: true,
       },
       callOptions
     ).catch(() => {});
   }
 
-  // 3. 기존 대화 데이터 전체 로드 (A2:F)
-  const existingDataRes = await callSheetsTool(
-    "sheets_get_range",
-    {
+  // 3. 기존 대화 데이터 전체 로드 (A2:I — G~I열 상태/메시지ID/파일링크 무손실 보존)
+  let existingRows: any[][] = [];
+  try {
+    const existingDataRes = await callSheetsTool(
+      "sheets_get_range",
+      {
+        spreadsheetId: targetSpreadsheetId,
+        range: rangeOf("A2:I"),
+        preferOAuth: true,
+      },
+      callOptions
+    );
+    existingRows = existingDataRes?.values || [];
+  } catch (readErr: any) {
+    const errMsg = String(readErr?.message || readErr || "기존 시트 데이터 조회 실패");
+    console.error("[KakaoSheetSync] 기존 대화 조회 실패(데이터 유실 방지를 위해 중단):", errMsg);
+    return {
+      success: false,
       spreadsheetId: targetSpreadsheetId,
-      range: "시트1!A2:F",
-      preferOAuth: true,
-    },
-    callOptions
-  ).catch(() => null);
-
-  const existingRows: any[][] = existingDataRes?.values || [];
+      spreadsheetUrl,
+      chatRoomName,
+      startTime,
+      endTime,
+      replacedRowsCount: 0,
+      newRowsCount: 0,
+      totalSheetRowsCount: 0,
+      error: `구글 시트 기존 데이터 조회 실패: ${errMsg}`,
+    };
+  }
 
   // 4. [사용자 제안 핵심 로직] 구간 덮어쓰기 (Replace Window)
   // 대상: 해당 채팅방(row[2])이면서 시작 일시 <= row[0] <= 종료 일시 구간에 속하는 기존 행 제거
@@ -143,19 +207,31 @@ export async function syncKakaoChatToSheet(
     const rowRoom = String(row[2] || "").trim();
 
     // 해당 채팅방명 매칭 검사 (부분 일치 또는 동일)
-    const isTargetRoom = rowRoom.includes(chatRoomName) || chatRoomName.includes(rowRoom);
+    const isTargetRoom =
+      rowRoom.length > 0 &&
+      (rowRoom.includes(chatRoomName) || chatRoomName.includes(rowRoom));
     const isInTimeWindow = rowTime >= startTime && rowTime <= endTime;
 
     if (isTargetRoom && isInTimeWindow) {
       // 교체 대상 구간의 기존 행 (삭제 대상)
       replacedCount++;
     } else {
-      // 보존 대상 행
-      preservedRows.push(row);
+      // 보존 대상 행 (9컬럼 길이 정규화)
+      preservedRows.push([
+        row[0] ?? "",
+        row[1] ?? "",
+        row[2] ?? "",
+        row[3] ?? "",
+        row[4] ?? "",
+        row[5] ?? "",
+        row[6] ?? "",
+        row[7] ?? "",
+        row[8] ?? "",
+      ]);
     }
   }
 
-  // 파일에서 파싱된 신규 행들 변환
+  // 파일에서 파싱된 신규 행들 변환 (9컬럼 스키마 통일)
   const newRows = messages.map((m) => [
     m.timestamp,
     m.direction,
@@ -163,40 +239,75 @@ export async function syncKakaoChatToSheet(
     m.sender,
     m.message,
     "카카오톡 내보내기",
+    "정상",
+    "",
+    "",
   ]);
 
   // 보존된 행들과 신규 행들을 병합 후 시간순 정렬
   const mergedRows = [...preservedRows, ...newRows];
   mergedRows.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
 
-  // 5. 시트 갱신: 기존 A2:F 영역 비우고, 병합된 전체 데이터 덮어쓰기
-  await callSheetsTool(
-    "sheets_clear_range",
-    {
+  // 5. 시트 갱신: 기존 A2:I 영역 비우고, 병합된 전체 데이터 덮어쓰기 (실패 시 에러 전파)
+  try {
+    await callSheetsTool(
+      "sheets_clear_range",
+      {
+        spreadsheetId: targetSpreadsheetId,
+        range: rangeOf("A2:I"),
+        preferOAuth: true,
+      },
+      callOptions
+    );
+  } catch (clearErr: any) {
+    const errMsg = String(clearErr?.message || clearErr || "시트 영역 초기화 실패");
+    console.error("[KakaoSheetSync] sheets_clear_range 실패:", errMsg);
+    return {
+      success: false,
       spreadsheetId: targetSpreadsheetId,
-      range: "시트1!A2:F",
-      preferOAuth: true,
-    },
-    callOptions
-  ).catch(() => {});
+      spreadsheetUrl,
+      chatRoomName,
+      startTime,
+      endTime,
+      replacedRowsCount: 0,
+      newRowsCount: 0,
+      totalSheetRowsCount: existingRows.length,
+      error: `구글 시트 영역 초기화 실패: ${errMsg}`,
+    };
+  }
 
   if (mergedRows.length > 0) {
     // 500줄 단위로 분할 청크 전송 (Google Sheets API 페이로드 한도 방어)
     const CHUNK_SIZE = 500;
     for (let i = 0; i < mergedRows.length; i += CHUNK_SIZE) {
       const chunk = mergedRows.slice(i, i + CHUNK_SIZE);
-      await callSheetsTool(
-        "sheets_append_values",
-        {
+      try {
+        await callSheetsTool(
+          "sheets_append_values",
+          {
+            spreadsheetId: targetSpreadsheetId,
+            range: rangeOf("A:I"),
+            values: chunk,
+            preferOAuth: true,
+          },
+          callOptions
+        );
+      } catch (appendErr: any) {
+        const errMsg = String(appendErr?.message || appendErr || "행 추가 실패");
+        console.error(`[KakaoSheetSync] 행 추가 청크(${i}~${i + chunk.length}) 실패:`, errMsg);
+        return {
+          success: false,
           spreadsheetId: targetSpreadsheetId,
-          range: "시트1!A2",
-          values: chunk,
-          preferOAuth: true,
-        },
-        callOptions
-      ).catch((err: any) => {
-        console.error("[KakaoSheetSync] 행 추가 청크 실패:", err.message);
-      });
+          spreadsheetUrl,
+          chatRoomName,
+          startTime,
+          endTime,
+          replacedRowsCount: replacedCount,
+          newRowsCount: i,
+          totalSheetRowsCount: i,
+          error: `구글 시트 행 기록 실패: ${errMsg}`,
+        };
+      }
     }
   }
 

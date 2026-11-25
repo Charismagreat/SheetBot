@@ -321,7 +321,11 @@ class AccountPairingController(
                     prefs.ftsSheetName = sName
                     prefs.ftsProjectName = pName
                     prefs.ftsProjectId = pId
-                    prefs.uploadDestination = AppPreferences.DESTINATION_FILE_TO_SHEET
+                    prefs.uploadDestination = if (prefs.hasGoogleAccount) {
+                        AppPreferences.DESTINATION_BOTH
+                    } else {
+                        AppPreferences.DESTINATION_FILE_TO_SHEET
+                    }
                     prefs.isPaired = true
                     if (prefs.userEmail.isNullOrBlank()) {
                         prefs.userEmail = "fts_${pName.replace(' ', '_')}@filetosheet.cloud"
@@ -491,7 +495,11 @@ class AccountPairingController(
                     prefs.clearSheetBindingsCache()
                 }
                 prefs.userEmail = email
-                prefs.uploadDestination = AppPreferences.DESTINATION_GOOGLE_SHEETS
+                prefs.uploadDestination = if (prefs.isFtsPaired) {
+                    AppPreferences.DESTINATION_BOTH
+                } else {
+                    AppPreferences.DESTINATION_GOOGLE_SHEETS
+                }
                 prefs.isPaired = true
                 if (!result.visitorSessionId.isNullOrBlank()) prefs.visitorSessionId = result.visitorSessionId
                 if (!result.webhookUrl.isNullOrBlank()) prefs.webhookUrl = result.webhookUrl
@@ -567,7 +575,11 @@ class AccountPairingController(
                     prefs.clearSheetBindingsCache()
                 }
                 prefs.userEmail = finalEmail
-                prefs.uploadDestination = AppPreferences.DESTINATION_GOOGLE_SHEETS
+                prefs.uploadDestination = if (prefs.isFtsPaired) {
+                    AppPreferences.DESTINATION_BOTH
+                } else {
+                    AppPreferences.DESTINATION_GOOGLE_SHEETS
+                }
                 prefs.isPaired = true
                 if (!result.visitorSessionId.isNullOrBlank()) prefs.visitorSessionId = result.visitorSessionId
                 if (!result.webhookUrl.isNullOrBlank()) prefs.webhookUrl = result.webhookUrl
@@ -830,7 +842,11 @@ class AccountPairingController(
                         prefs.ftsProjectId = result.projectId
                         prefs.ftsProjectName = result.projectName ?: "내 비즈니스 장부"
                         prefs.ftsEndpoint = FileToSheetClient.FTS_OFFICIAL_DOMAIN
-                        prefs.uploadDestination = AppPreferences.DESTINATION_FILE_TO_SHEET
+                        prefs.uploadDestination = if (prefs.hasGoogleAccount) {
+                            AppPreferences.DESTINATION_BOTH
+                        } else {
+                            AppPreferences.DESTINATION_FILE_TO_SHEET
+                        }
                         prefs.isPaired = true
                         if (prefs.userEmail.isNullOrBlank()) {
                             prefs.userEmail = "fts_${phoneNumber.takeLast(4)}@filetosheet.cloud"

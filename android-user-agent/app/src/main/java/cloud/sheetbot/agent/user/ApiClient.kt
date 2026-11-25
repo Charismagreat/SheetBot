@@ -3160,17 +3160,26 @@ object ApiClient {
                         insertedCount = count,
                         startDate = ftsRes.startDate,
                         endDate = ftsRes.endDate,
-                        message = ftsRes.message ?: "파일투시트 카카오톡대화대장 적재 완료"
+                        message = ftsRes.message ?: "파일투시트 카카오톡대화대장 적재 완료",
+                        ftsSuccess = true,
+                        googleSuccess = null
                     )
                 } else {
                     ftsImportResult = KakaoImportResult(
                         success = false,
-                        error = ftsRes.error ?: "파일투시트 카카오톡 대화 파일 업로드 실패"
+                        error = ftsRes.error ?: "파일투시트 카카오톡 대화 파일 업로드 실패",
+                        ftsSuccess = false,
+                        googleSuccess = null
                     )
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "파일투시트 카톡 대화 파일 업로드 예외: ${e.message}")
-                ftsImportResult = KakaoImportResult(success = false, error = e.localizedMessage)
+                ftsImportResult = KakaoImportResult(
+                    success = false,
+                    error = e.localizedMessage,
+                    ftsSuccess = false,
+                    googleSuccess = null
+                )
             } finally {
                 try {
                     if (tempTxtFile.exists()) tempTxtFile.delete()
@@ -3182,60 +3191,124 @@ object ApiClient {
             }
         }
 
-        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
-        val json = JSONObject().apply {
-            put("userEmail", userEmail)
-            put("textContent", textContent)
-            put("fileName", fileName)
-            put("sheetTitle", sheetTitle)
-        }
-        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST)
+        val safeFileName = fileName.replace(Regex("[\\\\/:*?\"<>|]"), "_").ifBlank { "KakaoTalkChats.txt" }
+        val textBytes = textContent.toByteArray(Charsets.UTF_8)
+        var lastGoogleError = "구글 시트 서버와의 통신에 실패했습니다. 네트워크를 확인해 주세요."
 
-        for (host in hosts) {
+        for ((idx, host) in hosts.withIndex()) {
             val endpoint = "$host/api/user/messages/kakao/import"
             try {
+                // 대용량 카톡 내보내기(.txt)도 JSON 이스케이프 팽창 없이 안전하게 전송하도록 multipart/form-data 사용
+                val multipartBody = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart(
+                        "file",
+                        safeFileName,
+                        textBytes.toRequestBody("text/plain; charset=utf-8".toMediaTypeOrNull())
+                    )
+                    .addFormDataPart("userEmail", userEmail)
+                    .addFormDataPart("sheetTitle", sheetTitle)
+                    .build()
+
                 val request = Request.Builder()
                     .url(endpoint)
-                    .post(body)
+                    .post(multipartBody)
                     .addHeader("x-sheetbot-user-email", userEmail)
                     .build()
                 val response = longTimeoutClient.newCall(request).execute()
                 val resBody = response.body?.string() ?: ""
+                val resJson = try {
+                    if (resBody.isNotBlank()) JSONObject(resBody) else JSONObject()
+                } catch (_: Exception) {
+                    JSONObject()
+                }
+
                 if (response.isSuccessful && resBody.isNotBlank()) {
-                    val resJson = JSONObject(resBody)
                     val isSuccess = resJson.optBoolean("success", false)
                     if (isSuccess) {
+                        val totalCnt = resJson.optInt("totalCount", 0)
+                        val insertedCnt = resJson.optInt("insertedCount", -1).let {
+                            if (it >= 0) it else resJson.optInt("newRowsCount", totalCnt)
+                        }
+                        val startStr = resJson.optString("startDate", "").ifBlank {
+                            resJson.optString("startTime", "")
+                        }
+                        val endStr = resJson.optString("endDate", "").ifBlank {
+                            resJson.optString("endTime", "")
+                        }
+                        val urlStr = resJson.optString("sheetUrl", "").ifBlank {
+                            resJson.optString("spreadsheetUrl", "")
+                        }
                         return@withContext KakaoImportResult(
                             success = true,
                             chatRoomName = resJson.optString("chatRoomName", ""),
-                            totalCount = resJson.optInt("totalCount", 0),
-                            insertedCount = resJson.optInt("insertedCount", 0),
-                            startDate = resJson.optString("startDate", ""),
-                            endDate = resJson.optString("endDate", ""),
-                            sheetUrl = resJson.optString("sheetUrl", ""),
-                            message = resJson.optString("message", "")
+                            totalCount = totalCnt,
+                            insertedCount = insertedCnt,
+                            startDate = startStr.takeIf { it.isNotBlank() },
+                            endDate = endStr.takeIf { it.isNotBlank() },
+                            sheetUrl = urlStr.takeIf { it.isNotBlank() },
+                            message = resJson.optString("message", ""),
+                            ftsSuccess = if (isFts) ftsImportResult?.success else null,
+                            googleSuccess = true,
+                            googleError = null
                         )
-                    } else if (ftsImportResult?.success == true) {
-                        return@withContext ftsImportResult
                     } else {
+                        val serverErr = resJson.optString("error", "구글 시트 동기화에 실패했습니다.")
+                        Log.w(TAG, "⚠️ [구글 시트 카톡 가져오기 실패] $serverErr")
+                        if (ftsImportResult?.success == true) {
+                            return@withContext ftsImportResult.copy(
+                                ftsSuccess = true,
+                                googleSuccess = false,
+                                googleError = serverErr
+                            )
+                        }
                         return@withContext KakaoImportResult(
                             success = false,
-                            error = resJson.optString("error", "카카오톡 대화 파싱에 실패했습니다.")
+                            error = serverErr,
+                            ftsSuccess = if (isFts) ftsImportResult?.success else null,
+                            googleSuccess = false,
+                            googleError = serverErr
                         )
                     }
-                } else if (!response.isSuccessful && resBody.isNotBlank()) {
-                    if (ftsImportResult?.success == true) return@withContext ftsImportResult
-                    val errJson = JSONObject(resBody)
+                } else {
+                    val serverErr = resJson.optString("error", "").ifBlank { "HTTP ${response.code}" }
+                    Log.w(TAG, "⚠️ [구글 시트 카톡 가져오기 HTTP 오류] $endpoint -> $serverErr")
+                    if (ftsImportResult?.success == true) {
+                        return@withContext ftsImportResult.copy(
+                            ftsSuccess = true,
+                            googleSuccess = false,
+                            googleError = serverErr
+                        )
+                    }
                     return@withContext KakaoImportResult(
                         success = false,
-                        error = errJson.optString("error", "HTTP ${response.code}")
+                        error = serverErr,
+                        ftsSuccess = if (isFts) ftsImportResult?.success else null,
+                        googleSuccess = false,
+                        googleError = serverErr
                     )
                 }
             } catch (e: Exception) {
+                lastGoogleError = e.localizedMessage ?: "구글 시트 서버 연결 실패"
                 Log.w(TAG, "카카오톡 대화 가져오기 예외 ($host): ${e.message}")
+                if (idx == 0 && !isDnsOrTlsFailure(e)) break
             }
         }
-        ftsImportResult ?: KakaoImportResult(success = false, error = "서버와의 통신에 실패했습니다. 네트워크를 확인해 주세요.")
+        if (ftsImportResult?.success == true) {
+            return@withContext ftsImportResult.copy(
+                ftsSuccess = true,
+                googleSuccess = false,
+                googleError = lastGoogleError
+            )
+        }
+        ftsImportResult ?: KakaoImportResult(
+            success = false,
+            error = lastGoogleError,
+            ftsSuccess = if (isFts) false else null,
+            googleSuccess = false,
+            googleError = lastGoogleError
+        )
     }
 
     /**
@@ -5048,7 +5121,10 @@ data class KakaoImportResult(
     val endDate: String? = null,
     val sheetUrl: String? = null,
     val message: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val ftsSuccess: Boolean? = null,
+    val googleSuccess: Boolean? = null,
+    val googleError: String? = null
 )
 
 data class LawAdvisoryResult(
