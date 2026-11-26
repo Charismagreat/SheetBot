@@ -68,6 +68,8 @@ class MainActivity : AppCompatActivity() {
         getEstimate = { cardCoordinator!!.estimateCardController },
         isLawInitialized = { cardCoordinator?.isLawInitialized == true },
         getLaw = { cardCoordinator!!.lawCardController },
+        isCompanyResearchInitialized = { cardCoordinator?.isCompanyResearchInitialized == true },
+        getCompanyResearch = { cardCoordinator!!.companyResearchCardController },
         isBlogInitialized = { cardCoordinator?.isBlogInitialized == true },
         getBlog = { cardCoordinator!!.blogCardController },
         isInstaInitialized = { cardCoordinator?.isInstaInitialized == true },

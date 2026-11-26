@@ -276,6 +276,13 @@ export const TABLES = {
     columnCount: 14,
     rowCount: 0,
   },
+  sheetbot_company_research_reports: {
+    name: 'sheetbot_company_research_reports',
+    displayName: 'SheetBot 기업 심층 리서치 HTML 보고서 대장',
+    columns: ['id', 'uuid', 'user_email', 'company_name', 'domain', 'business_number', 'source_type', 'source_file_name', 'source_file_url', 'drive_html_url', 'doc_url', 'sheet_url', 'share_url', 'tax_status', 'employee_count', 'avg_salary', 'contract_summary', 'smpp_summary', 'grants_summary', 'ai_summary', 'report_html', 'mcp_data_json', 'status', 'created_at', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by'],
+    columnCount: 30,
+    rowCount: 0,
+  },
   sheetbot_users: {
     name: 'sheetbot_users',
     displayName: 'SheetBot 회원 마스터 대장',

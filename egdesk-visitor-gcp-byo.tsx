@@ -13,7 +13,7 @@ import {
   resolveEgdeskPublicUrl,
   setStoredVisitorGcpHandle,
   startVisitorGoogleLogin,
-} from '@/egdesk-visitor-google';
+} from './egdesk-visitor-google';
 
 export function VisitorGcpByoPanel() {
   const [handle, setHandle] = useState(() => getStoredVisitorGcpHandle() || '');
@@ -74,6 +74,10 @@ export function VisitorGcpByoPanel() {
       <h2 style={{ fontSize: '1.1rem' }}>Bring your own Google Cloud project</h2>
       <p style={{ fontSize: '0.9rem', color: '#444' }}>
         Upload a Web application OAuth client JSON. Secrets stay on the operator&apos;s EGDesk PC, not this site&apos;s server.
+      </p>
+      <p style={{ fontSize: '0.85rem', color: '#555', marginTop: 8 }}>
+        In Google Cloud Console → APIs &amp; Services → Library, enable: Google Drive API, Google Sheets API,
+        Google Apps Script API, and Maps JavaScript API on the same project as your OAuth client.
       </p>
       <label style={{ display: 'block', marginBottom: 8 }}>
         Handle (optional)

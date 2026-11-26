@@ -40,6 +40,8 @@ class ActivityLauncherRegistry(
     private val getEstimate: () -> EstimateSyncCardController,
     private val isLawInitialized: () -> Boolean,
     private val getLaw: () -> LawAdvisoryCardController,
+    private val isCompanyResearchInitialized: () -> Boolean = { false },
+    private val getCompanyResearch: () -> CompanyResearchCardController = { throw IllegalStateException("CompanyResearch not initialized") },
     private val isBlogInitialized: () -> Boolean,
     private val getBlog: () -> BlogAutomationCardController,
     private val isInstaInitialized: () -> Boolean,
@@ -152,6 +154,15 @@ class ActivityLauncherRegistry(
     ) { uri ->
         if (uri != null && isLawInitialized()) {
             getLaw().handleFileSelected(uri)
+        }
+    }
+
+    // 11-1. 기업 심층 리서치 멀티모달 자료(이미지/PDF) 선택 런처
+    val companyResearchFilePickerLauncher: ActivityResultLauncher<Array<String>> = activity.registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null && isCompanyResearchInitialized()) {
+            getCompanyResearch().handleFileSelected(uri)
         }
     }
 

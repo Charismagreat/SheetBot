@@ -403,6 +403,9 @@ class CardSetupCoordinator(
             activity = activity,
             binding = binding,
             prefs = prefs,
+            onPickFile = {
+                launchers.companyResearchFilePickerLauncher.launch(arrayOf("image/*", "application/pdf"))
+            },
             onOpenSheetChooser = { sheetType, defaultTitle -> showOpenSheetChooserDialog(sheetType, defaultTitle) }
         )
         companyResearchCardController.setup()

@@ -79,23 +79,26 @@ When building features for this Next.js project:
 
 ## EGDesk MCP (optional — preferred for exploring My DB)
 
-External agents (Claude Desktop, Antigravity, Cursor MCP, etc.) can talk to EGDesk My DB
-through the **egdesk-user-data** MCP server when EGDesk is running and MCP is installed.
+External agents (Claude Desktop, Antigravity, Cursor, etc.) reach EGDesk through a **single unified MCP server**
+(`egdesk` → `mcp-stdio-proxy.js combined` → `http://localhost:8080`) when EGDesk is running and MCP is installed from the EGDesk app.
 
 ### Check whether MCP is connected
 
 1. Confirm EGDesk is running and the local MCP HTTP gateway is up (usually `http://localhost:8080`).
-2. Confirm EGDesk MCP services were installed into the agent (Claude Desktop / Antigravity MCP config).
-3. Prefer calling MCP tools over reading filesystem caches or inventing HTTP scripts:
-   - `user_data_list_projects` — see available My DB projects (do this first)
+2. Confirm **main `egdesk`** is in the agent config (Antigravity: `~/.gemini/config/mcp_config.json`; Claude: `claude_desktop_config.json`).
+3. `egdesk-recorder` on `:8081` is Recorder-only (Playwright, phone, scheduler) — not the full catalog.
+4. Prefer MCP tools over filesystem cache or invented HTTP:
+   - `user_data_list_projects` — see My DB projects (do this first)
    - `user_data_select_project` — choose `projectId` + `environment`
    - `user_data_list_tables` / `user_data_query` / etc. — work with data
+
+If the agent only sees `browser_recording_*` / `phone_*` / `scheduler_*` tools, reinstall MCP from EGDesk (main `egdesk` on :8080), quit the agent app, and start a new session.
 
 ### When to use MCP vs app helpers
 
 | Goal | Prefer |
 |------|--------|
-| Explore / query My DB from an IDE agent | **MCP** (`egdesk-user-data` tools) if connected |
+| Explore / query My DB from an IDE agent | **MCP** (`user_data_*` tools on unified `egdesk`) if connected |
 | Ship UI/API code inside this Next.js app | **egdesk-helpers.ts** (`queryTable`, etc.) |
 | MCP tools missing / empty / failing | Fall back to helpers + `EGDESK-README.md` / schema files; tell the user to install MCP from EGDesk |
 

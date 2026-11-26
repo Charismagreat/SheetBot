@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server';
 /**
  * EGDesk Database Proxy (Next.js 16+)
  *
- * Intercepts __user_data_proxy, __browser_recording_proxy, __business_identity_proxy, __company_research_proxy, __ai_center_proxy, __korean_law_proxy, __bizinfo_proxy, __nps_proxy, __seo_proxy, __hosting_coding_proxy, __local_agent_proxy, __pageindex_proxy, __drive_proxy, __sheets_proxy, __docs_proxy, __slides_proxy, __egdesk_http_proxy, __gmail_proxy, __apps_script_proxy, __knowledge_wiki_proxy, __egdesk_config_proxy, __ai_caller_proxy, __kakao_proxy, __phone_proxy, __instagram_proxy, __financehub_proxy, __blog_proxy, __youtube_proxy, __visitor_auth_proxy, and __visitor_google_proxy requests
+ * Intercepts __user_data_proxy, __browser_recording_proxy, __business_identity_proxy, __company_research_proxy, __ai_center_proxy, __korean_law_proxy, __bizinfo_proxy, __nps_proxy, __seo_proxy, __hosting_coding_proxy, __local_agent_proxy, __pageindex_proxy, __drive_proxy, __sheets_proxy, __docs_proxy, __slides_proxy, __egdesk_http_proxy, __gmail_proxy, __apps_script_proxy, __knowledge_wiki_proxy, __relate_proxy, __egdesk_config_proxy, __ai_caller_proxy, __kakao_proxy, __phone_proxy, __instagram_proxy, __financehub_proxy, __blog_proxy, __youtube_proxy, __visitor_auth_proxy, and __visitor_google_proxy requests
  *
  * POLICY (workspace-oauth-byo-multi-HANDOFF-README.md §6.9): Never codegen app/api/workspace-oauth/*
  * or browser proxies to POST /workspace-oauth/tools/call — operator BYO config is not a visitor API.
@@ -810,6 +810,28 @@ export async function proxy(request: NextRequest) {
     }
   }
 
+  if (pathname.includes('__relate_proxy')) {
+    try {
+      const body = await request.text();
+      const apiUrl = resolveEgdeskMcpApiUrl();
+
+      const response = await fetch(`${apiUrl}/relate/tools/call`, {
+        method: 'POST',
+        headers: buildEgdeskHeaders(),
+        body,
+      });
+
+      const result = await response.json();
+
+      return NextResponse.json(result, { status: response.status });
+    } catch (error: any) {
+      return NextResponse.json(
+        { error: 'Proxy error', message: error.message },
+        { status: 500 }
+      );
+    }
+  }
+
   if (pathname.includes('__kakao_proxy')) {
     try {
       const body = await request.text();
@@ -1101,7 +1123,7 @@ export const config = {
   matcher: [
     /*
      * Match all paths except static assets
-     * The proxy function filters for __user_data_proxy / __browser_recording_proxy / __business_identity_proxy / __company_research_proxy / __ai_center_proxy / __korean_law_proxy / __bizinfo_proxy / __nps_proxy / __seo_proxy / __hosting_coding_proxy / __local_agent_proxy / __pageindex_proxy / __drive_proxy / __sheets_proxy / __docs_proxy / __slides_proxy / __egdesk_http_proxy / __gmail_proxy / __apps_script_proxy / __knowledge_wiki_proxy / __egdesk_config_proxy / __ai_caller_proxy / __kakao_proxy / __phone_proxy / __instagram_proxy / __financehub_proxy / __blog_proxy / __youtube_proxy / __visitor_auth_proxy / __visitor_google_proxy
+     * The proxy function filters for __user_data_proxy / __browser_recording_proxy / __business_identity_proxy / __company_research_proxy / __ai_center_proxy / __korean_law_proxy / __bizinfo_proxy / __nps_proxy / __seo_proxy / __hosting_coding_proxy / __local_agent_proxy / __pageindex_proxy / __drive_proxy / __sheets_proxy / __docs_proxy / __slides_proxy / __egdesk_http_proxy / __gmail_proxy / __apps_script_proxy / __knowledge_wiki_proxy / __relate_proxy / __egdesk_config_proxy / __ai_caller_proxy / __kakao_proxy / __phone_proxy / __instagram_proxy / __financehub_proxy / __blog_proxy / __youtube_proxy / __visitor_auth_proxy / __visitor_google_proxy
      */
     '/:path*',
   ],

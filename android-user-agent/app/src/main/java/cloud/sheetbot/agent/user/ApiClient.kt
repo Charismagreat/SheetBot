@@ -1171,58 +1171,97 @@ object ApiClient {
         val companyName: String = "",
         val domain: String = "",
         val businessNumber: String = "",
+        val reportUuid: String = "",
+        val shareUrl: String = "",
+        val driveHtmlUrl: String = "",
         val docUrl: String = "",
         val sheetUrl: String = "",
         val taxStatus: String = "",
         val employeeCount: String = "",
         val avgSalary: String = "",
+        val smppSummary: String = "",
         val contractSummary: String = "",
         val grantsSummary: String = "",
+        val webTechSummary: String = "",
         val summary: String = "",
         val error: String? = null
     )
 
     /**
-     * 기업 심층 리서치 및 구글 리서치 보고서 문서화 요청
+     * AI 멀티모달(텍스트/URL/이미지/PDF) 기업 심층 리서치 & HTML 보고서 생성 요청
      */
     suspend fun requestCompanyResearch(
         companyName: String,
         domain: String,
-        userEmail: String
+        userEmail: String,
+        sourceText: String = "",
+        sourceUrl: String = "",
+        file: File? = null,
+        fileName: String? = null,
+        mimeType: String = "image/jpeg"
     ): CompanyResearchResult = withContext(Dispatchers.IO) {
+        val prefs = try { PreferencesManager(SheetBotApp.appContext) } catch (_: Exception) { null }
         val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
-        val json = JSONObject().apply {
-            put("userEmail", userEmail)
-            put("companyName", companyName)
-            put("domain", domain)
-        }
-        val requestBody = json.toString().toRequestBody(JSON_MEDIA_TYPE)
         var lastErr = "기업 리서치 요청 실패"
 
         for (host in hosts) {
             val endpoint = "$host/api/user/company-research"
             try {
-                val request = Request.Builder()
-                    .url(endpoint)
-                    .post(requestBody)
-                    .build()
+                val requestBuilder = Request.Builder().url(endpoint)
+                prefs?.visitorSessionId?.takeIf { it.isNotBlank() }?.let {
+                    requestBuilder.addHeader("x-visitor-session-id", it)
+                }
+                if (userEmail.isNotBlank()) {
+                    requestBuilder.addHeader("x-sheetbot-user-email", userEmail)
+                }
+
+                val requestBody: RequestBody = if (file != null && file.exists()) {
+                    val safeName = fileName?.takeIf { it.isNotBlank() } ?: file.name
+                    val mediaType = mimeType.toMediaTypeOrNull() ?: "application/octet-stream".toMediaTypeOrNull()
+                    MultipartBody.Builder()
+                        .setType(MultipartBody.FORM)
+                        .addFormDataPart("userEmail", userEmail)
+                        .addFormDataPart("companyName", companyName)
+                        .addFormDataPart("domain", domain)
+                        .addFormDataPart("sourceText", sourceText)
+                        .addFormDataPart("sourceUrl", sourceUrl)
+                        .addFormDataPart("file", safeName, file.asRequestBody(mediaType))
+                        .build()
+                } else {
+                    val json = JSONObject().apply {
+                        put("userEmail", userEmail)
+                        put("companyName", companyName)
+                        put("domain", domain)
+                        put("sourceText", sourceText)
+                        put("sourceUrl", sourceUrl)
+                    }
+                    json.toString().toRequestBody(JSON_MEDIA_TYPE)
+                }
+
+                val request = requestBuilder.post(requestBody).build()
                 val response = longTimeoutClient.newCall(request).execute()
                 val resStr = response.body?.string() ?: ""
                 val resJson = try { JSONObject(resStr) } catch (_: Exception) { JSONObject() }
 
                 if (response.isSuccessful && resJson.optBoolean("success", false)) {
+                    val shareUrl = resJson.optString("shareUrl", resJson.optString("docUrl", ""))
                     return@withContext CompanyResearchResult(
                         success = true,
                         companyName = resJson.optString("companyName", companyName),
                         domain = resJson.optString("domain", domain),
                         businessNumber = resJson.optString("businessNumber", ""),
-                        docUrl = resJson.optString("docUrl", ""),
+                        reportUuid = resJson.optString("reportUuid", ""),
+                        shareUrl = shareUrl,
+                        driveHtmlUrl = resJson.optString("driveHtmlUrl", ""),
+                        docUrl = resJson.optString("docUrl", shareUrl),
                         sheetUrl = resJson.optString("sheetUrl", ""),
                         taxStatus = resJson.optString("taxStatus", "-"),
                         employeeCount = resJson.optString("employeeCount", "-"),
                         avgSalary = resJson.optString("avgSalary", "-"),
+                        smppSummary = resJson.optString("smppSummary", "-"),
                         contractSummary = resJson.optString("contractSummary", "-"),
                         grantsSummary = resJson.optString("grantsSummary", "-"),
+                        webTechSummary = resJson.optString("webTechSummary", "-"),
                         summary = resJson.optString("summary", "")
                     )
                 } else {
