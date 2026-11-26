@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import {
@@ -7,6 +8,7 @@ import {
   callDriveTool,
   listDriveFiles,
   insertRows,
+  queryTable,
 } from "@/lib/egdesk-helpers";
 import { uploadDriveFileWithBridge } from "@/lib/drive-upload-helper";
 import { setupDatabase } from "@/lib/setup-db";
@@ -18,6 +20,14 @@ import { recordPaymentToGoogleSheet } from "@/lib/payment-sheet-sync";
 import { findMatchingSmartOrder, generateReceiptSmsText } from "@/lib/smart-order-match";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import { extractAndCreateTasksFromMessage } from "@/lib/task-hub-helper";
+import {
+  analyzeMediaWithAi,
+  formatKakaoMediaMessage,
+  getKakaoMediaUserSettings,
+  inferKakaoMediaTypeLabel,
+  inspectMediaForQuickSummary,
+  type QuickAnalysisResult,
+} from "@/lib/kakao-media-analyzer";
 
 // 15초 이내 동일 SMS 송수신 중복 기록 방어 캐시 (키: userEmail:direction:phoneNumber:message, 값: timestamp)
 const recentSmsDedupeCache = new Map<string, number>();
@@ -37,11 +47,25 @@ const SMS_ATTACHMENT_FOLDER_NAME = "[SheetBot] 문자 첨부파일";
 async function resolveSmsAttachmentFolderId(
   cleanEmail: string,
   callOptions: any
-): Promise<string | undefined> {
+): Promise<string | null> {
   const cacheKey = `${callOptions?.visitorSessionId || cleanEmail}:${SMS_ATTACHMENT_FOLDER_NAME}`;
   const cached = smsAttachmentFolderCache.get(cacheKey);
   if (cached) return cached;
 
+  // 1. DB 바인딩 테이블 선제 조회 (0초 타겟팅)
+  try {
+    const bindingQuery = await queryTable("sheetbot_user_sheet_bindings", {
+      filters: { user_email: cleanEmail, sheet_type: "SMS_ATTACHMENT" },
+      limit: 1,
+    });
+    const foundFolderId = bindingQuery?.rows?.[0]?.folder_id;
+    if (foundFolderId && typeof foundFolderId === "string") {
+      smsAttachmentFolderCache.set(cacheKey, foundFolderId);
+      return foundFolderId;
+    }
+  } catch {}
+
+  let targetFolderId: string | null = null;
   try {
     const folderSearch = await listDriveFiles(
       {
@@ -52,28 +76,227 @@ async function resolveSmsAttachmentFolderId(
 
     const existing = folderSearch?.files?.[0]?.id;
     if (existing) {
-      smsAttachmentFolderCache.set(cacheKey, existing);
-      return existing;
+      targetFolderId = String(existing);
     }
 
-    const created: any = await callDriveTool(
-      "drive_create_folder",
-      { name: SMS_ATTACHMENT_FOLDER_NAME, preferOAuth: true },
-      callOptions
-    ).catch(() => null);
+    if (!targetFolderId) {
+      const created: any = await callDriveTool(
+        "drive_create_folder",
+        { name: SMS_ATTACHMENT_FOLDER_NAME, preferOAuth: true },
+        callOptions
+      ).catch(() => null);
 
-    const createdId =
-      created?.id ||
-      created?.folderId ||
-      (typeof created === "string" ? created : undefined);
-    if (createdId) {
-      smsAttachmentFolderCache.set(cacheKey, createdId);
-      return createdId;
+      if (created && typeof created === "object") {
+        targetFolderId =
+          created.id ||
+          created.folderId ||
+          (() => {
+            const rawText = created?.result?.content?.[0]?.text || created?.content?.[0]?.text;
+            if (rawText) {
+              try {
+                const parsed = JSON.parse(rawText);
+                return parsed?.id || parsed?.folderId || null;
+              } catch {}
+            }
+            return null;
+          })();
+      } else if (typeof created === "string" && created.trim()) {
+        try {
+          const parsed = JSON.parse(created);
+          targetFolderId = parsed?.id || parsed?.folderId || null;
+        } catch {
+          targetFolderId = created.trim();
+        }
+      }
+    }
+
+    if (targetFolderId) {
+      smsAttachmentFolderCache.set(cacheKey, targetFolderId);
+      try {
+        await insertRows("sheetbot_user_sheet_bindings", [
+          {
+            user_email: cleanEmail,
+            sheet_type: "SMS_ATTACHMENT",
+            sheet_title: SMS_ATTACHMENT_FOLDER_NAME,
+            spreadsheet_id: "",
+            spreadsheet_url: "",
+            folder_id: targetFolderId,
+            folder_name: SMS_ATTACHMENT_FOLDER_NAME,
+            created_at: getKoreanTimeString(),
+            updated_at: getKoreanTimeString(),
+          },
+        ]);
+      } catch {}
+      return targetFolderId;
     }
   } catch (err: any) {
     console.warn("[SmsSync] Attachment folder resolve warning:", err?.message);
   }
-  return undefined;
+  return null;
+}
+
+interface AnalyzedSmsAttachment {
+  att: IncomingSmsAttachment;
+  safeFileName: string;
+  ext: string;
+  fileHash: string;
+  mediaTypeLabel: string;
+  mediaIndex: number;
+  mediaTotal: number;
+  quickAnalysis: QuickAnalysisResult;
+  initialLine: string;
+  webViewLink: string;
+}
+
+/** 안드로이드 앱 등에서 본문이 비어있을 때 자동 채우는 기본 안내 문구인지 판별 */
+function isPlaceholderAttachmentMessage(text: string): boolean {
+  const trimmed = (text || "").trim();
+  if (!trimmed) return true;
+  return /^\[첨부파일:\s*[^\]]+\]$/.test(trimmed);
+}
+
+/** 실제 문자 본문을 보존하면서 아래 줄에 첨부파일 요약 라인을 덧붙임 */
+function buildCombinedSmsMessage(baseText: string, attachmentLines: string[]): string {
+  const cleanBase = baseText.trim();
+  const cleanLines = attachmentLines.map((l) => l.trim()).filter(Boolean);
+  if (cleanBase && cleanLines.length > 0) {
+    return `${cleanBase}\n${cleanLines.join("\n")}`;
+  }
+  if (cleanLines.length > 0) {
+    return cleanLines.join("\n");
+  }
+  return cleanBase;
+}
+
+/** KST 날짜 문자열(YYYY-MM-DD HH:MM:SS)을 밀리초 타임스탬프로 안전 파싱 */
+function parseKoreanTimeMs(str: string): number | null {
+  const m = String(str || "").trim().match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return null;
+  const iso = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6] || "00"}+09:00`;
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? null : t;
+}
+
+/**
+ * 요약된 문자 MMS 첨부파일 내용에서 업무 할 일(견적서/발주서/계약서/입금요청 등)을 자동 추출해 할 일 허브에 등록합니다.
+ */
+async function maybeExtractTaskFromSmsAttachmentSummary(params: {
+  cleanEmail: string;
+  displayName: string;
+  phoneNumber: string;
+  fileName: string;
+  summary: string;
+  webViewLink: string;
+  timestamp: string;
+  fileHash: string;
+}) {
+  try {
+    if (!params.summary || params.summary.trim().length < 8) return;
+    const messageForTask = [
+      `[문자 첨부파일: ${params.fileName}]`,
+      params.summary.trim(),
+      params.webViewLink ? `(원본 파일: ${params.webViewLink})` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    await extractAndCreateTasksFromMessage({
+      userEmail: params.cleanEmail,
+      sourceType: "SMS",
+      contactName: params.displayName !== "미등록 연락처" ? params.displayName : undefined,
+      contactPhone: params.phoneNumber !== "-" ? params.phoneNumber : undefined,
+      message: messageForTask,
+      timestamp: params.timestamp,
+      sourceId: `sms_att_${params.fileHash.slice(0, 16)}`,
+      deepLink: params.webViewLink || undefined,
+    });
+  } catch (err: any) {
+    console.warn("[SmsSync] 첨부파일 할 일 허브 자동 연계 경고:", err?.message || err);
+  }
+}
+
+/**
+ * 2단계(비동기 백그라운드) AI 요약 완료 후, 핑거프린트 행 검증(G열 파일링크 / 분석 중 표식)을 거쳐
+ * 구글 시트 '[SheetBot] 스마트폰 문자(SMS) 송수신 대장'의 E열(메시지 내용)만 안전하게 갱신합니다.
+ * - 사용자가 해당 행을 이미 삭제한 경우 시트 쓰기를 중단(Abort)하여 다른 행 오염을 원천 차단합니다.
+ */
+async function updateSmsSheetRowMessageSummary(params: {
+  cleanEmail: string;
+  spreadsheetId: string;
+  callOptions: any;
+  targetLinks: string[];
+  phoneNumber: string;
+  initialMessage: string;
+  finalMessage: string;
+}): Promise<boolean> {
+  try {
+    const sheetData = await callSheetsTool(
+      "sheets_get_range",
+      {
+        spreadsheetId: params.spreadsheetId,
+        range: "A1:G5000",
+        preferOAuth: true,
+      },
+      params.callOptions
+    ).catch(() => null);
+
+    const rows: string[][] = Array.isArray(sheetData?.values) ? sheetData.values : [];
+    const linksToMatch = params.targetLinks.map((l) => l.trim()).filter(Boolean);
+
+    let matchedRowIdx = -1;
+    for (let i = rows.length - 1; i >= 1; i--) {
+      const rowPhone = String(rows[i]?.[3] ?? "").trim();
+      const rowContent = String(rows[i]?.[4] ?? "").trim();
+      const rowLinks = String(rows[i]?.[6] ?? "").trim();
+
+      if (linksToMatch.length > 0 && rowLinks) {
+        if (linksToMatch.some((lnk) => rowLinks.includes(lnk))) {
+          matchedRowIdx = i;
+          break;
+        }
+      }
+      // 드라이브 링크가 없는 예외 케이스는 전화번호 + "(내용 분석 중...)" 핑거프린트로 역추적
+      if (
+        linksToMatch.length === 0 &&
+        rowPhone === params.phoneNumber &&
+        rowContent.includes("(내용 분석 중...)")
+      ) {
+        matchedRowIdx = i;
+        break;
+      }
+    }
+
+    // 핑거프린트 불일치(사용자 행 삭제 등) 시 안전 폐기 (다른 정상 행 오염 100% 차단)
+    if (matchedRowIdx === -1) return false;
+
+    const sheetRowNumber = matchedRowIdx + 1;
+    await callSheetsTool(
+      "sheets_update_range",
+      {
+        spreadsheetId: params.spreadsheetId,
+        range: `E${sheetRowNumber}`,
+        values: [[params.finalMessage]],
+        preferOAuth: true,
+      },
+      params.callOptions
+    );
+
+    try {
+      realtimeHub.broadcast("sms", {
+        type: "DATA_CHANGED",
+        source: "sms_mms_ai_summary_updated",
+        tableName: "sheetbot_user_dispatch_logs",
+        action: "UPDATE",
+        userEmail: params.cleanEmail,
+        timestamp: new Date().toISOString(),
+      });
+    } catch {}
+
+    return true;
+  } catch (err: any) {
+    console.warn("[SmsSync] updateSmsSheetRowMessageSummary warning:", err?.message || err);
+    return false;
+  }
 }
 
 /**
@@ -225,8 +448,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const effectiveRawText = isPlaceholderAttachmentMessage(rawMessage) ? "" : rawMessage.trim();
     const message =
-      rawMessage ||
+      effectiveRawText ||
       (incomingAttachments.length > 0
         ? `[첨부파일: ${incomingAttachments.map((a) => a.fileName).join(", ")}]`
         : "");
@@ -304,37 +528,101 @@ export async function POST(req: NextRequest) {
       sheetTitle = `[SheetBot] ${sheetTitle}`;
     }
 
-    // 1. 구글 드라이브 첨부파일 업로드 + 구글 스프레드시트 대장 기록 (비동기 처리로 응답 지연 원천 차단)
+    // 1. 구글 드라이브 첨부파일 업로드 + 2단계 하이브리드 AI 요약 + 구글 스프레드시트 대장 기록 (비동기 처리로 응답 지연 원천 차단)
     let spreadsheetUrl = "";
     if (autoRecordSheet) {
       (async () => {
         try {
           const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req);
 
-          // 1-A. MMS 첨부파일이 있다면 사용자 구글 드라이브 전용 폴더에 업로드하고 링크 수집
+          // 1-A. MMS 첨부파일 1단계 동기 무료 즉시 요약(<50ms) + 구글 드라이브 전용 폴더 격리 업로드
           const uploadedLinks: string[] = [...externalFileLinks];
+          const analyzedAttachments: AnalyzedSmsAttachment[] = [];
+          const userSettings =
+            incomingAttachments.length > 0
+              ? await getKakaoMediaUserSettings(cleanEmail)
+              : null;
+
           if (incomingAttachments.length > 0) {
             const folderId = await resolveSmsAttachmentFolderId(cleanEmail, callOptions);
-            for (const att of incomingAttachments) {
-              try {
-                const upRes = await uploadDriveFileWithBridge({
-                  buffer: att.buffer,
-                  fileName: att.fileName,
-                  folderId,
-                  mimeType: att.mimeType,
-                  preferOAuth: true,
-                  userEmail: cleanEmail,
-                  callOptions,
-                });
-                if (upRes?.webViewLink && !uploadedLinks.includes(upRes.webViewLink)) {
-                  uploadedLinks.push(upRes.webViewLink);
+            if (!folderId) {
+              console.warn(
+                `[SmsSync] 전용 폴더('${SMS_ATTACHMENT_FOLDER_NAME}') ID 미확정 — 기본 감시 폴더 오염 방지를 위해 드라이브 업로드를 건너뜁니다.`
+              );
+            }
+
+            const totalAtt = incomingAttachments.length;
+            for (let i = 0; i < totalAtt; i++) {
+              const att = incomingAttachments[i];
+              const safeFileName =
+                att.fileName.replace(/[/\\?%*:|"<>]/g, "_") || `mms_attachment_${i + 1}.bin`;
+              const ext = safeFileName.split(".").pop()?.toLowerCase() || "bin";
+              const fileHash = crypto.createHash("sha256").update(att.buffer).digest("hex");
+              const mediaTypeLabel = inferKakaoMediaTypeLabel(ext, att.mimeType);
+
+              // 1단계: 엑셀/CSV/EML/텍스트 무료 즉시 요약, .gif 및 15KB 미만 이미지 자동 제외
+              const quickAnalysis = inspectMediaForQuickSummary({
+                buffer: att.buffer,
+                fileName: safeFileName,
+                ext,
+                fileHash,
+                aiSummaryEnabled: userSettings ? userSettings.aiSummaryEnabled : true,
+              });
+
+              const initialLine = formatKakaoMediaMessage({
+                messageType: mediaTypeLabel,
+                fileName: safeFileName,
+                mediaIndex: i + 1,
+                mediaTotal: totalAtt,
+                summary: quickAnalysis.immediateSummary,
+                analyzing: quickAnalysis.needsAsyncAi,
+              });
+
+              let webViewLink = "";
+              if (folderId) {
+                try {
+                  const upRes = await uploadDriveFileWithBridge({
+                    buffer: att.buffer,
+                    fileName: safeFileName,
+                    folderId,
+                    mimeType: att.mimeType,
+                    preferOAuth: true,
+                    userEmail: cleanEmail,
+                    callOptions,
+                  });
+                  if (upRes?.webViewLink) {
+                    webViewLink = upRes.webViewLink;
+                    if (!uploadedLinks.includes(upRes.webViewLink)) {
+                      uploadedLinks.push(upRes.webViewLink);
+                    }
+                  }
+                } catch (upErr: any) {
+                  console.warn("[SmsSync] Attachment Drive upload warning:", upErr?.message);
                 }
-              } catch (upErr: any) {
-                console.warn("[SmsSync] Attachment Drive upload warning:", upErr?.message);
               }
+
+              analyzedAttachments.push({
+                att,
+                safeFileName,
+                ext,
+                fileHash,
+                mediaTypeLabel,
+                mediaIndex: i + 1,
+                mediaTotal: totalAtt,
+                quickAnalysis,
+                initialLine,
+                webViewLink,
+              });
             }
           }
+
           const joinedFileLinks = uploadedLinks.join("\n");
+          const initialAttachmentLines = analyzedAttachments.map((a) => a.initialLine);
+          let baseTextForSheet = effectiveRawText;
+          let initialSheetMessage =
+            analyzedAttachments.length > 0
+              ? buildCombinedSmsMessage(baseTextForSheet, initialAttachmentLines)
+              : message;
 
           const resolved = await resolveUserSpreadsheet({
             userEmail: cleanEmail,
@@ -347,7 +635,7 @@ export async function POST(req: NextRequest) {
 
           const targetSpreadsheetId = resolved.spreadsheetId;
 
-          // 시트에 신규 문자 기록 행 추가 (자가 치유: 1행 A1:G1 헤더 보장)
+          // 시트에 신규 문자 기록 행 추가 또는 직전 SMS 텍스트 행 병합 (자가 치유: 1행 A1:G1 헤더 보장)
           if (targetSpreadsheetId) {
             const headerValues = [
               ["일시", "구분", "상대방 이름", "상대방 전화번호", "메시지 내용", "기기명", "파일링크"]
@@ -404,19 +692,179 @@ export async function POST(req: NextRequest) {
               ).catch(() => {});
             }
 
-            const newRowValues = [
-              [nowStr, directionLabel, displayName, phoneNumber, message, deviceId, joinedFileLinks]
-            ];
-            await callSheetsTool(
-              "sheets_append_values",
-              {
-                spreadsheetId: targetSpreadsheetId,
-                range: "A:G",
-                values: newRowValues,
-                preferOAuth: true,
-              },
-              callOptions
-            ).catch((err: any) => console.warn("[SmsSync] append_values warning:", err.message));
+            // 기존 SMS 텍스트 행에 MMS 첨부파일이 직후(3분 이내) 뒤따라 유입된 경우 원본 본문 보존 병합
+            let mergedIntoExistingRow = false;
+            if (analyzedAttachments.length > 0) {
+              const recentSheetData = await callSheetsTool(
+                "sheets_get_range",
+                {
+                  spreadsheetId: targetSpreadsheetId,
+                  range: "A1:G5000",
+                  preferOAuth: true,
+                },
+                callOptions
+              ).catch(() => null);
+
+              const existingRows: string[][] = Array.isArray(recentSheetData?.values)
+                ? recentSheetData.values
+                : [];
+              const nowMs = parseKoreanTimeMs(nowStr) ?? Date.now();
+              const scanStart = Math.max(1, existingRows.length - 25);
+
+              for (let rIdx = existingRows.length - 1; rIdx >= scanStart; rIdx--) {
+                const row = existingRows[rIdx] || [];
+                const rowTimeStr = String(row[0] ?? "").trim();
+                const rowDir = String(row[1] ?? "").trim();
+                const rowPhone = String(row[3] ?? "").trim();
+                const rowContent = String(row[4] ?? "").trim();
+                const rowLinks = String(row[6] ?? "").trim();
+
+                if (rowDir !== directionLabel || rowPhone !== phoneNumber) continue;
+                if (rowLinks) continue; // 이미 파일링크가 연결된 행은 건드리지 않음
+                if (!rowContent || isPlaceholderAttachmentMessage(rowContent)) continue;
+
+                const rowMs = parseKoreanTimeMs(rowTimeStr);
+                if (rowMs !== null && Math.abs(nowMs - rowMs) > 3 * 60 * 1000) continue;
+
+                // 동일 본문이거나 이번 MMS에 본문이 비어있으면 직전 SMS 텍스트 행에 병합
+                if (!baseTextForSheet || rowContent === baseTextForSheet) {
+                  baseTextForSheet = rowContent;
+                  initialSheetMessage = buildCombinedSmsMessage(
+                    baseTextForSheet,
+                    initialAttachmentLines
+                  );
+                  const targetRowNum = rIdx + 1;
+                  await callSheetsTool(
+                    "sheets_update_range",
+                    {
+                      spreadsheetId: targetSpreadsheetId,
+                      range: `E${targetRowNum}:G${targetRowNum}`,
+                      values: [[initialSheetMessage, String(row[5] ?? deviceId), joinedFileLinks]],
+                      preferOAuth: true,
+                    },
+                    callOptions
+                  ).catch((err: any) =>
+                    console.warn("[SmsSync] existing row merge warning:", err?.message)
+                  );
+                  mergedIntoExistingRow = true;
+                  break;
+                }
+              }
+            }
+
+            if (!mergedIntoExistingRow) {
+              const newRowValues = [
+                [
+                  nowStr,
+                  directionLabel,
+                  displayName,
+                  phoneNumber,
+                  initialSheetMessage,
+                  deviceId,
+                  joinedFileLinks,
+                ],
+              ];
+              await callSheetsTool(
+                "sheets_append_values",
+                {
+                  spreadsheetId: targetSpreadsheetId,
+                  range: "A:G",
+                  values: newRowValues,
+                  preferOAuth: true,
+                },
+                callOptions
+              ).catch((err: any) => console.warn("[SmsSync] append_values warning:", err.message));
+            }
+
+            // 1-B. 1단계 무료 즉시 요약(엑셀/EML/텍스트 등)으로 확정된 수신 첨부 -> 할 일 허브 자동 연계
+            if (!isOutbound && userSettings?.autoTaskFromAttachment) {
+              for (const item of analyzedAttachments) {
+                if (
+                  !item.quickAnalysis.needsAsyncAi &&
+                  !item.quickAnalysis.skippedAsMeme &&
+                  item.quickAnalysis.immediateSummary
+                ) {
+                  void maybeExtractTaskFromSmsAttachmentSummary({
+                    cleanEmail,
+                    displayName,
+                    phoneNumber,
+                    fileName: item.safeFileName,
+                    summary: item.quickAnalysis.immediateSummary,
+                    webViewLink: item.webViewLink,
+                    timestamp: nowStr,
+                    fileHash: item.fileHash,
+                  });
+                }
+              }
+            }
+
+            // 1-C. 2단계(비동기 백그라운드): 사진·PDF·음성 경량 멀티모달 AI 1줄 요약 -> 시트 E열 안전 갱신 + 할 일 허브 자동 연계
+            const asyncTargets = analyzedAttachments.filter((a) => a.quickAnalysis.needsAsyncAi);
+            if (asyncTargets.length > 0) {
+              void (async () => {
+                try {
+                  const finalLines = [...initialAttachmentLines];
+
+                  for (let i = 0; i < analyzedAttachments.length; i++) {
+                    const item = analyzedAttachments[i];
+                    if (!item.quickAnalysis.needsAsyncAi) continue;
+
+                    const aiRes = await analyzeMediaWithAi({
+                      base64Data: item.att.buffer.toString("base64"),
+                      ext: item.ext,
+                      mimeType: item.att.mimeType,
+                      fileName: item.safeFileName,
+                      fileHash: item.fileHash,
+                      channel: "sms",
+                    });
+
+                    finalLines[i] = formatKakaoMediaMessage({
+                      messageType: item.mediaTypeLabel,
+                      fileName: item.safeFileName,
+                      mediaIndex: item.mediaIndex,
+                      mediaTotal: item.mediaTotal,
+                      summary: aiRes.skippedAsMeme ? undefined : aiRes.summary,
+                      analyzing: false,
+                    });
+
+                    // 수신 문자의 업무 문서 첨부 시 할 일 허브 자동 등록
+                    if (
+                      !isOutbound &&
+                      userSettings?.autoTaskFromAttachment &&
+                      !aiRes.skippedAsMeme &&
+                      aiRes.summary
+                    ) {
+                      await maybeExtractTaskFromSmsAttachmentSummary({
+                        cleanEmail,
+                        displayName,
+                        phoneNumber,
+                        fileName: item.safeFileName,
+                        summary: aiRes.summary,
+                        webViewLink: item.webViewLink,
+                        timestamp: nowStr,
+                        fileHash: item.fileHash,
+                      });
+                    }
+                  }
+
+                  const finalSheetMessage = buildCombinedSmsMessage(baseTextForSheet, finalLines);
+                  await updateSmsSheetRowMessageSummary({
+                    cleanEmail,
+                    spreadsheetId: targetSpreadsheetId,
+                    callOptions,
+                    targetLinks: uploadedLinks,
+                    phoneNumber,
+                    initialMessage: initialSheetMessage,
+                    finalMessage: finalSheetMessage,
+                  });
+                } catch (bgErr: any) {
+                  console.warn(
+                    "[SmsSync] MMS 백그라운드 AI 요약/시트 갱신 경고:",
+                    bgErr?.message || bgErr
+                  );
+                }
+              })();
+            }
           }
         } catch (sheetErr: any) {
           console.warn("[SmsSync] Sheet auto-record warning:", sheetErr.message);
@@ -481,12 +929,12 @@ export async function POST(req: NextRequest) {
       }).catch((err) => console.warn("[SmsSync] Payment sheet sync background error:", err));
     }
 
-    // 1-3. 수신 문자(INBOUND)에서 비즈니스 할 일(Action Item) 실시간 자동 추출 및 할 일 허브 등록 (Zero-Block 백그라운드)
-    if (!isOutbound && (!parsedBank || !parsedBank.amountKrw)) {
+    // 1-3. 수신 문자(INBOUND) 실제 텍스트 본문에서 비즈니스 할 일(Action Item) 실시간 자동 추출 및 할 일 허브 등록 (Zero-Block 백그라운드)
+    if (!isOutbound && effectiveRawText && (!parsedBank || !parsedBank.amountKrw)) {
       void extractAndCreateTasksFromMessage({
         userEmail: cleanEmail,
         sourceType: "SMS",
-        message,
+        message: effectiveRawText,
         contactName: displayName !== "미등록 연락처" ? displayName : undefined,
         contactPhone: phoneNumber !== "-" ? phoneNumber : undefined,
         timestamp: nowStr,

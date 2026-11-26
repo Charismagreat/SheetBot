@@ -9,7 +9,7 @@ import {
 
 /**
  * GET /api/user/messages/kakao/settings
- * 카카오톡 첨부파일 AI 자동 요약 및 할 일 자동 연계 설정 조회
+ * 카카오톡·문자(MMS) 첨부파일 AI 자동 요약 및 할 일 자동 연계 설정 조회
  */
 export async function GET(req: NextRequest) {
   try {

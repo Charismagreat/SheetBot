@@ -404,7 +404,7 @@ export function inspectMediaForQuickSummary(params: {
   }
 
   // 5. PDF / 음성 — 백그라운드 경량 멀티모달 AI 요약 대상
-  if (["pdf", "m4a", "mp3", "wav", "ogg", "aac"].includes(ext)) {
+  if (["pdf", "m4a", "mp3", "wav", "ogg", "aac", "amr"].includes(ext)) {
     if (params.buffer.length <= MAX_AI_ANALYZE_BYTES) {
       return { needsAsyncAi: true };
     }
@@ -428,6 +428,7 @@ export async function analyzeMediaWithAi(params: {
   mimeType: string;
   fileName: string;
   fileHash?: string;
+  channel?: "kakao" | "sms";
 }): Promise<{ summary: string; skippedAsMeme: boolean }> {
   const cached = getCachedSummary(params.fileHash);
   if (cached) {
@@ -437,7 +438,7 @@ export async function analyzeMediaWithAi(params: {
   const ext = params.ext.toLowerCase().replace(/^\./, "");
   const isImage = ["jpg", "jpeg", "png", "webp"].includes(ext);
   const isPdf = ext === "pdf";
-  const isAudio = ["m4a", "mp3", "wav", "ogg", "aac"].includes(ext);
+  const isAudio = ["m4a", "mp3", "wav", "ogg", "aac", "amr"].includes(ext);
 
   if (!isImage && !isPdf && !isAudio) {
     return { summary: "", skippedAsMeme: false };
@@ -455,7 +456,7 @@ export async function analyzeMediaWithAi(params: {
     };
     resolvedMime = imgMimeMap[ext] || "image/jpeg";
     prompt = [
-      "당신은 카카오톡 대화 대장에 첨부된 이미지를 1줄로 요약하는 업무 비서입니다.",
+      "당신은 메신저·문자 대화 대장에 첨부된 이미지를 1줄로 요약하는 업무 비서입니다.",
       '규칙 1) 이 이미지가 업무·정보 가치가 없는 단순 짤방, 밈(meme), 이모티콘, 스티커, 캐릭터 반응짤, 인사말 이미지라면 다른 설명 없이 반드시 "SKIP_MEME" 한 단어만 출력하세요.',
       "규칙 2) 문서(인증서, 영수증, 거래명세서, 견적서, 명함, 계약서, 통장사본, 공문, 안내문 등), 스크린샷, 제품·현장 사진 등 정보 가치가 있는 이미지라면 한국어로 1줄(최대 160자) 핵심 사실만 요약하세요.",
       '규칙 3) 문서 제목, 상호/이름, 날짜, 금액/인증번호 등 검색에 유용한 핵심 키워드를 " · "로 구분해 포함하고, 마크다운 기호나 줄바꿈 없이 평문 한 줄만 출력하세요.',
@@ -473,18 +474,24 @@ export async function analyzeMediaWithAi(params: {
       wav: "audio/wav",
       ogg: "audio/ogg",
       aac: "audio/aac",
+      amr: "audio/amr",
     };
     resolvedMime = audioMimeMap[ext] || "audio/mp4";
     prompt = [
-      "첨부된 카카오톡 음성 메시지의 핵심 발화 내용을 한국어 1줄(최대 160자)로 요약하세요.",
+      "첨부된 음성 메시지의 핵심 발화 내용을 한국어 1줄(최대 160자)로 요약하세요.",
       "마크다운 기호나 줄바꿈 없이 평문 한 줄만 출력하세요.",
     ].join("\n");
   }
 
+  const callerTag =
+    params.channel === "sms"
+      ? "sheetbot-sms-media-summary"
+      : "sheetbot-kakao-media-summary";
+
   for (const model of SUMMARY_MODELS) {
     try {
       const res = await callAiCaller(prompt, {
-        caller: "sheetbot-kakao-media-summary",
+        caller: callerTag,
         model,
         temperature: 0.1,
         maxOutputTokens: 220,

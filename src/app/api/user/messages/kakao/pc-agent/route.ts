@@ -155,11 +155,11 @@ function buildGuideHtml(
     </div>
 
     <div class="card">
-      <div class="step">📎 첨부 사진·파일 AI 자동 요약 및 할 일 연계 설정</div>
+      <div class="step">📎 카카오톡·문자(MMS) 첨부 사진·파일 AI 자동 요약 및 할 일 연계 설정</div>
       <div class="toggle-row">
         <div>
           <div class="toggle-label">첨부 사진·파일 AI 내용 자동 요약</div>
-          <div class="toggle-desc">엑셀·텍스트 무료 즉시 요약 + 사진·PDF·음성 경량 AI 1줄 요약(짤방 자동 제외)을 구글 시트 E열에 자동 기록합니다.</div>
+          <div class="toggle-desc">카카오톡·문자(MMS) 첨부의 엑셀·텍스트 무료 즉시 요약 + 사진·PDF·음성 경량 AI 1줄 요약(짤방 자동 제외)을 구글 시트 E열에 자동 기록합니다.</div>
         </div>
         <label class="switch">
           <input type="checkbox" id="toggleAiSummary" ${aiChecked} onchange="saveKakaoSettings()" />
@@ -169,7 +169,7 @@ function buildGuideHtml(
       <div class="toggle-row">
         <div>
           <div class="toggle-label">업무 문서 첨부 시 할 일 자동 생성</div>
-          <div class="toggle-desc">견적서·발주서·계약서·입금요청 등 업무 문서가 첨부되면 요약 내용을 분석해 할 일 허브에 자동 등록합니다.</div>
+          <div class="toggle-desc">견적서·발주서·계약서·입금요청 등 업무 문서가 카카오톡·문자로 첨부되면 요약 내용을 분석해 할 일 허브에 자동 등록합니다.</div>
         </div>
         <label class="switch">
           <input type="checkbox" id="toggleAutoTask" ${taskChecked} onchange="saveKakaoSettings()" />
