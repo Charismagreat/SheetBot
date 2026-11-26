@@ -1162,9 +1162,38 @@ export async function markKakaoMessagesDeletedInSheets(params: {
   }
 }
 
+function parseKstTimeMsSafe(raw?: string | null): number | null {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  const m = s.match(/(\d{4})[-./](\d{1,2})[-./](\d{1,2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return null;
+  const iso = `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}T${m[4].padStart(2, "0")}:${m[5]}:${m[6] || "00"}+09:00`;
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? null : t;
+}
+
+function isKakaoMediaPlaceholderText(text: string): boolean {
+  const t = (text || "").trim();
+  if (!t) return false;
+  return (
+    t === "사진" ||
+    t === "동영상" ||
+    t === "파일" ||
+    t.startsWith("[사진") ||
+    t.startsWith("[파일") ||
+    t.startsWith("[동영상") ||
+    t.startsWith("[음성") ||
+    t.includes("사진을 보냈습니다") ||
+    t.includes("동영상을 보냈습니다") ||
+    t.includes("파일을 보냈습니다") ||
+    t.includes("음성메시지를 보냈습니다")
+  );
+}
+
 /**
  * 구글 드라이브에 업로드된 카카오톡 첨부 파일의 링크(webViewLink) 및 원본 파일을
- * 구글 시트 '[SheetBot] 카카오톡 메시지 대장'(I열)과 파투 '카카오톡대화대장'('파일링크' + _fileId)에 동시 연결합니다.
+ * 구글 시트 '[SheetBot] 카카오톡 메시지 대장'(E열 요약 + H열 메시지ID + I열 파일링크)과
+ * 파투 '카카오톡대화대장'에 동시 연결합니다.
  */
 export async function attachDriveLinkToKakaoSheetRow(params: {
   userEmail: string;
@@ -1177,40 +1206,54 @@ export async function attachDriveLinkToKakaoSheetRow(params: {
   fileBase64?: string;
   webViewLink: string;
   pcName?: string;
+  sentAtStr?: string;
+  messageContent?: string;
+  mediaIndex?: number;
+  skipFtsSync?: boolean;
   req?: NextRequest;
-}): Promise<{ updated: boolean; appended: boolean; spreadsheetUrl: string; ftsUpdated?: boolean; ftsFileUrl?: string }> {
+}): Promise<{
+  updated: boolean;
+  appended: boolean;
+  spreadsheetId?: string;
+  spreadsheetUrl: string;
+  rowNumber?: number;
+  ftsUpdated?: boolean;
+  ftsFileUrl?: string;
+}> {
   let ftsUpdated = false;
   let ftsFileUrl = "";
   try {
     const cleanEmail = (params.userEmail || "").toLowerCase().trim();
 
-    // 1. 파투(FileToSheet) '카카오톡대화대장' 원본 파일 저장 + '파일링크' 연결
-    const ftsEmailDigits = cleanEmail.match(/^([0-9]{9,12})@(fts\.local|filetosheet\.cloud)$/)?.[1] || "";
-    const resolvedPhone =
-      (params.phoneNumber || "").replace(/[^0-9]/g, "") ||
-      ftsEmailDigits ||
-      (cleanEmail ? await resolveUserFtsPhoneNumber(cleanEmail).catch(() => null) : null) ||
-      (cleanEmail === "chachogreat@gmail.com" ? "01072165884" : "");
+    // 1. 파투(FileToSheet) '카카오톡대화대장' 원본 파일 저장 + '파일링크' 연결 (브리지 직접 연동 시 skipFtsSync 가능)
+    if (!params.skipFtsSync) {
+      const ftsEmailDigits = cleanEmail.match(/^([0-9]{9,12})@(fts\.local|filetosheet\.cloud)$/)?.[1] || "";
+      const resolvedPhone =
+        (params.phoneNumber || "").replace(/[^0-9]/g, "") ||
+        ftsEmailDigits ||
+        (cleanEmail ? await resolveUserFtsPhoneNumber(cleanEmail).catch(() => null) : null) ||
+        (cleanEmail === "chachogreat@gmail.com" ? "01072165884" : "");
 
-    if (resolvedPhone) {
-      const ftsRes = await patchFtsKakaoSheet(resolvedPhone, {
-        action: "ATTACH_FILE",
-        logId: params.logId,
-        roomName: params.roomName,
-        senderName: params.senderName,
-        fileName: params.fileName,
-        mimeType: params.mimeType,
-        fileBase64: params.fileBase64,
-        webViewLink: params.webViewLink,
-        pcName: params.pcName,
-      });
-      if (ftsRes.ok && ftsRes.data) {
-        ftsUpdated = Boolean(ftsRes.data.updated || ftsRes.data.appended);
-        ftsFileUrl = String(ftsRes.data.fileUrl || "");
+      if (resolvedPhone) {
+        const ftsRes = await patchFtsKakaoSheet(resolvedPhone, {
+          action: "ATTACH_FILE",
+          logId: params.logId,
+          roomName: params.roomName,
+          senderName: params.senderName,
+          fileName: params.fileName,
+          mimeType: params.mimeType,
+          fileBase64: params.fileBase64,
+          webViewLink: params.webViewLink,
+          pcName: params.pcName,
+        });
+        if (ftsRes.ok && ftsRes.data) {
+          ftsUpdated = Boolean(ftsRes.data.updated || ftsRes.data.appended);
+          ftsFileUrl = String(ftsRes.data.fileUrl || "");
+        }
       }
     }
 
-    // 2. 구글 시트 '[SheetBot] 카카오톡 메시지 대장' I열('파일링크') 연결
+    // 2. 구글 시트 '[SheetBot] 카카오톡 메시지 대장' E/H/I열 연결
     if (!cleanEmail || !cleanEmail.includes("@") || cleanEmail.endsWith("@fts.local") || cleanEmail.endsWith("@filetosheet.cloud")) {
       return { updated: ftsUpdated, appended: false, spreadsheetUrl: "", ftsUpdated, ftsFileUrl };
     }
@@ -1228,7 +1271,7 @@ export async function attachDriveLinkToKakaoSheetRow(params: {
     });
 
     if (!resolved?.spreadsheetId) {
-      return { updated: false, appended: false, spreadsheetUrl: "" };
+      return { updated: false, appended: false, spreadsheetUrl: "", ftsUpdated, ftsFileUrl };
     }
 
     const spreadsheetId = resolved.spreadsheetId;
@@ -1247,7 +1290,9 @@ export async function attachDriveLinkToKakaoSheetRow(params: {
     const rows: string[][] = Array.isArray(sheetData?.values) ? sheetData.values : [];
     const targetLogId = params.logId !== undefined && params.logId !== null ? String(params.logId).trim() : "";
     const targetRoom = (params.roomName || "").trim();
+    const targetSender = (params.senderName || "").trim();
     const targetFileName = (params.fileName || "").trim();
+    const mediaIndex = Math.max(1, Number(params.mediaIndex || 1) || 1);
 
     let targetRowIndex = -1;
 
@@ -1274,8 +1319,42 @@ export async function attachDriveLinkToKakaoSheetRow(params: {
       }
     }
 
+    // 3순위: 모바일 알림 선기록 행(사진/파일 플레이스홀더) ±2분 매칭으로 2행 중복 원천 방지
+    if (targetRowIndex === -1 && mediaIndex === 1) {
+      const targetTsMs = parseKstTimeMsSafe(params.sentAtStr);
+      const normRoom = targetRoom.replace(/\s+/g, "").toLowerCase();
+      const normSender = targetSender.replace(/\s+/g, "").toLowerCase();
+      const searchStart = Math.max(1, rows.length - 200);
+
+      for (let i = rows.length - 1; i >= searchStart; i--) {
+        const existingLink = String(rows[i]?.[8] ?? "").trim();
+        if (existingLink) continue;
+
+        const rowMsg = String(rows[i]?.[4] ?? "").trim();
+        if (!isKakaoMediaPlaceholderText(rowMsg)) continue;
+
+        const rowRoom = String(rows[i]?.[2] ?? "").replace(/\s+/g, "").toLowerCase();
+        const rowSender = String(rows[i]?.[3] ?? "").replace(/\s+/g, "").toLowerCase();
+        const roomMatched =
+          (normRoom && (rowRoom.includes(normRoom) || normRoom.includes(rowRoom))) ||
+          (normSender && (rowRoom.includes(normSender) || rowSender.includes(normSender)));
+        if (!roomMatched) continue;
+
+        const rowTsMs = parseKstTimeMsSafe(rows[i]?.[0]);
+        if (targetTsMs !== null && rowTsMs !== null && Math.abs(targetTsMs - rowTsMs) > 120_000) {
+          continue;
+        }
+
+        targetRowIndex = i;
+        break;
+      }
+    }
+
+    const desiredMessage = (params.messageContent || "").trim() || `[파일: ${targetFileName}]`;
+
     if (targetRowIndex !== -1) {
       const sheetRowNumber = targetRowIndex + 1;
+      const existingMsg = String(rows[targetRowIndex]?.[4] ?? "").trim();
       const existingLink = String(rows[targetRowIndex]?.[8] ?? "").trim();
       const existingLogId = String(rows[targetRowIndex]?.[7] ?? "").trim();
       const finalLogId = existingLogId || targetLogId;
@@ -1286,6 +1365,20 @@ export async function attachDriveLinkToKakaoSheetRow(params: {
         finalLink = `${existingLink}\n${params.webViewLink}`;
       } else if (existingLink.includes(params.webViewLink)) {
         finalLink = existingLink;
+      }
+
+      // E열 메시지 내용이 플레이스홀더이거나 파일 태그뿐이면 요약/파일명 포맷으로 업그레이드
+      if (params.messageContent && (!existingMsg || isKakaoMediaPlaceholderText(existingMsg))) {
+        await callSheetsTool(
+          "sheets_update_range",
+          {
+            spreadsheetId,
+            range: `E${sheetRowNumber}`,
+            values: [[desiredMessage]],
+            preferOAuth: true,
+          },
+          callOptions
+        ).catch(() => {});
       }
 
       await callSheetsTool(
@@ -1299,11 +1392,19 @@ export async function attachDriveLinkToKakaoSheetRow(params: {
         callOptions
       );
 
-      return { updated: true, appended: false, spreadsheetUrl: resolved.spreadsheetUrl, ftsUpdated, ftsFileUrl };
+      return {
+        updated: true,
+        appended: false,
+        spreadsheetId,
+        spreadsheetUrl: resolved.spreadsheetUrl,
+        rowNumber: sheetRowNumber,
+        ftsUpdated,
+        ftsFileUrl,
+      };
     }
 
     // 매칭되는 기존 행이 없는 경우 신규 행으로 안전하게 기록
-    const nowStr = getKoreanTimeString();
+    const nowStr = (params.sentAtStr || "").trim() || getKoreanTimeString();
     const roomLabel = targetRoom || "대화방";
     const senderLabel = (params.senderName || roomLabel).trim();
     const deviceLabel = `🖥️ 내 PC(${(params.pcName || "Windows PC").trim()}) 카톡 첨부파일`;
@@ -1313,16 +1414,106 @@ export async function attachDriveLinkToKakaoSheetRow(params: {
       {
         spreadsheetId,
         range: "A:I",
-        values: [[nowStr, "📎 PC카톡 첨부", roomLabel, senderLabel, `[파일: ${targetFileName}]`, deviceLabel, "정상", targetLogId, params.webViewLink]],
+        values: [[nowStr, "📎 PC카톡 첨부", roomLabel, senderLabel, desiredMessage, deviceLabel, "정상", targetLogId, params.webViewLink]],
         preferOAuth: true,
       },
       callOptions
     );
 
-    return { updated: false, appended: true, spreadsheetUrl: resolved.spreadsheetUrl, ftsUpdated, ftsFileUrl };
+    return {
+      updated: false,
+      appended: true,
+      spreadsheetId,
+      spreadsheetUrl: resolved.spreadsheetUrl,
+      rowNumber: rows.length + 1,
+      ftsUpdated,
+      ftsFileUrl,
+    };
   } catch (err: any) {
     console.warn("[AiCopilotLearning] attachDriveLinkToKakaoSheetRow error:", err?.message || err);
     return { updated: false, appended: false, spreadsheetUrl: "", ftsUpdated, ftsFileUrl };
+  }
+}
+
+/**
+ * 2단계(비동기 백그라운드) AI 요약 완료 후, 핑거프린트 행 검증(H열 logId / I열 webViewLink)을 거쳐
+ * 구글 시트 '[SheetBot] 카카오톡 메시지 대장'의 E열(메시지 내용)만 안전하게 갱신합니다.
+ * - 사용자가 해당 행을 이미 삭제한 경우 시트 쓰기를 중단(Abort)하여 다른 행 오염을 원천 차단합니다.
+ */
+export async function updateKakaoSheetRowMessageSummary(params: {
+  userEmail: string;
+  spreadsheetId?: string;
+  logId?: string | number;
+  webViewLink?: string;
+  finalMessage: string;
+  req?: NextRequest;
+}): Promise<boolean> {
+  try {
+    const cleanEmail = (params.userEmail || "").toLowerCase().trim();
+    if (!cleanEmail || !cleanEmail.includes("@") || cleanEmail.endsWith("@fts.local") || cleanEmail.endsWith("@filetosheet.cloud")) {
+      return false;
+    }
+    const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, params.req);
+
+    let spreadsheetId = params.spreadsheetId || "";
+    if (!spreadsheetId) {
+      const resolved = await resolveUserSpreadsheet({
+        userEmail: cleanEmail,
+        sheetType: "KAKAO",
+        defaultTitle: "[SheetBot] 카카오톡 메시지 대장",
+        preferOAuth: true,
+        callOptions,
+      });
+      spreadsheetId = resolved?.spreadsheetId || "";
+    }
+    if (!spreadsheetId) return false;
+
+    const sheetData = await callSheetsTool(
+      "sheets_get_range",
+      {
+        spreadsheetId,
+        range: "A1:I5000",
+        preferOAuth: true,
+      },
+      callOptions
+    ).catch(() => null);
+
+    const rows: string[][] = Array.isArray(sheetData?.values) ? sheetData.values : [];
+    const targetLogId = params.logId !== undefined && params.logId !== null ? String(params.logId).trim() : "";
+    const targetLink = (params.webViewLink || "").trim();
+
+    let matchedRowIdx = -1;
+    for (let i = rows.length - 1; i >= 1; i--) {
+      const rowLogId = String(rows[i]?.[7] ?? "").trim();
+      const rowLink = String(rows[i]?.[8] ?? "").trim();
+      if (targetLink && rowLink.includes(targetLink)) {
+        matchedRowIdx = i;
+        break;
+      }
+      if (targetLogId && rowLogId === targetLogId) {
+        matchedRowIdx = i;
+        break;
+      }
+    }
+
+    // 핑거프린트 불일치(사용자 삭제 등) 시 안전 폐기
+    if (matchedRowIdx === -1) return false;
+
+    const sheetRowNumber = matchedRowIdx + 1;
+    await callSheetsTool(
+      "sheets_update_range",
+      {
+        spreadsheetId,
+        range: `E${sheetRowNumber}`,
+        values: [[params.finalMessage]],
+        preferOAuth: true,
+      },
+      callOptions
+    );
+    return true;
+  } catch (err: any) {
+    console.warn("[AiCopilotLearning] updateKakaoSheetRowMessageSummary warning:", err?.message || err);
+    return false;
   }
 }
 

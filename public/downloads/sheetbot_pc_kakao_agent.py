@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SheetBot & 파투(FileToSheet) 내 PC 카카오톡 원격 발송 + 열린 대화창 실시간 자동 기록 브리지 (v2.0)
+SheetBot & 파투(FileToSheet) 내 PC 카카오톡 원격 발송 + 열린 대화창 실시간 자동 기록 브리지 (v2.2)
 - 기능 1 (원격 무포커스 자동 발송): 외출 중 스마트폰 [시트봇 앱 ➔ AI 비서 카드]에서 [🖥️ 내 PC 카톡으로 자동 발송]을 누르면
   내 PC 카카오톡이 창을 앞으로 띄우지 않고(SW_SHOWMINNOACTIVE) 대화방을 검색해 자동 전송합니다.
-- 기능 2 (열린 대화창 실시간 대화 파투 시트 자동 기록 - kakao_native):
-  스마트폰 알림이 울리지 않는 'PC 카카오톡 열린 대화창의 실시간 대화(상대방 수신 + 내가 PC 키보드로 직접 타이핑한 발신)'를
-  창 포커스나 클립보드 간섭이 전혀 없는 로컬 DB(.edb / -wal) 메모리 읽기 전용 방식으로 감지하여
-  파투(FileToSheet) [카카오톡대화대장] 시트에 중복 없이(3단계 중복 방어) 실시간 자동 적재합니다.
+- 기능 2 (열린 대화창 실시간 대화 시트·파투 자동 기록 - kakao_native):
+  스마트폰 알림이 울리지 않는 'PC 카카오톡 열린 대화창의 실시간 대화(상대방 수신 + 내가 PC 키보드로 직접 타이핑한 발신)'와
+  삭제된 메시지(MARK_DELETED)를 로컬 DB(.edb / -wal) 메모리 읽기 전용 방식으로 감지하여 자동 적재합니다.
+- 기능 3 (사진·파일 원본 증빙 자동 수집 + 청크 분할 업로드 - v2.2):
+  700KB 이하는 multipart 단일 요청(413 시 자동 청크 폴백), 700KB 초과~20MB는 450KB 단위 3단계 청크 업로드(init→chunk→commit)와
+  로컬 '카카오톡 받은 파일' 2시간 지속 감시를 결합하여 구글 드라이브·구글 시트·파투에 무손실 자동 저장합니다.
 """
 from __future__ import annotations
 
@@ -35,6 +37,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
@@ -1503,9 +1506,36 @@ class KakaoNativeLiveWatcher:
                 )
 
     # ------------------------------------------------------------------
-    # 하이브리드 첨부 파일 자동 저장 (1차 URL 다운로드 + 2차 로컬 폴더 감시)
+    # 하이브리드 첨부 파일 자동 저장 (1차 URL 다운로드 + 2차 로컬 폴더 감시 + 자동 청크 분할 업로드)
     # ------------------------------------------------------------------
-    MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024
+    MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024  # 20MB 상한
+    CHUNKED_ATTACHMENT_THRESHOLD_BYTES = 700 * 1024  # 700KB 초과 시 자동 청크 업로드
+    ATTACHMENT_CHUNK_RAW_BYTES = 450 * 1024  # 450KB 원본 (Base64 약 600KB)
+
+    @staticmethod
+    def _build_multipart_form_data(
+        fields: dict[str, str],
+        file_field: str,
+        filename: str,
+        content_type: str,
+        file_bytes: bytes,
+    ) -> tuple[bytes, str]:
+        boundary = f"----SheetBotKakaoAtt{uuid.uuid4().hex}"
+        chunks: list[bytes] = []
+        for k, v in fields.items():
+            chunks.append(f"--{boundary}\r\n".encode("utf-8"))
+            chunks.append(f'Content-Disposition: form-data; name="{k}"\r\n\r\n'.encode("utf-8"))
+            chunks.append(f"{v}\r\n".encode("utf-8"))
+
+        safe_name = filename.replace('"', "_").replace("\r", "").replace("\n", "")
+        chunks.append(f"--{boundary}\r\n".encode("utf-8"))
+        chunks.append(
+            f'Content-Disposition: form-data; name="{file_field}"; filename="{safe_name}"\r\n'.encode("utf-8")
+        )
+        chunks.append(f"Content-Type: {content_type}\r\n\r\n".encode("utf-8"))
+        chunks.append(file_bytes)
+        chunks.append(f"\r\n--{boundary}--\r\n".encode("utf-8"))
+        return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
 
     @staticmethod
     def _normalize_kakao_filename(name: str) -> str:
@@ -1572,16 +1602,19 @@ class KakaoNativeLiveWatcher:
                     default_ext = url_ext
             raw_name = f"kakao_{ev['logId']}{default_ext}"
 
-        size = _int(att.get("size"), 0)
+        size = _int(att.get("size") or att.get("s"), 0)
         if size > self.MAX_ATTACHMENT_BYTES:
             ts = time.strftime("%H:%M:%S")
-            print(f"[{ts}] ⚠️ [첨부 스킵] [{ev['roomName']}] {raw_name} (15MB 초과: {size // (1024*1024)}MB)")
+            print(f"[{ts}] ⚠️ [첨부 스킵] [{ev['roomName']}] {raw_name} (20MB 초과: {size // (1024*1024)}MB)")
             return
 
+        msg_type_label = {2: "사진", 27: "사진 묶음", 3: "동영상", 5: "음성", 18: "파일"}.get(typ, "파일")
         job = {
             "logId": ev["logId"],
             "roomName": ev["roomName"],
             "senderName": ev["senderName"],
+            "sentAtStr": ev.get("sentAtStr") or "",
+            "messageType": msg_type_label,
             "fileName": raw_name,
             "urls": urls,
             "msgType": typ,
@@ -1589,6 +1622,88 @@ class KakaoNativeLiveWatcher:
         }
         with self._att_lock:
             self._attachment_queue.append(job)
+
+    def _post_json_attachment(self, endpoint: str, payload_obj: dict, timeout: int = 30) -> dict:
+        data = json.dumps(payload_obj).encode("utf-8")
+        last_err: Exception | None = None
+        for attempt in range(2):
+            try:
+                req = urllib.request.Request(
+                    endpoint,
+                    data=data,
+                    method="POST",
+                    headers={
+                        "Content-Type": "application/json; charset=utf-8",
+                        "User-Agent": "SheetBot-PC-Kakao-Agent/2.2",
+                        "Cookie": "__egdesk_tunnel_ctx=mcp-server-fxkud1:SheetBot",
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=timeout, context=self.ssl_ctx) as resp:
+                    return json.loads(resp.read().decode("utf-8", errors="replace"))
+            except Exception as err:
+                last_err = err
+                if attempt == 0:
+                    time.sleep(0.5)
+        raise last_err or RuntimeError("chunked attachment request failed")
+
+    def _upload_attachment_chunked(
+        self,
+        endpoint: str,
+        fields: dict[str, str],
+        file_name: str,
+        mime_type: str,
+        data: bytes,
+    ) -> dict:
+        # 1단계: init
+        init_res = self._post_json_attachment(
+            endpoint,
+            {
+                "action": "init",
+                **fields,
+                "fileName": file_name,
+                "mimeType": mime_type,
+                "totalSize": len(data),
+            },
+            timeout=20,
+        )
+        upload_id = init_res.get("uploadId")
+        if not (init_res.get("ok") or init_res.get("success")) or not upload_id:
+            raise RuntimeError(init_res.get("error") or "chunked attachment init failed")
+
+        # 2단계: 450KB 원본(Base64 ~600KB) 단위 순차 청크 전송
+        offset = 0
+        total_len = len(data)
+        while offset < total_len:
+            chunk = data[offset : offset + self.ATTACHMENT_CHUNK_RAW_BYTES]
+            chunk_b64 = base64.b64encode(chunk).decode("ascii")
+            chunk_res = self._post_json_attachment(
+                endpoint,
+                {
+                    "action": "chunk",
+                    "uploadId": upload_id,
+                    "email": fields.get("email", ""),
+                    "phone": fields.get("phone", ""),
+                    "code": fields.get("code", ""),
+                    "chunkBase64": chunk_b64,
+                },
+                timeout=30,
+            )
+            if not (chunk_res.get("ok") or chunk_res.get("success")):
+                raise RuntimeError(chunk_res.get("error") or "chunked attachment append failed")
+            offset += len(chunk)
+
+        # 3단계: commit
+        return self._post_json_attachment(
+            endpoint,
+            {
+                "action": "commit",
+                "uploadId": upload_id,
+                "email": fields.get("email", ""),
+                "phone": fields.get("phone", ""),
+                "code": fields.get("code", ""),
+            },
+            timeout=60,
+        )
 
     def _upload_attachment_bytes(
         self,
@@ -1600,6 +1715,10 @@ class KakaoNativeLiveWatcher:
         data: bytes,
         mime_type: str,
         source: str,
+        sent_at_str: str = "",
+        message_type: str = "파일",
+        media_index: int = 1,
+        media_total: int = 1,
     ) -> bool:
         if not data or len(data) > self.MAX_ATTACHMENT_BYTES:
             return False
@@ -1607,40 +1726,68 @@ class KakaoNativeLiveWatcher:
         if dedupe_key in self._uploaded_att_keys:
             return True
 
-        payload = json.dumps({
+        endpoint = f"{self.server_url}/api/user/messages/kakao/attachment"
+        common_fields = {
             "email": self.email,
             "phone": self.phone,
             "code": self.code,
             "pcName": self.pc_name,
-            "logId": log_id,
+            "logId": str(log_id),
             "roomName": room_name,
             "senderName": sender_name,
+            "sentAtStr": sent_at_str,
+            "messageType": message_type,
+            "mediaIndex": str(media_index),
+            "mediaTotal": str(media_total),
             "fileName": file_name,
             "mimeType": mime_type or "application/octet-stream",
-            "fileBase64": base64.b64encode(data).decode("ascii"),
             "source": source,
-        }).encode("utf-8")
+        }
 
+        use_chunked = len(data) > self.CHUNKED_ATTACHMENT_THRESHOLD_BYTES
         for attempt in range(3):
             try:
-                req = urllib.request.Request(
-                    f"{self.server_url}/api/user/messages/kakao/attachment",
-                    data=payload,
-                    method="POST",
-                    headers={
-                        "Content-Type": "application/json; charset=utf-8",
-                        "User-Agent": "SheetBot-PC-Kakao-Agent/2.0",
-                        "Cookie": "__egdesk_tunnel_ctx=mcp-server-fxkud1:SheetBot",
-                    },
-                )
-                with urllib.request.urlopen(req, timeout=30, context=self.ssl_ctx) as resp:
-                    res = json.loads(resp.read().decode("utf-8", errors="replace"))
-                if res.get("ok"):
+                if use_chunked:
+                    res = self._upload_attachment_chunked(
+                        endpoint, common_fields, file_name, mime_type or "application/octet-stream", data
+                    )
+                else:
+                    try:
+                        body_bytes, ct_header = self._build_multipart_form_data(
+                            fields=common_fields,
+                            file_field="file",
+                            filename=file_name,
+                            content_type=mime_type or "application/octet-stream",
+                            file_bytes=data,
+                        )
+                        req = urllib.request.Request(
+                            endpoint,
+                            data=body_bytes,
+                            method="POST",
+                            headers={
+                                "Content-Type": ct_header,
+                                "User-Agent": "SheetBot-PC-Kakao-Agent/2.2",
+                                "Cookie": "__egdesk_tunnel_ctx=mcp-server-fxkud1:SheetBot",
+                            },
+                        )
+                        with urllib.request.urlopen(req, timeout=30, context=self.ssl_ctx) as resp:
+                            res = json.loads(resp.read().decode("utf-8", errors="replace"))
+                    except urllib.error.HTTPError as http_err:
+                        if http_err.code == 413:
+                            use_chunked = True
+                            res = self._upload_attachment_chunked(
+                                endpoint, common_fields, file_name, mime_type or "application/octet-stream", data
+                            )
+                        else:
+                            raise
+
+                if res.get("ok") or res.get("success"):
                     self._uploaded_att_keys.add(dedupe_key)
                     ts = time.strftime("%H:%M:%S")
                     src_tag = "URL 자동저장" if source == "URL_DOWNLOAD" else "로컬폴더 자동저장"
+                    mode_tag = "청크분할" if use_chunked else "단일"
                     print(
-                        f"[{ts}] 📎 [{src_tag}] [{room_name}] {file_name} -> 구글 드라이브 & 시트 링크 기록 완료"
+                        f"[{ts}] 📎 [{src_tag}({mode_tag})] [{room_name}] {file_name} -> 구글 드라이브 & 시트 링크 기록 완료"
                     )
                     return True
                 if res.get("skipped"):
@@ -1687,6 +1834,7 @@ class KakaoNativeLiveWatcher:
             uploaded_any = False
             urls = job.get("urls") or []
             base_name = job["fileName"]
+            total_urls = max(1, len(urls))
 
             # 1차 시도: attachement URL 직접 다운로드
             for idx, u in enumerate(urls):
@@ -1706,6 +1854,10 @@ class KakaoNativeLiveWatcher:
                     data=data,
                     mime_type=guessed_mime,
                     source="URL_DOWNLOAD",
+                    sent_at_str=job.get("sentAtStr") or "",
+                    message_type=job.get("messageType") or "파일",
+                    media_index=idx + 1,
+                    media_total=total_urls,
                 ):
                     uploaded_any = True
 
@@ -1757,7 +1909,7 @@ class KakaoNativeLiveWatcher:
                     st = p.stat()
                 except OSError:
                     continue
-                # 쓰기 완료된 1초 이상 경과 + 15MB 이하 파일만 대상
+                # 쓰기 완료된 1초 이상 경과 + 20MB 이하 파일만 대상
                 if st.st_size <= 0 or st.st_size > self.MAX_ATTACHMENT_BYTES:
                     continue
                 if now - st.st_mtime < 1.0:
@@ -1796,6 +1948,10 @@ class KakaoNativeLiveWatcher:
                     data=data,
                     mime_type=guessed_mime,
                     source="LOCAL_FOLDER",
+                    sent_at_str=matched_job.get("sentAtStr") or "",
+                    message_type=matched_job.get("messageType") or "파일",
+                    media_index=1,
+                    media_total=1,
                 )
                 if ok:
                     self._seen_local_files[key_path] = sig
@@ -2024,7 +2180,7 @@ def run_bridge_loop():
     ssl_ctx = ssl.create_default_context()
 
     print("\n" + "=" * 68)
-    print("  🚀 [SheetBot & 파투 내 PC 카톡 브리지 v2.0] 실시간 연결 시작!")
+    print("  🚀 [SheetBot & 파투 내 PC 카톡 브리지 v2.2] 실시간 연결 시작!")
     print(f"  • 연결 서버   : {server_url}")
     print(f"  • 연동 계정   : {email or phone or code}")
     print(f"  • 내 PC 이름  : {pc_name}")
@@ -2034,7 +2190,8 @@ def run_bridge_loop():
     status_icon = "🟢 준비 완료" if ready else "🟡 대기 중 (PC 카카오톡 로그인/잠금해제 필요)"
     print(f"  • PC 카카오톡 : {status_icon} — {detail}")
     print("  • 기능 1: 스마트폰 [AI 비서 카드]에서 [내 PC 카톡 자동 발송] 시 무포커스 자동 전송")
-    print("  • 기능 2: PC 카톡 열린 대화창의 실시간 대화(수신 + 내 PC 직접 발신) 파투 시트 자동 기록\n")
+    print("  • 기능 2: PC 카톡 열린 대화창의 실시간 대화·삭제 감지 자동 기록")
+    print("  • 기능 3: 사진·파일 원본 20MB 자동 청크 분할 업로드 + 구글 시트 AI 요약 & 할 일 연계\n")
 
     # 열린 대화창 실시간 감시 백그라운드 스레드 기동 (kakao_native)
     watcher = KakaoNativeLiveWatcher(server_url, email, phone, code, pc_name, ssl_ctx)

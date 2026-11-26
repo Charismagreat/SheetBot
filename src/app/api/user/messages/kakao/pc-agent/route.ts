@@ -14,6 +14,10 @@ import {
   markKakaoMessagesDeletedInSheets,
   syncPcLiveKakaoMessageToSheets,
 } from "@/lib/ai-copilot-learning";
+import {
+  getKakaoMediaUserSettings,
+  KakaoMediaUserSettings,
+} from "@/lib/kakao-media-analyzer";
 
 /**
  * 이용자 맞춤형 원클릭 Windows 실행 배치 파일(.bat) 생성
@@ -76,13 +80,16 @@ function formatDisplayAccount(userEmail: string): string {
 function buildGuideHtml(
   userEmail: string,
   status: ReturnType<typeof getUserPcAgentStatus>,
-  serverOrigin: string
+  serverOrigin: string,
+  mediaSettings: KakaoMediaUserSettings
 ): string {
   const encodedEmail = encodeURIComponent(userEmail);
   const displayAccount = formatDisplayAccount(userEmail);
   const batUrl = `${serverOrigin}/api/user/messages/kakao/pc-agent?download=bat&email=${encodedEmail}`;
   const pyUrl = `${serverOrigin}/downloads/sheetbot_pc_kakao_agent.py`;
   const oneLineCmd = `curl.exe -sSL "${batUrl}" -o "%TEMP%\\sb_kakao.bat" && "%TEMP%\\sb_kakao.bat"`;
+  const aiChecked = mediaSettings.aiSummaryEnabled ? "checked" : "";
+  const taskChecked = mediaSettings.autoTaskFromAttachment ? "checked" : "";
 
   const badgeHtml = status.online
     ? `<div style="display:inline-flex;align-items:center;gap:8px;background:#ECFDF5;border:1px solid #10B981;color:#065F46;padding:8px 14px;border-radius:999px;font-weight:700;font-size:14px;">
@@ -97,7 +104,7 @@ function buildGuideHtml(
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SheetBot 내 PC 카카오톡 원격 발송 연결</title>
+  <title>SheetBot 내 PC 카카오톡 원격 발송 및 첨부파일 자동 기록</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Malgun Gothic", sans-serif; background: #0F172A; color: #F8FAFC; margin: 0; padding: 24px 16px; line-height: 1.6; }
     .container { max-width: 640px; margin: 0 auto; background: #1E293B; border: 1px solid #334155; border-radius: 20px; padding: 28px 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.4); }
@@ -109,12 +116,23 @@ function buildGuideHtml(
     code { display: block; background: #020617; color: #38BDF8; padding: 12px; border-radius: 10px; font-size: 12.5px; word-break: break-all; margin-top: 8px; border: 1px solid #1E293B; }
     .step { font-weight: 700; color: #E2E8F0; margin-bottom: 6px; font-size: 15px; }
     .meta { font-size: 13px; color: #CBD5E1; }
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #1E293B; }
+    .toggle-row:first-of-type { border-top: none; padding-top: 4px; }
+    .toggle-label { font-size: 14px; font-weight: 600; color: #F1F5F9; }
+    .toggle-desc { font-size: 12px; color: #94A3B8; margin-top: 2px; }
+    .switch { position: relative; display: inline-block; width: 46px; height: 26px; flex-shrink: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; inset: 0; background-color: #475569; transition: .2s; border-radius: 999px; }
+    .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%; }
+    input:checked + .slider { background-color: #10B981; }
+    input:checked + .slider:before { transform: translateX(20px); }
+    .save-status { font-size: 12px; color: #34D399; margin-top: 6px; min-height: 18px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>💛 시트봇 내 PC 카카오톡 원격 자동 발송</h1>
-    <div class="sub">외출 중에도 스마트폰 시트봇 앱에서 내 사무실·집 PC에 켜진 카카오톡으로 무포커스 답장을 보냅니다.</div>
+    <h1>💛 시트봇 내 PC 카카오톡 브리지 (v2.2)</h1>
+    <div class="sub">외출 중 무포커스 카톡 발송, 실시간 대화·삭제 감지, 첨부 사진·파일(최대 20MB 청크 업로드) 구글 드라이브 보관 및 AI 자동 요약까지 지원합니다.</div>
     ${badgeHtml}
 
     <div class="card">
@@ -137,12 +155,60 @@ function buildGuideHtml(
     </div>
 
     <div class="card">
+      <div class="step">📎 첨부 사진·파일 AI 자동 요약 및 할 일 연계 설정</div>
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">첨부 사진·파일 AI 내용 자동 요약</div>
+          <div class="toggle-desc">엑셀·텍스트 무료 즉시 요약 + 사진·PDF·음성 경량 AI 1줄 요약(짤방 자동 제외)을 구글 시트 E열에 자동 기록합니다.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggleAiSummary" ${aiChecked} onchange="saveKakaoSettings()" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">업무 문서 첨부 시 할 일 자동 생성</div>
+          <div class="toggle-desc">견적서·발주서·계약서·입금요청 등 업무 문서가 첨부되면 요약 내용을 분석해 할 일 허브에 자동 등록합니다.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggleAutoTask" ${taskChecked} onchange="saveKakaoSettings()" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div id="settingSaveStatus" class="save-status"></div>
+    </div>
+
+    <div class="card">
       <div class="step">💡 Windows 명령 프롬프트(CMD) 1줄 즉시 실행 명령어</div>
       <div class="meta">파일 다운로드 없이 내 PC의 CMD 창에 아래 한 줄을 붙여넣어도 즉시 실행됩니다:</div>
       <code id="cmdBox">${oneLineCmd}</code>
       <button onclick="navigator.clipboard.writeText(document.getElementById('cmdBox').innerText);this.innerText='✅ 복사되었습니다!';" style="margin-top:10px;background:#334155;color:#F8FAFC;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:700;">📋 1줄 명령어 복사</button>
     </div>
   </div>
+  <script>
+    async function saveKakaoSettings() {
+      const statusEl = document.getElementById('settingSaveStatus');
+      const aiSummaryEnabled = document.getElementById('toggleAiSummary').checked;
+      const autoTaskFromAttachment = document.getElementById('toggleAutoTask').checked;
+      statusEl.textContent = '저장 중...';
+      try {
+        const res = await fetch('/api/user/messages/kakao/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: ${JSON.stringify(userEmail)},
+            aiSummaryEnabled,
+            autoTaskFromAttachment
+          })
+        });
+        const data = await res.json();
+        statusEl.textContent = data.success ? '✅ 설정이 저장되었습니다.' : ('⚠️ ' + (data.error || '저장 실패'));
+      } catch (e) {
+        statusEl.textContent = '⚠️ 네트워크 오류로 저장하지 못했습니다.';
+      }
+    }
+  </script>
 </body>
 </html>`;
 }
@@ -194,7 +260,8 @@ export async function GET(req: NextRequest) {
   // 2. 연결 가이드 웹페이지
   if (isGuide) {
     const status = getUserPcAgentStatus(resolvedEmail);
-    const html = buildGuideHtml(resolvedEmail, status, serverOrigin);
+    const mediaSettings = await getKakaoMediaUserSettings(resolvedEmail);
+    const html = buildGuideHtml(resolvedEmail, status, serverOrigin, mediaSettings);
     return new NextResponse(html, {
       status: 200,
       headers: {
