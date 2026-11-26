@@ -1,9 +1,9 @@
+import { callSheetsTool } from "@/lib/egdesk-helpers";
+import { getWorkspaceCallOptionsForEmail, HOST_WORKSPACE_OWNER_EMAIL } from "@/lib/auth";
 import {
-  callSheetsTool,
-  listDriveFiles,
-} from "@/lib/egdesk-helpers";
-import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
-import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
+  HOST_KNOWN_SHEET_IDS,
+  resolveUserSpreadsheet,
+} from "@/lib/sheet-binding-helper";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import { FinancialTransactionType } from "@/lib/bank-sms-parser";
 
@@ -18,6 +18,7 @@ export interface RecordPaymentParams {
   memoOrRawText: string;
   deviceId?: string;
   sheetTitle?: string;
+  req?: Request;
 }
 
 // 90초 이내 푸시/SMS 중복 수신 방지를 위한 인메모리 디바운싱 맵
@@ -64,6 +65,7 @@ export async function recordPaymentToGoogleSheet(
       memoOrRawText,
       deviceId = "SheetBot Agent",
       sheetTitle: rawSheetTitle = "[SheetBot] 매장 결제 및 매출 대장",
+      req,
     } = params;
 
     if (!userEmail) {
@@ -75,6 +77,17 @@ export async function recordPaymentToGoogleSheet(
     const customerName = rawCustomerName && rawCustomerName.trim().length > 0 ? rawCustomerName.trim() : defaultName;
 
     const cleanEmail = userEmail.toLowerCase().trim();
+    const isHostOwner = cleanEmail === HOST_WORKSPACE_OWNER_EMAIL;
+    const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req);
+
+    // 🛡️ [1차 멀티테넌트 격리 가드] 일반 회원이 유효한 방문자 Google OAuth 세션이 없으면 즉시 차단
+    if (!isHostOwner && (!callOptions?.asVisitor || !callOptions?.visitorSessionId?.trim())) {
+      return {
+        success: false,
+        error: `[GOOGLE_OAUTH_REQUIRED] 본인 구글 계정 연동이 완료되지 않아 매출 대장 기록을 건너뛰었습니다. (${cleanEmail})`,
+      };
+    }
+
     const cleanAmount = Number(amount) || 0;
     const cleanBank = (channelOrBank || "").replace(/PUSH:/i, "").trim();
     const cleanName = customerName.replace(/미확인|고객|가맹점\/출금처|출금처|가맹점/g, "").trim();
@@ -104,71 +117,33 @@ export async function recordPaymentToGoogleSheet(
 
     const nowStr = paymentTime || getKoreanTimeString();
 
-    let targetSpreadsheetId: string | null = null;
-    let spreadsheetUrl = "";
+    // 1. 회원별 대장 고유 ID 영구 바인딩 및 0초 즉각 조회 (실패 시 호스트 드라이브 폴백 절대 금지)
+    const resolved = await resolveUserSpreadsheet({
+      userEmail: cleanEmail,
+      sheetType: "PAYMENT_PUSH",
+      defaultTitle: "[SheetBot] 매장 결제 및 매출 대장",
+      requestedTitle: sheetTitle,
+      preferOAuth: true,
+      callOptions,
+    });
 
-    let isNewSheet = false;
-
-    const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail);
-
-    // 1. 회원별 대장 고유 ID 영구 바인딩 및 0초 즉각 조회
-    try {
-      const resolved = await resolveUserSpreadsheet({
-        userEmail: cleanEmail,
-        sheetType: "PAYMENT_PUSH",
-        defaultTitle: "[SheetBot] 매장 결제 및 매출 대장",
-        requestedTitle: sheetTitle,
-        preferOAuth: true,
-        callOptions,
-      });
-      if (resolved?.spreadsheetId) {
-        targetSpreadsheetId = resolved.spreadsheetId;
-        spreadsheetUrl = resolved.spreadsheetUrl;
-        isNewSheet = Boolean(resolved.isNew);
-      }
-    } catch (resolveErr: any) {
-      console.warn("[PaymentSheetSync] resolveUserSpreadsheet fallback:", resolveErr?.message);
-    }
-
-    // 2. 바인딩 조회가 없을 경우 드라이브 검색 폴백
-    if (!targetSpreadsheetId) {
-      const queryStr = `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${sheetTitle}' and trashed = false`;
-      const sheetSearch = await (listDriveFiles as any)(
-        {
-          query: queryStr,
-          preferOAuth: true,
-        },
-        callOptions
-      ).catch(() => ({ files: [] }));
-
-      const foundSheets = sheetSearch?.files || [];
-      if (foundSheets.length > 0) {
-        targetSpreadsheetId = foundSheets[0].id;
-        spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
-      } else {
-        // 대장 시트 신규 생성
-        const createRes = await callSheetsTool(
-          "sheets_create_spreadsheet",
-          {
-            title: sheetTitle,
-            preferOAuth: true,
-          },
-          callOptions
-        ).catch((err: any) => {
-          console.warn("[PaymentSheetSync] sheets_create_spreadsheet warning:", err.message);
-          return null;
-        });
-
-        targetSpreadsheetId = createRes?.spreadsheetId || createRes?.id || null;
-        if (targetSpreadsheetId) {
-          spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${targetSpreadsheetId}/edit`;
-          isNewSheet = true;
-        }
-      }
-    }
+    const targetSpreadsheetId = resolved?.spreadsheetId || null;
+    const spreadsheetUrl = resolved?.spreadsheetUrl || "";
+    const isNewSheet = Boolean(resolved?.isNew);
 
     if (!targetSpreadsheetId) {
       return { success: false, error: "스프레드시트를 생성하거나 찾을 수 없습니다." };
+    }
+
+    // 🛡️ [2차 멀티테넌트 격리 가드] 일반 회원이 호스트 소유자 시트에 기록하는 것을 최종 차단
+    if (!isHostOwner && HOST_KNOWN_SHEET_IDS.has(targetSpreadsheetId)) {
+      console.error(
+        `[PaymentSheetSync] 🛡️ Cross-tenant write blocked! user=${cleanEmail}, sheet=${targetSpreadsheetId}`
+      );
+      return {
+        success: false,
+        error: "타 계정의 스프레드시트 접근이 보안 정책에 의해 차단되었습니다.",
+      };
     }
 
     // 3. 신규 시트인 경우에만 8열 신규 표준 헤더 및 서식 초기화 (Fast-Path: 기존 시트는 0ms 통과)
