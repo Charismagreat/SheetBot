@@ -35,6 +35,59 @@ const CHUNK_SESSION_TTL_MS = 5 * 60 * 1000; // 청크 업로드 세션 5분 TTL
 const recentKakaoAttachmentUploads = new Map<string, { timestamp: number; response: any }>();
 // 사용자별 카카오톡 첨부파일 전용 드라이브 폴더 ID 메모리 캐시 (0초 타겟팅)
 const kakaoAttachmentFolderCache = new Map<string, string>();
+// 휴대폰 번호(@fts.local) -> 연동된 실제 구글 이메일 역조회 캐시 (5분 TTL)
+const ftsPhoneToGoogleEmailCache = new Map<string, { email: string; cachedAt: number }>();
+
+/**
+ * 파투 가상 계정(010XXXXXXXX@fts.local)으로 첨부파일이 유입되었을 때
+ * DB(sheetbot_users)에 연동된 실제 구글 계정이 있으면 자동 역매핑하여
+ * 구글 드라이브 보관 + 구글 시트 파일링크/AI 요약까지 함께 동작하도록 보장합니다.
+ */
+async function resolveLinkedGoogleEmailIfFts(
+  candidateEmail: string,
+  rawPhone: string
+): Promise<string> {
+  const lower = (candidateEmail || "").toLowerCase().trim();
+  const ftsMatch = lower.match(/^([0-9]{9,12})@(fts\.local|filetosheet\.cloud)$/);
+  if (!ftsMatch) return lower;
+
+  const digits = (rawPhone || "").replace(/[^0-9]/g, "") || ftsMatch[1];
+  if (!digits || digits.length < 9) return lower;
+
+  const cached = ftsPhoneToGoogleEmailCache.get(digits);
+  if (cached && Date.now() - cached.cachedAt < 5 * 60 * 1000) {
+    return cached.email || lower;
+  }
+
+  // 호스트 대표 번호 빠른 매핑
+  if (digits === "01072165884") {
+    ftsPhoneToGoogleEmailCache.set(digits, { email: "chachogreat@gmail.com", cachedAt: Date.now() });
+    return "chachogreat@gmail.com";
+  }
+
+  try {
+    const dashed =
+      digits.length === 11
+        ? `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`
+        : digits;
+    const usersRes = await queryTable("sheetbot_users", { limit: 200 }).catch(() => ({ rows: [] }));
+    const matched = (usersRes?.rows || []).find((u: any) => {
+      if (!u?.email || !String(u.email).includes("@")) return false;
+      const uEmail = String(u.email).toLowerCase().trim();
+      if (uEmail.endsWith("@fts.local") || uEmail.endsWith("@filetosheet.cloud")) return false;
+      const uPhone = String(u.phone || "").replace(/[^0-9]/g, "");
+      return uPhone === digits || String(u.phone || "").trim() === dashed;
+    });
+    if (matched?.email) {
+      const foundEmail = String(matched.email).toLowerCase().trim();
+      ftsPhoneToGoogleEmailCache.set(digits, { email: foundEmail, cachedAt: Date.now() });
+      return foundEmail;
+    }
+  } catch {}
+
+  ftsPhoneToGoogleEmailCache.set(digits, { email: "", cachedAt: Date.now() });
+  return lower;
+}
 
 interface KakaoAttachmentUploadSession {
   uploadId: string;
@@ -470,11 +523,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const resolvedEmail =
+    const resolvedEmailRaw =
       resolveUserEmailFromAuth(email || phone || sessionEmail || "", code, phone) ||
       (email.includes("@") ? email : "") ||
       (sessionEmail || "");
-    const cleanEmail = resolvedEmail.toLowerCase().trim();
+    const cleanEmail = await resolveLinkedGoogleEmailIfFts(resolvedEmailRaw, phone);
 
     if (!cleanEmail || !cleanEmail.includes("@")) {
       return NextResponse.json(

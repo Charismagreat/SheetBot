@@ -1203,18 +1203,26 @@ class KakaoAccountReader:
                 return None
 
 
+def compute_fts_pairing_code(clean_phone: str) -> str:
+    if not clean_phone:
+        return ""
+    seed = f"sheetbot-kakao-bridge:{clean_phone}@fts.local".encode("utf-8")
+    return hashlib.sha256(seed).hexdigest().upper()[:6]
+
+
 class KakaoNativeLiveWatcher:
     """
-    1단계 중복 방어(Watermark 선점) + 열린 대화창 실시간 대화(수신 + 내 PC 직접 발신) 감시 워커
+    1단계 중복 방어(Watermark 선점) + 열린 대화창 실시간 대화(수신 + 내 PC 직접 발신) + 삭제 감지 + 사진/파일 통합 20MB 청크 업로드 워커
     - 브리지 시작 시점 이전에 쌓인 과거 대화는 MAX(logId) 기준점으로만 기록하고 절대 전송하지 않습니다.
-    - 브리지 시작 이후 새로 발생한 메시지(logId > last_log_id AND sendAt >= start_ts - 5)만 파투 시트로 실시간 전송합니다.
+    - 사진·파일은 파투(/api/staging/kakao-media)와 시트봇(/api/user/messages/kakao/attachment) 양쪽에 20MB 자동 청크 분할 업로드합니다.
     """
 
-    def __init__(self, server_url: str, email: str, phone: str, code: str, pc_name: str, ssl_ctx):
-        self.server_url = server_url
+    def __init__(self, server_url: str, fts_server_url: str, email: str, phone: str, code: str, pc_name: str, ssl_ctx):
+        self.server_url = server_url.rstrip("/")
+        self.fts_server_url = (fts_server_url or "").rstrip("/")
         self.email = email
         self.phone = phone
-        self.code = code
+        self.code = code or compute_fts_pairing_code(phone)
         self.pc_name = pc_name
         self.ssl_ctx = ssl_ctx
         self.cursor_path = app_home() / "sync_cursor.json"
@@ -1613,6 +1621,7 @@ class KakaoNativeLiveWatcher:
             "logId": ev["logId"],
             "roomName": ev["roomName"],
             "senderName": ev["senderName"],
+            "direction": "발신" if ev.get("mine") else "수신",
             "sentAtStr": ev.get("sentAtStr") or "",
             "messageType": msg_type_label,
             "fileName": raw_name,
@@ -1705,6 +1714,147 @@ class KakaoNativeLiveWatcher:
             timeout=60,
         )
 
+    def _upload_to_fts_kakao_media(
+        self,
+        *,
+        log_id: int,
+        room_name: str,
+        sender_name: str,
+        file_name: str,
+        data: bytes,
+        mime_type: str,
+        sent_at_str: str = "",
+        message_type: str = "파일",
+        direction: str = "수신",
+        media_index: int = 1,
+        media_total: int = 1,
+    ) -> bool:
+        """파투(FileToSheet) /api/staging/kakao-media 20MB 자동 청크 분할 업로드"""
+        if not self.phone or not self.fts_server_url or not data or len(data) > self.MAX_ATTACHMENT_BYTES:
+            return False
+        pairing_code = compute_fts_pairing_code(self.phone)
+        endpoint = f"{self.fts_server_url}/api/staging/kakao-media"
+        common_fields = {
+            "phoneNumber": self.phone,
+            "pairingCode": pairing_code,
+            "roomName": room_name,
+            "senderName": sender_name,
+            "direction": direction,
+            "sentAtStr": sent_at_str,
+            "messageType": message_type,
+            "logId": str(log_id),
+            "pcName": self.pc_name,
+            "mediaIndex": str(media_index),
+            "mediaTotal": str(media_total),
+        }
+
+        def _post_fts_json(payload_obj: dict, timeout: int = 30) -> dict:
+            raw_bytes = json.dumps(payload_obj).encode("utf-8")
+            last_err: Exception | None = None
+            for attempt in range(2):
+                try:
+                    req = urllib.request.Request(
+                        endpoint,
+                        data=raw_bytes,
+                        method="POST",
+                        headers={
+                            "Content-Type": "application/json; charset=utf-8",
+                            "User-Agent": "SheetBot-PC-Kakao-Agent/2.2",
+                        },
+                    )
+                    with urllib.request.urlopen(req, timeout=timeout, context=self.ssl_ctx) as resp:
+                        return json.loads(resp.read().decode("utf-8", errors="replace"))
+                except Exception as err:
+                    last_err = err
+                    if attempt == 0:
+                        time.sleep(0.5)
+            raise last_err or RuntimeError("fts chunked upload failed")
+
+        def _upload_fts_chunked() -> dict:
+            init_res = _post_fts_json(
+                {
+                    "action": "init",
+                    **common_fields,
+                    "fileName": file_name,
+                    "mimeType": mime_type or "application/octet-stream",
+                    "totalSize": len(data),
+                },
+                timeout=20,
+            )
+            upload_id = init_res.get("uploadId")
+            if not init_res.get("success") or not upload_id:
+                raise RuntimeError(init_res.get("error") or "fts init failed")
+
+            offset = 0
+            while offset < len(data):
+                chunk = data[offset : offset + self.ATTACHMENT_CHUNK_RAW_BYTES]
+                chunk_res = _post_fts_json(
+                    {
+                        "action": "chunk",
+                        "uploadId": upload_id,
+                        "phoneNumber": self.phone,
+                        "pairingCode": pairing_code,
+                        "chunkBase64": base64.b64encode(chunk).decode("ascii"),
+                    },
+                    timeout=30,
+                )
+                if not chunk_res.get("success"):
+                    raise RuntimeError(chunk_res.get("error") or "fts chunk failed")
+                offset += len(chunk)
+
+            return _post_fts_json(
+                {
+                    "action": "commit",
+                    "uploadId": upload_id,
+                    "phoneNumber": self.phone,
+                    "pairingCode": pairing_code,
+                },
+                timeout=60,
+            )
+
+        use_chunked = len(data) > self.CHUNKED_ATTACHMENT_THRESHOLD_BYTES
+        try:
+            if use_chunked:
+                res = _upload_fts_chunked()
+            else:
+                try:
+                    body_bytes, ct_header = self._build_multipart_form_data(
+                        fields=common_fields,
+                        file_field="file",
+                        filename=file_name,
+                        content_type=mime_type or "application/octet-stream",
+                        file_bytes=data,
+                    )
+                    req = urllib.request.Request(
+                        endpoint,
+                        data=body_bytes,
+                        method="POST",
+                        headers={
+                            "Content-Type": ct_header,
+                            "User-Agent": "SheetBot-PC-Kakao-Agent/2.2",
+                        },
+                    )
+                    with urllib.request.urlopen(req, timeout=30, context=self.ssl_ctx) as resp:
+                        res = json.loads(resp.read().decode("utf-8", errors="replace"))
+                except urllib.error.HTTPError as http_err:
+                    if http_err.code == 413:
+                        use_chunked = True
+                        res = _upload_fts_chunked()
+                    else:
+                        raise
+            if res and res.get("success"):
+                ts = time.strftime("%H:%M:%S")
+                mode_tag = "청크분할" if use_chunked else "단일"
+                print(
+                    f"[{ts}] 📎 [파투 원본 저장({mode_tag})] [{room_name}] {file_name} "
+                    f"(파일ID: #{res.get('fileId')}, 처리: {res.get('action')})"
+                )
+                return True
+        except Exception as fts_err:
+            ts = time.strftime("%H:%M:%S")
+            print(f"[{ts}] ⚠️ [파투 원본 저장 경고] [{room_name}] {file_name}: {fts_err}")
+        return False
+
     def _upload_attachment_bytes(
         self,
         *,
@@ -1717,6 +1867,7 @@ class KakaoNativeLiveWatcher:
         source: str,
         sent_at_str: str = "",
         message_type: str = "파일",
+        direction: str = "수신",
         media_index: int = 1,
         media_total: int = 1,
     ) -> bool:
@@ -1726,6 +1877,22 @@ class KakaoNativeLiveWatcher:
         if dedupe_key in self._uploaded_att_keys:
             return True
 
+        # 1. 파투(FileToSheet) 직결 20MB 청크 업로드 (원본 증빙 + AI 요약)
+        fts_ok = self._upload_to_fts_kakao_media(
+            log_id=log_id,
+            room_name=room_name,
+            sender_name=sender_name,
+            file_name=file_name,
+            data=data,
+            mime_type=mime_type,
+            sent_at_str=sent_at_str,
+            message_type=message_type,
+            direction=direction,
+            media_index=media_index,
+            media_total=media_total,
+        )
+
+        # 2. 시트봇(SheetBot) 20MB 청크 업로드 (구글 드라이브 보관 + 구글 시트 E열 AI 요약 + I열 파일링크 + 할 일 연계)
         endpoint = f"{self.server_url}/api/user/messages/kakao/attachment"
         common_fields = {
             "email": self.email,
@@ -1742,9 +1909,11 @@ class KakaoNativeLiveWatcher:
             "fileName": file_name,
             "mimeType": mime_type or "application/octet-stream",
             "source": source,
+            "skipFtsSync": "1" if fts_ok else "0",
         }
 
         use_chunked = len(data) > self.CHUNKED_ATTACHMENT_THRESHOLD_BYTES
+        sb_ok = False
         for attempt in range(3):
             try:
                 if use_chunked:
@@ -1782,19 +1951,24 @@ class KakaoNativeLiveWatcher:
                             raise
 
                 if res.get("ok") or res.get("success"):
-                    self._uploaded_att_keys.add(dedupe_key)
+                    sb_ok = True
                     ts = time.strftime("%H:%M:%S")
                     src_tag = "URL 자동저장" if source == "URL_DOWNLOAD" else "로컬폴더 자동저장"
                     mode_tag = "청크분할" if use_chunked else "단일"
                     print(
-                        f"[{ts}] 📎 [{src_tag}({mode_tag})] [{room_name}] {file_name} -> 구글 드라이브 & 시트 링크 기록 완료"
+                        f"[{ts}] 📎 [시트봇 {src_tag}({mode_tag})] [{room_name}] {file_name} -> 구글 드라이브 & 시트 링크 기록 완료"
                     )
-                    return True
+                    break
                 if res.get("skipped"):
-                    return True
+                    sb_ok = True
+                    break
             except Exception:
                 if attempt < 2:
                     time.sleep(1.0 * (attempt + 1))
+
+        if fts_ok or sb_ok:
+            self._uploaded_att_keys.add(dedupe_key)
+            return True
         return False
 
     def _download_url_bytes(self, url: str) -> tuple[bytes | None, str]:
@@ -1856,6 +2030,7 @@ class KakaoNativeLiveWatcher:
                     source="URL_DOWNLOAD",
                     sent_at_str=job.get("sentAtStr") or "",
                     message_type=job.get("messageType") or "파일",
+                    direction=job.get("direction") or "수신",
                     media_index=idx + 1,
                     media_total=total_urls,
                 ):
@@ -1950,6 +2125,7 @@ class KakaoNativeLiveWatcher:
                     source="LOCAL_FOLDER",
                     sent_at_str=matched_job.get("sentAtStr") or "",
                     message_type=matched_job.get("messageType") or "파일",
+                    direction=matched_job.get("direction") or "수신",
                     media_index=1,
                     media_total=1,
                 )
@@ -2098,6 +2274,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 LOCAL_CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
 HOME_CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sheetbot_kakao_bridge.json")
 DEFAULT_SERVER_URL = "https://sheetbot.cloud"
+DEFAULT_FTS_SERVER_URL = "https://file2sheet.cloud"
 
 
 def load_saved_config() -> dict:
@@ -2123,9 +2300,10 @@ def save_config(cfg: dict) -> None:
             pass
 
 
-def resolve_agent_settings() -> tuple[str, str, str, str]:
+def resolve_agent_settings() -> tuple[str, str, str, str, str]:
     cfg = load_saved_config()
     server_url = os.environ.get("SHEETBOT_SERVER_URL") or cfg.get("sheetbotServerUrl") or cfg.get("serverUrl") or DEFAULT_SERVER_URL
+    fts_server_url = os.environ.get("FTS_SERVER_URL") or cfg.get("ftsServerUrl") or DEFAULT_FTS_SERVER_URL
     email = (os.environ.get("SHEETBOT_USER_EMAIL") or cfg.get("userEmail") or "").strip()
     phone = (os.environ.get("SHEETBOT_USER_PHONE") or cfg.get("phoneNumber") or "").strip()
     code = (os.environ.get("SHEETBOT_PAIRING_CODE") or cfg.get("pairingCode") or "").strip()
@@ -2140,6 +2318,8 @@ def resolve_agent_settings() -> tuple[str, str, str, str]:
             code = args[i + 1].strip()
         elif a in ("--server", "-s") and i + 1 < len(args):
             server_url = args[i + 1].strip().rstrip("/")
+        elif a in ("--fts-server",) and i + 1 < len(args):
+            fts_server_url = args[i + 1].strip().rstrip("/")
 
     # SB- 접두어 자동 정규화
     if code:
@@ -2170,18 +2350,27 @@ def resolve_agent_settings() -> tuple[str, str, str, str]:
         else:
             code = user_input.upper().replace("SB-", "").strip()
 
-    save_config({"serverUrl": server_url, "userEmail": email, "phoneNumber": clean_phone, "pairingCode": code})
-    return server_url.rstrip("/"), email, clean_phone, code
+    if not code and clean_phone:
+        code = compute_fts_pairing_code(clean_phone)
+
+    save_config({
+        "serverUrl": server_url,
+        "ftsServerUrl": fts_server_url,
+        "userEmail": email,
+        "phoneNumber": clean_phone,
+        "pairingCode": code,
+    })
+    return server_url.rstrip("/"), fts_server_url.rstrip("/"), email, clean_phone, code
 
 
 def run_bridge_loop():
-    server_url, email, phone, code = resolve_agent_settings()
+    server_url, fts_server_url, email, phone, code = resolve_agent_settings()
     pc_name = socket.gethostname() or "Windows-PC"
     ssl_ctx = ssl.create_default_context()
 
     print("\n" + "=" * 68)
     print("  🚀 [SheetBot & 파투 내 PC 카톡 브리지 v2.2] 실시간 연결 시작!")
-    print(f"  • 연결 서버   : {server_url}")
+    print(f"  • 연결 서버   : {server_url} (파투 미디어: {fts_server_url})")
     print(f"  • 연동 계정   : {email or phone or code}")
     print(f"  • 내 PC 이름  : {pc_name}")
     print("=" * 68)
@@ -2191,10 +2380,10 @@ def run_bridge_loop():
     print(f"  • PC 카카오톡 : {status_icon} — {detail}")
     print("  • 기능 1: 스마트폰 [AI 비서 카드]에서 [내 PC 카톡 자동 발송] 시 무포커스 자동 전송")
     print("  • 기능 2: PC 카톡 열린 대화창의 실시간 대화·삭제 감지 자동 기록")
-    print("  • 기능 3: 사진·파일 원본 20MB 자동 청크 분할 업로드 + 구글 시트 AI 요약 & 할 일 연계\n")
+    print("  • 기능 3: 사진·파일 원본 20MB 자동 청크 분할 업로드 (구글 시트 + 파투 동시 연동)\n")
 
     # 열린 대화창 실시간 감시 백그라운드 스레드 기동 (kakao_native)
-    watcher = KakaoNativeLiveWatcher(server_url, email, phone, code, pc_name, ssl_ctx)
+    watcher = KakaoNativeLiveWatcher(server_url, fts_server_url, email, phone, code, pc_name, ssl_ctx)
     watcher.start_background_thread()
 
     last_ready_state = None
