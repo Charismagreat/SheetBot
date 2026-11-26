@@ -94,6 +94,7 @@ export async function POST(req: NextRequest) {
       content: sendContent,
       status: directSent ? "SUCCESS" : "PENDING",
       deviceId: deviceId || "SheetBot Agent",
+      req,
     }).catch((err) => console.warn("[UserDevicesTest] Dispatch sheet sync error:", err));
 
     return NextResponse.json({

@@ -6,6 +6,8 @@ import {
   callUserDataTool,
   callAiCaller,
 } from "@/lib/egdesk-helpers";
+import { getWorkspaceCallOptionsForEmail, HOST_WORKSPACE_OWNER_EMAIL } from "@/lib/auth";
+import { HOST_KNOWN_SHEET_IDS } from "@/lib/sheet-binding-helper";
 import { setupDatabase } from "@/lib/setup-db";
 import { realtimeHub } from "@/lib/realtime-hub";
 import { getKoreanTimeString } from "@/lib/date-utils";
@@ -51,36 +53,57 @@ const recentTasksMemoryCache = new Set<string>();
 
 /**
  * 회원별 '[SheetBot] 통합 할 일 대장' 구글 스프레드시트 탐색 또는 자동 프로비저닝
+ * 🛡️ 멀티테넌트 완전 격리: 일반 회원은 유효한 방문자 Google OAuth 세션(callOptions)이 없으면 즉시 차단
  */
 export async function resolveUserTaskSpreadsheet(userEmail: string): Promise<string | null> {
   const cleanEmail = userEmail.toLowerCase().trim();
+  const isHostOwner = cleanEmail === HOST_WORKSPACE_OWNER_EMAIL;
+
+  // 🛡️ [1차 멀티테넌트 격리 가드] 일반 회원이 본인 Google OAuth 세션이 없으면 호스트 드라이브 접근 원천 차단
+  const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail);
+  if (!isHostOwner && (!callOptions?.asVisitor || !callOptions?.visitorSessionId?.trim())) {
+    return null;
+  }
+
   if (userTaskSheetCache.has(cleanEmail)) {
-    return userTaskSheetCache.get(cleanEmail)!;
+    const cachedId = userTaskSheetCache.get(cleanEmail)!;
+    if (!isHostOwner && HOST_KNOWN_SHEET_IDS.has(cachedId)) {
+      userTaskSheetCache.delete(cleanEmail);
+    } else {
+      return cachedId;
+    }
   }
 
   const sheetTitle = "[SheetBot] 통합 할 일 대장";
 
   try {
-    // 1. 드라이브에서 기존 시트 탐색
+    // 1. 본인 드라이브에서 기존 시트 탐색 (반드시 callOptions 경유)
     const searchRes = (await listDriveFiles(
       {
         query: `name = '${sheetTitle}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
       },
-      { preferOAuth: true }
+      { preferOAuth: true, ...callOptions }
     )) as any;
 
     const files = searchRes?.files || [];
     if (files.length > 0) {
       const sheetId = files[0].id;
+      if (!isHostOwner && HOST_KNOWN_SHEET_IDS.has(sheetId)) {
+        return null;
+      }
       userTaskSheetCache.set(cleanEmail, sheetId);
       return sheetId;
     }
 
-    // 2. 시트가 없으면 신규 생성
-    const createRes = (await callSheetsTool("sheets_create_spreadsheet", {
-      title: sheetTitle,
-      preferOAuth: true,
-    })) as any;
+    // 2. 시트가 없으면 본인 드라이브에 신규 생성 (반드시 callOptions 경유)
+    const createRes = (await callSheetsTool(
+      "sheets_create_spreadsheet",
+      {
+        title: sheetTitle,
+        preferOAuth: true,
+      },
+      callOptions
+    )) as any;
 
     const newSheetId = createRes?.spreadsheetId;
     if (newSheetId) {
@@ -97,21 +120,29 @@ export async function resolveUserTaskSpreadsheet(userEmail: string): Promise<str
         "완료 일시",
       ];
 
-      await callSheetsTool("sheets_update_range", {
-        spreadsheetId: newSheetId,
-        range: "A1:I1",
-        values: [headers],
-        preferOAuth: true,
-      }).catch(() => {});
+      await callSheetsTool(
+        "sheets_update_range",
+        {
+          spreadsheetId: newSheetId,
+          range: "A1:I1",
+          values: [headers],
+          preferOAuth: true,
+        },
+        callOptions
+      ).catch(() => {});
 
       // 상단 헤더 서식 스타일링
-      await callSheetsTool("sheets_format_headers", {
-        spreadsheetId: newSheetId,
-        tabName: "시트1",
-        headers,
-        theme: "emerald",
-        preferOAuth: true,
-      }).catch(() => {});
+      await callSheetsTool(
+        "sheets_format_headers",
+        {
+          spreadsheetId: newSheetId,
+          tabName: "시트1",
+          headers,
+          theme: "emerald",
+          preferOAuth: true,
+        },
+        callOptions
+      ).catch(() => {});
 
       userTaskSheetCache.set(cleanEmail, newSheetId);
       return newSheetId;
@@ -190,11 +221,16 @@ export async function createTaskItem(input: TaskItemInput): Promise<{ success: b
       },
     ]);
 
-    // 2. 구글 스프레드시트 마스터 대장에 원자적 행 추가 (비동기 병렬)
+    // 2. 구글 스프레드시트 마스터 대장에 원자적 행 추가 (비동기 병렬, 반드시 callOptions 경유)
     void (async () => {
       try {
+        const isHostOwner = cleanEmail === HOST_WORKSPACE_OWNER_EMAIL;
+        const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail);
+        if (!isHostOwner && (!callOptions?.asVisitor || !callOptions?.visitorSessionId?.trim())) {
+          return;
+        }
         const sheetId = await resolveUserTaskSpreadsheet(cleanEmail);
-        if (sheetId) {
+        if (sheetId && (isHostOwner || !HOST_KNOWN_SHEET_IDS.has(sheetId))) {
           const sourceIcon = whenSourceTypeToIcon(input.sourceType);
           const contactDisplay = input.contactName
             ? (input.contactPhone ? `${input.contactName} (${input.contactPhone})` : input.contactName)
@@ -218,12 +254,16 @@ export async function createTaskItem(input: TaskItemInput): Promise<{ success: b
             ],
           ];
 
-          await callSheetsTool("sheets_append_values", {
-            spreadsheetId: sheetId,
-            range: "A:I",
-            values: rowValues,
-            preferOAuth: true,
-          });
+          await callSheetsTool(
+            "sheets_append_values",
+            {
+              spreadsheetId: sheetId,
+              range: "A:I",
+              values: rowValues,
+              preferOAuth: true,
+            },
+            callOptions
+          );
         }
       } catch (sheetErr: any) {
         console.warn(`[TaskHubHelper] Sheet append warning:`, sheetErr.message);

@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail, HOST_WORKSPACE_OWNER_EMAIL } from "@/lib/auth";
 import {
   callDriveTool,
   callSheetsTool,
@@ -158,20 +158,32 @@ export async function POST(req: NextRequest) {
       title = cleanHtmlEntities(rawText.replace(rawUrl, "").trim()) || rawUrl;
     }
 
-    // 3. 구글 드라이브 폴더 및 구글 스프레드시트 탐색/생성 ([SheetBot] 네이밍 규칙 준수)
+    // 3. 구글 드라이브 폴더 및 구글 스프레드시트 탐색/생성 ([SheetBot] 네이밍 규칙 + 멀티테넌트 격리 준수)
+    const isHostOwner = cleanEmail === HOST_WORKSPACE_OWNER_EMAIL;
+    const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req);
+    if (!isHostOwner && (!callOptions?.asVisitor || !callOptions?.visitorSessionId?.trim())) {
+      return NextResponse.json(
+        { success: false, error: "본인 구글 드라이브에 스크랩을 저장하려면 먼저 Google 계정 연동을 완료해 주세요." },
+        { status: 403 }
+      );
+    }
+
     const folderName = "[SheetBot] 스크랩 보관함";
     const sheetTitle = "[SheetBot] 웹 링크 & 유튜브 스크랩 대장";
 
     let targetFolderId: string | null = null;
     try {
-      const folderSearch = await listDriveFiles({
-        query: `mimeType = 'application/vnd.google-apps.folder' and name = '${folderName}' and trashed = false`,
-      }, { preferOAuth: true });
+      const folderSearch = await listDriveFiles(
+        {
+          query: `mimeType = 'application/vnd.google-apps.folder' and name = '${folderName}' and trashed = false`,
+        },
+        { preferOAuth: true, ...callOptions }
+      );
       const existingFolders = folderSearch?.files || [];
       if (existingFolders.length > 0) {
         targetFolderId = existingFolders[0].id;
       } else {
-        const newFolderRes = await createDriveFolder(folderName, undefined, true);
+        const newFolderRes = await callDriveTool("drive_create_folder", { name: folderName, preferOAuth: true }, callOptions);
         targetFolderId = newFolderRes?.id || (typeof newFolderRes === "string" ? newFolderRes : null);
       }
     } catch (fErr: any) {
@@ -185,6 +197,7 @@ export async function POST(req: NextRequest) {
       defaultTitle: sheetTitle,
       folderId: targetFolderId,
       preferOAuth: true,
+      callOptions,
     });
 
     const targetSpreadsheetId = resolved.spreadsheetId;
@@ -195,21 +208,29 @@ export async function POST(req: NextRequest) {
       const headers = [
         ["등록 일시", "구분", "제목", "웹 링크(URL)", "출처(채널명)", "AI 핵심 3줄 요약", "수집 메모", "등록 기기"]
       ];
-      await callSheetsTool("sheets_update_range", {
-        spreadsheetId: targetSpreadsheetId,
-        range: "A1:H1",
-        values: headers,
-        preferOAuth: true,
-      }).catch(() => {});
+      await callSheetsTool(
+        "sheets_update_range",
+        {
+          spreadsheetId: targetSpreadsheetId,
+          range: "A1:H1",
+          values: headers,
+          preferOAuth: true,
+        },
+        callOptions
+      ).catch(() => {});
 
       // 버건디/레드 테마 서식 스타일링
-      await callSheetsTool("sheets_format_headers", {
-        spreadsheetId: targetSpreadsheetId,
-        tabName: "시트1",
-        headerBgColor: "#991b1b",
-        headerTextColor: "#ffffff",
-        preferOAuth: true,
-      }).catch(() => {});
+      await callSheetsTool(
+        "sheets_format_headers",
+        {
+          spreadsheetId: targetSpreadsheetId,
+          tabName: "시트1",
+          headerBgColor: "#991b1b",
+          headerTextColor: "#ffffff",
+          preferOAuth: true,
+        },
+        callOptions
+      ).catch(() => {});
     }
 
     // 4. [실시간 고속 AI 3줄 요약] (사용자 경험 최우선: 1.5초 내외 즉시 완성 & 0오류 단일 Append)
@@ -280,12 +301,16 @@ export async function POST(req: NextRequest) {
         [nowStr, category, title, rawUrl, siteName, aiSummary, memo, deviceId]
       ];
 
-      await callSheetsTool("sheets_append_values", {
-        spreadsheetId: targetSpreadsheetId,
-        range: "A:H",
-        values: newRowValues,
-        preferOAuth: true,
-      }).catch((err: any) => console.warn("[LinkBookmark] append_values warning:", err.message));
+      await callSheetsTool(
+        "sheets_append_values",
+        {
+          spreadsheetId: targetSpreadsheetId,
+          range: "A:H",
+          values: newRowValues,
+          preferOAuth: true,
+        },
+        callOptions
+      ).catch((err: any) => console.warn("[LinkBookmark] append_values warning:", err.message));
     }
 
     // 6. SQLite 감사 대장 기록 (INTEGER id 규격 준수)

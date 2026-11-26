@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import {
   callCompanyResearchTool,
   callSheetsTool,
@@ -284,11 +284,12 @@ export async function POST(req: NextRequest) {
     // 6. [SheetBot] 기업 리서치 관리 대장 구글 시트 바인딩 및 행 추가
     let sheetUrl: string | null = null;
     try {
+      const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req);
       const resolved = await resolveUserSpreadsheet({
         userEmail: cleanEmail,
         sheetType: "COMPANY_RESEARCH",
         defaultTitle: "[SheetBot] 기업 리서치 관리 대장",
-        preferOAuth: true,
+        preferOAuth: true, callOptions,
       });
       const sheetId = resolved.spreadsheetId;
       sheetUrl = resolved.spreadsheetUrl;
@@ -313,7 +314,7 @@ export async function POST(req: NextRequest) {
             spreadsheetId: sheetId,
             range: "시트1!A1:K1",
             preferOAuth: true,
-          });
+          }, callOptions);
           const existingHeaders = headerCheck?.values?.[0] || [];
           if (existingHeaders.length < 11 || existingHeaders[0] !== STANDARD_RESEARCH_HEADERS[0]) {
             await callSheetsTool("sheets_update_range", {
@@ -321,7 +322,7 @@ export async function POST(req: NextRequest) {
               range: "시트1!A1:K1",
               values: [STANDARD_RESEARCH_HEADERS],
               preferOAuth: true,
-            }).catch(() => {});
+            }, callOptions).catch(() => {});
 
             await callSheetsTool("sheets_format_headers", {
               spreadsheetId: sheetId,
@@ -329,7 +330,7 @@ export async function POST(req: NextRequest) {
               headerBgColor: "#0f172a",
               headerTextColor: "#38bdf8",
               preferOAuth: true,
-            }).catch(() => {});
+            }, callOptions).catch(() => {});
           }
         } catch {}
 
@@ -356,7 +357,7 @@ export async function POST(req: NextRequest) {
           range: "A:K",
           values: [newRow],
           preferOAuth: true,
-        }).catch(() => {});
+        }, callOptions).catch(() => {});
       }
     } catch (sheetErr: any) {
       console.warn("[CompanyResearch] Sheet append warning:", sheetErr.message);

@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
       content: message, // 온전한 수신 메시지 전문 보존
       status: "INBOUND",
       deviceId: deviceId || "SheetBot Agent",
+      req,
     }).catch((err) => console.warn("[InboundSms] Dispatch sheet sync error:", err));
 
     // 1-1. 은행/결제/배달앱 승인 문자 및 푸시일 경우 [SheetBot] 매장 결제 및 매출 대장 시트에 실시간 자동 기록
@@ -97,6 +98,7 @@ export async function POST(req: NextRequest) {
         amount: cleanAmount,
         memoOrRawText: message.slice(0, 200),
         deviceId: deviceId || "SheetBot Agent",
+        req,
       }).catch((err) => console.warn("[InboundSms] Payment sheet sync error:", err));
 
       // 🎯 매출(입금) 건인 경우, [SheetBot] 스마트 간편 주문 및 품목 대장 매칭 수행!

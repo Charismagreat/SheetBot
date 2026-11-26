@@ -407,17 +407,15 @@ export async function POST(req: NextRequest) {
                 spreadsheetId: targetSpreadsheetId,
                 range: "시트1!A1:K1",
                 values: cardHeaders,
-                preferOAuth: true,
-                ...callOptions,
-              }).catch(() => {});
+                
+}, callOptions).catch(() => {});
               await callSheetsTool("sheets_format_headers", {
                 spreadsheetId: targetSpreadsheetId,
                 tabName: "시트1",
                 headerBgColor: "#1e3a8a",
                 headerTextColor: "#ffffff",
-                preferOAuth: true,
-                ...callOptions,
-              }).catch(() => {});
+                
+}, callOptions).catch(() => {});
             }
 
             // 시트 사전 중복 검사: 최근 10개 행 중 동일 휴대폰 또는 성함 확인
@@ -426,9 +424,8 @@ export async function POST(req: NextRequest) {
               const existingRowsRes = await callSheetsTool("sheets_get_range", {
                 spreadsheetId: targetSpreadsheetId,
                 range: "시트1!B:E",
-                preferOAuth: true,
-                ...callOptions,
-              }).catch(() => null);
+                
+}, callOptions).catch(() => null);
 
               const rows = existingRowsRes?.values || existingRowsRes?.result?.values || [];
               if (rows.length > 1) {
@@ -474,9 +471,8 @@ export async function POST(req: NextRequest) {
                 spreadsheetId: targetSpreadsheetId,
                 range: "시트1!A:K",
                 values: newCardRow,
-                preferOAuth: true,
-                ...callOptions,
-              }).catch((e: any) => console.warn("[FilesUpload] Sheet append warning:", e.message));
+                
+}, callOptions).catch((e: any) => console.warn("[FilesUpload] Sheet append warning:", e.message));
 
               const usedTokens = 700;
               await deductTokens(cleanEmail, usedTokens).catch(() => {});
@@ -614,15 +610,13 @@ export async function POST(req: NextRequest) {
                     spreadsheetId: targetSpreadsheetId,
                     range: "시트1!A1:M1",
                     values: receiptHeaders,
-                    preferOAuth: true,
-                    ...callOptions,
-                  }).catch(() => {});
+                    
+}, callOptions).catch(() => {});
                   await callSheetsTool("sheets_format_headers", {
                     spreadsheetId: targetSpreadsheetId,
                     sheetName: "시트1",
-                    preferOAuth: true,
-                    ...callOptions,
-                  }).catch(() => {});
+                    
+}, callOptions).catch(() => {});
                 }
 
                 if (capturedOcrType === "RECEIPT") {
@@ -630,9 +624,8 @@ export async function POST(req: NextRequest) {
                     const rangeRes = await callSheetsTool("sheets_get_range", {
                       spreadsheetId: targetSpreadsheetId,
                       range: "시트1!A:A",
-                      preferOAuth: true,
-                      ...callOptions,
-                    });
+                      
+}, callOptions);
                     targetRow = (rangeRes?.values?.length || 1) + 1;
                   } catch {
                     targetRow = null;
@@ -659,9 +652,8 @@ export async function POST(req: NextRequest) {
                     spreadsheetId: targetSpreadsheetId,
                     range: "A:M",
                     values: initialRow,
-                    preferOAuth: true,
-                    ...callOptions,
-                  }).catch(() => {});
+                    
+}, callOptions).catch(() => {});
                 } else {
                   // 일반 파일
                   let category = "일반 파일";
@@ -678,9 +670,8 @@ export async function POST(req: NextRequest) {
                     spreadsheetId: targetSpreadsheetId,
                     range: "A:F",
                     values: newRowValues,
-                    preferOAuth: true,
-                    ...callOptions,
-                  }).catch((e: any) => console.warn("[FilesUpload] append_values error:", e.message));
+                    
+}, callOptions).catch((e: any) => console.warn("[FilesUpload] append_values error:", e.message));
                 }
               }
             } catch (sheetErr: any) {
@@ -699,9 +690,8 @@ export async function POST(req: NextRequest) {
                 spreadsheetId: targetSpreadsheetId,
                 range: `시트1!D${rowToUpdate}:D${rowToUpdate}`,
                 values: [[noTokenMsg]],
-                preferOAuth: true,
-                ...callOptions,
-              }).catch(() => {});
+                
+}, callOptions).catch(() => {});
               return;
             }
 
@@ -824,9 +814,8 @@ export async function POST(req: NextRequest) {
                     capturedWebViewLink ? `=HYPERLINK("${capturedWebViewLink}", "🧾 영수증 보기")` : "-", // K: 영수증사진URL
                     "✅ 분석 완료", // L: 분석상태
                   ]],
-                  preferOAuth: true,
-                  ...callOptions,
-                }).catch(() => {});
+                  
+}, callOptions).catch(() => {});
 
                 const usedTokens = Math.round(1200 * 0.5);
                 await deductTokens(cleanEmail, usedTokens).catch(() => {});
@@ -882,9 +871,8 @@ export async function POST(req: NextRequest) {
                     capturedWebViewLink ? `=HYPERLINK("${capturedWebViewLink}", "🧾 영수증 보기")` : "-", // K: 영수증사진URL
                     "✅ 분석 완료", // L: 분석상태
                   ]],
-                  preferOAuth: true,
-                  ...callOptions,
-                }).catch(() => {});
+                  
+}, callOptions).catch(() => {});
                 const usedTokens = Math.round(1200);
                 await deductTokens(cleanEmail, usedTokens).catch(() => {});
               }

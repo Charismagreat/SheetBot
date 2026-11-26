@@ -1,3 +1,4 @@
+import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
@@ -139,11 +140,12 @@ async function fetchSiteFromSheet(siteId: string, forceFresh = false) {
   // 1. 스프레드시트 바인딩 확인 (기본 바인딩 또는 매핑 조회)
   let spreadsheetId = siteSpreadsheetMap.get(siteId)?.spreadsheetId;
 
-  if (!spreadsheetId) {
+  const callOptions = await getWorkspaceCallOptionsForEmail("charismagreat@gmail.com");
+    if (!spreadsheetId) {
     const binding = await resolveUserSpreadsheet({
       userEmail: "charismagreat@gmail.com",
       sheetType: "MOBILE_SITE",
-      defaultTitle: "[SheetBot] 모바일 홈페이지 관리 대장",
+      defaultTitle: "[SheetBot] 모바일 홈페이지 관리 대장", callOptions,
     }).catch(() => null);
     if (binding?.spreadsheetId) {
       spreadsheetId = binding.spreadsheetId;
@@ -158,7 +160,7 @@ async function fetchSiteFromSheet(siteId: string, forceFresh = false) {
   const res = await callSheetsTool("sheets_get_range", {
     spreadsheetId,
     range: "A2:R100",
-  }).catch(() => null);
+  }, callOptions).catch(() => null);
 
   const values: string[][] = res?.values || [];
   let foundRow: string[] | null = null;
@@ -429,13 +431,14 @@ export async function POST(req: NextRequest) {
           const b64 = file.buffer.toString("base64");
           const safeName = `${siteId}_banner_${idx + 1}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
 
+          const callOptions = await getWorkspaceCallOptionsForEmail(userEmail, req);
           const uploadRes = await callDriveTool("drive_upload", {
             name: safeName,
             content: b64,
             mimeType: file.mimeType,
             folderId: siteFolder.id,
             encoding: "base64",
-          }).catch(() => null);
+          }, callOptions).catch(() => null);
 
           const fileUrl = uploadRes?.webViewLink || uploadRes?.url || (uploadRes?.id ? `https://drive.google.com/file/d/${uploadRes.id}/view` : "");
           imageDriveList.push({ name: safeName, url: fileUrl });
@@ -517,10 +520,11 @@ export async function POST(req: NextRequest) {
     let spreadsheetId = "";
 
     try {
+      const callOptions = await getWorkspaceCallOptionsForEmail(userEmail, req);
       const binding = await resolveUserSpreadsheet({
         userEmail,
         sheetType: "MOBILE_SITE",
-        defaultTitle: "[SheetBot] 모바일 홈페이지 관리 대장",
+        defaultTitle: "[SheetBot] 모바일 홈페이지 관리 대장", callOptions,
       });
 
       spreadsheetId = binding.spreadsheetId;
@@ -532,7 +536,7 @@ export async function POST(req: NextRequest) {
           spreadsheetId,
           range: "A1:R1",
           values: [SITE_SHEET_HEADERS],
-        }).catch(() => {});
+        }, callOptions).catch(() => {});
       }
 
       const socialLinksJson = JSON.stringify({
@@ -567,7 +571,7 @@ export async function POST(req: NextRequest) {
         spreadsheetId,
         range: "A:R",
         values: [rowValues],
-      });
+      }, callOptions);
 
       // 매핑 캐시 및 사이트 캐시 사전 등록
       siteSpreadsheetMap.set(siteId, { spreadsheetId, rowIndex: 2 });
@@ -646,6 +650,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const { spreadsheetId, rowIndex } = currentSite;
+    const callOptions = await getWorkspaceCallOptionsForEmail(currentSite.userEmail || "charismagreat@gmail.com", req);
     const nowStr = getKoreanTimeString();
 
     // 18대 컬럼 중 변경된 항목 반영
@@ -662,7 +667,7 @@ export async function PUT(req: NextRequest) {
       spreadsheetId,
       range: `B${rowIndex}`,
       values: [[nowStr]],
-    }).catch(() => {});
+    }, callOptions).catch(() => {});
 
     // E열부터 J열까지 일괄 업데이트
     await callSheetsTool("sheets_update_range", {
@@ -676,7 +681,7 @@ export async function PUT(req: NextRequest) {
         updatedPhone,
         updatedAddress,
       ]],
-    });
+    }, callOptions);
 
     // 캐시 무효화
     siteCache.delete(siteId);

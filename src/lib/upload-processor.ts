@@ -21,7 +21,7 @@ import { checkTokenBalance, deductTokens } from "@/lib/token-wallet";
 import { recordAiUsageLog } from "@/lib/ai-usage";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import { resolveSafeTargetRow } from "@/lib/sheet-fingerprint-guard";
-import { getWorkspaceCallOptionsForEmail } from "@/lib/auth";
+import { getWorkspaceCallOptionsForEmail, HOST_WORKSPACE_OWNER_EMAIL } from "@/lib/auth";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -502,6 +502,15 @@ export async function processCallRecordingFile(input: ProcessCallRecordingInput)
     return { success: false, error: "사용자 이메일 정보가 누락되었습니다." };
   }
 
+  const isHostOwner = cleanEmail === HOST_WORKSPACE_OWNER_EMAIL;
+  const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail);
+  if (!isHostOwner && (!callOptions?.asVisitor || !callOptions?.visitorSessionId?.trim())) {
+    return {
+      success: false,
+      error: "본인 구글 드라이브에 통화 녹음을 저장하려면 먼저 Google 계정 연동을 완료해 주세요.",
+    };
+  }
+
   if (!fs.existsSync(input.filePath)) {
     return { success: false, error: `통화 녹음 파일을 찾을 수 없습니다: ${input.filePath}` };
   }
@@ -516,18 +525,22 @@ export async function processCallRecordingFile(input: ProcessCallRecordingInput)
   const folderCacheKey = `${cleanEmail}:${targetFolderName}`;
   let targetFolderId = userFolderCache.get(folderCacheKey) || null;
   if (!targetFolderId) {
-    const newFolderRes = await createDriveFolder(targetFolderName, undefined, true).catch(() => null);
+    const newFolderRes = await callDriveTool("drive_create_folder", { name: targetFolderName, preferOAuth: true }, callOptions).catch(() => null);
     targetFolderId = newFolderRes?.id || (typeof newFolderRes === "string" ? newFolderRes : null);
     if (targetFolderId) userFolderCache.set(folderCacheKey, targetFolderId);
   }
+  if (!targetFolderId) {
+    return { success: false, error: `대상 드라이브 폴더('${targetFolderName}')를 확보하지 못했습니다.` };
+  }
 
-  // 구글 드라이브 업로드
+  // 구글 드라이브 업로드 (반드시 callOptions 경유)
   const uploadResult = await uploadDriveFileWithBridge({
     buffer,
     fileName: rawFileName,
-    folderId: targetFolderId!,
+    folderId: targetFolderId,
     mimeType: "audio/m4a",
     userEmail: cleanEmail,
+    callOptions,
   });
 
   const fileId = uploadResult?.id || null;
@@ -543,30 +556,35 @@ export async function processCallRecordingFile(input: ProcessCallRecordingInput)
       defaultTitle: "[SheetBot] 스마트폰 통화 녹음 대장",
       folderId: targetFolderId || undefined,
       preferOAuth: true,
+      callOptions,
     });
 
     spreadsheetUrl = resolved.spreadsheetUrl;
     const targetSpreadsheetId = resolved.spreadsheetId;
 
     if (targetSpreadsheetId) {
-      await callSheetsTool("sheets_append_values", {
-        spreadsheetId: targetSpreadsheetId,
-        range: "시트1!A:K",
-        values: [[
-          callTime,
-          contactName,
-          rawFileName,
-          buffer.length >= 1024 * 1024 ? (buffer.length / (1024 * 1024)).toFixed(1) + " MB" : (buffer.length / 1024).toFixed(0) + " KB",
-          webViewLink ? `=HYPERLINK("${webViewLink}", "🎙️ 녹음 듣기")` : "-",
-          "⏳ AI 배치 전사 대기중...",
-          "-",
-          "-",
-          "-",
-          "대기",
-          getKoreanTimeString(),
-        ]],
-        preferOAuth: true,
-      }).catch(() => {});
+      await callSheetsTool(
+        "sheets_append_values",
+        {
+          spreadsheetId: targetSpreadsheetId,
+          range: "시트1!A:K",
+          values: [[
+            callTime,
+            contactName,
+            rawFileName,
+            buffer.length >= 1024 * 1024 ? (buffer.length / (1024 * 1024)).toFixed(1) + " MB" : (buffer.length / 1024).toFixed(0) + " KB",
+            webViewLink ? `=HYPERLINK("${webViewLink}", "🎙️ 녹음 듣기")` : "-",
+            "⏳ AI 배치 전사 대기중...",
+            "-",
+            "-",
+            "-",
+            "대기",
+            getKoreanTimeString(),
+          ]],
+          preferOAuth: true,
+        },
+        callOptions
+      ).catch(() => {});
     }
   }
 

@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import { recordAiUsageLog } from "@/lib/ai-usage";
 import { deductTokens } from "@/lib/token-wallet";
@@ -287,6 +287,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
+      const callOptions = await getWorkspaceCallOptionsForEmail(userEmail, req);
       const parentFolder = await findOrCreateEgdeskFolder("[SheetBot] 연동 데이터");
       const modelFolder = await createDriveFolder("[SheetBot] AI 모델 영상 보관함", parentFolder?.id);
       const targetFolderId = modelFolder?.id || parentFolder?.id;
@@ -300,7 +301,7 @@ export async function POST(req: NextRequest) {
           mimeType: uploadedFile.mimeType,
           contentBase64: uploadedFile.buffer.toString("base64"),
           folderId: targetFolderId,
-        });
+        }, callOptions);
         productDriveUrl = uploadRes?.file?.webViewLink || uploadRes?.webViewLink || "";
         const driveId = uploadRes?.file?.id || uploadRes?.id || "";
         if (driveId && !productProxyImgUrl) {
@@ -368,10 +369,11 @@ export async function POST(req: NextRequest) {
     // 4. 구글 시트 바인딩 및 장부 기록 ([SheetBot] AI 홍보 콘텐츠 관리대장)
     let sheetUrl = "";
     try {
+      const callOptions = await getWorkspaceCallOptionsForEmail(userEmail, req);
       const sheetBinding = await resolveUserSpreadsheet({
         userEmail,
         sheetType: "AI_MODEL",
-        defaultTitle: "[SheetBot] AI 홍보 콘텐츠 관리대장",
+        defaultTitle: "[SheetBot] AI 홍보 콘텐츠 관리대장", callOptions,
       });
 
       if (sheetBinding?.spreadsheetId) {
@@ -393,7 +395,7 @@ export async function POST(req: NextRequest) {
           spreadsheetId: sheetBinding.spreadsheetId,
           range: "A:I",
           values: [rowValues],
-        }).catch((e: any) => console.warn("[AiModelVideo] sheets_append_values warning:", e.message));
+        }, callOptions).catch((e: any) => console.warn("[AiModelVideo] sheets_append_values warning:", e.message));
       }
     } catch (e: any) {
       console.warn("[AiModelVideo] Sheet binding warning:", e.message);

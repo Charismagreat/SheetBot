@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import {
   callSheetsTool,
   callAiCaller,
@@ -207,13 +207,14 @@ export async function POST(req: NextRequest) {
         uploadedFiles.slice(0, 10).map(async (file, idx) => {
           const b64 = file.buffer.toString("base64");
           const safeName = `img_${idx + 1}_${file.name}`;
-          const uploadRes = await callDriveTool("drive_upload", {
+          const callOptions = await getWorkspaceCallOptionsForEmail(userEmail);
+    const uploadRes = await callDriveTool("drive_upload", {
             name: safeName,
             content: b64,
             mimeType: file.mimeType,
             folderId: blogFolder.id,
             encoding: "base64",
-          }).catch(() => null);
+          }, callOptions).catch(() => null);
 
           const fileUrl = uploadRes?.webViewLink || uploadRes?.url || (uploadRes?.id ? `https://drive.google.com/file/d/${uploadRes.id}/view` : "");
           imageDriveList.push({ name: safeName, url: fileUrl, base64: b64 });
@@ -351,10 +352,11 @@ ${refSummaryForAi || "참고 URL 없음 (주제 및 키워드 기반으로 최�
     // 6. 구글 스프레드시트 [SheetBot] 블로그 마케팅 관리 대장 적재
     let sheetUrl = "";
     try {
+      const callOptions = await getWorkspaceCallOptionsForEmail(userEmail, req);
       const binding = await resolveUserSpreadsheet({
         userEmail,
         sheetType: "NAVER_BLOG",
-        defaultTitle: "[SheetBot] 블로그 마케팅 관리 대장",
+        defaultTitle: "[SheetBot] 블로그 마케팅 관리 대장", callOptions,
       });
 
       sheetUrl = binding.spreadsheetUrl;
@@ -364,7 +366,7 @@ ${refSummaryForAi || "참고 URL 없음 (주제 및 키워드 기반으로 최�
           spreadsheetId: binding.spreadsheetId,
           range: "A1:J1",
           values: [BLOG_SHEET_HEADERS],
-        }).catch(() => {});
+        }, callOptions).catch(() => {});
       }
 
       const rowValues = [
@@ -384,7 +386,7 @@ ${refSummaryForAi || "참고 URL 없음 (주제 및 키워드 기반으로 최�
         spreadsheetId: binding.spreadsheetId,
         range: "A:J",
         values: [rowValues],
-      });
+      }, callOptions);
     } catch (sheetErr: any) {
       console.warn("[BlogPost] Sheets append warning:", sheetErr.message);
     }

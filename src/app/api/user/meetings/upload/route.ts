@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail, HOST_WORKSPACE_OWNER_EMAIL } from "@/lib/auth";
 import {
   callDriveTool,
   callSheetsTool,
@@ -296,14 +296,21 @@ async function executeBackgroundMeetingPipeline(params: {
   try {
     writeDebugLog(`[BackgroundPipeline] Started for ${targetFileName}...`);
 
-    // 1. 구글 드라이브 대상 폴더 탐색 및 사전 캐싱 (0초 즉시 매핑)
+    const isHostOwner = cleanEmail === HOST_WORKSPACE_OWNER_EMAIL;
+    const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail);
+    if (!isHostOwner && (!callOptions?.asVisitor || !callOptions?.visitorSessionId?.trim())) {
+      writeDebugLog(`[BackgroundPipeline] 🛡️ Blocked: missing visitor OAuth for ${cleanEmail}`);
+      return;
+    }
+
+    // 1. 구글 드라이브 대상 폴더 탐색 및 사전 캐싱 (0초 즉시 매핑, 반드시 callOptions 경유)
     let targetFolderId: string | null = null;
     try {
       writeDebugLog(`Step 1: Searching folder ${targetFolderName}...`);
       const folderSearch = (await Promise.race([
         listDriveFiles(
           { query: `mimeType = 'application/vnd.google-apps.folder' and name = '${targetFolderName}' and trashed = false` },
-          { preferOAuth: true }
+          { preferOAuth: true, ...callOptions }
         ),
         new Promise((_, reject) => setTimeout(() => reject(new Error("Folder search timeout")), 4000)),
       ])) as any;
@@ -312,14 +319,14 @@ async function executeBackgroundMeetingPipeline(params: {
       if (existingFolders.length > 0) {
         targetFolderId = existingFolders[0].id;
       } else {
-        const newFolderRes = await createDriveFolder(targetFolderName, undefined, true);
+        const newFolderRes = await callDriveTool("drive_create_folder", { name: targetFolderName, preferOAuth: true }, callOptions);
         targetFolderId = newFolderRes?.id || (typeof newFolderRes === "string" ? newFolderRes : null);
       }
     } catch (folderErr: any) {
       writeDebugLog(`Step 1 folder warning: ${folderErr.message}`);
     }
 
-    // 2. 구글 드라이브 중복 파일 검사 및 업로드
+    // 2. 구글 드라이브 중복 파일 검사 및 업로드 (반드시 callOptions 경유)
     let driveFileId: string | null = null;
     let webViewLink = "";
 
@@ -327,7 +334,7 @@ async function executeBackgroundMeetingPipeline(params: {
       writeDebugLog(`Step 2: Checking if file already exists in Drive: ${targetFileName}...`);
       const existingFileCheck = await listDriveFiles(
         { folderId: targetFolderId || undefined, query: `name = '${targetFileName}' and trashed = false` },
-        { preferOAuth: true }
+        { preferOAuth: true, ...callOptions }
       );
       const existingDriveFiles = existingFileCheck?.files || [];
       if (existingDriveFiles.length > 0) {
@@ -339,15 +346,17 @@ async function executeBackgroundMeetingPipeline(params: {
       writeDebugLog(`Step 2 duplicate check warning: ${checkErr.message}`);
     }
 
-    if (!driveFileId) {
+    if (!driveFileId && targetFolderId) {
       try {
         writeDebugLog(`Step 2: Uploading file to Google Drive: ${targetFileName}...`);
         const uploadRes = await uploadDriveFileWithBridge({
           buffer: Buffer.from(base64Audio, "base64"),
           fileName: targetFileName,
-          folderId: targetFolderId || undefined,
+          folderId: targetFolderId,
           tempFilePath,
           preferOAuth: true,
+          userEmail: cleanEmail,
+          callOptions,
         });
 
         driveFileId = uploadRes?.id || uploadRes?.fileId || null;
@@ -381,6 +390,7 @@ async function executeBackgroundMeetingPipeline(params: {
         defaultTitle: sheetTitle,
         folderId: targetFolderId,
         preferOAuth: true,
+        callOptions,
       });
       targetSpreadsheetId = resolved.spreadsheetId;
 
@@ -399,38 +409,54 @@ async function executeBackgroundMeetingPipeline(params: {
       if (targetSpreadsheetId) {
         // 1행 헤더 확인 및 9대 표준 자동 보장
         try {
-          const headerCheck = await callSheetsTool("sheets_get_range", {
-            spreadsheetId: targetSpreadsheetId,
-            range: "시트1!A1:I1",
-            preferOAuth: true,
-          });
-          const existingHeaders = headerCheck?.values?.[0] || [];
-          if (existingHeaders.length < 9 || existingHeaders[5] !== STANDARD_MEETING_HEADERS[5]) {
-            await callSheetsTool("sheets_update_range", {
+          const headerCheck = await callSheetsTool(
+            "sheets_get_range",
+            {
               spreadsheetId: targetSpreadsheetId,
               range: "시트1!A1:I1",
-              values: [STANDARD_MEETING_HEADERS],
               preferOAuth: true,
-            }).catch(() => {});
+            },
+            callOptions
+          );
+          const existingHeaders = headerCheck?.values?.[0] || [];
+          if (existingHeaders.length < 9 || existingHeaders[5] !== STANDARD_MEETING_HEADERS[5]) {
+            await callSheetsTool(
+              "sheets_update_range",
+              {
+                spreadsheetId: targetSpreadsheetId,
+                range: "시트1!A1:I1",
+                values: [STANDARD_MEETING_HEADERS],
+                preferOAuth: true,
+              },
+              callOptions
+            ).catch(() => {});
 
-            await callSheetsTool("sheets_format_headers", {
-              spreadsheetId: targetSpreadsheetId,
-              tabName: "시트1",
-              headerBgColor: "#0f172a",
-              headerTextColor: "#38bdf8", // Sky blue 포인트
-              preferOAuth: true,
-            }).catch(() => {});
+            await callSheetsTool(
+              "sheets_format_headers",
+              {
+                spreadsheetId: targetSpreadsheetId,
+                tabName: "시트1",
+                headerBgColor: "#0f172a",
+                headerTextColor: "#38bdf8", // Sky blue 포인트
+                preferOAuth: true,
+              },
+              callOptions
+            ).catch(() => {});
           }
         } catch {}
 
         // 시트 D열(파일명) 중복 검사
         let isDuplicate = false;
         try {
-          const filesCheck = await callSheetsTool("sheets_get_range", {
-            spreadsheetId: targetSpreadsheetId,
-            range: "시트1!D:D",
-            preferOAuth: true,
-          });
+          const filesCheck = await callSheetsTool(
+            "sheets_get_range",
+            {
+              spreadsheetId: targetSpreadsheetId,
+              range: "시트1!D:D",
+              preferOAuth: true,
+            },
+            callOptions
+          );
           const cleanTarget = targetFileName.replace(/^\[SheetBot\]\s*/i, "").trim();
           const existingFiles: string[] = (filesCheck?.values || []).map((row: any[]) => String(row[0] || ""));
           const matchIndex = existingFiles.findIndex((name, idx) => {
@@ -456,23 +482,31 @@ async function executeBackgroundMeetingPipeline(params: {
 
         if (isDuplicate && targetRowIndex) {
           writeDebugLog(`Step 3: Updating existing duplicate row ${targetRowIndex}...`);
-          await callSheetsTool("sheets_update_range", {
-            spreadsheetId: targetSpreadsheetId,
-            range: `E${targetRowIndex}:I${targetRowIndex}`,
-            values: [[fileSizeMb, "⏳ AI 배치 분석 대기 중 (비용 50% 절감)", "⏳ 분석 준비 중...", "⏳ 음성 전사 대기 중...", listenLinkFormula]],
-            preferOAuth: true,
-          }).catch(() => {});
+          await callSheetsTool(
+            "sheets_update_range",
+            {
+              spreadsheetId: targetSpreadsheetId,
+              range: `E${targetRowIndex}:I${targetRowIndex}`,
+              values: [[fileSizeMb, "⏳ AI 배치 분석 대기 중 (비용 50% 절감)", "⏳ 분석 준비 중...", "⏳ 음성 전사 대기 중...", listenLinkFormula]],
+              preferOAuth: true,
+            },
+            callOptions
+          ).catch(() => {});
         } else {
           const initialRowValues = [
             [meetingTime, meetingTopic, "참석자 분석 중...", targetFileName, fileSizeMb, "⏳ AI 배치 분석 대기 중 (비용 50% 절감)", "⏳ 분석 준비 중...", "⏳ 음성 전사 대기 중...", listenLinkFormula],
           ];
           writeDebugLog(`Step 3: Appending new row to sheet ${targetSpreadsheetId}...`);
-          await callSheetsTool("sheets_append_values", {
-            spreadsheetId: targetSpreadsheetId,
-            range: "A:I",
-            values: initialRowValues,
-            preferOAuth: true,
-          }).catch(() => {});
+          await callSheetsTool(
+            "sheets_append_values",
+            {
+              spreadsheetId: targetSpreadsheetId,
+              range: "A:I",
+              values: initialRowValues,
+              preferOAuth: true,
+            },
+            callOptions
+          ).catch(() => {});
         }
       }
     } catch (sheetErr: any) {
@@ -541,17 +575,22 @@ async function triggerMeetingAudioAnalysis(params: {
 
   try {
     const cleanEmail = userEmail.toLowerCase().trim();
+    const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail);
 
     // 1. 최소 오디오 크기 검사 (1KB 미만 차단)
     const audioBytesLen = Buffer.byteLength(base64Audio, "base64");
     if (audioBytesLen < 1024) {
       if (spreadsheetId && rowIndex && rowIndex > 1) {
-        await callSheetsTool("sheets_update_range", {
-          spreadsheetId,
-          range: `시트1!F${rowIndex}:H${rowIndex}`,
-          values: [["⚠️ 테스트 파일 (음성 파형 없음)", "-", "-"]],
-          preferOAuth: true,
-        }).catch(() => {});
+        await callSheetsTool(
+          "sheets_update_range",
+          {
+            spreadsheetId,
+            range: `시트1!F${rowIndex}:H${rowIndex}`,
+            values: [["⚠️ 테스트 파일 (음성 파형 없음)", "-", "-"]],
+            preferOAuth: true,
+          },
+          callOptions
+        ).catch(() => {});
       }
       return;
     }
@@ -561,12 +600,16 @@ async function triggerMeetingAudioAnalysis(params: {
     if (!balanceCheck.allowed) {
       const noTokenMsg = "⚠️ 잔여 토큰 부족으로 AI 회의록 분석이 생략되었습니다. (충전 후 정상 분석)";
       if (spreadsheetId && rowIndex && rowIndex > 1) {
-        await callSheetsTool("sheets_update_range", {
-          spreadsheetId,
-          range: `시트1!F${rowIndex}:H${rowIndex}`,
-          values: [[noTokenMsg, "-", "-"]],
-          preferOAuth: true,
-        }).catch(() => {});
+        await callSheetsTool(
+          "sheets_update_range",
+          {
+            spreadsheetId,
+            range: `시트1!F${rowIndex}:H${rowIndex}`,
+            values: [[noTokenMsg, "-", "-"]],
+            preferOAuth: true,
+          },
+          callOptions
+        ).catch(() => {});
       }
       return;
     }
@@ -730,19 +773,27 @@ ${voiceProfileHint}
           const targetRow = guardRes.safeRow;
 
           if (targetRow && targetRow > 1) {
-            await callSheetsTool("sheets_update_range", {
-              spreadsheetId,
-              range: `시트1!B${targetRow}:C${targetRow}`,
-              values: [[meetingTitle, participants]],
-              preferOAuth: true,
-            }).catch(() => {});
+            await callSheetsTool(
+              "sheets_update_range",
+              {
+                spreadsheetId,
+                range: `시트1!B${targetRow}:C${targetRow}`,
+                values: [[meetingTitle, participants]],
+                preferOAuth: true,
+              },
+              callOptions
+            ).catch(() => {});
 
-            await callSheetsTool("sheets_update_range", {
-              spreadsheetId,
-              range: `시트1!F${targetRow}:H${targetRow}`,
-              values: [[summary, actionItems, transcript]],
-              preferOAuth: true,
-            }).catch(() => {});
+            await callSheetsTool(
+              "sheets_update_range",
+              {
+                spreadsheetId,
+                range: `시트1!F${targetRow}:H${targetRow}`,
+                values: [[summary, actionItems, transcript]],
+                preferOAuth: true,
+              },
+              callOptions
+            ).catch(() => {});
           }
 
           // Task Hub 할 일 자동 등록

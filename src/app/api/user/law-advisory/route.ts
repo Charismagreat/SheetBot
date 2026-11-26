@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import {
   callKoreanLawTool,
   searchKoreanLaw,
@@ -174,6 +174,7 @@ export async function POST(req: NextRequest) {
         fileBase64 = buffer.toString("base64");
 
         // 대상 폴더 격리: [SheetBot] 법률·계약 증빙 보관함
+        const callOptions = await getWorkspaceCallOptionsForEmail(userEmail, req);
         const parentFolder = await findOrCreateEgdeskFolder("[SheetBot] 연동 데이터");
         const lawFolder = await createDriveFolder("[SheetBot] 법률·계약 증빙 보관함", parentFolder?.id);
 
@@ -183,7 +184,7 @@ export async function POST(req: NextRequest) {
           mimeType: fileMimeType,
           folderId: lawFolder?.id,
           encoding: "base64",
-        });
+        }, callOptions);
 
         fileDriveUrl = uploadRes?.webViewLink || uploadRes?.url || (uploadRes?.id ? `https://drive.google.com/file/d/${uploadRes.id}/view` : "");
       } catch (fileErr: any) {
@@ -401,10 +402,11 @@ export async function POST(req: NextRequest) {
     // 7. 구글 스프레드시트 [SheetBot] 법률·계약 검토 대장 바인딩 및 행 적재
     let sheetUrl = "";
     try {
+      const callOptions = await getWorkspaceCallOptionsForEmail(userEmail, req);
       const binding = await resolveUserSpreadsheet({
         userEmail,
         sheetType: "LAW_ADVISORY",
-        defaultTitle: "[SheetBot] 법률·계약 검토 대장",
+        defaultTitle: "[SheetBot] 법률·계약 검토 대장", callOptions,
       });
 
       sheetUrl = binding.spreadsheetUrl;
@@ -414,7 +416,7 @@ export async function POST(req: NextRequest) {
           spreadsheetId: binding.spreadsheetId,
           range: "A1:K1",
           values: [LAW_SHEET_HEADERS],
-        }).catch(() => {});
+        }, callOptions).catch(() => {});
       }
 
       const rowValues = [
@@ -435,7 +437,7 @@ export async function POST(req: NextRequest) {
         spreadsheetId: binding.spreadsheetId,
         range: "A:K",
         values: [rowValues],
-      });
+      }, callOptions);
     } catch (sheetErr: any) {
       console.warn("[LawAdvisory] Sheets append warning:", sheetErr.message);
     }

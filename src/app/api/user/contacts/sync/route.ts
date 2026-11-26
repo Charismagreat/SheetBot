@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import { setupDatabase } from "@/lib/setup-db";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { callSheetsTool } from "@/lib/egdesk-helpers";
@@ -235,10 +235,11 @@ export async function POST(req: NextRequest) {
     const nowStr = getKoreanTimeString();
 
     // 1. 구글 스프레드시트 대장 조회 또는 선제 자동 생성
+    const callOptions = await getWorkspaceCallOptionsForEmail(userEmail, req);
     const sheetRes = await resolveUserSpreadsheet({
       userEmail,
       sheetType: "CONTACTS",
-      defaultTitle: "[SheetBot] 스마트폰 연락처 대장",
+      defaultTitle: "[SheetBot] 스마트폰 연락처 대장", callOptions,
     });
 
     const spreadsheetId = sheetRes.spreadsheetId;
@@ -254,14 +255,14 @@ export async function POST(req: NextRequest) {
       const headerCheck = await callSheetsTool("sheets_get_range", {
         spreadsheetId,
         range: "A1:K1",
-      });
+      }, callOptions);
       const firstRow = headerCheck?.values?.[0] || [];
       if (firstRow.length === 0 || firstRow[0] !== "ID") {
         await callSheetsTool("sheets_update_range", {
           spreadsheetId,
           range: "A1:K1",
           values: [HEADERS],
-        });
+        }, callOptions);
       }
     } catch (headerErr: any) {
       console.warn("[ContactsSync] Header check warning:", headerErr.message);
@@ -270,7 +271,7 @@ export async function POST(req: NextRequest) {
         spreadsheetId,
         range: "A1:K1",
         values: [HEADERS],
-      }).catch(() => null);
+      }, callOptions).catch(() => null);
     }
 
     // 3. 연락처 행 데이터 빌드
@@ -314,7 +315,7 @@ export async function POST(req: NextRequest) {
         const idColRes = await callSheetsTool("sheets_get_range", {
           spreadsheetId,
           range: "A2:A",
-        });
+        }, callOptions);
         oldRowCount = idColRes?.values ? idColRes.values.length : 0;
       } catch {}
 
@@ -326,7 +327,7 @@ export async function POST(req: NextRequest) {
         spreadsheetId,
         range: targetRange,
         values: rowsToInsert,
-      });
+      }, callOptions);
 
       // 4-3. 만약 기존 시트에 더 많은 행이 있었다면 초과 행들 클리어
       if (oldRowCount > rowsToInsert.length) {
@@ -335,7 +336,7 @@ export async function POST(req: NextRequest) {
         await callSheetsTool("sheets_clear_range", {
           spreadsheetId,
           range: `A${clearStart}:K${clearEnd}`,
-        }).catch(() => null);
+        }, callOptions).catch(() => null);
       }
 
       insertedCount = rowsToInsert.length;
@@ -346,7 +347,7 @@ export async function POST(req: NextRequest) {
         const idColRes = await callSheetsTool("sheets_get_range", {
           spreadsheetId,
           range: "A2:A",
-        });
+        }, callOptions);
         existingIds = (idColRes?.values || []).map((r: any) => String(r[0] || "").trim());
       } catch {}
 
@@ -363,7 +364,7 @@ export async function POST(req: NextRequest) {
             spreadsheetId,
             range: `A${targetRowIndex}:K${targetRowIndex}`,
             values: [row],
-          });
+          }, callOptions);
           updatedCount++;
         } else {
           appendList.push(row);
@@ -375,7 +376,7 @@ export async function POST(req: NextRequest) {
           spreadsheetId,
           range: "A:K",
           values: appendList,
-        });
+        }, callOptions);
         insertedCount = appendList.length;
       }
     }

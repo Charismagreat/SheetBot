@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail, HOST_WORKSPACE_OWNER_EMAIL } from "@/lib/auth";
 import {
   callDriveTool,
   callSheetsTool,
@@ -40,27 +40,39 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanEmail = userEmail.toLowerCase().trim();
+    const isHostOwner = cleanEmail === HOST_WORKSPACE_OWNER_EMAIL;
+    const callOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req);
+    if (!isHostOwner && (!callOptions?.asVisitor || !callOptions?.visitorSessionId?.trim())) {
+      return NextResponse.json(
+        { success: false, error: "본인 구글 드라이브에 CRM 대장을 구축하려면 먼저 Google 계정 연동을 완료해 주세요." },
+        { status: 403 }
+      );
+    }
+
     const sheetTitle = "[SheetBot] 고객 360도 통합 CRM 대장";
     const folderName = "[SheetBot] 비즈니스 CRM";
 
-    // 1. 드라이브 폴더 탐색 또는 생성
+    // 1. 본인 드라이브 폴더 탐색 또는 생성 (반드시 callOptions 경유)
     let targetFolderId: string | null = null;
     try {
-      const folderSearch = await listDriveFiles({
-        query: `mimeType = 'application/vnd.google-apps.folder' and name = '${folderName}' and trashed = false`,
-      });
+      const folderSearch = await listDriveFiles(
+        {
+          query: `mimeType = 'application/vnd.google-apps.folder' and name = '${folderName}' and trashed = false`,
+        },
+        { preferOAuth: true, ...callOptions }
+      );
       const existingFolders = folderSearch?.files || [];
       if (existingFolders.length > 0) {
         targetFolderId = existingFolders[0].id;
       } else {
-        const newFolderRes = await createDriveFolder(folderName, undefined, true);
+        const newFolderRes = await callDriveTool("drive_create_folder", { name: folderName, preferOAuth: true }, callOptions);
         targetFolderId = newFolderRes?.id || (typeof newFolderRes === "string" ? newFolderRes : null);
       }
     } catch (fErr: any) {
       console.warn("[CrmSetup] Folder search warning:", fErr.message);
     }
 
-    // 2. 기존 CRM 시트가 있는지 검색
+    // 2. 기존 CRM 시트가 있는지 검색 (반드시 callOptions 경유)
     let targetSpreadsheetId: string | null = null;
     let spreadsheetUrl = "";
 
@@ -68,9 +80,12 @@ export async function POST(req: NextRequest) {
       ? `'${targetFolderId}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${sheetTitle}' and trashed = false`
       : `mimeType = 'application/vnd.google-apps.spreadsheet' and name = '${sheetTitle}' and trashed = false`;
 
-    const sheetSearch = await listDriveFiles({
-      query: queryStr,
-    }).catch(() => ({ files: [] }));
+    const sheetSearch = await listDriveFiles(
+      {
+        query: queryStr,
+      },
+      { preferOAuth: true, ...callOptions }
+    ).catch(() => ({ files: [] }));
 
     const foundSheets = sheetSearch?.files || [];
     if (foundSheets.length > 0) {
@@ -86,11 +101,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 3. 스프레드시트 신규 생성
-    const createRes = await callSheetsTool("sheets_create_spreadsheet", {
-      title: sheetTitle,
-      preferOAuth: true,
-    });
+    // 3. 스프레드시트 신규 생성 (반드시 callOptions 경유)
+    const createRes = await callSheetsTool(
+      "sheets_create_spreadsheet",
+      {
+        title: sheetTitle,
+        preferOAuth: true,
+      },
+      callOptions
+    );
 
     targetSpreadsheetId = createRes?.spreadsheetId || createRes?.id || null;
     if (!targetSpreadsheetId) {
@@ -100,24 +119,29 @@ export async function POST(req: NextRequest) {
 
     // 4. 폴더 이동
     if (targetFolderId) {
-      await moveDriveFile(targetSpreadsheetId, targetFolderId, true).catch(() => {});
+      await callDriveTool("drive_move", { fileId: targetSpreadsheetId, targetFolderId, preferOAuth: true }, callOptions).catch(() => {});
     }
 
-    // 5. 시트 탭 구성 (기본 시트1 -> '🔍 고객 360도 통합 조회'로 단일화/명명)
-    // 탭 1: '🔍 고객 360도 통합 조회'
-    // 탭 2: '📊 통합 타임라인 로그'
-    // 탭 3: '📇 인맥 및 고객 프로필'
-    await callSheetsTool("sheets_create_tab", {
-      spreadsheetId: targetSpreadsheetId,
-      tabName: "📊 통합 타임라인 로그",
-      preferOAuth: true,
-    }).catch(() => {});
+    // 5. 시트 탭 구성
+    await callSheetsTool(
+      "sheets_create_tab",
+      {
+        spreadsheetId: targetSpreadsheetId,
+        tabName: "📊 통합 타임라인 로그",
+        preferOAuth: true,
+      },
+      callOptions
+    ).catch(() => {});
 
-    await callSheetsTool("sheets_create_tab", {
-      spreadsheetId: targetSpreadsheetId,
-      tabName: "📇 인맥 및 고객 프로필",
-      preferOAuth: true,
-    }).catch(() => {});
+    await callSheetsTool(
+      "sheets_create_tab",
+      {
+        spreadsheetId: targetSpreadsheetId,
+        tabName: "📇 인맥 및 고객 프로필",
+        preferOAuth: true,
+      },
+      callOptions
+    ).catch(() => {});
 
     // [탭 1: 🔍 고객 360도 통합 조회] 헤더 & 템플릿
     const tab1Content = [
@@ -137,50 +161,70 @@ export async function POST(req: NextRequest) {
       ["발생일시", "채널/구분", "고객명/상호", "연락처", "내용 요약 / 주요 대화 / 결제내역", "상세/녹음/영수증 링크"]
     ];
 
-    await callSheetsTool("sheets_update_range", {
-      spreadsheetId: targetSpreadsheetId,
-      range: "시트1!A1:F9",
-      values: tab1Content,
-      preferOAuth: true,
-    }).catch(() => {});
+    await callSheetsTool(
+      "sheets_update_range",
+      {
+        spreadsheetId: targetSpreadsheetId,
+        range: "시트1!A1:F9",
+        values: tab1Content,
+        preferOAuth: true,
+      },
+      callOptions
+    ).catch(() => {});
 
     // [탭 2: 📊 통합 타임라인 로그] 헤더
     const tab2Headers = [
       ["발생일시", "채널/구분", "고객명/상호", "연락처/식별자", "내용 요약 / 대화 / 품목", "금액 / 부가세", "상세/녹음/영수증 링크", "기기/출처", "기록일시"]
     ];
-    await callSheetsTool("sheets_update_range", {
-      spreadsheetId: targetSpreadsheetId,
-      range: "'📊 통합 타임라인 로그'!A1:I1",
-      values: tab2Headers,
-      preferOAuth: true,
-    }).catch(() => {});
+    await callSheetsTool(
+      "sheets_update_range",
+      {
+        spreadsheetId: targetSpreadsheetId,
+        range: "'📊 통합 타임라인 로그'!A1:I1",
+        values: tab2Headers,
+        preferOAuth: true,
+      },
+      callOptions
+    ).catch(() => {});
 
-    await callSheetsTool("sheets_format_headers", {
-      spreadsheetId: targetSpreadsheetId,
-      tabName: "📊 통합 타임라인 로그",
-      headerBgColor: "#0f172a", // 슬레이트 다크
-      headerTextColor: "#ffffff",
-      preferOAuth: true,
-    }).catch(() => {});
+    await callSheetsTool(
+      "sheets_format_headers",
+      {
+        spreadsheetId: targetSpreadsheetId,
+        tabName: "📊 통합 타임라인 로그",
+        headerBgColor: "#0f172a", // 슬레이트 다크
+        headerTextColor: "#ffffff",
+        preferOAuth: true,
+      },
+      callOptions
+    ).catch(() => {});
 
     // [탭 3: 📇 인맥 및 고객 프로필] 헤더
     const tab3Headers = [
       ["등록일시", "성함", "직함", "휴대전화", "회사/소속", "이메일", "회사전화", "주소", "명함 원본 링크", "메모"]
     ];
-    await callSheetsTool("sheets_update_range", {
-      spreadsheetId: targetSpreadsheetId,
-      range: "'📇 인맥 및 고객 프로필'!A1:J1",
-      values: tab3Headers,
-      preferOAuth: true,
-    }).catch(() => {});
+    await callSheetsTool(
+      "sheets_update_range",
+      {
+        spreadsheetId: targetSpreadsheetId,
+        range: "'📇 인맥 및 고객 프로필'!A1:J1",
+        values: tab3Headers,
+        preferOAuth: true,
+      },
+      callOptions
+    ).catch(() => {});
 
-    await callSheetsTool("sheets_format_headers", {
-      spreadsheetId: targetSpreadsheetId,
-      tabName: "📇 인맥 및 고객 프로필",
-      headerBgColor: "#1e3a8a", // 네이비 블루
-      headerTextColor: "#ffffff",
-      preferOAuth: true,
-    }).catch(() => {});
+    await callSheetsTool(
+      "sheets_format_headers",
+      {
+        spreadsheetId: targetSpreadsheetId,
+        tabName: "📇 인맥 및 고객 프로필",
+        headerBgColor: "#1e3a8a", // 네이비 블루
+        headerTextColor: "#ffffff",
+        preferOAuth: true,
+      },
+      callOptions
+    ).catch(() => {});
 
     // 6. 감사 로그 DB 기록
     const logId = Date.now();

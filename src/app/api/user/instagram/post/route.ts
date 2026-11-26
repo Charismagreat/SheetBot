@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import { recordAiUsageLog } from "@/lib/ai-usage";
 import { deductTokens } from "@/lib/token-wallet";
@@ -246,13 +246,14 @@ export async function POST(req: NextRequest) {
           const b64 = file.buffer.toString("base64");
           const safeName = `${instagramId}_photo_${idx + 1}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
 
-          const uploadRes = await callDriveTool("drive_upload", {
+          const callOptions = await getWorkspaceCallOptionsForEmail(userEmail);
+    const uploadRes = await callDriveTool("drive_upload", {
             name: safeName,
             content: b64,
             mimeType: file.mimeType,
             folderId: instaFolder.id,
             encoding: "base64",
-          }).catch(() => null);
+          }, callOptions).catch(() => null);
 
           const fileUrl = uploadRes?.webViewLink || uploadRes?.url || (uploadRes?.id ? `https://drive.google.com/file/d/${uploadRes.id}/view` : "");
           imageDriveList.push({ name: safeName, url: fileUrl, base64: b64 });
@@ -349,10 +350,11 @@ ${refSummaryForAi}
     // 4. 구글 스프레드시트 [SheetBot] 인스타그램 마케팅 관리 대장 적재
     let sheetUrl = "";
     try {
+      const callOptions = await getWorkspaceCallOptionsForEmail(userEmail, req);
       const binding = await resolveUserSpreadsheet({
         userEmail,
         sheetType: "INSTAGRAM",
-        defaultTitle: "[SheetBot] 인스타그램 마케팅 관리 대장",
+        defaultTitle: "[SheetBot] 인스타그램 마케팅 관리 대장", callOptions,
       });
 
       sheetUrl = binding.spreadsheetUrl;
@@ -362,7 +364,7 @@ ${refSummaryForAi}
           spreadsheetId: binding.spreadsheetId,
           range: "A1:J1",
           values: [INSTAGRAM_SHEET_HEADERS],
-        }).catch(() => {});
+        }, callOptions).catch(() => {});
       }
 
       const captionPreview = caption.length > 60 ? caption.slice(0, 60) + "..." : caption;
@@ -383,7 +385,7 @@ ${refSummaryForAi}
         spreadsheetId: binding.spreadsheetId,
         range: "A:J",
         values: [rowValues],
-      });
+      }, callOptions);
     } catch (sheetErr: any) {
       console.warn("[InstagramPost] Sheets append warning:", sheetErr.message);
     }

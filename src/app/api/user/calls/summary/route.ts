@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { callSheetsTool, queryTable } from "@/lib/egdesk-helpers";
 import { resolveUserFtsPhoneNumber } from "@/lib/task-hub-helper";
@@ -236,12 +236,13 @@ async function handleCallSummary(req: NextRequest) {
     }
 
     // 1. [CONTACTS] 스마트폰 연락처 대장 시트 조회
+    const callOptions = await getWorkspaceCallOptionsForEmail(resolvedEmail);
     try {
       const resolvedContacts = await resolveUserSpreadsheet({
         userEmail: resolvedEmail,
         sheetType: "CONTACTS",
         defaultTitle: "[SheetBot] 스마트폰 연락처 대장",
-        preferOAuth: true,
+        preferOAuth: true, callOptions,
       });
 
       if (resolvedContacts?.spreadsheetId) {
@@ -249,7 +250,7 @@ async function handleCallSummary(req: NextRequest) {
           spreadsheetId: resolvedContacts.spreadsheetId,
           range: "시트1!A1:K100",
           preferOAuth: true,
-        }).catch(() => null);
+        }, callOptions).catch(() => null);
 
         const rows: string[][] = rangeRes?.values || [];
         if (rows.length > 1) {
@@ -280,7 +281,7 @@ async function handleCallSummary(req: NextRequest) {
           userEmail: resolvedEmail,
           sheetType: "BUSINESS_CARD",
           defaultTitle: "[SheetBot] 스마트 명함 관리 대장",
-          preferOAuth: true,
+          preferOAuth: true, callOptions,
         });
 
         if (resolvedCard?.spreadsheetId) {
@@ -288,7 +289,7 @@ async function handleCallSummary(req: NextRequest) {
             spreadsheetId: resolvedCard.spreadsheetId,
             range: "시트1!A1:K100",
             preferOAuth: true,
-          }).catch(() => null);
+          }, callOptions).catch(() => null);
 
           const rows: string[][] = rangeRes?.values || [];
           if (rows.length > 1) {
@@ -319,7 +320,7 @@ async function handleCallSummary(req: NextRequest) {
         userEmail: resolvedEmail,
         sheetType: "RECORDING",
         defaultTitle: "[SheetBot] 통화 녹음 대장",
-        preferOAuth: true,
+        preferOAuth: true, callOptions,
       });
 
       if (resolvedRec?.spreadsheetId) {
@@ -327,7 +328,7 @@ async function handleCallSummary(req: NextRequest) {
           spreadsheetId: resolvedRec.spreadsheetId,
           range: "시트1!A1:H100",
           preferOAuth: true,
-        }).catch(() => null);
+        }, callOptions).catch(() => null);
 
         const rows: string[][] = rangeRes?.values || [];
         if (rows.length > 1) {
@@ -366,7 +367,7 @@ async function handleCallSummary(req: NextRequest) {
         userEmail: resolvedEmail,
         sheetType: "MISSED_CALL",
         defaultTitle: "[SheetBot] 부재중 전화 대장",
-        preferOAuth: true,
+        preferOAuth: true, callOptions,
       });
 
       if (resolvedMissed?.spreadsheetId) {
@@ -374,7 +375,7 @@ async function handleCallSummary(req: NextRequest) {
           spreadsheetId: resolvedMissed.spreadsheetId,
           range: "시트1!A1:F50",
           preferOAuth: true,
-        }).catch(() => null);
+        }, callOptions).catch(() => null);
 
         const rows: string[][] = rangeRes?.values || [];
         if (rows.length > 1) {

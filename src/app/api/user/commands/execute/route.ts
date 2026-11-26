@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserEmail } from "@/lib/auth";
+import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail, HOST_WORKSPACE_OWNER_EMAIL } from "@/lib/auth";
 import {
   callSheetsTool,
   callAppsScriptTool,
@@ -1843,29 +1843,37 @@ ${sampleDataTexts.join("\n\n====================\n\n")}
         }
       }
 
-      // 5-B. Google Drive 명함 시트에서 보조 탐색
+      // 5-B. Google Drive 명함 시트에서 보조 탐색 (반드시 본인 Google OAuth 세션 callOptions 경유)
       if (!recipientPhone && plan.targetName && cleanEmail && !cleanEmail.endsWith("@fts.local")) {
         try {
-          const cardSearch = await listDriveFiles(
-            {
-              query: `mimeType = 'application/vnd.google-apps.spreadsheet' and name contains '명함' and trashed = false`,
-            },
-            { preferOAuth: true }
-          ).catch(() => ({ files: [] }));
+          const isHostOwner = cleanEmail === HOST_WORKSPACE_OWNER_EMAIL;
+          const cardCallOptions = await getWorkspaceCallOptionsForEmail(cleanEmail, req);
+          if (isHostOwner || (cardCallOptions?.asVisitor && cardCallOptions?.visitorSessionId?.trim())) {
+            const cardSearch = await listDriveFiles(
+              {
+                query: `mimeType = 'application/vnd.google-apps.spreadsheet' and name contains '명함' and trashed = false`,
+              },
+              { preferOAuth: true, ...cardCallOptions }
+            ).catch(() => ({ files: [] }));
 
-          const cardSheets = cardSearch?.files || [];
-          if (cardSheets.length > 0) {
-            const cardData = await callSheetsTool("sheets_get_range", {
-              spreadsheetId: cardSheets[0].id,
-              range: "A2:E50",
-              preferOAuth: true,
-            }).catch(() => ({ values: [] }));
+            const cardSheets = cardSearch?.files || [];
+            if (cardSheets.length > 0) {
+              const cardData = await callSheetsTool(
+                "sheets_get_range",
+                {
+                  spreadsheetId: cardSheets[0].id,
+                  range: "A2:E50",
+                  preferOAuth: true,
+                },
+                cardCallOptions
+              ).catch(() => ({ values: [] }));
 
-            for (const row of cardData?.values || []) {
-              if (row[1] && row[1].includes(plan.targetName)) {
-                recipientPhone = row[4] || "";
-                matchedContactSource = `구글시트 [${cardSheets[0].name}]`;
-                break;
+              for (const row of cardData?.values || []) {
+                if (row[1] && row[1].includes(plan.targetName)) {
+                  recipientPhone = row[4] || "";
+                  matchedContactSource = `구글시트 [${cardSheets[0].name}]`;
+                  break;
+                }
               }
             }
           }
