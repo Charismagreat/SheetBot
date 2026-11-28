@@ -15,6 +15,15 @@ import {
   submitVerificationSelfCheck,
   syncRelationshipLedgerToSheet,
 } from "@/lib/relationship-intelligence";
+import {
+  analyzeNetworkContagion,
+  buildEvidenceVaultHtml,
+  buildInCallTacticalCoach,
+  computeMutualPromiseLedger,
+  computeRoiEmotionalMatrix,
+  detectRelationshipDecayRadar,
+  generateSelfCoachingMirror,
+} from "@/lib/relationship-copilot-suite";
 
 async function resolveAuthenticatedEmail(req: NextRequest, bodyEmail?: string): Promise<string | null> {
   const sessionEmail = await getCurrentUserEmail(req).catch(() => null);
@@ -45,9 +54,27 @@ export async function GET(req: NextRequest) {
     }
 
     const contactKeyParam = searchParams.get("contactKey");
+    const viewParam = searchParams.get("view");
+
+    if (viewParam === "suite") {
+      const [decayRadar, networkContagion, roiMatrix, selfMirror] = await Promise.all([
+        detectRelationshipDecayRadar({ userEmail, withAiDraft: false }),
+        analyzeNetworkContagion(userEmail),
+        computeRoiEmotionalMatrix(userEmail),
+        generateSelfCoachingMirror(userEmail),
+      ]);
+      return NextResponse.json({
+        success: true,
+        decayRadar,
+        networkContagion,
+        roiMatrix,
+        selfMirror,
+      });
+    }
+
     if (contactKeyParam) {
       const contactKey = normalizeContactKey(contactKeyParam);
-      const [profileRes, signalsRes, verificationsRes] = await Promise.all([
+      const [profileRes, signalsRes, verificationsRes, promiseLedger] = await Promise.all([
         queryTable("sheetbot_contact_profiles", {
           filters: { user_email: userEmail, contact_key: contactKey },
           orderBy: "id",
@@ -66,13 +93,37 @@ export async function GET(req: NextRequest) {
           orderDirection: "DESC",
           limit: 10,
         }).catch(() => ({ rows: [] })),
+        computeMutualPromiseLedger({ userEmail, contactKey }).catch(() => null),
       ]);
+
+      const profile = (profileRes.rows || []).find((r: any) => !r.deleted_at) || null;
+      const verifications = (verificationsRes.rows || []).filter((r: any) => !r.deleted_at);
+      let tacticalCoach = null;
+      if (profile) {
+        let labels: string[] = [];
+        try {
+          labels = JSON.parse(String(profile.multi_labels_json || "[]"));
+        } catch {}
+        tacticalCoach = buildInCallTacticalCoach({
+          labels,
+          riskGrade: profile.risk_grade || "보통",
+          riskScore: Number(profile.final_risk_score ?? 20),
+          trustScore: Number(profile.final_trust_score ?? 50),
+          favorability: Number(profile.favorability ?? 0),
+          trend: profile.trend,
+          lastInteractionAt: profile.last_interaction_at || profile.updated_at,
+          evidenceSummary: profile.evidence_summary,
+          pendingVerificationCount: verifications.filter((v: any) => v.status === "PENDING").length,
+        });
+      }
 
       return NextResponse.json({
         success: true,
-        profile: (profileRes.rows || []).find((r: any) => !r.deleted_at) || null,
+        profile,
         signals: (signalsRes.rows || []).filter((r: any) => !r.deleted_at),
-        verifications: (verificationsRes.rows || []).filter((r: any) => !r.deleted_at),
+        verifications,
+        tacticalCoach,
+        promiseLedger,
       });
     }
 
@@ -288,6 +339,24 @@ export async function POST(req: NextRequest) {
         item: body.item,
       });
       return NextResponse.json({ success: true, ...applied });
+    }
+
+    if (action === "generate_evidence_vault") {
+      const cKey = String(body.contactKey || body.phoneNumber || body.contactName || "");
+      if (!cKey) {
+        return NextResponse.json({ success: false, error: "contactKey가 필요합니다." }, { status: 400 });
+      }
+      const vault = await buildEvidenceVaultHtml({ userEmail, contactKey: cKey });
+      return NextResponse.json({ success: true, vault });
+    }
+
+    if (action === "decay_radar") {
+      const radar = await detectRelationshipDecayRadar({
+        userEmail,
+        thresholdDays: Number(body.thresholdDays) || 21,
+        withAiDraft: body.withAiDraft !== false,
+      });
+      return NextResponse.json({ success: true, decayRadar: radar });
     }
 
     return NextResponse.json(

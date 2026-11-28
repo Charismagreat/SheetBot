@@ -444,7 +444,13 @@ object InCallOverlayManager {
             tvActionItems.visibility = View.GONE
         }
 
-        tvCustomerMemo.text = result.memo.ifBlank { "등록된 최근 문자·카톡·파투 시트 내역이 없습니다." }
+        if (result.tacticalTip.isNotBlank()) {
+            val baseMemo = result.memo.ifBlank { "" }
+            val tipBlock = "🎯 [5초 대응 전략] ${result.tacticalTip}"
+            tvCustomerMemo.text = if (baseMemo.isNotBlank()) "$tipBlock\n$baseMemo" else tipBlock
+        } else {
+            tvCustomerMemo.text = result.memo.ifBlank { "등록된 최근 문자·카톡·파투 시트 내역이 없습니다." }
+        }
     }
 
     private fun renderSummaryData(

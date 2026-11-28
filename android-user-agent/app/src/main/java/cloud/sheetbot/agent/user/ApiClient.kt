@@ -4025,6 +4025,8 @@ object ApiClient {
                         trustScore = relObj?.optInt("trustScore", -1) ?: -1,
                         favorability = relObj?.optInt("favorability", 0) ?: 0,
                         pendingVerificationCount = relObj?.optInt("pendingVerificationCount", 0) ?: 0,
+                        tacticalTip = relObj?.optString("tacticalTip", "") ?: "",
+                        tacticalHeadline = relObj?.optString("tacticalHeadline", "") ?: "",
                         rawJson = resStr
                     )
                 } else {
@@ -4904,6 +4906,8 @@ data class CallSummaryResult(
     val trustScore: Int = -1,
     val favorability: Int = 0,
     val pendingVerificationCount: Int = 0,
+    val tacticalTip: String = "",
+    val tacticalHeadline: String = "",
     val rawJson: String? = null,
     val error: String? = null
 )

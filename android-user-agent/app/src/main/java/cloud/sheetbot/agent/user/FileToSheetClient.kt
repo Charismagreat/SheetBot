@@ -3120,6 +3120,8 @@ object FileToSheetClient {
         var relTrustScore = -1
         var relFavorability = 0
         var relPendingVerify = 0
+        var relTacticalTip = ""
+        var relTacticalHeadline = ""
         if (cleanOwner.isNotBlank()) {
             try {
                 val rel = fetchFtsRelationshipOverlayData(cleanOwner, cleanCaller)
@@ -3130,6 +3132,8 @@ object FileToSheetClient {
                     relTrustScore = rel.trustScore
                     relFavorability = rel.favorability
                     relPendingVerify = rel.pendingVerificationCount
+                    relTacticalTip = rel.tacticalTip
+                    relTacticalHeadline = rel.tacticalHeadline
                     if (relLabels.isNotEmpty() || relRiskScore >= 0) {
                         isFound = true
                     }
@@ -3156,6 +3160,8 @@ object FileToSheetClient {
             trustScore = relTrustScore,
             favorability = relFavorability,
             pendingVerificationCount = relPendingVerify,
+            tacticalTip = relTacticalTip,
+            tacticalHeadline = relTacticalHeadline,
             rawJson = rawCacheJson
         )
     }
@@ -3166,7 +3172,9 @@ object FileToSheetClient {
         val riskScore: Int = -1,
         val trustScore: Int = -1,
         val favorability: Int = 0,
-        val pendingVerificationCount: Int = 0
+        val pendingVerificationCount: Int = 0,
+        val tacticalTip: String = "",
+        val tacticalHeadline: String = ""
     )
 
     suspend fun fetchFtsRelationshipOverlayData(
@@ -3210,13 +3218,16 @@ object FileToSheetClient {
                             }
                         }
                     }
+                    val coachObj = json.optJSONObject("tacticalCoach")
                     return@withContext FtsRelationshipOverlayData(
                         labels = labelsList,
                         riskGrade = p.optString("risk_grade", ""),
                         riskScore = p.optInt("final_risk_score", -1),
                         trustScore = p.optInt("final_trust_score", -1),
                         favorability = p.optInt("favorability", 0),
-                        pendingVerificationCount = pendingCount
+                        pendingVerificationCount = pendingCount,
+                        tacticalTip = coachObj?.optString("tacticalTip", "") ?: "",
+                        tacticalHeadline = coachObj?.optString("headline", "") ?: ""
                     )
                 }
             } catch (_: Exception) {}

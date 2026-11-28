@@ -5,6 +5,7 @@ import { getCurrentUserEmail, getWorkspaceCallOptionsForEmail } from "@/lib/auth
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { callSheetsTool, queryTable } from "@/lib/egdesk-helpers";
 import { resolveUserFtsPhoneNumber } from "@/lib/task-hub-helper";
+import { buildInCallTacticalCoach } from "@/lib/relationship-copilot-suite";
 
 const FTS_INTERNAL_ENDPOINTS = [
   process.env.FILETOSHEET_INTERNAL_URL,
@@ -461,6 +462,17 @@ async function handleCallSummary(req: NextRequest) {
         } catch {
           labels = [];
         }
+        const tacticalCoach = buildInCallTacticalCoach({
+          labels,
+          riskGrade: relRow.risk_grade || "보통",
+          riskScore: Number(relRow.final_risk_score ?? 20),
+          trustScore: Number(relRow.final_trust_score ?? 50),
+          favorability: Number(relRow.favorability ?? 0),
+          trend: relRow.trend || "유지",
+          lastInteractionAt: relRow.last_interaction_at || relRow.updated_at,
+          evidenceSummary: relRow.evidence_summary,
+          pendingVerificationCount: pendingVerifies.length,
+        });
         relationshipProfile = {
           contactKey: relRow.contact_key,
           labels,
@@ -471,6 +483,8 @@ async function handleCallSummary(req: NextRequest) {
           interest: Number(relRow.interest ?? 40),
           trend: relRow.trend || "유지",
           pendingVerificationCount: pendingVerifies.length,
+          tacticalTip: tacticalCoach.tacticalTip,
+          tacticalHeadline: tacticalCoach.headline,
         };
         isFoundInSheet = true;
       }
