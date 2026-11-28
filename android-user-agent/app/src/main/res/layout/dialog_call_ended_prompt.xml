@@ -302,6 +302,94 @@
                 android:text="진행 중인 할 일이 있습니다." />
         </LinearLayout>
 
+        <!-- 🧠 관계 코파일럿: 통화 종료 1초 관계 태그 확정 & 상대방 의심 검증 -->
+        <LinearLayout
+            android:id="@+id/llRelationshipQuickTagContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#0F172A"
+            android:padding="10dp"
+            android:layout_marginBottom="10dp">
+
+            <TextView
+                android:id="@+id/tvRelationshipQuickTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🧠 관계 코파일럿 · 1초 태그 확정 및 의심 검증"
+                android:textColor="#A78BFA"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/chipRelFamily"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_badge_version"
+                        android:backgroundTint="#1E293B"
+                        android:paddingHorizontal="9dp"
+                        android:paddingVertical="5dp"
+                        android:text="👨‍👩‍👧 가족"
+                        android:textColor="#FDE68A"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:layout_marginEnd="6dp" />
+
+                    <TextView
+                        android:id="@+id/chipRelFriend"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_badge_version"
+                        android:backgroundTint="#1E293B"
+                        android:paddingHorizontal="9dp"
+                        android:paddingVertical="5dp"
+                        android:text="🤝 지인"
+                        android:textColor="#A7F3D0"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:layout_marginEnd="6dp" />
+
+                    <TextView
+                        android:id="@+id/chipRelCustomer"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_badge_version"
+                        android:backgroundTint="#1E293B"
+                        android:paddingHorizontal="9dp"
+                        android:paddingVertical="5dp"
+                        android:text="💼 고객"
+                        android:textColor="#93C5FD"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:layout_marginEnd="6dp" />
+
+                    <TextView
+                        android:id="@+id/chipRelVerify"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_badge_version"
+                        android:backgroundTint="#451A03"
+                        android:paddingHorizontal="9dp"
+                        android:paddingVertical="5dp"
+                        android:text="🛡️ 의심 검증·자가체크"
+                        android:textColor="#FCD34D"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </HorizontalScrollView>
+        </LinearLayout>
+
         <!-- 하단 메인 액션 버튼: 지금 바로 발송 -->
         <Button
             android:id="@+id/btnSendBusinessCardNow"

@@ -15,6 +15,10 @@ import { getKoreanTimeString } from './date-utils';
 import { resolveSafeTargetRow } from './sheet-fingerprint-guard';
 import { getWorkspaceCallOptionsForEmail } from './auth';
 import { createTaskItem, parseActionItems, autoResolveMissedCallTasks } from './task-hub-helper';
+import {
+  ingestContactSignal,
+  generateCounterpartyVerificationKit,
+} from './relationship-intelligence';
 
 function formatBusinessNumber(raw: any): string {
   if (!raw) return "미기재";
@@ -447,9 +451,11 @@ export async function processPendingBatchJobs(): Promise<{
             let summary = '1. 통화 확인 완료\n2. 후속 조치 요망\n3. 상세 내용 녹음 참조';
             let actionItems = '• 담당자 확인 필요';
             let transcript = '음성 분석 완료';
+            let parsedRecordingJson: any = null;
 
             try {
               const parsed = JSON.parse(rawText);
+              parsedRecordingJson = parsed;
               if (parsed.summary) summary = parsed.summary;
               if (parsed.actionItems) actionItems = parsed.actionItems;
               if (parsed.transcript) transcript = parsed.transcript;
@@ -514,6 +520,50 @@ export async function processPendingBatchJobs(): Promise<{
                   priority: task.priority,
                   badgeText: "통화 녹음",
                 }).catch((e: any) => console.warn("[BatchSweeper] createTaskItem error:", e.message));
+              }
+
+              // 3. 관계 인텔리전스 · 음성 감정 시그널 자동 적재 + 의심 감지 시 검증 체크리스트 생성
+              if (
+                parsedRecordingJson &&
+                (parsedRecordingJson.relationshipIntelligence || parsedRecordingJson.emotionAnalysis)
+              ) {
+                const rel = parsedRecordingJson.relationshipIntelligence || {};
+                const emo = parsedRecordingJson.emotionAnalysis || null;
+                const redFlags: string[] = Array.isArray(rel.detectedRedFlags) ? rel.detectedRedFlags : [];
+                const ingested = await ingestContactSignal({
+                  userEmail,
+                  contactName: detectedContact,
+                  sourceType: "CALL_RECORDING",
+                  sourceRef: fileName,
+                  multiLabels: Array.isArray(rel.multiLabels) ? rel.multiLabels : [],
+                  emotion: emo,
+                  closeness: rel.closeness,
+                  favorability: rel.favorability,
+                  interest: rel.interest,
+                  riskUrgency: rel.riskUrgency,
+                  fraudRisk: rel.fraudRisk,
+                  authenticityConsistency: rel.authenticityConsistency,
+                  flatteryDetected: Boolean(rel.flatteryDetected),
+                  insincerityDetected: Boolean(rel.insincerityDetected),
+                  detectedRedFlags: redFlags,
+                  evidenceText: rel.evidenceText || summary,
+                  confidence: emo?.confidence ?? 0.85,
+                }).catch(() => null);
+
+                const highRisk =
+                  Number(rel.fraudRisk ?? 0) >= 45 ||
+                  Number(ingested?.profile?.final_risk_score ?? 0) >= 50 ||
+                  redFlags.length > 0;
+                if (highRisk) {
+                  await generateCounterpartyVerificationKit({
+                    userEmail,
+                    contactName: detectedContact,
+                    recentContextText: `${summary}\n근거: ${rel.evidenceText || ""}`,
+                    persist: true,
+                  }).catch((e: any) =>
+                    console.warn("[BatchSweeper] verification kit error:", e?.message)
+                  );
+                }
               }
             } catch (taskErr: any) {
               console.warn("[BatchSweeper] Task Hub integration error:", taskErr.message);

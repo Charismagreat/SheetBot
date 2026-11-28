@@ -3995,6 +3995,16 @@ object ApiClient {
                         }
                     }
 
+                    val relObj = resJson.optJSONObject("relationshipProfile")
+                    val relLabels = mutableListOf<String>()
+                    val relArr = relObj?.optJSONArray("labels")
+                    if (relArr != null) {
+                        for (i in 0 until relArr.length()) {
+                            val lbl = relArr.optString(i, "").trim()
+                            if (lbl.isNotBlank()) relLabels.add(lbl)
+                        }
+                    }
+
                     return@withContext CallSummaryResult(
                         success = true,
                         found = resJson.optBoolean("found", false),
@@ -4009,6 +4019,12 @@ object ApiClient {
                         actionItems = resJson.optString("actionItems", ""),
                         pendingTasks = tasksList,
                         lastMissedCallTime = resJson.optString("lastMissedCallTime", ""),
+                        relationshipLabels = relLabels,
+                        riskGrade = relObj?.optString("riskGrade", "") ?: "",
+                        riskScore = relObj?.optInt("riskScore", -1) ?: -1,
+                        trustScore = relObj?.optInt("trustScore", -1) ?: -1,
+                        favorability = relObj?.optInt("favorability", 0) ?: 0,
+                        pendingVerificationCount = relObj?.optInt("pendingVerificationCount", 0) ?: 0,
                         rawJson = resStr
                     )
                 } else {
@@ -4019,6 +4035,77 @@ object ApiClient {
             }
         }
         CallSummaryResult(success = false, phone = callerPhone, error = lastError)
+    }
+
+    /**
+     * 🧠 관계 코파일럿: 통화 종료 후 원터치 관계 태그 확정·잠금 (POST /api/user/relationship)
+     */
+    suspend fun lockRelationshipLabels(
+        userEmail: String,
+        contactKey: String,
+        contactName: String,
+        lockedLabels: List<String>
+    ): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            try {
+                val labelsArr = org.json.JSONArray()
+                lockedLabels.forEach { labelsArr.put(it) }
+                val json = JSONObject().apply {
+                    put("action", "lock_labels")
+                    put("userEmail", userEmail)
+                    put("contactKey", contactKey)
+                    put("contactName", contactName)
+                    put("lockedLabels", labelsArr)
+                }
+                val request = Request.Builder()
+                    .url("$host/api/user/relationship")
+                    .post(json.toString().toRequestBody(JSON_MEDIA_TYPE))
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .build()
+                val response = client.newCall(request).execute()
+                val bodyStr = response.body?.string() ?: ""
+                if (response.isSuccessful && bodyStr.contains("\"success\":true")) {
+                    return@withContext true
+                }
+            } catch (_: Exception) {}
+        }
+        false
+    }
+
+    /**
+     * 🛡️ 관계 코파일럿: AI 상대방 의심 검증 체크리스트 즉시 생성 요청 (POST /api/user/relationship)
+     */
+    suspend fun requestCounterpartyVerification(
+        userEmail: String,
+        contactName: String,
+        phoneNumber: String,
+        recentContextText: String = ""
+    ): Boolean = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            try {
+                val json = JSONObject().apply {
+                    put("action", "generate_verification")
+                    put("userEmail", userEmail)
+                    put("contactName", contactName)
+                    put("phoneNumber", phoneNumber)
+                    put("recentContextText", recentContextText)
+                    put("persist", true)
+                }
+                val request = Request.Builder()
+                    .url("$host/api/user/relationship")
+                    .post(json.toString().toRequestBody(JSON_MEDIA_TYPE))
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .build()
+                val response = client.newCall(request).execute()
+                val bodyStr = response.body?.string() ?: ""
+                if (response.isSuccessful && bodyStr.contains("\"success\":true")) {
+                    return@withContext true
+                }
+            } catch (_: Exception) {}
+        }
+        false
     }
 
     /**
@@ -4811,6 +4898,12 @@ data class CallSummaryResult(
     val actionItems: String = "",
     val pendingTasks: List<TaskItemDto> = emptyList(),
     val lastMissedCallTime: String = "",
+    val relationshipLabels: List<String> = emptyList(),
+    val riskGrade: String = "",
+    val riskScore: Int = -1,
+    val trustScore: Int = -1,
+    val favorability: Int = 0,
+    val pendingVerificationCount: Int = 0,
     val rawJson: String? = null,
     val error: String? = null
 )

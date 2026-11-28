@@ -30,6 +30,10 @@ import {
   parseActionItems,
   autoResolveMissedCallTasks,
 } from "@/lib/task-hub-helper";
+import {
+  ingestContactSignal,
+  generateCounterpartyVerificationKit,
+} from "@/lib/relationship-intelligence";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -775,12 +779,36 @@ async function triggerAiAudioAnalysis(params: {
       ? `• [3단계 성문 프로필 연동] 기기 소유자인 '본인'의 음성 성문 프로필이 등록되어 있습니다. 본인 특유의 억양과 상대방(${contactName})을 부르는 호칭 관계를 기반으로 정확하게 라벨링하세요.`
       : `• 통화 상대방의 이름 및 전화번호는 "${contactName}"입니다.`;
 
-    const prompt = `당신은 비즈니스 통화 녹음 정밀 분석 및 화자 분리(Speaker Diarization) 전문 AI입니다.
-첨부된 통화 녹음 파일("${fileName}")의 음성을 분석하여, 통화 참여자인 '본인(기기 소유자)'과 '상대방(${contactName})'의 발화를 타임라인 순서대로 명확히 구분하여 다음 JSON 포맷으로만 답변하세요. 마크다운 따옴표나 기타 텍스트 없이 순수 JSON만 반환하세요:
+    const prompt = `당신은 비즈니스 통화 녹음 정밀 분석 및 화자 분리(Speaker Diarization) · 음성 감정 · 관계 인텔리전스 전문 AI입니다.
+첨부된 통화 녹음 파일("${fileName}")의 음성을 분석하여, 통화 참여자인 '본인(기기 소유자)'과 '상대방(${contactName})'의 발화를 타임라인 순서대로 명확히 구분하고, 오디오 톤·감정·관계·신뢰 시그널까지 함께 추출하여 다음 JSON 포맷으로만 답변하세요. 마크다운 따옴표나 기타 텍스트 없이 순수 JSON만 반환하세요:
 {
   "summary": "1. [주요 문의 및 통화 목적]\\n2. [협의 및 결정 사항]\\n3. [기타 특이사항]",
   "actionItems": "• [후속 조치 1]\\n• [후속 조치 2]",
-  "transcript": "[상대방 (${contactName})]: [발화 내용]\\n[본인]: [발화 내용]\\n..."
+  "transcript": "[상대방 (${contactName})]: [발화 내용]\\n[본인]: [발화 내용]\\n...",
+  "emotionAnalysis": {
+    "primaryEmotion": "상대방 주된 감정/톤 (예: 차분함/호의적/조급함/불안/짜증)",
+    "valence": 0,
+    "arousal": 30,
+    "situationalStress": 0,
+    "interpersonalHostility": 0,
+    "acousticCues": ["음성 톤, 말 속도, 한숨, 웃음, 머뭇거림 등 비언어적 근거"],
+    "emotionFlow": "초반 -> 후반 감정 변화",
+    "turningPoint": "톤 변화 시점(MM:SS) 및 계기",
+    "confidence": 0.8
+  },
+  "relationshipIntelligence": {
+    "multiLabels": ["해당 관계 태그 복수 선택 (가족/지인/잠재고객/기존고객/거래처·공급사/파트너/물류·기사/채권자/채무자/투자자/전문가 등)"],
+    "closeness": 20,
+    "favorability": 0,
+    "interest": 50,
+    "riskUrgency": 10,
+    "fraudRisk": 0,
+    "authenticityConsistency": 80,
+    "flatteryDetected": false,
+    "insincerityDetected": false,
+    "detectedRedFlags": ["긴급 선입금 압박, 타인 계좌 요구, 말 바뀜, 과잉 아첨 후 요구 등 객관적 의심 정황만 기록 (없으면 빈 배열)"],
+    "evidenceText": "관계·감정·신뢰 판단 근거 1~2문장 (제3자 언급과 통화 당사자 엄격 구분)"
+  }
 }
 
 화자 판별 및 전사 필수 준수사항:
@@ -793,6 +821,7 @@ async function triggerAiAudioAnalysis(params: {
      ② 상대방 (${contactName})
    - 전화를 걸었거나 받은 주체, 회사/서비스 소개를 하거나 용건에 답하는 비즈니스 응대 주체가 '본인'입니다.
    - 용건을 문의하거나 자신의 신원을 밝히는 고객/거래처 주체가 '상대방 (${contactName})'입니다.
+   - 현장/업무상 일시적 조급함(situationalStress)과 대인 비우호(interpersonalHostility)는 엄격히 구분하세요.
 ${channelGuide}
 ${voiceProfileHint}
 3. 전사(transcript)는 반드시 두 참여자의 대화를 한 문장/발화 단위로 번갈아가며 타임라인 순으로 화자 분리하여 전사해야 합니다. 화자 분리 없이 한 문단으로 뭉뚱그려 작성하면 안 됩니다.`;
@@ -921,9 +950,11 @@ ${voiceProfileHint}
     let summary = "1. 통화 확인 완료\n2. 후속 조치 요망\n3. 상세 내용 녹음 참조";
     let actionItems = "• 담당자 확인 필요";
     let transcript = "음성 분석 완료";
+    let parsedJson: any = null;
 
     try {
       const parsed = JSON.parse(rawText);
+      parsedJson = parsed;
       if (parsed.summary) summary = parsed.summary;
       if (parsed.actionItems) actionItems = parsed.actionItems;
       if (parsed.transcript) transcript = parsed.transcript;
@@ -932,6 +963,49 @@ ${voiceProfileHint}
         summary = rawText.slice(0, 300);
         transcript = rawText;
       }
+    }
+
+    // [관계 인텔리전스 & 감정·신뢰 시그널 자동 적재 + 의심 시 맞춤 검증 체크리스트 생성]
+    if (parsedJson && (parsedJson.relationshipIntelligence || parsedJson.emotionAnalysis)) {
+      const rel = parsedJson.relationshipIntelligence || {};
+      const emo = parsedJson.emotionAnalysis || null;
+      const redFlags: string[] = Array.isArray(rel.detectedRedFlags) ? rel.detectedRedFlags : [];
+      void ingestContactSignal({
+        userEmail: cleanEmail,
+        contactName,
+        sourceType: "CALL_RECORDING",
+        sourceRef: fileName,
+        multiLabels: Array.isArray(rel.multiLabels) ? rel.multiLabels : [],
+        emotion: emo,
+        closeness: rel.closeness,
+        favorability: rel.favorability,
+        interest: rel.interest,
+        riskUrgency: rel.riskUrgency,
+        fraudRisk: rel.fraudRisk,
+        authenticityConsistency: rel.authenticityConsistency,
+        flatteryDetected: Boolean(rel.flatteryDetected),
+        insincerityDetected: Boolean(rel.insincerityDetected),
+        detectedRedFlags: redFlags,
+        evidenceText: rel.evidenceText || summary,
+        confidence: emo?.confidence ?? 0.85,
+      })
+        .then((ingested) => {
+          const highRisk =
+            Number(rel.fraudRisk ?? 0) >= 45 ||
+            Number(ingested?.profile?.final_risk_score ?? 0) >= 50 ||
+            redFlags.length > 0;
+          if (highRisk) {
+            return generateCounterpartyVerificationKit({
+              userEmail: cleanEmail,
+              contactName,
+              recentContextText: `${summary}\n근거: ${rel.evidenceText || ""}`,
+              persist: true,
+            });
+          }
+        })
+        .catch((e: any) =>
+          console.warn("[AiAudioAnalysis] Relationship intelligence hook warning:", e?.message)
+        );
     }
 
     const baseMultiplier = (aiSettings as any).tokenMultiplier || 1.0;

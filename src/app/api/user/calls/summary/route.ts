@@ -433,6 +433,51 @@ async function handleCallSummary(req: NextRequest) {
       console.warn("[CallSummary] Task Hub lookup warning:", taskErr.message);
     }
 
+    // 6. [RELATIONSHIP_COPILOT] 상대방 관계 인텔리전스 프로필 및 대기 검증 체크리스트 조회
+    let relationshipProfile: any = null;
+    try {
+      const [relProfileRes, relVerifyRes] = await Promise.all([
+        queryTable("sheetbot_contact_profiles", {
+          filters: { user_email: resolvedEmail, contact_key: cleanPhone },
+          orderBy: "id",
+          orderDirection: "DESC",
+          limit: 1,
+        }).catch(() => ({ rows: [] })),
+        queryTable("sheetbot_contact_verifications", {
+          filters: { user_email: resolvedEmail, contact_key: cleanPhone, status: "PENDING" },
+          orderBy: "id",
+          orderDirection: "DESC",
+          limit: 5,
+        }).catch(() => ({ rows: [] })),
+      ]);
+
+      const relRow = (relProfileRes.rows || []).find((r: any) => !r.deleted_at);
+      const pendingVerifies = (relVerifyRes.rows || []).filter((r: any) => !r.deleted_at);
+
+      if (relRow) {
+        let labels: string[] = [];
+        try {
+          labels = JSON.parse(String(relRow.multi_labels_json || "[]"));
+        } catch {
+          labels = [];
+        }
+        relationshipProfile = {
+          contactKey: relRow.contact_key,
+          labels,
+          riskGrade: relRow.risk_grade || "보통",
+          riskScore: Number(relRow.final_risk_score ?? 20),
+          trustScore: Number(relRow.final_trust_score ?? 50),
+          favorability: Number(relRow.favorability ?? 0),
+          interest: Number(relRow.interest ?? 40),
+          trend: relRow.trend || "유지",
+          pendingVerificationCount: pendingVerifies.length,
+        };
+        isFoundInSheet = true;
+      }
+    } catch (relErr: any) {
+      console.warn("[CallSummary] Relationship profile lookup warning:", relErr?.message);
+    }
+
     const responsePayload = {
       success: true,
       found: isFoundInSheet,
@@ -454,6 +499,7 @@ async function handleCallSummary(req: NextRequest) {
         sourceType: t.source_type,
       })),
       lastMissedCallTime: lastMissedCallTime.trim(),
+      relationshipProfile,
       checkedAt: new Date().toISOString(),
     };
 

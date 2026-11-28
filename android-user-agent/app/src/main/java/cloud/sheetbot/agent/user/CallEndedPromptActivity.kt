@@ -3,9 +3,11 @@ package cloud.sheetbot.agent.user
 import android.app.Activity
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Paint
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.CountDownTimer
@@ -207,6 +209,65 @@ class CallEndedPromptActivity : Activity() {
         binding.chipPromiseReview.setOnClickListener {
             pauseCountdownForEditing()
             appendOrToggleQuickPromise("✔️ 요청하신 사항 꼼꼼히 검토 후 회신드리겠습니다.")
+        }
+
+        // 3-B. 🧠 관계 코파일럿: 1초 관계 태그 확정 & 상대방 의심 검증 체크리스트 열기
+        val quickTagClick = { label: String ->
+            pauseCountdownForEditing()
+            val email = prefs.userEmail?.takeIf { it.isNotBlank() }
+            if (email.isNullOrBlank()) {
+                Toast.makeText(this, "계정 연동 후 관계 태그를 저장할 수 있습니다.", Toast.LENGTH_SHORT).show()
+            } else {
+                val cName = contactName ?: ContactHelper.formatPhoneNumber(targetPhone)
+                binding.tvRelationshipQuickTitle.text = "🧠 [$label] 태그 저장 중..."
+                CoroutineScope(Dispatchers.IO).launch {
+                    val ok = ApiClient.lockRelationshipLabels(
+                        userEmail = email,
+                        contactKey = targetPhone,
+                        contactName = cName,
+                        lockedLabels = listOf(label)
+                    )
+                    withContext(Dispatchers.Main) {
+                        if (!isFinishing && !isDestroyed) {
+                            binding.tvRelationshipQuickTitle.text = if (ok) {
+                                "✅ [$label] 관계 태그 확정 잠금 완료"
+                            } else {
+                                "🧠 관계 코파일럿 · 저장 재시도 필요"
+                            }
+                            Toast.makeText(
+                                this@CallEndedPromptActivity,
+                                if (ok) "🏷️ [$cName] → '$label' 관계로 확정되었습니다." else "관계 태그 저장에 실패했습니다.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }
+            }
+        }
+        binding.chipRelFamily.setOnClickListener { quickTagClick("가족") }
+        binding.chipRelFriend.setOnClickListener { quickTagClick("지인") }
+        binding.chipRelCustomer.setOnClickListener { quickTagClick("기존고객") }
+        binding.chipRelVerify.setOnClickListener {
+            pauseCountdownForEditing()
+            val email = prefs.userEmail?.takeIf { it.isNotBlank() }
+            val cName = contactName ?: ContactHelper.formatPhoneNumber(targetPhone)
+            if (!email.isNullOrBlank()) {
+                CoroutineScope(Dispatchers.IO).launch {
+                    ApiClient.requestCounterpartyVerification(
+                        userEmail = email,
+                        contactName = cName,
+                        phoneNumber = targetPhone,
+                        recentContextText = fetchedCallSummary
+                    )
+                }
+            }
+            val url = "https://sheetbot.cloud/relationship-copilot?phone=${Uri.encode(targetPhone)}&name=${Uri.encode(cName)}"
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                Toast.makeText(this, "🛡️ 관계 코파일럿 검증 체크리스트를 엽니다.", Toast.LENGTH_SHORT).show()
+            } catch (_: Exception) {
+                Toast.makeText(this, "브라우저를 열 수 없습니다.", Toast.LENGTH_SHORT).show()
+            }
         }
 
         // 4. 파투 전 프로젝트·시트 및 시트봇 서버에서 통화 요약 & 미완료 할 일 실시간 로드

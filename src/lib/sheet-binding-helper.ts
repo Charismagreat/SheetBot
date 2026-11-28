@@ -75,7 +75,8 @@ export type SheetBindingType =
   | "SHEET_SMS_CHECKBOX"
   | "SAAS_OTP_RELAY"
   | "EMAIL"
-  | "AI_COPILOT_LOG";
+  | "AI_COPILOT_LOG"
+  | "RELATIONSHIP_COPILOT";
 
 export interface ResolveSheetOptions {
   userEmail: string;

@@ -283,6 +283,27 @@ export const TABLES = {
     columnCount: 30,
     rowCount: 0,
   },
+  sheetbot_contact_profiles: {
+    name: 'sheetbot_contact_profiles',
+    displayName: 'SheetBot 상대방 관계 인텔리전스 및 종합 수치 프로필 대장',
+    columns: ['id', 'uuid', 'user_email', 'contact_key', 'contact_name', 'phone_number', 'multi_labels_json', 'locked_labels_json', 'closeness', 'favorability', 'interest', 'economic_value', 'risk_urgency', 'reliability', 'fraud_risk', 'authenticity_consistency', 'final_trust_score', 'final_risk_score', 'risk_grade', 'trend', 'signal_count', 'last_emotion_json', 'evidence_summary', 'last_interaction_at', 'created_at', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by'],
+    columnCount: 31,
+    rowCount: 0,
+  },
+  sheetbot_contact_signals: {
+    name: 'sheetbot_contact_signals',
+    displayName: 'SheetBot 상대방 감정·관계·신뢰 시그널 이벤트 로그 대장',
+    columns: ['id', 'uuid', 'user_email', 'contact_key', 'contact_name', 'source_type', 'source_ref', 'multi_labels_json', 'emotion_json', 'closeness', 'favorability', 'interest', 'risk_urgency', 'fraud_risk', 'authenticity_consistency', 'situational_stress', 'interpersonal_hostility', 'flattery_detected', 'insincerity_detected', 'detected_red_flags_json', 'evidence_text', 'confidence', 'occurred_at', 'created_at', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by'],
+    columnCount: 30,
+    rowCount: 0,
+  },
+  sheetbot_contact_verifications: {
+    name: 'sheetbot_contact_verifications',
+    displayName: 'SheetBot 상대방 의심 검증 체크리스트 및 자가 체크 재평가 대장',
+    columns: ['id', 'uuid', 'user_email', 'contact_key', 'contact_name', 'trigger_reason', 'ai_initial_risk_score', 'ai_initial_trust_score', 'fact_checklist_json', 'test_questions_json', 'self_check_questions_json', 'user_responses_json', 'recalculated_risk_score', 'recalculated_trust_score', 'final_recommendation', 'status', 'completed_at', 'created_at', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by'],
+    columnCount: 24,
+    rowCount: 0,
+  },
   sheetbot_users: {
     name: 'sheetbot_users',
     displayName: 'SheetBot 회원 마스터 대장',

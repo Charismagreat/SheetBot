@@ -403,7 +403,20 @@ object InCallOverlayManager {
         tvCustomerMemo: TextView
     ) {
         tvCustomerName.text = result.name.ifBlank { "고객" }
-        if (result.found) {
+        val hasRelLabels = result.relationshipLabels.isNotEmpty()
+        val hasRiskScore = result.riskScore >= 0
+        if (hasRelLabels || hasRiskScore) {
+            val primaryLabel = result.relationshipLabels.take(2).joinToString("·").ifBlank { "분석됨" }
+            val gradePrefix = when (result.riskGrade) {
+                "고위험" -> "🚨 고위험(${result.riskScore}) · "
+                "주의" -> "⚠️ 주의(${result.riskScore}) · "
+                "안전" -> "✅ "
+                else -> if (primaryLabel.contains("가족")) "👨‍👩‍👧 " else if (primaryLabel.contains("지인")) "🤝 " else "💼 "
+            }
+            val verifySuffix = if (result.pendingVerificationCount > 0) " · 검증대기" else ""
+            tvCustomerBadge.text = "$gradePrefix$primaryLabel$verifySuffix"
+            tvCustomerBadge.visibility = View.VISIBLE
+        } else if (result.found) {
             tvCustomerBadge.text = if (isParuSource) "파투 고객" else "시트 고객"
             tvCustomerBadge.visibility = View.VISIBLE
         } else {

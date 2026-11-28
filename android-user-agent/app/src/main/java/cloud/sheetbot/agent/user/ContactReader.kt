@@ -18,6 +18,8 @@ data class ContactDto(
     val title: String = "",
     val note: String = "",
     val address: String = "",
+    val groups: List<String> = emptyList(),
+    val relation: String = "",
     val updatedAt: String = ""
 )
 
@@ -33,6 +35,28 @@ object ContactReader {
         val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA)
         val nowStr = timeFormat.format(Date())
 
+        // 주소록 그룹 ID -> 그룹명 매핑 사전 로드 (가족/친구/거래처/VIP 등 관계 1차 분류용)
+        val groupTitleMap = HashMap<String, String>()
+        try {
+            context.contentResolver.query(
+                ContactsContract.Groups.CONTENT_URI,
+                arrayOf(ContactsContract.Groups._ID, ContactsContract.Groups.TITLE),
+                "${ContactsContract.Groups.DELETED} = 0",
+                null,
+                null
+            )?.use { gCursor ->
+                val colGId = gCursor.getColumnIndex(ContactsContract.Groups._ID)
+                val colGTitle = gCursor.getColumnIndex(ContactsContract.Groups.TITLE)
+                while (gCursor.moveToNext()) {
+                    val gid = if (colGId >= 0) gCursor.getString(colGId) else null
+                    val gTitle = if (colGTitle >= 0) gCursor.getString(colGTitle)?.trim() else null
+                    if (!gid.isNullOrBlank() && !gTitle.isNullOrBlank()) {
+                        groupTitleMap[gid] = gTitle
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
         val projection = arrayOf(
             ContactsContract.Data.CONTACT_ID,
             ContactsContract.Data.RAW_CONTACT_ID,
@@ -44,13 +68,15 @@ object ContactReader {
             ContactsContract.Data.DATA4
         )
 
-        val selection = "${ContactsContract.Data.MIMETYPE} IN (?, ?, ?, ?, ?)"
+        val selection = "${ContactsContract.Data.MIMETYPE} IN (?, ?, ?, ?, ?, ?, ?)"
         val selectionArgs = arrayOf(
             ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE,
             ContactsContract.CommonDataKinds.Email.CONTENT_ITEM_TYPE,
             ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE,
             ContactsContract.CommonDataKinds.StructuredPostal.CONTENT_ITEM_TYPE,
-            ContactsContract.CommonDataKinds.Note.CONTENT_ITEM_TYPE
+            ContactsContract.CommonDataKinds.Note.CONTENT_ITEM_TYPE,
+            ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE,
+            ContactsContract.CommonDataKinds.Relation.CONTENT_ITEM_TYPE
         )
 
         var cursor: Cursor? = null
@@ -126,6 +152,32 @@ object ContactReader {
                         ContactsContract.CommonDataKinds.Note.CONTENT_ITEM_TYPE -> {
                             if (contact.note.isBlank() && data1.isNotBlank()) {
                                 contact.note = data1.trim()
+                            }
+                        }
+                        ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE -> {
+                            val groupName = groupTitleMap[data1.trim()]
+                            if (!groupName.isNullOrBlank() && !contact.groups.contains(groupName)) {
+                                contact.groups.add(groupName)
+                            }
+                        }
+                        ContactsContract.CommonDataKinds.Relation.CONTENT_ITEM_TYPE -> {
+                            val relType = if (colData2 >= 0) cursor.getInt(colData2) else -1
+                            val relLabel = when (relType) {
+                                ContactsContract.CommonDataKinds.Relation.TYPE_SPOUSE -> "배우자"
+                                ContactsContract.CommonDataKinds.Relation.TYPE_MOTHER -> "어머니"
+                                ContactsContract.CommonDataKinds.Relation.TYPE_FATHER -> "아버지"
+                                ContactsContract.CommonDataKinds.Relation.TYPE_PARENT -> "부모"
+                                ContactsContract.CommonDataKinds.Relation.TYPE_BROTHER -> "형제"
+                                ContactsContract.CommonDataKinds.Relation.TYPE_SISTER -> "자매"
+                                ContactsContract.CommonDataKinds.Relation.TYPE_CHILD -> "자녀"
+                                ContactsContract.CommonDataKinds.Relation.TYPE_RELATIVE -> "친척"
+                                ContactsContract.CommonDataKinds.Relation.TYPE_FRIEND -> "친구"
+                                ContactsContract.CommonDataKinds.Relation.TYPE_PARTNER -> "파트너"
+                                ContactsContract.CommonDataKinds.Relation.TYPE_MANAGER -> "매니저"
+                                else -> data1.trim()
+                            }
+                            if (contact.relation.isBlank() && relLabel.isNotBlank()) {
+                                contact.relation = relLabel
                             }
                         }
                     }
@@ -209,6 +261,8 @@ object ContactReader {
         var title: String = "",
         var note: String = "",
         var address: String = "",
+        val groups: MutableList<String> = mutableListOf(),
+        var relation: String = "",
         var updatedAt: String = ""
     ) {
         fun toDto() = ContactDto(
@@ -221,6 +275,8 @@ object ContactReader {
             title = title,
             note = note,
             address = address,
+            groups = groups.toList(),
+            relation = relation,
             updatedAt = updatedAt
         )
     }
