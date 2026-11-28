@@ -4111,6 +4111,67 @@ object ApiClient {
     }
 
     /**
+     * ✍️ 사전 발신 AI 코칭 (전화 걸기 전 · 문자 발송 전 · 이메일 작성 시)
+     */
+    data class PreOutboundCoachDto(
+        val success: Boolean,
+        val keyStrategy: String = "",
+        val riskWarning: String = "",
+        val soft: String = "",
+        val firm: String = "",
+        val concise: String = ""
+    )
+
+    suspend fun requestPreOutboundCoach(
+        userEmail: String,
+        channel: String,
+        contactName: String,
+        contactKey: String,
+        draftText: String,
+        goal: String = ""
+    ): PreOutboundCoachDto = withContext(Dispatchers.IO) {
+        val hosts = listOf(PRIMARY_HOST, SECONDARY_HOST, FALLBACK_HOST)
+        for (host in hosts) {
+            try {
+                val json = JSONObject().apply {
+                    put("action", "pre_outbound_coach")
+                    put("userEmail", userEmail)
+                    put("channel", channel)
+                    put("contactName", contactName)
+                    put("contactKey", contactKey)
+                    put("draftText", draftText)
+                    put("goal", goal)
+                }
+                val request = Request.Builder()
+                    .url("$host/api/user/relationship")
+                    .post(json.toString().toRequestBody(JSON_MEDIA_TYPE))
+                    .addHeader("x-sheetbot-user-email", userEmail)
+                    .build()
+                val response = client.newCall(request).execute()
+                val bodyStr = response.body?.string() ?: ""
+                if (response.isSuccessful && bodyStr.isNotBlank()) {
+                    val obj = JSONObject(bodyStr)
+                    if (obj.optBoolean("success", false)) {
+                        val coach = obj.optJSONObject("coach") ?: JSONObject()
+                        val rw = coach.optJSONObject("rewriteOptions") ?: JSONObject()
+                        val warns = coach.optJSONArray("riskWarnings")
+                        val firstWarn = if (warns != null && warns.length() > 0) warns.optString(0, "") else ""
+                        return@withContext PreOutboundCoachDto(
+                            success = true,
+                            keyStrategy = coach.optString("keyStrategy", ""),
+                            riskWarning = firstWarn,
+                            soft = rw.optString("soft", ""),
+                            firm = rw.optString("firm", ""),
+                            concise = rw.optString("concise", "")
+                        )
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        PreOutboundCoachDto(success = false)
+    }
+
+    /**
      * 스마트 통합 할 일 허브 목록 조회 (GET /api/user/tasks)
      */
     suspend fun fetchTasks(

@@ -300,6 +300,57 @@ class CallEndedPromptActivity : Activity() {
             }
         }
 
+        binding.chipPreOutboundCoach.setOnClickListener {
+            pauseCountdownForEditing()
+            val email = prefs.userEmail?.takeIf { it.isNotBlank() }
+            if (email.isNullOrBlank()) {
+                Toast.makeText(this, "계정 연동 후 AI 발송 코칭을 이용할 수 있습니다.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val currentDraft = binding.tvMessagePreview.text?.toString()?.trim().orEmpty()
+            val cName = contactName ?: ContactHelper.formatPhoneNumber(targetPhone)
+            binding.tvRelationshipQuickTitle.text = "✨ AI가 발송 전 리스크와 톤을 점검 중..."
+            CoroutineScope(Dispatchers.IO).launch {
+                val coach = ApiClient.requestPreOutboundCoach(
+                    userEmail = email,
+                    channel = "SMS",
+                    contactName = cName,
+                    contactKey = targetPhone,
+                    draftText = currentDraft
+                )
+                withContext(Dispatchers.Main) {
+                    if (isFinishing || isDestroyed) return@withContext
+                    if (!coach.success) {
+                        binding.tvRelationshipQuickTitle.text = "🧠 관계 코파일럿 · AI 코칭 재시도 필요"
+                        return@withContext
+                    }
+                    binding.tvRelationshipQuickTitle.text = if (coach.riskWarning.isNotBlank()) {
+                        "⚠️ ${coach.riskWarning}"
+                    } else {
+                        "✨ AI 발송 코칭 완료 (원하는 톤 선택)"
+                    }
+                    val items = arrayOf(
+                        "🤝 부드럽게:\n${coach.soft}",
+                        "⚖️ 단호·증거형:\n${coach.firm}",
+                        "⚡ 핵심 3줄:\n${coach.concise}"
+                    )
+                    val values = arrayOf(coach.soft, coach.firm, coach.concise)
+                    android.app.AlertDialog.Builder(this@CallEndedPromptActivity)
+                        .setTitle(if (coach.keyStrategy.isNotBlank()) "🧭 ${coach.keyStrategy}" else "✨ AI 발송 전 코칭")
+                        .setItems(items) { _, which ->
+                            val picked = values[which]
+                            if (picked.isNotBlank()) {
+                                binding.tvMessagePreview.setText(picked)
+                                binding.tvMessagePreview.setSelection(picked.length)
+                                Toast.makeText(this@CallEndedPromptActivity, "✅ AI 코칭 문구가 본문에 적용되었습니다.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        .setNegativeButton("유지", null)
+                        .show()
+                }
+            }
+        }
+
         // 4. 파투 전 프로젝트·시트 및 시트봇 서버에서 통화 요약 & 미완료 할 일 실시간 로드
         loadCustomerBriefingAndTasks(prefs)
 

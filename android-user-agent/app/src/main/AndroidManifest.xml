@@ -148,6 +148,20 @@
             android:showWhenLocked="true"
             android:turnScreenOn="true" />
 
+        <!-- ✍️ 카톡·문자·이메일 입력창 텍스트 선택 시 [✨ 시트봇 AI 발신 코칭] (ACTION_PROCESS_TEXT) -->
+        <activity
+            android:name=".OutboundCoachProcessTextActivity"
+            android:label="✨ 시트봇 AI 코칭"
+            android:exported="true"
+            android:theme="@style/Theme.AppCompat.Light.Dialog"
+            android:excludeFromRecents="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
         <!-- 스마트 통합 할 일 허브 전용 액티비티 -->
         <activity
             android:name=".TasksActivity"

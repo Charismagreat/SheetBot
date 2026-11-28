@@ -17,6 +17,7 @@ import { callAiCaller, queryTable } from "@/lib/egdesk-helpers";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import {
   normalizeContactKey,
+  unwrapAiCallerJson,
   unwrapAiCallerText,
 } from "@/lib/relationship-intelligence";
 
@@ -701,3 +702,182 @@ export async function generateSelfCoachingMirror(userEmail: string) {
     insights,
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [Pre-Outbound Coach] 전화 걸기 전 · 문자 발송 전 · 이메일 작성 시 사전 AI 코칭
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type OutboundChannel = "CALL" | "SMS" | "EMAIL";
+
+export interface PreOutboundCoachResult {
+  channel: OutboundChannel;
+  contactName: string;
+  riskGrade: string;
+  riskWarnings: string[];
+  openingOrSubject: string;
+  keyStrategy: string;
+  avoidPhrases: string[];
+  rewriteOptions: {
+    soft: string; // 🤝 관계 회복·부드럽게
+    firm: string; // ⚖️ 단호·증거 보존형
+    concise: string; // ⚡ 핵심 3줄
+  };
+  attachmentReminder: string | null;
+}
+
+export async function generatePreOutboundCoach(params: {
+  userEmail: string;
+  channel: OutboundChannel;
+  contactKey?: string;
+  contactName?: string;
+  goal?: string;
+  draftSubject?: string;
+  draftText?: string;
+}): Promise<PreOutboundCoachResult> {
+  const cleanEmail = params.userEmail.toLowerCase().trim();
+  const cKey = params.contactKey
+    ? normalizeContactKey(params.contactKey)
+    : params.contactName
+    ? normalizeContactKey(params.contactName)
+    : "";
+
+  let profile: any = null;
+  let signals: any[] = [];
+  if (cKey && cKey !== "unknown") {
+    const [pRes, sRes] = await Promise.all([
+      queryTable("sheetbot_contact_profiles", {
+        filters: { user_email: cleanEmail, contact_key: cKey },
+        orderBy: "id",
+        orderDirection: "DESC",
+        limit: 1,
+      }).catch(() => ({ rows: [] })),
+      queryTable("sheetbot_contact_signals", {
+        filters: { user_email: cleanEmail, contact_key: cKey },
+        orderBy: "id",
+        orderDirection: "DESC",
+        limit: 5,
+      }).catch(() => ({ rows: [] })),
+    ]);
+    profile = (pRes.rows || []).find((r: any) => !r.deleted_at) || null;
+    signals = (sRes.rows || []).filter((r: any) => !r.deleted_at);
+  }
+
+  const contactName = params.contactName || profile?.contact_name || "상대방";
+  const labels = safeJson<string[]>(profile?.multi_labels_json, []);
+  const riskGrade = String(profile?.risk_grade || "보통");
+  const riskScore = Number(profile?.final_risk_score ?? 20);
+  const trustScore = Number(profile?.final_trust_score ?? 50);
+  const favorability = Number(profile?.favorability ?? 0);
+
+  const recentHistory = signals
+    .map((s: any, i: number) => `[${i + 1}] (${s.source_type}, ${s.occurred_at || ""}) 우호:${s.favorability} / 기망:${s.fraud_risk} / 내용:${s.evidence_text || "-"}`)
+    .join("\n");
+
+  const draftText = String(params.draftText || "").trim();
+  const draftSubject = String(params.draftSubject || "").trim();
+  const goal = String(params.goal || "").trim();
+
+  // 이메일 첨부 누락 사전 감지
+  const attachmentReminder =
+    params.channel === "EMAIL" && /(첨부|붙임|별첨|파일 보내|견적서 확인|계약서 확인)/.test(`${draftSubject} ${draftText}`)
+      ? "📎 본문에 첨부파일 언급이 있습니다. 발송 전 실제 첨부파일이 포함되었는지 꼭 확인하세요."
+      : null;
+
+  const channelLabel =
+    params.channel === "CALL"
+      ? "전화 걸기 전 (구두 통화 스크립트)"
+      : params.channel === "EMAIL"
+      ? "이메일 작성·발송 전 (공식 서면)"
+      : "문자·카카오톡 발송 전 (메신저)";
+
+  const prompt = `당신은 비즈니스·대인 커뮤니케이션 전문 '사전 발신 AI 코치'입니다.
+이용자가 아래 상대방에게 [${channelLabel}] 연락을 하기 직전입니다.
+상대방의 누적 관계·위험도·감정 이력을 반영해, 말실수·불리한 양보·감정적 분쟁을 예방하고 목적을 달성할 수 있는 사전 코칭을 순수 JSON으로만 작성하세요.
+
+[상대방 프로필]
+- 이름: ${contactName}
+- 다중 관계 태그: ${labels.join(", ") || "미분류"}
+- 위험 등급: ${riskGrade} (위험도 ${riskScore} / 신뢰도 ${trustScore} / 우호도 ${favorability})
+- 최근 이력:
+${recentHistory || "(누적 이력 없음)"}
+
+[이용자 발신 정보]
+- 연락 목적/용건: ${goal || "(초안 내용 기준 추론)"}
+- 작성 중인 제목(이메일): ${draftSubject || "-"}
+- 작성 중인 초안: ${draftText || "(초안 없음 - 목적에 맞게 새로 작성)"}
+
+[필수 출력 JSON 스키마]
+{
+  "riskWarnings": ["초안이나 상대방 위험도 기준 주의해야 할 경고 1~3개 (없으면 빈 배열)"],
+  "openingOrSubject": "전화인 경우 추천 첫 마디 오프닝 멘트 / 이메일인 경우 추천 제목 / 문자인 경우 핵심 첫 문장",
+  "keyStrategy": "이번 연락에서 반드시 지켜야 할 핵심 전략 1~2문장",
+  "avoidPhrases": ["절대 쓰지 말아야 할 표현이나 함정 2~3개"],
+  "rewriteOptions": {
+    "soft": "🤝 부드럽고 관계 친화적인 버전 (실제 바로 보낼 수 있는 완성 문장)",
+    "firm": "⚖️ 단호하고 조건·기한이 명확한 증거 보존형 버전 (실제 바로 보낼 수 있는 완성 문장)",
+    "concise": "⚡ 바쁜 상대방용 2~3줄 핵심 요약 버전"
+  }
+}
+
+규칙:
+- 상대방이 고위험/주의/채무자라면 불리한 구두 약속이나 감정적 표현을 반드시 riskWarnings에서 경고하세요.
+- 초안에 화가 나거나 거친 표현이 있다면 법적·캡처 리스크를 경고하고 쿨다운된 문장으로 순화하세요.
+- 한국어로 자연스럽고 즉시 복사해 쓸 수 있게 작성하세요.`;
+
+  let aiParsed: any = null;
+  try {
+    const res = await callAiCaller(prompt, {
+      caller: "sheetbot-pre-outbound-coach",
+      model: "gemini-2.5-flash",
+      temperature: 0.3,
+    });
+    aiParsed = unwrapAiCallerJson(res);
+  } catch (err: any) {
+    console.warn("[PreOutboundCoach] AI fallback:", err?.message);
+  }
+
+  const baseFallbackText =
+    draftText ||
+    (goal
+      ? `안녕하세요, ${contactName}님. ${goal} 관련하여 연락드렸습니다. 확인 후 회신 부탁드립니다.`
+      : `안녕하세요, ${contactName}님. 논의드린 건 확인차 연락드렸습니다.`);
+
+  const defaultWarnings: string[] = [];
+  if (riskGrade === "고위험" || riskScore >= 75) {
+    defaultWarnings.push(`🚨 고위험 상대(${riskScore}점)입니다. 선입금·구두 확정·개인계좌 송금 표현을 피하고 서면 검토 절차를 명시하세요.`);
+  }
+  if (labels.includes("채무자")) {
+    defaultWarnings.push("⚠️ 채무/미수 관리 대상입니다. 구체적 금액과 입금 기한을 문자로 명확히 남기세요.");
+  }
+
+  return {
+    channel: params.channel,
+    contactName,
+    riskGrade,
+    riskWarnings:
+      Array.isArray(aiParsed?.riskWarnings) ? aiParsed.riskWarnings.map(String) : defaultWarnings,
+    openingOrSubject:
+      aiParsed?.openingOrSubject ||
+      (params.channel === "EMAIL"
+        ? draftSubject || `[확인 요청] ${goal || "협의 사항"} 안내드립니다.`
+        : `안녕하세요 ${contactName}님, 잠시 통화 가능하실까요?`),
+    keyStrategy:
+      aiParsed?.keyStrategy ||
+      "상대방의 감정선을 자극하지 않으면서 핵심 조건·기한을 명확히 확인하고 기록으로 남기세요.",
+    avoidPhrases:
+      Array.isArray(aiParsed?.avoidPhrases) && aiParsed.avoidPhrases.length > 0
+        ? aiParsed.avoidPhrases.map(String)
+        : ["기한 없는 '천천히 주세요'", "검토 없는 즉시 확정", "감정적 추궁 표현"],
+    rewriteOptions: {
+      soft: aiParsed?.rewriteOptions?.soft || baseFallbackText,
+      firm:
+        aiParsed?.rewriteOptions?.firm ||
+        `${contactName}님, 안녕하세요. ${goal || "진행 건"}에 대해 정확한 일정과 조건을 서면으로 확인하고자 연락드립니다. 금일 중 확인 후 회신 부탁드립니다.`,
+      concise:
+        aiParsed?.rewriteOptions?.concise ||
+        `안녕하세요 ${contactName}님. ${goal || "논의 건"} 일정 확인 부탁드립니다. 감사합니다.`,
+    },
+    attachmentReminder,
+  };
+}
+

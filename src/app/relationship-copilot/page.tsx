@@ -162,10 +162,19 @@ export default function RelationshipCopilotPage() {
   const [confirmedRepIds, setConfirmedRepIds] = useState<string[]>([]);
 
   // 🚀 7대 고급 코파일럿 스위트 상태 (5초 코치 · 약속 성적표 · 냉각 레이더 · 연결망 · ROI 매트릭스 · 내 소통 미러링)
-  const [activeTab, setActiveTab] = useState<"profiles" | "decay" | "network" | "roi" | "mirror">("profiles");
+  const [activeTab, setActiveTab] = useState<"profiles" | "coach" | "decay" | "network" | "roi" | "mirror">("profiles");
   const [tacticalCoach, setTacticalCoach] = useState<any>(null);
   const [promiseLedger, setPromiseLedger] = useState<any>(null);
   const [suiteData, setSuiteData] = useState<any>(null);
+
+  // ✍️ 사전 발신 AI 코칭 (전화 · 문자 · 이메일) 상태
+  const [coachChannel, setCoachChannel] = useState<"CALL" | "SMS" | "EMAIL">("SMS");
+  const [coachContactName, setCoachContactName] = useState("");
+  const [coachContactKey, setCoachContactKey] = useState("");
+  const [coachGoal, setCoachGoal] = useState("");
+  const [coachSubject, setCoachSubject] = useState("");
+  const [coachDraft, setCoachDraft] = useState("");
+  const [coachResult, setCoachResult] = useState<any>(null);
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -607,6 +616,7 @@ export default function RelationshipCopilotPage() {
         <div className="mb-5 flex flex-wrap gap-2">
           {[
             { id: "profiles", label: "📋 프로필 · 5초 코치 · 자가체크" },
+            { id: "coach", label: "✍️ 발신 전 AI 코칭 (전화·문자·메일)" },
             { id: "decay", label: `⏳ 관계 냉각 레이더 (${suiteData?.decayRadar?.coolingCount ?? 0})` },
             { id: "network", label: `🕸️ 연결망 · 연쇄 리스크 (${suiteData?.networkContagion?.contagionAlerts?.length ?? 0})` },
             { id: "roi", label: `💰 수익성 vs 감정 매트릭스` },
@@ -616,7 +626,11 @@ export default function RelationshipCopilotPage() {
               key={tab.id}
               onClick={() => {
                 setActiveTab(tab.id as any);
-                if (tab.id !== "profiles" && !suiteData) void loadSuiteData();
+                if (tab.id === "coach" && selectedProfile && !coachContactName) {
+                  setCoachContactName(selectedProfile.contact_name);
+                  setCoachContactKey(selectedProfile.contact_key);
+                }
+                if (tab.id !== "profiles" && tab.id !== "coach" && !suiteData) void loadSuiteData();
               }}
               className={`rounded-xl border px-3.5 py-2 text-xs font-bold transition ${
                 activeTab === tab.id
@@ -628,6 +642,176 @@ export default function RelationshipCopilotPage() {
             </button>
           ))}
         </div>
+
+        {/* [탭 1-B] ✍️ 발신 전 AI 코칭 (전화 걸기 전 · 문자 발송 전 · 이메일 작성 시) */}
+        {activeTab === "coach" && (
+          <div className="mb-6 rounded-2xl border border-sky-500/40 bg-slate-900/90 p-5">
+            <h2 className="text-base font-bold text-sky-300">
+              ✍️ 발신 전 AI 코칭 (전화 걸기 전 · 문자/카톡 발송 전 · 이메일 작성 시)
+            </h2>
+            <p className="mt-1 text-xs text-slate-400">
+              상대방의 누적 위험도·감정·과거 약속 이력을 반영하여 말실수·불리한 양보·감정 과열을 사전에 점검하고 3가지 톤의 완성 멘트를 제안합니다.
+            </p>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {([
+                { id: "CALL", label: "📞 전화 걸기 전" },
+                { id: "SMS", label: "💬 문자·카톡 발송 전" },
+                { id: "EMAIL", label: "📧 이메일 작성 시" },
+              ] as const).map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setCoachChannel(c.id)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-bold ${
+                    coachChannel === c.id
+                      ? "border-sky-400 bg-sky-500/20 text-sky-200"
+                      : "border-slate-700 bg-slate-950 text-slate-400"
+                  }`}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 grid gap-2.5 md:grid-cols-2">
+              <input
+                value={coachContactName}
+                onChange={(e) => setCoachContactName(e.target.value)}
+                placeholder="상대방 이름 (예: 김성호 대표)"
+                className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+              />
+              <input
+                value={coachContactKey}
+                onChange={(e) => setCoachContactKey(e.target.value)}
+                placeholder="전화번호 또는 이메일 (프로필 자동 매칭용, 선택)"
+                className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+              />
+            </div>
+
+            <input
+              value={coachGoal}
+              onChange={(e) => setCoachGoal(e.target.value)}
+              placeholder="이번 연락의 목적/용건 (예: 미수 잔금 300만 원 이번 주 금요일까지 입금 요청)"
+              className="mt-2.5 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+            />
+
+            {coachChannel === "EMAIL" && (
+              <input
+                value={coachSubject}
+                onChange={(e) => setCoachSubject(e.target.value)}
+                placeholder="작성 중인 이메일 제목 (선택)"
+                className="mt-2.5 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+              />
+            )}
+
+            <textarea
+              value={coachDraft}
+              onChange={(e) => setCoachDraft(e.target.value)}
+              rows={4}
+              placeholder="작성 중인 문자/이메일 초안이나 하려던 말을 입력하세요 (비워두면 목적에 맞춰 AI가 새로 작성합니다)"
+              className="mt-2.5 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+            />
+
+            <div className="mt-3 flex justify-end">
+              <button
+                disabled={busyAction === "pre_outbound_coach"}
+                onClick={async () => {
+                  setBusyAction("pre_outbound_coach");
+                  try {
+                    const r = await apiFetch("/api/user/relationship", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        action: "pre_outbound_coach",
+                        channel: coachChannel,
+                        contactName: coachContactName,
+                        contactKey: coachContactKey || coachContactName,
+                        goal: coachGoal,
+                        draftSubject: coachSubject,
+                        draftText: coachDraft,
+                      }),
+                    });
+                    const d = await r.json();
+                    if (d.success && d.coach) {
+                      setCoachResult(d.coach);
+                      showToast("✨ 발신 전 AI 코칭 분석이 완료되었습니다.");
+                    } else {
+                      showToast(d.error || "AI 코칭 실패");
+                    }
+                  } finally {
+                    setBusyAction(null);
+                  }
+                }}
+                className="rounded-xl bg-sky-600 px-5 py-2 text-xs font-bold text-white hover:bg-sky-500 disabled:opacity-50"
+              >
+                {busyAction === "pre_outbound_coach" ? "AI 코칭 분석 중..." : "✨ 발신 전 AI 코칭 받기"}
+              </button>
+            </div>
+
+            {coachResult && (
+              <div className="mt-5 space-y-3 border-t border-slate-800 pt-4 text-xs">
+                {coachResult.attachmentReminder && (
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 text-amber-200">
+                    {coachResult.attachmentReminder}
+                  </div>
+                )}
+                {Array.isArray(coachResult.riskWarnings) && coachResult.riskWarnings.length > 0 && (
+                  <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-rose-200">
+                    <div className="font-bold">⚠️ 발송 전 주의 경고</div>
+                    <ul className="mt-1 list-disc pl-4 space-y-1">
+                      {coachResult.riskWarnings.map((w: string, i: number) => (
+                        <li key={i}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
+                    <div className="font-bold text-sky-300">
+                      {coachResult.channel === "EMAIL" ? "📧 추천 이메일 제목" : "🎙️ 추천 오프닝 멘트"}
+                    </div>
+                    <div className="mt-1 text-white">{coachResult.openingOrSubject}</div>
+                  </div>
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
+                    <div className="font-bold text-emerald-300">🧭 핵심 전략 &amp; 금지어</div>
+                    <div className="mt-1 text-slate-200">{coachResult.keyStrategy}</div>
+                    <div className="mt-1 text-[11px] text-amber-300">
+                      🚫 피해야 할 표현: {(coachResult.avoidPhrases || []).join(" · ")}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-3">
+                  {[
+                    { key: "soft", title: "🤝 부드럽게 · 관계 회복", color: "text-emerald-300" },
+                    { key: "firm", title: "⚖️ 단호 · 증거 보존형", color: "text-amber-300" },
+                    { key: "concise", title: "⚡ 핵심 3줄 요약", color: "text-sky-300" },
+                  ].map((opt) => {
+                    const txt = coachResult.rewriteOptions?.[opt.key] || "";
+                    return (
+                      <div key={opt.key} className="flex flex-col justify-between rounded-xl border border-slate-800 bg-slate-950 p-3">
+                        <div>
+                          <div className={`font-bold ${opt.color}`}>{opt.title}</div>
+                          <p className="mt-1.5 whitespace-pre-wrap text-slate-200">{txt}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            void navigator.clipboard.writeText(txt);
+                            showToast(`📋 [${opt.title}] 문구가 복사되었습니다.`);
+                          }}
+                          className="mt-3 w-full rounded-lg bg-slate-800 py-1.5 text-[11px] font-bold text-white hover:bg-slate-700"
+                        >
+                          📋 복사하기
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* [탭 2] ⏳ 관계 냉각 경보 & 안부 초안 */}
         {activeTab === "decay" && (

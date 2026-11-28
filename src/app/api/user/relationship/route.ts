@@ -22,6 +22,7 @@ import {
   computeMutualPromiseLedger,
   computeRoiEmotionalMatrix,
   detectRelationshipDecayRadar,
+  generatePreOutboundCoach,
   generateSelfCoachingMirror,
 } from "@/lib/relationship-copilot-suite";
 
@@ -357,6 +358,21 @@ export async function POST(req: NextRequest) {
         withAiDraft: body.withAiDraft !== false,
       });
       return NextResponse.json({ success: true, decayRadar: radar });
+    }
+
+    if (action === "pre_outbound_coach") {
+      const channel =
+        body.channel === "CALL" || body.channel === "EMAIL" ? body.channel : "SMS";
+      const coach = await generatePreOutboundCoach({
+        userEmail,
+        channel,
+        contactKey: body.contactKey || body.phoneNumber || undefined,
+        contactName: body.contactName || undefined,
+        goal: body.goal || "",
+        draftSubject: body.draftSubject || "",
+        draftText: body.draftText || "",
+      });
+      return NextResponse.json({ success: true, coach });
     }
 
     return NextResponse.json(
