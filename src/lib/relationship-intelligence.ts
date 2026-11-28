@@ -1180,3 +1180,229 @@ export async function syncRelationshipLedgerToSheet(userEmail: string): Promise<
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. 언론·공공 공표·공식 SNS 공개 평판 스캔 + 동명이인 1초 확인 후 평가 반영
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ReputationCategory =
+  | "범죄·형사·행정제재"
+  | "스캔들·분쟁·논란"
+  | "선행·기부·사회공헌"
+  | "업적·수상·공적"
+  | "공식SNS·활동";
+
+export interface PublicReputationItem {
+  id: string;
+  category: ReputationCategory;
+  polarity: "POSITIVE" | "NEGATIVE" | "NEUTRAL";
+  sourceTier: "TIER_1" | "TIER_2" | "TIER_3";
+  sourceName: string;
+  publishedAt: string;
+  sourceUrl: string;
+  summary: string;
+  identityMatchConfidence: number; // 0 ~ 1
+  correctionOrAcquittalNote?: string;
+  scoreImpact: number; // 긍정 +, 부정 - (Tier 3는 자동 감점 금지 -> 0)
+}
+
+export interface PublicReputationScanResult {
+  contactKey: string;
+  contactName: string;
+  affiliation: string;
+  identityWarning: string | null;
+  overallPublicReputationScore: number; // -100 ~ +100 (참고용 프리뷰)
+  items: PublicReputationItem[];
+  scannedAt: string;
+}
+
+export async function scanPublicReputation(params: {
+  contactName: string;
+  phoneNumber?: string | null;
+  affiliation?: string; // 회사명·직함·지역 등 (동명이인 차단용)
+}): Promise<PublicReputationScanResult> {
+  const contactName = String(params.contactName || "").trim();
+  const affiliation = String(params.affiliation || "").trim();
+  const contactKey = normalizeContactKey(params.phoneNumber || contactName);
+  const nowStr = getKoreanTimeString();
+
+  const identityWarning = !affiliation
+    ? "소속(회사명·직함·지역) 정보가 없어 동명이인 오매칭 위험이 높습니다. 발견 항목은 반드시 본인 여부를 확인한 뒤 반영하세요."
+    : null;
+
+  const prompt = `당신은 공개 출처(OSINT) 기반 인물·기업 공개 평판 리서치 AI입니다.
+아래 대상에 대해 **누구나 열람 가능한 공개 언론 보도, 정부·공공기관 공식 공표(공정위·금감원·법원 보도·정부 포상·SMPP), 공식 SNS 활동** 중 확인되는 사실만 객관적으로 조사하여 순수 JSON으로 반환하세요.
+
+[조사 대상]
+- 성명: ${contactName}
+- 소속/직함/지역(동명이인 구분 식별자): ${affiliation || "(미지정 - 동명이인 주의)"}
+
+[필수 출력 JSON 스키마]
+{
+  "overallPublicReputationScore": 0,
+  "items": [
+    {
+      "id": "rep_1",
+      "category": "범죄·형사·행정제재 | 스캔들·분쟁·논란 | 선행·기부·사회공헌 | 업적·수상·공적 | 공식SNS·활동",
+      "polarity": "POSITIVE | NEGATIVE | NEUTRAL",
+      "sourceTier": "TIER_1 | TIER_2 | TIER_3",
+      "sourceName": "매체명 또는 공공기관명",
+      "publishedAt": "YYYY-MM-DD 또는 연도",
+      "sourceUrl": "확인된 공개 URL (확실하지 않으면 빈 문자열)",
+      "summary": "객관적 사실 요약 1~2문장 (단정적 낙인 표현 금지)",
+      "identityMatchConfidence": 0.5,
+      "correctionOrAcquittalNote": "정정보도/무혐의/진행중 여부 (없으면 빈 문자열)",
+      "scoreImpact": 0
+    }
+  ]
+}
+
+절대 준수 원칙:
+1. 확인되지 않은 사실이나 가짜 URL을 절대 지어내지 마세요. 공개된 특이 이력이 없다면 items를 빈 배열([])로 반환하세요.
+2. TIER_1 = 정부/법원/공공기관 공식 공표·포상(가중치 1.0), TIER_2 = 공신력 있는 등록 언론사 보도(0.8), TIER_3 = 개인 블로그/커뮤니티/SNS(참고 전용, scoreImpact는 반드시 0).
+3. 소속 정보가 일치하지 않거나 불확실하면 identityMatchConfidence를 0.5 이하로 보수적 표기하세요.
+4. '사기꾼', '범죄자' 같은 단정적 낙인 대신 '언론 보도됨', '공표됨', '수상함' 등 객관적 표현만 사용하세요.`;
+
+  let aiParsed: any = null;
+  try {
+    const aiRes = await callAiCaller(prompt, {
+      caller: "sheetbot-public-reputation-scan",
+      model: "gemini-2.5-flash",
+      temperature: 0.1,
+      tools: [{ googleSearch: {} }],
+    } as any);
+    aiParsed = unwrapAiCallerJson(aiRes);
+  } catch (err: any) {
+    // Search tool 미지원 환경 폴백
+    try {
+      const fallbackRes = await callAiCaller(prompt, {
+        caller: "sheetbot-public-reputation-scan",
+        model: "gemini-2.5-flash",
+        temperature: 0.1,
+      });
+      aiParsed = unwrapAiCallerJson(fallbackRes);
+    } catch (err2: any) {
+      console.warn("[RelationshipIntel] Public reputation scan warning:", err2?.message || err?.message);
+    }
+  }
+
+  const rawItems: any[] = Array.isArray(aiParsed?.items) ? aiParsed.items : [];
+  const items: PublicReputationItem[] = rawItems.slice(0, 8).map((it: any, idx: number) => {
+    const tier =
+      it.sourceTier === "TIER_1" || it.sourceTier === "TIER_2" || it.sourceTier === "TIER_3"
+        ? it.sourceTier
+        : "TIER_3";
+    const polarity =
+      it.polarity === "POSITIVE" || it.polarity === "NEGATIVE" ? it.polarity : "NEUTRAL";
+    // Tier 3(익명/개인 SNS)는 자동 감점 원천 차단 (참고 링크 전용)
+    const rawImpact = Number(it.scoreImpact ?? 0);
+    const safeImpact =
+      tier === "TIER_3"
+        ? 0
+        : polarity === "POSITIVE"
+        ? clamp(Math.abs(rawImpact || 15), 5, 35)
+        : polarity === "NEGATIVE"
+        ? -clamp(Math.abs(rawImpact || 20), 5, 45)
+        : 0;
+
+    return {
+      id: String(it.id || `rep_${idx + 1}`),
+      category: (it.category || "공식SNS·활동") as ReputationCategory,
+      polarity,
+      sourceTier: tier,
+      sourceName: String(it.sourceName || "공개 출처"),
+      publishedAt: String(it.publishedAt || "-"),
+      sourceUrl: String(it.sourceUrl || ""),
+      summary: String(it.summary || "").slice(0, 400),
+      identityMatchConfidence: Math.max(0, Math.min(1, Number(it.identityMatchConfidence ?? 0.5))),
+      correctionOrAcquittalNote: String(it.correctionOrAcquittalNote || ""),
+      scoreImpact: safeImpact,
+    };
+  });
+
+  const previewScore = clamp(
+    items.reduce((acc, it) => acc + it.scoreImpact, 0),
+    -100,
+    100
+  );
+
+  return {
+    contactKey,
+    contactName,
+    affiliation,
+    identityWarning,
+    overallPublicReputationScore: previewScore,
+    items,
+    scannedAt: nowStr,
+  };
+}
+
+/**
+ * 이용자가 '동일인 맞음'으로 1초 확인한 공개 평판 항목만 관계 점수에 공식 반영
+ */
+export async function applyConfirmedPublicReputation(params: {
+  userEmail: string;
+  contactName: string;
+  phoneNumber?: string | null;
+  item: PublicReputationItem;
+}) {
+  const { item } = params;
+  const isNegative = item.polarity === "NEGATIVE" && item.sourceTier !== "TIER_3";
+  const isPositive = item.polarity === "POSITIVE" && item.sourceTier !== "TIER_3";
+
+  const tierWeight = item.sourceTier === "TIER_1" ? 1.0 : item.sourceTier === "TIER_2" ? 0.8 : 0.3;
+  const fraudRisk =
+    isNegative && item.category === "범죄·형사·행정제재"
+      ? clamp(Math.round(70 * tierWeight), 0, 100)
+      : isNegative
+      ? clamp(Math.round(45 * tierWeight), 0, 100)
+      : 0;
+
+  const riskUrgency = isNegative ? clamp(Math.round(65 * tierWeight), 0, 100) : 10;
+  const favorability = isPositive
+    ? clamp(Math.round(45 * tierWeight), -100, 100)
+    : isNegative
+    ? -clamp(Math.round(50 * tierWeight), 0, 100)
+    : 0;
+
+  const authenticity = isPositive ? 90 : isNegative ? 30 : 75;
+  const evidence = `[공개평판 확인 · ${item.sourceTier} · ${item.sourceName}(${item.publishedAt})] ${item.category}: ${item.summary}${
+    item.sourceUrl ? ` (${item.sourceUrl})` : ""
+  }`;
+
+  const ingested = await ingestContactSignal({
+    userEmail: params.userEmail,
+    contactName: params.contactName,
+    phoneNumber: params.phoneNumber || null,
+    sourceType: "MANUAL",
+    sourceRef: `PUBLIC_REPUTATION_${item.sourceTier}`,
+    multiLabels: isPositive && item.category === "업적·수상·공적" ? ["전문가"] : [],
+    closeness: 25,
+    favorability,
+    interest: 50,
+    riskUrgency,
+    fraudRisk,
+    authenticityConsistency: authenticity,
+    detectedRedFlags: isNegative ? [`${item.category}: ${item.summary.slice(0, 80)}`] : [],
+    evidenceText: evidence,
+    confidence: tierWeight,
+  });
+
+  // 부정(범죄/제재/논란) Tier 1·2 확인 시 맞춤 검증 체크리스트 자동 생성
+  let verificationKit: CounterpartyVerificationKit | null = null;
+  if (isNegative) {
+    verificationKit = await generateCounterpartyVerificationKit({
+      userEmail: params.userEmail,
+      contactName: params.contactName,
+      phoneNumber: params.phoneNumber || null,
+      recentContextText: evidence,
+      persist: true,
+    }).catch(() => null);
+  }
+
+  return {
+    ...ingested,
+    verificationKit,
+  };
+}
+
+

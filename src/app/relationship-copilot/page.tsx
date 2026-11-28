@@ -155,6 +155,12 @@ export default function RelationshipCopilotPage() {
   const [selfAnswers, setSelfAnswers] = useState<Record<string, string>>({});
   const [latestEvalResult, setLatestEvalResult] = useState<any>(null);
 
+  // 🌐 공개 평판(언론·공공·SNS) 스캔 상태
+  const [repAffiliation, setRepAffiliation] = useState("");
+  const [repScanResult, setRepScanResult] = useState<any>(null);
+  const [dismissedRepIds, setDismissedRepIds] = useState<string[]>([]);
+  const [confirmedRepIds, setConfirmedRepIds] = useState<string[]>([]);
+
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 4000);
@@ -344,6 +350,65 @@ export default function RelationshipCopilotPage() {
         showToast(`📊 구글 시트 대장에 ${data.syncedCount}명 프로필이 동기화되었습니다.`);
       } else {
         showToast(data.error || "구글 시트 동기화 실패 (구글 인증을 확인해 주세요)");
+      }
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleScanPublicReputation = async () => {
+    if (!selectedProfile) return;
+    setBusyAction("scan_rep");
+    setRepScanResult(null);
+    setDismissedRepIds([]);
+    setConfirmedRepIds([]);
+    try {
+      const res = await apiFetch("/api/user/relationship", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "scan_public_reputation",
+          contactName: selectedProfile.contact_name,
+          phoneNumber: selectedProfile.phone_number,
+          affiliation: repAffiliation,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.scan) {
+        setRepScanResult(data.scan);
+        showToast(`🌐 공개 평판 스캔 완료: ${data.scan.items?.length || 0}건 발견 (동명이인 확인 후 반영)`);
+      } else {
+        showToast(data.error || "공개 평판 스캔 실패");
+      }
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleConfirmPublicReputation = async (item: any) => {
+    if (!selectedProfile) return;
+    setBusyAction(`confirm_${item.id}`);
+    try {
+      const res = await apiFetch("/api/user/relationship", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "confirm_public_reputation",
+          contactName: selectedProfile.contact_name,
+          phoneNumber: selectedProfile.phone_number,
+          item,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setConfirmedRepIds((prev) => [...prev, item.id]);
+        showToast(
+          data.verificationKit
+            ? `⚠️ '${item.category}' 동일인 확인 완료 — 위험도 상향 및 맞춤 검증 체크리스트가 자동 생성되었습니다.`
+            : `✅ '${item.category}' 공개 평판이 관계 평가에 공식 반영되었습니다.`
+        );
+        await loadList();
+        await loadContactDetail(selectedProfile.contact_key);
       }
     } finally {
       setBusyAction(null);
@@ -693,6 +758,127 @@ export default function RelationshipCopilotPage() {
                         })}
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* 1-B. 🌐 언론·공공·SNS 공개 평판 스캔 & 동명이인 1초 확인 */}
+                {selectedProfile && (
+                  <div className="rounded-2xl border border-indigo-500/30 bg-slate-900/80 p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-bold text-indigo-300">
+                          🌐 언론 · 공공 공표 · 공식 SNS 공개 평판 스캔
+                        </h3>
+                        <p className="text-[11px] text-slate-400">
+                          범죄·제재·논란·선행·수상·공적을 조회하며, 동명이인 오매칭 방지를 위해 본인 확인 후에만 점수에 반영됩니다.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <input
+                        value={repAffiliation}
+                        onChange={(e) => setRepAffiliation(e.target.value)}
+                        placeholder="소속·회사명·직함·지역 입력 (동명이인 차단 권장)"
+                        className="min-w-[220px] flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs text-white placeholder-slate-500"
+                      />
+                      <button
+                        disabled={busyAction === "scan_rep"}
+                        onClick={() => void handleScanPublicReputation()}
+                        className="rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-indigo-500 disabled:opacity-50"
+                      >
+                        {busyAction === "scan_rep" ? "공개 출처 스캔 중..." : "🔍 공개 평판 스캔"}
+                      </button>
+                    </div>
+
+                    {repScanResult && (
+                      <div className="mt-4 space-y-2.5">
+                        {repScanResult.identityWarning && (
+                          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-[11px] text-amber-200">
+                            ⚠️ {repScanResult.identityWarning}
+                          </div>
+                        )}
+                        {(!repScanResult.items || repScanResult.items.length === 0) ? (
+                          <div className="rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-400">
+                            공개된 언론·공공 공표에서 특이 이력이 발견되지 않았습니다.
+                          </div>
+                        ) : (
+                          repScanResult.items
+                            .filter((it: any) => !dismissedRepIds.includes(it.id))
+                            .map((it: any) => {
+                              const isConfirmed = confirmedRepIds.includes(it.id);
+                              return (
+                                <div
+                                  key={it.id}
+                                  className="rounded-xl border border-slate-800 bg-slate-950/80 p-3 text-xs"
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      <span
+                                        className={`rounded px-2 py-0.5 text-[10.5px] font-bold ${
+                                          it.polarity === "NEGATIVE"
+                                            ? "bg-rose-500/20 text-rose-300"
+                                            : it.polarity === "POSITIVE"
+                                            ? "bg-emerald-500/20 text-emerald-300"
+                                            : "bg-slate-700 text-slate-300"
+                                        }`}
+                                      >
+                                        {it.category}
+                                      </span>
+                                      <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">
+                                        {it.sourceTier} · {it.sourceName} ({it.publishedAt})
+                                      </span>
+                                      <span className="text-[10px] text-slate-400">
+                                        동일인 확신도 {Math.round((it.identityMatchConfidence || 0) * 100)}%
+                                      </span>
+                                    </div>
+                                    {it.sourceUrl && (
+                                      <a
+                                        href={it.sourceUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-[11px] text-sky-400 underline"
+                                      >
+                                        원문 ↗
+                                      </a>
+                                    )}
+                                  </div>
+                                  <p className="mt-1.5 text-slate-200">{it.summary}</p>
+                                  {it.correctionOrAcquittalNote && (
+                                    <p className="mt-1 text-[11px] text-amber-300">
+                                      참고(정정/무혐의): {it.correctionOrAcquittalNote}
+                                    </p>
+                                  )}
+                                  <div className="mt-2.5 flex gap-2">
+                                    {isConfirmed ? (
+                                      <span className="rounded bg-emerald-500/20 px-2.5 py-1 text-[11px] font-bold text-emerald-300">
+                                        ✅ 동일인 확인 · 평가 반영 완료
+                                      </span>
+                                    ) : (
+                                      <>
+                                        <button
+                                          disabled={busyAction === `confirm_${it.id}`}
+                                          onClick={() => void handleConfirmPublicReputation(it)}
+                                          className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-500"
+                                        >
+                                          ✅ 동일인 맞음 (평가 반영)
+                                        </button>
+                                        <button
+                                          onClick={() =>
+                                            setDismissedRepIds((prev) => [...prev, it.id])
+                                          }
+                                          className="rounded-lg bg-slate-800 px-2.5 py-1 text-[11px] text-slate-300 hover:bg-slate-700"
+                                        >
+                                          ❌ 동명이인 (무시)
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

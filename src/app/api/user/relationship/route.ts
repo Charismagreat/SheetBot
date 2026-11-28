@@ -5,11 +5,13 @@ import { getCurrentUserEmail } from "@/lib/auth";
 import { queryTable, updateRows } from "@/lib/egdesk-helpers";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import {
+  applyConfirmedPublicReputation,
   generateCounterpartyVerificationKit,
   inferContactLabelsFromMetadata,
   ingestContactSignal,
   normalizeContactKey,
   recomputeContactProfile,
+  scanPublicReputation,
   submitVerificationSelfCheck,
   syncRelationshipLedgerToSheet,
 } from "@/lib/relationship-intelligence";
@@ -257,11 +259,42 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (action === "scan_public_reputation") {
+      if (!body.contactName) {
+        return NextResponse.json(
+          { success: false, error: "contactName이 필요합니다." },
+          { status: 400 }
+        );
+      }
+      const scanRes = await scanPublicReputation({
+        contactName: String(body.contactName),
+        phoneNumber: body.phoneNumber || null,
+        affiliation: body.affiliation || "",
+      });
+      return NextResponse.json({ success: true, scan: scanRes });
+    }
+
+    if (action === "confirm_public_reputation") {
+      if (!body.contactName || !body.item) {
+        return NextResponse.json(
+          { success: false, error: "contactName과 item이 필요합니다." },
+          { status: 400 }
+        );
+      }
+      const applied = await applyConfirmedPublicReputation({
+        userEmail,
+        contactName: String(body.contactName),
+        phoneNumber: body.phoneNumber || null,
+        item: body.item,
+      });
+      return NextResponse.json({ success: true, ...applied });
+    }
+
     return NextResponse.json(
       {
         success: false,
         error:
-          "지원하지 않는 action입니다. (ingest_signal | generate_verification | submit_self_check | lock_labels | sync_sheet | ingest_contacts_metadata)",
+          "지원하지 않는 action입니다. (ingest_signal | generate_verification | submit_self_check | lock_labels | sync_sheet | ingest_contacts_metadata | scan_public_reputation | confirm_public_reputation)",
       },
       { status: 400 }
     );
