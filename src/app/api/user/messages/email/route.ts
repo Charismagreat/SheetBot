@@ -12,6 +12,7 @@ import { maskRecipient, formatZeroRetentionContent } from "@/lib/privacy";
 import { resolveUserSpreadsheet } from "@/lib/sheet-binding-helper";
 import { getKoreanTimeString } from "@/lib/date-utils";
 import { extractAndCreateTasksFromMessage } from "@/lib/task-hub-helper";
+import { ingestEmailRelationshipSignal } from "@/lib/relationship-intelligence";
 
 // 15초 이내 동일 이메일 중복 기록 방어 캐시 (키: userEmail:sender:subject:body, 값: timestamp)
 const recentEmailDedupeCache = new Map<string, number>();
@@ -215,6 +216,17 @@ export async function POST(req: NextRequest) {
       timestamp: nowStr,
       deepLink: spreadsheetUrl || undefined,
     }).catch((err) => console.warn("[EmailSync] Task extraction warning:", err?.message));
+
+    // 2-2. 관계 코파일럿 이메일 시그널 자동 적재 (도메인·거래·기망/클레임 분석, Zero-Block 백그라운드)
+    void ingestEmailRelationshipSignal({
+      userEmail: cleanEmail,
+      senderName,
+      senderEmail: senderEmail || undefined,
+      subject: subjectText,
+      bodyText: bodyText || subjectText,
+      occurredAt: nowStr,
+      sourceRef: mailAppLabel,
+    }).catch((err) => console.warn("[EmailSync] Relationship signal warning:", err?.message));
 
     // 3. 실시간 SSE 브로드캐스트
     try {

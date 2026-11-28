@@ -25,6 +25,7 @@ import { getKoreanTimeString } from "@/lib/date-utils";
 
 export type SignalSourceType =
   | "CALL_RECORDING"
+  | "EMAIL"
   | "SMS"
   | "KAKAO"
   | "BANK_PUSH"
@@ -213,6 +214,8 @@ function getChannelReliabilityWeight(sourceType: string): number {
       return 1.0;
     case "BANK_PUSH":
       return 1.0;
+    case "EMAIL":
+      return 0.9;
     case "SMS":
     case "KAKAO":
       return 0.85;
@@ -1404,5 +1407,133 @@ export async function applyConfirmedPublicReputation(params: {
     verificationKit,
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. 이메일(EMAIL) 수신/발신 기반 관계·도메인·신뢰 시그널 자동 추출 및 적재
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FREE_EMAIL_DOMAINS = new Set([
+  "gmail.com", "naver.com", "daum.net", "hanmail.net", "nate.com",
+  "kakao.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com",
+]);
+
+function isAutomatedOrNewsletterEmail(senderEmail: string, subject: string): boolean {
+  const lowerEmail = senderEmail.toLowerCase();
+  if (/(no-?reply|noreply|mailer-daemon|newsletter|notification|alert|support@|info@|billing@|admin@)/i.test(lowerEmail)) {
+    return true;
+  }
+  if (/(\[광고\]|\(광고\)|뉴스레터|인증번호|비밀번호 재설정|구독 해지|결제 영수증 자동)/i.test(subject)) {
+    return true;
+  }
+  return false;
+}
+
+export async function ingestEmailRelationshipSignal(params: {
+  userEmail: string;
+  senderName: string;
+  senderEmail?: string;
+  subject: string;
+  bodyText: string;
+  occurredAt?: string;
+  sourceRef?: string;
+}) {
+  const senderEmail = String(params.senderEmail || "").trim().toLowerCase();
+  const subject = String(params.subject || "").trim();
+  const body = String(params.bodyText || "").trim();
+  if (isAutomatedOrNewsletterEmail(senderEmail, subject)) {
+    return null;
+  }
+
+  const combined = `${subject}\n${body}`;
+  const labels = new Set<string>();
+  const redFlags: string[] = [];
+  const reasons: string[] = [];
+
+  // 1. 발신자 이메일 도메인 분석 (법인 도메인 vs 무료 포털)
+  const domain = senderEmail.includes("@") ? senderEmail.split("@")[1] : "";
+  const isCorporateDomain = Boolean(domain && !FREE_EMAIL_DOMAINS.has(domain));
+  if (isCorporateDomain) {
+    labels.add("거래처·공급사");
+    reasons.push(`공식 기업 도메인(@${domain})`);
+  }
+
+  // 2. 비즈니스·재무·관계 키워드 분석
+  if (/(견적서|발주서|계약서|거래명세서|세금계산서|납품|입금 확인|정산)/i.test(combined)) {
+    labels.add("기존고객");
+    reasons.push("공식 거래·서류 키워드");
+  }
+  if (/(미수금|연체|잔금|채무|변제|상환|차용|독촉|내용증명)/i.test(combined)) {
+    labels.add(/(입금 요청|잔금 요청|미수|연체|독촉)/.test(combined) ? "채무자" : "채권자");
+    reasons.push("재무·채권/채무 키워드");
+  }
+  if (/(투자|IR|밸류에이션|지분|펀딩|투자검토|시드|시리즈)/i.test(combined)) {
+    labels.add("투자자");
+    reasons.push("투자·IR 키워드");
+  }
+  if (/(세무|회계|법무|변호사|노무|특허|법률 검토)/i.test(combined)) {
+    labels.add("전문가");
+    reasons.push("전문 자문 키워드");
+  }
+
+  // 3. 의심·기망·분쟁 정황 감지
+  let fraudRisk = 0;
+  let riskUrgency = 15;
+  let favorability = 15;
+  let authenticity = isCorporateDomain ? 85 : 70;
+
+  if (/(원금 보장|고수익|확정 수익|비밀 유지|개인 계좌|오늘까지 입금|긴급 송금)/i.test(combined)) {
+    fraudRisk += 50;
+    riskUrgency = 75;
+    authenticity = 35;
+    redFlags.push("이메일 내 긴급 송금·원금보장·개인계좌 의심 표현 감지");
+  }
+  if (!isCorporateDomain && /(대표이사|법인|투자 계약|선입금)/i.test(combined) && senderEmail) {
+    fraudRisk += 20;
+    redFlags.push(`법인/투자 언급 대비 무료 포털 메일(@${domain}) 사용`);
+  }
+  if (/(불만|클레임|환불|해지|법적 조치|내용증명|책임지지 않|일방적)/i.test(combined)) {
+    favorability = -45;
+    riskUrgency = Math.max(riskUrgency, 65);
+    redFlags.push("이메일 내 클레임·분쟁·책임회피 표현 감지");
+  } else if (/(감사합니다|감사드립니다|잘 부탁|협조 감사|긍정적)/i.test(combined)) {
+    favorability = 35;
+  }
+
+  const contactName = params.senderName || senderEmail || "이메일 상대방";
+  const contactKeySource = senderEmail || contactName;
+  const evidenceText = `[이메일] ${subject}${reasons.length > 0 ? ` (${reasons.join(", ")})` : ""}`;
+
+  const ingested = await ingestContactSignal({
+    userEmail: params.userEmail,
+    contactName,
+    phoneNumber: extractPhoneFromContactText(combined) || contactKeySource,
+    sourceType: "EMAIL",
+    sourceRef: params.sourceRef || senderEmail || subject.slice(0, 60),
+    multiLabels: Array.from(labels),
+    closeness: 25,
+    favorability,
+    interest: /(견적|계약|미팅|일정|문의|검토)/i.test(combined) ? 70 : 45,
+    riskUrgency,
+    fraudRisk: clamp(fraudRisk, 0, 100),
+    authenticityConsistency: authenticity,
+    detectedRedFlags: redFlags,
+    evidenceText,
+    confidence: isCorporateDomain ? 0.9 : 0.75,
+    occurredAt: params.occurredAt,
+  });
+
+  if (fraudRisk >= 45 || redFlags.length > 0) {
+    await generateCounterpartyVerificationKit({
+      userEmail: params.userEmail,
+      contactName,
+      phoneNumber: extractPhoneFromContactText(combined) || undefined,
+      recentContextText: `이메일 제목: ${subject}\n본문 요약: ${body.slice(0, 500)}\n감지 정황: ${redFlags.join(" / ")}`,
+      persist: true,
+    }).catch(() => {});
+  }
+
+  return ingested;
+}
+
 
 
