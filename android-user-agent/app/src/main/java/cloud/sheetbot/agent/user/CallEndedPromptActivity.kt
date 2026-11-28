@@ -211,22 +211,34 @@ class CallEndedPromptActivity : Activity() {
             appendOrToggleQuickPromise("✔️ 요청하신 사항 꼼꼼히 검토 후 회신드리겠습니다.")
         }
 
-        // 3-B. 🧠 관계 코파일럿: 1초 관계 태그 확정 & 상대방 의심 검증 체크리스트 열기
+        // 3-B. 🧠 관계 코파일럿: 1초 관계 태그 확정 & 상대방 의심 검증 체크리스트 열기 (시트봇 + 파투 듀얼 지원)
+        val ftsOwner = prefs.ftsPhoneNumber?.takeIf { it.isNotBlank() }
+        val useFtsMode = !ftsOwner.isNullOrBlank() && (prefs.isDestinationFileToSheet || prefs.userEmail.isNullOrBlank())
+
         val quickTagClick = { label: String ->
             pauseCountdownForEditing()
             val email = prefs.userEmail?.takeIf { it.isNotBlank() }
-            if (email.isNullOrBlank()) {
-                Toast.makeText(this, "계정 연동 후 관계 태그를 저장할 수 있습니다.", Toast.LENGTH_SHORT).show()
+            if (!useFtsMode && email.isNullOrBlank()) {
+                Toast.makeText(this, "계정 또는 파투 연동 후 관계 태그를 저장할 수 있습니다.", Toast.LENGTH_SHORT).show()
             } else {
                 val cName = contactName ?: ContactHelper.formatPhoneNumber(targetPhone)
                 binding.tvRelationshipQuickTitle.text = "🧠 [$label] 태그 저장 중..."
                 CoroutineScope(Dispatchers.IO).launch {
-                    val ok = ApiClient.lockRelationshipLabels(
-                        userEmail = email,
-                        contactKey = targetPhone,
-                        contactName = cName,
-                        lockedLabels = listOf(label)
-                    )
+                    val ok = if (useFtsMode && !ftsOwner.isNullOrBlank()) {
+                        FileToSheetClient.lockFtsRelationshipLabels(
+                            ownerPhone = ftsOwner,
+                            contactKey = targetPhone,
+                            contactName = cName,
+                            lockedLabels = listOf(label)
+                        )
+                    } else {
+                        ApiClient.lockRelationshipLabels(
+                            userEmail = email!!,
+                            contactKey = targetPhone,
+                            contactName = cName,
+                            lockedLabels = listOf(label)
+                        )
+                    }
                     withContext(Dispatchers.Main) {
                         if (!isFinishing && !isDestroyed) {
                             binding.tvRelationshipQuickTitle.text = if (ok) {
@@ -251,22 +263,40 @@ class CallEndedPromptActivity : Activity() {
             pauseCountdownForEditing()
             val email = prefs.userEmail?.takeIf { it.isNotBlank() }
             val cName = contactName ?: ContactHelper.formatPhoneNumber(targetPhone)
-            if (!email.isNullOrBlank()) {
+            if (useFtsMode && !ftsOwner.isNullOrBlank()) {
                 CoroutineScope(Dispatchers.IO).launch {
-                    ApiClient.requestCounterpartyVerification(
-                        userEmail = email,
+                    FileToSheetClient.requestFtsCounterpartyVerification(
+                        ownerPhone = ftsOwner,
                         contactName = cName,
-                        phoneNumber = targetPhone,
+                        contactPhone = targetPhone,
                         recentContextText = fetchedCallSummary
                     )
                 }
-            }
-            val url = "https://sheetbot.cloud/relationship-copilot?phone=${Uri.encode(targetPhone)}&name=${Uri.encode(cName)}"
-            try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                Toast.makeText(this, "🛡️ 관계 코파일럿 검증 체크리스트를 엽니다.", Toast.LENGTH_SHORT).show()
-            } catch (_: Exception) {
-                Toast.makeText(this, "브라우저를 열 수 없습니다.", Toast.LENGTH_SHORT).show()
+                val url = "${FileToSheetClient.FTS_OFFICIAL_DOMAIN}/relationship-copilot?ownerPhone=${Uri.encode(ftsOwner)}&phone=${Uri.encode(targetPhone)}&name=${Uri.encode(cName)}"
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    Toast.makeText(this, "🛡️ 파투 관계 코파일럿 검증 체크리스트를 엽니다.", Toast.LENGTH_SHORT).show()
+                } catch (_: Exception) {
+                    Toast.makeText(this, "브라우저를 열 수 없습니다.", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                if (!email.isNullOrBlank()) {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        ApiClient.requestCounterpartyVerification(
+                            userEmail = email,
+                            contactName = cName,
+                            phoneNumber = targetPhone,
+                            recentContextText = fetchedCallSummary
+                        )
+                    }
+                }
+                val url = "https://sheetbot.cloud/relationship-copilot?phone=${Uri.encode(targetPhone)}&name=${Uri.encode(cName)}"
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    Toast.makeText(this, "🛡️ 관계 코파일럿 검증 체크리스트를 엽니다.", Toast.LENGTH_SHORT).show()
+                } catch (_: Exception) {
+                    Toast.makeText(this, "브라우저를 열 수 없습니다.", Toast.LENGTH_SHORT).show()
+                }
             }
         }
 

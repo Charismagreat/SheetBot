@@ -3113,6 +3113,30 @@ object FileToSheetClient {
             put("memo", finalMemo)
         }.toString()
 
+        // 🧠 파투(FileToSheet) 관계 코파일럿 프로필 실시간 병합 조회
+        var relLabels: List<String> = emptyList()
+        var relRiskGrade = ""
+        var relRiskScore = -1
+        var relTrustScore = -1
+        var relFavorability = 0
+        var relPendingVerify = 0
+        if (cleanOwner.isNotBlank()) {
+            try {
+                val rel = fetchFtsRelationshipOverlayData(cleanOwner, cleanCaller)
+                if (rel != null) {
+                    relLabels = rel.labels
+                    relRiskGrade = rel.riskGrade
+                    relRiskScore = rel.riskScore
+                    relTrustScore = rel.trustScore
+                    relFavorability = rel.favorability
+                    relPendingVerify = rel.pendingVerificationCount
+                    if (relLabels.isNotEmpty() || relRiskScore >= 0) {
+                        isFound = true
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
         CallSummaryResult(
             success = true,
             found = isFound,
@@ -3126,7 +3150,146 @@ object FileToSheetClient {
             lastCallSummary = lastCallSummary,
             actionItems = finalActions,
             lastMissedCallTime = lastMissedTime,
+            relationshipLabels = relLabels,
+            riskGrade = relRiskGrade,
+            riskScore = relRiskScore,
+            trustScore = relTrustScore,
+            favorability = relFavorability,
+            pendingVerificationCount = relPendingVerify,
             rawJson = rawCacheJson
         )
+    }
+
+    data class FtsRelationshipOverlayData(
+        val labels: List<String> = emptyList(),
+        val riskGrade: String = "",
+        val riskScore: Int = -1,
+        val trustScore: Int = -1,
+        val favorability: Int = 0,
+        val pendingVerificationCount: Int = 0
+    )
+
+    suspend fun fetchFtsRelationshipOverlayData(
+        ownerPhone: String,
+        contactKey: String
+    ): FtsRelationshipOverlayData? = withContext(Dispatchers.IO) {
+        val cleanOwner = ownerPhone.replace("[^0-9]".toRegex(), "")
+        val cleanKey = normalizePhoneDigits(contactKey)
+        if (cleanOwner.isBlank() || cleanKey.isBlank()) return@withContext null
+
+        val bases = listOf(FTS_OFFICIAL_DOMAIN, FTS_TUNNEL_BASE)
+        for (base in bases) {
+            try {
+                val url = "${base.trimEnd('/')}/api/relationship?ownerPhone=$cleanOwner&contactKey=$cleanKey"
+                val req = Request.Builder()
+                    .url(url)
+                    .get()
+                    .addHeader("x-fts-owner-phone", cleanOwner)
+                    .build()
+                val res = httpClient.newCall(req).execute()
+                val bodyStr = res.body?.string() ?: ""
+                if (res.isSuccessful && bodyStr.isNotBlank()) {
+                    val json = JSONObject(bodyStr)
+                    if (!json.optBoolean("success", false)) continue
+                    val p = json.optJSONObject("profile") ?: return@withContext null
+                    val labelsRaw = p.optString("multi_labels_json", "[]")
+                    val labelsList = mutableListOf<String>()
+                    try {
+                        val arr = JSONArray(labelsRaw)
+                        for (i in 0 until arr.length()) {
+                            val s = arr.optString(i, "").trim()
+                            if (s.isNotBlank()) labelsList.add(s)
+                        }
+                    } catch (_: Exception) {}
+                    val verArr = json.optJSONArray("verifications")
+                    var pendingCount = 0
+                    if (verArr != null) {
+                        for (i in 0 until verArr.length()) {
+                            if (verArr.optJSONObject(i)?.optString("status") == "PENDING") {
+                                pendingCount++
+                            }
+                        }
+                    }
+                    return@withContext FtsRelationshipOverlayData(
+                        labels = labelsList,
+                        riskGrade = p.optString("risk_grade", ""),
+                        riskScore = p.optInt("final_risk_score", -1),
+                        trustScore = p.optInt("final_trust_score", -1),
+                        favorability = p.optInt("favorability", 0),
+                        pendingVerificationCount = pendingCount
+                    )
+                }
+            } catch (_: Exception) {}
+        }
+        null
+    }
+
+    suspend fun lockFtsRelationshipLabels(
+        ownerPhone: String,
+        contactKey: String,
+        contactName: String,
+        lockedLabels: List<String>
+    ): Boolean = withContext(Dispatchers.IO) {
+        val cleanOwner = ownerPhone.replace("[^0-9]".toRegex(), "")
+        if (cleanOwner.isBlank()) return@withContext false
+        val bases = listOf(FTS_OFFICIAL_DOMAIN, FTS_TUNNEL_BASE)
+        for (base in bases) {
+            try {
+                val arr = JSONArray().apply { lockedLabels.forEach { put(it) } }
+                val payload = JSONObject().apply {
+                    put("action", "lock_labels")
+                    put("ownerPhone", cleanOwner)
+                    put("contactKey", contactKey)
+                    put("contactName", contactName)
+                    put("contactPhone", contactKey)
+                    put("lockedLabels", arr)
+                }
+                val req = Request.Builder()
+                    .url("${base.trimEnd('/')}/api/relationship")
+                    .post(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
+                    .addHeader("x-fts-owner-phone", cleanOwner)
+                    .build()
+                val res = httpClient.newCall(req).execute()
+                val bodyStr = res.body?.string() ?: ""
+                if (res.isSuccessful && bodyStr.contains("\"success\":true")) {
+                    return@withContext true
+                }
+            } catch (_: Exception) {}
+        }
+        false
+    }
+
+    suspend fun requestFtsCounterpartyVerification(
+        ownerPhone: String,
+        contactName: String,
+        contactPhone: String,
+        recentContextText: String = ""
+    ): Boolean = withContext(Dispatchers.IO) {
+        val cleanOwner = ownerPhone.replace("[^0-9]".toRegex(), "")
+        if (cleanOwner.isBlank()) return@withContext false
+        val bases = listOf(FTS_OFFICIAL_DOMAIN, FTS_TUNNEL_BASE)
+        for (base in bases) {
+            try {
+                val payload = JSONObject().apply {
+                    put("action", "generate_verification")
+                    put("ownerPhone", cleanOwner)
+                    put("contactName", contactName)
+                    put("contactPhone", contactPhone)
+                    put("recentContextText", recentContextText)
+                    put("persist", true)
+                }
+                val req = Request.Builder()
+                    .url("${base.trimEnd('/')}/api/relationship")
+                    .post(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
+                    .addHeader("x-fts-owner-phone", cleanOwner)
+                    .build()
+                val res = httpClient.newCall(req).execute()
+                val bodyStr = res.body?.string() ?: ""
+                if (res.isSuccessful && bodyStr.contains("\"success\":true")) {
+                    return@withContext true
+                }
+            } catch (_: Exception) {}
+        }
+        false
     }
 }
